@@ -6,13 +6,15 @@ PostgREST service are real and run today. A pending case is a skip that names it
 `run.py --layer 3` counts it as pending: never a pass.
 
 The matrix (18 §E3B.a, 04 BACKEND-JOURNEY): inputs text / video by URL / video by upload,
-modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell:
+modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell (E3B phase
+2: only unmerged tasks; G1R, G6B, D2, D3, W3, Q3 and M3 have merged):
 
-* every cell: G1R (the pilot ingress is not what `gateway.app.ROUTERS` mounts), G6B (the
-  operator provisioning adapter), D2 (durable admission), D5 (settlement), W3 (worker);
-* sync: G2; SSE: G2 + D4 (persistent journal replay); async: G3 + Q3 (dispatch);
+* every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with) and F2P
+  (the wire-in's CreditJobStore port the metered route admits through);
+* sync: G2 (the relay and the cutover that mounts the ingress); SSE: G2 + D4 (persistent
+  journal replay); async: G2 + G3 (the job routes);
 * video by URL: nothing more (M2's fetch/probe/persist is merged);
-* video by upload: M3 + G4U.
+* video by upload: G4U (M3's uploads are merged; the HTTP adapter is not).
 """
 from __future__ import annotations
 
@@ -25,9 +27,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stack                                            # noqa: E402
 
-COMMON = ("G1R", "G6B", "D2", "D5", "W3")
-BY_MODE = {"sync": ("G2",), "sse": ("G2", "D4"), "async": ("G3", "Q3")}
-BY_INPUT = {"text": (), "video_url": (), "video_upload": ("M3", "G4U")}
+COMMON = ("D5", "F2P")
+BY_MODE = {"sync": ("G2",), "sse": ("G2", "D4"), "async": ("G2", "G3")}
+BY_INPUT = {"text": (), "video_url": (), "video_upload": ("G4U",)}
 
 
 def unblocking(input_kind: str, mode: str) -> tuple[str, ...]:
@@ -39,8 +41,6 @@ def unblocking(input_kind: str, mode: str) -> tuple[str, ...]:
 def test_backend_journey(input_kind, mode):
     """Two tenants call the metered endpoint; accepted identity, output replay, rate pins
     and exact usage reconcile; the other tenant's handle is 404; nothing leaks."""
-    alpha, beta = stack.provision_two_tenants()
-    assert alpha.org_id != beta.org_id
     if not stack.ingress_is_mounted():
         stack.pending(*unblocking(input_kind, mode),
                       why=f"{input_kind} x {mode}: the pilot ingress is not mounted, so "
@@ -53,7 +53,7 @@ def test_backend_journey__dataset_client_resume():
     """04 BACKEND-JOURNEY: resume a bounded dataset client; no duplicate accepted items or
     charges after an interrupted run (E1B's bench client is the client)."""
     if not stack.ingress_is_mounted():
-        stack.pending("G1R", "G3", "D2", "D5", "G6B",
+        stack.pending("G2", "G3", "D5", "F2P",
                       why="resume needs idempotent explicit jobs on the metered endpoint")
     pytest.fail("the pilot ingress is mounted: write the dataset-resume journey body now")
 

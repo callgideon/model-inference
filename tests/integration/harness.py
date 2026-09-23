@@ -427,7 +427,7 @@ def _resource_id(kind: str, name: str) -> str:
 
 # --------------------------------------------------------------------- database (R-a)
 
-def provision_database() -> dict:
+def provision_database(database: str = PG_DATABASE) -> dict:
     """`CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres` (r1 review R-a).
 
     Two things the copy needs, both measured on the pinned image:
@@ -446,6 +446,8 @@ def provision_database() -> dict:
     Each statement is its own `-c`: `DROP DATABASE` and `CREATE DATABASE` cannot run inside a
     transaction block, and psql wraps a multi-statement `-c` in one. The workers reconnect
     within seconds, so a lost race is retried rather than reported as a refusal.
+
+    `database` defaults to E2's; E3B phase 2 builds its JobStore template the same way.
     """
     container = assert_ours(container_of("postgres"))
     terminate = (f"select pg_terminate_backend(pid) from pg_stat_activity "
@@ -454,13 +456,13 @@ def provision_database() -> dict:
     for attempt in range(4):
         result = run(["docker", "exec", "-i", container, "psql", "-U", PG_ADMIN_ROLE,
                       "-d", "template1", "-v", "ON_ERROR_STOP=1",
-                      "-c", f"drop database if exists {PG_DATABASE}",
+                      "-c", f"drop database if exists {database}",
                       "-c", terminate,
-                      "-c", (f"create database {PG_DATABASE} "
+                      "-c", (f"create database {database} "
                              f"template {PG_TEMPLATE_SOURCE} owner {PG_USER}")],
                      check=False, timeout=300.0)
         if result.returncode == 0:
-            return {"database": PG_DATABASE, "template": PG_TEMPLATE_SOURCE,
+            return {"database": database, "template": PG_TEMPLATE_SOURCE,
                     "created_by": PG_ADMIN_ROLE, "owner": PG_USER, "attempts": attempt + 1,
                     "statements": ["drop database if exists", "pg_terminate_backend",
                                    "create database … template … owner"]}

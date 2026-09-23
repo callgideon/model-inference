@@ -19,9 +19,12 @@ Three things live here, each small:
 from __future__ import annotations
 
 import asyncio
+import atexit
 import importlib.util
+import itertools
 import json
 import os
+import re
 import sys
 import uuid
 from dataclasses import dataclass
@@ -42,29 +45,44 @@ if importlib.util.find_spec("infrx") is None:
 # ------------------------------------------------------------------ pending vocabulary
 
 # Every id a pending case may name, with what it delivers. A typo is a failure, not a new
-# kind of pending: `pending()` refuses an id that is not here.
+# kind of pending: `pending()` refuses an id that is not here. E3B phase 2: no merged task
+# (tasks.json implemented/integrated) is a blocker of an E3B case; the ones still listed are
+# `RESIDUAL`, kept only for I3B's recovery cases, which are read-only here and extend this
+# vocabulary (`recovery/recoverykit.PENDING`). `test_stage.py` holds both lists to tasks.json.
 PENDING = {
-    "G1R": "pilot ingress mounted in gateway.app.ROUTERS (cutover from the legacy chat "
-           "route) with consumer/provider audiences",
-    "G2": "synchronous chat and the persistent SSE relay over the journal",
+    "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
+          "mounts the metered ingress in gateway.app.ROUTERS",
     "G3": "explicit async job routes: create, status, cancel, replay",
     "G4U": "owned upload HTTP adapter",
-    "G6B": "operator provisioning adapter (infrx/operations): identities, keys, wallets",
-    "D1R": "product-v2 schema (CREDIT wallets, rate cards, pins) in PostgreSQL",
+    "D4": "persistent stream journal in PostgreSQL: infrx.append, replay, PgStreamStore (0017)",
+    "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
+          "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
+          "Registry/AccountView and G1R's CatalogDirectory",
+    "F2P": "wire-in merged (CreditJobStore port + credit fake)",
+    # RESIDUAL (merged; I3B's cases only - see RESIDUAL)
+    "G1R": "pilot ingress mounted in gateway.app.ROUTERS (cutover from the legacy chat "
+           "route) with consumer/provider audiences",
     "D2": "atomic admission RPC: job + hold + reservations + outbox in one transaction",
     "D3": "fenced leases, recovery and cancellation RPCs in PostgreSQL",
-    "D4": "persistent stream journal append/replay RPCs in PostgreSQL",
-    "D5": "terminal settlement transaction, grants and reconciliation in PostgreSQL",
     "M3": "owned uploads, expiry and orphan collection",
-    "Q3": "outbox dispatcher/reconciler feeding the index from PostgreSQL",
     "W3": "worker wiring: drain, engine pin, media root, measured concurrency",
+}
+# Merged tasks still in the vocabulary, and why. Integration request #2 asks I3B to rename
+# its blockers; E3B's own cases may not name these (`pending()` refuses them).
+RESIDUAL = {
+    "G1R": "I3B rc03 (recovery/test_recovery.py) still names it; the mount is G2's cutover",
+    "D2": "I3B rc04 names it through stack.unimplemented_rpcs(), which counts D6's permanent "
+          "stubs too; the adapter exists (dr01-dr04/dr09 [postgres] run on it)",
+    "D3": "I3B rc04, as D2",
+    "M3": "I3B rc05b names it for an S3-backed ObjectStore, which no task owns yet",
+    "W3": "I3B rc08b names it for a worker process entry point (with I2B)",
 }
 
 
 def pending(*ids: str, why: str):
     """Skip as PENDING. Never a pass: `run.py --layer 3` counts it, and the stage exits 3."""
     import pytest
-    unknown = [task for task in ids if task not in PENDING]
+    unknown = [task for task in ids if task not in PENDING or task in RESIDUAL]
     if not ids or unknown:
         raise AssertionError(f"a pending case must name known unblocking ids, got {ids}")
     pytest.skip(f"PENDING[{','.join(ids)}] {why}")
@@ -96,6 +114,134 @@ def unimplemented_rpcs() -> int:
             return conn.execute(UNIMPLEMENTED_SQL).fetchone()[0]
     return sum(path.read_text().count("perform infrx.unimplemented(")
                for path in harness.MIGRATIONS_DIR.glob("*.sql"))
+
+
+# E3B phase 2, item 1: the per-drill probe. D6's three stubs (0004) never go away in
+# backend-first scope, so a global count pends every drill for ever; a drill pends only while
+# one of the functions IT drives is a stub, on the task that stub names.
+STUBS_SQL = ("select p.proname, p.prosrc from pg_proc p join pg_namespace n on n.oid = "
+             "p.pronamespace where n.nspname = 'infrx' "
+             "and p.prosrc like '%infrx.unimplemented(%'")
+STUB_OWNER = re.compile(r"infrx\.unimplemented\('[^']*',\s*'(\w+)'\)")
+
+
+def stub_owners() -> dict[str, str]:
+    """rpc -> the task its stub names, for every `infrx` function still an
+    `infrx.unimplemented` stub, measured on this stack's migrated database."""
+    import psycopg
+    with psycopg.connect(harness.pg_dsn(), autocommit=True) as conn:
+        rows = conn.execute(STUBS_SQL).fetchall()
+    return {name: STUB_OWNER.search(source).group(1) for name, source in rows}
+
+
+def stubbed(rpcs, owners: dict[str, str] | None = None) -> dict[str, str]:
+    """The stubs among the functions a drill drives, with their owners (empty = none)."""
+    owners = stub_owners() if owners is None else owners
+    return {rpc: owners[rpc] for rpc in rpcs if rpc in owners}
+
+
+def has_stack() -> bool:
+    return bool(harness.load_state() and harness.owned_containers())
+
+
+# ------------------------------------------------------------------ the real JobStore
+
+# E3B phase 2, item 2 (D2 req 1 / D3 req 6): `pgtesting.make_jobstore_factory` on THIS
+# stack's PostgreSQL. A template database carries every migration `pgstate` applies (D4's
+# 0017 arrives without an edit), the test clock, D's builders' world and the PROVISIONAL
+# Marlin seed (P-01: never a price); each call clones it (`infrx_<ns>_*`, which the clock
+# gate needs). Built once per process and dropped at exit with its clones.
+TEMPLATE = f"{harness.PG_DATABASE}_tmpl"
+_clones = itertools.count(1)
+_made: list[str] = []
+_factory = None
+
+
+def _admin(statement: str) -> None:
+    import psycopg
+    with psycopg.connect(harness.pg_dsn(harness.PG_TEMPLATE_SOURCE), autocommit=True) as conn:
+        conn.execute(statement)
+
+
+def _template() -> None:
+    import pgstate
+    import psycopg
+
+    from infrx.state import migrations, pgtesting
+    harness.provision_database(TEMPLATE)
+    with psycopg.connect(harness.pg_dsn(TEMPLATE), autocommit=True) as conn:
+        pgstate.apply_migrations(conn)
+        pgstate.install_test_clock(conn)
+        pgtesting.seed(conn)
+        conn.execute(migrations.SEED_MARLIN.read_text())
+    atexit.register(_drop_all)
+
+
+def _drop_all() -> None:
+    for name in [*_made, TEMPLATE]:
+        try:
+            _admin(f'drop database if exists "{name}" with (force)')
+        except Exception:                          # noqa: BLE001 - the stack may be gone
+            pass
+
+
+def fresh_database() -> str:
+    """A clone of the template, unique across processes; at most 12 kept per process."""
+    name = f"{harness.PG_DATABASE}_{os.getpid()}_{next(_clones)}"
+    _admin(f'create database "{name}" template "{TEMPLATE}"')
+    _made.append(name)
+    while len(_made) > 12:
+        _admin(f'drop database if exists "{_made.pop(0)}" with (force)')
+    return name
+
+
+def current_database() -> str:
+    """The clone the last `pg_jobstore()` built (a live drill applies its defect there)."""
+    return _made[-1]
+
+
+class _NoStream:
+    """Stands in for the `stream` hook until D4's PgStreamStore gives pgtesting one: a drill
+    that reaches it although its `append` is no stub FAILS by name, never by KeyError."""
+
+    def __getattr__(self, name):
+        import pytest
+        pytest.fail(f"stream.{name}: no PostgreSQL StreamStore on this base (D4's hook)")
+
+
+def pg_jobstore(limits=None):
+    """A fresh real-store conformance Harness (`pgtesting`), on this stack."""
+    global _factory
+    import pytest
+    if not has_stack():
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
+    if _factory is None:
+        from infrx.state import pgtesting
+        _template()
+        _factory = pgtesting.make_jobstore_factory(fresh_database, harness.pg_dsn)
+    h = _factory(limits=limits)
+    h.extra.setdefault("stream", _NoStream())
+    return h
+
+
+def defect(sql: str) -> None:
+    """A live defect drill on the CURRENT clone only - never the template, never E2's
+    database. The store opens its own connection per operation, so a replacement it must
+    see is committed; the clone is disposable and dropped with the others."""
+    name = current_database()
+    if not name.startswith(f"{harness.PG_DATABASE}_{os.getpid()}_"):
+        raise AssertionError(f"refusing a defect outside this process's clones: {name}")
+    import psycopg
+    with psycopg.connect(harness.pg_dsn(name), autocommit=True) as conn:
+        conn.execute(sql)
+
+
+def function_source(name: str, signature: str) -> str:
+    """`pg_get_functiondef` of a function on the current clone (what a defect edits)."""
+    import psycopg
+    with psycopg.connect(harness.pg_dsn(current_database()), autocommit=True) as conn:
+        return conn.execute("select pg_get_functiondef(%s::regprocedure)",
+                            (f"{name}({signature})",)).fetchone()[0]
 
 
 # ------------------------------------------------------------------ two tenants

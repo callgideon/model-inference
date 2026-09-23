@@ -5,9 +5,10 @@ parametrised over the store it runs on:
 
 * `fake`     - the merged contract fakes. Runs today; proves the drill and its assertions
                (a fake-only result is *implemented*, never *integrated*).
-* `postgres` - the real PostgreSQL JobStore/StreamStore adapter. It does not exist on this
-               base (the D2-D5 RPCs are `infrx.unimplemented` stubs), so each drill is
-               PENDING with the D task that delivers the operation it crashes.
+* `postgres` - the real PostgreSQL JobStore (`infrx.state.pgtesting` on this stack's
+               PostgreSQL, E3B phase 2). A drill names the store functions it drives and is
+               PENDING - on the task the stub names - only while one of THOSE is still an
+               `infrx.unimplemented` stub (D4's `append`, D5's settlement).
 
 Where a real store does exist it is used directly: Q2's `ValkeyScheduler` on E2's Valkey
 (queue loss and rebuild, index saturation), migrations 0001-0005 on E2's PostgreSQL (the
@@ -23,6 +24,7 @@ Drill ids are `E3B-DR-nn`; the evidence maps each to its oracle (04).
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import uuid
 from decimal import Decimal
@@ -48,21 +50,35 @@ GRANT = "5"
 BACKENDS = ("fake", "postgres")
 
 
-def rig(backend: str, *unblock: str, **limits):
-    """The store a drill runs on. `postgres` is pending on the D tasks named - but only
-    while the D RPCs are still stubs: the day they are implemented this FAILS, so a drill
-    cannot stay silently pending behind a store that already exists."""
+# E3B phase 2, item 2: a live defect for the next `postgres` rig (a callable applying it to
+# that rig's own clone), set by the db06/db07 drills and nothing else.
+DEFECT = None
+
+
+def rig(backend: str, *rpcs: str, **limits):
+    """The store a drill runs on. `rpcs` are the store functions the drill drives: on
+    `postgres` the drill is PENDING, on the task each stub names, only while one of THOSE is
+    an `infrx.unimplemented` stub (item 1) - a D6 stub it never calls cannot hold it back."""
+    settings = DEFAULTS.replace(**limits) if limits else None
     if backend == "postgres":
-        stubs = stack.unimplemented_rpcs()
-        if stubs == 0:
-            pytest.fail("the D RPCs are implemented: wire rig('postgres') to the real "
-                        "adapter (E3B phase 2)")
-        stack.pending(*unblock, why=f"no PostgreSQL JobStore/StreamStore adapter on this "
-                                    f"base: {stubs} infrx RPCs are infrx.unimplemented stubs")
-    h = jobstore_factory(limits=DEFAULTS.replace(**limits) if limits else None)
+        stubs = stack.stubbed(rpcs) if stack.has_stack() else {}
+        if stubs:
+            stack.pending(*sorted(set(stubs.values())),
+                          why=f"{sorted(stubs)} are still infrx.unimplemented stubs")
+        h = stack.pg_jobstore(settings)
+        if DEFECT is not None:
+            DEFECT()
+    else:
+        h = jobstore_factory(limits=settings)
     h.extra["grant"](b.ORG_A, GRANT)
     h.extra["grant"](b.ORG_B, GRANT)
     return h
+
+
+# The functions each group of drills drives (`rig`'s probe), in one place.
+ADMIT = ("admit",)
+PREPARE = (*ADMIT, "claim_preparation", "prepare")
+RUN = (*PREPARE, "claim")
 
 
 def run(body):
@@ -106,7 +122,7 @@ def test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity(backend)
     """DUR-ADMIT: the process dies after the admission committed and before it answered.
     The retry with the same idempotency key is the SAME accepted job - one job, one hold
     of exactly its maximum, one prepare dispatch - and nothing was reserved twice."""
-    h = rig(backend, "D2")
+    h = rig(backend, *ADMIT)
 
     async def body():
         h.failures.crash_after_commit("admit")
@@ -128,7 +144,7 @@ def test_e3b_dr02_a_refused_admission_leaves_nothing_behind(backend):
     """DUR-ADMIT / DUR-CAP / API-AUTH: a revoked key, an unpriced model, an empty wallet and
     a full key each refuse with their typed error and leave no job, hold, dispatch or
     journal reservation - the invalid call cannot leak capacity or credit."""
-    h = rig(backend, "D2", max_active_jobs_per_key=1)
+    h = rig(backend, *ADMIT, max_active_jobs_per_key=1)
 
     async def refused(expected, **kw):
         request = b.request(h, **kw)
@@ -162,7 +178,7 @@ def test_e3b_dr03_a_lost_preparation_worker_is_redispatched_and_fenced(backend):
     """DUR-FENCE (preparation): the preparing worker dies; after its short lease the reaper
     re-dispatches preparation, the dead worker's late `prepared` is refused, and the new
     worker queues the job exactly once."""
-    h = rig(backend, "D3")
+    h = rig(backend, *PREPARE, "recover")
 
     async def body():
         _, admission = await admit(h)
@@ -187,7 +203,7 @@ def test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once(backend):
     """DUR-FENCE / DUR-OUTBOX (dispatch): the claim committed but the worker never got the
     lease. After lease expiry the job is requeued as a prepublication retry with ONE new
     inference dispatch, and the next claim is a new generation."""
-    h = rig(backend, "D3")
+    h = rig(backend, *RUN, "recover")
 
     async def body():
         _, admission = await admit(h)
@@ -216,7 +232,7 @@ def test_e3b_dr05_a_stale_generation_cannot_append(backend):
     worker id claims generation 2. Generation 1's append is refused and stores nothing;
     only generation 2's output is readable. (Same worker id on purpose: only the
     generation, not the owner, distinguishes the two.)"""
-    h = rig(backend, "D3", "D4")
+    h = rig(backend, *RUN, "recover", "append")
 
     async def body():
         _, admission = await admit(h)
@@ -240,7 +256,7 @@ def test_e3b_dr06_a_worker_lost_after_publication_is_never_regenerated(backend):
     """DUR-OUTPUT: the worker dies after its first committed chunk. The reaper fails the job
     `lost_after_publication` (no second attempt, no early success) and, usage unknown, the
     hold stays reserved for reconciliation rather than becoming a debit."""
-    h = rig(backend, "D4", "D5")
+    h = rig(backend, *RUN, "append", "recover")
 
     async def body():
         _, admission = await admit(h)
@@ -264,7 +280,7 @@ def test_e3b_dr07_a_duplicate_settlement_settles_once(backend):
     """DUR-SETTLE / CREDIT-SPEND: the settling commit's answer is lost; the identical retry
     replays the committed outcome, a different proposal is refused, a late cancel returns
     the same outcome - one usage projection, one debit, conservation exact."""
-    h = rig(backend, "D5")
+    h = rig(backend, *RUN, "append", "terminalize", "cancel")
 
     async def body():
         _, admission = await admit(h)
@@ -292,7 +308,7 @@ def test_e3b_dr08_a_foreign_tenant_cannot_read_cancel_or_see_a_result(backend):
     """Tenant isolation of results (BACKEND-JOURNEY "foreign calls leave nothing"): beta
     asking for alpha's handle gets `not_found` from status, replay and cancel alike - the
     same answer as an unknown handle - and alpha's job is untouched."""
-    h = rig(backend, "D4", "G3")
+    h = rig(backend, *RUN, "append", "cancel")
 
     async def body():
         _, admission = await admit(h)
@@ -317,7 +333,9 @@ def test_e3b_dr09_cancellation_beats_a_late_completion(backend):
     """DUR-SETTLE / API-MODES: cancel while running, then the worker's completion arrives.
     One winner (the cancel), the completion is fenced, nothing is debited for unreported
     work and the hold is released."""
-    h = rig(backend, "D3", "D5")
+    # `complete` is refused by terminalize's D3 fence (the job is cancelled) before its D5
+    # stub runs, so the settlement stub is not a function this drill drives.
+    h = rig(backend, *RUN, "cancel")
 
     async def body():
         _, admission = await admit(h)
@@ -335,7 +353,7 @@ def test_e3b_dr09_cancellation_beats_a_late_completion(backend):
 def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole(backend):
     """Backpressure (API-STREAM / DUR-OUTPUT): an event over `JOURNAL_EVENT_MAX_BYTES` is
     `journal_write_failed`, and nothing of it - not a prefix - is stored."""
-    h = rig(backend, "D4", journal_event_max_bytes=64)
+    h = rig(backend, *RUN, "append", journal_event_max_bytes=64)
 
     async def body():
         _, admission = await admit(h)
@@ -348,14 +366,77 @@ def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole(backend)
     run(body)
 
 
+# ------------------------------------------------------------------ live defects, real store
+
+def _without_prepare_dispatch():
+    """`infrx.admission_rows` with its `prepare_dispatch` outbox insert removed: admission
+    still commits the job, its hold and its reservations - but nothing will dispatch it."""
+    source = stack.function_source("infrx.admission_rows",
+                                   "jsonb, jsonb, jsonb, text, timestamptz")
+    broken = re.sub(r"insert into infrx\.outbox .*?p_now\);", "", source, count=1, flags=re.S)
+    assert broken != source, "the outbox insert moved: the drill no longer describes 0011"
+    stack.defect(broken)
+
+
+def _fence_ignores_generation():
+    """`infrx.fence_lease` without its generation check: an old generation's lease passes
+    whenever its worker id matches the live attempt's."""
+    source = stack.function_source("infrx.fence_lease", "jsonb, text[], double precision")
+    check = "if a.generation is distinct from (p_lease->>'generation')::int then"
+    assert source.count(check) == 1, "the generation check moved: the drill is stale"
+    stack.defect(source.replace(check, "if false then"))
+
+
+def test_e3b_db06_detects_a_missing_durable_acceptance_on_the_real_store(monkeypatch):
+    """Intentional defect on the REAL store (DUR-ADMIT): an admission that commits without
+    its `prepare_dispatch` row. dr01's own assertions, unchanged, must report it. The defect
+    lives in this case's clone only (`stack.defect`)."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _without_prepare_dispatch)
+    with pytest.raises(AssertionError, match="prepare_dispatch"):
+        test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity("postgres")
+
+
+async def _stale_generation_accepted(h) -> list[str]:
+    """dr04's requeue with the SAME worker id on both generations (dr05's shape, without
+    D4's append): generation 1's lease must be refused by the fence every execution
+    mutation runs first. Returns what was accepted (empty = fenced)."""
+    _, admission = await admit(h)
+    old = await running(h, admission, "w1")
+    h.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    await h.port.recover()
+    new = await h.port.claim(admission.request_id, "w1")
+    assert (old.generation, new.generation) == (1, 2)
+    accepted = []
+    try:
+        await h.port.heartbeat(old)
+        accepted.append("heartbeat of generation 1")
+    except errors.StaleLease:
+        pass
+    await assert_conserved(h, b.ORG_A, [admission.job_handle])
+    return accepted
+
+
+def test_e3b_db07_detects_a_stale_fence_on_the_real_store(monkeypatch):
+    """Intentional defect on the REAL store (DUR-FENCE, stale lease): the fence holds on the
+    migrated store, and with `fence_lease`'s generation check removed the drill names the
+    accepted stale heartbeat. (dr04 itself never presents generation 1's lease again, so
+    the drill adds the one call that does.)"""
+    drives = (*RUN, "recover", "heartbeat")
+    h = rig("postgres", *drives)
+    assert run(lambda: _stale_generation_accepted(h)) == []
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _fence_ignores_generation)
+    h = rig("postgres", *drives)
+    assert run(lambda: _stale_generation_accepted(h)) == ["heartbeat of generation 1"]
+
+
 def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
     """API-MODES / API-STREAM: a sync or SSE client that disconnects mid-generation must
     cancel or detach per mode, with no orphan execution. It is a route behaviour, so it is
     pending exactly as long as no metered route is mounted, and fails once one is."""
     if stack.ingress_is_mounted():
         pytest.fail("the pilot ingress is mounted: write the disconnect drill body now")
-    stack.pending("G1R", "G2", why="the sync/SSE relay that sees the disconnect is G2's, "
-                                   "and no metered route is mounted")
+    stack.pending("G2", why="the sync/SSE relay that sees the disconnect is G2's, "
+                            "and no metered route is mounted")
 
 
 # ------------------------------------------------------------------ saturation and queue

@@ -2,12 +2,17 @@
 detected and failed. Layer 1 - no container; the JUnit XML is written by hand."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import run                                              # noqa: E402
+import stack                                            # noqa: E402
+
+import harness                                          # noqa: E402
 
 XML = """<testsuites><testsuite>
 <testcase classname="b.test_drills" name="test_e3b_dr01[fake]"/>
@@ -80,3 +85,38 @@ def test_the_backend_stage_reports_the_summary_of_what_its_suite_produced(monkey
     assert stage["status"] == run.PENDING
     assert (stage["detail"]["passed"], stage["detail"]["pending"]) == (2, 2)
     assert report.exit_code == 3
+
+
+# ------------------------------------------------------------------ E3B phase 2, item 1
+
+def test_a_drill_pends_only_on_the_stubs_it_drives():
+    """1a: D6's three stubs never go away in backend-first scope, so the probe must be per
+    drill - a drill that drives no stub runs (dr01 drives `admit` only), and one that does
+    pends on the task that stub names."""
+    owners = {"append": "D4", "terminalize": "D5", "accept_feedback": "D6",
+              "reserve_judge": "D6", "record_submission": "D6"}
+    assert stack.stubbed(("admit",), owners) == {}
+    assert stack.stubbed(("admit", "claim", "append"), owners) == {"append": "D4"}
+    assert stack.stubbed(("terminalize", "cancel"), {}) == {}
+
+
+def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual():
+    """1c: every pending id is a task of tasks.json, and one tasks.json marks implemented or
+    integrated is a blocker only as a RESIDUAL with its reason - and never for an E3B case
+    (`stack.pending` refuses it)."""
+    tasks = {task["id"]: task["status"] for task in json.loads(
+        (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
+    assert set(stack.PENDING) <= set(tasks), set(stack.PENDING) - set(tasks)
+    merged = {task for task in stack.PENDING if tasks[task] in ("implemented", "integrated")}
+    assert merged == set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
+    assert all(reason.strip() for reason in stack.RESIDUAL.values())
+    import pytest
+    refused = []
+    for task in stack.RESIDUAL:
+        try:
+            stack.pending(task, why="an E3B case may not name a merged task")
+        except AssertionError:
+            refused.append(task)
+        except pytest.skip.Exception:            # it pended: the refusal is gone
+            pass
+    assert refused == list(stack.RESIDUAL), refused
