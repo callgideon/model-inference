@@ -165,6 +165,8 @@ with (here / "curl.log").open("a") as log:
             log.write("HEADER MODE " + oct(stat.S_IMODE(path.stat().st_mode)) + " " + str(path)
                       + "\\n")
             log.write("HEADER FILE " + path.read_text())
+    if "-o" in args:
+        log.write("BODY " + args[args.index("-o") + 1] + "\\n")
 if "-o" in args and args[args.index("-o") + 1] != "/dev/null":
     pathlib.Path(args[args.index("-o") + 1]).write_text('{{"ok":true}}')
 if "-D" in args:
@@ -178,7 +180,8 @@ def test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line(tmp_
     """Every key the external check uses reaches curl in a header file, so none is ever an
     argument (visible in `ps` and /proc on the coordinator host) or printed; the key is
     still what curl sends. That file is 0600 while it exists, and it - like the response
-    body file - is a fresh temporary file, gone when the script exits."""
+    body file, which is never a fixed /tmp path - is a fresh temporary file, gone when the
+    script exits."""
     stub = tmp_path / "bin"
     stub.mkdir()
     (stub / "curl").write_text(FAKE_CURL.format(python=sys.executable))
@@ -191,13 +194,16 @@ def test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line(tmp_
                           text=True, env={**os.environ, **keys, "TMPDIR": str(scratch),
                                           "PATH": f"{stub}{os.pathsep}{os.environ['PATH']}"})
     log = (stub / "curl.log").read_text()
-    argv = [line for line in log.splitlines() if not line.startswith("HEADER ")]
+    argv = [line for line in log.splitlines() if not line.startswith(("HEADER ", "BODY "))]
     assert argv and not [line for line in argv if support.MARKER in line]
     assert support.MARKER not in done.stdout + done.stderr
     for key in keys.values():
         assert f"HEADER FILE Authorization: Bearer {key}\n" in log, key
     modes = [line.split(" ", 3)[2:] for line in log.splitlines() if line.startswith("HEADER MODE")]
     assert modes and all(mode == "0o600" and path.startswith(str(scratch)) for mode, path in modes)
+    bodies = [line[5:] for line in log.splitlines()
+              if line.startswith("BODY ") and line != "BODY /dev/null"]
+    assert bodies and all(body.startswith(f"{scratch}/") for body in bodies), bodies
     assert list(scratch.iterdir()) == [], "a temporary file outlived the script"
 
 
