@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T17:13:29Z",
+  "updated": "2026-09-23T17:21:22Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round-3 verifier at 1a7a256 fix_required (DRL-R3-1 READY_S budget unkillable; 3 nonblocking) \u2192 round 4 running \u2192 verifier \u2192 merge after E3B2 (IR2-2 updated: RESIDUAL = {}, PENDING = OWNERS + D5)",
+      "phase": "round 4 HANDED BACK 95b7df7 (rc10b READY_S budget pinned; column_acls privilege witness; rc04a drift; I3B list 104/102); final verifier running \u2192 merge after E3B2 with IR2-2",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
@@ -54,8 +54,8 @@
       "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "verifier fix_required at 1a7a256 (wf_9570bfe1-b82; JSON evidence/i/I3B-followup-verify-1a7a256.json) \u2192 round 4",
-      "since": "2026-09-23T16:59:16Z"
+      "phase": "round-4 verifier at 95b7df7 running (single Opus drill verifier + refuters)",
+      "since": "2026-09-23T17:21:22Z"
     },
     "F-fakes-followup": {
       "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
