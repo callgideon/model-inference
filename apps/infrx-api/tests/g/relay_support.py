@@ -101,6 +101,14 @@ class World:
             self.jobs.grant(self.org, self.grant)
         self.results: dict[str, str] = {}
         self.objects = Objects()
+        self.naps = 0
+        self.during: list[Callable] = []          # run, in order, one per nap
+        self.restart()
+
+    def restart(self) -> None:
+        """A gateway process: its relay, its media adapter (M's state is in process) and its
+        app, over the stores and object store that outlive it. Called again, it is the next
+        process after a restart."""
         self.relay = Relay(jobs=self.jobs, stream=self.stream, media=None, regime=self.regime,
                            catalog=self.catalog, active_rate_card_version=self.card,
                            results=self, limits=self.limits, clock=self.now_s, sleep=self.nap)
@@ -108,8 +116,6 @@ class World:
         self.media = MediaUploads(self.objects, limits=self.limits, fetcher=fetcher,
                                   probe=probe, job_org=self.relay.job_org)
         self.relay.media = self.media
-        self.naps = 0
-        self.during: list[Callable] = []          # run, in order, one per nap
         self.app, _ = support.cutover_app(
             clock=self.now_s, sb=support.supabase(rows=(self.row,)),
             ingress_deps=support.deps(accept=self.relay.accept, catalog=self.catalog))
