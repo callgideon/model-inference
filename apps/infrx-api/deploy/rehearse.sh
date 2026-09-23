@@ -7,19 +7,20 @@
 #
 # How the box is stood in for, and what that does not prove:
 # * "the host" is a sandbox root (INFRX_ROOT) and one network namespace, the container
-#   infrx-i2b-box (--network none): every `--network host` unit joins it, so 127.0.0.1 is
+#   $NS-box (--network none): every `--network host` unit joins it, so 127.0.0.1 is
 #   shared the way the box's is, and nothing listens on this machine's own interfaces.
 # * `systemctl` is a mini-systemd that reads the installed unit files and runs their
 #   ExecStartPre/ExecStart/ExecStop lines (`+` lines as root through a throwaway root
-#   container); `docker` is a wrapper that renames containers/volumes to infrx-i2b-*,
+#   container); `docker` is a wrapper that renames containers/volumes to $NS-*,
 #   maps host paths into the sandbox and joins the box; `curl` runs inside the box;
 #   `aws` answers from a local parameter file. The scripts themselves are unmodified.
 # * no GPU: the engine unit runs tests/integration/fake_vllm.py (E2's fake) in the runtime
 #   image on 127.0.0.1:8000 instead of serve.sh. Nothing here measures the engine.
 # * pilot is refused by the real preflight today (G2 composition, W3 entry points), so the
 #   deploy rehearsed end to end is dev mode; pilot's refusal is rehearsed as a drill.
-# Every container, network and volume it makes is named infrx-i2b-* and labelled
-# ai.infrx.i2b.rehearsal=1; teardown removes exactly those and checks nothing is left.
+# Every container, network and volume it makes is named $NS-* and labelled
+# ai.infrx.rehearsal=$NS; teardown removes exactly those and checks nothing is left.
+# NS is REHEARSAL_NS (default infrx-i2b), so two rehearsals never touch each other.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -28,7 +29,9 @@ mkdir -p "$work"
 work=$(cd "$work" && pwd)
 export INFRX_ROOT=$work/root REHEARSAL=$work
 BIN=$work/bin
-LABEL=ai.infrx.i2b.rehearsal=1
+NS=${REHEARSAL_NS:-infrx-i2b}
+LABEL=ai.infrx.rehearsal=$NS
+export REHEARSAL_NS=$NS REHEARSAL_LABEL=$LABEL
 PG_IMAGE=supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd
 KEY=infrx-i2b-rehearsal-legacy-key-0123456789     # a local literal, dev mode only
 mkdir -p "$INFRX_ROOT/etc" "$BIN"
@@ -44,20 +47,20 @@ teardown() {
   [ -d "$work" ] && /usr/bin/docker run --rm --user 0 --network none -v "$work:$work" \
     --label "$LABEL" python@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 \
     sh -c "rm -rf '$work/root'" >/dev/null 2>&1
-  /usr/bin/docker network rm infrx-i2b-net >/dev/null 2>&1
-  /usr/bin/docker volume ls -q --filter name=infrx-i2b- | xargs -r /usr/bin/docker volume rm >/dev/null
-  left=$(/usr/bin/docker ps -aq --filter name=infrx-i2b-; /usr/bin/docker volume ls -q --filter name=infrx-i2b-)
-  echo "teardown: $( [ -z "$left" ] && echo 'nothing infrx-i2b-* left' || echo "LEFT: $left")"
+  /usr/bin/docker network rm "$NS-net" >/dev/null 2>&1
+  /usr/bin/docker volume ls -q --filter "name=$NS-" | xargs -r /usr/bin/docker volume rm >/dev/null
+  left=$(/usr/bin/docker ps -aq --filter "name=$NS-"; /usr/bin/docker volume ls -q --filter "name=$NS-")
+  echo "teardown: $( [ -z "$left" ] && echo "nothing $NS-* left" || echo "LEFT: $left")"
 }
 trap teardown EXIT
 
 # --- the stubs ---------------------------------------------------------------------------
 cat > "$BIN/docker" <<'PY'
 #!/usr/bin/env python3
-"""docker, as the box would see it: containers/volumes/image tags in the infrx-i2b-
+"""docker, as the box would see it: containers/volumes/image tags in the rehearsal's
 namespace, host paths inside the sandbox root, host networking = the box's namespace."""
 import os, sys
-ROOT, P, REAL = os.environ["INFRX_ROOT"], "infrx-i2b-", "/usr/bin/docker"
+ROOT, P, REAL = os.environ["INFRX_ROOT"], os.environ["REHEARSAL_NS"] + "-", "/usr/bin/docker"
 HOST = ("/etc/", "/var/lib/infrx", "/var/backups/infrx", "/opt/dlami/nvme")
 VALUED = {"--user", "--tmpfs", "--cap-drop", "--cap-add", "--security-opt", "--memory",
           "--cpus", "--pids-limit", "-e", "--env", "--label", "-p", "--gpus", "--entrypoint",
@@ -70,11 +73,11 @@ def vol(spec):
 args, out = sys.argv[1:], []
 sub = args[0] if args else ""
 if sub == "run":
-    out, i = ["run", "--label", "ai.infrx.i2b.rehearsal=1"], 1
+    out, i = ["run", "--label", os.environ["REHEARSAL_LABEL"]], 1
     while i < len(args):
         a = args[i]
         if a in ("--network",) and args[i + 1] == "host":
-            out += ["--network", "container:infrx-i2b-box"]
+            out += ["--network", "container:" + P + "box"]
         elif a == "--name":
             out += ["--name", P + args[i + 1]]
         elif a in ("-v", "--volume"):
@@ -208,7 +211,7 @@ PY
 cat > "$BIN/curl" <<'SH'
 #!/usr/bin/env bash
 # curl -fsS -o /dev/null --max-time N URL, from inside the box's network namespace.
-exec /usr/bin/docker exec infrx-i2b-box python -c '
+exec /usr/bin/docker exec "$REHEARSAL_NS-box" python -c '
 import sys, urllib.request
 try:
     urllib.request.urlopen(sys.argv[1], timeout=5)
@@ -233,7 +236,7 @@ cat > "$BIN/chown" <<'SH'
 # chown OWNER DIR... as root, through a throwaway container (this host is not root).
 owner=$1; shift
 for d in "$@"; do
-  /usr/bin/docker run --rm --user 0 --network none --label ai.infrx.i2b.rehearsal=1 \
+  /usr/bin/docker run --rm --user 0 --network none --label "$REHEARSAL_LABEL" \
     -v "$d:$d" "$REHEARSAL_IMAGE" chown "$owner" "$d"
 done
 SH
@@ -243,7 +246,7 @@ cat > "$BIN/chmod" <<'SH'
 /bin/chmod "$@" 2>/dev/null && exit 0
 mode=$1; shift
 for d in "$@"; do
-  /usr/bin/docker run --rm --user 0 --network none --label ai.infrx.i2b.rehearsal=1 \
+  /usr/bin/docker run --rm --user 0 --network none --label "$REHEARSAL_LABEL" \
     -v "$d:$d" "$REHEARSAL_IMAGE" chmod "$mode" "$d"
 done
 SH
@@ -254,7 +257,7 @@ params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
 
 # in-namespace HTTP: status, then body
 http() {  # http METHOD URL [header-json] [body]
-  /usr/bin/docker exec infrx-i2b-box python -c '
+  /usr/bin/docker exec "$NS-box" python -c '
 import json, sys, urllib.request
 method, url = sys.argv[1], sys.argv[2]
 headers = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
@@ -268,7 +271,7 @@ except Exception as e:
     print("ERR", type(e).__name__)' "$@"
 }
 status_of() { local out; out=$(http "$@"); echo "${out%%$'\n'*}"; }   # status line only
-started() { /usr/bin/docker inspect --format '{{.State.StartedAt}}' "infrx-i2b-$1" 2>/dev/null || echo none; }
+started() { /usr/bin/docker inspect --format '{{.State.StartedAt}}' "$NS-$1" 2>/dev/null || echo none; }
 sha() { sha256sum "$1" | cut -c1-16; }
 
 # --- the run -------------------------------------------------------------------------------
@@ -279,7 +282,7 @@ RELEASE=$(git rev-parse HEAD)
 docker build -q --provenance=false -f "$here/Dockerfile" -t "infrx-runtime:$RELEASE" "$repo/apps/infrx-api" >/dev/null
 export REHEARSAL_IMAGE
 REHEARSAL_IMAGE=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$RELEASE")
-/usr/bin/docker run -d --name infrx-i2b-box --label "$LABEL" --network none \
+/usr/bin/docker run -d --name "$NS-box" --label "$LABEL" --network none \
   "$REHEARSAL_IMAGE" sleep infinity >/dev/null
 export REHEARSAL_ENGINE="docker run --rm --name marlin2b-8000 --network host \
   -v $repo/apps/infrx-api/infrx:/x/apps/infrx-api/infrx:ro \
@@ -299,7 +302,7 @@ echo "env keys: $(cut -d= -f1 "$env_file" | tr '\n' ' ')"
 check "INFRX_IMAGE in the env file is the image the probe ran in" \
   "grep -qx 'INFRX_IMAGE=$REHEARSAL_IMAGE' '$env_file'"
 first_env=$(sha "$env_file")
-g=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}} secopt={{.HostConfig.SecurityOpt}} mem={{.HostConfig.Memory}} pids={{.HostConfig.PidsLimit}} image={{.Image}}' infrx-i2b-infrx-gateway)
+g=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}} secopt={{.HostConfig.SecurityOpt}} mem={{.HostConfig.Memory}} pids={{.HostConfig.PidsLimit}} image={{.Image}}' "$NS-infrx-gateway")
 echo "gateway container: $g"
 check "the gateway runs the pinned image as 10001, read-only, no capabilities" \
   "[[ '$g' == *'user=10001:10000 ro=true capdrop=[ALL] secopt=[no-new-privileges]'*'image=$REHEARSAL_IMAGE'* ]]"
@@ -332,6 +335,7 @@ drill "a throttled SSM read" 2 INFRX_MODE=dev
 params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
 drill "a mistyped tunable" 2 INFRX_MODE=dev INFRX_SET=MAX_ACTIVE_JOB=4
 drill "a tunable the runtime cannot read" 2 INFRX_MODE=dev INFRX_SET=MAX_ACTIVE_JOBS=abc
+drill "an engine sequence count of 0" 2 INFRX_MODE=dev INFRX_SET=ENGINE_MAX_NUM_SEQS=0
 params "{\"/model-inference/supabase_url\": {\"value\": \"https://example.supabase.co\"},
  \"/model-inference/supabase_service_role_key\": {\"value\": \"local-literal-service-role-0123456789\"},
  \"/model-inference/pg_journal_url\": {\"value\": \"postgresql://infrx@127.0.0.1:5432/infrx\"}}"
@@ -347,9 +351,9 @@ params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
 
 step "4. the pilot-only index unit (pinned Valkey, loopback, read-only, no persistence)"
 systemctl start infrx-valkey
-v=$(/usr/bin/docker exec infrx-i2b-infrx-valkey valkey-cli -h 127.0.0.1 ping 2>&1 || true)
+v=$(/usr/bin/docker exec "$NS-infrx-valkey" valkey-cli -h 127.0.0.1 ping 2>&1 || true)
 check "valkey answers PONG on 127.0.0.1 (got $v)" '[ "$v" = PONG ]'
-vi=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}}' infrx-i2b-infrx-valkey)
+vi=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}}' "$NS-infrx-valkey")
 echo "valkey container: $vi"
 check "valkey runs as 999, read-only, no capabilities" "[ '$vi' = 'user=999:1000 ro=true capdrop=[ALL]' ]"
 
@@ -358,6 +362,9 @@ step "5. the edge: real Caddyfile, pinned Caddy, in the box (plain HTTP address,
 sleep 2
 out=$(http GET http://127.0.0.1:8080/health); echo "$out"
 check "public /health is exactly {\"ok\":true}" "[ '${out##*$'\n'}' = '{\"ok\":true}' ]"
+# The runtime containers share this loopback: Caddy's admin API must not be on it.
+r=$(status_of GET http://127.0.0.1:2019/config/)
+check "the admin API does not answer on the shared loopback :2019 (got $r)" '[[ "$r" == ERR* ]]'
 for p in /metrics /readyz /internal/x; do
   r=$(http GET "http://127.0.0.1:8080$p"); echo "$p -> $(echo "$r" | tr '\n' ' ')"
   check "$p is 404 not_found at the edge" "[[ '${r%%$'\n'*}' = 404 && '$r' == *'\"code\":\"not_found\"'* ]]"
@@ -366,7 +373,7 @@ r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":
 check "an authenticated call through the edge is 200 (got $r)" '[ "$r" = 200 ]'
 # A raw socket: the edge answers 413 and closes while the client is still sending, which
 # an HTTP library reports as a reset rather than as the answer it received.
-r=$(/usr/bin/docker exec infrx-i2b-box python -c '
+r=$(/usr/bin/docker exec "$NS-box" python -c '
 import socket
 n = 97 * 2**20
 s = socket.create_connection(("127.0.0.1", 8080), timeout=60)
@@ -402,15 +409,16 @@ step "6. drain: maintenance at the edge first, then the runtime stops; resume af
 out=$(http POST http://127.0.0.1:8080/v1/chat/completions '{"Content-Type":"application/json"}' "$body")
 echo "during maintenance: $(echo "$out" | tr '\n' ' ')"
 check "maintenance answers 503 dependency_unavailable" "[[ '${out%%$'\n'*}' = 503 && '$out' == *dependency_unavailable* ]]"
-check "the gateway is stopped" '[ "$(/usr/bin/docker inspect --format "{{.State.Running}}" infrx-i2b-infrx-gateway 2>/dev/null || echo gone)" != true ]'
-/usr/bin/docker restart infrx-i2b-caddy >/dev/null; sleep 2
+check "the gateway is stopped" '[ "$(/usr/bin/docker inspect --format "{{.State.Running}}" "$NS-infrx-gateway" 2>/dev/null || echo gone)" != true ]'
+/usr/bin/docker restart "$NS-caddy" >/dev/null; sleep 2
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
 check "maintenance survives a Caddy restart (health: $r)" "[[ '$r' == 503* ]]"
 "$here/drain.sh" resume
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
 check "resumed: public health up again ($r)" "[[ '$r' == '200 {\"ok\":true}'* ]]"
 
-step "7. rollback: a second deploy (MAX_ACTIVE_JOBS=4), then rollback.sh to the first"
+step "7. R2 in runbook order: pause, a second deploy (MAX_ACTIVE_JOBS=4), rollback.sh to the first, resume"
+"$here/drain.sh" pause
 set +e
 INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) INFRX_SET=MAX_ACTIVE_JOBS=4 READY_S=60 \
   "$here/install.sh" > "$work/second.log" 2>&1; code=$?; set -e
@@ -421,32 +429,37 @@ before_start=$(started infrx-gateway)
 "$here/rollback.sh" "$second_backup" 2>&1 | tail -n 2 || true
 check "the env file is the first deploy's again" "[ \"\$(sha '$env_file')\" = '$first_env' ]"
 check "the gateway restarted onto it and is ready" "[ \"\$(started infrx-gateway)\" != '$before_start' ] && curl -fsS -o /dev/null http://127.0.0.1:8001/health"
+r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
+check "rollback.sh restored the edge as it was backed up - maintenance, through the admin socket ($r)" "[[ '$r' == 503* ]]"
+"$here/drain.sh" resume
+r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
+check "drain.sh resume (90-revert's last line) reopens the edge ($r)" "[[ '$r' == '200 {\"ok\":true}'* ]]"
 
 step "8. migrate.py against the pinned supabase/postgres (own network, no host port)"
-/usr/bin/docker network create --label "$LABEL" infrx-i2b-net >/dev/null
-/usr/bin/docker run -d --name infrx-i2b-postgres --label "$LABEL" --network infrx-i2b-net \
+/usr/bin/docker network create --label "$LABEL" "$NS-net" >/dev/null
+/usr/bin/docker run -d --name "$NS-postgres" --label "$LABEL" --network "$NS-net" \
   -e POSTGRES_PASSWORD=infrx-i2b-local "$PG_IMAGE" >/dev/null
 for _ in $(seq 60); do
-  /usr/bin/docker exec infrx-i2b-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 2
+  /usr/bin/docker exec "$NS-postgres" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 2
 done
 sleep 3
 # The Supabase CLI's history table, as a hosted project has it (I1B: 0001-0002 applied).
-/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local infrx-i2b-postgres psql -q -h 127.0.0.1 -U postgres -c \
+/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local "$NS-postgres" psql -q -h 127.0.0.1 -U postgres -c \
   "create schema if not exists supabase_migrations; create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);"
 migrate() {  # migrate DIR ARGS...
   local dir=$1; shift
-  /usr/bin/docker run --rm --label "$LABEL" --network infrx-i2b-net -v "$dir:/migrations:ro" \
+  /usr/bin/docker run --rm --label "$LABEL" --network "$NS-net" -v "$dir:/migrations:ro" \
     -e MIGRATE_DATABASE_URL -e PYTHONDONTWRITEBYTECODE=1 "$REHEARSAL_IMAGE" \
     python /app/deploy/migrate.py "$@" --dir /migrations
 }
-export MIGRATE_DATABASE_URL=postgresql://postgres:infrx-i2b-local@infrx-i2b-postgres:5432/postgres
+export MIGRATE_DATABASE_URL=postgresql://postgres:infrx-i2b-local@$NS-postgres:5432/postgres
 mig=$repo/apps/app/supabase/migrations
 first2=$work/first2; mkdir -p "$first2"; cp "$mig"/0001_*.sql "$mig"/0002_*.sql "$first2/"
 d=$(migrate "$first2" plan | sed -n 's/^plan digest: //p')
 migrate "$first2" apply --expect "$d"
 out=$(migrate "$mig" plan); echo "$out"
 digest=$(echo "$out" | sed -n 's/^plan digest: //p')
-applied_versions() { /usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local infrx-i2b-postgres psql -At -h 127.0.0.1 -U postgres -c "select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations"; }
+applied_versions() { /usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local "$NS-postgres" psql -At -h 127.0.0.1 -U postgres -c "select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations"; }
 set +e
 migrate "$mig" apply --expect "$(printf '0%.0s' $(seq 64))"; code=$?
 check "apply with an unreviewed digest refuses: exit 2 (got $code), history 0001,0002" "[ $code = 2 ] && [ \"\$(applied_versions)\" = 0001,0002 ]"
@@ -455,7 +468,7 @@ printf 'create table infrx_i2b_never (x int);\nthis is not sql;\n' > "$broken/00
 bd=$(migrate "$broken" plan | sed -n 's/^plan digest: //p')
 migrate "$broken" apply --expect "$bd"; code=$?
 check "a failing migration rolls the whole plan back: exit 3 (got $code), history 0001,0002" "[ $code = 3 ] && [ \"\$(applied_versions)\" = 0001,0002 ]"
-t=$(/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local infrx-i2b-postgres psql -At -h 127.0.0.1 -U postgres -c "select to_regclass('infrx.jobs') is null and to_regclass('public.infrx_i2b_never') is null")
+t=$(/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local "$NS-postgres" psql -At -h 127.0.0.1 -U postgres -c "select to_regclass('infrx.jobs') is null and to_regclass('public.infrx_i2b_never') is null")
 check "no table from 0003-0010 survived the rollback (got $t)" '[ "$t" = t ]'
 gap=$work/gap; mkdir -p "$gap"; cp "$mig"/0001_*.sql "$mig"/0003_*.sql "$gap/"
 migrate "$gap" plan; code=$?
@@ -465,6 +478,11 @@ set -e
 check "the reviewed plan applies: exit 0 (got $code), history 0001..0009" "[ $code = 0 ] && [ \"\$(applied_versions)\" = 0001,0002,0003,0004,0005,0006,0007,0008,0009 ]"
 out=$(migrate "$mig" plan | tail -1)
 check "a second plan has nothing pending ($out)" '[ "$out" = "nothing pending" ]'
+partial=$work/partial; mkdir -p "$partial"; cp "$mig"/*.sql "$partial/"
+printf 'create table infrx_i2b_partial (x int);\ncommit;\n' > "$partial/0010_commits.sql"
+pd=$(migrate "$partial" plan | sed -n 's/^plan digest: //p')
+set +e; migrate "$partial" apply --expect "$pd"; code=$?; set -e
+check "a migration with its own COMMIT stops the plan: exit 4 (got $code), history still 0001..0009" "[ $code = 4 ] && [ \"\$(applied_versions)\" = 0001,0002,0003,0004,0005,0006,0007,0008,0009 ]"
 
 step "result"
 [ "$FAILED" = 0 ] && echo "REHEARSAL PASSED" || echo "REHEARSAL FAILED"
