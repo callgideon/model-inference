@@ -203,7 +203,7 @@ def test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed(
     assert preflight.apply(cfg) == preflight.REFUSED
     unchanged(cfg, before, made.systemctl_calls)
     message = capsys.readouterr().err
-    assert "ROUTERS" in message and "G2" in message
+    assert "pilot routers to be composed" in message  # preflight's own phrase (G1R review C2)
     assert MARKER not in message
 
 

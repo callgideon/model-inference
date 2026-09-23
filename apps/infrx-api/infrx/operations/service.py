@@ -27,6 +27,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Callable
 
+from ..auth.context import auth_context
 from ..contracts import errors
 from ..contracts.records import Role
 from ..contracts.v2 import fixtures as v2fix
@@ -109,10 +110,8 @@ class Operations:
             raise errors.InvalidApiKey("the credential is unknown or revoked")
         if row.audience is CredentialAudience.provider_dev:
             raise errors.Forbidden("provider credentials are served by the Lab surface")
-        return AuthContextV2(audience=row.audience, org_id=row.org_id, key_id=row.key_id,
-                             principal=row.key_id, role=row.role, entitlement_version=0,
-                             user_id=row.user_id if row.audience is CredentialAudience.consumer
-                             else None)
+        return auth_context(audience=row.audience, org_id=row.org_id, key_id=row.key_id,
+                            user_id=row.user_id, role=row.role)
 
     async def operator(self, secret: str) -> OperatorSession:
         auth = await self._context(secret)

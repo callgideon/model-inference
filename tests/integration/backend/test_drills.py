@@ -508,8 +508,13 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     """Forced fallback to legacy unmetered ingress (R51): a pilot configured with the shared
     gateway key (R51's forbidden setting) - the legacy path that bypasses per-tenant metering - refuses to
     start, naming the setting and not its value."""
+    from unittest import mock
     from infrx.config import RuntimeMisconfigured, validate_runtime
-    assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
+    from infrx.gateway import app as composition
+    from infrx.gateway.routes import health, ingress, models
+    # G1R: a complete pilot configuration validates only as the cutover composes it.
+    with mock.patch.object(composition, "ROUTERS", (health, models, ingress)):
+        assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
     with pytest.raises(RuntimeMisconfigured) as refused:
         validate_runtime(_pilot_settings(tmp_path, legacy_key="shared-legacy-key"))
     # assembled from parts: tests/integration's production-pointer guard scans this file
@@ -522,8 +527,14 @@ def test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route(t
     must be the metered ingress, never the legacy F1 chat route (no durable admission, no
     hold). Today the composition root mounts the legacy route in every mode - the documented
     pre-cutover state - so this is pending on G1R with the observation recorded."""
+    from infrx.config import RuntimeMisconfigured
     from infrx.gateway.app import create_app
-    app = create_app(_pilot_settings(tmp_path))
+    try:
+        app = create_app(_pilot_settings(tmp_path))
+    except RuntimeMisconfigured as refused:
+        # G1R: pilot refuses to start while chat would be served by the legacy route.
+        assert "legacy route" in str(refused)
+        return
     served = {route.path: route.endpoint.__module__ for route in app.routes
               if getattr(route, "path", "") == "/v1/chat/completions"}
     if served and all(module.endswith(".ingress") for module in served.values()):
