@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T05:12:27Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T05:16:20Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>20</b><span>done</span></div>
 <div class="tile prog"><b>6</b><span>in progress</span></div>
@@ -90,7 +90,8 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td><code>P-18</code></td><td>Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent</td><td>E4B certification; provisional criteria allowed</td><td>workload owner</td></tr>
 <tr><td><code>P-01</code></td><td>Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)</td><td>public metered publication only; a provisional fixture rate is used meanwhile</td><td>user/operator</td></tr>
 <tr><td><code>P-19 (new)</code></td><td>Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md</td><td>publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol)</td><td>pricing owner / user</td></tr>
-<tr><td><code>P-04-sweep</code></td><td>W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box&#x27;s measured value) until then.</td><td>W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status</td><td>coordinator (box op)</td></tr>
+<tr><td><code>P-04-sweep</code></td><td>W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine&#x27;s 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside</td><td>ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 ⚠️ / cutover keeps 32 explicitly); W4&#x27;s first input</td><td>W4 (tuning) / W3 (record)</td></tr>
+<tr><td><code>P-20</code></td><td>The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) — until then the pilot admits what the engine cannot serve</td><td>E4B certification; G2&#x27;s validation ceiling</td><td>W4 decides; G2 applies</td></tr>
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>F2P</code> — codex-f2p — wire-in round 2 (MONEY-C1 + test strength) then coordinator check and merge since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>

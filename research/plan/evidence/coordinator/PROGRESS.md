@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T05:12:27Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T05:16:20Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 20 done · 6 in progress · 4 remaining (of 30).**
 
@@ -52,7 +52,8 @@ Generated 2026-09-23T05:12:27Z from `tasks.json` (manifest v4) and `progress-sta
 | P-18 | Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent | E4B certification; provisional criteria allowed | workload owner |
 | P-01 | Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate) | public metered publication only; a provisional fixture rate is used meanwhile | user/operator |
 | P-19 (new) | Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md | publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol) | pricing owner / user |
-| P-04-sweep | W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box's measured value) until then. | W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status | coordinator (box op) |
+| P-04-sweep | W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside | ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 ⚠️ / cutover keeps 32 explicitly); W4's first input | W4 (tuning) / W3 (record) |
+| P-20 | The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) — until then the pilot admits what the engine cannot serve | E4B certification; G2's validation ceiling | W4 decides; G2 applies |
 
 ## ETA (provisional, cadence-based — not a commitment)
 
