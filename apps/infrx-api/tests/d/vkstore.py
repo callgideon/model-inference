@@ -20,7 +20,9 @@ from pathlib import Path
 
 from . import pgharness
 
-CONTAINER = "infrx-d2-valkey"
+# Another D lane running these drills names its own (`infrx-<task>-valkey`) and port below,
+# so two lanes never create, lock or remove the same container.
+CONTAINER = os.environ.get("INFRX_D2_VALKEY_CONTAINER", "infrx-d2-valkey")
 PORT = int(os.environ.get("INFRX_D2_VALKEY_PORT", "55463"))
 IMAGE = ("valkey/valkey@sha256:"
          "d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1")
