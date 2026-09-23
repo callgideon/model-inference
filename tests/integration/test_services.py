@@ -295,9 +295,10 @@ def test_the_shared_clock_moves_the_function_every_durable_decision_reads():
     default every timestamp to - and not a private function of E2's that nothing reads.
 
     Three measured facts, all three of which a caller gets wrong if they are not stated:
-    the offset moves `infrx.now()`; `advance()` returns the PRE-move value because
-    `infrx.now()` is STABLE within a statement; and the offset is a committed row, so it
-    outlives its statement and a rollback is what undoes it.
+    the offset moves `infrx.now()`; `advance()` returns the MOVED clock (D2 made it plpgsql;
+    before, it returned the pre-move value, and this case said so until E3B phase 2
+    re-measured it); and the offset is a committed row, so it outlives its statement and a
+    rollback is what undoes it.
     """
     stack_or_skip()
     with connect() as conn:
@@ -310,9 +311,8 @@ def test_the_shared_clock_moves_the_function_every_durable_decision_reads():
         behind = pgstate.clock_delta_s(conn)
         pgstate.set_clock_offset(conn, 0.0)
     assert probe["moved_s"] == 3600.0, probe
-    assert 3595.0 <= probe["advance_returned_pre_move_s"] <= 3605.0, \
-        "advance() must be measured as returning the pre-move time: move the clock in its " \
-        f"own statement, then read (E2 round-3 limit 3): {probe}"
+    assert abs(probe["advance_return_lag_s"]) < 1.0, \
+        f"advance() must return the moved clock, which PgClock.advance relies on: {probe}"
     assert abs(probe["at_rest_s"]) < 1.0, probe
     assert probe["inside_rolled_back_tx_s"] == 1800.0, probe
     assert abs(probe["after_rollback_s"]) < 1.0, \

@@ -748,6 +748,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "    except ZeroDivisionError as late:\n",
            "tests/integration/test_run.py", "outlives_its_budget",
            cases=("test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback",)),
+    Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
+           "tests/integration/pgstate.py",
+           "    lag = (read_back - returned).total_seconds()\n",
+           "    lag = (read_back - wall).total_seconds()\n",
+           "tests/integration/test_services.py", "shared_clock", layer=2,
+           cases=("test_the_shared_clock_moves_the_function_every_durable_decision_reads",)),
 )
 
 

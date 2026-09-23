@@ -114,9 +114,10 @@ def probe_clock(conn) -> dict:
     Three facts, each of which a caller gets wrong if it is not stated:
 
     * the offset really moves `infrx.now()`, the function the migrations default to;
-    * `advance()` RETURNS `infrx.now()`, and `infrx.now()` is STABLE, so within that one
-      statement it is still the PRE-move value. Move the clock in its own statement, then
-      read (E2 round-3 limit 3, now measured rather than asserted in prose);
+    * `advance()` RETURNS the MOVED clock. It used to return the pre-move value (a SQL
+      function reads `infrx.now()`, which is STABLE, in the UPDATE's own snapshot); D2
+      rewrote it as plpgsql, one statement each, so `PgClock.advance` can use the answer.
+      E3B phase 2 re-measured it: `advance_return_lag_s` is ~0, not 3600;
     * the offset is a committed row, not a transaction-local GUC: it survives its statement
       and a rolled-back transaction is what undoes it.
     """
@@ -124,7 +125,7 @@ def probe_clock(conn) -> dict:
     returned = advance_clock(conn, 3600.0)
     read_back, wall = conn.execute(f"select {CLOCK_FUNCTION}, now()").fetchone()
     moved = (read_back - wall).total_seconds()
-    stale = (read_back - returned).total_seconds()
+    lag = (read_back - returned).total_seconds()
     set_clock_offset(conn, 0.0)
     at_rest = clock_delta_s(conn)
     try:
@@ -136,7 +137,7 @@ def probe_clock(conn) -> dict:
         pass
     return {"function": CLOCK_FUNCTION, "offset_table": f"{CLOCK_SCHEMA}.clock",
             "fixture": str(CLOCK_FIXTURE.relative_to(harness.REPO_ROOT)),
-            "moved_s": round(moved, 1), "advance_returned_pre_move_s": round(stale, 1),
+            "moved_s": round(moved, 1), "advance_return_lag_s": round(lag, 1),
             "at_rest_s": round(at_rest, 1),
             "inside_rolled_back_tx_s": round(inside, 1),
             "after_rollback_s": round(clock_delta_s(conn), 1)}
