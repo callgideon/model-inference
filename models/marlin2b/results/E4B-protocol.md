@@ -143,3 +143,11 @@ run closed, and the coordinator's decision recorded in
   checkout, found by its working directory or its command line; one whose working directory
   cannot be read counts as running - unknown is not stopped (F7).
   (g) The stack halves are judged with the backend run's own pytest exit code (N1).
+- 2026-09-23 (E4B), **amendment 4**, the verifier's fold-ins (`E4B-verify-7b5dbd7.json`,
+  PASS with V1-V6): (a) amendment 3(d) now also requires `e4b.b.served-build` PASS for
+  `meas.` (V4); (b) `serve.sh`'s encoder budget is held against the record, and a value that
+  is not a literal integer reads as unknown, which fails the pin (V2); (c) `--release-sha` is
+  the **full** 40-character commit id - a prefix is not the release - and a served revision
+  shorter than 7 characters identifies nothing (V5). Stated, not coded (V3): the runner reads
+  only `E4B_WINDOW_OK=1` from the window record; the record's time and the edge's maintenance
+  site are the operator's checks in the box protocol's step 5, not the runner's.

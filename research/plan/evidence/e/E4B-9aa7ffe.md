@@ -497,3 +497,28 @@ Changes from the first version:
   `report.json`. Nothing earlier was rewritten, except a pointer under the first box
   protocol's heading. No hosted project, AWS, box, GPU or secret was used. The only
   containers were this lane's `infrx-e2-*` and `infrx-e3b-postgrest`, all removed.
+
+## Round 3 — the verifier's fold-ins (`E4B-verify-7b5dbd7.json`: PASS; V1-V6 folded in)
+
+Small commits on top of `7b5dbd7`, each with named mutants through this lane's list; no
+further verification round (the merge unit and checkpoint 2 cover them).
+
+| Item | Commit | Change | Mutants (all killed) |
+|---|---|---|---|
+| V1 | `81207fd` | the endpoint doc's 2xx statuses are read from the function that builds each route's answer (`status_code=`, or the default 200); a case holds every 2xx citation to its route and allows no other | `upload_201_typed_200`, `example_202_typed_200` (the verifier's own), `success_read_as_the_default` |
+| V2 | `c050911` | `serve_sh_pins` holds serve.sh's encoder budget against the record: a raised literal fails the pin by name, a variable reads as unknown (fails), a comment is ignored | `serve_sh_budget_ignored` (the verifier's own), `non_literal_budget_accepted`, `commented_budget_counted` |
+| V5 | `501d274` | a 7-character `--release-sha` is not the release; a 6-character served revision identifies nothing; a `myapps/app` directory is not an App package; `--release-sha`'s help names the full commit id | `release_sha_prefix_accepted`, `short_revision_accepted`, `app_path_substring_matches` |
+| V6 | `e1c86c7` | the Model table's two notes are read from the published release against W3's record (flagged while B1 stands; the measured pin once the cutover's fixture fix lands); doc regenerated | `model_note_always_the_pin`, `model_note_always_flagged` |
+| V4 | `7bf43a0` | the box label is decided after `e4b.b.served-build`: a served build that is not the release labels nothing `meas.` | `unserved_build_measured` |
+| V3 | amendment 4 | stated, not coded: the window record's time and the edge's maintenance site are the operator's step-5 checks | - |
+
+**Box protocol (round 2's) - one correction (V5):** `RELEASE` in steps 0.7 and 5 is the
+**full 40-character commit id** (as the cutover's `infrx_release_sha` is); a short SHA makes
+every box run FAIL `release-identity`. Step 5 also checks, before launching, that the edge
+serves the maintenance site (`30-pause.sh`'s 503) and that `E4B_WINDOW_OPENED` is from this
+window (V3; the runner does not check either).
+
+**For the merge (the coordinator's step 6):** the Makefile `api-mutants` line unions with
+M1-L2's s3 line; `E4B-endpoint.md` is regenerated (`endpoint_doc.py --write`) after the
+cutover merges, and its Model notes then name the measured pin by themselves (V6).
+
