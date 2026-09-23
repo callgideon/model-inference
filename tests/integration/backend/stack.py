@@ -28,6 +28,7 @@ import re
 import sys
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -169,6 +170,14 @@ def _template() -> None:
 
     from infrx.state import migrations, pgtesting
     harness.provision_database(TEMPLATE)
+    # GoTrue's own `auth.users` columns, which every hosted project has and the pinned
+    # image's bare auth schema lacks (A1 derives verification from `email_confirmed_at`).
+    # `postgres` does not own `auth.users` there, so as `supabase_admin` over the socket.
+    harness.run(["docker", "exec", "-i", harness.assert_ours(harness.container_of("postgres")),
+                 "psql", "-U", harness.PG_ADMIN_ROLE, "-d", TEMPLATE, "-v", "ON_ERROR_STOP=1",
+                 "-c", "alter table auth.users add column if not exists email_confirmed_at "
+                       "timestamptz, add column if not exists deleted_at timestamptz"],
+                timeout=120.0)
     with psycopg.connect(harness.pg_dsn(TEMPLATE), autocommit=True) as conn:
         pgstate.apply_migrations(conn)
         pgstate.install_test_clock(conn)
@@ -234,6 +243,74 @@ def defect(sql: str) -> None:
     import psycopg
     with psycopg.connect(harness.pg_dsn(name), autocommit=True) as conn:
         conn.execute(sql)
+
+
+def connect():
+    """An autocommit connection to the current clone, as its owner (hooks and drills)."""
+    import psycopg
+    return psycopg.connect(harness.pg_dsn(current_database()), autocommit=True)
+
+
+# ------------------------------------------------------------------ CREDIT individuals
+
+# The PROVISIONAL Marlin seed's fixed identities (`infrx/state/seed_marlin_provisional.sql`;
+# P-01: its card is never a price). The alias is the public listing; the dev deployment is
+# private (R70: never listed).
+CREDIT_ALIAS = "nemostation/marlin-2b"
+SEED_PROVIDER_ORG = "b0000001-0000-4000-8000-000000000001"
+SEED_DEV_ENDPOINT = "c0000001-0000-4000-8000-000000000001"
+SEED_DEV_DEPLOYMENT = "c0000003-0000-4000-8000-000000000003"
+SEED_PUBLIC_DEPLOYMENT = "c0000004-0000-4000-8000-000000000004"
+SEED_MODEL = "d0000001-0000-4000-8000-000000000001"
+SEED_SERVING = "d0000003-0000-4000-8000-000000000003"
+SEED_CARD = "rc_marlin2b_2026_09_provisional"
+SIGNUP_GRANT = Decimal("10000")
+
+
+@dataclass(frozen=True)
+class Individual:
+    name: str
+    user_id: str
+    org_id: str              # the personal organization 0001's signup trigger created
+    key_id: str              # a consumer key filed in that organization
+    wallet_id: str           # the CREDIT wallet A1's grant created and funded
+
+
+def seed_individual(conn, name: str) -> tuple[str, str]:
+    """A verified individual through `auth.users` (E2's pattern: the 0001 trigger makes the
+    profile, the personal organization and the owner membership); returns (user, org)."""
+    user = _uuid(f"{name}/user")
+    conn.execute("insert into auth.users (id, email, email_confirmed_at) "
+                 "values (%s, %s, infrx.now())", (user, f"{name}@e3b2.invalid"))
+    org, = conn.execute("select org_id from public.org_members where user_id = %s",
+                        (user,)).fetchone()
+    return user, str(org)
+
+
+def enable(conn, *flags: str) -> None:
+    conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'e3b2', "
+                 "reason = 'e3b2 local drill' where name = any(%s)", (list(flags),))
+
+
+def credit_world(names=("alpha", "beta")) -> dict[str, Individual]:
+    """On the current clone: signup and CREDIT admission switched on, and per name one
+    verified individual granted through A1's `public.claim_signup_grant` (10,000 CREDIT,
+    once) with one consumer key in its personal organization."""
+    world = {}
+    with connect() as conn:
+        enable(conn, "signup_grant", "credit_admission")
+        for name in names:
+            user, org = seed_individual(conn, name)
+            status, wallet = conn.execute(
+                "select status, wallet_id from public.claim_signup_grant(%s, '', null)",
+                (user,)).fetchone()
+            assert status == "granted", (name, status)
+            key = _uuid(f"{name}/credit-key")
+            conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, "
+                         "key_hash, audience) values (%s, %s, %s, 'k', 'sk-infrx-e3b2cred', "
+                         "%s, 'consumer')", (key, org, user, f"hash-{key}"))
+            world[name] = Individual(name, user, org, key, str(wallet))
+    return world
 
 
 def function_source(name: str, signature: str) -> str:

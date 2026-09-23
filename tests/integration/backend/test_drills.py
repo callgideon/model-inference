@@ -366,6 +366,173 @@ def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole(backend)
     run(body)
 
 
+# ------------------------------------------------------------------ CREDIT admission (item 3)
+#
+# PgJobStore.admit_credit on the real store, over the PROVISIONAL Marlin seed (P-01: its
+# card is a label here, never a price). Individuals come from `auth.users` and A1's grant.
+# The `[fake]` twins wait for the wire-in's credit fake; settlement waits for D5.
+
+def credit_request(h, person, model=stack.CREDIT_ALIAS, **kw):
+    return b.request(h, org_id=person.org_id, key_id=person.key_id, model_revision=model, **kw)
+
+
+def credit_wallet(person) -> dict:
+    """One CREDIT wallet's totals. R73: a read is one unit; nothing adds CREDIT to USD."""
+    with stack.connect() as conn:
+        ledger, reserved, available = conn.execute(
+            "select ledger_total, reserved_total, available from infrx.credit_wallets "
+            "where wallet_id = %s", (person.wallet_id,)).fetchone()
+    return {"ledger": ledger, "reserved": reserved, "available": available}
+
+
+def holds_of(request_id) -> dict:
+    with stack.connect() as conn:
+        credit = conn.execute("select wallet_id::text, state, amount from "
+                              "infrx.credit_wallet_holds where request_id = %s",
+                              (request_id,)).fetchall()
+        usd, = conn.execute("select count(*) from infrx.credit_holds where request_id = %s",
+                            (request_id,)).fetchone()
+    return {"credit": credit, "usd": usd}
+
+
+def footprint() -> tuple:
+    """Everything an admission may own: jobs, both units' hold tables, reservations,
+    outbox, idempotency mappings, and the CREDIT reserved total."""
+    with stack.connect() as conn:
+        return conn.execute("""select (select count(*) from infrx.jobs),
+            (select count(*) from infrx.credit_holds),
+            (select count(*) from infrx.credit_wallet_holds),
+            (select count(*) from infrx.capacity_reservations),
+            (select count(*) from infrx.outbox), (select count(*) from infrx.idempotency),
+            (select coalesce(sum(reserved_total), 0) from infrx.credit_wallets)""").fetchone()
+
+
+def assert_credit_conserved(person) -> None:
+    """Per CREDIT wallet: ledger = the one signup grant - settled debits (none settle
+    before D5); reserved = its holds still held; available never negative."""
+    with stack.connect() as conn:
+        held, = conn.execute("select coalesce(sum(amount), 0) from infrx.credit_wallet_holds "
+                             "where wallet_id = %s and state = 'held'",
+                             (person.wallet_id,)).fetchone()
+        debited, = conn.execute("select coalesce(sum(debit), 0) from infrx.jobs where "
+                                "wallet_id = %s and settled_at is not null",
+                                (person.wallet_id,)).fetchone()
+    wallet = credit_wallet(person)
+    assert wallet["ledger"] == stack.SIGNUP_GRANT - debited, (wallet, debited)
+    assert wallet["reserved"] == held, (wallet, held)
+    assert wallet["available"] >= 0, wallet
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(backend):
+    """CREDIT-SPEND / DUR-ADMIT (R66, R78, R79): the admission's answer is lost after its
+    commit; the retry is the SAME job with ONE hold, on the individual's own CREDIT wallet,
+    pinned to the listing it resolved - and the organization's legacy USD books do not
+    move."""
+    if backend == "fake":
+        stack.pending("F2P", why="the CREDIT fake store (credit_jobstore_factory) is the "
+                                 "wire-in's, on codex/f2p-wirein")
+    h = rig(backend, *ADMIT)
+    alpha = stack.credit_world()["alpha"]
+
+    async def body():
+        usd = h.extra["balance"](alpha.org_id)
+        request = credit_request(h, alpha)
+        idem = b.idem(request, "c1")
+        h.failures.crash_after_commit("admit_credit")
+        with pytest.raises(CrashAfterCommit):
+            await h.port.admit_credit(request, idem)
+        again = await h.port.admit_credit(request, idem)
+        assert again.replayed and again.request_id == request.request_id
+        assert (again.org_id, again.wallet_id) == (alpha.org_id, alpha.wallet_id)
+        assert (again.pins.requested_model, again.pins.rate_card_version) == (
+            stack.CREDIT_ALIAS, stack.SEED_CARD)
+        hold = Decimal(str(again.maximum_hold))
+        held = holds_of(request.request_id)
+        assert held == {"credit": [(alpha.wallet_id, "held", hold)],
+                        "usd": 0}, f"the hold is not one hold on the CREDIT wallet: {held}"
+        assert credit_wallet(alpha)["reserved"] == hold > 0
+        assert h.extra["balance"](alpha.org_id) == usd, "the legacy USD books moved"
+        assert h.extra["outbox_kinds"](request.request_id) == [OutboxKind.prepare_dispatch]
+        assert (await h.port.get_owned_credit(alpha.org_id, again.job_handle))[1] is None
+        assert_credit_conserved(alpha)
+    run(body)
+
+
+def _unpriced_listing() -> None:
+    """R69: a newer listing of the alias whose card is not yet effective. The alias is then
+    unserveable (invalid_request), never free. Listings are immutable, so this is the last
+    refusal a drill stages."""
+    with stack.connect() as conn:
+        conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                     "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                     "output_rate_per_million, effective_at, approved_by, provisional) values "
+                     "('rc_e3b2_not_yet', %s, %s, %s, 1, 1, infrx.now() + interval '1 day', "
+                     "'e3b2 drill', true)",
+                     (stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING))
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) values (%s, 2, %s, %s, %s, 'rc_e3b2_not_yet', "
+                     "infrx.now(), 'e3b2 drill')",
+                     (stack.CREDIT_ALIAS, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT,
+                      stack.SEED_SERVING))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
+    """DUR-ADMIT / DUR-CAP / CREDIT-SPEND (R66, R69, R70): a private dev deployment and a
+    provider_dev key filed in its creator's personal org (D2 MC-1) are `not_found`, a revoked
+    key `invalid_api_key`, a full key `capacity_exhausted`, an unpriced listing
+    `invalid_request` - each typed, each leaving no job, hold of either unit, reservation,
+    outbox row or mapping; every wallet conserved on its own."""
+    if backend == "fake":
+        stack.pending("F2P", why="the CREDIT fake store (credit_jobstore_factory) is the "
+                                 "wire-in's, on codex/f2p-wirein")
+    h = rig(backend, *ADMIT, max_active_jobs_per_key=1)
+    world = stack.credit_world(("alpha", "beta", "gamma"))
+    alpha, beta, gamma = world["alpha"], world["beta"], world["gamma"]
+    provider_key = stack._uuid("alpha/provider-dev-key")
+    with stack.connect() as conn:
+        conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, "
+                     "key_hash, audience, provider_org_id, endpoint_id) values (%s, %s, %s, "
+                     "'p', 'sk-infrx-e3b2prov', %s, 'provider_dev', %s, %s)",
+                     (provider_key, alpha.org_id, alpha.user_id, f"hash-{provider_key}",
+                      stack.SEED_PROVIDER_ORG, stack.SEED_DEV_ENDPOINT))
+
+    async def refused(expected, request):
+        mark = footprint()
+        with pytest.raises(expected):
+            await h.port.admit_credit(request, b.idem(request, str(uuid.uuid4())))
+        assert footprint() == mark, f"{expected.__name__}: the refusal left rows behind"
+
+    async def body():
+        usd = {person.name: h.extra["balance"](person.org_id) for person in world.values()}
+        await refused(errors.NotFound, credit_request(h, alpha, stack.SEED_DEV_DEPLOYMENT))
+        await refused(errors.NotFound, b.request(h, org_id=alpha.org_id, key_id=provider_key,
+                                                 model_revision=stack.CREDIT_ALIAS))
+        h.extra["revoke_key"](beta.key_id)
+        await refused(errors.InvalidApiKey, credit_request(h, beta))
+        first = credit_request(h, alpha)
+        kept = await h.port.admit_credit(first, b.idem(first, "kept"))    # the key's one slot
+        await refused(errors.CapacityExhausted, credit_request(h, alpha))
+        _unpriced_listing()
+        await refused(errors.InvalidRequest, credit_request(h, gamma))
+        assert credit_wallet(alpha)["reserved"] == Decimal(str(kept.maximum_hold))
+        assert (credit_wallet(beta)["reserved"], credit_wallet(gamma)["reserved"]) == (0, 0)
+        for person in world.values():
+            assert_credit_conserved(person)
+            assert h.extra["balance"](person.org_id) == usd[person.name]
+    run(body)
+
+
+def test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction():
+    """CREDIT-SPEND settlement (R73, R79): one debit on the CREDIT wallet, the hold released,
+    usage projected once. Pending while the settlement after terminalize's fence is a stub;
+    the day it is not, this fails until its body is written."""
+    rig("postgres", *RUN, "terminalize")
+    pytest.fail("terminalize is implemented: write the CREDIT settlement drill body now")
+
+
 # ------------------------------------------------------------------ live defects, real store
 
 def _without_prepare_dispatch():
@@ -427,6 +594,26 @@ def test_e3b_db07_detects_a_stale_fence_on_the_real_store(monkeypatch):
     monkeypatch.setattr(sys.modules[__name__], "DEFECT", _fence_ignores_generation)
     h = rig("postgres", *drives)
     assert run(lambda: _stale_generation_accepted(h)) == ["heartbeat of generation 1"]
+
+
+def _credit_hold_on_the_usd_books():
+    """`infrx.admit_credit` with its CREDIT hold written as a legacy USD hold instead."""
+    source = stack.function_source("infrx.admit_credit", "jsonb")
+    hold = re.search(r"insert into infrx\.credit_wallet_holds .*?v_now\);", source, re.S)
+    assert hold, "the CREDIT hold insert moved: the drill no longer describes 0011"
+    stack.defect(source.replace(hold.group(0), (
+        "insert into infrx.credit_holds (request_id, org_id, key_id, amount, state, "
+        "created_at, updated_at) values (j.request_id, j.org_id, j.key_id, v_hold, 'held', "
+        "v_now, v_now);")))
+
+
+def test_e3b_db08_detects_a_credit_hold_on_the_usd_books(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-SPEND, R64/R73): a CREDIT admission whose
+    hold lands on the legacy USD books. dr01c's own assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _credit_hold_on_the_usd_books)
+    with pytest.raises(AssertionError, match="not one hold on the CREDIT wallet"):
+        test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(
+            "postgres")
 
 
 def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
