@@ -177,7 +177,7 @@ The focused run at `4bcac3b` gives `184 passed, 5 xfailed` = test_settle 19 + te
 
 ## Commands and results (from `apps/infrx-api` unless stated)
 
-The task-local environment in every PostgreSQL run is `INFRX_D_TASK=d5 INFRX_D2_VALKEY_PORT=55467 INFRX_D2_VALKEY_CONTAINER=infrx-d5-valkey`. `INFRX_D1_IMAGE=supabase` selects the Supabase image; unset means plain. Logs are in the session scratchpad (`logs/`, named in the last column).
+The task-local environment in every PostgreSQL run is `INFRX_D_TASK=d5 INFRX_D2_VALKEY_PORT=55467 INFRX_D2_VALKEY_CONTAINER=infrx-d5-valkey`. `INFRX_D1_IMAGE=supabase` selects the Supabase image; unset means plain. Runs 20–25 were driven by `scratchpad/d5/driver.sh`, which also exports `INFRX_Q_VALKEY_PORT=55498`. Logs are in the session scratchpad (`logs/`, named in the last column).
 
 | # | Command | Tree | UTC | Exit | Tail (quoted) | Log |
 |---|---|---|---|---|---|---|
@@ -200,14 +200,53 @@ The task-local environment in every PostgreSQL run is `INFRX_D_TASK=d5 INFRX_D2_
 | 17 | Q3 fake baseline: `INFRX_Q_VALKEY_PORT=55498 pytest -q tests/q/test_reconcile.py` | `906d963` | 16:25:07Z | 0 | `73 passed in 6.75s` | `d5-q3-fake-baseline.log` |
 | 18 | Q3 on PostgreSQL: the same with `q3rig.diff` applied and `INFRX_Q3_STORE=postgres`, then reverted (`git status` clean, committed `1107079`) | `1107079` content | ~16:01Z | 1 | `4 failed, 69 passed in 44.47s` (integration request 6 names the 4) | `q3-pg-final.log` |
 | 19 | 0018 privilege/definition measurement (`scratchpad/d5/measure_0018.py`, a fresh migrated clone, read-only) on both images | `4bcac3b` | 17:03:10Z / 17:03:13Z | 0 | identical on both images (quoted under "pgstate rows") | `d5-measure-0018.log` |
-| 20 | mutants (brief §7.3), plain: `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/d/test_migration_mutants.py -k "d5_ or d3_cancel or d3_claim or d3_unknown_release"` | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-mutants-plain.log` |
-| 21 | the same, Supabase | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-mutants-supabase.log` |
-| 22 | `make -k check` (repo root; `-k` so every target reports despite the known api-test red of Limits 1) | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-make-check.log` |
-| 23 | `pytest -q --ignore=tests/d` legacy-first (`tests/test_*.py`, then `tests/contracts tests/g tests/i tests/j tests/m tests/q tests/t tests/w`) | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-order-legacy-first.log` |
-| 24 | the same, track-first | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-order-track-first.log` |
-| 25 | full D sweep, Supabase, at the implementation SHA | `4bcac3b` | running | - | running at this commit; the next evidence commit quotes it | `d5-sweep-supabase-final.log` |
+| 20 | mutants (brief §7.3), plain: `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/d/test_migration_mutants.py -k "d5_ or d3_cancel or d3_claim or d3_unknown_release"` | `4bcac3b` | 17:12:48Z → 17:14:38Z | 0 | `82 passed, 460 deselected in 109.06s (0:01:49)`; 82 kill lines, all `AssertionError` (below) | `d5-mutants-plain.log` |
+| 21 | the same, Supabase | `4bcac3b` | 17:14:38Z → 17:17:34Z | 0 | `82 passed, 460 deselected in 175.40s (0:02:55)`; 82 kill lines, all `AssertionError` | `d5-mutants-supabase.log` |
+| 22 | `make -k check` (repo root; `-k` so every target reports despite the known api-test red of Limits 1) | `c67e4f5` (= `4bcac3b` + evidence) | 17:17:34Z → 19:25:56Z | 2 | per target below: `api-test` and `api-mutants` red ONLY on `tests/contracts` (Limits 1); every console target and `bench-test` green | `d5-make-check.log` |
+| 23 | `pytest -q --ignore=tests/d` legacy-first (`tests/test_*.py`, then `tests/contracts tests/g tests/i tests/j tests/m tests/q tests/t tests/w`) | `c67e4f5` (= `4bcac3b` + evidence) | 19:25:56Z → 19:50:27Z | 1 | `23 failed, 2759 passed, 2 warnings in 1455.85s (0:24:15)`: the 23 are `tests/contracts/test_cancel_cause.py` (1) + `tests/contracts/test_mutants.py` (22), Limits 1 | `d5-order-legacy-first.log` |
+| 24 | the same, track-first | `c67e4f5` (= `4bcac3b` + evidence) | 19:50:27Z → 20:09:28Z | 1 | `23 failed, 2759 passed, 2 warnings in 1132.05s (0:18:52)`: the same 23, so the order changes nothing | `d5-order-track-first.log` |
+| 25 | full D sweep, Supabase, at the implementation SHA | `4bcac3b` | 20:09:28Z → 20:43:30Z | 1 | `2 failed, 1022 passed, 5 xfailed in 2039.94s (0:33:59)`. The 5 XFAIL are the partitions, and every D5, D1–D4 and A1 mutant was killed. The 2 failures are `test_pgharness.py::test_a_second_concurrent_run_is_refused_and_alters_nothing` and `…::test_a_run_killed_mid_provision_is_cleaned_up_by_the_next_one`: `could not start infrx-d5-dharness-postgres: … failed to bind host port 127.0.0.1:55476/tcp: address already in use`. Another process held the decoy port during the run (the review lanes were running then); it was free again at 20:44Z. Re-run in the fix round | `d5-sweep-supabase-final.log` |
 
 `make integration` was not run: no file under `tests/integration` was touched.
+
+### Mutant kills (rows 20-21)
+
+Both images: **82 killed, all by `AssertionError` in the named check**. That is 60 `d5_` names plus 22 `d3_` names matched by the `-k` filter: 14 claim, 3 cancel, 5 unknown-release (3 of those are anchored in 0018; `d3_unknown_released_early` is in 0016's `recover_job`, `d3_unknown_release_refused` in 0003). Tallies:
+
+```
+plain: 82 AssertionError
+supabase: 82 AssertionError
+```
+
+Excerpt, plain (the full per-mutant lines are in `d5-kills-plain.txt` / `d5-kills-supabase.txt`):
+
+```
+d3_cancel_any_tenant: killed by cancel -> AssertionError: another tenant cancelled the job
+d5_debit_rounds_down: killed by settle_exact -> AssertionError: ('pv_d5_tie', None, '0.00000000')
+d5_usage_debit_without_ledger_row: killed by settle_exact -> AssertionError: a settled job: the wallet summary drifted from its ledger and holds: USD [(UUID('1a1a1a1a-0000-4000-8000-00000
+d5_hold_not_moved_on_settle: killed by settle_exact -> AssertionError: a settled job: the wallet summary drifted from its ledger and holds: USD [(UUID('1a1a1a1a-0000-4000-8000-00000
+d5_second_terminal_event: killed by settle_terminal_event -> AssertionError: untyped 23505
+d5_credit_debit_before_hold: killed by credit_settle -> AssertionError: a settlement on a wallet with zero available failed: insufficient_credit
+d5_claim_refuses_credit_again: killed by credit_settle -> AssertionError: a CREDIT job was not claimable: not_claimable
+d5_settle_without_the_row_lock: killed by settle_races -> AssertionError: a duplicate completion was refused: already_terminal
+d5_takes_the_scope_lock: killed by settle_races -> AssertionError: a settlement waited on the admission scope lock: untyped 57014
+d5_reconcile_on_callers_clock: killed by reconcile_clock -> AssertionError: released before the window on the DB clock: None
+d5_lookup_any_org_scope: killed by lookup -> AssertionError: another org read the scope
+d5_release_reported_as_outcome: killed by settle_released -> AssertionError: [{'outcome': {'cause': 'queue_wait_expired', 'debit': '0.00000000', 'state': 'expired', 'usage': None, 'job_id
+```
+
+### `make -k check` by target (row 22; tree `c67e4f5` = `4bcac3b` + the WIP evidence commit)
+
+| Target | Result (quoted) |
+|---|---|
+| `api-test` | `23 failed, 3394 passed, 5 xfailed, 2 warnings in 1664.50s (0:27:44)` → `make: *** [Makefile:13: api-test] Error 1`. The 23 are `tests/contracts/test_cancel_cause.py` (1) and `tests/contracts/test_mutants.py` (22), Limits 1. The 5 xfails are the D partitions. No skip |
+| `api-mutants` | `412 failed, 2331 passed in 5889.43s (1:38:09)` → `Error 1`. **All 412 are `tests/contracts/test_mutants.py`** (`broken_runner`, Limits 1); every other list passed: m, q, j, w (incl. W4), t, d (migration list, D1–D4 code lists, signup), g, g/ops, g/uploads, i. `tests/d/test_code_mutants_d5.py` is not in the Makefile yet (integration request 1; run separately, row 9) |
+| `console-test` | `# tests 289` / `# pass 289` / `# fail 0` / `# skipped 0` |
+| `console-lint` | `✖ 2 problems (0 errors, 2 warnings)` (pre-existing, `apps/app`, not touched by D5) |
+| `console-typecheck` | `✓ Types generated successfully`, then `tsc --noEmit` silent (exit 0) |
+| `console-mutants` | contracts: `14 self-tests, 14 passed, 0 failed`, `199 mutants: 199 killed by a named declared case, 0 survived, 0 stale, 0 runner errors`; v: `40/40 mutants killed by a declared case.`; u: `2 self-checks, 2 as expected; 64 mutants, 64 killed, 0 not killed`; c: `4 self-tests, 0 failed`, `104 mutants: 104 killed by a named declared case, 0 survived, 0 stale, 0 runner errors` |
+| `bench-test` | `67 passed in 5.93s` |
+| overall | `make: Target 'check' not remade because of errors.` exit 2 at 19:25:56Z. Both errors are Limits 1 |
 
 ## Failure drill
 
