@@ -46,7 +46,7 @@ Local dev box only (Linux 7.0.0-1010-aws, Python 3.12.3, uv 0.11.8, pytest 8.4.2
 | Command | UTC | Exit | Tail (quoted) |
 |---|---|---|---|
 | `uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py` | 14:41:37Z–14:43:08Z | 0 | `1051 passed in 90.11s (0:01:30)` (head `ae0f2a2`: `1048 passed in 103.85s`; +3 = the three new exported cases on the fakes) |
-| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py` (detached, `/tmp/claude-1000/ffakes/mutants-all.log`) | MUTANTS_UTC | MUTANTS_EXIT | MUTANTS_TAIL |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py` (detached, `/tmp/claude-1000/ffakes/mutants-all.log`) | 14:41:25Z–15:01:43Z | 0 | `438 passed in 1216.99s (0:20:16)` - every one of the 418 declared mutants (`python -m tests.contracts.mutants --list`: `418 mutants over 214 named cases`; this lane added 12 `_m(` entries - 380 → 392 in the file) killed, plus the list's own checks |
 | `uv run --frozen pytest -q -p no:cacheprovider tests/d/test_journal_units.py` (no Docker) | 14:43:16Z | 0 | `6 passed in 0.31s` |
 | `uv run --frozen python -m tests.d.code_mutants_d4` (the flipped test is its target) | 14:43:17Z–14:43:56Z | 0 | `17/17 killed` |
 | `uv run --frozen pytest -q -p no:cacheprovider tests/g` | 14:44:01Z–14:46:12Z | 0 | `405 passed, 2 warnings in 129.23s (0:02:09)` - **same count as the head** (`ae0f2a2`: `405 passed, 2 warnings in 108.21s`); the relay's fake journal never prunes to nothing nor sends an unjournalable payload in those tests |
@@ -64,7 +64,7 @@ Not applicable (fakes). The refusal drill for M1 is the case itself: a refused b
 
 ## Artifacts
 
-Logs (local, not committed), sha256: `base-contracts.log` 197432933a7a562aaabcc4a316cedc025ffdb9e945742420ca78b0556658dbbd, `base-g.log` 0120510b08e907555e9cc13475e32f69ff4a07f65995d2baa51c92c969cddc60, `contracts.log` 28be94f0d2fa21073be87aa0bc099d98d83185c03d423db5d00dd6e1ac597c1a, `d-units.log` 3859a8a3532362c90f9d8855c22c69d3913aa5222ea21b52d54d0b578118c15b, `g.log` a490918838d3de4ba629341a3b3b5d6f5be6e4575e1d67a59d5b0d549ebf17cf, `mutants-all.log` MUTANTS_SHA, `m4_probe.py` 6c57de623ffca05a905f6c05855264abb2bcdc9a1eb9b1642eb46a79a03a2ba8 (all under `/tmp/claude-1000/ffakes/`).
+Logs (local, not committed), sha256: `base-contracts.log` 197432933a7a562aaabcc4a316cedc025ffdb9e945742420ca78b0556658dbbd, `base-g.log` 0120510b08e907555e9cc13475e32f69ff4a07f65995d2baa51c92c969cddc60, `contracts.log` 28be94f0d2fa21073be87aa0bc099d98d83185c03d423db5d00dd6e1ac597c1a, `d-units.log` 3859a8a3532362c90f9d8855c22c69d3913aa5222ea21b52d54d0b578118c15b, `g.log` a490918838d3de4ba629341a3b3b5d6f5be6e4575e1d67a59d5b0d549ebf17cf, `mutants-all.log` 5eecc2c7816f036dfb81aca40757e6c52e1023ab54e88de0cacc67988df958a8, `m4_probe.py` 6c57de623ffca05a905f6c05855264abb2bcdc9a1eb9b1642eb46a79a03a2ba8 (all under `/tmp/claude-1000/ffakes/`).
 
 ## Changes
 
@@ -93,3 +93,4 @@ Logs (local, not committed), sha256: `base-contracts.log` 197432933a7a562aaabcc4
 ## Verification log
 
 - 2026-09-23: Items 1–3 implemented at `b6e8354` on `ae0f2a2`; item 4 assessed and declined with a probe; commands above run on the committed tree; no Docker, hosted or shared environment touched.
+- 2026-09-23: Full contracts mutant list finished (15:01:43Z, exit 0, 438 passed); evidence completed.
