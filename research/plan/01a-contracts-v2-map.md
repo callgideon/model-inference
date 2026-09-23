@@ -246,3 +246,10 @@ Numbered by the coordinator at the additive merge (2026-09-22): V1–V15 are **R
   (required on `credit`) and `project_v1_usage` no longer invents `settled`. The canonical-`Z`
   note is now enforced (`instantKey`); `wallet_id` is written only by `resolve_wallet` in the
   fake store (mutant `credit_wallet_by_organization`).
+- 2026-09-23: F2P wire-in review fix (M-7). `project_v1_usage` refuses a row that recorded
+  exactly one token count (neither dropped nor completed); a legacy row's `settled_at` is the
+  row's `created_at` when `outcome` is absent. Known asymmetry, console side: the TS
+  `UsageRecordV2` has no runtime rule that a `credit` row carries `usage` and `outcome`, and
+  `projectV1UsageRow` drops a half-recorded token pair instead of refusing it. Python is the
+  enforcing side; the console reads rows the database already constrains. To close with the
+  console DTO swap (IR-DTO).

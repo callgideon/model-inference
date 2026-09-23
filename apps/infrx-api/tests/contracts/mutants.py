@@ -1843,6 +1843,9 @@ MUTANTS: tuple[Mutant, ...] = (
           "                               else self.wallet(hold.org_id), hold)",
        "            self._release_hold(self.wallet(hold.org_id), hold)",
        "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"),
+    _m("legacy_projection_drops_a_half_usage", "a half-recorded usage row is refused (review M-7)",
+       V2_R, "    if (prompt is None) != (completion is None):", "    if False:",
+       "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"),
     # coordinator addition (D2 handback): `Work.prompt_tokens`
     _m("work_prompt_tokens_unbounded", "Work.prompt_tokens never exceeds max_input_tokens",
        R, "        if self.prompt_tokens is not None and self.prompt_tokens > self.request.max_input_tokens:",

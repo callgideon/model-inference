@@ -134,6 +134,10 @@ def test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them(
                                  org_id=v2fix.IDS.consumer_org)
     assert tokens.usage is not None and tokens.usage.total_tokens == 1250
     assert tokens.outcome is None
+    # F2P review M-7: a half-recorded usage report is refused, never dropped or completed.
+    for half in ({"prompt_tokens": 1000}, {"completion_tokens": 250}):
+        with pytest.raises(ValueError, match="only one token count"):
+            v2.project_v1_usage({**raw, **half}, org_id=v2fix.IDS.consumer_org)
     body = v2fix.BUILDERS["usage_credit.json"]().model_dump(mode="json")
     for missing in ("usage", "outcome"):
         with pytest.raises(pydantic.ValidationError):

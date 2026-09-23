@@ -775,6 +775,8 @@ class UsageRecordV2(RecordV2):
     serving_version_id: UuidStr | None = None
     deployment_revision_id: UuidStr | None = None
     price_version: str | None = None    # legacy rows only
+    # A legacy row's `created_at` when `outcome` is absent (a row from before settlement
+    # existed): the time the row was written, not a settlement time.
     settled_at: Timestamp
 
     @model_validator(mode="after")
@@ -969,6 +971,10 @@ def project_v1_usage(row: dict, *, org_id: str) -> UsageRecordV2:
     # are the engine's own usage report, which is what `authoritative` means; a recorded
     # certainty is kept as it is.
     prompt, completion = row.get("prompt_tokens"), row.get("completion_tokens")
+    if (prompt is None) != (completion is None):
+        # Half a usage report is neither "no usage" nor a usage: dropping the recorded
+        # count would lose history, inventing the other one would fabricate it.
+        raise ValueError(f"usage row {row['request_id']} records only one token count")
     usage = None
     if prompt is not None and completion is not None:
         usage = Usage.of(int(prompt), int(completion),
