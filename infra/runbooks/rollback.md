@@ -34,8 +34,9 @@ old gateway.
    gateway's and the worker's `/readyz`, and only then reloads the edge. A backup whose
    runtime cannot meter is refused on a pilot host (exit 2, nothing stopped or written):
    stay in [maintenance](#maintenance) instead. Exit 4 is a restored runtime that is not
-   ready; the edge is not reloaded (its files on disk are already the backup's). Schema changes are never rolled back to roll back code:
-   0003-0009 are additive and the older runtime runs on them (`bk02`, restore.md A7).
+   ready; the edge is not reloaded (its files on disk are already the backup's). Schema
+   changes are never rolled back to roll back code: 0003-0009 are additive and the older
+   runtime runs on them (`bk02`, restore.md A7).
 5. **Rebuild the index** from PostgreSQL ([index-loss.md](index-loss.md#index-loss)).
 6. **Resume admission** only after `/readyz` is ready: [maintenance](#maintenance), exit.
 7. **Reconcile** ([reconcile.md](reconcile.md#drift)) and append to the record: durable state
