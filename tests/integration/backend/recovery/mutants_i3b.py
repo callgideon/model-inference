@@ -317,6 +317,10 @@ MUTANTS += (
            # measured: a revoked-to-empty ACL is not `= '{}'` (1 dimension, 0 items)
            "unnest(coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, acldefault(",
            RESTORE, "bk01g", layer=2),
+    Mutant("i3bm95", "RST-1: the check compares a schema's ACL (USAGE on infrx is the tenant "
+                     "boundary's first gate)", PGRESTORE,
+           "unnest(coalesce(nspacl, acldefault('n', ", "unnest(coalesce(null, acldefault('n', ",
+           RESTORE, "bk01f and schemas", layer=2),
     Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
                      "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
            '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',

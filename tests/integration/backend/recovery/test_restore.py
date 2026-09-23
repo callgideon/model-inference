@@ -407,6 +407,8 @@ DAMAGE = {
     "functions_config": "alter function public.handle_new_user() set search_path = public",
     "rows": "update public.models set limits = limits || '{{\"i3b\": 1}}' "
             "where id = (select min(id) from public.models)",
+    # RST-1: a schema grant is the tenant boundary's first gate (USAGE on infrx).
+    "schemas": "grant usage on schema infrx to anon",
 }
 
 
