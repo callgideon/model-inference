@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:46:43Z",
+  "updated": "2026-09-23T16:51:40Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "round 2 confirmation at b0a64e1 running; R3-1 done at a9b1ca9 (pendings on G2-R1; stale_pending rule; e3bm40/41); lane committing R2-A/R2-B next \u2192 final single verifier on the head \u2192 MERGE (IR2-1 one commit, IR2-3 dr04 pin deletion) \u2192 I3B (IR2-2 updated)",
+      "phase": "round 2 confirmation at b0a64e1 running; rounds 2b/2c done at 5eb7b85 (G2-R1 pendings, stale_pending rule, R2-A/R2-B in the runner; e3bm40\u201343) \u2192 single verifier on 5eb7b85 after the confirmation \u2192 MERGE (IR2-1 one commit, IR2-3 dr04 pin deletion) \u2192 I3B (IR2-2 updated only)",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
