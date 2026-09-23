@@ -29,17 +29,20 @@ SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
           # M3: one per new file, plus the two acceptance pins - a live job's input is
           # never collected, and a refused upload stays refused.
           "upload_owner_unchecked", "liveness_ignored", "consent_org_unchecked",
-          "lookup_failure_fails_open", "refusal_not_recorded")
+          "lookup_failure_fails_open", "refusal_not_recorded",
+          # M4: no new file; the two pins - a download's header reaches the profile, and a
+          # prepared clip is the same file on every run.
+          "early_look_not_wired", "cache_file_name_varies")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
     """A typo in a test name would make a mutant unkillable by construction and pass."""
-    from . import (test_consent, test_fetch, test_gc, test_prepare, test_probe, test_store,
-                   test_uploads)
+    from . import (test_consent, test_fetch, test_gc, test_parity, test_prepare, test_probe,
+                   test_store, test_uploads)
 
     names = {name for module in (test_fetch, test_prepare, test_probe, test_store,
-                                 test_uploads, test_gc, test_consent)
+                                 test_uploads, test_gc, test_consent, test_parity)
              for name in vars(module)
              if name.startswith("test_")}
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
@@ -49,6 +52,15 @@ def test_the_list_is_well_formed():
         assert mutant.invariant, f"{mutant.name} states no invariant"
         for case in mutant.cases:
             assert case in names, f"{mutant.name} names unknown test {case}"
+
+
+def test_every_anchor_is_in_the_source_as_often_as_declared():
+    """M4: an edit that moves an anchor turns its mutant into `misdeclared` only when the
+    full list runs (`INFRX_MUTANTS=all`); this finds it in the default suite."""
+    source = {m.file: (mutation_list.API_DIR / mutation_list.PACKAGE / m.file).read_text()
+              for m in ALL}
+    moved = [m.name for m in ALL if source[m.file].count(m.old) != m.occurrences]
+    assert moved == [], f"anchors no longer in the source: {moved}"
 
 
 def test_the_mutation_list_covers_the_owned_modules():
