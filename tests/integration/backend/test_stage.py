@@ -113,13 +113,20 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeyp
     sys.path.insert(0, str(Path(__file__).resolve().parent / "recovery"))
     import recoverykit
     vocabulary = {**stack.PENDING, **recoverykit.PENDING}
-    owners = set(getattr(recoverykit, "OWNERS", {}))       # the I3B follow-up adds OWNERS
+    kit_owners = getattr(recoverykit, "OWNERS", {})        # the I3B follow-up adds OWNERS
+    # R3-1: an owner both name (G2-R1) is one reference - the same text on both sides.
+    assert all(stack.OWNERS[o] == kit_owners[o] for o in set(stack.OWNERS) & set(kit_owners))
+    owners = set(stack.OWNERS) | set(kit_owners)
     # ... which are no task, and which the stage's PENDING[..] parser reads whole.
     assert owners.isdisjoint(tasks) and all(run.PENDING_MARK.fullmatch(f"PENDING[{o}]")
                                             for o in owners)
     assert set(vocabulary) - owners <= set(tasks), set(vocabulary) - owners - set(tasks)
     merged = {task for task in vocabulary if tasks.get(task) in ("implemented", "integrated")}
-    assert merged == set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
+    assert merged <= set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
+    # R3-1: a RESIDUAL id this tree's tasks.json does not yet mark merged (G2, merged on the
+    # integration head with its cutover held) must name the owner reference replacing it.
+    for task in set(stack.RESIDUAL) - merged:
+        assert any(owner in stack.RESIDUAL[task] for owner in owners), (task, merged)
     assert all(reason.strip() for reason in stack.RESIDUAL.values())
     import pytest
     # A synthetic RESIDUAL id as well, so the refusal stays pinned the day RESIDUAL empties.

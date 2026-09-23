@@ -7,13 +7,15 @@ PostgREST service are real and run today. A pending case is a skip that names it
 
 The matrix (18 §E3B.a, 04 BACKEND-JOURNEY): inputs text / video by URL / video by upload,
 modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell (E3B phase
-2: only unmerged tasks; G1R, G6B, D2, D3, D4, W3, Q3, M3, F2P and G4U have merged):
+2: only unmerged tasks and owner references; G1R, G6B, D2, D3, D4, W3, Q3, M3, F2P, G4U, G2
+and G3 have merged):
 
 * every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with);
-* sync and SSE: G2 (the relay and the cutover that mounts the ingress; D4's persistent
-  journal merged); async: G2 + G3 (the job routes);
+* every mode: G2-R1, the HELD cutover (G2 integration request 1, with G3's jobs router in
+  gateway.app.ROUTERS): G2's relay, D4's journal and G3's job routes are merged, and
+  nothing mounts them until the coordinator releases it (R3-1);
 * video by URL and by upload: nothing more (M2's fetch/probe/persist, M3's uploads and
-  G4U's upload routes are merged; the routes are mounted by G2's cutover).
+  G4U's upload routes are merged; the routes are mounted by the same cutover).
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import stack                                            # noqa: E402
 
 COMMON = ("D5",)
-BY_MODE = {"sync": ("G2",), "sse": ("G2",), "async": ("G2", "G3")}
+BY_MODE = {"sync": ("G2-R1",), "sse": ("G2-R1",), "async": ("G2-R1",)}
 BY_INPUT = {"text": (), "video_url": (), "video_upload": ()}
 
 
@@ -42,8 +44,8 @@ def test_backend_journey(input_kind, mode):
     and exact usage reconcile; the other tenant's handle is 404; nothing leaks."""
     if not stack.ingress_is_mounted():
         stack.pending(*unblocking(input_kind, mode),
-                      why=f"{input_kind} x {mode}: the pilot ingress is not mounted, so "
-                          f"there is no metered endpoint to call (legacy chat route only)")
+                      why=f"{input_kind} x {mode}: the held cutover has not mounted the "
+                          f"pilot ingress, so there is no metered endpoint to call")
     pytest.fail(f"the pilot ingress is mounted: write the {input_kind} x {mode} journey "
                 f"body now (E3B phase 2) - an unwritten journey is not a pass")
 
@@ -52,8 +54,9 @@ def test_backend_journey__dataset_client_resume():
     """04 BACKEND-JOURNEY: resume a bounded dataset client; no duplicate accepted items or
     charges after an interrupted run (E1B's bench client is the client)."""
     if not stack.ingress_is_mounted():
-        stack.pending("G2", "G3", "D5",
-                      why="resume needs idempotent explicit jobs on the metered endpoint")
+        stack.pending("G2-R1", "D5",
+                      why="resume needs idempotent explicit jobs on the metered endpoint, "
+                          "which the held cutover has not mounted")
     pytest.fail("the pilot ingress is mounted: write the dataset-resume journey body now")
 
 

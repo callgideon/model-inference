@@ -773,8 +773,8 @@ def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
     pending exactly as long as no metered route is mounted, and fails once one is."""
     if stack.ingress_is_mounted():
         pytest.fail("the pilot ingress is mounted: write the disconnect drill body now")
-    stack.pending("G2", why="the sync/SSE relay that sees the disconnect is G2's, "
-                            "and no metered route is mounted")
+    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect is G2's (merged), "
+                               "and the held cutover has mounted no metered route")
 
 
 # ------------------------------------------------------------------ saturation and queue

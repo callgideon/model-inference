@@ -55,14 +55,21 @@ if importlib.util.find_spec("infrx") is None:
 # vocabulary (`recovery/recoverykit.PENDING`), with owner references that are no task
 # (`recoverykit.OWNERS`, e.g. `I2B-R4`, `M1-L2`: never an E3B blocker, never stale).
 # `test_stage.py` holds all of them to tasks.json.
+#
+# E3B's own owner references (R3-1): work a MERGED task left held, named by its request.
+# A merged task whose cutover is held is not a pending owner - its cutover request is.
+# The text is I3B's `recoverykit.OWNERS["G2-R1"]`, verbatim (test_stage holds them equal).
+OWNERS = {"G2-R1": "the cutover that mounts the metered ingress in gateway.app.ROUTERS: G2 "
+                   "integration request 1 (G2-e5e7d3a.md), owned by the coordinator and HELD "
+                   "until the adapters exist (tasks.json, G2's disposition); G2 is merged"}
 PENDING = {
-    "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
-          "mounts the metered ingress in gateway.app.ROUTERS",
-    "G3": "explicit async job routes: create, status, cancel, replay",
+    **OWNERS,
     "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
           "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
           "Registry/AccountView and G1R's CatalogDirectory",
     # RESIDUAL (merged; I3B's cases only - see RESIDUAL)
+    "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
+          "mounts the metered ingress in gateway.app.ROUTERS",
     "G1R": "pilot ingress mounted in gateway.app.ROUTERS (cutover from the legacy chat "
            "route) with consumer/provider audiences",
     "D2": "atomic admission RPC: job + hold + reservations + outbox in one transaction",
@@ -74,6 +81,8 @@ PENDING = {
 # its blockers; E3B's own cases may not name these (`pending()` refuses them).
 RESIDUAL = {
     "G1R": "I3B rc03 (recovery/test_recovery.py) still names it; the mount is G2's cutover",
+    "G2": "I3B rc03 still names it (with G1R); the I3B follow-up renames it G2-R1, the held "
+          "cutover E3B's own cases pend on",
     "D2": "I3B rc04 names it through stack.unimplemented_rpcs(), which counts D6's permanent "
           "stubs too; the adapter exists (dr01-dr04/dr09 [postgres] run on it)",
     "D3": "I3B rc04, as D2",
