@@ -473,7 +473,8 @@ def test_dur_admit__the_key_names_the_payload_for_sync_and_stream_and_folds_only
     """R94's identity, byte for byte (review ADM-R2-B3): the idempotency hash the acceptor
     receives is the payload digest itself for sync and for stream - their identity is
     unchanged, so a mapping stored before R94 still replays after it - and the folded digest
-    for async, the same one on chat with `Prefer` and on `POST /v1/jobs`."""
+    for async, the same one on chat with `Prefer` and on `POST /v1/jobs`. The mode is the
+    validated one, never the raw header: `Prefer: x-no-respond-async` is sync (ADM-R2-N1)."""
     world = JobsWorld()
     seen = []
 
@@ -483,12 +484,15 @@ def test_dur_admit__the_key_names_the_payload_for_sync_and_stream_and_folds_only
 
     world.relay.admit = captured
     for path, payload, headers in ((CHAT, rs.body(), {}), (CHAT, rs.body(stream=True), {}),
-                                   (CHAT, rs.body(), PREFER), (JOBS, rs.body(), {})):
+                                   (CHAT, rs.body(), PREFER), (JOBS, rs.body(), {}),
+                                   (CHAT, rs.body(), {"prefer": "x-no-respond-async"})):
         assert refusal(post(world, path, payload, key="k", headers=headers)) == (
             400, "invalid_request")
-    sync, stream, prefer, jobs = seen
+    sync, stream, prefer, jobs, lookalike = seen
     assert [mode for mode, *_ in seen] == [ExecutionMode.sync, ExecutionMode.stream,
-                                           ExecutionMode.async_, ExecutionMode.async_]
+                                           ExecutionMode.async_, ExecutionMode.async_,
+                                           ExecutionMode.sync]
+    assert lookalike == sync, "the digest follows the validated mode, not the raw Prefer"
     assert sync[2] == sync[1], "a sync key's identity is its payload digest"
     assert stream[2] == stream[1] != sync[1], "a stream key's identity is its payload digest"
     assert sync[1] == prefer[1] == jobs[1] and prefer[2] == jobs[2] != prefer[1]

@@ -170,6 +170,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "(review ADM-R2-B3)",
        N, "    if request.execution_mode is not ExecutionMode.async_:",
        "    if request.execution_mode is ExecutionMode.sync:", DIGEST),
+    _m("mode_read_from_prefer", "the digest follows the validated mode, not the raw Prefer "
+       "(review ADM-R2-N1)",
+       N, "            idem = idempotency(auth, request.headers, identity_digest(normalized), "
+          "CHAT_OPERATION)",
+       "            idem = idempotency(auth, request.headers, identity_digest(normalized.model_copy("
+       "update={'execution_mode': ExecutionMode.async_})) if 'respond-async' in "
+       "(request.headers.get('prefer') or '') else normalized.payload_digest, CHAT_OPERATION)",
+       DIGEST),
     _m("replay_readmits", "a key the lookup missed is still one job: admission replays it",
        ST, "            replay = self._replay(idem, now, credit=credit)",
        "            replay = None", TWICE),
