@@ -1,0 +1,214 @@
+{
+  "verdict": "pass",
+  "head": "d99da09",
+  "reviews": [
+    {
+      "lens": "restore",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every number and quoted string above comes from runs in this session on the scratch merge d99da09 + 3438d86. The lane's d3/Supabase numbers (23/1 for test_restore.py; 52/9 for the recovery dir) and its plain-image numbers (5 failed / 10 passed / 1 skipped / 8 errors) reproduced exactly. The lane's diagnosis also reproduced: a 17.6 client container into a 16.14 server, and bk02's confirmed_at coming from the shim. i3bm86-91 were each applied by hand as one edit. Each was killed by an AssertionError at the lines the lane cites (255, 479, 483, 514). The lane's evidence was checked against E3B2 at 8fb3ea2; my merge base is 3438d86 (the branch's current tip). I did not run the E runner's mutation stage, rc10's drill in isolation, or the E3B2 review JSON. The attack cases and mutant driver lived only in the scratch clone and the session scratchpad.",
+      "cleanup": "I removed the scratch clone /tmp/claude-1000/review-i3bf-restore-3835171, including its private TMPDIR and d3 port locks. pgharness removed the d3 containers (infrx-d3-postgres-supabase and the plain variant) at process exit; docker ps -a showed no d3 container afterwards. The restore tool's client containers are --rm: one transient pgclient appeared and was gone on recheck. I left /tmp/infrx-d3-postgres-55434.lock (12:37Z) and /tmp/infrx-d3-valkey-55464.lock (03:50Z) alone: both predate this session and are not mine. I never touched the shared 55432, other lanes' containers or the E2 stack. The codex-i3bf worktree was not modified. The only copies of the attack file and mutant driver are in the session scratchpad.",
+      "mutants": [
+        {
+          "name": "i3bm86 (lane)",
+          "edit": "pgrestore.py relations: unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(c.relacl, '{}', acldefault(",
+          "result": "killed",
+          "killed_by": "bk01_a test_restore.py:255 AssertionError (relations differ ... '{}')"
+        },
+        {
+          "name": "i3bm87 (lane)",
+          "edit": "functions: coalesce(p.proacl, acldefault('f', -> coalesce(p.proacl, '{}', acldefault('f',",
+          "result": "killed",
+          "killed_by": "bk01g :479 AssertionError (functions differ)"
+        },
+        {
+          "name": "i3bm88 (lane)",
+          "edit": "schemas: coalesce(nspacl, acldefault('n', -> coalesce(nspacl, '{}', acldefault('n',",
+          "result": "killed",
+          "killed_by": "bk01g :479 AssertionError (schemas differ)"
+        },
+        {
+          "name": "i3bm89 (lane)",
+          "edit": "when 'S' then 's' -> when 'S' then 'r'",
+          "result": "killed",
+          "killed_by": "bk01g :479 AssertionError (relations differ)"
+        },
+        {
+          "name": "i3bm90 (lane)",
+          "edit": "coalesce(c.relacl, ...) -> coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, ...)",
+          "result": "killed",
+          "killed_by": "bk01g :483 AssertionError: []"
+        },
+        {
+          "name": "i3bm91 (lane)",
+          "edit": "restorable(): ' DEFAULT ACL ' filter -> if \" ACL \" in line (drop every ACL TOC entry)",
+          "result": "killed",
+          "killed_by": "bk01h :514 AssertionError (privilege tuple)"
+        },
+        {
+          "name": "M1_rel_kind_f",
+          "edit": "relations acldefault kind else 'r' -> else 'f'",
+          "result": "killed",
+          "killed_by": "bk01_a :255 AssertionError"
+        },
+        {
+          "name": "M2_rel_owner_const",
+          "edit": "acldefault(..., c.relowner) -> acldefault(..., 10::oid)",
+          "result": "killed",
+          "killed_by": "bk01_a :255 AssertionError (supabase_admin default)"
+        },
+        {
+          "name": "M3_rel_ignore_acl",
+          "edit": "unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(null, acldefault( (relations blind to ACL)",
+          "result": "killed",
+          "killed_by": "bk01c :293 AssertionError and bk01g :483"
+        },
+        {
+          "name": "M4_fn_ignore_acl",
+          "edit": "unnest(coalesce(p.proacl, acldefault('f', -> unnest(coalesce(null, acldefault('f', (functions blind to ACL)",
+          "result": "killed",
+          "killed_by": "bk01f[functions] :447 AssertionError: []"
+        },
+        {
+          "name": "M5_schema_ignore_acl",
+          "edit": "unnest(coalesce(nspacl, acldefault('n', -> unnest(coalesce(null, acldefault('n', (schemas blind to ACL)",
+          "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
+          "killed_by": "none - finding RST-1"
+        },
+        {
+          "name": "M6_drop_sequences",
+          "edit": "c.relkind in ('r','p','v','m','S') -> ('r','p','v','m')",
+          "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
+          "killed_by": "none - finding RST-4"
+        },
+        {
+          "name": "M7_fn_owner_const",
+          "edit": "acldefault('f', p.proowner) -> acldefault('f', 10::oid)",
+          "result": "killed",
+          "killed_by": "bk01g :479 AssertionError"
+        },
+        {
+          "name": "M8_schema_owner_const",
+          "edit": "acldefault('n', nspowner) -> acldefault('n', 10::oid)",
+          "result": "killed",
+          "killed_by": "bk01g :479 AssertionError"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git clone --shared -q .../infrx-impl /tmp/claude-1000/review-i3bf-restore-3835171 && git checkout -q d99da09 && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (3438d86)",
+          "exit": 0,
+          "tail": "merge=0; d5c8568 Merge remote-tracking branch 'origin/codex/e3b-phase2-gate' into HEAD (no conflict)"
+        },
+        {
+          "cmd": "make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "TMPDIR=<scratch>/tmp INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey pytest tests/integration/backend/recovery/test_restore.py",
+          "exit": 0,
+          "tail": "23 passed, 1 skipped in 46.66s (skip: bk03 needs the infrx-e2 stack); bk01_a, bk01f x8, bk01g, bk01h pass"
+        },
+        {
+          "cmd": "same env, pytest -s test_restore.py -k review (appended scratch attack cases, 13 attacks + scratch-kind case)",
+          "exit": 1,
+          "tail": "4 failed (3 need a sequence / NULL-ACL function, and none exists in public or infrx: premise probe 'seq None nullfn None'), 10 passed. Every real loss or widening named: rev_fn_service->functions, grant_anon_tbl->relations, grant_anon_fn->functions, owner_tbl_null->relations, owner_fn->functions, schema_usage_anon->schemas, schema_create_anon->schemas, mv_grant_anon->relations, f revoke public->functions. col_grant_lost->[], col_grant_widen->[], empty_acl_owner_change->[]. The premise job_results (None,'postgres') after restore held live."
+        },
+        {
+          "cmd": "same env without INFRX_D1_IMAGE (plain image) pytest -rA test_restore.py",
+          "exit": 1,
+          "tail": "5 failed, 10 passed, 1 skipped, 8 errors; 12x 'pg_restore failed (1): ... unrecognized configuration parameter \"transaction_timeout\" Command was: SET transaction_timeout = 0;' from infrx-i3b-pgclient-*; bk02: UndefinedColumn confirmed_at"
+        },
+        {
+          "cmd": "docker run --rm --network none --entrypoint pg_restore <pgrestore.IMAGE> --version; docker run ... postgres <PLAIN_IMAGE> --version; pg_restore --version",
+          "exit": 0,
+          "tail": "pg_restore (PostgreSQL) 17.6 / postgres (PostgreSQL) 16.14 / host pg_restore 16.15 (not used by the tool)"
+        },
+        {
+          "cmd": "python scratchpad/mut.py <14 mutants> (one edit each, pytest -k <selector> --tb=line on d3/Supabase, git checkout after each)",
+          "exit": 0,
+          "tail": "12 killed by AssertionError at named lines; M5_schema_ignore_acl exit 0 '21 passed'; M6_drop_sequences exit 0 '21 passed'; git status clean after (only ?? tmp/)"
+        },
+        {
+          "cmd": "same env pytest -rs -q tests/integration/backend/recovery",
+          "exit": 0,
+          "tail": "52 passed, 9 skipped in 57.55s (PENDING G2, M1-L2, I2B-R4; 6 need infrx-e2), matching the lane's claim"
+        },
+        {
+          "cmd": "docker ps -a | grep -E 'd3|i3b'; rm -rf scratch",
+          "exit": 0,
+          "tail": "one transient infrx-i3b-pgclient-48d9761f168a seen, then gone (--rm); no d3 containers; scratch removed"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [],
+  "refuted_blocking": [
+    {
+      "id": "RST-1-schemas-family-unkillable",
+      "severity": "blocking",
+      "file": "tests/integration/backend/recovery/test_restore.py",
+      "line": "396",
+      "claim_broken": "restore.md A6 (infra/runbooks/restore.md:113) says schema ACLs must be identical, and R92 says a real ACL difference is still named after normalisation. But no test fails when the schemas family stops reading nspacl at all. bk01g only proves the equal direction for a schema (NULL vs the owner default spelled out). Its only real-loss assertion (the '{}' revoke) is on a table, and bk01f's DAMAGE has no schemas entry.",
+      "evidence": "Mutant M5 (pgrestore.py:274), one edit: `unnest(coalesce(nspacl, acldefault('n', ` -> `unnest(coalesce(null, acldefault('n', `. The schemas family then compares only the owner's default and is blind to every schema grant. Whole test_restore.py on d3/Supabase with this mutant: exit 0, `21 passed, 3 deselected` (the 3 are E2-only). SURVIVED. On pristine code the attack `grant usage on schema infrx to anon` against a good restore gives exactly [\"schemas differ: ... extra [('infrx', '{anon=U/postgres,postgres=UC/postgres,service_role=U/postgres}')]\"]. So the check works today, but nothing pins it. Keeping infrx hidden from anon is a tenant-boundary property (0008). This gap predates R92, but R92 edited this same expression and tested only its equal direction.",
+      "minimal_fix": "Add one bk01f DAMAGE entry, `\"schemas\": \"grant usage on schema infrx to anon\"` (measured: compare names exactly {schemas}). Add a mutant in mutants_i3b.py with M5's edit, named bk01f and schemas.",
+      "lens": "restore",
+      "votes": []
+    }
+  ],
+  "unverified_blocking": [
+    {
+      "id": "RST-1-schemas-family-unkillable",
+      "severity": "blocking",
+      "file": "tests/integration/backend/recovery/test_restore.py",
+      "line": "396",
+      "claim_broken": "restore.md A6 (infra/runbooks/restore.md:113) says schema ACLs must be identical, and R92 says a real ACL difference is still named after normalisation. But no test fails when the schemas family stops reading nspacl at all. bk01g only proves the equal direction for a schema (NULL vs the owner default spelled out). Its only real-loss assertion (the '{}' revoke) is on a table, and bk01f's DAMAGE has no schemas entry.",
+      "evidence": "Mutant M5 (pgrestore.py:274), one edit: `unnest(coalesce(nspacl, acldefault('n', ` -> `unnest(coalesce(null, acldefault('n', `. The schemas family then compares only the owner's default and is blind to every schema grant. Whole test_restore.py on d3/Supabase with this mutant: exit 0, `21 passed, 3 deselected` (the 3 are E2-only). SURVIVED. On pristine code the attack `grant usage on schema infrx to anon` against a good restore gives exactly [\"schemas differ: ... extra [('infrx', '{anon=U/postgres,postgres=UC/postgres,service_role=U/postgres}')]\"]. So the check works today, but nothing pins it. Keeping infrx hidden from anon is a tenant-boundary property (0008). This gap predates R92, but R92 edited this same expression and tested only its equal direction.",
+      "minimal_fix": "Add one bk01f DAMAGE entry, `\"schemas\": \"grant usage on schema infrx to anon\"` (measured: compare names exactly {schemas}). Add a mutant in mutants_i3b.py with M5's edit, named bk01f and schemas.",
+      "lens": "restore"
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "RST-2-plain-image-not-refused",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/test_restore.py",
+      "line": "96",
+      "claim_broken": "The lane says 'the fixture does not allow the plain image'. That is true in effect, but INFRX_I3B_PG=d with no INFRX_D1_IMAGE is not refused. The fixture carries plain-image code paths (lines 133 and 150: the _admin superuser branch and the NEEDS_SHIM shim apply), and they cannot work for 13 of the 24 cases. The failure is loud, but the configuration looks supported when it is not.",
+      "evidence": "Reproduced exactly on d3 with the plain image: `5 failed, 10 passed, 1 skipped, 8 errors`. Every restore-dependent case (bk01_a/b/c/h, bk01f x8 via good_restore) stops at `pg_restore failed (1): ... unrecognized configuration parameter \"transaction_timeout\" / Command was: SET transaction_timeout = 0;`. The client that fails is the throwaway `infrx-i3b-pgclient-*` container from pgrestore.IMAGE: `pg_restore (PostgreSQL) 17.6`. The plain server is `postgres (PostgreSQL) 16.14`. The host's own pg_restore (16.15) is never used. So the lane's diagnosis is correct: a 17 client into a 16 server. bk02 fails at `psycopg.errors.UndefinedColumn: column \"confirmed_at\" of relation \"users\" does not exist`. HOSTED_SEED inserts into hosted/Supabase's auth.users.confirmed_at, and D's shim (supabase_shim.sql:58) has only email_confirmed_at. That is a shim schema difference, not a fixture bug.",
+      "minimal_fix": "In needs_pg(), when ON_D and not d_harness().ON_SUPABASE, call pytest.fail('INFRX_I3B_PG=d needs INFRX_D1_IMAGE=supabase: pgrestore.IMAGE is a 17.6 client (transaction_timeout) and the shim has no auth.users.confirmed_at'). Delete the dead plain branches at lines 133 and 150. Use fail, not skip, so a plain run cannot go green without testing anything.",
+      "lens": "restore"
+    },
+    {
+      "id": "RST-3-column-acls-not-compared",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "250",
+      "claim_broken": "R92 says the check compares ACLs by the privileges they grant. Column privileges (pg_attribute.attacl) are in no family, and the project uses one: 0001_init.sql:208 `grant update (full_name, avatar_url) on public.profiles to authenticated`. This predates the lane and is not caused by the coalesce normalisation.",
+      "evidence": "Against a good d3/Supabase restore, `revoke update (full_name) on public.profiles from authenticated` gives pg.compare == []. So does `grant update (full_name) on public.profiles to anon`, which is a widening. Both measured.",
+      "minimal_fix": "Add a family: `select attrelid::regclass::text, attname, array(select unnest(attacl)::text order by 1)::text from pg_attribute where attrelid in (select c.oid from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname = any(%(s)s)) and attnum > 0 and not attisdropped and attacl is not null order by 1,2`. attacl has no owner default, so NULL needs no normalisation. Add a bk01f DAMAGE entry using the revoke above.",
+      "lens": "restore"
+    },
+    {
+      "id": "RST-4-sequence-family-empty",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "249",
+      "claim_broken": "The R92 claim covers sequences (acldefault 's', i3bm89). No test detects a sequence dropped from the compare or a real sequence ACL change, and the migrated schema has no sequence in public or infrx. The claim holds only over a scratch object in bk01g.",
+      "evidence": "Probe on a good restore: `select ... where relkind='S' and nspname in ('public','infrx')` returns None. Mutant M6: `c.relkind in ('r','p','v','m','S')` -> `('r','p','v','m')`. Whole test_restore.py: 21 passed. SURVIVED. i3bm89 is killed by bk01g, but only in the equal direction (NULL vs spelled-out default).",
+      "minimal_fix": "In bk01g, after the equality assertion, add `grant usage on sequence infrx.s to anon` and assert problems name {relations}. Or state in restore.md that the project has no sequences, so this family is a guard only.",
+      "lens": "restore"
+    },
+    {
+      "id": "RST-5-owner-not-compared",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "243",
+      "claim_broken": "The lens asked whether an owner change hides an ACL change. It does not: acldefault takes the owner, and ALTER OWNER rewrites explicit ACLs. The one blind spot is an object whose ACL is '{}' (revoked from its owner): an owner change there leaves the fingerprint unchanged, because no family compares owners.",
+      "evidence": "On a good restore, `alter table infrx.job_results owner to supabase_admin` (NULL ACL) is now named: relations extra '{supabase_admin=arwdDxtm/supabase_admin}'. The pre-R92 catalog would have missed that on any NULL-ACL object. `alter function infrx.put_result(jsonb) owner to supabase_admin` is named (functions, grantor rewritten). In scratch, table infrx.e with relacl '{}', then owner changed to supabase_admin: pg.compare == []. No project object has '{}'.",
+      "minimal_fix": "Optional: add relowner::regrole / proowner::regrole / nspowner::regrole columns to the three families. This matters most for SECURITY DEFINER functions, whose owner is their privilege.",
+      "lens": "restore"
+    }
+  ],
+  "coordinator_note": "PARTIAL: the drill lens and both refuters of RST-1 died at the session limit (Opus 429, resets 14:00 UTC). Restore lens: verdict_hint fix_required with RST-1 (schemas family unkillable: pgrestore reading no nspacl survives test_restore) and RST-4 (dropping sequences from the relkind set survives) \u2014 UNVERIFIED (no refuter votes). Not a pass; rerun the drill lens + refuters."
+}
