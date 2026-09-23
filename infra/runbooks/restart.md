@@ -84,6 +84,14 @@ systemctl is-active infrx-worker.service
 A worker that restarts **does not resume** its old leases (r1 R46): a new generation is the
 only way back, so a restart inside 120 s just waits for the reaper.
 
+**The box drill must SIGKILL the worker process** (`systemctl kill -s KILL
+infrx-worker.service`, then start it), not `restart` it: the local drills' worker "kill" is a
+task cancellation, whose `finally` acknowledges the in-flight candidate (`WorkerLoop.claim_one`),
+so the index's own expiry path - an unacknowledged candidate resurfacing after `LEASE_TTL_S`
+with no acknowledge - is exercised by no drill yet. Pass: the in-flight job is requeued by
+the reaper (or failed `lost_after_publication` if it had published) within TTL plus one
+reaper tick. ⚠️ TO BE VERIFIED (P-18) until the coordinator runs it.
+
 ## Gateway
 
 The gateway holds no durable state: after acceptance the job is in PostgreSQL, before it
@@ -154,3 +162,5 @@ page: those limits come from E1B/W4 measurements. Check `infrx_queue_oldest_wait
 
 - 2026-09-22 (I3B.c): Written from drills rc01/rc02/rc03/rc08/rc09 (local, E2's stack) and the
   I1B inventory's unit names. No step has run on the box; every window is ⚠️.
+- 2026-09-23 (I3B fix round, D4): the box worker drill is a SIGKILL of the process, because
+  the local drills' cancellation acknowledges the candidate a real crash would leave in flight.
