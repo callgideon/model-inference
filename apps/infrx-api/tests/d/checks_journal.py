@@ -560,11 +560,23 @@ def check_terminal_every_path(conn) -> str:
              "recover queue_wait_expired": queue_wait_expired,
              "recover preparation_failed": preparation_reaped,
              "a second generation's journal": second_generation, "a CREDIT job": credit}
+    # Review J2/H3: a job that never appended gets its terminal event at its LAST inference
+    # generation (else 1), sequence 1, with the frozen default JOURNAL_CHUNK_TTL_S of 3600 s.
+    no_output = {"0012 preparation failure": (1, 1), "cancel before publication": (1, 1),
+                 "recover queue_wait_expired": (1, 1), "recover preparation_failed": (1, 1),
+                 "recover retries_exhausted": (DEFAULTS.max_prepublication_retries + 1, 1)}
     for what, path in paths.items():
         def run(path=path, what=what):
             request, cause = path()
             terminal = one_terminal_last(conn, request.request_id, what)
             assert terminal["payload"]["cause"] == cause, (what, terminal["payload"])
+            if what in no_output:
+                assert (terminal["generation"], terminal["sequence"]) == no_output[what], \
+                    f"{what}: a chunkless terminal event at " \
+                    f"{terminal['generation']}-{terminal['sequence']}"
+                assert terminal["expires_at"] - terminal["persisted_at"] == \
+                    timedelta(seconds=3600), f"{what}: a chunkless terminal event lives " \
+                    f"{terminal['expires_at'] - terminal['persisted_at']}"
         ca._in_rollback(conn, run)
 
     def released():
