@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:04:42Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:05:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 13 done · 10 in progress · 7 remaining (of 30).**
 
@@ -67,7 +67,7 @@ Generated 2026-09-23T03:04:42Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — round 2 (RM-1 retirement scope unkillable; 8 nonblocking) after closure review of 47b0382 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
-- W3: codex-w3 / codex/w3-drain-pin — fix round (S1 partly-dead pool liveness) after review of a0eeaf4 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
+- W3: codex-w3 / codex/w3-drain-pin — confirmation review of fix round at d80c04d; box measurements pending since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
