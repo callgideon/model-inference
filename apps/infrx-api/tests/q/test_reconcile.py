@@ -185,6 +185,8 @@ def test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch(adapter):
         w.h.clock.advance(5.0)
         await w.rec.drain()
         assert w.rec.metrics["outbox_lag_s"] == 7.5
+        assert await w.rec.drain() == {}
+        assert w.rec.metrics["outbox_lag_s"] == 0.0      # caught up: no lag (DUR-3)
     run(body)
 
 

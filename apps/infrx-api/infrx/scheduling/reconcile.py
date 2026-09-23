@@ -49,7 +49,7 @@ class Reconciler:
     max_batches: int = 10
     redelivery_s: float = 30.0
     # Gauges from the last drain/pass, plus the rebuild count. `outbox_lag_s`: age of the
-    # oldest dispatch row the drain found waiting. `missing_index` / `missing_lag_s`: jobs
+    # oldest dispatch row the last drain found waiting (0 when none waited). `missing_index` / `missing_lag_s`: jobs
     # PostgreSQL wants dispatched that the index did not hold, and the oldest one's age.
     # `dead_candidates`: candidates removed because their job no longer wants dispatch.
     metrics: dict[str, float] = field(default_factory=lambda: {
@@ -103,6 +103,7 @@ class Reconciler:
         it is still acknowledged, the rest is redelivered.
         """
         report: Counter[str] = Counter()
+        self.metrics["outbox_lag_s"] = 0.0          # nothing waiting is no lag (DUR-3)
         for _ in range(self.max_batches):
             events = await self.store.dispatch_pending(limit=self.batch,
                                                        worker_id=self.worker_id,
@@ -111,7 +112,8 @@ class Reconciler:
             if events:
                 # How far behind the relay is: the oldest dispatch it just found waiting.
                 self.metrics["outbox_lag_s"] = max(
-                    (self.now() - event.available_at).total_seconds() for event in events)
+                    self.metrics["outbox_lag_s"],
+                    *((self.now() - event.available_at).total_seconds() for event in events))
             indexed: list[str] = []
             try:
                 for event in events:

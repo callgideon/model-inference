@@ -83,6 +83,11 @@ MUTANTS: tuple[Mutant, ...] = (
        '                self.metrics["outbox_lag_s"] = max(',
        '                self.metrics["outbox_lag_s"] = min(',
        "test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch"),
+    _m("the_outbox_lag_outlives_the_backlog",
+       "review DUR-3: a drain that finds nothing waiting reports no lag",
+       '        self.metrics["outbox_lag_s"] = 0.0',
+       "        pass",
+       "test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch"),
     # --- (2) the reconciler --------------------------------------------------
     _m("dead_candidates_are_kept",
        "a candidate whose job no longer wants dispatch is removed",
