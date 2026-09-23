@@ -1,0 +1,274 @@
+"""R32/R40 for A1: single-edit defects of migration 0015 and of `infrx/state/signup.py`.
+
+Two lists, two runners, one kill rule:
+
+* `MIGRATION_MUTANTS` join the D list (`migration_mutants.py` imports this module on its
+  last line; importing appends them to its `MUTANTS` and their checks to its `_CHECKS`).
+  Each builds a database from a mutated 0015 on the D1R "credit" scenario and runs the
+  named `checks_signup` check in process - the D runner, `assertion_kill` underneath.
+* `MUTANTS` (code) go through the shared runner (`tests/contracts/mutants.py`, R83) and
+  name pure cases of `tests/d/test_signup.py`, which need no database: a nested pytest
+  cannot take the D harness's port lock while the parent suite holds it.
+
+    INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_migration_mutants.py
+    uv run --frozen pytest -q tests/d/test_signup.py -k code_mutant
+"""
+from __future__ import annotations
+
+from ..contracts import mutants as shared
+from . import checks_signup, pgharness
+from . import migration_mutants as _d
+
+SIGNUP = "0015_signup_eligibility.sql"
+
+
+def _m(name, old, new, check, why, **kw):
+    return _d.Mutant(name, SIGNUP, old, new, "credit", check, why, **kw)
+
+
+MIGRATION_MUTANTS = (
+    _m("a1_unverified_mints",
+       "  if v_evidence is null or v_email is null or length(btrim(v_email)) = 0 then",
+       "  if v_email is null or length(btrim(v_email)) = 0 then",
+       "signup_eligibility", "an unverified signup mints 10,000 CREDIT"),
+    _m("a1_soft_deleted_is_verified",
+       "   where u.id = p_user_id and to_jsonb(u)->>'deleted_at' is null;",
+       "   where u.id = p_user_id;",
+       "signup_eligibility", "a deleted account keeps claiming"),
+    _m("a1_identity_digest_is_case_sensitive",
+       "encode(sha256(convert_to(lower(btrim(v_email)), 'UTF8')), 'hex')",
+       "encode(sha256(convert_to(v_email, 'UTF8')), 'hex')",
+       "signup_eligibility", "re-registering the address in another case is a new human"),
+    _m("a1_identity_reuse_allowed",
+       "      if v_claimant is distinct from p_user_id then",
+       "      if false then",
+       "signup_eligibility", "delete + re-create with the same address earns another grant"),
+    _m("a1_usd_balance_not_a_hold",
+       "  select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l",
+       "  select coalesce(sum(l.delta_usd), 0) <> 0 and false from public.credit_ledger l",
+       "signup_eligibility", "R72: a nonzero legacy USD account is silently granted"),
+    _m("a1_usd_hold_only_on_credit_balances",
+       "  select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l",
+       "  select coalesce(sum(l.delta_usd), 0) > 0 from public.credit_ledger l",
+       "signup_eligibility", "R72: an account that owes legacy USD is granted anyway"),
+    _m("a1_usd_hold_personal_org_only",
+       "                 where o.created_by = p_user and infrx.legacy_usd_rollout_hold(o.id));",
+       "                 where o.created_by = p_user and o.id = (select v.personal_org_id from "
+       "infrx.verified_user(p_user) v) and infrx.legacy_usd_rollout_hold(o.id));",
+       "signup_eligibility", "R72: USD owed through a second organization is ignored"),
+    _m("a1_usd_hold_summed_across_orgs",
+       "  select exists (select 1 from public.organizations o\n"
+       "                 where o.created_by = p_user and infrx.legacy_usd_rollout_hold(o.id));",
+       "  select (select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l join "
+       "public.organizations o on o.id = l.org_id where o.created_by = p_user);",
+       "signup_eligibility", "R72: USD owed in one organization is netted against USD held "
+       "in another"),
+    _m("a1_campaign_length_unchecked",
+       "  if length(coalesce(p_campaign_version, '')) > 100 then",
+       "  if length(coalesce(p_campaign_version, '')) > 1000 then",
+       "signup_eligibility", "an over-long campaign is a constraint crash, not a 22023 answer"),
+    _m("a1_campaign_counts_octets",
+       "  if length(coalesce(p_campaign_version, '')) > 100 then",
+       "  if octet_length(coalesce(p_campaign_version, '')) > 100 then",
+       "signup_eligibility", "a valid non-ASCII campaign of 100 characters is refused"),
+    _m("a1_denial_not_recorded",
+       "    perform infrx.record_signup_denial(p_user_id, 'unverified');",
+       "    null;",
+       "signup_eligibility", "held/denied onboarding leaves no reason for operators"),
+    _m("a1_denial_enumerates_unknown",
+       "  select p_user, p_reason where exists (select 1 from public.profiles p "
+       "where p.id = p_user)",
+       "  select p_user, p_reason",
+       "signup_eligibility", "an unknown id answers differently from an unverified one"),
+    _m("a1_replay_reverifies",
+       "  if exists (select 1 from infrx.signup_entitlements e\n"
+       "             where e.user_id = p_user_id and e.entitlement = 'initial_signup_grant') then",
+       "  if exists (select 1 from infrx.signup_entitlements e\n"
+       "             where e.user_id = p_user_id and false) then",
+       "signup_eligibility", "a granted individual whose verification lapses is denied their "
+       "own grant"),
+    _m("a1_membership_not_frozen",
+       "               and w.personal_org_id = any (array[old.org_id, new.org_id])) then",
+       "               and false) then",
+       "signup_binding", "a second member spends through, or reads, a funded personal org"),
+    _m("a1_owner_removable",
+       "               and w.personal_org_id = any (array[old.org_id, new.org_id])) then",
+       "               and w.personal_org_id = any (array[new.org_id])) then",
+       "signup_binding", "the wallet owner is removed from the org their wallet funds"),
+    _m("a1_binding_guard_unlocked",
+       "  perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id])\n"
+       "     for share;\n",
+       "",
+       "signup_binding", "a member joining while the claim binds the org shares the wallet"),
+    _m("a1_binding_guard_locks_new_only",
+       "  perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id])\n",
+       "  perform 1 from public.organizations o where o.id = any (array[new.org_id])\n",
+       "signup_binding", "the owner leaves or moves out of a personal org while a claim binds "
+       "it: a wallet funded by an org with no owner"),
+    _m("a1_claim_binding_unlocked",
+       "        perform 1 from public.organizations o where o.created_by = p_user_id\n"
+       "           for no key update;\n",
+       "",
+       "signup_binding", "a claim binds a personal org a member is joining concurrently"),
+    _m("a1_claim_callable_by_browsers",
+       "grant execute on function public.claim_signup_grant(uuid, text, uuid) to service_role;",
+       "grant execute on function public.claim_signup_grant(uuid, text, uuid) "
+       "to service_role, authenticated;",
+       "signup_privileges", "a browser session claims for any user id it names"),
+    # No mutant drops 0015's `revoke all on function public.claim_signup_grant`: D1's
+    # default privileges already keep a later public function from browser roles, so that
+    # revoke is a restatement no single edit of 0015 can break (it survived; measured).
+    _m("a1_service_writes_claims",
+       "revoke all on infrx.signup_identity_claims, infrx.signup_denials, "
+       "infrx.retired_individuals\n  from public, anon, authenticated, service_role;",
+       "revoke all on infrx.signup_identity_claims, infrx.signup_denials, "
+       "infrx.retired_individuals\n  from public, anon, authenticated;",
+       "signup_privileges", "the platform role forges identity claims or retirements"),
+    _m("a1_claim_race_raises",
+       "      values (v_digest, p_user_id) on conflict do nothing;",
+       "      values (v_digest, p_user_id);",
+       "signup_race", "concurrent callback retries fail instead of answering the grant"),
+    _m("a1_claim_races_retirement",
+       "  perform 1 from public.profiles p where p.id = p_user_id for key share;\n",
+       "",
+       "signup_retirement_race", "a claim racing an account deletion raises 23514 instead of "
+       "answering `retired`"),
+    _m("a1_retired_wallet_spends",
+       "create or replace trigger credit_wallet_holds_frozen before insert",
+       "create or replace trigger credit_wallet_holds_frozen before update",
+       "signup_retirement", "a deleted account keeps spending its credit"),
+    _m("a1_frozen_holds_refuse_settlement",
+       "create or replace trigger credit_wallet_holds_frozen before insert\n",
+       "create or replace trigger credit_wallet_holds_frozen before insert or update\n",
+       "signup_retirement", "a hold admitted before retirement can never settle or release"),
+    _m("a1_frozen_ledger_refuses_every_kind",
+       "  for each row when (new.kind = 'signup_grant')\n",
+       "  for each row\n",
+       "signup_retirement", "in-flight debits and D5 corrections of a retired wallet fail"),
+    _m("a1_retired_keeps_keys",
+       "   where coalesce(user_id, created_by) = p_user and revoked_at is null;",
+       "   where false;",
+       "signup_retirement", "a deleted account's API keys keep working"),
+    _m("a1_retired_org_not_suspended",
+       "    perform infrx.set_suspension(v_org, true, 'operator_request', p_actor, p_reason,",
+       "    perform infrx.set_suspension(v_org, false, 'operator_request', p_actor, p_reason,",
+       "signup_retirement", "a deleted account's organization stays active"),
+    _m("a1_retired_profile_kept",
+       "     set email = 'retired+' || p_user || '@invalid', full_name = null, avatar_url = null",
+       "     set email = email, full_name = full_name, avatar_url = avatar_url",
+       "signup_retirement", "personal data survives an account deletion"),
+    _m("a1_retired_org_keeps_the_name",
+       "    update public.organizations set name = 'retired' where id = v_org;",
+       "    update public.organizations set name = name where id = v_org;",
+       "signup_retirement", "the personal org keeps the deleted individual's name"),
+    _m("a1_retirement_suspends_shared_orgs",
+       "       and not exists (select 1 from public.org_members x\n"
+       "                       where x.org_id = o.id and x.user_id <> p_user)\n",
+       "",
+       "signup_retirement", "retiring one member suspends a shared organization they created, "
+       "refusing admission for everyone else in it"),
+    _m("a1_retirement_not_serialised",
+       "  perform 1 from public.profiles p where p.id = p_user for update;",
+       "  perform 1 from public.profiles p where p.id = p_user;",
+       "signup_retirement_race", "two concurrent deletion requests for one individual: one "
+       "fails with 23505"),
+    _m("a1_retirement_ignores_created_by",
+       "     where o.created_by = p_user\n       and not exists",
+       "     where true\n       and not exists",
+       "signup_retirement", "retiring an individual suspends an organization someone else "
+       "created that they happen to own alone"),
+    _m("a1_retirement_not_idempotent",
+       "  if v_at is not null then\n    return v_at;\n  end if;\n  insert into "
+       "infrx.retired_individuals",
+       "  insert into infrx.retired_individuals",
+       "signup_retirement", "a retried deletion request fails"),
+    _m("a1_retired_regranted",
+       "create or replace trigger credit_ledger_signup_frozen before insert on infrx.credit_ledger",
+       "create or replace trigger credit_ledger_signup_frozen before update on infrx.credit_ledger",
+       "signup_retirement", "the grant seam mints into a retired individual's wallet"),
+    _m("a1_backfill_grants_unverified",
+       "    perform infrx.record_signup_denial(p_user_id, 'unverified');\n    return query select "
+       "'unverified'::text",
+       "    return query select 'granted'::text",
+       "signup_backfill", "the backfill counts unverified accounts as granted"),
+)
+
+_d._CHECKS.update({
+    "signup_eligibility": checks_signup.check_eligibility,
+    "signup_binding": checks_signup.check_binding,
+    "signup_privileges": checks_signup.check_signup_privileges,
+    "signup_race": lambda conn: checks_signup.check_claim_race(pgharness.connect, _d.MUT_DB),
+    "signup_retirement": checks_signup.check_retirement,
+    "signup_retirement_race": lambda conn: checks_signup.check_retirement_race(
+        pgharness.connect, _d.MUT_DB),
+    "signup_backfill": lambda conn: (checks_signup.seed_hosted(conn),
+                                     checks_signup.check_backfill(conn))[1],
+})
+_d.MUTANTS = _d.MUTANTS + MIGRATION_MUTANTS
+
+
+# --- code mutants: infrx/state/signup.py, through the shared runner ------------------
+F = "state/signup.py"
+RUNNER = shared.Runner(name="a1", targets=("tests/d/test_signup.py",))
+
+
+def _c(name, invariant, old, new, *cases, **kw) -> shared.Mutant:
+    return shared._m(name, invariant, F, old, new, *cases, **kw)
+
+
+MUTANTS: tuple[shared.Mutant, ...] = (
+    _c("unverified_is_forbidden", "an unverified individual reads as not found (no enumeration)",
+       '        if status == "unverified":', "        if False:",
+       "test_answer__denials_are_not_found_or_forbidden"),
+    _c("denial_is_not_found", "a held/denied grant names itself as Forbidden",
+       '        raise errors.Forbidden(f"signup grant refused: {status}")',
+       '        raise errors.NotFound(f"signup grant refused: {status}")',
+       "test_answer__denials_are_not_found_or_forbidden"),
+    _c("binding_unchecked", "a grant bound to another org than the identity's is refused",
+       "    if str(org) != identity.personal_org_id:", "    if False:",
+       "test_answer__a_grant_bound_elsewhere_is_forbidden"),
+    _c("replay_flag_lost", "a replay is reported as one (the operator never re-audits a grant)",
+       "    return grant, status == REPLAYED", "    return grant, False",
+       "test_answer__granted_and_replayed"),
+    _c("unverified_identity", "an individual without verification evidence has no identity",
+       "    if row is None or row[1] is None or row[2] is None:",
+       "    if row is None or row[1] is None:",
+       "test_identity_from__unverified_and_orgless_are_none"),
+    _c("grant_outside_a_transaction", "a refused port answer rolls the grant back",
+       "            async with conn.transaction():",
+       "            if True:",
+       "test_grant_initial__one_transaction_rolled_back_on_refusal"),
+    _c("denial_answered_inside_the_transaction", "a denial's recorded reason is committed",
+       "                if status in (GRANTED, REPLAYED):", "                if True:",
+       "test_grant_initial__a_denial_commits_its_recorded_reason"),
+    _c("operation_id_dropped", "the G6B operation id is the ledger row's (crash replay)",
+       '                CLAIM, (identity.user_id, "", operation_id))).fetchone()',
+       '                CLAIM, (identity.user_id, "", None))).fetchone()',
+       "test_grant_initial__one_transaction_rolled_back_on_refusal"),
+    _c("backfill_one_transaction", "each individual is claimed in their own transaction",
+       "                with conn.transaction():", "                if True:",
+       "test_backfill__pages_per_user_transactions_and_errors"),
+    _c("backfill_stops_on_refusal", "one refused individual does not stop the backfill",
+       '                if state in (None, "42501") or state == "55000" and "maintenance" in str(failed):',
+       "                if True:",
+       "test_backfill__pages_per_user_transactions_and_errors",
+       dies_by=("FakeRefusal",)),
+    _c("backfill_pages_overlap", "keyset pages advance past the last id",
+       "        after = rows[-1][0]", "        after = rows[0][0]",
+       "test_backfill__pages_per_user_transactions_and_errors"),
+    _c("backfill_counts_a_missing_privilege", "a role without EXECUTE stops the backfill",
+       '                if state in (None, "42501") or state == "55000" and "maintenance" in str(failed):',
+       '                if state is None or state == "55000" and "maintenance" in str(failed):',
+       "test_backfill__a_role_without_execute_stops_the_run"),
+    _c("backfill_page_inclusive", "a keyset page starts strictly after the last id",
+       'PAGE = "select id from public.profiles where id > %s order by id limit %s"',
+       'PAGE = "select id from public.profiles where id >= %s order by id limit %s"',
+       "test_backfill__pages_per_user_transactions_and_errors", dies_by=("RuntimeError",)),
+    _c("backfill_unguarded_keyset", "a page that does not advance stops the run",
+       "        if rows[-1][0] <= after:", "        if False:",
+       "test_backfill__a_keyset_that_does_not_advance_stops_loudly"),
+    _c("backfill_swallows_maintenance", "flag off stops the backfill loudly",
+       '                if state in (None, "42501") or state == "55000" and "maintenance" in str(failed):',
+       '                if state in (None, "42501"):',
+       "test_backfill__maintenance_stops_the_run"),
+)

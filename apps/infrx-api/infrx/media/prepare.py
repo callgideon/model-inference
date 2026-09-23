@@ -283,6 +283,30 @@ class MediaPreparation(MediaStaging):
         self.profile.check(probed, len(data))
         return probed.mime, probed.duration_s
 
+    def refuse_early(self, head) -> bool:
+        """M4: the fetcher's look at a download still in progress (`MediaFetcher.fetch`).
+
+        A header-first clip the profile refuses - most often one over the duration cap - is
+        refused from its `moov`, and the rest of the body is never read. Measured before
+        this, a 56 MB clip of 150 s was downloaded to its last byte and only then refused.
+        Anything the header does not settle is left to `facts`, which still probes the
+        whole object: this only ever refuses sooner, never accepts. True once a complete
+        `moov` passed: the walk stops at the first one, so no later look can change it.
+        An injected probe is the only one that decides (M2's timeout drills), so the
+        built-in header walk - on the loop, one bounded walk per look - stays out of it.
+        """
+        if self.probe is not probing.probe:
+            return False
+        probed = probing.probe_header(head)
+        if probed is None:
+            return False
+        try:
+            self.profile.check(probed, 0)           # bytes are the fetcher's own cap
+        except errors.DomainError as refusal:
+            refusal.reason = "header"               # for the operator's log line
+            raise
+        return True                                 # settled
+
     # --- admission-time preparation -------------------------------------------
     async def prepare_request(self, org_id: str, request: NormalizedRequest) -> NormalizedRequest:
         """The validated request with its media materialized, measured and referenced.
@@ -367,7 +391,8 @@ class MediaPreparation(MediaStaging):
             # is told it is prepared" holds on the second attempt as well as the first.
             if entry is None or await self.objects.head(prepared_key) is None:
                 data = await self.objects.get(key)
-                if data is None or digest_of(data) != ref.digest:
+                # M4: the full-body digest runs in a worker thread, off the event loop.
+                if data is None or await asyncio.to_thread(digest_of, data) != ref.digest:
                     # Between the HEAD and the read: an object store that answered "yes"
                     # and then handed over other bytes must not become a prepared artifact.
                     raise errors.NotFound(f"the staged object for media {ref.handle} is gone")

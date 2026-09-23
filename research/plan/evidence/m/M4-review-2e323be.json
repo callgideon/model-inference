@@ -1,0 +1,451 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "S1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/probe.py",
+      "line": "382 (probe_header: `return probe(data[:at + size]) if at + size <= len(data) else None`)",
+      "claim_broken": "\"a moov still arriving is not copied and probed\" only guards an INCOMPLETE moov; a complete but huge moov is copied and re-probed on every later look, so an adversarial header shape brings back an on-loop stall of the same size the change removed.",
+      "evidence": "meas. on the loaded dev host: probe_header on a bytearray with a complete 60 MiB moov (udta padding) = 43.8 ms per look (16 MiB: 2.4 ms; 1 MiB: 0.1 ms); adversarial E6 through the real adapter showed one 30 MiB prefix copy at the look after the moov completed. Also E5: an accepted 32 MiB header-first clip re-probes the same 354-byte moov at every look (6 probe calls) although the first complete-moov answer can never change (the walk stops at the first moov). Bounded (<= 7 looks, prefix <= cap), so not a MEDIA-SEC regression; it is a loop-stall claim that does not hold for a crafted header.",
+      "minimal_fix": "In probe_header, leave a moov larger than a small bound to the whole-object probe: `if size > 8 * EARLY_LOOK_BYTES: return None` before the `probe(data[:at + size])` (copy then <= 8 MiB, ~3 ms), and/or let `early` return True to say \"settled\" so `_fetch` stops looking after the first complete-moov answer.",
+      "lens": "security"
+    },
+    {
+      "id": "S2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/test_fetch.py",
+      "line": "537-555 (test_a_fetched_body_is_held_at_most_about_twice)",
+      "claim_broken": "\"the body is held at most about twice\" is only proven with early=None; the production path (MediaPreparation.materialize) passes early=refuse_early, and an extra copy on that path is not caught.",
+      "evidence": "My mutant M2 (`early(body)` -> `early(bytes(body))`, one full copy per look) SURVIVED tests/m (241 passed). At head the code passes the live bytearray, so the claim holds today; it is a test gap, not a defect.",
+      "minimal_fix": "Run the tracemalloc bound with an `early=lambda head: None` (or through `preparation(...).materialize`) so the look path is the one measured; name the M4 mutant `fetched_body_copied_twice` on that case too.",
+      "lens": "security"
+    },
+    {
+      "id": "S3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/fetch.py",
+      "line": "322-324 (`if early is not None and len(body) >= look:`)",
+      "claim_broken": "\"at most seven looks up to the 64 MiB cap\" (looks at every doubling until the cap) is only tested to 8 MiB.",
+      "evidence": "My mutant M3 (stop looking past 16 MiB: `... and len(body) <= (16 << 20)`) SURVIVED tests/m; a header whose moov completes after 16 MiB would then never be refused early, and no test notices. The harness's real over-cap clip has its moov inside the first 1 MiB, so the measurement does not cover it either.",
+      "minimal_fix": "Extend test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk to a 32 MiB body in 1 MiB chunks (`looks == [1,2,4,8,16,32] << 20`), or add a 20 MiB-padded moov case that must be refused at the 32 MiB look.",
+      "lens": "security"
+    },
+    {
+      "id": "S4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/test_prepare.py",
+      "line": "682-694 (test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives)",
+      "claim_broken": "\"the early refusal is byte-identical to the full-read refusal except the tag\": the test pins class, detail substring and reason only; `param` (and the rest of the DomainError) is not pinned.",
+      "evidence": "My mutant M5 (`refusal.param = None` alongside `refusal.reason = \"header\"`) SURVIVED. At head my adversarial E2 confirmed the two exceptions are identical apart from `.reason` (vars: param='messages', detail='the video is longer than 120s', code=unsupported_media, args equal), so this is a test gap only.",
+      "minimal_fix": "In that test, materialize the same clip media-first and assert `{k: v for k, v in vars(early).items() if k != 'reason'} == vars(full)` and `early.code == full.code`.",
+      "lens": "security"
+    },
+    {
+      "id": "S5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/store.py",
+      "line": "226-228 (`await asyncio.to_thread(decode_data_url, source, self.limits, ...)`)",
+      "claim_broken": "Pre-existing (present at base 5552c40, not introduced by M4): the configured `limits` on the data: decode path have no killing test; only the allow-list argument is mutated.",
+      "evidence": "My mutant M8 (`self.limits` -> `DEFAULTS` in the to_thread call) SURVIVED tests/m. Bounded: decode_data_url still refuses on the encoded length above the DEFAULT cap before decoding (adversarial B3), and materialize re-checks `len(fetched.data) > self.limits.max_media_bytes` after decoding, so a tightened cap is honoured, just after a decode of up to 64 MiB. Base mutant list has only `data_urls_ignore_the_configured_allow_list` on this line.",
+      "minimal_fix": "Add a mutant `data_urls_ignore_the_configured_limits` (same anchor, `self.limits` -> `DEFAULTS`) killed by a `staging(limits=SMALL)` data: URL case asserting the refusal happens before `binascii.a2b_base64` is called (patch it to count calls).",
+      "lens": "security"
+    },
+    {
+      "id": "P1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/test_parity.py",
+      "line": "88-96 (CLIPS) and 149 (budget_equal check)",
+      "claim_broken": "Evidence \u00a7Item 2: 'the budget equals the budget of the ffprobe duration' and 'probe agrees with ffprobe ... frame budget'. The corpus half of that check compares `support.BUDGET.budget_kwargs(derived['duration_s'])` with `budget_kwargs(probed duration)` - the same function against itself - and every real clip's duration is an integer number of seconds (E1: 2,3,5,7,9,12,15,20,26,34,48,72,112; sop: 8,30,60,120); the only fractional synthetic clip is 10.5 s (=21 frames exactly). So a frame-budget rounding defect that is not the even-rounding one is invisible to the parity oracle.",
+      "evidence": "Reviewer mutant R3 (`round(seconds * s.fps)` -> `int(seconds * s.fps)` in infrx/media/video.py:113) SURVIVED `pytest -q tests/m/test_parity.py` (6 passed in 24.30s). The implementer's `budget_frames_not_rounded_to_even` (R4) is killed by the 10.5 s case, so even-rounding is covered; truncation-vs-rounding is not. video.py is W-owned, not an M4 path, so this is an oracle-strength gap, not an M4 defect.",
+      "minimal_fix": "Add one synthetic clip whose duration*2 is not a half-integer to CLIPS, e.g. `\"mp4-5.3s-rounds-up\": (support.mp4(seconds=5.3), \"video/mp4\", 12)` (10.6 -> round 11 -> 12 frames; truncation gives 10). One line; R3 then dies on the hand-declared 12.",
+      "lens": "parity"
+    },
+    {
+      "id": "P2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/test_parity.py",
+      "line": "55-58 (_runs, after-expiry leg)",
+      "claim_broken": "Evidence \u00a7Item 2 / brief item (2): facts 'identical between a preparation and a re-preparation after the cache expired'. The parity test advances the clock but never asserts the cache entry actually expired, so if expiry stopped working the leg silently degenerates to a cache hit and still passes.",
+      "evidence": "Reviewer mutant R5 (`if self.clock() - entry.stored_at >= self.ttl_s:` -> `if False:` in prepare.py:180) SURVIVED tests/m/test_parity.py (6 passed in 24.10s). The same edit is M2's mutant at tests/m/mutants.py:766 and dies in the M list (233 passed per the evidence; my head tests/m run 358 passed includes the default subset), so the invariant has a killable test elsewhere - just not in the oracle that claims it.",
+      "minimal_fix": "In `_runs`, after `clock.now += DEFAULTS.processing_cache_ttl_s`, add `assert media.cache.get(ORG, runs[\"memory-1\"][\"ref\"][\"digest\"], \"v1\") is None` before the second `prepared_facts` call (and add `test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry` to mutant `cache_entry_never_expires`'s cases at mutants.py:766).",
+      "lens": "parity"
+    },
+    {
+      "id": "P3",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/m/M4-8179144.md",
+      "line": "168-169, 336",
+      "claim_broken": "Measurement honesty wording. (a) Line 336: 'every clip row has `loadavg_1m`' - false for 5 of the 11 committed files. (b) Lines 168-169: '`tracemalloc` peaks and bytes read are load-independent and reproduced exactly across runs' - the inline peak is exact, the URL peak and the bytes read before the early refusal are not.",
+      "evidence": "(a) `loadavg_1m` rows / total: M4-baseline.jsonl 0/86, M4-A/B/C/C-run1 0/14 each; r2/r3/final-r1..r4 86/86 (the field arrived with harness commit bdef8e0). My own rev-baseline run at 7582242 also lacks it, confirming the cause. (b) materialize_url peak MiB on ladder-67108864: baseline 192.86 / 195.61 / 193.0 (+ mine 193.0); final 128.86 / 128.86 / 128.79 / 131.61 (+ mine 128.86). bytes_read_materialize for overcap-150s-720p-faststart under final: 1,048,576 / 1,081,344 / 1,048,576 / 1,114,059 (+ mine 1,081,291) - one look-chunk of jitter. The tables in the evidence do print these varying values, so nothing is hidden; the summary sentence overstates.",
+      "minimal_fix": "Reword line 168-169 to 'the `data:` peak reproduces exactly; the URL peak within ~3 MiB and the early-refusal bytes read within one chunk of the 1 MiB look'; reword 336 to 'every clip row from `bdef8e0` on (r2 onwards) has `loadavg_1m`; the first baseline and the four per-change subset runs predate the field'.",
+      "lens": "parity"
+    },
+    {
+      "id": "P4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/perf/harness.py",
+      "line": "336-357 (parity) and 372-402 (run)",
+      "claim_broken": "Evidence Test runs row 10 lists 'harness measure --label final-r4 ... exit 0' beside the pytest rows as if it were a pass. `measure` never fails: `parity()` records `differs`/`manifest` disagreement into the row and `run()` returns 0 regardless, so exit 0 only says the tool ran. The parity verdict lives in the jsonl fields (which do hold - see fabrication check), not in the exit code.",
+      "evidence": "harness.py `parity()` builds `identical`/`differs` lists and `manifest` booleans and returns them; `run()` has no check on them; `main()` returns 0 after `asyncio.run(run(args))`. I verified the jsonl fields myself for all 9 runs (79/79 identical, differs [], v1_identity True, manifest 76/76).",
+      "minimal_fix": "In `run()`, after writing each row: `bad |= bool(row.get(\"parity\", {}).get(\"differs\")) or not all(row[\"parity\"].get(\"manifest\", {\"sha256\": True, \"budget_equal\": True}).values())`; `return 1 if bad else 0` and `sys.exit(main())` already propagates it. Or drop 'exit 0' from the evidence row and cite the parity fields instead.",
+      "lens": "parity"
+    },
+    {
+      "id": "H1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/perf/test_harness.py",
+      "line": "14-27",
+      "claim_broken": "Implicit: the harness test guards the harness. It checks that the tool runs end to end (outcome, bytes_read, layout, parity list, n==2, peak keys) and nothing about the numbers' sanity.",
+      "evidence": "On a scratch copy I set `stalled()` to return stall 0.0, `peaks()` to 0.0 and `probe_s` to 0.0 (walls real): `1 passed in 1.80s`. With walls also a constant 1e-9: `1 passed in 0.77s`. Only all-zero walls die, and by an incidental ZeroDivisionError in `fetch_mib_s` (harness.py:345), not by an assertion. The docstring admits it ('proves the tool works, not a product invariant'), so this is a gap, not a misstatement.",
+      "minimal_fix": "Add three assertions: `row['fetch_ms']['p50'] > 0`, `row['probe_s'] > 0`, `row['peak_mib']['materialize_url'] > 0` (tracemalloc peak of a 256 KiB fetch is deterministic and non-zero).",
+      "lens": "honesty"
+    },
+    {
+      "id": "H2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/prepare.py",
+      "line": "286-300",
+      "claim_broken": "Evidence 'Changes': 'M2/M3 behaviour and tests kept'. M2's `probed()` (prepare.py:255-273) runs the injected `self.probe` in a thread under `probe_timeout_s`; `refuse_early` calls `probing.probe_header` -> module-level `probe` synchronously on the event loop, with no timeout, ignoring an injected `probe=`. No test pins either property on the early path.",
+      "evidence": "prepare.py:296 `probed = probing.probe_header(head)`; probe.py:355 `return probe(data[:at + size])` (module `probe`, not `self.probe`). `preparation(..., probe_fn=hangs, probe_timeout_s=0.01)` drills (test_prepare.py:347, test_uploads.py:414) never reach `refuse_early`. Cost today is small (harness: probe <= 0.1 ms on every real clip) and the built-in probe is bounded (MAX_ELEMENTS), so no MEDIA-SEC regression is demonstrated; it is an unstated bypass of an M2 invariant.",
+      "minimal_fix": "In `refuse_early`: `if self.probe is not probing.probe: return None` (an injected probe is the only one allowed to decide), and one line in Limits saying the header probe runs on the loop for one bounded walk per look (<= 7 looks).",
+      "lens": "honesty"
+    },
+    {
+      "id": "H3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/perf/harness.py",
+      "line": "267-272",
+      "claim_broken": "Evidence: 'the same unsupported_media refusal ... same code, same message' for the early refusal. The harness rows cannot show that: `outcome()` prints `reason` when set, so the final rows read `unsupported_media:header` and lose the message; the 'same message' claim rests only on the unit test (test_prepare.py:919 `'longer than 120s' in caught.value.detail`).",
+      "evidence": "All 4 final runs: `overcap-150s-720p-faststart outcome=unsupported_media:header`; all 3 baseline runs: `unsupported_media:the video is longer than 120s`. The unit test does assert the message, so the claim is true, just not by the artifact cited for it.",
+      "minimal_fix": "`outcome()` returns `f\"{code}:{reason}:{detail}\"` (or the report prints both), so the parity of the message is in the jsonl.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/m/test_fetch.py",
+      "line": "357-374",
+      "claim_broken": "Lens question: no test in tests/m depends on host timing. None of M4's 14 new tests do (tracemalloc thresholds, byte counts, exact look positions). Two pre-existing M1/M2 cases do: `test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop` needs the 1.05 s real-clock backstop to fire inside `wait_for(go(), 2.0)` (0.95 s margin), and test_probe.py:170 bounds a hostile-length walk at < 1.0 s wall.",
+      "evidence": "Both passed here under load average 36-45 (tests/m 358 in the api-test run; the backstop case also ran 2x in the `no_real_clock_backstop` hand run). The margin is the only exposure; it is M1's, not M4's.",
+      "minimal_fix": "None for M4. If it ever flakes: widen the outer `wait_for` to 5.0 s; the invariant is 'it returned', not '2 s'.",
+      "lens": "honesty"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "security",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "M1_partial_digest (R76 provenance)",
+          "edit": "fetch.py: `digest=\"sha256:\" + hasher.hexdigest()` -> `digest=digest_of(bytes(body[:len(body) // 2]))`",
+          "result": "KILLED",
+          "killed_by": "tests/m/test_fetch.py::test_the_digest_covers_every_chunk_in_the_order_it_arrived (+3 others: connection_is_pinned, held_at_most_about_twice, no_full_body_digest_on_the_loop)"
+        },
+        {
+          "name": "M2_early_gets_a_copy",
+          "edit": "fetch.py: `early(body)` -> `early(bytes(body))`",
+          "result": "SURVIVED (241 passed) - perf-only; finding S2"
+        },
+        {
+          "name": "M3_looks_stop_at_16MiB",
+          "edit": "fetch.py: `if early is not None and len(body) >= look:` -> `... and len(body) <= (16 << 20):`",
+          "result": "SURVIVED (241 passed) - finding S3"
+        },
+        {
+          "name": "M4_ftyp_gate_removed",
+          "edit": "probe.py: delete `if data[4:8] != b\"ftyp\": return None`",
+          "result": "SURVIVED - equivalent: a WebM/text prefix walks to a truncated read or an unknown-container probe and still returns None (verified C1/C2 shapes by hand); not a finding"
+        },
+        {
+          "name": "M5_early_refusal_drops_param",
+          "edit": "prepare.py: `refusal.reason = \"header\"` -> `refusal.reason = \"header\"; refusal.param = None`",
+          "result": "SURVIVED (241 passed) - finding S4"
+        },
+        {
+          "name": "M6_linear_looks",
+          "edit": "fetch.py: `look = 2 * len(body)` -> `look = len(body) + EARLY_LOOK_BYTES`",
+          "result": "KILLED",
+          "killed_by": "tests/m/test_prepare.py::test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk"
+        },
+        {
+          "name": "M7_header_probe_refusal_escapes",
+          "edit": "probe.py: `except errors.UnsupportedMedia: return None` -> `raise`",
+          "result": "KILLED",
+          "killed_by": "tests/m/test_prepare.py::test_a_media_first_clip_within_the_cap_is_read_to_the_end_and_accepted, ::test_a_media_first_clip_over_the_cap_is_refused_once_it_has_arrived"
+        },
+        {
+          "name": "M8_data_url_thread_ignores_limits",
+          "edit": "store.py: `decode_data_url, source, self.limits, ...` -> `decode_data_url, source, DEFAULTS, ...`",
+          "result": "SURVIVED (241 passed) - pre-existing gap; finding S5"
+        },
+        {
+          "name": "M9_early_look_before_cap_check",
+          "edit": "fetch.py: move the early look ahead of `if len(body) > cap` (and the hasher update after it)",
+          "result": "SURVIVED - equivalent: the cap check still runs on the same chunk, and the header look cannot accept; not a finding"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-m4> archive 2e323be | tar -x -C $S/head; git archive 7582242 | tar -x -C $S/base; (cd $S/head && make api-env)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": "$S/head/apps/infrx-api: .venv/bin/python -m pytest tests/m -q -p no:cacheprovider -x",
+          "exit": 0,
+          "tail": "357 passed, 1 skipped in 187.16s (0:03:07)  [skip = the corpus test without CORPUS_CACHE; see next row]"
+        },
+        {
+          "cmd": "CORPUS_CACHE=<main>/.claude/corpus-cache .venv/bin/python -m pytest tests/m/test_parity.py -q -p no:cacheprovider",
+          "exit": 0,
+          "tail": "6 passed in 28.71s  (5 synthetic + the 76-clip ffprobe-agreement case, no skip)"
+        },
+        {
+          "cmd": "PYTHONPATH=. .venv/bin/python $S/adversarial.py  (A: 25 random chunkings + reorder/drop/duplicate/split vs hashlib; B: 40,000-payload differential a2b_base64(strict) vs b64decode(validate=True) + 13 named edge cases + encoded-length cap before decode; C: 30 probe_header crafted inputs incl. size 0/1/largesize 0,1,8,15,16,2^63,2^64-1, nested moov, two moovs both orders, 5000 tiny boxes, lying moov size, bytearray; D: 1,500 random ISO files x up to 40 prefixes each, header refusal => whole-object refusal; E: adapter-level short-moov+over-cap mdat, error identity, nothing stored, MediaStaging unchanged, no exception escapes probe_header over every prefix of 105 crafted headers, look/copy counts, to_thread cancellation)",
+          "exit": 0,
+          "tail": "PASS E7 to_thread digest cancels cleanly (thread result discarded) / default executor bound: min(32, cpu+4) = 20 threads (cpu=16) / FAILED: none"
+        },
+        {
+          "cmd": ".venv/bin/python - (probe_header on-loop cost, meas. loaded host, min of 5)",
+          "exit": 0,
+          "tail": "moov 1 MiB complete: 0.1 ms | 16 MiB: 2.4 ms | 60 MiB: 43.8 ms | 4096 tiny boxes per look: 4.28 ms"
+        },
+        {
+          "cmd": ".venv/bin/python $S/mutants.py  (9 own single-edit mutants, each in a copy of head, against tests/m/test_{fetch,prepare,store,probe,parity}.py)",
+          "exit": 0,
+          "tail": "M1 KILLED, M2 SURVIVED, M3 SURVIVED, M4 SURVIVED(equiv), M5 SURVIVED, M6 KILLED, M7 KILLED, M8 SURVIVED, M9 SURVIVED(equiv), DONE"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/m/test_mutants.py  (detached, polled)",
+          "exit": 0,
+          "tail": "233 passed in 1554.08s (0:25:54)  [meas. on the loaded host, load avg ~41 on 16 CPUs]"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/review-m4-security-3952742 \u2026; git -C <codex-m4> status --short",
+          "exit": 0,
+          "tail": "scratch removed / worktree status clean"
+        }
+      ],
+      "fabrication_check": "Implementer's counts reproduced from the archived head: tests/m 357 passed + 1 skipped without the corpus cache and the parity module 6/6 with it (= the claimed 358); full M list 233 passed (229 mutants + 4 meta, no survivor) in 25:54 on this loaded host vs the claimed 19:30; 11 result files exist with 87/15 rows as claimed; the final-r4 row for overcap-150s-720p-faststart records bytes_read_materialize 1,114,059 and layout ftyp,moov,free,mdat, matching the report's '~1.05\u20131.11 MB read'. Code claims verified independently: streaming digest equals sha256 of the served concatenation under 25 random chunkings and reorder/drop/duplicate/split; a2b_base64(strict_mode=True) and b64decode(validate=True) agree on 40,000 fuzzed payloads and all named edge cases (URL-safe alphabet, whitespace, padding errors, data after padding, non-ASCII), and in Python 3.12.3 b64decode(validate=True) is literally a2b_base64(strict_mode=True) after an ASCII encode; the encoded-length bound refuses one quad over the bound before any decode (a body exactly at the bound decodes cap+2 bytes then refuses - pre-existing, bounded); early refusal raises before any Fetched/digest exists (no partial digest returned, logged or persisted; nothing stored, no ref); the early refusal is identical to the full-read refusal except .reason='header' (host in the log line is '-'); 'refuses sooner, never differently' held over 1,500 random ISO files x prefixes and both two-moov orders (whole-object refuses duplicate-header); truncated/size-0/largesize/overflowing/nested/many-box/WebM/text headers all return None without raising; MediaStaging (no probe) behaviour unchanged; the two fetch doubles in tests/m are the only ones in the repo and accept early=. Measurements I took are meas. on a shared loaded host (load ~41/16 CPUs) and not the pilot box. Not re-run: the perf harness measure runs (the jsonl evidence was checked for shape and the over-cap row, not regenerated), make check as written (other tracks' Docker/Postgres suites).",
+      "cleanup": "Removed /tmp/claude-1000/review-m4-security-3952742 (head and 7582242 scratch archives, their .venv, my adversarial.py, mutants.py, mutant copies and all logs) and the scratch-path note; killed nothing (all runs finished); no worktree was edited or committed (codex-m4 status clean); no container, network beyond loopback, GPU or hosted project used."
+    },
+    {
+      "lens": "parity",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "R1 prepared output one byte altered",
+          "edit": "infrx/media/prepare.py:418 `return data` -> `return data[:1] + bytes([data[1] ^ 1]) + data[2:]` (MediaPreparation._prepared_bytes)",
+          "result": "KILLED - 1 failed in 2.46s",
+          "killed_by": "tests/m/test_parity.py::test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry[mov-1s-min-frames] (the `prepared_digest == local_digest == source_digest` assertion: 'profile v1 prepares the source unchanged' is asserted, not assumed)"
+        },
+        {
+          "name": "R2 local cache file short by one byte",
+          "edit": "infrx/media/prepare.py:199 `handle.write(data)` -> `handle.write(data[:-1])` (ProcessingCache.put)",
+          "result": "KILLED - 1 failed in 0.38s",
+          "killed_by": "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry[mov-1s-min-frames] (local_digest != prepared_digest)"
+        },
+        {
+          "name": "R3 frame budget truncates instead of rounds",
+          "edit": "infrx/media/video.py:113 `round(seconds * s.fps)` -> `int(seconds * s.fps)`",
+          "result": "SURVIVED - 6 passed in 24.30s (finding P1; W-owned module, oracle gap only)",
+          "killed_by": "nothing in tests/m/test_parity.py"
+        },
+        {
+          "name": "R4 frame budget not rounded to even (implementer's `budget_frames_not_rounded_to_even`)",
+          "edit": "infrx/media/video.py:114 `frames += frames % 2` -> `pass`",
+          "result": "KILLED - 1 failed, 1 passed in 1.41s",
+          "killed_by": "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry[mp4-10.5s-odd-frames]"
+        },
+        {
+          "name": "R5 processing cache never expires",
+          "edit": "infrx/media/prepare.py:180 `if self.clock() - entry.stored_at >= self.ttl_s:` -> `if False:`",
+          "result": "SURVIVED test_parity.py - 6 passed in 24.10s (finding P2; same edit is M2's mutant at mutants.py:766, killed in the M list)",
+          "killed_by": "nothing in tests/m/test_parity.py"
+        },
+        {
+          "name": "R6 probe duration rounded to whole seconds",
+          "edit": "infrx/media/probe.py:225 `duration_s=duration / timescale` -> `duration_s=float(round(duration / timescale))`",
+          "result": "KILLED - 1 failed, 1 passed in 1.58s",
+          "killed_by": "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry[mp4-10.5s-odd-frames]"
+        },
+        {
+          "name": "R7 probe duration off by +0.4 ms",
+          "edit": "infrx/media/probe.py:225 `duration_s=duration / timescale` -> `... + 0.0004`",
+          "result": "KILLED - 1 failed, 3 passed in 0.78s",
+          "killed_by": "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry[mp4-at-the-cap] (120.0004 s refused by the profile cap; the \u00b11 ms manifest tolerance itself would have let 0.4 ms through, as designed)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-m4> archive 2e323be | tar -x -C $S/head; git archive 7582242 | tar -x -C $S/base; (cd $S/head && make api-env); (cd $S/base && make api-env); third copy $S/mut of 2e323be + make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0 / head exit 0 / base exit 0 / mut exit 0"
+        },
+        {
+          "cmd": "cd $S/head/apps/infrx-api && CORPUS_CACHE=<main>/.claude/corpus-cache uv run --frozen pytest -q tests/m",
+          "exit": 0,
+          "tail": "358 passed in 203.73s (0:03:23)  [meas., shared host, load 1m ~40]"
+        },
+        {
+          "cmd": "cd $S/base/apps/infrx-api && CORPUS_CACHE=... uv run --frozen pytest -q tests/m/test_parity.py  (at 7582242)",
+          "exit": 0,
+          "tail": "6 passed in 26.71s"
+        },
+        {
+          "cmd": "cd $S/base/apps/infrx-api && uv run --frozen python -m tests.m.perf.harness measure --label rev-baseline --out $S/rev-baseline.jsonl --work $S/work --ffmpeg <pinned ffmpeg>  (7582242)",
+          "exit": 0,
+          "tail": "neg-zero-length  media_fetch_failed:empty-body  mat 3.953 ms / exit 0  (86 rows, 01:22:58Z)"
+        },
+        {
+          "cmd": "cd $S/head/apps/infrx-api && uv run --frozen python -m tests.m.perf.harness measure --label rev-final --out $S/rev-final.jsonl --work $S/work --ffmpeg <pinned ffmpeg>  (2e323be)",
+          "exit": 0,
+          "tail": "neg-zero-length  media_fetch_failed:empty-body  mat 5.119 ms / exit 0  (86 rows, 01:26:37Z, loadavg_1m 46.4 on the 64 MiB row)"
+        },
+        {
+          "cmd": "python3 $S/compare.py  (my 2 runs + 7 committed full runs; parity block per accepted clip compared as sorted JSON and by facts_sha256)",
+          "exit": 0,
+          "tail": "parity blocks byte-identical across all 9 runs: 79 / 79 differ: [] | rev-baseline 5-way identical 79 v1 identity 79 manifest agree 76 / 76 | rev-final 5-way identical 79 v1 identity 79 manifest agree 76 / 76 | overcap-150s-720p-faststart rev-baseline ('longer than 120s', 56510882 B, 358.992 ms, peak 165.56 MiB) rev-final ('unsupported_media:header', 1081291 B, 9.999 ms, peak 1.6 MiB) | ladder-67108864 stall ms baseline->final: url 244.1->52.4, fetch 167.3->49.2, inline 585.3->297.1, prepare-miss 70.3->49.3; peaks url 193.0->128.86, inline 234.67->149.34 MiB; walls url 554.0->467.7, inline 673.8->563.4, prepare 195.3->181.5 [meas., load 1m 44-46, not the pilot box]"
+        },
+        {
+          "cmd": "python3 (committed jsonl only): parity/outcome/wall-spread over M4-baseline, -r2, -r3, M4-final-r1..r4",
+          "exit": 0,
+          "tail": "79/79 facts identical across 7 runs; only outcome difference overcap-150s-720p-faststart baseline 'longer than 120s' vs final 'header'; <1MiB materialize_url p50-median ms baseline 3.46/4.42/3.74 vs final 4.15/3.84/4.24/4.52; 32-64MiB url 218.6/245.75/240.99 vs 218.47/202.99/223.93/225.44; prepare_cold 77.99/89.75/80.68 vs 82.17/83.01/83.73/85.01 -> final inside the baseline spread (walls unchanged; inline 284-343 vs 244-274 is the 3c copy saving the evidence reports)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.m.perf.harness report M4-baseline-r2.jsonl M4-baseline-r3.jsonl M4-final-r1.jsonl M4-final-r2.jsonl",
+          "exit": 0,
+          "tail": "| <1 MiB | 39 | materialize_url_ms | 4.42 | 3.74 | 4.15 | 3.84 | ... | 32-64 MiB | 3 | materialize_url_stall_ms | 121.3 (max 221.3) | 113.9 (max 238.6) | 25.3 (max 50.7) | 25.3 (max 51.3) | peak url 3.11x/3.07x/2.07x/2.07x inline 3.67x/3.67x/2.33x/2.33x  (= the evidence's cells)"
+        },
+        {
+          "cmd": "python3 $S/mutants.py (7 reviewer mutants, each applied to $S/mut, tests/m/test_parity.py -x, source restored from $S/head; diff confirmed 'restored')",
+          "exit": 0,
+          "tail": "R1 KILLED, R2 KILLED, R3 SURVIVED, R4 KILLED, R5 SURVIVED, R6 KILLED, R7 KILLED"
+        },
+        {
+          "cmd": "git diff --stat 8179144 0b9f78b -- apps/infrx-api; git diff 0d86e2c 8179144 -- apps/infrx-api/infrx; git diff --stat 5552c40 7582242 -- apps/infrx-api/infrx",
+          "exit": 0,
+          "tail": "empty; only probe.py:360 incomplete-moov guard; empty  (the evidence's three SHA claims hold)"
+        },
+        {
+          "cmd": "sha256sum <corpus-cache>/tools/ffmpeg-7.0.2-amd64-static/{ffmpeg,ffprobe}; manifest ffmpeg pins; grep ffprobe models/marlin2b/corpus/build.py",
+          "exit": 0,
+          "tail": "e7e7fb30...eb99 / 4f231a19...450d = both manifests' ffmpeg_sha256/ffprobe_sha256; build.py:229 verifies the pins and :430 `d = probe(ffprobe, dst)` writes `derived`; synth.py:263 uses corpus.ensure_ffmpeg (verifies both digests)"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/review-m4-parity-3965804 + scratchpad/scratchdir; git -C <codex-m4> status --porcelain | wc -l",
+          "exit": 0,
+          "tail": "No such file or directory (scratch gone); 0 (worktree clean at 2e323be)"
+        }
+      ],
+      "fabrication_check": "Every figure above is from my own command output in this session (test summaries, the harness's jsonl rows, compare.py, harness report, mutants.py log); nothing is quoted from the evidence without re-deriving it. Reproduced: tests/m 358 passed at 2e323be; test_parity 6 passed at 7582242; my harness runs at 7582242 and 2e323be give 79/79 accepted clips whose `parity` blocks (5-way identical, v1_identity, facts_sha256, manifest sha256/duration/budget) are byte-identical to each other and to all seven committed full runs; the two over-cap clips re-render to the same sha256 as the committed rows; the evidence's table cells for the four interleaved runs are what `harness report` prints. Oracle strength: the 5-way comparison is the dict `support.prepared_facts` - the prepared MediaRef minus `kind`, sha256 of the durable prepared object's bytes, sha256 of the local file the engine opens, its cache-relative path, probed width/height/codec and `budget_kwargs(duration)` - i.e. digests of the prepared bytes plus metadata, not the bytes themselves (sufficient); `prepared_digest == local_digest == source_digest` is asserted (R1/R2 killed). The ffprobe test uses the manifests' committed `derived` values (no ffprobe re-run); those values were written by models/marlin2b/corpus/build.py `probe(ffprobe, dst)` after pinning both binary digests, and the cached binaries match the pins. Measurement honesty: 'worst event-loop stall' is a loop-lag watcher task (asyncio.sleep(0.001), excess over 1 ms, max over the awaited call) - it measures loop latency including GIL-holding worker threads (hence the residual ~250 ms data: stall the evidence admits) and by definition cannot see a GIL-releasing worker; 'off the loop' is proven by `test_no_full_body_digest_runs_on_the_event_loop` (asserts no `digest_of` in store/prepare/fetch sees a running loop in its thread) and its three mutants, not by the harness. tracemalloc high-water is process-wide (all threads, Python allocator only), `reset_peak` + baseline per operation, in a separate pass with nothing else running in the process. Results are under models/marlin2b/results/M4-<label>.jsonl on the branch as the brief's owned path requires, named consistently; code_sha in env rows checked (7582242, 51d3e0d, d99a0bb, 28e54b5, 0d86e2c, 8179144, 0b9f78b). No blocking defect, no MEDIA-SEC/PARITY regression; the four findings are oracle-strength and wording items. All my numbers are meas. on the shared development host at 1-minute load ~40-46 (heavier than the implementer's 13-31), not the pilot box.",
+      "cleanup": "Removed /tmp/claude-1000/review-m4-parity-3965804 entirely (head, base and mut archives with their .venvs, harness work tree and rendered over-cap clips, rev-baseline/rev-final jsonl, logs, scripts) and the one marker file I wrote in the session scratchpad; no background process of mine remains; no edit or commit in any worktree (codex-m4 `git status --porcelain` empty at 2e323be); no container, no network beyond loopback, no GPU."
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "meta-test: anchor moved (prepare.py `refusal.reason = \"header\"` -> `\"hdr\"`)",
+          "edit": "sed on infrx/media/prepare.py in a third scratch copy, run tests/m/test_mutants.py -k every_anchor",
+          "result": "killed",
+          "killed_by": "test_every_anchor_is_in_the_source_as_often_as_declared: `anchors no longer in the source: ['early_refusal_reason_untagged']`"
+        },
+        {
+          "name": "meta-test: an occurrences=1 anchor made to appear twice (a comment containing `\"Accept-Encoding\": \"identity\"` appended to fetch.py)",
+          "edit": "printf >> infrx/media/fetch.py",
+          "result": "killed",
+          "killed_by": "same test: `['asks_for_compression']` (count 2 != 1; counting uses str.count, identical to the runner's `_prepare` at contracts/mutants.py)"
+        },
+        {
+          "name": "meta-test: one occurrence of a two-line anchor removed (the second `if self.monotonic() >= expires_at:` block in fetch.py)",
+          "edit": "python slice on fetch.py",
+          "result": "killed",
+          "killed_by": "same test: `['aggregate_deadline_not_checked_between_chunks']`"
+        },
+        {
+          "name": "harness: stall 0.0, peaks 0.0, probe_s 0.0 (walls real)",
+          "edit": "three replacements in tests/m/perf/harness.py (stalled, peaks, probe_s)",
+          "result": "SURVIVED tests/m/perf/test_harness.py (1 passed) - see H1",
+          "killed_by": "nothing"
+        },
+        {
+          "name": "harness: walls constant 1e-9 + zeros above",
+          "edit": "as above plus `return result, 1e-9, 0.0`",
+          "result": "SURVIVED (1 passed) - see H1",
+          "killed_by": "nothing"
+        },
+        {
+          "name": "harness: walls 0.0 + zeros above",
+          "edit": "`return result, 0.0, 0.0`",
+          "result": "died, but by ZeroDivisionError at harness.py:345 (fetch_mib_s), not by an assertion",
+          "killed_by": "incidental crash"
+        },
+        {
+          "name": "24 list mutants applied by hand via the shared runner's _copy/_prepare/_pytest (17 new + 5 re-anchored + 2 with M4-added cases)",
+          "edit": "streaming_digest_keeps_only_the_last_chunk, fetched_body_copied_twice, materialize_digest_on_the_loop, prepare_digest_on_the_loop, data_url_text_copied_again, data_url_decoded_on_the_loop, early_look_never_taken, early_look_on_every_chunk, early_look_not_wired, header_not_checked_against_the_profile, early_refusal_reason_untagged, header_probe_refusal_escapes, incomplete_header_probed, header_scan_unbounded, prepared_bytes_are_not_the_source, cache_file_name_varies, budget_frames_not_rounded_to_even, no_real_clock_backstop, digest_taken_from_the_fetcher, digest_not_rechecked_after_the_read, base64_not_validated, data_urls_ignore_the_configured_allow_list, duration_cap_removed, duration_cap_excludes_its_own_bound",
+          "result": "all 24 killed, exit 1 each, runner verdict `killed` each; every failing id is a named case; deaths: AssertionError with the invariant's message (e.g. `peak 3.07x the body`, `peak 3.67x the decoded size`, `assert [394, 62] == []` (digest sizes seen on the loop), `assert 20483 <= 4096`, `after-expiry prepared differently from memory-1`, `assert (21 <= 240 and (21 % 2) == 0)`, `assert [1048576, 111...] == [1048576, 2097152, 4194304, 8388608]`), pytest `Failed: DID NOT RAISE` (digest_not_rechecked, allow_list, duration_cap_removed), typed `UnsupportedMedia` (header_probe_refusal_escapes at probe.py:120; duration_cap_excludes_its_own_bound at prepare.py:103 - both DomainError subclasses, honest per R83), and `TimeoutError` declared in dies_by (no_real_clock_backstop). Edits are all single-anchor (count==occurrences for all 229), old!=new, none a no-op, no duplicate (file,old,new). Note: early_look_never_taken, early_look_not_wired, header_not_checked_against_the_profile and early_refusal_reason_untagged all die on the same first assertion (test_prepare.py:920 `assert None == 'header'`); the bytes-read bound on line 921 is proven only by the unmutated pass.",
+          "killed_by": "the named cases, as listed"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-m4> archive 2e323be | tar -x -C $S/head; git archive 7582242 | tar -x -C $S/base; cd $S/head && make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0 (real 0m0.5s, uv cache warm)"
+        },
+        {
+          "cmd": "cd $S/head/apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/m/test_mutants.py (detached, load avg 36-45 throughout)",
+          "exit": 0,
+          "tail": "233 passed in 1768.20s (0:29:28) \u2014 229 mutants + 4 meta; no survivor, misdeclared or broken_runner (any would be a FAILED line; none)"
+        },
+        {
+          "cmd": "cd $S/head/apps/infrx-api && uv run --frozen pytest -q -p no:cacheprovider --ignore=tests/d --ignore=tests/e2 --ignore=tests/q/test_valkey_mutants.py --ignore=tests/q/test_valkey_scheduler.py --ignore=tests/q/test_fairness_properties.py (make api-test minus Docker/Valkey-backed suites; detached)",
+          "exit": 0,
+          "tail": "2317 passed, 1 skipped, 2 warnings in 1685.98s (0:28:05)"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -rs tests/m/test_parity.py -k real_corpora (scratch copy is not a git checkout, so default_corpus() fails)",
+          "exit": 0,
+          "tail": "SKIPPED [1] tests/m/test_parity.py:109: corpus cache not found \u2014 this is the api-test run's 1 skip"
+        },
+        {
+          "cmd": "CORPUS_CACHE=<main>/.claude/corpus-cache .venv/bin/python -m pytest -q tests/m/test_parity.py -k real_corpora",
+          "exit": 0,
+          "tail": "1 passed, 5 deselected in 16.44s (76 real clips, 5-way parity + ffprobe agreement, reproduced here)"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest --collect-only -q tests/test_app_factory.py tests/test_gateway_auth.py tests/test_inflight.py tests/test_media.py tests/m --deselect tests/m/test_mutants.py::test_mutant_is_killed",
+          "exit": 0,
+          "tail": "368/387 tests collected (19 deselected); tests/m alone: 358 collected. The 19 are the default-subset parametrizations of test_mutant_is_killed (SUBSET has 19 names: 7 M1, 5 M2, 5 M3, 2 M4), deselected because rows 6 and 11 already run them; 368 = 358 - 19 + 29 legacy"
+        },
+        {
+          "cmd": "python analyze.py over models/marlin2b/results/M4-*.jsonl (11 files)",
+          "exit": 0,
+          "tail": "7 full runs x 86 rows, 79 accepted each; facts_sha256 identical across all 7 on 79/79; 5-way 79, v1 79, manifest 76/76 in every run; only outcome difference overcap-150s-720p-faststart (header); 64 MiB stalls/peaks and over-cap bytes read match every cell quoted in the evidence; zero p50 walls: 0"
+        },
+        {
+          "cmd": "python (tests.m.mutants introspection)",
+          "exit": 0,
+          "tail": "total 229; per file fetch 47 prepare 43 store 36 uploads 35 probe 26 gc 25 consent 9 video 8; duplicate (file,old,new): []; old==new: []; count mismatches: []; no-op after replace: []; base 5552c40 grep = 212, 7582242 = 215 (212 + the 3 parity mutants), head 229 = 215 + 14 = 212 + 17 as claimed"
+        },
+        {
+          "cmd": ".venv/bin/python hand.py (24 mutants by hand, detached)",
+          "exit": 0,
+          "tail": "HAND DONE; 24/24 RUNNER VERDICT: killed"
+        },
+        {
+          "cmd": "meta-test / harness experiments on a third archive copy ($S/meta), source restored and diffed clean after each",
+          "exit": 0,
+          "tail": "anchor moved -> FAIL naming early_refusal_reason_untagged; duplicated -> FAIL naming asks_for_compression; occurrence removed -> FAIL naming aggregate_deadline_not_checked_between_chunks; harness zeros -> 1 passed (twice)"
+        }
+      ],
+      "fabrication_check": "Every number I checked in research/plan/evidence/m/M4-8179144.md is present in the committed jsonl: env rows carry the claimed code SHAs (baseline/r2/r3 = 7582242, final-r1/r2 = 0d86e2c, r3 = 8179144, r4 = 0b9f78b; `git diff 0d86e2c 8179144 -- infrx` is only the incomplete-moov guard, as stated), UTC times in the claimed order, loadavg_1m 13.3-31.5 on the rows that have it (the first five runs predate bdef8e0 and have none, consistent with the commit order), host_class 'NOT the pilot GPU host'. The 64 MiB cells (fetch stall 142.1 -> 41.6/49.7/47.9/49.9/43.0; URL stall 185.8 -> 95.6/45.7/42.7/43.5/46.3/49.2; data: stall 484.6 -> 260.0/278.3/248.2/261.8; prepare-miss 65.0 -> 28.3/27.6/28.4/27.1/28.0; high-water 192.86/234.67 -> 128.86/149.34), the over-cap header-first rows (56,510,882 B read at 294-361 ms -> 1,048,576 / 1,081,344 / 1,048,576 / 1,114,059 B at 9.7 / 7.6 / 7.0 / 9.1 ms, peak 1.68/1.46/1.6/1.59 MiB) and the moov-last rows (unchanged, 56,510,882 B) are the file values. MEDIA-PARITY: 79 accepted clips have identical facts_sha256 across all 7 full runs, 5-way identical and manifest-agreeing in each, reproduced by my own script, and the 76-clip corpus test passed again here against the real corpus cache. Test-run claims reproduced: 233 passed (full M list), 358 in tests/m, 368/19 deselected accounted for, 229 = 212 + 17. The 'make api-test not run as written' attribution is accurate; run here minus tests/d and the Valkey/Docker suites it is 2317 passed, 1 skipped (the corpus test, skipped only because the scratch copy is not a git checkout). All timings I observed are meas. on a shared host at load average 36-45 (test wall times only; I took no performance measurements of my own). No number in the evidence was found to be invented or misquoted; the one soft spot is H3 (the message parity is proven by a unit test, not by the harness rows the paragraph sits under).",
+      "cleanup": "Removed /tmp/claude-1000/review-m4-honesty-3948971 (head, base and meta archive copies with the scratch venv, all logs, analyze.py and hand.py) and /tmp/claude-1000/review-m4-honesty-dir.txt; every temporary directory my runs created was released by TemporaryDirectory on normal exit. No process of mine remains (pgrep clean). The /tmp/m1-mutant-* directories still present are other lanes' concurrent M mutant runs (created before my session or while mine had already exited, fuser shows them in use, 10 foreign tests/m mutant processes running) and were left alone. No worktree was edited or committed; `git status --porcelain` in codex-m4 is empty. No network beyond loopback, no container, no GPU, no hosted project."
+    }
+  ]
+}

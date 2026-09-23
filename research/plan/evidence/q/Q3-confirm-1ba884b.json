@@ -1,0 +1,448 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "DUR-1b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "76-86",
+      "claim_broken": "run() docstring: 'a pass that keeps failing (the unbounded snapshot timing out under a backlog ...) never stops the drain behind it'. True only at zero failure latency: a failed pass stays due, so the SLOW-failing snapshot is re-run on every tick and the drain is serialized behind it. DUR-1 (silent starvation) is closed; the drain now runs, but at one drain per snapshot-timeout.",
+      "evidence": "Probe confirm_throttle.py (memory adapter, drain_every_s=0.001, reconcile_every_s=10, 1 s window): snapshot raising immediately -> reconcile attempts 701, drains 701; snapshot raising after 0.2 s -> reconcile attempts 5, drains 5. With a 30 s statement timeout that is one drain (<= batch x max_batches rows) per 30 s.",
+      "minimal_fix": "Run reconcile() in its own task (drain loop independent), or after a failed pass set due = loop.time() + min(reconcile_every_s, retry_s) so the drain tick is not blocked by the retry; keep test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass (retry within the period) and add a slow-failing SnapshotDown case asserting drains >> passes.",
+      "lens": "durability"
+    },
+    {
+      "id": "DUR-4b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "192-200",
+      "claim_broken": "rebuild(): 'returns the number of candidates it then holds from the snapshots' and metrics['rebuilds'] 'moves once per rebuild'. With an ack inside BOTH rebuilds the loop ends blocked: rebuild() returns 1 while members() == {} (repaired by the next pass, by design bounded at two). And the counter is incremented after the top-up, so a top-up that raises inside rebuild() leaves a real index.rebuild uncounted.",
+      "evidence": "Probe B3 (both adapters): ack at snapshots 2 and 4 -> rebuild() -> 1, members [], rebuilds 2; next pass {'missing': 1, 'rebuilt': 1}, members [job], rebuilds 3. Probe A5 (both adapters): pass blocked -> rebuild -> delivery behind the rebuild's snapshot -> top-up enqueue raises ConnectionError -> reconcile raises, rebuilds metric 0 although index.rebuild ran; next pass {'missing': 1, 'repaired': 1}. B1 (the fixed n=2 schedule) 20/20 on memory and 20/20 on Valkey: members holds the job right after rebuild(), rebuilds == 2 every time.",
+      "minimal_fix": "Increment metrics['rebuilds'] right after index.rebuild(); return count + repaired - blocked (or document that a twice-blocked rebuild leaves the job to the next pass); optionally one case for the n=2-and-n=4 schedule asserting members == {} then the next pass rebuilds.",
+      "lens": "durability"
+    },
+    {
+      "id": "DUR-3b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/test_reconcile.py",
+      "line": "255-267",
+      "claim_broken": "Evidence DUR-3 row: drain() 'keeps the oldest age across its batches'. No killable test: the metrics case uses batch=100 (one batch).",
+      "evidence": "Hand-applied mutant X1 (`max(self.metrics[\"outbox_lag_s\"], *ages)` -> `max(0.0, *ages)`, last batch wins): 54 passed on the whole Q3 file (both adapters). Product probe F1 with batch=1: two batches, lag 7.5 (oldest), 0.0 after the empty drain.",
+      "minimal_fix": "Set w.rec.batch = 1 in test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch (two rows 2.5 s apart become two batches; 7.5 then kills X1) and add the mutant to reconcile_mutants.py.",
+      "lens": "durability"
+    },
+    {
+      "id": "DUR-7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "221-223",
+      "claim_broken": "_top_up: 'except CapacityExhausted: report[\"deferred\"] += 1  # the next pass retries it', and Limit 8: capacity deferrals 'each has its own two-adapter cases'. Only the DRAIN's deferral has a case; a full index inside a reconcile pass or a rebuild's top-up has none.",
+      "evidence": "Hand-applied mutant X2 (`report[\"deferred\"] += 1` -> `raise`): 54 passed on the whole Q3 file; the differential never produces a deferred key (HON-2).",
+      "minimal_fix": "One case: max_items=1, two wanted jobs removed from the index, reconcile() == {'missing': 2, 'repaired': 1, 'deferred': 1} and no exception; register the mutant.",
+      "lens": "durability"
+    },
+    {
+      "id": "DUR-8",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/test_reconcile.py",
+      "line": "541-581",
+      "claim_broken": "'the relay outlives a failing drain / a failing pass' is pinned only for ConnectionError: both run() cases inject ConnectionError, so the loop's `except Exception` cannot be told from `except ConnectionError` - a poison row (RuntimeError from enqueue, DUR-6's scenario) under run() is not covered by a killable test.",
+      "evidence": "Hand-applied mutants X15 (`except Exception: self._failed(\"drain\")` -> `except ConnectionError`) and X16 (same for reconcile): 54 passed each. The lane's the_loop_dies_on_* mutants use `except errors.DomainError`, which ConnectionError does kill. Product probe C1 (poison row + 5 good rows per tick, 10 ticks, both adapters): good rows all indexed (the tick-1 five arrive on tick 2: read 10), poison delivered once, claim kept, re-delivered after redelivery_s (deliveries 2) - but through drain() calls, not run().",
+      "minimal_fix": "Make SnapshotDown raise RuntimeError (or add the poison-row-under-run() case: an index whose enqueue raises RuntimeError for one row; assert the loop ends cleanly and the good rows are delivered) and register X15/X16.",
+      "lens": "durability"
+    },
+    {
+      "id": "OB-1b-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "47",
+      "claim_broken": "worker_id: str = \"q3-relay\" is a class constant, not the per-instance default D2's re-confirmation (D2-confirm-6a8cc8d OB-1b residual: 'add to the Q3 delta that the Reconciler's relay id must be unique per process') asked for; Q3 answers with a handback line only. Two default Reconcilers share the id, so the claim-holder predicate is vacuous between them.",
+      "evidence": "Probe D1: two default Reconcilers -> same 'q3-relay'. D2 (same id, fake, both adapters): B claims c and indexes it, index loses c, +30 s, A re-claims c, B's late ack -> 1 (landed), release -> 0, row acknowledged and in no index, dispatch_pending reads nothing. Unlike D2's OutboxRelay, Q3's next pass repairs it: {'missing': 1, 'repaired': 1} - one reconcile period of latency, not a loss. D3 (distinct ids): late ack -> 0. D4: the drain's own ack after a reopen -> {'read': 1, 'indexed': 1}, re-delivered next drain.",
+      "minimal_fix": "worker_id: str = field(default_factory=lambda: f\"q3-relay-{uuid.uuid4().hex[:8]}\") plus a one-line case that two default Reconcilers differ; keep the handback sentence.",
+      "lens": "durability"
+    },
+    {
+      "id": "DUR-9",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "136-141",
+      "claim_broken": "drain(): 'the rows after it are handed back' - in the `finally`, release_dispatch runs after acknowledge_dispatch, so an ack that raises (OutboxLost 'before') skips the release and the read-but-unindexed rest waits the full redelivery_s. Not a loss; the DUR-6 latency point reopens for that one combination.",
+      "evidence": "Static: lines 136-141 (`if indexed: ... acknowledge_dispatch(...)` precedes `if rest: ... release_dispatch(...)` inside one finally). No lane case combines a capacity stop with an ack fault; my X18 attempt at a mutant was discarded (its edit reset `rest` and broke the report, 4 failed for the wrong reason).",
+      "minimal_fix": "Release `rest` before acknowledging `indexed` (or wrap the ack in try/finally around the release).",
+      "lens": "durability"
+    },
+    {
+      "id": "FID-A",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/outboxfake.py",
+      "line": "3, 80-81, 103-110",
+      "claim_broken": "\"`0012_dispatch_outbox.sql` at codex-d2 `30d614d` ... this is each one, row for row\" - true for 30d614d, stale against D2 HEAD a7c7a79: 606480b (review OB-8) makes `dispatch_pending` refuse a NULL/blank worker id with `invalid_request`. The fake accepts `worker_id=None`/\"\" (default \"relay\"), stamps `claimed_by=None`, and `acknowledge_dispatch(..., worker_id=None)` then matches (`.get(id) == None`) and acks, whereas PostgreSQL refuses the read outright and `claimed_by = NULL` acks 0. A Q3 case built with `Reconciler(worker_id=None or \"\")` would pass on the fake and fail on PostgreSQL. No current case does (default \"q3-relay\"; the product never sends a blank id), so nothing shipped diverges.",
+      "evidence": "git -C codex-d2 diff 30d614d..HEAD -- 0012: `+ if p_args->>'worker_id' is null or length(btrim(...)) = 0 then perform infrx.refuse('invalid_request', ...)`. Fake lines 80-101 have no guard. Reviewer probe RF1 (add the OB-8 guard to the fake, run every memory case): `30 passed, 30 deselected` - the guard is unobserved by the suite either way.",
+      "minimal_fix": "Mirror OB-8 in `FakeDispatchOutbox.dispatch_pending` (`raise errors.InvalidRequest('a worker id is required')` on None/blank), drop the \"relay\" default, cite a7c7a79 in the docstring, and add one two-line case that `Reconciler(worker_id=\"\")` drain raises `InvalidRequest`.",
+      "lens": "fidelity"
+    },
+    {
+      "id": "FID-B",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/test_reconcile.py",
+      "line": "333-342 (test_q3_reconcile__a_dead_candidate_is_removed); evidence request 1 (\"rig.admit_in_order already keeps the order-reading cases independent of that\")",
+      "claim_broken": "FID-2 is closed for the two cases the review named, but the evidence's claim that the order-reading cases are now independent of PostgreSQL's random uuid tie-break is an over-claim: `a_dead_candidate_is_removed` admits three jobs in one clock instant, then relies on FIFO (\"# FIFO: cancelled\", second claim must be `running`). On PgJobStore under D2's frozen test clock the drain order among equal `available_at` is random, so the case fails in roughly two of three orders.",
+      "evidence": "Reviewer probe (fake tie-break replaced by md5(event_id+salt) in both dispatch_pending and dispatch_snapshot, all memory cases minus drills/differential): salt a `FAILED ...a_dead_candidate_is_removed[memory] test_reconcile.py:342 assert '...0001' == '...0004'`, salt b and d the same case (`'...0007' == '...0004'`), salt c `26 passed`; no other case failed in any permutation (the two FID-2 cases held).",
+      "minimal_fix": "`cancelled, running, live = await rig.admit_in_order(w, 3)` in that case; reword request 1 to name it.",
+      "lens": "fidelity"
+    },
+    {
+      "id": "FID-C",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/outboxfake.py",
+      "line": "124-127",
+      "claim_broken": "`dispatch_snapshot` \"with its latest wanted dispatch event\": SQL takes `order by x.created_at desc, x.event_id desc limit 1`; the fake takes `latest[-1]` (insertion order). They diverge only when two wanted rows of one job share `created_at` (a reaper writing a second `prepare_dispatch` under a frozen `infrx.now()`), where SQL then picks by random uuid. Unreachable today: no SQL writes a dispatch row outside admit/prepare (FID-5, Limit 3), so no Q3 case can hit it until D3.",
+      "evidence": "0012 line 327 vs fake line 127; `OutboxEvent` has no `created_at`; fakes/state.py `_emit` appends with `available_at=now`.",
+      "minimal_fix": "Add to Limit 9 / the fake docstring: \"latest = last appended; SQL breaks a `created_at` tie on `event_id desc`\", or sort `latest` by `(available_at, event_id)` and take the last.",
+      "lens": "fidelity"
+    },
+    {
+      "id": "FID-D",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/q/outboxfake.py",
+      "line": "137-141",
+      "claim_broken": "`record_dispatch_error` \"row for row\" with `fail_dispatch`: SQL `left(coalesce(error, 'unknown'), 500)` records '' for an empty string; the fake's `(error or \"unknown\")[:500]` records 'unknown'. Unobservable: Q3 never calls it (Limit 10).",
+      "evidence": "0012 line 354 vs fake line 140.",
+      "minimal_fix": "`('unknown' if error is None else error)[:500]`.",
+      "lens": "fidelity"
+    },
+    {
+      "id": "HON-A",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/q/Q3-44eb4f0.md",
+      "line": "\"Focused runs made while fixing ... killed every new or re-anchored mutant: ... OB-1b `4/4 killed`, ... FID-3 `2/2`\"",
+      "claim_broken": "HON-5 is closed in the list (header \"test-double checks: NOT product mutants\") and in the table (\"43 entries: 39 product mutants ... plus 4 test-double checks\", per-file count reproduced: reconcile 35, memory 2, valkey 2, fakes/state 1, outboxfake 3), but this one sentence still counts the doubles as \"mutants killed\": FID-3's 2/2 are both outboxfake checks and OB-1b's 4/4 includes one.",
+      "evidence": "tests/q/reconcile_mutants.py entries `the_store_acknowledges_a_row_it_reopened`, `the_store_leaves_a_superseded_row_pending`, `the_store_filters_before_the_limit` (file=OUTBOX_FAKE); python -c count over MUTANTS at 1ba884b: 43 = 35+2+2 product, 1+3 doubles.",
+      "minimal_fix": "Write \"OB-1b 3/3 product + 1 check, FID-3 0 product + 2 checks\".",
+      "lens": "fidelity"
+    },
+    {
+      "id": "HON-B",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/scheduling/reconcile.py",
+      "line": "133-138",
+      "claim_broken": "drain() docstring: on an index failure \"the rows after it are handed back\". When the acknowledgment in the same `finally` raises (store unreachable right after the index failure), the exception leaves `finally` before `if rest:` runs, so the rows after the failing one keep their claim for the full `redelivery_s`. Latency only, never a loss; no case covers the ack-raises-with-rest-pending path.",
+      "evidence": "Lines 134-138: `if indexed: ... acknowledge_dispatch(...)` precedes `if rest: release_dispatch(...)` inside one `finally` with no inner try.",
+      "minimal_fix": "Release in an inner `finally` (or release before acknowledging) and add one case: FlakyIndex(fail_on=2) plus `ack_faults=['before']`, assert the third row comes back on the next drain.",
+      "lens": "fidelity"
+    },
+    {
+      "id": "REL-1",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/q/Q3-44eb4f0.md",
+      "line": "Handback request 1, \"Which fence the merged relay keeps\" / \"Keep: one relay process, the Reconciler\"",
+      "claim_broken": "The recommendation is sound but its stated ground is incomplete. With two relay kinds in one deployment I found no schedule specific to the mix that loses a job: D2's rebuild against a Q3 drain is covered by reopen + OB-1b refusing the late ack (tested), and a Q3 rebuild against a D2 pump by the second snapshot (state-based). The one schedule neither fence covers is shared with a single relay of either kind: a worker takes a candidate that the rebuild's top-up (Q3) or the reopen's pump (D2) re-indexed, its `claim` fails to land, and the W2 loop acknowledges the candidate anyway - the event is in the index's ACKED set, absent from members, its row acknowledged. D2's `since` bound does not reopen it (the ack is not a dispatch-row ack) and D2's pump would be refused as already acknowledged; Q3's top-up counts `blocked` only at enqueue time, so DUR-4's second rebuild does not see an ack that lands after it. Only Q3's reconcile pass (missing -> refused -> blocked -> rebuild) repairs it, and `OutboxRelay` has no reconcile pass at all, which is the real reason to keep the Reconciler. Side note for D2: `reopen_dispatch` also re-pends a row acknowledged as 'superseded' once its job returns to `queued` (running -> reaped -> queued), yielding a second event id for the job; harmless (the store fences), identical in SQL and fake.",
+      "evidence": "codex-d2 outbox.py:76-81, 0012 reopen_dispatch (wanted + not leased + ack/claim >= since); reconcile.py rebuild() lines 194-200 (`blocked` from `_top_up` only); test_q3_drill__an_acknowledgment_after_a_rebuild_is_repaired_by_the_next_pass is exactly this schedule for one relay.",
+      "minimal_fix": "In request 1 replace \"the mix still holds in both directions\" with: \"no mix-specific hole was found; the residual (worker acks a re-indexed candidate after the top-up) is the same with one relay and is repaired only by the Reconciler's pass, which OutboxRelay lacks - that is why one relay, the Reconciler.\"",
+      "lens": "fidelity"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "durability",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "Lane list (43 entries + well-formed + 2 runner self-tests), INFRX_MUTANTS=all, my container 55771",
+          "edit": "tests/q/reconcile_mutants.py as committed at 1ba884b (35 reconcile.py, 2 memory.py, 2 valkey.py, 1 fakes/state.py, 3 outboxfake.py - counted from MUTANTS)",
+          "result": "46 passed in 141.24s (all killed); no default-name container created by my subprocesses (default subset re-run under a docker-run watcher: 6 passed in 15.93s, zero create events for infrx-q3-valkey during it)",
+          "killed_by": "as named per entry"
+        },
+        {
+          "name": "X1_lag_is_the_last_batch",
+          "edit": "reconcile.py drain(): max(self.metrics[\"outbox_lag_s\"], *ages) -> max(0.0, *ages)",
+          "result": "SURVIVED - 54 passed (finding DUR-3b)",
+          "killed_by": ""
+        },
+        {
+          "name": "X2_top_up_capacity_raises",
+          "edit": "_top_up(): except CapacityExhausted: report[\"deferred\"] += 1 -> raise",
+          "result": "SURVIVED - 54 passed (finding DUR-7)",
+          "killed_by": ""
+        },
+        {
+          "name": "X3_refused_row_keeps_its_claim_on_capacity",
+          "edit": "drain(): on CapacityExhausted rest = events[position:] -> events[position + 1:]",
+          "result": "killed - 4 failed",
+          "killed_by": "drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it, caps__both_adapters_take_the_caps_from_the_settings (both adapters)"
+        },
+        {
+          "name": "X15_drain_failure_swallowed_only_for_connection_errors",
+          "edit": "run(): except Exception: self._failed(\"drain\") -> except ConnectionError",
+          "result": "SURVIVED - 54 passed (finding DUR-8)",
+          "killed_by": ""
+        },
+        {
+          "name": "X16_reconcile_failure_swallowed_only_for_connection_errors",
+          "edit": "run(): except Exception: self._failed(\"reconcile\") -> except ConnectionError",
+          "result": "SURVIVED - 54 passed (finding DUR-8)",
+          "killed_by": ""
+        },
+        {
+          "name": "X17_rebuild_returns_count_without_the_top_up",
+          "edit": "rebuild(): return count + report[\"repaired\"] -> return count",
+          "result": "killed - 2 failed",
+          "killed_by": "reconcile__a_delivery_behind_a_stale_snapshot_survives_the_rebuild (both adapters)"
+        },
+        {
+          "name": "X18_release_before_ack (discarded)",
+          "edit": "drain() finally: release rest before the ack and reset rest",
+          "result": "4 failed for my edit's own reason (the reset dropped the 'deferred' count) - not evidence either way; see DUR-9",
+          "killed_by": ""
+        },
+        {
+          "name": "X19_fake_tie_break_reversed (FID-2 check)",
+          "edit": "outboxfake.dispatch_pending sort key (available_at, event_id) -> (available_at, reversed event_id)",
+          "result": "54 passed - the two order-reading cases are now tie-independent (evidence run 7 confirmed)",
+          "killed_by": ""
+        },
+        {
+          "name": "Schedule A1-A5 (DUR-1 re-attack), both adapters",
+          "edit": "store with per-method failure switches under run(): reconcile failing forever with admissions mid-run; drain failing forever; both failing then both recovering; one tick with both failing; a ConnectionError inside rebuild()'s top-up during a blocked pass",
+          "result": "A1 members==admitted, unacked [], errors==snapshots (38 mem / 29 vk); A2 members 2 (repaired), snapshots 10 in 0.5 s at reconcile_every_s=0.05 (due advances), pending calls 291/351; A3 both steps counted per tick, recovered members==admitted, unacked []; A4 one tick -> errors 2, calls 1/1; A5 reconcile raises, first job held, second (delivered behind the rebuild's snapshot) not indexed until the next pass repairs {'missing': 1, 'repaired': 1}; under run() members==admitted, errors 1",
+          "killed_by": ""
+        },
+        {
+          "name": "Schedule B1-B3 (DUR-4), both adapters",
+          "edit": "Interleave: ack at snapshot 2 (x20); ack at snapshot 4 alone; ack at snapshots 2 and 4",
+          "result": "B1 20/20 members==[job] right after rebuild(), rebuilds 2; B2 n=4 alone never fires (a non-blocked rebuild reads two snapshots); B3 rebuild() -> 1 with members [] and rebuilds 2, next pass {'missing': 1, 'rebuilt': 1}",
+          "killed_by": ""
+        },
+        {
+          "name": "Schedule C1-C2 (DUR-6), both adapters",
+          "edit": "poison row (RuntimeError) + 5 good rows per tick x 10 ticks, redelivery_s 30; max_items=2 with batch=6 over 6 rows",
+          "result": "C1 good rows all indexed (tick-1 five on tick 2: read 10), poison delivered 1 in 10 ticks, claim kept, drains raised 1, after +30 s delivered 2; C2 {'read': 6, 'indexed': 2, 'acknowledged': 2, 'deferred': 4}, rows 3-6 unclaimed, next drain with no clock advance {'read': 4, 'deferred': 4}, finish(): one lease per job, unacked []",
+          "killed_by": ""
+        },
+        {
+          "name": "Schedule D1-D4 (OB-1b), both adapters",
+          "edit": "two default Reconcilers; same-id late-ack-then-failed-enqueue strand; distinct ids; drain ack after reopen_dispatch",
+          "result": "D1 same id 'q3-relay'; D2 late ack 1, release 0, row acked, in no index, next Q3 pass repairs; D3 late ack 0; D4 {'read': 1, 'indexed': 1} then re-delivered {'read': 1, 'indexed': 1, 'acknowledged': 1}",
+          "killed_by": ""
+        },
+        {
+          "name": "Schedule E1 (DUR-2) and F1/F2 (DUR-3), both adapters",
+          "edit": "n=3 switch schedule x10; batch=1 lag across two batches then an empty drain; lag after a raising drain",
+          "result": "E1 10/10 late job in the new index; F1 lag 7.5 then 0.0; F2 3.0 (age of what the failed drain read)",
+          "killed_by": ""
+        },
+        {
+          "name": "SIGKILL under traffic x5 (lane drill, my container)",
+          "edit": "pytest -s -k sigkilled, 5 consecutive runs",
+          "result": "5/5 passed; leases 24 each; felt {'prep-1','prep-2','gpu-1'} 23-34 each, 'gpu-slow': 0 every run (HON-1 printout present); relay errors 92/88/78/74/66; rebuilds 0 (post-kill recovery goes missing->repaired, never blocked)",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-q3 archive 1ba884b | tar -x -C /tmp/claude-1000/confirm-q3-durability-1959409; make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1\n + zstandard==0.25.0\nexit=0"
+        },
+        {
+          "cmd": "INFRX_Q_VALKEY_PORT=55771 python -c 'import tests.q.vkharness as v; print(v.CONTAINER, v.PORT)' ; docker run -d --name infrx-q3-valkey-55771 -p 127.0.0.1:55771:6379 valkey/valkey@sha256:d2e18f... valkey-server --save '' --appendonly no",
+          "exit": 0,
+          "tail": "infrx-q3-valkey-55771 55771\n+PONG (valkey_version:8.1.10)"
+        },
+        {
+          "cmd": "chain.sh (detached): INFRX_Q_VALKEY_PORT=55771 pytest -q tests/q",
+          "exit": 0,
+          "tail": "179 passed in 75.23s (0:01:15)"
+        },
+        {
+          "cmd": "chain.sh: pytest -q -s tests/q/test_reconcile.py -k 'drill or switch or differential'",
+          "exit": 0,
+          "tail": "workers that felt the outage: {'prep-1': 32, 'prep-2': 32, 'gpu-1': 32, 'gpu-slow': 0}; relay errors 77, rebuilds 0; leases 24\n12 passed, 48 deselected in 5.90s"
+        },
+        {
+          "cmd": "chain.sh: python -m tests.q.q3differential",
+          "exit": 0,
+          "tail": "20 seeds x 1000 operations = 20000 compared states; no divergence"
+        },
+        {
+          "cmd": "chain.sh: INFRX_MUTANTS=all pytest -q tests/q/test_reconcile_mutants.py",
+          "exit": 0,
+          "tail": "46 passed in 141.24s (0:02:21)"
+        },
+        {
+          "cmd": "python -m tests.q.confirm_probes memory | valkey (schedules A-F)",
+          "exit": 0,
+          "tail": "A1..F2 lines quoted in the mutant table; identical outcomes on both adapters"
+        },
+        {
+          "cmd": "hand_apply.py X1 X2 X3 X15 X16 X17 X18 X19 (fresh 1ba884b copy per mutant, PYTHONPATH=copy, pytest tests/q/test_reconcile.py -k 'not drill and not differential')",
+          "exit": 1,
+          "tail": "X1 54 passed | X2 54 passed | X3 4 failed | X15 54 passed | X16 54 passed | X17 2 failed | X18 4 failed (probe bug) | X19 54 passed"
+        },
+        {
+          "cmd": "docker events --filter container=infrx-q3-valkey (03:00-03:14); pytest -q tests/q/test_reconcile_mutants.py (default subset) under a docker-run watcher",
+          "exit": 0,
+          "tail": "10 create/kill/destroy cycles of infrx-q3-valkey at 03:11:27-03:12:13 from other sessions (pytest cwds /tmp/claude-1000/review-wirein-honesty-1831202 and worktrees/infrx-impl, no INFRX_Q_VALKEY_PORT); my subset: 6 passed in 15.93s, zero create events, watcher saw no docker run"
+        },
+        {
+          "cmd": "for i in 1..5: pytest -q -s tests/q/test_reconcile.py -k sigkilled",
+          "exit": 0,
+          "tail": "5x '1 passed'; leases 24 each; gpu-slow 0 each; relay errors 92/88/78/74/66"
+        },
+        {
+          "cmd": "python -m tests.q.confirm_throttle",
+          "exit": 0,
+          "tail": "snapshot fails after 0.0s: reconcile attempts 701, drains in 1 s 701\nsnapshot fails after 0.2s: reconcile attempts 5, drains in 1 s 5"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/q/test_valkey_mutants.py (Q2 list) ; INFRX_MUTANTS=all pytest -q tests/q/test_mutants.py (Q1 list)",
+          "exit": 0,
+          "tail": "82 passed in 188.79s (0:03:08)\n61 passed in 149.21s (0:02:29)"
+        },
+        {
+          "cmd": "docker rm -f -v infrx-q3-valkey-55771; rm -rf scratch; git status --short in codex-q3, codex-d2, infrx-impl",
+          "exit": 0,
+          "tail": "container removed; scratch dirs left 0; 0 changed in each worktree; no processes of mine left"
+        }
+      ],
+      "fabrication_check": "Reproduced on a scratch copy of 1ba884b in my own namespace (container infrx-q3-valkey-55771 - the fixed harness names the container after the port, confirmed by importing vkharness before starting anything; valkey 8.1.10 at the pinned digest): tests/q 179 passed (claimed 179); drills/switch/differential 12 passed with leases 24 and gpu-slow printed as 0 (claimed 12; HON-1 printout present); the 20x1000 differential with no divergence; the Q3 list 46 passed (claimed 46) and the per-file count 43 = 35+2+2+1+3 exactly as the evidence states; the Q2 list 82 and the Q1 list 61 (claimed 82 and 61); run 7's FID-2 claim (tie-break reversed, 54 passed); run 8's HON-3 claim (my port reached every mutant copy: _layout writes PORT = 55771 into the copy's vkharness, and no default-name container was created by my subprocesses - the ten infrx-q3-valkey creates observed at 03:11-03:12 belong to other sessions' pytest processes running without a port override, attributed by their cwds). Every DUR item's fix behaves as described on both adapters under my own schedules, including the DUR-6 poison-row and full-at-row-3 drills the lane did not run. D2's head has moved past the fake's 30d614d to a7c7a79 (OB-8: dispatch_pending refuses an empty worker_id); Q3's id is non-empty, so nothing diverges, but the fake's citation is one round stale. Not fabricated: no count in Q3-44eb4f0.md was found wrong. Not reproduced: make check, the legacy-first ordering, tests/d, and a run against PgJobStore (D2 is read-only; the fake stands in). The residual findings are latency/metric/test-strength items; none re-opens a loss of a job.",
+      "cleanup": "Removed: container infrx-q3-valkey-55771 (docker rm -f -v; `docker ps -a | grep -E '55771|q3'` -> none of mine; infrx-q3-valkey-55772 belongs to another lens and was not touched), the scratch tree /tmp/claude-1000/confirm-q3-durability-1959409 (with its .venv, logs, probes, hand-apply copies) and the pointer file confirm-q3-durability-scratchpath, and my two background wait shells. No file in any worktree was edited or committed (git status --short empty in codex-q3, codex-d2 and infrx-impl); codex-d2 was only read. Left untouched: infrx-d2-postgres and the other sessions' processes."
+    },
+    {
+      "lens": "fidelity",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "21 new/changed list entries by hand (R83 shape): the_row_is_acknowledged_before_it_is_indexed, every_row_read_is_acknowledged, the_ack_names_another_worker, a_deferred_row_is_acknowledged, the_scan_stops_after_one_batch, a_refused_row_waits_the_redelivery_window, the_failing_row_is_handed_back_too, a_full_index_keeps_the_scan_going, the_outbox_lag_outlives_the_backlog, the_rebuild_is_not_topped_up, the_rebuild_starts_empty_and_applies_the_caps, rebuilds_are_not_counted, a_blocked_rebuild_is_not_repeated, the_switch_tops_up_from_a_snapshot_read_before_the_swap, the_loop_dies_on_an_outage, the_loop_dies_on_a_failed_drain, a_failing_pass_skips_the_drain, errors_are_not_counted, the_store_acknowledges_a_row_it_reopened, the_store_filters_before_the_limit (+ the_store_leaves_a_superseded_row_pending, see next row)",
+          "edit": "each entry's old->new applied once (anchor count checked == 1) to a scratch copy, the named cases run on the memory adapter (four multi-case entries also ran their [valkey] id, see cleanup)",
+          "result": "20/20 killed, every death an AssertionError in the named case: e.g. the_ack_names_another_worker `test_reconcile.py:66 assert {'indexed': 3, 'read': 3} == {'acknowledged': 3, ...}`; a_refused_row_waits_the_redelivery_window `:140 assert {} == {'deferred': 1, 'read': 1}`; the_failing_row_is_handed_back_too `:165 assert {'acknowledged': 2, 'read': 2} == {'acknowledged': 1, 'read': 1}`; a_full_index_keeps_the_scan_going `:137 read 4 == read 3`; the_outbox_lag_outlives_the_backlog `:266 assert 7.5 == 0.0`; a_blocked_rebuild_is_not_repeated `:756 assert [] == ['...0001']`; the_switch_tops_up_from_a_snapshot_read_before_the_swap `:667 '...0004' in dict_values(['...0001'])`; a_failing_pass_skips_the_drain and the_loop_dies_on_a_failed_drain `:5xx` on the DUR-1 case; the_store_filters_before_the_limit `:186 assert {'acknowledged': 1, 'read': 1} == {}`",
+          "killed_by": "the case each entry names"
+        },
+        {
+          "name": "the_store_leaves_a_superseded_row_pending (test-double check)",
+          "edit": "fake's superseded branch -> `pass`",
+          "result": "first hand run reported `1 passed` (survived) - a stale-bytecode artifact of my script: the mutated file has exactly the same size (7891 bytes) as the previous entry's mutated file and was written in the same second, so CPython reused the previous .pyc; rerun with PYTHONDONTWRITEBYTECODE=1: killed on both adapters `test_reconcile.py:187 AssertionError: assert None == 'superseded'` (2 failed). The shared runner is immune (fresh copy + PYTHONPYCACHEPREFIX per mutant).",
+          "killed_by": "test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_slot"
+        },
+        {
+          "name": "RF1_fake_refuses_a_blank_worker_id_like_OB8 (reviewer, fidelity probe)",
+          "edit": "add D2 a7c7a79's OB-8 guard to the fake's dispatch_pending",
+          "result": "survived: 30 passed, 30 deselected - the guard is unobserved; no Q3 case sends a blank worker id (FID-A)",
+          "killed_by": ""
+        },
+        {
+          "name": "RF3_snapshot_takes_the_oldest_event (reviewer)",
+          "edit": "`latest[-1]` -> `latest[0]` in dispatch_snapshot",
+          "result": "killed: `test_reconcile.py:429` in a_job_redispatched_during_the_pass_keeps_its_new_candidate (1 failed, 29 passed)",
+          "killed_by": "test_q3_reconcile__a_job_redispatched_during_the_pass_keeps_its_new_candidate"
+        },
+        {
+          "name": "RF5_reopen_uses_strictly_after_since (reviewer)",
+          "edit": "`at >= since` -> `at > since` in reopen_dispatch",
+          "result": "killed: `test_reconcile.py:228 assert 0 == 1` (the fence case's `reopen_dispatch(since) == 1` under the frozen clock)",
+          "killed_by": "test_q3_drain__an_acknowledgment_behind_another_relays_rebuild_fence_is_refused"
+        },
+        {
+          "name": "RF8_ack_ignores_claimed_at_presence (reviewer)",
+          "edit": "drop `event_id in self.claimed_at` from acknowledge_dispatch's predicate",
+          "result": "survived: 30 passed - equivalent mutant (the fake sets and clears claimed_at/claimed_by together, so `claimed_by == worker_id` implies a claim), matches SQL's `claimed_at is not null and claimed_by = worker_id`",
+          "killed_by": ""
+        },
+        {
+          "name": "RF-order_random_uuid_tiebreak (reviewer, 4 salts)",
+          "edit": "fake's `(available_at, event_id)` sort key in dispatch_pending and dispatch_snapshot -> `(available_at, md5(event_id+salt))`",
+          "result": "3 of 4 permutations fail exactly one case, a_dead_candidate_is_removed[memory] (`:342`); the two FID-2 cases pass in all four (FID-B)",
+          "killed_by": "test_q3_reconcile__a_dead_candidate_is_removed (order-fragile, not a product kill)"
+        },
+        {
+          "name": "RP1_ack_failure_skips_the_release_of_rest (reviewer, product)",
+          "edit": "`if rest:` -> `if rest and not indexed:` around release_dispatch",
+          "result": "killed: `:140 assert {} == {'deferred': 1, 'read': 1}` and `:165` (2 failed) - the release IS pinned when the ack succeeds; the ack-raises path (HON-B) has no case",
+          "killed_by": "test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it, test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed"
+        },
+        {
+          "name": "RP2_release_happens_before_the_ack (reviewer, product)",
+          "edit": "move release_dispatch(rest) ahead of the ack in `finally` and clear `rest`",
+          "result": "killed: `:137 read 4 == read 3`, `:859` (caps case) - killed by the report/break bookkeeping my edit broke, not by ordering; ordering itself is untested",
+          "killed_by": "test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it, test_q3_caps__both_adapters_take_the_caps_from_the_settings"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-q3 archive 1ba884b | tar -x -C /tmp/claude-1000/confirm-q3-fidelity-1962382; make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1\n + zstandard==0.25.0\nexit 0"
+        },
+        {
+          "cmd": "docker ps -a; python valkey DBSIZE on 55462 and 55772 (before)",
+          "exit": 0,
+          "tail": "55462 no server: ConnectionError; 55772 no server (containers present: infrx-e2-*, infrx-d2-postgres, infrx-review-d3-fence-postgres, gideon-migration-order-test-*; none named infrx-q3-*)"
+        },
+        {
+          "cmd": "INFRX_Q_VALKEY_PORT=55772 python -c 'from tests.q import vkharness as v; print(v.PORT, v.CONTAINER, v.URL)'",
+          "exit": 0,
+          "tail": "55772 infrx-q3-valkey-55772 redis://127.0.0.1:55772/0"
+        },
+        {
+          "cmd": "docker run -d --name infrx-q3-valkey-55772 -p 127.0.0.1:55772:6379 valkey/valkey@sha256:d2e18f... valkey-server --save '' --appendonly no (local image, digest present)",
+          "exit": 0,
+          "tail": "map[6379/tcp:[{127.0.0.1 55772}]]"
+        },
+        {
+          "cmd": "chain.sh (detached, INFRX_Q_VALKEY_PORT=55772, docker events logged): pytest -q tests/q",
+          "exit": 0,
+          "tail": "179 passed in 70.66s (0:01:10)"
+        },
+        {
+          "cmd": "pytest -q -s tests/q/test_reconcile.py -k 'drill or switch or differential'",
+          "exit": 0,
+          "tail": "workers that felt the outage: {'prep-1': 34, 'prep-2': 34, 'gpu-1': 34, 'gpu-slow': 0}; relay errors 78, rebuilds 0; leases 24\n12 passed, 48 deselected in 5.84s"
+        },
+        {
+          "cmd": "python -m tests.q.q3differential",
+          "exit": 0,
+          "tail": "20 seeds x 1000 operations = 20000 compared states; no divergence; outcomes reconcile:missing 1003, reconcile:dead 342, reconcile:rebuilt 205, reconcile:repaired 921, drain:raised:OutboxLost 527, lose 543, transit 544, rebuild 511, recover 1150, ack_fault 530 (no 'deferred' key) - identical to the evidence"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/q/test_reconcile_mutants.py (Q3 list)",
+          "exit": 0,
+          "tail": "46 passed in 117.65s (0:01:57)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/q/test_mutants.py (Q1 list over tests/q)",
+          "exit": 0,
+          "tail": "61 passed in 153.58s (0:02:33)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/q/test_valkey_mutants.py (Q2 list)",
+          "exit": -1,
+          "tail": "NOT COMPLETED: stopped at 13 of 82 for the forced report; the log shows `.......F..F..` - the two F marks coincide with my kill of the mutant subprocesses (same interpreter path matched my pkill pattern) and are not attributed to the tree; 82 is unverified by this lens"
+        },
+        {
+          "cmd": "python -c 'from tests.q import mutants; layout probe' + fixed-env subprocess (PATH=/usr/bin:/bin, no INFRX_Q_VALKEY_PORT)",
+          "exit": 0,
+          "tail": "copy's vkharness: ['PORT = 55772', 'CONTAINER = (_SERVICE.container if PORT == _SERVICE.host_port'] ; subprocess resolves: 55772 infrx-q3-valkey-55772"
+        },
+        {
+          "cmd": "python -c count over reconcile_mutants.MUTANTS / mutants.MUTANTS / valkey_mutants.MUTANTS",
+          "exit": 0,
+          "tail": "Q3 entries 43 {'scheduling/reconcile.py': 35, 'scheduling/memory.py': 2, 'scheduling/valkey.py': 2, 'contracts/fakes/state.py': 1, '../tests/q/outboxfake.py': 3}; Q1 entries 54 (61 = 54 + 7 harness tests); Q2 entries 78 (82 = 78 + 4)"
+        },
+        {
+          "cmd": "hand_apply.py (21 listed entries + 6 reviewer probes, memory adapter) then reruns with PYTHONDONTWRITEBYTECODE=1 and the 4-salt order probe",
+          "exit": 0,
+          "tail": "HAND DONE: 20 killed, 1 false survival (stale .pyc, killed on rerun: 2 failed), RF1 survived, RF8 survived, RF3/RF5/RP1/RP2 killed; order probe: a_dead_candidate_is_removed fails under salts a, b, d"
+        },
+        {
+          "cmd": "awk over docker-events.log: container creates during the Q3-list window after my hand-apply ended (>= 03:12:14Z) and during the Q1 list",
+          "exit": 0,
+          "tail": "none named infrx-q3-valkey or infrx-q3-valkey-55772 (only the SIGKILL drill's `start infrx-q3-valkey-55772`); other lanes' creates in the window (not mine, not touched): infrx-e2r-dharness-postgres x4, infrx-review-a1r2-postgres x3, infrx-d2-valkey, infrx-d2-postgres-supabase, 6 unnamed"
+        }
+      ],
+      "fabrication_check": "Reproduced on a scratch archive of 1ba884b in my own namespace (container infrx-q3-valkey-55772, port 55772): tests/q 179 passed (claimed 179); drills/switch/differential 12 passed with leases 24 and the HON-1 printout listing 'gpu-slow': 0 (claimed 12; felt/error counts are load-dependent, 34/78 vs 24/72); the 20x1000 differential with a histogram identical to the report; the Q3 list 46 passed (claimed 46) and the Q1 list 61 passed (claimed 61). NOT reproduced by this lens: the Q2 Valkey list 82 (interrupted at 13/82 for the forced report; the two F marks in its partial log coincide with my killing the subprocesses and are unattributed). HON-3: the runner's layout demonstrably writes PORT=55772 into the copy and a fixed-environment subprocess resolves infrx-q3-valkey-55772; over the Q3-list and Q1-list windows no mutant subprocess created a container (docker events), and no server existed on 55462 before or after (DBSIZE not applicable, none listening). HON-5: 43 = 35+2+2 product + 1+3 test-double checks reproduced from the list; the table row is honest, one 'focused runs' sentence still counts doubles as mutants (HON-A). HON-4: not measured dynamically (server busy, then report forced); static reading agrees with the lane - `assert set(await port.tags()) == {...}` at test_valkey_scheduler.py:599 precedes the claim loop and the 'any|org' flow changes that key set. Fidelity: the fake is row for row with 0012 at 30d614d for dispatch_pending (limit before filter, superseded ack, either-kind lease via `leased()`), acknowledge_dispatch (claim-holder predicate), release_dispatch, fail_dispatch, reopen_dispatch and dispatch_snapshot; the divergences vs D2 HEAD a7c7a79 are FID-A (OB-8 blank worker id, unobserved), FID-C (latest-row tie-break, D3-dependent) and FID-D (empty error string), plus `attempts`/`skip locked`/raw psycopg errors, all documented or unreachable. One evidence over-claim found (FID-B: a third order-fragile case remains). No count in the evidence was found to be fabricated.",
+      "cleanup": "Removed: my container infrx-q3-valkey-55772 (docker rm -f -v; `docker ps -a` lists no infrx-q3-valkey* now), the unfinished chain and its pytest/docker-events processes, and the hand-apply trees /tmp/claude-1000/confirm-q3-fidelity-1962382/{hand,hand-pristine}. Left: the scratch archive with its .venv and logs at /tmp/claude-1000/confirm-q3-fidelity-1962382 (tests-q.log, drills.log, differential.log, q3-list.log, q1-list.log, q2-list.log partial, hand.log, docker-events.log, chain.sh, hand_apply.py) for the coordinator; rm -rf it when done. No file in any worktree was edited or committed (git status --short in codex-q3: 0 lines); codex-d2 was only read. Namespace breach to disclose: my hand_apply.py had a `-k` precedence bug (`A or B and not valkey`) and no INFRX_Q_VALKEY_PORT in its environment, so the [valkey] parametrization of four multi-case mutants ran in subprocesses on the DEFAULT port: between 03:11:27Z and 03:12:13Z the default-named container `infrx-q3-valkey` on 127.0.0.1:55462 was created, started and removed (atexit) up to 10 times by those subprocesses (docker events; the window ends exactly at hand.log's mtime). No server was listening on 55462 before that window or after it, no container of that name pre-existed, and none remains, so no other lane's data was touched; the lane's own container was not running at the time. Another lens's container infrx-q3-valkey-55771 (created 03:07:37Z, not mine) was left untouched, as were infrx-e2-*, infrx-d2-*, infrx-review-*, gideon-*."
+    }
+  ]
+}

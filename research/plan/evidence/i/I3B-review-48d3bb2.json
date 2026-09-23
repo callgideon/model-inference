@@ -1,0 +1,680 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "RS-1",
+      "severity": "blocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "149-166 (restore(): NEUTRALIZE_DEFAULTS runs before pg_restore; no target guard)",
+      "claim_broken": "restore.md A5/A8.3 and the docstring ('Into an EMPTY database ... never onto live data', 'never over the live one') are prose only: the tool accepts any target DSN, never checks that the target is empty, and never compares the target to the dump's source. The unsafe path mutates a live database before it fails.",
+      "evidence": "probe2 (review namespace, pinned image): target = a migrated 0001-0009 database with 0 auth.users rows (a live-shaped project). `pg.restore(target)` -> auth.dump restored 0 rows, then NEUTRALIZE_DEFAULTS executed on the live target, then pg_restore failed: 'ERROR: schema \"infrx\" already exists Command was: CREATE SCHEMA infrx'. Measured pg_default_acl for role postgres in public BEFORE: tables {postgres,anon,authenticated,service_role=arwdDxtm}, sequences {..=rwU}, functions {postgres=X,service_role=X}; AFTER the refused restore: tables {postgres=arwdDxtm/postgres}, sequences {postgres=rwU/postgres}, functions {postgres=X/postgres} (a_defaults_mutated=true). A table created afterwards in that database had relacl NULL (service_role no longer receives access by default; any later additive migration relying on the default silently breaks). With users present the tool fails earlier at 'COPY failed for table users: duplicate key ... users_pkey' and nothing is mutated (b_defaults_mutated=false) - protection by accident of ordering, not by design. No test covers a non-empty target.",
+      "minimal_fix": "At the top of restore(): connect to the target and refuse unless to_regnamespace('infrx') is null, public has no relkind r/p tables, and every auth table in meta['auth_tables'] has 0 rows; additionally record `host`/`dbname` from psycopg.conninfo.conninfo_to_dict(source) in meta.json at dump time and refuse a target whose host+dbname match. Add bk01e: restore into a non-empty scratch DB raises before any write and pg_default_acl is byte-identical before/after; put a mutant on the guard in mutants_i3b.py.",
+      "lens": "restore",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "Confirmed from the code at 48d3bb2 without needing to re-run the probe; the sequence is deterministic. `restore()` (infra/runbooks/pgrestore.py:149-169) has no target check at all: it calls `verify(backup)` (checksums only), then `pg_restore --data-only auth.dump` into whatever `--conninfo` names, then opens an autocommit psycopg connection and executes the three NEUTRALIZE_DEFAULTS `alter default privileges for role postgres in schema public revoke all on {tables,sequences,functions} from anon, authenticated, service_role` statements (committed immediately), and only THEN runs `pg_restore -L project.list project.dump`, which is the first step that can fail on a target that already holds the project (`CREATE SCHEMA infrx` / `CREATE TABLE public.*`). So any target with the schema present and no conflicting auth rows is left with its `public` default ACLs stripped after the tool raises; if the source dump has auth rows and the target has none, the auth rows are also inserted before the failure. The only thing that stops the hosted-shaped case (4 users) is the duplicate-key COPY error on auth.users, which is ordering luck, not a guard - exactly as the reviewer says. Nothing in the tree enforces the docstring's 'Into an EMPTY database ... never onto live data' or restore.md A8.3's 'into a NEW project, never over the live one': the CLI (main(), lines 289-292) passes the DSN straight through, and every drill (bk01/bk01b/bk01c/bk01d/bk02 in tests/integration/backend/recovery/test_restore.py) restores into `scratch()`-created fresh template databases; no test restores into a non-empty target and no mutant in mutants_i3b.py (i3bm40-45) touches target validation. The reviewer's severity narrative also checks out: migration 0004 narrows only FUNCTION defaults in `public` (lines 43-49) and grants table/function defaults only in `infrx`, so on a 0001-0009 database the `public` table/sequence defaults are still the template's `{postgres,anon,authenticated,service_role=arwdDxtm}`, and after NEUTRALIZE a new `public` table gets relacl NULL, i.e. service_role (PostgREST) loses default access to anything a later additive migration creates in `public`. Mitigating facts, for the record: the runbook as written (A4 fresh DB from template -> A5) is safe if followed, and the real hosted project fails early by accident; the harm needs an operator pointing `--conninfo` at the wrong database. Still blocking under the stated criteria: it is a stated invariant of a destructive tool with no enforcement and no killable test, and the same task already establishes the fail-closed-before-any-write pattern for the backup side (bk01d/i3bm44) while leaving the target side unguarded. The proposed guard (refuse unless `to_regnamespace('infrx')` is null, `public` has no r/p relations, and each meta auth table is empty, plus a bk01e test and mutant) is small and consistent with the existing drills."
+        },
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "Confirmed from code at 48d3bb2 (infra/runbooks/pgrestore.py restore(), lines 149-179): the target DSN is never inspected - no emptiness check, no source/target identity check, and meta.json (lines 109-114) records no source host/dbname to compare. Order is verify -> pg_restore --data-only auth.dump into the target (line 156) -> NEUTRALIZE_DEFAULTS executed on the target under autocommit (lines 158-161, connect() line 91) -> pg_restore project.dump (line 166). On a target that already holds schema infrx the project restore is guaranteed to fail (no --clean, --exit-on-error, CREATE SCHEMA infrx is kept by restorable() which only skips the public schema entries via TEMPLATE_OWNED), but by then the three ALTER DEFAULT PRIVILEGES ... REVOKE ALL ON tables/sequences/functions FROM anon, authenticated, service_role have committed and any auth rows in the dump have been inserted. The mutation is real on a live-shaped 0001-0009 database, not a no-op: 0004_pilot_roles_and_rpcs.sql (lines 40-49) only revokes EXECUTE on functions from anon/authenticated in public, while the template/shim grants of ALL on tables and sequences to anon/authenticated/service_role (supabase_shim.sql lines 91-96) survive migration - matching the reviewer's measured before {postgres,anon,authenticated,service_role=arwdDxtm} -> after {postgres=arwdDxtm/postgres}; a later additive migration creating a public table without an explicit grant then silently loses service_role access. Test coverage: every restore target in tests/integration/backend/recovery/test_restore.py comes from scratch() which _create()s fresh databases (lines 95-102); bk01/bk01b/bk01c/bk01d/bk02 all restore into empty ones, none into a non-empty target, and mutants_i3b.py has no guard mutant because no guard exists. The only protection is prose (restore.md A8.3 'never over the live one'; docstring lines 152-153); dump and restore share the same --conninfo flag so reusing $HOSTED with the wrong subcommand is a one-token slip. The 'fails earlier with users present' case is protection by ordering accident (duplicate key on users_pkey at line 156), not design. Blocking per the given criteria: a stated invariant of a disaster-recovery runbook tool with no enforcement and no killable test, whose failure path mutates a live database before reporting failure. Reviewer's minimal fix (refuse unless infrx absent, public has no r/p tables, each meta['auth_tables'] table empty; record and compare source host+dbname; add bk01e plus a guard mutant) is the right shape. No live experiment needed; the code fully determines the behavior."
+        }
+      ]
+    },
+    {
+      "id": "RS-2",
+      "severity": "blocking",
+      "file": "tests/integration/backend/recovery/test_restore.py",
+      "line": "149-165 (bk01_a docstring claims rows+policies/ACLs/functions/triggers/constraints/indexes/default privileges are CHECKED)",
+      "claim_broken": "bk01's 'checked, not merely listed' invariant has no killable test per family: the check's discrimination for default privileges, policies, functions, indexes (and columns/constraints/schema ACLs by the same construction) and row CONTENT is proven only by the whole-catalog mutant i3bm45 and by the ACL/trigger cases; every per-family removal survives bk01/bk02.",
+      "evidence": "Reviewer mutants on the scratch copy, tests unchanged: rv02 (CATALOG key 'default_acls' renamed so it is never compared) -> 5 passed (bk01_a,b,c,d,bk02) SURVIVED; rv03 'policies' ignored -> 5 passed SURVIVED; rv04 'functions' ignored -> bk01_a/b/c passed SURVIVED; rv06 'indexes' ignored -> 3 passed SURVIVED; rv07b row md5 replaced by the constant 'md5-ignored' (count-only rows) -> 5 passed SURVIVED. The tool itself DOES detect each class (probe1 on a good restore: drop policy -> 'policies differ'; alter column default -> 'columns differ'; revoke execute on infrx.now from service_role -> 'functions differ'; drop index org_members_user_id_idx -> 'indexes differ'; update one models row -> 'rows of public.models differ'), so this is a test gap on the gate that precedes the hosted apply, not a tool defect. Killed by the existing suite: rv01 relation ACL ignored (bk01c), rv08 restorable() drops every DEFAULT ACL entry (bk01_a), rv09 dump excludes infrx (bk01_a), rv10 neutralize skips functions (bk01_a).",
+      "minimal_fix": "Add one parametrised case bk01e: after a good restore, damage the copy one family at a time (drop policy / set column default / revoke function grant / drop index / `alter default privileges for role postgres in schema public grant all on tables to anon` / update one row) and assert compare() names exactly that family; add the five CATALOG-key mutants and a rows-md5 mutant to mutants_i3b.py.",
+      "lens": "restore",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed from the code at 48d3bb2; no live experiment was needed because the survivals are structural. tests/integration/backend/recovery/test_restore.py calls pg.compare only on good restores (lines 159 bk01_a, 359 bk02 rollback) or asserts a single family with any(startswith(\"triggers differ\")) (181, bk01b) / any(startswith(\"relations differ\")) (196, bk01c); bk03 compares fingerprints of an unchanged database (381/393); bk01d never fingerprints. compare() in infra/runbooks/pgrestore.py iterates source[\"catalog\"] per family and rows per table, so dropping any family other than triggers/relations (policies, functions, indexes, columns, constraints, views, schemas, default_acls) or replacing the row md5 with a constant (count-only) can only remove problems and therefore passes every case unchanged \u2014 exactly the reviewer's rv02/rv03/rv04/rv06/rv07b. The only mutant in mutants_i3b.py on the check is i3bm45 (whole-catalog removal, killed by bk01c via relations). Yet the invariant is claimed three times as per-family: bk01_a docstring (\"CHECKED - not merely listed: rows, RLS/policies/ACLs/functions/triggers/constraints/indexes/default privileges identical\"), infra/runbooks/restore.md A6 (\"restored and checked, not merely listed\"), and research/plan/evidence/i/I3B-32f94b3.md:241-242 (\"bk01/bk01b/bk01c/bk01d prove the check catches each\"), which is literally false for 8 of 10 catalog families and for row content. Blocking under the given definition (invariant with no killable test) because this check is the gate before applying 0003-0009 to hosted (bk02, restore.md A6): a count-only or family-blind regression of the check would pass the whole suite and the mutant run while still reporting \"equal\". The tool itself discriminates correctly today (reviewer's probe1; consistent with the CATALOG queries), so the fix is test-only: one parametrised bk01e damaging one family at a time on a good restore and asserting compare() names exactly that family, plus per-family CATALOG-key mutants and a rows-md5 mutant in mutants_i3b.py.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed by static analysis of every use of pg.fingerprint/pg.compare in the repo (all in tests/integration/backend/recovery/test_restore.py; no other caller). The only assertions that can fail on a weakened check are bk01b (\"triggers differ\") and bk01c (\"relations differ\"); bk01_a/bk02/bk03 assert compare()==[] or fingerprint equality on good/identical databases, and bk02's row assertions use direct SQL (legacy_rows), not the fingerprint. Hence deleting any of policies/functions/indexes/columns/constraints/schemas/views/default_acls from CATALOG (infra/runbooks/pgrestore.py:184-217) or replacing the row md5 with a constant cannot fail any test at 48d3bb2 - matching the reviewer's rv02/rv03/rv04/rv06/rv07b survivals. The committed list mutants_i3b.py covers the check only with i3bm45 (whole catalog loop) and the trigger/ACL cases. The bk01_a docstring (test_restore.py:149-153) names rows, policies, ACLs, functions, triggers, constraints, indexes and default privileges as CHECKED, and R32 (research/plan/08-contracts-v1-encoding.md:190) requires every invariant a case names to be killable; eight of ten families plus row content have no killer. The tool discriminates each family (reviewer's probes), so this is a test gap on the gate that precedes the hosted apply (bk02, hosted has no backup), not a tool defect. Blocking under the given rubric (invariant with no killable test); the proposed fix (one parametrised bk01e damaging one family at a time, plus CATALOG-key and rows-md5 mutants in mutants_i3b.py) is small and proportionate.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "M1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/observe/alerts.py",
+      "line": "196-212 (main: state written from this run's samples only)",
+      "claim_broken": "Evaluator arithmetic over windows: 'increase' rules judge the increase since the last run. After one transient scrape failure the state file is rewritten WITHOUT that source's series, so the next successful run treats every counter's lifetime total as the increase and fires spurious alerts with no new event.",
+      "evidence": "probe_alerts.py sequence on a healthy gateway.prom carrying lease_lost_total=3 and rejected_total{rate_limited}=500: run1 exit 0 [], run2 exit 0 [], run3 (file renamed away) exit 1 ['ScrapeFailed'], run4 (file back, nothing changed) exit 1 ['RejectionsHigh','LeaseLost']. Direction is noisy not silent, so nonblocking; but a page/ticket after every scrape hiccup is not 'accurate and actionable' (BACKEND-OBSERVE).",
+      "minimal_fix": "In main(), when a source fails to read, carry that source's previous samples forward into the written state (or write state only for keys read this run and merge `previous` for the rest); add a case: scrape gap then recovery with no new events fires nothing.",
+      "lens": "metrics"
+    },
+    {
+      "id": "M2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/observe/metrics.py",
+      "line": "78-82 (_MOUNT, _DEVICE, _REVISION) and module docstring 'Every label is a closed vocabulary'",
+      "claim_broken": "'every label is a closed vocabulary' \u2014 `mount` is `[a-z][a-z_]{0,23}`, `revision` is 7-40 hex, `gpu` is 1-2 digits: patterns, not vocabularies. Any lowercase word, any hex id (including a 12-hex tenant hash or a hex request id) passes through verbatim.",
+      "evidence": "probe_labels.py: mount=\"prompt_leak\", mount=\"describe\", mount=\"t_deadbeefcafe\", revision=\"deadbeefcafe\", revision=\"deadbeefcafebabe\", gpu=\"99\" all appear in render() with rejected counter None. ob01's PAYLOADS all contain uppercase/spaces/punctuation, so the test proves less than the docstring says. Today these labels are fed only by operator configuration (METRICS_DISKS keys, git revision, nvidia-smi index), so no customer value reaches them \u2014 hence nonblocking.",
+      "minimal_fix": "Make `mount` a frozenset of the configured METRICS_DISKS keys (validated at register()/Registry construction) and reword the docstring: mount/gpu/revision are configuration-sourced patterns; add a lowercase-word payload to ob01 for the mount slot once it is an enum.",
+      "lens": "metrics"
+    },
+    {
+      "id": "M3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/observe/host.py",
+      "line": "45-52 collect_disks, 55-68 collect_gpu",
+      "claim_broken": "Gauges are set but never cleared: after a GPU or mount disappears, the previous measurement stays in the exposition as if current (only gpu_up / disk_free_ratio are refreshed).",
+      "evidence": "probe_labels.py: collect_gpu twice (util 50%, then rc=9) -> infrx_gpu_up 0.0 but infrx_gpu_utilization_ratio{gpu=\"0\"} still 0.5; collect_disks twice (free 90, then OSError) -> infrx_disk_free_ratio 0.0 but infrx_disk_bytes{state=\"free\"} still 90. With no GPU at all (this host) the code correctly emits gpu_up 0 and NO memory series \u2014 no fabricated 0 \u2014 but no test pins that: reviewer mutant rv13 (fabricate gpu_memory_bytes{used}=0 on failure) SURVIVED ob08. Alerts read only the refreshed gauges, so no wrong alert; dashboards show a frozen value.",
+      "minimal_fix": "Add Registry.clear(family) and call it at the top of collect_gpu / collect_disks per family (or per mount); in ob08 assert that after a failed nvidia-smi no infrx_gpu_memory_bytes / utilization series remains.",
+      "lens": "metrics"
+    },
+    {
+      "id": "M4",
+      "severity": "nonblocking",
+      "file": "infra/alerts/alerts.json",
+      "line": "PlatformFailureRate (threshold_status 'provisional (P-18): ...')",
+      "claim_broken": "'unmeasured thresholds are \u26a0\ufe0f' \u2014 one rule is unmeasured but carries no \u26a0\ufe0f TO BE VERIFIED marker, and the convention is not enforced by any case.",
+      "evidence": "probe_alerts.py: no_warning_but_not_exact == ['PlatformFailureRate']; reviewer mutant rv06b (replace a rule's '\u26a0\ufe0f TO BE VERIFIED (P-18)' with 'exact') SURVIVED \u2014 ob10 only asserts threshold_status is a non-empty string (rv06, removing the key, is killed by a KeyError). Also the rule pages on a single failure in a quiet minute: one engine_error among one terminal job -> ratio 1.0 > 0.01 -> ['PlatformFailureRate'].",
+      "minimal_fix": "Prefix the PlatformFailureRate status with '\u26a0\ufe0f TO BE VERIFIED (P-18)'; in ob10 assert every threshold_status starts with 'exact' or contains '\u26a0\ufe0f TO BE VERIFIED (P-18)'; consider a minimum denominator (e.g. divide_by only when total increase >= 20) for the ratio rule.",
+      "lens": "metrics"
+    },
+    {
+      "id": "M5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/observe/alerts.py",
+      "line": "92-93 (`if not series: continue`) and main() file sources",
+      "claim_broken": "'silence must never mean healthy' holds only for an unreadable source. A readable but stale textfile (worker/reaper dead, .prom left behind) or an empty scrape evaluates to no alert at all.",
+      "evidence": "probe_alerts.py: stale_textfile_is_silence -> [] ; empty_scrape_alerts (Registry with no samples) -> []. rv10 confirms ob11 pins silence on missing series by design. Worker liveness is otherwise systemd/W3's, hence nonblocking.",
+      "minimal_fix": "Give main() a --max-age seconds option: a file source whose mtime is older than it is reported as ScrapeFailed (label source), and treat an exposition with zero samples the same way.",
+      "lens": "metrics"
+    },
+    {
+      "id": "M6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/observe/metrics.py",
+      "line": "48-50 tenant_label; 149-152 Registry.__init__; 61 SECONDS",
+      "claim_broken": "Minor unpinned invariants: (a) tenant hash is an unsalted sha256 prefix \u2014 documented in the docstring as pseudonymous/matchable by an operator holding the id, so acceptable, but note the proposed `tenant=\"unauthenticated\"` literal (integration request 3) hashes to a fixed t_b6545eef9260; (b) the process-label pattern and the label-name check have no killable case; (c) histogram bucket bounds are unpinned.",
+      "evidence": "tenant_hash_is_plain_sha256_prefix: true; prehashed input 't_deadbeefcafe' is re-hashed (good). Reviewer mutants rv11 (process pattern removed), rv12 (label-name check removed), rv04b (SECONDS loses 0.01) all SURVIVED; none exposes customer data (an extra label is never rendered; a missing one still KeyErrors).",
+      "minimal_fix": "One case: Registry('bad name') raises; inc() with an extra label raises; render() has len(SECONDS)+1 buckets. Optionally declare the tenant hash unsalted in 08 \u00a75 alongside METRICS_DISKS.",
+      "lens": "metrics"
+    },
+    {
+      "id": "D1",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/recoverykit.py",
+      "line": "239-248",
+      "claim_broken": "reconcile() asserts 'a debit only when settled' and 'no duplicate charge', but never checks the settled debit AGAINST the frozen price snapshot x usage: a consistent overcharge (wrong amount recorded in both ledger and outcome) is invisible to the oracle",
+      "evidence": "reviewer mutant rv15 (fakes/state.py `debit = candidate` -> `debit = candidate + candidate`, rc01) SURVIVED: `1 passed, 11 deselected in 0.74s`. Duplicate application of the same debit IS caught (rv01 killed at recoverykit.py:252) and a leaked hold IS caught (rv02 killed at :253); only the amount itself is unverified",
+      "minimal_fix": "in reconcile(), when outcome.settlement_state is settled: `assert outcome.debit == accepted.price_snapshot.debit(outcome.usage.prompt_tokens, outcome.usage.completion_tokens)` and add a mutant for it to mutants_i3b.py",
+      "lens": "drills"
+    },
+    {
+      "id": "D2",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/i/I3B-32f94b3.md",
+      "line": "107 (rc06 row)",
+      "claim_broken": "'SIGKILL of E2's Valkey while workers run' overstates rc06: at the kill instant no worker is running - `first.run(..., max_claims=2)` has returned before `faults.kill_container('valkey')`, and the `blind` loop starts after the kill",
+      "evidence": "test_recovery.py:473-479: `await first.run(...)` completes, then `with harness.Faults()`: kill, then `blind = world.loop(...)`. The loss-is-loud claim (blind.failures, claimed == 0, ComponentDown) is real; a claim in flight during the kill is only exercised by rc09 (worker cancelled first, then Valkey killed)",
+      "minimal_fix": "reword the rc06 row to 'between worker runs; the next claim after the kill fails loudly', or kill Valkey while a Hanging engine holds a claim",
+      "lens": "drills"
+    },
+    {
+      "id": "D3",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/test_recovery.py",
+      "line": "351-354, 529-533",
+      "claim_broken": "'each PENDING would FAIL once its component exists' relies on two loose probes: rc05b fails on ANY name containing 's3' in infrx.media.store (a helper `_s3_key` would flip it, an adapter named `MinioObjectStore` would not); rc08b only sees `infrx.worker.__main__` or `infrx.worker.main` (a console-script or `infrx/worker/cli.py` entry point stays pending)",
+      "evidence": "rv11 (add `class S3ObjectStore` to store.py) and rv12 (add `def main()` to worker/__init__.py) both flip to FAIL (killed); rc03/rc04/rc10 probes flip correctly too (rv09, rv10 killed; rollback.sh touched -> `Failed: I2B's rollback exists (['rollback.sh'])`). The probes work for the named shapes but are name-heuristics, unlike E3B's structural `ingress_is_mounted`",
+      "minimal_fix": "rc05b: probe for a class implementing the ObjectStore port whose module is not the in-memory one (e.g. `issubclass`/duck-check on `head/get/put_if_absent` with a non-InMemory name); rc08b: also check `importlib.metadata.entry_points(group='console_scripts')` for an infrx-worker script",
+      "lens": "drills"
+    },
+    {
+      "id": "D4",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/test_recovery.py",
+      "line": "128-131 (kill), 164, 559",
+      "claim_broken": "'worker kill' in rc01/rc09 is a cooperative `task.cancel()`: `WorkerLoop.claim_one`'s `finally: _acknowledge(candidate)` runs and removes the in-flight candidates from the real index; under SIGKILL they would stay in-flight until Q2's visibility timeout, so the index's own in-flight expiry/requeue path is never exercised by any drill (evidence Limit 2 states this honestly)",
+      "evidence": "infrx/worker/loop.py:71-77 (`finally: await self._acknowledge(candidate)`); rc09 acks against live Valkey before it is killed; rc08 `drain` uses the same cancel path (rv07 confirms cancel never settles: killed at test_recovery.py:516). rc02/rc06/rc09/bk03 kills are real: `FakeVllmServer.kill` -> `Popen.send_signal(SIGKILL)` (fake_vllm.py:439-444), `docker kill -s SIGKILL` (harness.py:574-579)",
+      "minimal_fix": "none required for the software half; the box drill (restart.md worker step) must SIGKILL the worker process and the rc08b/W3 case should assert the in-flight candidate resurfaces after `lease_ttl_s` without an acknowledge",
+      "lens": "drills"
+    },
+    {
+      "id": "D5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+      "line": "1044-1060",
+      "claim_broken": "Finding 3 reproduced: `recover()` returns the aged unknown-usage release as a `TerminalOutcome` of an already-terminal job; a reaper counting returned outcomes double-counts, and `record_recovery` without `released=` reports `infrx_jobs_terminal_total{failed,lost_after_publication} = 2` for one job",
+      "evidence": "repro script over the reference store: `recover() passes returned TerminalOutcome objects: 2 for 1 job` (same job_id: first `held_unknown reconcile_after 2026-09-21`, then `released_platform_absorbed reconcile_after None`, settled_at unchanged); `naive record_recovery: jobs_terminal_total = 2.0 | terminalized = 2.0 | hold_released = None`. Note the release copy keeps the ORIGINAL settled_at, so a store-side reaper could disambiguate by `settled_at < now - unknown_usage_reconcile_s` until D3/D5 return a distinct record",
+      "minimal_fix": "D3/D5 (already an integration request): return the release as its own record type or flag; meanwhile document the settled_at heuristic in reconcile.md",
+      "lens": "drills"
+    },
+    {
+      "id": "RS-3",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "195-201 (CATALOG functions/triggers)",
+      "claim_broken": "'equal': true tolerates three catalog facts the tenant boundary and the money invariants rest on: trigger enabled state (tgenabled), function proconfig (the `search_path=...` pin on every SECURITY DEFINER function - 30+ functions carry it, incl. ledger_moves_wallet, admit, claim) and comments. pg_dump preserves them, so a restore will not lose them, but a copy with `alter table ... disable trigger user` or a function whose search_path pin was dropped still checks equal.",
+      "evidence": "probe1 on the good restore: `alter table public.api_keys disable trigger user` -> no new problem; `alter function public.handle_new_user() set search_path = public` (source: 'public, pg_temp') -> no new problem; `comment on table ...` -> no new problem. RLS disable, policy drop, ACL loss, index loss, row change were all reported.",
+      "minimal_fix": "Add `t.tgenabled::text` to the triggers query and `coalesce(p.proconfig::text,'')` to the functions query in CATALOG.",
+      "lens": "restore"
+    },
+    {
+      "id": "RS-4",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/restore.md",
+      "line": "77 (A4 LOCAL=... password=$LOCALPW ...) and README.md rule 2; pgrestore.py run() line ~83",
+      "claim_broken": "README rule 2 ('never put [a secret] in a command's argument list') and the tool docstring ('libpq string without the password') are contradicted by the runbook's own LOCAL conninfo, which carries password= into `docker run ... pg_restore -d '...password=...'` argv (ps-visible) and into psycopg. It is a throwaway local literal, so nothing secret leaks. Separately, run() re-raises pg_restore's stderr verbatim, which can carry row data from auth.users (e-mails) into the operator's terminal/session record.",
+      "evidence": "restore.md:77 `LOCAL=\"host=127.0.0.1 port=55470 user=postgres password=$LOCALPW ...\"`; pgrestore.py client() passes conninfo as a `-d` argument of `docker run`. PGPASSWORD handling otherwise verified correct: grep over the diff shows it is read via process substitution (A2), passed only as `-e PGPASSWORD` (pgrestore.py:77), never printed by dump/restore/check, unset in A9; the committed evidence contains env var names only. Measured stderr leak shape (probe2 b): 'COPY failed for table \"users\": ERROR: duplicate key ... DETAIL: Key (id)=(30c10a5c-0969-4093-bde2-a0c0dee98e6b) already exists. CONTEXT: COPY users, line 1' - a malformed-row error would quote the row itself.",
+      "minimal_fix": "State in A4 that LOCAL's password is a deliberate non-secret exception (check needs two passwords), or start the scratch container with POSTGRES_PASSWORD=\"$PGPASSWORD\" so LOCAL needs none; in run(), drop `DETAIL:`/`CONTEXT:` lines from the re-raised stderr.",
+      "lens": "restore"
+    },
+    {
+      "id": "RS-5",
+      "severity": "nonblocking",
+      "file": ".gitignore",
+      "line": "1-11 (no backup/dump pattern); infra/runbooks/restore.md:63-65",
+      "claim_broken": "The backup holds users' e-mail addresses; exclusion from git rests on the operator choosing $HOME/infrx-backups (outside the repo) and on 'Never commit it' - no .gitignore pattern catches a BACKUP set inside the checkout - and retention is 'a decision for the coordinator' with no period or deletion step (A9 removes the container, not the backup).",
+      "evidence": "`cat .gitignore` at 48d3bb2: __pycache__/ *.pyc .venv/ node_modules/ .next/ .env .env.local .env*.local *.tsbuildinfo .vercel/ .claude/ - no *.dump, infrx-backups/, SHA256SUMS or meta.json pattern; restore.md:65 'Keeping it past the apply is a retention decision for the coordinator.'",
+      "minimal_fix": "Add `*.dump`, `infrx-backups/` to .gitignore; in A9 add `shred -u`/rm of $BACKUP after the apply is verified (or state the retention period and location).",
+      "lens": "restore"
+    },
+    {
+      "id": "RS-6",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/rollback.md",
+      "line": "45-52 (maintenance: 'As service_role ... through the pooler')",
+      "claim_broken": "The drilled statement (bk04) runs under `set local role service_role`; the runbook says 'as service_role' but shows no SET ROLE, and the pooler login is `postgres`, so the operator's statement runs as a different role than the drill - it works, but not for the reason the runbook gives.",
+      "evidence": "test_restore.py as_role(): `set local role service_role` before MAINTENANCE; rollback.md:50 SQL block has no SET ROLE. Measured on the pinned image: pg_has_role('postgres','service_role','member') = t for anon/authenticated/service_role; postgres rolsuper=f, rolbypassrls=t (the update succeeds as postgres by BYPASSRLS, as service_role by 0006's policy).",
+      "minimal_fix": "Prefix the SQL block with `set role service_role;` and end with `reset role;` (rb03's substring assertion still passes).",
+      "lens": "restore"
+    },
+    {
+      "id": "RS-7",
+      "severity": "nonblocking",
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "224 (fingerprint(): set default_transaction_read_only = on)",
+      "claim_broken": "The one line that makes A6 (check --source <LIVE hosted>) read-only against production has no test; nothing today writes in fingerprint(), so this is a guard without a witness rather than a defect.",
+      "evidence": "Reviewer mutant rv14: `conn.execute(\"set default_transaction_read_only = on\")` -> `pass`; bk01_a: 1 passed, 64 s (SURVIVED).",
+      "minimal_fix": "In bk01_a assert the check's connection is read-only (have fingerprint assert `show transaction_read_only` = 'on' before reading), and add the mutant to mutants_i3b.py.",
+      "lens": "restore"
+    },
+    {
+      "id": "RS-8",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/i/I3B-32f94b3.md",
+      "line": "218-223 (Artifacts: 'not committed'), 181 (command 6 runbook-dryrun.sh)",
+      "claim_broken": "The hosted-shaped dry run of restore.md A3-A9 'verbatim' (command 6) is evidenced only by the report's summary: runbook-dryrun.{sh,log} and check.log are stated as uncommitted scratch, so the 'verbatim' claim and the A6 `{\"equal\": true}` output cannot be audited. Honest per R83 (stated, not hidden), but the F2R-A audit-gap-3 precedent preserved raw logs in evidence.",
+      "evidence": "`git ls-tree -r 48d3bb2 --name-only | grep -i i3b/` -> empty; codex-i3b worktree research/plan/evidence/i/ holds only I0/I1/I1B/I3B .md and check_i1.py; evidence line 220: 'Raw outputs in the session scratch area (not committed)'.",
+      "minimal_fix": "Commit runbook-dryrun.sh (it is the A3-A9 blocks with local values) and its log under research/plan/evidence/i/i3b/, or turn it into a test that executes restore.md's bash blocks against the scratch container.",
+      "lens": "restore"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "metrics",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "rv01 label vocabulary check removed at the key site (`if not _allowed(...)` -> `if False`)",
+          "edit": "metrics.py _key",
+          "result": "killed",
+          "killed_by": "ob01"
+        },
+        {
+          "name": "rv02 tenant hash is the identity (tenant_label returns str(org_id))",
+          "edit": "metrics.py tenant_label",
+          "result": "killed",
+          "killed_by": "ob02"
+        },
+        {
+          "name": "rv03 route accepts a non-loopback peer (gate `if not is_direct_loopback` -> `if False`)",
+          "edit": "route.py metrics()",
+          "result": "killed",
+          "killed_by": "ob07"
+        },
+        {
+          "name": "rv04 +Inf bucket dropped from the exposition",
+          "edit": "metrics.py render() zip(spec.buckets, sample[:-2])",
+          "result": "killed",
+          "killed_by": "ob05"
+        },
+        {
+          "name": "rv04b a middle bucket bound dropped (SECONDS loses 0.01)",
+          "edit": "metrics.py SECONDS",
+          "result": "SURVIVED (bucket bounds unpinned; design choice, see M6)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv05 Server-Timing renames prefill->ttft on the way out",
+          "edit": "metrics.py server_timing",
+          "result": "killed",
+          "killed_by": "ob04"
+        },
+        {
+          "name": "rv06 a rule loses its threshold_status key",
+          "edit": "alerts.json GpuUnavailable",
+          "result": "killed (by KeyError in ob10, not an assert)",
+          "killed_by": "ob10"
+        },
+        {
+          "name": "rv06b an unmeasured threshold loses its \u26a0\ufe0f marker ('exact: ...')",
+          "edit": "alerts.json DiskFilling",
+          "result": "SURVIVED (see M4)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv07 evaluator fires at the threshold (> becomes >=)",
+          "edit": "alerts.py OPS",
+          "result": "killed",
+          "killed_by": "ob11 (LeaseLost increase 0 >= 0 fires on healthy)"
+        },
+        {
+          "name": "rv08 disk gauge reports used bytes as free",
+          "edit": "host.py collect_disks",
+          "result": "killed",
+          "killed_by": "ob08"
+        },
+        {
+          "name": "rv09 zero denominator divided (`if total == 0: continue` removed)",
+          "edit": "alerts.py evaluate",
+          "result": "killed",
+          "killed_by": "ob11"
+        },
+        {
+          "name": "rv10 missing series becomes an alert (inverse probe: is silence-on-missing pinned?)",
+          "edit": "alerts.py evaluate",
+          "result": "killed (ob11 pins silence on absent series \u2014 see M5)",
+          "killed_by": "ob11"
+        },
+        {
+          "name": "rv11 process label pattern removed",
+          "edit": "metrics.py Registry.__init__",
+          "result": "SURVIVED (see M6)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv12 label-name check dropped (extra label silently ignored)",
+          "edit": "metrics.py _key",
+          "result": "SURVIVED (see M6; not a leak \u2014 extra label never rendered)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv13 GPU gauge fabricates gpu_memory_bytes{used}=0 when nvidia-smi fails",
+          "edit": "host.py collect_gpu",
+          "result": "SURVIVED (see M3; current code does not fabricate, but nothing pins it)",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-i3b archive 48d3bb2 | tar -x -C /tmp/claude-1000/review-i3b-metrics-3546125; git diff 5552c40..48d3bb2 --stat",
+          "exit": 0,
+          "tail": "23 files changed, 4499 insertions(+) \u2014 observe/{__init__,alerts,host,metrics,route}.py, infra/alerts/*.json, infra/runbooks/*, tests/integration/backend/recovery/*"
+        },
+        {
+          "cmd": "make api-env (scratch)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/integration/backend/recovery/test_observe.py test_mutant_list_i3b.py test_runbooks.py",
+          "exit": 0,
+          "tail": "19 passed, 2 warnings in 1.90s"
+        },
+        {
+          "cmd": ".venv/bin/python tests/integration/backend/recovery/mutants_i3b.py --layer 1 --report out/mutants-l1.json (detached)",
+          "exit": 0,
+          "tail": "{\"mutants\": 34, \"killed\": 33, \"controls_survived\": 1, \"not_killed\": 0, \"pending\": 0, \"problems\": null} \u2014 only [SURVIVED] i3bc01 CONTROL"
+        },
+        {
+          "cmd": "out/probe_labels.py (payload injection into every label slot; hashing; header; gauges)",
+          "exit": 0,
+          "tail": "leaks: only pattern labels pass free values (mount=prompt_leak, revision=deadbeefcafe, gpu=99); request id/URL/error/raw org id/model alias -> 'other'; process label injection refused; spoofed .value refused; server_timing drops undeclared/negative/NaN: 'queue;dur=1.0, settle;dur=1000000000000.0'; gpu_no_smi: gpu_up 0.0, mem_series []; gpu_stale_after_loss util_still 0.5; disk_stale free_bytes_still 90.0; build_info '32f94b3-dirty' -> revision=\"other\""
+        },
+        {
+          "cmd": "out/strict_parse.py (own strict 0.0.4 checker over all 30 families populated)",
+          "exit": 0,
+          "tail": "{\"problems\": [], \"series\": 140, \"families_rendered\": 30, \"families_declared\": 30, \"missing\": []}; EMPTY registry renders '\\n'; alerts.parse series: 140"
+        },
+        {
+          "cmd": "uvicorn live_app:app on 127.0.0.1:55901 / [::]:55902 / 127.0.0.1:55903 --proxy-headers; curl probes",
+          "exit": 0,
+          "tail": "direct 127.0.0.1 -> 200; 127.0.0.2 -> 000 (refused peer); XFF/Forwarded/X-Real-IP/Via/empty XFF -> 404; 404 body identical to /nope; ::1 -> 200; uvicorn proxy-headers + XFF 203.0.113.9 -> 404; non-loopback 172.31.20.161 -> 000; content-type text/plain; version=0.0.4; charset=utf-8; real scrape: infrx_gpu_up 0.0 with no memory series, disk_free_ratio root 0.151"
+        },
+        {
+          "cmd": "out/probe_alerts.py (evaluator arithmetic)",
+          "exit": 0,
+          "tail": "one_failure_pages ['PlatformFailureRate']; B_run3 (source gone) [1,['ScrapeFailed']]; B_run4 (source back, no new events) [1,['RejectionsHigh','LeaseLost']]; zero_denominator []; two_process_queue_sum [('QueueSaturated',1.0)]; stale_textfile []; empty_scrape []; stale_at_3600 [] / 3601 ['ReconciliationStale']; rejections alert labels [{}]; no_warning_but_not_exact ['PlatformFailureRate']"
+        },
+        {
+          "cmd": "server_timing(reversed dict) order check; mount=\"describe\"",
+          "exit": 0,
+          "tail": "retrieval;dur=9.0, decode;dur=8.0, ... settle;dur=1.0 order==PHASES: True; mount=describe exposed: True rejected: None"
+        },
+        {
+          "cmd": "out/my_mutants.py (15 reviewer mutants through E's runner, copy carries infra/) (detached)",
+          "exit": 1,
+          "tail": "killed 10, SURVIVED rv04b rv06b rv11 rv12 rv13; \"mutants\": 15, \"killed\": 10, \"not_killed\": 5"
+        },
+        {
+          "cmd": "cleanup: pgrep uvicorn/mutants; ss -ltn | grep :559; docker ps -a | grep review-i3b-metrics; rm -rf scratch; git status codex-i3b",
+          "exit": 0,
+          "tail": "0 listeners, 0 containers, scratch dir gone, codex-i3b worktree clean (0 lines)"
+        }
+      ],
+      "fabrication_check": "Re-ran everything I quote in a fresh archive of 48d3bb2 with a fresh `make api-env`. Implementer's layer-1 numbers reproduce: 19 layer-1 cases pass; the 34 layer-1 mutants give 33 killed + 1 control survived, 0 problems (the 7 layer-2 mutants and the rc/bk drills are outside this lens and were not run \u2014 no stack was started). Checked claims: Prometheus text is valid under my own strict parser (HELP/TYPE per family, cumulative buckets, +Inf == _count, _sum/_count present, 140 unique series, no duplicates); label escaping round-trips; phase names equal bench.PHASES and the header is emitted in PHASES order \u2014 but the evidence cites `models/marlin2b/results/E1B-protocol.md` as the source of the nine names and that file does not contain them (grep 'retrieval' finds nothing); the names live in `models/marlin2b/bench.py:103` and the I3B brief, so the claim is right and the citation is wrong. Tenant hashing is a plain unsalted sha256 prefix, and the docstring says so (pseudonymous, matchable by an operator holding the id) \u2014 documented, not keyed. The /metrics gate is the ASGI peer address (127.0.0.1 or ::1) plus absence of any of six proxy headers; verified on a real uvicorn: every proxied form gets the byte-identical 404 of an unknown path, and with uvicorn's own --proxy-headers the rewritten client host is refused too. '20 rules each with a threshold source' is true; 'unmeasured ones are \u26a0\ufe0f' is not quite (PlatformFailureRate). 'Every label is a closed vocabulary' is overstated for mount/gpu/revision (patterns), though no customer-derived value reaches those labels through any call site that exists. No rule reads a customer-visible value; firing alerts carry only component/mount labels or none. No GPU on this host: gpu_up 0 and no memory series \u2014 no fabricated zero. No docker, no network, no AWS used.",
+      "cleanup": "Created only: scratch archive /tmp/claude-1000/review-i3b-metrics-3546125 (with its own .venv, out/ probes, logs) and the pointer file /tmp/claude-1000/review-i3b-metrics-scratchdir \u2014 both removed (ls confirms gone). Three throwaway uvicorn servers on 127.0.0.1:55901, [::]:55902, 127.0.0.1:55903 were started and killed; `ss -ltn` shows 0 listeners on 559xx and pgrep shows no uvicorn/mutant processes. No docker container, image, volume or tmpfs was created (the D harness and E2 stack were not touched); the codex-i3b worktree is untouched and clean."
+    },
+    {
+      "lens": "drills",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "rvc01 CONTROL layer 1 (comment edit in fakes/state.py, rc01)",
+          "edit": "class _Wallet: -> class _Wallet:  # control",
+          "result": "SURVIVED (1 passed) - runner sound"
+        },
+        {
+          "name": "rvc02 CONTROL layer 2 (same edit; rc06 or rc08 or rc09 on real Valkey)",
+          "edit": "class _Wallet: -> comment",
+          "result": "SURVIVED (3 passed, 1 skipped, 53.43s) - stack cases not flaky"
+        },
+        {
+          "name": "rv01 double debit",
+          "edit": "fakes/state.py `ledger_total - debit` -> `- debit - debit`",
+          "result": "killed",
+          "killed_by": "rc01 -> recoverykit.py:252 (ledger == GRANT - debits)"
+        },
+        {
+          "name": "rv02 hold leaked on settled success",
+          "edit": "fakes/state.py drop `reserved_total - hold.amount` on settle",
+          "result": "killed",
+          "killed_by": "rc01 -> recoverykit.py:253 (reserved == held_unknown holds)"
+        },
+        {
+          "name": "rv03 accepted job never indexed (dispatcher drops one)",
+          "edit": "recoverykit.dispatch `for job_id in job_ids` -> `job_ids[1:]`",
+          "result": "killed",
+          "killed_by": "rc01 -> recoverykit.py:231 (accepted job is queued, not terminal)"
+        },
+        {
+          "name": "rv04 store never requeues a lost prepublication attempt",
+          "edit": "fakes/state.py `_recover_job` `return [event]` -> `return []`",
+          "result": "killed",
+          "killed_by": "rc08 (real Valkey) -> test_recovery.py:518 (reap count)"
+        },
+        {
+          "name": "rv05 rebuild duplicates a queued job",
+          "edit": "recoverykit.snapshot iterates `list(jobs.values()) * 2` (distinct event ids, same job)",
+          "result": "killed",
+          "killed_by": "rc06 -> test_recovery.py:485 (rebuild == 4; Q2 dedups by event_id only, so 8 indexed)"
+        },
+        {
+          "name": "rv06 rebuild drops a queued job",
+          "edit": "recoverykit.snapshot `...)[1:]`",
+          "result": "killed",
+          "killed_by": "rc06 -> test_recovery.py:485"
+        },
+        {
+          "name": "rv07 drain settles the in-flight attempt",
+          "edit": "worker/attempt.py add `except asyncio.CancelledError: cause = platform_error` before `except TimeoutError`",
+          "result": "killed",
+          "killed_by": "rc08 -> test_recovery.py:516 (released job's outcome is None)"
+        },
+        {
+          "name": "rv08 unknown-usage hold released before 24 h",
+          "edit": "fakes/state.py `_release_aged_unknown_holds` drop `now >= hold.reconcile_after`",
+          "result": "killed",
+          "killed_by": "rc01 -> test_recovery.py:172 (3 produced instead of 2)"
+        },
+        {
+          "name": "rv09 rc03 probe flipped (ingress mounted)",
+          "edit": "backend/stack.py ingress_is_mounted -> return True",
+          "result": "killed (rc03 FAILS, not pending)"
+        },
+        {
+          "name": "rv10 rc04 probe flipped (0 stubs, live stack)",
+          "edit": "backend/stack.py unimplemented_rpcs -> return 0",
+          "result": "killed (rc04 FAILS)"
+        },
+        {
+          "name": "rv11 rc05b probe (S3ObjectStore appears)",
+          "edit": "media/store.py add `class S3ObjectStore`",
+          "result": "killed (rc05b FAILS)"
+        },
+        {
+          "name": "rv12 rc08b probe (worker gains main)",
+          "edit": "worker/__init__.py add `def main()`",
+          "result": "killed (rc08b FAILS)"
+        },
+        {
+          "name": "rc10 manual probe",
+          "edit": "touch apps/infrx-api/deploy/rollback.sh",
+          "result": "rc10 FAILED: `I2B's rollback exists (['rollback.sh'])`; file removed"
+        },
+        {
+          "name": "rv15 GAP PROBE consistent overcharge",
+          "edit": "fakes/state.py `debit = candidate` -> `candidate + candidate`",
+          "result": "SURVIVED (1 passed) - finding D1"
+        },
+        {
+          "name": "rv13 R83: fixture crash must not be a kill",
+          "edit": "recoverykit.needs_stack raises RuntimeError (valkey_world fixture errors)",
+          "result": "no-cases (`11 deselected, 1 error`) - correctly NOT counted as killed"
+        },
+        {
+          "name": "rv14 R83: double anchor",
+          "edit": "test_recovery.py `kit.needs_stack()` (occurs 2x) -> pass",
+          "result": "stale (`occurs 2 times, expected 1`) - refused, not a kill"
+        },
+        {
+          "name": "implementer list mutants_i3b.py --layer all",
+          "edit": "41 mutants as shipped, my namespace",
+          "result": "{mutants 41, killed 40, controls_survived 1, not_killed 0, pending 0, problems null}; every kill is `1 failed, N deselected` with errors=0; layer-2 bk01 mutants took 84-140 s each (runner timeout is 240 s)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-i3b archive 48d3bb2 | tar -x -C /tmp/claude-1000/review-i3b-drills-3546625; sed re-namespace infrx-e2->infrx-review-i3b-drills, infrx_e2->infrx_review_i3b_drills, infrx-e3b->infrx-review-i3b-drills-e3b, infrx-i3b->infrx-review-i3b-drills, 555xx->560xx (tests/integration/**, infra/runbooks/pgrestore.py); make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / EXIT=0"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python tests/integration/run.py --layer 2 --keep (2nd attempt; 1st hit an ephemeral-range collision on 56000, stack removed with compose down -v)",
+          "exit": 0,
+          "tail": "[ok  ] services: containers infrx-review-i3b-drills-{clickhouse,postgres,s3,valkey} / [ok  ] migrate / [ok  ] rls: cases 40, failed null / exit 0 (all stages passed)"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery -rs --junitxml=logs/recovery.xml (sudo -n available; tmpfs drill ran)",
+          "exit": 0,
+          "tail": "SKIPPED PENDING[G1R,G2] / PENDING[D2,D3] 11 infrx RPCs are still infrx.unimplemented stubs / PENDING[M3] / PENDING[W3,I2B] / PENDING[I2B] no rollback script / 33 passed, 5 skipped, 6 warnings in 322.84s; junit: part_files_left_on_full_disk=1, dump_s=18.76, restore_s=31.04, rows=53, backup_restore_check_s=53.65, postgres_restart_to_connection_s=3.92; `mount | grep i3b-tmpfs` = 0 afterwards"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python logs/reaper_ambiguity.py (reference store, no stack)",
+          "exit": 0,
+          "tail": "recover() passes returned TerminalOutcome objects: 2 for 1 job / ... lost_after_publication held_unknown ... / ... lost_after_publication released_platform_absorbed reconcile_after None / naive record_recovery: infrx_jobs_terminal_total{failed,lost_after_publication} = 2.0 | terminalized = 2.0 | hold_released = None"
+        },
+        {
+          "cmd": "setsid nohup ... tests/integration/backend/recovery/mutants_i3b.py --layer all --report logs/mutants-all.json (detached, ~25 min)",
+          "exit": 0,
+          "tail": "[killed] i3bm54 links between runbooks resolve / \"mutants\": 41, \"killed\": 40, \"controls_survived\": 1, \"not_killed\": 0, \"pending\": 0, \"problems\": null"
+        },
+        {
+          "cmd": "setsid nohup ... logs/review_mutants.py (17 reviewer mutants via mutants_i3b.run, stack_available=True)",
+          "exit": 0,
+          "tail": "[SURVIVED] rvc01 / [SURVIVED] rvc02 / [killed] rv01..rv12 / [SURVIVED] rv15 GAP PROBE / [no-cases] rv13 / [stale] rv14 / {mutants 17, killed 12, controls_survived 2, not_killed 3, problems [rv15, rv13, rv14]}"
+        },
+        {
+          "cmd": "touch apps/infrx-api/deploy/rollback.sh; pytest -k rc10; rm rollback.sh",
+          "exit": 1,
+          "tail": "E Failed: I2B's rollback exists (['rollback.sh']): drive it through a rollback drill now / 1 failed, 11 deselected in 0.41s"
+        },
+        {
+          "cmd": "docker compose -p infrx-review-i3b-drills -f compose.yaml down -v; rm state file, /tmp litter, scratch dir; verify",
+          "exit": 0,
+          "tail": "Volume infrx-review-i3b-drills_s3-data Removed / containers: 0 volumes: 0 networks: 0 tmpfs: 0 scratch: 0 tmp-litter: 0; no review-i3b-drills processes"
+        }
+      ],
+      "fabrication_check": "Implementer claims checked against my own runs in an isolated namespace (infrx-review-i3b-drills, ports 560xx): 33 passed / 5 PENDING reproduced exactly with the five task-id messages; 41-mutant list reproduced 40 killed + 1 control, each kill a pytest failure with 0 errors; rc07 `.part` = 1 reproduced; rc01 24 h release, rc06 exactly-once under rebuild (Q2 dedups by event_id; a duplicated job is caught by the count assert), rc08 release-not-settle, bk03 SIGKILL and the recover() double-count finding all confirmed by mutants or repro. Real kills verified in source: FakeVllmServer.kill = Popen.send_signal(SIGKILL) to a real child pid; Valkey/PostgreSQL = `docker kill -s SIGKILL`; worker/drain = task cancellation (as the evidence states). No claim in the evidence was found to be fabricated; two are overstated (D2 rc06 wording; the D-harness/PORT_D was not needed because the recovery suite never uses pgharness). Timings on my host are slower than the evidence (shared host running four other reviewer stacks), which the evidence already labels `meas. local`. Not run: nothing - passwordless sudo worked so the tmpfs drill ran.",
+      "cleanup": "Torn down: compose project infrx-review-i3b-drills (4 containers, 3 volumes, 1 network) with `down -v`; /tmp/infrx-review-i3b-drills-state.json and all /tmp/infrx-review-i3b-drills-* litter removed; the tmpfs mounts were unmounted by the drill (mount shows none); the temporary rollback.sh probe removed before the scratch was deleted; scratch /tmp/claude-1000/review-i3b-drills-3546625 (venv, logs, mutant copies) rm -rf'd; no fake_vllm or pytest processes from my namespace remain. Never touched: any worktree, the infrx-d*/q*/review-i3b-restore/review-i2b-*/review-d2-*/review-q3-* containers, the D harness on 55432, network, AWS or hosted. Note: the session scratchpad pointer file was overwritten mid-run by a concurrent reviewer session; I switched to the hard-coded path and nothing of theirs was touched."
+    },
+    {
+      "lens": "restore",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "rv01 check ignores relation ACL diffs",
+          "edit": "CATALOG.relations: `array(select unnest(c.relacl)...)::text` -> 'acl-ignored'",
+          "killed_by": "test_i3b_bk01c (relations differ no longer reported)",
+          "result": "KILLED (1 failed, 2 passed, 79 s)"
+        },
+        {
+          "name": "rv02 check ignores default privileges",
+          "edit": "CATALOG key 'default_acls' -> 'default_acls_ignored' (query never run)",
+          "killed_by": "-",
+          "result": "SURVIVED (bk01_a,b,c,d + bk02: 5 passed, 212 s)"
+        },
+        {
+          "name": "rv03 check ignores policies",
+          "edit": "CATALOG key 'policies' -> 'policies_ignored'",
+          "killed_by": "-",
+          "result": "SURVIVED (5 passed, 341 s)"
+        },
+        {
+          "name": "rv04 check ignores function ACLs/bodies",
+          "edit": "CATALOG key 'functions' -> 'functions_ignored'",
+          "killed_by": "-",
+          "result": "SURVIVED (bk01_a,b,c: 3 passed, 126 s)"
+        },
+        {
+          "name": "rv06 check ignores indexes",
+          "edit": "CATALOG key 'indexes' -> 'indexes_ignored'",
+          "killed_by": "-",
+          "result": "SURVIVED (3 passed, 118 s)"
+        },
+        {
+          "name": "rv07 rows count-only (tuple shape changed)",
+          "edit": "`.fetchone())` -> `.fetchone())[:1]` in fingerprint rows",
+          "killed_by": "bk01_a - incidentally: the test unpacks (count, md5) and raises TypeError, not a detection",
+          "result": "KILLED (incidental, 49 s)"
+        },
+        {
+          "name": "rv07b rows md5 ignored, shape preserved",
+          "edit": "`md5(coalesce(string_agg(t::text ...)))` -> `'md5-ignored'`",
+          "killed_by": "-",
+          "result": "SURVIVED (bk01 + bk02: 5 passed, 153 s)"
+        },
+        {
+          "name": "rv08 restore drops the source's DEFAULT ACL entries (the re-grant path removed)",
+          "edit": "restorable(): `if \" DEFAULT ACL \" in line and not line.rstrip().endswith(f\" {ROLE}\"):` -> `if \" DEFAULT ACL \" in line:`",
+          "killed_by": "test_i3b_bk01_a (default_acls differ)",
+          "result": "KILLED (1 failed, 51 s)"
+        },
+        {
+          "name": "rv09 dump excludes the infrx schema",
+          "edit": "pg_dump args: `for schema in schemas` -> `for schema in schemas[:1]`",
+          "killed_by": "test_i3b_bk01_a (rows/relations of infrx.* missing)",
+          "result": "KILLED (1 failed, 51 s)"
+        },
+        {
+          "name": "rv10 neutralize skips functions (anon keeps EXECUTE by default)",
+          "edit": "NEUTRALIZE_DEFAULTS kinds ('tables','sequences','functions') -> ('tables','sequences')",
+          "killed_by": "test_i3b_bk01_a (functions/default_acls differ)",
+          "result": "KILLED (1 failed, 71 s)"
+        },
+        {
+          "name": "rv14 fingerprint not read-only",
+          "edit": "`conn.execute(\"set default_transaction_read_only = on\")` -> `pass`",
+          "killed_by": "-",
+          "result": "SURVIVED (bk01_a: 1 passed, 64 s)"
+        },
+        {
+          "name": "rv05/rv11/rv12/rv13 check ignores columns/triggers/schema ACLs/constraints",
+          "edit": "CATALOG key renamed (same construction as rv02-rv06)",
+          "killed_by": "rv11 expected killed by bk01b; others expected to survive",
+          "result": "NOT RUN - host load 30-44 made each 5-test run 4-10 min (first runner hit its 600 s timeout); reported as not run, not inferred"
+        },
+        {
+          "name": "restore targeting the source/live DSN allowed",
+          "edit": "no guard exists to mutate",
+          "killed_by": "-",
+          "result": "DEMONSTRATED instead (probe2): restore into a non-empty target with 0 auth rows emptied the live default privileges then failed at CREATE SCHEMA infrx; with users it failed at COPY auth.users before mutating anything"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-i3b archive 48d3bb2 | tar -x -C /tmp/claude-1000/review-i3b-restore-3546500; sed re-namespace infrx-e2->infrx-review-i3b-restore, 555xx->561xx, infrx-i3b-*->infrx-review-i3b-restore-*, infrx-e3b->infrx-review-i3b-restore-e3b, tests/d/pgharness.py PORT=55723 (D harness never started); make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0 (45 lines, uv sync --frozen from cache, no network)"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python bringup.py (run.preflight + run.services(pull=False) + run.migrate(seed 20260921) in the review namespace)",
+          "exit": 0,
+          "tail": "[ok] services: containers infrx-review-i3b-restore-{clickhouse,postgres,s3,valkey}, PostgreSQL 17.6; [ok] migrate: 0001..0009 applied; postgres on 127.0.0.1:56132"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python -m pytest tests/integration/backend/recovery/test_restore.py tests/integration/backend/recovery/test_runbooks.py -v -p no:cacheprovider",
+          "exit": 0,
+          "tail": "bk01_a, bk01b, bk01c, bk01d, bk02, bk03, bk04, rb01-rb05 PASSED - 12 passed in 36.80s"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python probe1.py (plain restore neutralize=False vs good restore of infrx_e2; ACL/default/trigger measurement; break-the-check probes on the good copy)",
+          "exit": 0,
+          "tail": "template defaults public r: {postgres,anon,authenticated,service_role=arwdDxtm/postgres}; plain_anon_tables: public.api_keys, credit_ledger, models, org_members, organizations, profiles, usage_events (+views) all anon=arwdDxtm; plain_anon_functions: console_*, handle_new_user, is_operator, is_org_member, is_org_owner ... anon=X; good_anon_tables []; good_anon_functions []; nspacl(public) identical (template-owned); good_check []; break_drop_policy -> 'policies differ'; column_default -> 'columns differ'; fn_grant_lost -> 'functions differ'; index_dropped -> 'indexes differ'; rls_disabled -> 'relations differ'; row_changed -> 'rows of public.models differ'; trigger_disabled / fn_search_path / comment -> NOT reported; sequences in public/infrx: none"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python mutants_rv.py (run 1, -k 'bk01 or bk02' per mutant, 600 s cap)",
+          "exit": 1,
+          "tail": "rv01 KILLED (bk01c, 79 s); rv02 SURVIVED (5 passed, 212 s); rv03 SURVIVED (5 passed, 341 s); rv04 subprocess.TimeoutExpired after 600 s (host load avg 38-44 on 16 cores from other review namespaces); pgrestore.py re-extracted from 48d3bb2 and cmp-verified identical"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python probe2.py (restore over a LIVE-shaped target: (a) 0001-0009 with 0 auth rows, (b) a populated copy)",
+          "exit": 0,
+          "tail": "a_restore_error: pg_restore failed (1): ERROR: schema \"infrx\" already exists Command was: CREATE SCHEMA infrx; a_defaults_mutated: true (tables/sequences/functions defaults reduced to postgres-only); a_new_table_acl_after: null; b_restore_error: COPY failed for table \"users\": duplicate key ... users_pkey DETAIL: Key (id)=(30c10a5c-...) CONTEXT: COPY users, line 1; b_defaults_mutated: false; b_still_equal_to_source: []"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python timing.py (per-step timings under load)",
+          "exit": 0,
+          "tail": "create 0.5s, dump 25.7s, restore 25.6s, fingerprint 0.1s, docker-run-true(pinned image) 5.1s, drop 0.3s; load average 43.70"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python mutants_rv.py (run 3, targeted -k per mutant, 1500 s cap)",
+          "exit": 0,
+          "tail": "rv04 SURVIVED 3 passed 126 s; rv06 SURVIVED 3 passed 118 s; rv07 KILLED (bk01_a TypeError, 49 s); rv08 KILLED bk01_a 51 s; rv09 KILLED bk01_a 51 s; rv10 KILLED bk01_a 71 s; rv14 SURVIVED 1 passed 64 s; DONE; pgrestore.py intact"
+        },
+        {
+          "cmd": "sed rv07b (md5 -> 'md5-ignored') && pytest test_restore.py -k 'bk01 or bk02' -q; cp back; cmp against 48d3bb2",
+          "exit": 0,
+          "tail": "5 passed, 2 deselected in 152.86s; RC=0; intact"
+        },
+        {
+          "cmd": "python3 bash/dash -n over every ```bash block of restore.md, rollback.md, index-loss.md, README.md",
+          "exit": 0,
+          "tail": "all blocks bash -n 0; dash -n 0 except restore.md block 1 (A2 `< <(...)` process substitution, coordinator-host bash, not SSM) - README's ssm() wrapper pipes to bash so SSM blocks are dash-safe by construction; rollback.md has no bash block (prose + SQL)"
+        },
+        {
+          "cmd": "docker exec infrx-review-i3b-restore-postgres psql -U supabase_admin -Atc \"select rolname, pg_has_role('postgres', rolname, 'member') ...; select rolsuper, rolbypassrls from pg_roles where rolname='postgres'\"",
+          "exit": 0,
+          "tail": "authenticated|t anon|t service_role|t; f|t (postgres: not superuser, BYPASSRLS)"
+        },
+        {
+          "cmd": "INFRX_E2_CHECKOUT=... docker compose -p infrx-review-i3b-restore -f tests/integration/compose.yaml down -v --remove-orphans; rm -f /tmp/infrx-review-i3b-restore-state.json; rm -rf /tmp/rvbk-*; rm -rf /tmp/claude-1000/review-i3b-restore-3546500",
+          "exit": 0,
+          "tail": "Volume infrx-review-i3b-restore_s3-data Removed / Network infrx-review-i3b-restore_default Removed / Volume infrx-review-i3b-restore_clickhouse-data Removed; scratch removed; 0 containers left; codex-i3b worktree status clean"
+        }
+      ],
+      "fabrication_check": "Every restore-lens claim in I3B-32f94b3.md was re-run, not trusted: bk01/bk01b/bk01c/bk01d/bk02/bk03/bk04 and rb01-rb05 pass in the review namespace (12/12, 36.8 s); the pinned image equals compose's digest (rb02); the plain-restore finding is CONFIRMED and is wider than stated - on the pinned supabase image the template's default privileges for postgres in public hand anon/authenticated/service_role ALL on every public table AND view and EXECUTE on every public function (console_*, handle_new_user, is_operator, is_org_member ...), the public schema ACL itself is template-owned and unchanged, infrx objects are unaffected (0004's schema-scoped defaults are in the dump), and the auth.users trigger plus 0004's global function default are carried only via meta.json; pgrestore.py's neutralize-then-restore-DEFAULT-ACL sequence produces byte-identical defaults and ACLs (good_check []). The claimed check detects lost policy / column default / function grant / index / RLS / row content (probe1) - the tool works, but only the ACL and trigger classes are proven by a killable test (finding RS-2). The evidence's timings (dump 1.68 s, restore 3.74 s) were not reproducible here (25 s each) because this host ran at load 30-44 during the review; not a contradiction. Artifacts (runbook-dryrun.{sh,log}, check.log) are truthfully declared uncommitted (RS-8); no committed number was found false. rv07's kill was incidental (test tuple-unpacking), so I re-ran a shape-preserving variant (rv07b) rather than count it; rv05/rv11/rv12/rv13 were not run and are reported as such. No hosted, box, AWS or network access was used; nothing was run against any project or container I did not create.",
+      "cleanup": "Removed: compose project infrx-review-i3b-restore (containers postgres/valkey/clickhouse/s3, volumes postgres-data/clickhouse-data/s3-data, network _default; `docker ps -a | grep review-i3b-restore` -> 0), state file /tmp/infrx-review-i3b-restore-state.json, temp backups /tmp/rvbk-*, the scratch checkout /tmp/claude-1000/review-i3b-restore-3546500 (with its .venv and the mutated-then-restored pgrestore.py). Never created: the D harness on 55723, any tmpfs, any infrx-review-i3b-restore-e3b PostgREST. Untouched: every container not mine (infrx-d1/d2/d3, infrx-q2/q3, infrx-review-i3b-drills-*, infrx-review-q3-*, infrx-review-d2-*, infrx-review-i2b-*), both worktrees (codex-i3b `git status --short` clean; infrx-impl not edited). Reviewer scripts/logs remain only in this session's scratchpad (probe1.py/out, probe2.py/out, mutants_rv.py, mutants_rv*.log, timing.py, bringup.py, chain*.sh)."
+    }
+  ]
+}

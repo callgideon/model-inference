@@ -1,0 +1,19 @@
+# Maintenance: admission paused at the edge (drain.sh pause; infra/README.md §8 rule 3).
+# Every request is 503 `dependency_unavailable` with Retry-After, the contract's envelope
+# for "retry later"; public health is down. In-flight responses on the previous
+# configuration finish - a Caddy reload is graceful.
+{
+	admin unix//config/admin.sock
+}
+
+{$INFRX_SITE:marlin2b.callbill.ai} {
+	header Retry-After 120
+	handle /health {
+		header Content-Type application/json
+		respond `{"ok":false}` 503
+	}
+	handle {
+		header Content-Type application/json
+		respond `{"error":{"message":"A required dependency is unavailable; retry later.","type":"server_error","code":"dependency_unavailable","param":null,"request_id":"{http.request.uuid}","infrx":{"retry_after_s":120}}}` 503
+	}
+}

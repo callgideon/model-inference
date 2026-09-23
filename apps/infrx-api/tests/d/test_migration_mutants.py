@@ -74,7 +74,28 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d1r_gateway_row_needs_a_regime", "d1r_regrants_a_legacy_view",
           "d1r_credit_ledger_without_rls", "d1r_new_views_keep_default_acl",
           "d1r_summary_callable_by_anon", "d1r_audit_replays_twice", "d1r_key_unrevoked",
-          "d1r_unverified_reads_verified")
+          "d1r_unverified_reads_verified",
+          # D2: the money path, fencing, tenant isolation and the relay.
+          "d2_usd_balance_unchecked", "d2_hold_rounds_to_nearest",
+          "d2_replay_ignores_the_payload", "d2_admission_lock_dropped",
+          "d2_terminalize_keeps_the_usd_reservation", "d2_zero_credit_hold_written",
+          "d2_credit_wallet_reached_through_any_org",
+          "d2_consumer_spends_on_a_private_deployment", "d2_prepare_any_generation",
+          "d2_superseded_rows_dispatched", "d2_result_read_across_tenants",
+          "d2_media_delete_ignores_last_use", "d2_usd_statement_reads_credit",
+          "d2_credit_ledger_rounds_to_cents",
+          # D3: fencing, publication/regeneration, money release and tenant isolation.
+          "d3_fence_ignores_the_generation", "d3_fence_ignores_the_worker",
+          "d3_fence_expiry_before_the_deadline", "d3_fence_without_the_row_lock",
+          "d3_claim_without_the_row_lock", "d3_cancel_any_tenant",
+          "d3_published_output_released", "d3_terminalization_keeps_the_hold",
+          "d3_requeue_after_publication", "d3_retries_unbounded",
+          "d3_held_unknown_may_be_rewritten", "d3_one_stuck_job_stops_the_sweep",
+          "d3_service_operations_callable_by_browsers", "d3_prep_retries_unbounded",
+          # D3 review fix round: the CREDIT unknown-usage path and the guard's source side.
+          "d3_quarantine_releases_the_credit_hold",
+          "d3_published_credit_released_not_quarantined",
+          "d3_unknown_release_keeps_the_credit_hold", "d3_settled_usage_may_become_absorbed")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -88,8 +109,13 @@ def test_the_mutant_list_is_well_formed() -> None:
     assert len({m.name for m in ALL}) == len(ALL), "two mutants share a name"
     for mutant in ALL:
         assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike", "credit",
-                                   "upgrade05", "credit_volume"), mutant.name
+                                   "upgrade05", "credit_volume", "admission"), mutant.name
         assert mutant.check in mutation_list._CHECKS, f"{mutant.name}: unknown check"
+    # R83 / review H4: every anchor appears exactly as often as its mutant declares,
+    # checked statically, so a stale list fails here rather than one mutant at a time.
+    stale = [f"{m.name}: {mutation_list.anchor_count(m)} != {m.occurrences}" for m in ALL
+             if mutation_list.anchor_count(m) != m.occurrences]
+    assert not stale, "misdeclared anchors:\n  " + "\n  ".join(stale)
     covered = {m.check for m in ALL}
     uncovered = sorted(set(mutation_list._CHECKS) - covered)
     assert not uncovered, f"checks no mutant can break: {uncovered}"
@@ -114,6 +140,16 @@ def test_mutant_is_killed(mutant) -> None:
         f"mutant {mutant.name} was {outcome} but for the wrong reason: expected the "
         f"detail to name `{mutant.expects_detail}`, got {detail!r}")
     print(f"{mutant.name}: {outcome} by {mutant.check} -> {detail}")
+
+
+def test_the_runner_reports_a_stale_anchor_as_misdeclared() -> None:
+    """Review H4: a mutant whose anchor is gone is `misdeclared`, never a crash or a kill."""
+    import dataclasses
+    stale = dataclasses.replace(mutation_list.SELF_TEST, name="self_test_stale_anchor",
+                                old="create table infrx.no_such_relation (")
+    outcome, detail = mutation_list.kill(stale)
+    assert outcome == mutation_list.MISDECLARED, f"a stale anchor was {outcome}: {detail}"
+    print(f"runner self-test: stale anchor classified as {outcome} -> {detail}")
 
 
 def test_the_runner_cannot_report_a_broken_migration_as_a_kill() -> None:

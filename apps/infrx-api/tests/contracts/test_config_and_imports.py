@@ -169,6 +169,17 @@ def _app(env, **clients):
     return create_app(config.from_env(env), client=object(), sb=object(), **clients)
 
 
+def _validated_as_cutover(env):
+    """G1R / E3B dr17: `pilot` refuses while `app.ROUTERS` composes the legacy chat route,
+    and no pilot app can be built before G2 wires `rt.ingress`, so a complete pilot
+    configuration is validated as the cutover will compose it."""
+    from unittest import mock
+    from infrx.gateway import app as composition_root
+    from infrx.gateway.routes import health, ingress, models
+    with mock.patch.object(composition_root, "ROUTERS", (health, models, ingress)):
+        return config.validate_runtime(config.from_env(env))
+
+
 AUTHENTICATED = {"SUPABASE_URL": "https://example.supabase.co",
                  "SUPABASE_SERVICE_ROLE_KEY": "not-a-real-key"}
 METERED = {"DATABASE_URL": "postgresql:///x"}
@@ -216,8 +227,11 @@ def test_a_pilot_startup_error_never_echoes_a_value():
 
 
 def test_pilot_starts_with_authentication_and_metering():
-    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED})
-    assert app.state.runtime.mode == "pilot"
+    env = {"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED}
+    assert _validated_as_cutover(env) == "pilot"
+    # ...and never on today's composition, which serves chat through the legacy route.
+    with pytest.raises(config.RuntimeMisconfigured, match="legacy route"):
+        _app(env)
 
 
 def test_pilot_refuses_the_shared_legacy_key(caplog):
@@ -268,8 +282,8 @@ def test_a_whitespace_only_setting_is_not_configuration(name, blank):
 def test_a_whitespace_only_legacy_key_is_not_a_legacy_key():
     """The same rule on the forbidden side: `GATEWAY_API_KEY=" "` is unset, not a shared
     key, so it must not block a correctly configured pilot."""
-    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED, "GATEWAY_API_KEY": "  "})
-    assert app.state.runtime.mode == "pilot"
+    assert _validated_as_cutover({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED,
+                                  "GATEWAY_API_KEY": "  "}) == "pilot"
 
 
 @pytest.mark.parametrize("mode", ["pilo", "PILOT", "production", "legacy", "dev "])
@@ -516,8 +530,7 @@ def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
     recorded for C2 and the deployment checklist instead."""
     assert config.CONSOLE_ONLY_SETTINGS == ("CONSOLE_CURSOR_SECRET",)
     assert config.DEPLOYMENT_DEFAULTS.console_cursor_secret == ""
-    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED})
-    assert app.state.runtime.mode == "pilot"
+    assert _validated_as_cutover({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED}) == "pilot"
 
 
 @pytest.mark.parametrize("mode", ["", "dev", "test", "pilot"])
@@ -534,8 +547,11 @@ def test_a_bad_deployment_value_refuses_before_anything_mounts(mode):
     with pytest.raises(config.RuntimeMisconfigured, match="MAX_MESSAGES"):
         _app(env)
     # And the same configuration with the value corrected does start, so the refusal is
-    # about the value and not about the mode.
-    assert _app({**env, "MAX_MESSAGES": "64"}) is not None
+    # about the value and not about the mode (pilot: as the cutover composes it).
+    if mode == "pilot":
+        assert _validated_as_cutover({**env, "MAX_MESSAGES": "64"}) == "pilot"
+    else:
+        assert _app({**env, "MAX_MESSAGES": "64"}) is not None
 
 
 def test_the_g1_and_q1_constants_match_the_deployment_defaults():

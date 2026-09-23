@@ -1,0 +1,184 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "RV2-1",
+      "severity": "blocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "69-84 (personal_org_binding_guard) with 186-207 (claim_signup_grant -> grant_signup_credit); 0006_credit_accounting.sql:513-522 (member count, wallet insert, no org lock)",
+      "claim_broken": "0015 header lines 18-19 / R-A1 / check_binding docstring: 'the personal organization that funds a consumer wallet has a frozen membership (its owner, alone): nobody is added to ... a bound personal org'; 02 'do not let multiple memberships implicitly spend an individual's promotional balance'. New defect, not a round-1 item: a membership insert racing the claim reaches a wallet-bound personal org with TWO members, in both orders, on both images, with no lock wait at all.",
+      "evidence": "Probe P1e (plain and supabase, identical): claim_first - A runs claim_signup_grant(v) and holds the transaction; B inserts org_members(personal_org(v), w, 'member'): B waited=False, finished while A open, rowcount 1; after A commits: members=2, wallet bound. member_first - A inserts the member and holds; B claims: B waited=False, answers granted; members=2, wallet bound. In both, checks_credit.attempt(credit_job(..., personal_org, wallet)) -> None: admission through the now-shared bound org is accepted, so the second member's keys spend the owner's 10,000 CREDIT. The state is also irreversible under the guard (deletes of the extra member are refused by the same trigger, check_binding 'the owner leaves' case). Cause: the guard reads credit_wallets with a statement snapshot and takes no lock; grant_signup_credit counts members and inserts the wallet with no lock on the organization row; only the FK KEY SHARE is taken, which conflicts with nothing either side holds. Reachable only by the platform role (browser roles cannot write memberships), during the claim transaction's duration; but it is a stated invariant with a sequential-only test, and the consequence is another individual spending the grant.",
+      "minimal_fix": "0015 only, two lines, verified on both images with every A1 check passing (eligibility, binding, retirement, retirement_race, claim_race x3): in personal_org_binding_guard, before the exists check: `perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id]) for share;`; in claim_signup_grant, immediately before the `return query ... grant_signup_credit` call: `perform 1 from public.organizations o where o.created_by = p_user_id for no key update;`. Measured after the fix: claim_first -> the member insert waits, then 23514 'membership ... is frozen'; member_first -> the claim waits, then answers rollout_hold with no wallet (0006's count sees 2). Add one two-order race case to check_binding (reuse _behind) and register a mutant that drops the guard's `for share` line (signup_binding, or the new race check).",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed by code reading and by experiment. Code: infrx.personal_org_binding_guard (0015:69-84) does a plain `exists` on infrx.credit_wallets under a READ COMMITTED statement snapshot and takes no lock; infrx.grant_signup_credit (0006:513-522) counts org_members and inserts the wallet without locking the organizations row; claim_signup_grant locks only profiles FOR KEY SHARE. The only locks the two paths share are FK KEY SHARE on organizations/profiles, which do not conflict with each other. No other trigger or lock on org_members, organizations or credit_wallets exists in 0001-0015 (grepped). Experiment (scratch script at /tmp/claude-1000/.../scratchpad/p1e.py, pointing tests/d/pgharness at my own container infrx-review-a1r2-verify-0-0:55534 on the pinned plain image, migrations applied via infrx.state.migrations.sql_for, fixtures via checks.seed_fixtures + checks_credit.seed_credit, race via the suite's own checks_signup._behind; container removed after): claim_first -> B's org_members insert did not wait (no 'waited'), rowcount 1; after A commits: members=2, wallet bound=1; checks_credit.attempt(credit_job(personal_org(v), wallet_of(v))) returned None (admission through the now-shared bound org accepted); deleting the extra member refused with 23514 'membership ... is frozen' (irreversible). member_first -> B's claim did not wait and answered 'granted'; members=2, wallet bound=1. The mechanism (snapshot read + no conflicting lock) is image-independent, so the reviewer's supabase-image result is credible without a second run. Severity: it violates the unconditional invariant stated in the 0015 header and 02, with a money consequence (a second member's keys spend the owner's 10,000 CREDIT) and an unrecoverable state under the guard; the window is narrow (platform role only, during the claim transaction) and the proposed fix is two lock lines in 0015, so it is cheap to close before merge.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "CONFIRMED by code and by experiment on my own container (infrx-review-a1r2-verify-0-1, port 55535, plain image, removed afterwards; script at /tmp/claude-1000/.../scratchpad/race.py using the A1 harness at head d8a3e84). Code: `infrx.personal_org_binding_guard` (0015:69-84) only does `exists (select 1 from infrx.credit_wallets ...)` with no lock, so an uncommitted wallet row is invisible to it; `grant_signup_credit` (0006:513-522) counts org_members and inserts the wallet without locking the organization row; the only locks either side takes are FK KEY SHARE on organizations/profiles, which do not conflict with each other. Measured (both orders): claim_first: A `claim_signup_grant(v)` -> granted, held open; B `insert org_members(personal_org(v), w, 'member')` rowcount 1, waited 0.004s, not blocked while A was open; after A commits: members=2, wallet bound to the org. member_first: A holds the member insert; B's claim answers `granted` in 0.014s, unblocked; members=2, wallet bound. In both: `checks_credit.attempt(credit_job(..., org, wallet))` -> None (admission through the now two-member bound org accepted), and `delete` of the extra member -> 23514 'membership ... is frozen' (state irreversible under the guard). This is a new defect, distinct from round-1 items; the header lines 18-19 and the guard comment (\"this holds for the platform role too\") state the invariant this violates. Caveat on reach: no product code path in apps/ writes org_members (grep finds only tests; 0001's signup trigger inserts the owner only), so exploitation needs a service-role membership write inside the claim transaction's window. Severity kept as blocking because the invariant is explicitly claimed for the platform role, the resulting state cannot be repaired through the guard, and the fix is two lock lines in 0015.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "RV2-2",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/a/A1-38aea7f.md",
+      "line": "148-150 (R-A1) ; 0015:252-259 (retire_individual loop)",
+      "claim_broken": "R-A1 says retirement 'renames each personal org the user alone owns'. The loop's actual scope is every organization the user CREATED and alone owns, and its created_by boundary has no killable test: a solo side org (created + owned, no wallet) is renamed 'retired' and suspended (P1b: ('retired', True)); an org the user solely owns but did not create is left alive with a retired sole owner (P1c: ('d', False)); a team whose only two members are both retired (concurrently or sequentially) stays alive with 2 retired members (P1d). Reviewer mutant rv2_retire_loop_ignores_created_by (`where o.created_by = p_user` -> `where true`) SURVIVED on both images.",
+      "evidence": "Probe P1a-P1d on plain and supabase (identical). RM-1's case (t owner, o member) is closed: P1a member-only creator -> ('a', False); check_retirement's `team` assertion kills a1_retirement_suspends_shared_orgs and reviewer rv2_only_other_owners_keep_the_org. The created_by side of the scope is the same 'documented, not widened' shape as RM-3 but without the documentation.",
+      "minimal_fix": "One R-A1/migration-comment line: 'every organization the user created and alone owns (not only the personal one); an organization they solely own but did not create is left as is'; optionally a P1b/P1c case in check_retirement (3 lines) so the boundary is killable.",
+      "lens": "money"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "a1_retirement_suspends_shared_orgs (round 2, by hand)",
+          "edit": "0015 retire_individual: delete the two `and not exists (... x.user_id <> p_user)` lines",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement: AssertionError: a shared organization the individual created was retired with them"
+        },
+        {
+          "name": "a1_claim_races_retirement (round 2, by hand)",
+          "edit": "0015:151 delete `perform 1 from public.profiles ... for key share;`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement_race: AssertionError: a claim racing a retirement: AssertionError: claim for a100000b-...-01 raised instead of answering: 23514 CREDIT wallet ... (R83 assertion-shaped)"
+        },
+        {
+          "name": "a1_campaign_counts_octets (round 2, by hand)",
+          "edit": "0015:145 `length(` -> `octet_length(`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_eligibility: AssertionError: claim for a1000001-...-09 raised instead of answering: 22023 invalid_request: campaign_version is at most 100 characters"
+        },
+        {
+          "name": "a1_usd_hold_summed_across_orgs (round 2, by hand)",
+          "edit": "0015:186-187 exists-per-org predicate -> cross-org sum of delta_usd <> 0",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_eligibility: AssertionError: +3 and -3 USD in two organizations are two nonzero balances (R72): ('granted', ...)"
+        },
+        {
+          "name": "a1_retirement_not_serialised (round 2, by hand)",
+          "edit": "0015:236 `for update;` -> `;`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement_race: AssertionError: two retirements of one individual: AssertionError: retire a100000b-...-02 raised: 23505 duplicate key value violates unique constraint \"ret..."
+        },
+        {
+          "name": "rv2_key_share_after_retired_check",
+          "edit": "0015: move the `for key share` perform to AFTER the retired-individuals check",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement_race: claim ... raised instead of answering: 23514 CREDIT wallet ... (the lock must precede the check)"
+        },
+        {
+          "name": "rv2_key_share_is_for_share",
+          "edit": "0015:151 `for key share` -> `for share`",
+          "result": "SURVIVED plain + supabase (equivalent for money: FOR SHARE also waits on FOR UPDATE; it would block concurrent non-key profile updates, which P2d-f show KEY SHARE does not; not a defect)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "rv2_only_other_owners_keep_the_org",
+          "edit": "0015:259 `x.user_id <> p_user` -> `x.user_id <> p_user and x.role = 'owner'`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement: a shared organization the individual created was retired with them"
+        },
+        {
+          "name": "rv2_retire_loop_ignores_created_by",
+          "edit": "0015:257 `where o.created_by = p_user` -> `where true`",
+          "result": "SURVIVED plain + supabase - finding RV2-2 (created_by boundary of the retirement loop untested)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "rv2_hold_scope_is_ownership",
+          "edit": "0015:187 R72 predicate `o.created_by = p_user_id` -> exists owner membership (the RM-3 alternative)",
+          "result": "KILLED plain + supabase (by the '2nd org' fixture, whose side org has no org_members row: created_by is what the suite pins)",
+          "killed_by": "signup_eligibility: USD in another organization the individual created (R72 scope): ('granted', ...)"
+        },
+        {
+          "name": "rv2_shared_org_count_ignored (0006, control)",
+          "edit": "0006:513 `if (select count(*) ...) > 1 then` -> `if false then`",
+          "result": "KILLED plain + supabase (sequential shared-org refusal is defended; the RACE around it is RV2-1)",
+          "killed_by": "signup_eligibility: shared personal org: ('granted', ...)"
+        },
+        {
+          "name": "rv2_fix_candidate (not a mutant: the RV2-1 fix applied to a copy of 0015)",
+          "edit": "guard: `perform 1 from public.organizations o where o.id = any(array[old.org_id,new.org_id]) for share;` before its exists check; claim: `perform 1 from public.organizations o where o.created_by = p_user_id for no key update;` before grant_signup_credit",
+          "result": "plain + supabase: claim_first -> member insert waits then 23514 frozen; member_first -> claim waits then rollout_hold, no wallet; check_eligibility/binding/retirement/retirement_race/claim_race(3 rounds) all pass",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-a1 archive d8a3e84 | tar -x -C /tmp/claude-1000/reconfirm-a1-2107408; patch tests/d/pgharness.py (PORT=55531, CONTAINER=infrx-review-a1r2-postgres[-supabase], lock /tmp/infrx-review-a1r2.lock); make api-env",
+          "exit": 0,
+          "tail": "make api-env completed, exit 0 (uv sync --frozen)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py (plain)",
+          "exit": 0,
+          "tail": "33 passed in 44.63s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k 'a1_ or well_formed' (plain)",
+          "exit": 0,
+          "tail": "32 passed, 194 deselected in 48.07s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py",
+          "exit": 0,
+          "tail": "33 passed in 47.68s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k 'a1_ or well_formed'",
+          "exit": 0,
+          "tail": "32 passed, 194 deselected in 61.37s (0:01:01)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_rv2probe.py (plain; reviewer probes P1a-e, P2a-g, P3, P4, P5a-c)",
+          "exit": 0,
+          "tail": "P1e claim_first: B waited=False finished_while_A_open=True got=1 -> members=2 wallet=fdaaf5a1-...; admission through the now-shared bound org -> None | P2a x5 retired | P2b x5 granted, later_claim=retired, ledger=1 | P2c x5 ['granted','replayed'] | P2d/e/f waited=False | P2g waited=True | P3 x5 same retired_at | P4 100x4-byte granted (400,100), 101 multibyte 22023 | P5a rollout_hold, P5b granted + statement rollout_hold True, P5c rollout_hold | 6 passed in 3.97s (first run: 1 failed on my wrong 'replayed' expectation, corrected to 'retired' per 0015:152 ordering and check_retirement:492)"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_rv2probe.py",
+          "exit": 0,
+          "tail": "identical outcomes to plain (P1e members=2 in both orders, admission accepted); 6 passed in 5.57s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_rv2mutants.py (plain; kill() on the 5 round-2 mutants + 6 reviewer mutants)",
+          "exit": 0,
+          "tail": "5/5 round-2 killed; rv2_key_share_after_retired_check killed; rv2_key_share_is_for_share survived; rv2_only_other_owners_keep_the_org killed; rv2_retire_loop_ignores_created_by survived; rv2_hold_scope_is_ownership killed; rv2_shared_org_count_ignored killed; 1 passed in 15.03s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_rv2mutants.py",
+          "exit": 0,
+          "tail": "same 11 outcomes as plain; 1 passed in 18.12s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_rv2fix.py (plain, then INFRX_D1_IMAGE=supabase): candidate fix on a copy of 0015 + NOLOCK check of the Limits claim",
+          "exit": 0,
+          "tail": "FIX claim_first: waited=True err=CheckViolation ... membership ... is frozen | FIX member_first: waited=True got=('rollout_hold', ...) wallet=False | all 5 A1 checks pass | NOLOCK retire-then-claim: waited=True err=AssertionError: claim ... raised instead of answering: 23514 ... frozen, ledger=0 | 2 passed in 4.97s (plain) / 9.48s (supabase)"
+        },
+        {
+          "cmd": "git rev-parse 8a26524:...0015 d8a3e84:...0015 7012e59:...0015; python: len(mm.MUTANTS), len(sm.MIGRATION_MUTANTS), len(sm.MUTANTS) and anchor counts",
+          "exit": 0,
+          "tail": "178698bef10421fd98ec06b8b302ac87e837207f x3 (matches the evidence's R84 line); D total 224 A1 migration 31 A1 code 15; every A1 migration mutant anchor appears exactly once"
+        },
+        {
+          "cmd": "docker ps -a | grep a1r2; rm -f /tmp/infrx-review-a1r2.lock; rm -rf /tmp/claude-1000/reconfirm-a1-2107408; git -C codex-a1 status --short | wc -l",
+          "exit": 0,
+          "tail": "a1r2 containers: 0; lock gone; scratch gone; codex-a1 status lines: 0"
+        }
+      ],
+      "fabrication_check": "Every number and outcome above is from commands I ran in this session on the d8a3e84 archive with the patched harness (port 55531, containers infrx-review-a1r2-postgres[-supabase]); logs were copied to my scratchpad before the scratch tree was removed. Round-1 closure verified item by item: RM-1 closed (team org kept; mutant killed both images; re-attacks P1a/P1c/P1d behave per the created_by + alone-owns scope), RM-2 closed (5x each order, both images: retired / granted-then-retired, never raises; claim x claim 5x -> one grant; KEY SHARE blocks neither a display-name nor an email update in either order, which is acceptable; retirement's FOR UPDATE does block them, which is a write to the same row), RM-3 documented (P5b: created_by-NULL org not held, its statement still says rollout_hold=true; grep confirms 0001:168 is the only organizations insert in migrations and no console insert), RM-4 closed (100 x 4-byte granted and stored as 400 octets / 100 chars; 101 multibyte 22023), RM-5 closed (+/-0.000001 across two created orgs held), SEC-R1 closed (5x concurrent retirements same retired_at, both images), SEC-R2 header line present, dated, names the task per R84 (R84 read from claude/backend-impl:08 line 242; it is not in the d8a3e84 tree's 08), SEC-R3 line present in request 8, SEC-R4 docstring present. Evidence claims checked: 33/32 counts match my runs; 0015 blob 178698be... matches; mutant counts 224/31/15 match; the Limits statement 'without the FOR UPDATE the claim case fails as well' is true (NOLOCK probe: the claim raises 23514 after waiting on set_suspension's org lock). Not verified: the evidence's full tests/d sweep (305 passed) - not rerun, not asked. RV2-1 is a new finding, not a re-litigation of a closed item; its fix was verified on a copy, never in any worktree. My own first probe run had a wrong expectation (replayed vs retired) which I corrected; the code was right.",
+      "cleanup": "Containers infrx-review-a1r2-postgres and -supabase were created and removed by the patched harness at each run's exit (docker ps -a shows 0 a1r2 containers; the other containers on the host belong to other lanes and were not touched). /tmp/infrx-review-a1r2.lock removed. Scratch /tmp/claude-1000/reconfirm-a1-2107408 removed (logs copied to the session scratchpad first). Port 55432 never used. No edits or commits in any worktree; codex-a1 `git status --short` is empty. No hosted project touched."
+    }
+  ]
+}

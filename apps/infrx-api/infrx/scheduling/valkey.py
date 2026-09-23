@@ -558,6 +558,14 @@ class ValkeyScheduler:
         """Pending plus in flight, as the fake reports it."""
         return int((await self.snapshot())["stats"]["items"])
 
+    async def members(self) -> dict[str, str]:
+        """Q3: every indexed candidate, pending or in flight, as `event_id -> job_id`.
+        One `HGETALL` of the entry table (field 6 of the packed entry is the job id), so
+        it is one instant of the index, bounded by the item cap."""
+        table = await self.client.hgetall(self._keys[0])
+        return {_text(event_id): _text(packed).split("\t")[5]
+                for event_id, packed in table.items()}
+
     async def stats(self) -> dict[str, object]:
         """Index depth, bytes and waiting age - never admission capacity."""
         return (await self.snapshot())["stats"]

@@ -35,8 +35,9 @@ TEST_FILE = "tests/contracts/v2/test_conformance_v2.py"
 RUNNER = v1runner.Runner(name="v2", targets=(TEST_FILE,))
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by))
 
 
 R = "contracts/v2/records.py"
@@ -259,7 +260,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "the pin records the card the catalog resolved, not a constant",
        P, "                         rate_card_version=rate_card.rate_card_version,",
        '                         rate_card_version="rc_marlin2b_2026_09_provisional",',
-       "credit_rate__a_rate_published_after_acceptance_does_not_move_the_job"),
+       "credit_rate__a_rate_published_after_acceptance_does_not_move_the_job",
+       # the admission's own validator refuses pins that disagree with the attached card
+       # (`records.py`, "not the pinned rate_card_version") - the invariant held
+       # structurally, raised as pydantic's ValidationError
+       dies_by=("ValidationError",)),
     _m("publishing_a_rate_does_nothing",
        "the case really does change the published rate before settling",
        FAKE, "        self.rate_cards[card.deployment_revision_id] = card", "        pass",

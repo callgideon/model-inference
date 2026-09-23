@@ -1,0 +1,230 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "RC2-1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rollback.sh",
+      "line": "48-51",
+      "claim_broken": "rollback.sh header: only `ENGINE=restart` (runbook R2) restarts the engine, so a plain `rollback.sh <backup>` (the one install.sh prints at its step 6) leaves it alone. No case checks the negative direction.",
+      "evidence": "Code is correct. ENGINE=restart appears only in 90-revert.sh:18, in 50-install.sh:22 (passed per command to install.sh, which never calls rollback.sh) and in rehearse.sh:437. Reviewer drill (Host harness, pilot install exit 4 on 8001/readyz, then plain rollback.sh): `PLAIN 0 ['systemctl stop infrx-worker marlin2b-gateway', ..., 'systemctl daemon-reload', 'systemctl restart marlin2b-gateway', 'curl ... 8001/health']`. No engine restart. Own mutant own_rollback_engine_always (`if [ \"${ENGINE:-}\" = restart ]; then` -> `if true; then`): SURVIVED `4 passed, 6 deselected` across the four rollback/R2 cases. The listed rollback_engine_restart_ignored kills only the opposite direction.",
+      "minimal_fix": "In test_ops_recover__rollback_restores_every_replaced_file (plain rollback.sh), assert `not [e for e in host.events if e.startswith('systemctl restart marlin2b-vllm')]`, and list a mutant `rollback_engine_always_restarted`.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rollback.sh",
+      "line": "54-55",
+      "claim_broken": "90-revert header and README R2: exit 4 also covers 'the restored gateway did not come up', and the message tells the operator to fix it and then run drain.sh resume. rollback.sh's own runtime-readiness `die ... 4` has no killing case. The gap predates round 2.",
+      "evidence": "Reviewer drill: engine restart succeeds, 8001/health stays 503. Result: `GW503 rc 4 stderr: the restored runtime is not ready; the edge stays as it was: fix it, then drain.sh resume 4`. Events were `systemctl daemon-reload, systemctl restart marlin2b-vllm, systemctl restart marlin2b-gateway`, with no caddy reload. The active site stayed Caddyfile.maintenance and the env file was the monolith's. Behaviour is correct. Own mutant own_rollback_runtime_gate_soft (`|| die \"the restored runtime is not ready` -> `|| echo ...`): SURVIVED `4 passed`. In the runbook this is behaviour-equivalent: 90-revert's drain.sh resume then fails its own wait_ready with exit 4 'the runtime is not ready; the edge stays in maintenance'. A plain rollback.sh would print 'rolled back' with exit 0 on an unready runtime.",
+      "minimal_fix": "Add the engine-up/gateway-503 subcase to test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it (behave curl_fails=[8001/health]; assert rc 4, 'the restored runtime is not ready' in stderr, maintenance active, no reload), and list the `|| echo` mutant.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-3",
+      "severity": "nonblocking",
+      "file": "infra/rollout/steps/50-install.sh",
+      "line": "13",
+      "claim_broken": "RB-7 and README step 8: MIGRATION_DIGEST must be 64 hex or exactly `nothing-pending`. The regex is right, but neither the length nor the anchors have a killing case.",
+      "evidence": "Bash drill of the regex: 64 lowercase hex ACCEPT; 64 uppercase, 63 hex, 65 hex, 'Nothing-pending', 'nothing-pendingx', 'nothing-pending\\nx' and 64 hex plus a newline are refused; 'nothing-pending' ACCEPT. The case tests unset, 'nothing-pendng', 'x' and 'A'*64 only. Own mutants: own_digest_length_loose (`{64}` -> `{63,65}`) SURVIVED `1 passed`; own_digest_unanchored (drop `^`/`$`) SURVIVED `1 passed`. The listed migration_digest_any_string is killed. RB-7 was nonblocking and is an operator statement, not a check.",
+      "minimal_fix": "Add 'a'*63, 'a'*65 and 'nothing-pending-x' to the refused statements in test_backend_deploy__the_cutover_keeps_the_engines_concurrency.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-4",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/i/I2B-3c48066.md",
+      "line": "Round 2 table, row C-S6",
+      "claim_broken": "The evidence row says C-S6 (no fixed, pre-plantable /tmp body path) is 'covered by C-S4's empty-TMPDIR assertion' with mutant hdr_file_kept_after_exit. That case does not kill the regression C-S6 fixed.",
+      "evidence": "Own mutant own_verify_body_fixed_path (`out=$(mktemp)` -> `out=/tmp/infrx-verify.body`, the pre-fix path) SURVIVED `1 passed, 5 deselected`. The EXIT trap still removes $out, and a path outside TMPDIR never shows up in the case's `scratch.iterdir() == []`. The script itself is correct (mktemp plus trap on both files).",
+      "minimal_fix": "Have FAKE_CURL log the `-o` target and assert every one lies under the case's TMPDIR; list the mutant. Otherwise correct the evidence row to say C-S6 has no killing case.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rollback.sh",
+      "line": "49",
+      "claim_broken": "Round-2 evidence: 'ENGINE_READY_S, default 900' for R2's engine wait. The default is unpinned: every Host case sets ENGINE_READY_S=1.",
+      "evidence": "Own mutant own_rollback_engine_ready_default_1 (`${ENGINE_READY_S:-900}` -> `${ENGINE_READY_S:-1}`) SURVIVED `4 passed`. A regression fails closed: R2 exits 4 early, the edge stays in maintenance and the message names drain.sh resume. Interaction check: the unit is Type=simple, so TimeoutStartSec=900 bounds only ExecStartPre. `systemctl restart` returns once the unit forks, and wait_http's ENGINE_READY_S is the real budget. The worst case (stop 60 + engine 900 + gateway 120 + resume 120 s) fits ssm.sh's default executionTimeout of 3600.",
+      "minimal_fix": "Optional: a static assertion that rollback.sh and install.sh both read `${ENGINE_READY_S:-900}`, or accept the gap and say so in the Limits.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "51-56",
+      "claim_broken": "RB-5 scan: the error message names 'VACUUM, ALTER SYSTEM or CONCURRENTLY'. REINDEX CONCURRENTLY is refused, but no case pins it. The documented list of misses leaves out two cases.",
+      "evidence": "Drill over COMMENTS then OUTSIDE_TRANSACTION: comment 'vacuum' not flagged; block-comment vacuum not flagged; inline comment 'concurrently' not flagged; string literal 'create index concurrently' not flagged (including one at a line start after a quote); real CIC flagged; REINDEX INDEX CONCURRENTLY flagged; DROP INDEX CONCURRENTLY flagged; 'ALTER\\nSYSTEM SET' flagged (`\\s+` spans the newline, so it is not a miss); a multi-line 'create index\\n concurrently' not flagged (documented); DETACH PARTITION and CREATE DATABASE not flagged (documented). Two misses are undocumented: 'select 1; vacuum t;' on one line, and a string literal holding '--' or '/*' that hides a following line-start statement (`select '/*';\\nvacuum t;\\nselect '*/';`). Both fall back to apply's exit 3, rolled back, so this is fail-closed. Own mutant own_scan_no_reindex (`(create|drop|reindex)` -> `(create|drop)`) SURVIVED `1 passed`. The mutants own_comments_line_only and own_scan_no_alter_system were KILLED.",
+      "minimal_fix": "Add a `0004_reidx.sql: reindex index concurrently i;` refusal to the history case and list the mutant. Add 'a second statement on the same line' and 'comment markers inside a literal' to the comment's list of misses.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RC2-7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_scripts.py",
+      "line": "477-480",
+      "claim_broken": "R83 shape: the RB-1 case's order check is `events.index(a) < events.index(b) < events.index(c)`. When an event is missing, list.index raises ValueError instead of failing an assertion.",
+      "evidence": "Own mutant own_engine_wait_dropped (`&& wait_http http://127.0.0.1:8000/health` -> `&& true ...`): the case fails, but the runner reports `broken_runner undeclared exception deaths ['ValueError@test_scripts.py']: 1 failed`. So the defect is detected, but not as a declared kill. own_rollback_engine_after_gateway gives the same result. A true reorder (own_gateway_before_engine) is KILLED cleanly.",
+      "minimal_fix": "Assert membership first, e.g. `assert 'curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8000/health' in events`, before comparing indices. Or list a `rollback_engine_wait_dropped` mutant with `dies_by=('ValueError',)`.",
+      "lens": "rollout"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "rollout",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "own_rollback_engine_always",
+          "edit": "rollback.sh: `if [ \"${ENGINE:-}\" = restart ]; then` -> `if true; then`",
+          "result": "SURVIVED (4 passed, 6 deselected)",
+          "killed_by": "none; the reviewer's plain-rollback drill kills it (RC2-1)"
+        },
+        {
+          "name": "own_rollback_runtime_gate_soft",
+          "edit": "rollback.sh: `|| die \"the restored runtime is not ready` -> `|| echo ...`",
+          "result": "SURVIVED (4 passed); behaviour-equivalent in the runbook because drain.sh resume still exits 4 (RC2-2)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_rollback_engine_ready_default_1",
+          "edit": "rollback.sh: `${ENGINE_READY_S:-900}` -> `${ENGINE_READY_S:-1}`",
+          "result": "SURVIVED (4 passed) (RC2-5)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_rollback_engine_after_gateway",
+          "edit": "rollback.sh: delete `systemctl restart $units`",
+          "result": "detected: broken_runner, ValueError death (2 failed)",
+          "killed_by": "test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it (by exception)"
+        },
+        {
+          "name": "own_gateway_before_engine",
+          "edit": "rollback.sh: insert `systemctl restart marlin2b-gateway` after daemon-reload, before the ENGINE block",
+          "result": "KILLED (1 failed, 1 passed)",
+          "killed_by": "test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it"
+        },
+        {
+          "name": "own_engine_wait_dropped",
+          "edit": "rollback.sh: `&& wait_http http://127.0.0.1:8000/health` -> `&& true http://...`",
+          "result": "detected: broken_runner, ValueError death (1 failed) (RC2-7)",
+          "killed_by": "test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it (by exception)"
+        },
+        {
+          "name": "own_revert_no_set_e_engine_die",
+          "edit": "90-revert.sh: `ENGINE=restart \"$d/rollback.sh\" \"$BACKUP\"` -> `... || true`",
+          "result": "KILLED (1 failed, 3 passed)",
+          "killed_by": "test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it"
+        },
+        {
+          "name": "own_positive_int_match",
+          "edit": "preflight.py: `re.fullmatch(r\"[1-9][0-9]*\", value)` -> `re.match(...)`",
+          "result": "SURVIVED (1 passed); equivalent: under this mutant the in-image probe still refuses '8abc', '1e3' and '32x' (exit 2, 'ENGINE_MAX_NUM_SEQS is not a valid int', nothing written)",
+          "killed_by": "none (defence in depth covers it)"
+        },
+        {
+          "name": "own_digest_length_loose",
+          "edit": "50-install.sh: `[0-9a-f]{64}` -> `[0-9a-f]{63,65}`",
+          "result": "SURVIVED (1 passed) (RC2-3)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_digest_unanchored",
+          "edit": "50-install.sh: drop `^` and `$` from the MIGRATION_DIGEST regex",
+          "result": "SURVIVED (1 passed) (RC2-3)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_comments_line_only",
+          "edit": "migrate.py: COMMENTS drops the `/\\*.*?\\*/` alternative",
+          "result": "KILLED (1 failed)",
+          "killed_by": "test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain"
+        },
+        {
+          "name": "own_scan_no_reindex",
+          "edit": "migrate.py: `(create|drop|reindex)` -> `(create|drop)`",
+          "result": "SURVIVED (1 passed) (RC2-6)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_scan_no_alter_system",
+          "edit": "migrate.py: drop `alter\\s+system|`",
+          "result": "KILLED (1 failed)",
+          "killed_by": "test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain"
+        },
+        {
+          "name": "own_verify_body_fixed_path",
+          "edit": "verify-external.sh: `out=$(mktemp)` -> `out=/tmp/infrx-verify.body`",
+          "result": "SURVIVED (1 passed) (RC2-4)",
+          "killed_by": "none"
+        },
+        {
+          "name": "own_refused_install_keeps_backup_if_2",
+          "edit": "install.sh: refusal `rm -rf \"$backup\"` -> `rm -rf \"$backup/files.tar\"`",
+          "result": "KILLED (1 failed)",
+          "killed_by": "test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host"
+        },
+        {
+          "name": "implementer's new mutants (positive_int_by_isdigit, validate_after_put, refused_install_rm_all_backups, rollback_engine_restart_ignored, rollback_engine_failure_ignored, comments_scanned, scan_spans_lines, hdr_file_world_readable, hdr_file_kept_after_exit, readme_inline_key_literal, step_inline_key_literal, revert_engine_not_restarted, migration_digest_any_string, re-anchored revert_runtime_before_tree / revert_leaves_edge_in_maintenance / outside_transaction_accepted)",
+          "edit": "as listed in tests/i/mutants.py at d620f14; each target case was read",
+          "result": "all KILLED in the INFRX_MUTANTS=all run (179 passed). Case shape: RB-1 case asserts exit 4, the 'fix the engine, then drain.sh resume' text, maintenance active, no gateway restart and no reload, then the successful order; RB-4 asserts exit 4, no etc/caddy, no reload or run -d; C-S3 keeps an earlier backup; C-S4 asserts 0o600 and an empty TMPDIR",
+          "killed_by": "the cases named in mutants.py"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-i2b archive d620f14 | tar -x -C /tmp/claude-1000/reconfirm-i2b2-3260126 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "cd apps/infrx-api && timeout 600 uv run --frozen pytest -q tests/i",
+          "exit": 0,
+          "tail": "142 passed in 145.36s (0:02:25)  [= the evidence's 99 without test_mutants.py, plus the default mutant subset and the list checks]"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/test_mutants.py (detached nohup, log mutants.log)",
+          "exit": 0,
+          "tail": "179 passed in 408.62s (0:06:48)"
+        },
+        {
+          "cmd": "REHEARSAL_NS=infrx-reconfirm-i2b2 bash <scratch git repo of d620f14>/apps/infrx-api/deploy/rehearse.sh <scratch>/rehearse-work (detached; the first attempt on the non-git archive died with 'fatal: not a git repository' before any container, teardown 'nothing infrx-reconfirm-i2b2-* left')",
+          "exit": 0,
+          "tail": "PASS 90-revert's rollback restarts the engine, healthy, before the gateway (restart marlin2b-vllm restart marlin2b-gateway ) ... PASS a migration with its own COMMIT stops the plan: exit 4 (got 4), history still 0001..0009 / REHEARSAL PASSED / teardown: nothing infrx-reconfirm-i2b2-* left  (PASS 44, FAIL 0; runtime image sha256:846ce5dd..., same content id as the evidence)"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -s tests/i/test_zz_reconfirm.py (reviewer drills, scratch copy only)",
+          "exit": 0,
+          "tail": "GW503 rc 4 stderr: the restored runtime is not ready; the edge stays as it was: fix it, then drain.sh resume 4 | DOUBLE 0 0 / DOUBLE 1 0 'reverted to before ...; engine and runtime restored and ready; the edge serves' | PLAIN 0 (no restart marlin2b-vllm) | PI ENGINE_MAX_NUM_SEQS and WORKER_CONCURRENCY '007' '\u0663' '\u00b2' '1e3' ' 8' '8\\n' '0' '' '+8' '8 ' -> 2, env file unchanged, systemctl [] | 32 and 10 accepted | 5 passed in 11.31s"
+        },
+        {
+          "cmd": "bash drill: [[ $MIGRATION_DIGEST =~ ^([0-9a-f]{64}|nothing-pending)$ ]] over 9 values",
+          "exit": 0,
+          "tail": "ACCEPT 64 lowercase hex, nothing-pending; refuse uppercase 64, 63, 65, Nothing-pending, nothing-pendingx, nothing-pending\\nx, 64 hex plus newline"
+        },
+        {
+          "cmd": "python drill: migrate.OUTSIDE_TRANSACTION.search(migrate.COMMENTS.sub('', s)) over 16 inputs",
+          "exit": 0,
+          "tail": "comment/literal forms flagged=False; real CIC, REINDEX CONC, DROP INDEX CONC, ALTER\\nSYSTEM, VACUUM flagged=True; multi-line CIC, two-per-line, literal-hidden, CREATE DATABASE, DETACH PARTITION flagged=False"
+        },
+        {
+          "cmd": ".venv/bin/python own_mutants.py (13 mutants via tests.i.mutants.run_mutant, per-mutant copies) + 2 more (own_gateway_before_engine, own_engine_wait_dropped)",
+          "exit": 0,
+          "tail": "killed: own_comments_line_only, own_scan_no_alter_system, own_revert_no_set_e_engine_die, own_refused_install_keeps_backup_if_2, own_gateway_before_engine; survived: own_rollback_engine_always, own_rollback_runtime_gate_soft, own_rollback_engine_ready_default_1, own_positive_int_match (equivalent), own_digest_length_loose, own_digest_unanchored, own_scan_no_reindex, own_verify_body_fixed_path; broken_runner (ValueError death): own_rollback_engine_after_gateway, own_engine_wait_dropped"
+        },
+        {
+          "cmd": "docker rmi infrx-reconfirm-i2b2-runtime:<release>; rm -rf /tmp/claude-1000/reconfirm-i2b2-3260126; docker ps -a --filter label=ai.infrx.rehearsal=infrx-reconfirm-i2b2 -q | wc -l; docker volume ls -q | grep -c reconfirm; git -C codex-i2b status --porcelain | wc -l",
+          "exit": 0,
+          "tail": "Untagged ... Deleted: sha256:846ce5dd...; scratch gone; 0 containers, 0 volumes, 0 images; codex-i2b and codex-w3 serve.sh clean"
+        }
+      ],
+      "fabrication_check": "Every result above was observed in this session. The implementer's figures reproduce: 99 tests/i without mutants (my 142 adds the default subset); 172 mutants, all killed (179 passed); rehearsal 44 PASS / 0 FAIL; the same runtime image content id sha256:846ce5dd. One evidence claim is overstated: C-S6 is 'covered by C-S4's empty-TMPDIR assertion', but the pre-fix fixed-path mutant survives it (RC2-4).\n\nConfirmation items closed:\n- RB-1: the engine is restarted and health-waited before the gateway (Host case, own reorder mutant killed, rehearsal step 7 order).\n- Engine up but gateway stays 503: exit 4 with the documented guidance, edge in maintenance.\n- Engine restart fails: exit 4 naming drain.sh resume, no gateway restart, no reload.\n- The M1 case passes, and a double revert passes.\n- ENGINE=restart is set only by 90-revert for rollback.sh.\n- RB-2: all listed values are refused before any write; 32 and 10 are accepted.\n- RB-4: an invalid maintenance site gives exit 4 with the edge untouched.\n- RB-7: the grammar is correct.\n- C-S3, C-S4 and C-S6: the code is correct.\n\nThe monolith's engine-dependent /health is modelled by the stub, not observed. I did not re-verify the exit-3 fallback for scan misses against Postgres; I relied on the round-1 review and on rehearsal step 8's exit-3 rollback. Nothing was run against AWS, SSM, the pilot box or a hosted project, and no secret was printed.",
+      "cleanup": "All local:\n- Removed the scratch tree /tmp/claude-1000/reconfirm-i2b2-3260126 (archive, venv, the git scratch copy for the rehearsal, logs, drill file).\n- The rehearsal's own teardown reported 'nothing infrx-reconfirm-i2b2-* left'. Afterwards 0 labelled containers and 0 reconfirm volumes remained.\n- Removed my local image tag infrx-reconfirm-i2b2-runtime:<release>; it was the only reference, so the image was deleted.\n- No edits or commits in any worktree: codex-i2b and codex-w3's serve.sh have empty porcelain.\n- Other containers were never touched (infrx-d1/d2/d3 and gideon-* were left running)."
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "title": "Marlin endpoint - operations",
+  "description": "I3B.a dashboard spec as data: one row per question an operator asks during an incident. Every series is a family of infrx/observe/metrics.py FAMILIES; 'by' names the labels a panel splits on (all closed vocabularies, tenants hashed). 'rate' panels are per-second increases over the dashboard window; tool-neutral on purpose (Grafana, CloudWatch or the evaluator's JSON can render it). No panel shows request content, keys or raw tenant ids - none of those exist in the metrics.",
+  "rows": [
+    {
+      "title": "Is it up?",
+      "panels": [
+        {"title": "Components", "metric": "infrx_component_up", "by": ["component"], "unit": "bool"},
+        {"title": "GPU answering", "metric": "infrx_gpu_up", "unit": "bool"},
+        {"title": "Deployed revision", "metric": "infrx_build_info", "by": ["revision", "process"], "unit": "info"}
+      ]
+    },
+    {
+      "title": "Where does the time go? (Server-Timing phases)",
+      "panels": [
+        {"title": "Phase latency p50/p95", "metric": "infrx_phase_seconds", "by": ["phase"], "quantiles": [0.5, 0.95], "unit": "s"},
+        {"title": "Phase throughput", "metric": "infrx_phase_seconds_count", "by": ["phase"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
+      "title": "Is it saturated?",
+      "panels": [
+        {"title": "In flight vs limit", "metric": "infrx_inflight_requests", "compare": "infrx_inflight_limit", "unit": "requests"},
+        {"title": "Index depth by kind", "metric": "infrx_queue_depth", "by": ["kind"], "unit": "candidates"},
+        {"title": "Index items vs cap", "metric": "infrx_queue_items", "compare": "infrx_queue_items_limit", "unit": "candidates"},
+        {"title": "Oldest waiting candidate", "metric": "infrx_queue_oldest_wait_seconds", "unit": "s"},
+        {"title": "Refusals by code", "metric": "infrx_requests_rejected_total", "by": ["code"], "rate": true, "unit": "1/s"},
+        {"title": "Refusals by tenant (hashed)", "metric": "infrx_requests_rejected_total", "by": ["tenant"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
+      "title": "What happened to accepted jobs?",
+      "panels": [
+        {"title": "Accepted by mode", "metric": "infrx_jobs_accepted_total", "by": ["mode"], "rate": true, "unit": "1/s"},
+        {"title": "Terminal by state and cause", "metric": "infrx_jobs_terminal_total", "by": ["state", "cause"], "rate": true, "unit": "1/s"},
+        {"title": "Settlements", "metric": "infrx_settlements_total", "by": ["settlement"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
+      "title": "Did anything die?",
+      "panels": [
+        {"title": "Leases lost", "metric": "infrx_lease_lost_total", "by": ["kind", "detected_by"], "rate": true, "unit": "1/s"},
+        {"title": "Reaper actions", "metric": "infrx_recovery_actions_total", "by": ["action"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
+      "title": "Does the money add up?",
+      "panels": [
+        {"title": "Reconciliation drift rows", "metric": "infrx_reconciliation_drift", "unit": "rows"},
+        {"title": "Last clean reconciliation", "metric": "infrx_reconciliation_last_success_timestamp_seconds", "unit": "unixtime"},
+        {"title": "Reconciliation passes", "metric": "infrx_reconciliation_runs_total", "by": ["result"], "rate": true, "unit": "1/s"},
+        {"title": "Unknown-usage holds", "metric": "infrx_holds_unknown", "unit": "holds"},
+        {"title": "Unsettleable jobs", "metric": "infrx_unsettleable_jobs", "unit": "jobs"}
+      ]
+    },
+    {
+      "title": "Host",
+      "panels": [
+        {"title": "Disk free by mount", "metric": "infrx_disk_free_ratio", "by": ["mount"], "unit": "ratio"},
+        {"title": "Disk bytes", "metric": "infrx_disk_bytes", "by": ["mount", "state"], "unit": "bytes"},
+        {"title": "Host memory", "metric": "infrx_host_memory_bytes", "by": ["state"], "unit": "bytes"},
+        {"title": "Process resident memory", "metric": "infrx_process_resident_bytes", "by": ["process"], "unit": "bytes"},
+        {"title": "Load", "metric": "infrx_host_load1", "compare": "infrx_host_cpus", "unit": "load"},
+        {"title": "GPU memory", "metric": "infrx_gpu_memory_bytes", "by": ["gpu", "state"], "unit": "bytes"},
+        {"title": "GPU utilization", "metric": "infrx_gpu_utilization_ratio", "by": ["gpu"], "unit": "ratio"},
+        {"title": "Sanitizer refusals", "metric": "infrx_metrics_label_rejected_total", "by": ["family"], "rate": true, "unit": "1/s"}
+      ]
+    }
+  ]
+}

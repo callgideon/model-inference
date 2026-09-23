@@ -70,6 +70,10 @@ MAX_DEPTH = 8                  # moov/trak/mdia/minf/stbl/stsd is six; eight is 
 MAX_ELEMENTS = 4_096           # headers walked per probe, whatever the file declares
 MAX_DIMENSION = 8_192          # 8K is 7680 wide; 0 and 65535 are declarations, not frames
 BOX_HEADER = 8
+# M4: the most of a download's head `probe_header` copies and probes. A `moov` ending past it
+# is left to the whole-object probe: copied and walked at every look, a complete 60 MiB one
+# held the event loop 43.8 ms per look (M4 review S1, meas.); 8 MiB is ~3 ms.
+HEADER_PROBE_MAX = 8 << 20
 # Matroska stores a duration in timecode-scale units; the default scale is 1 ms.
 DEFAULT_TIMECODE_SCALE = 1_000_000
 NANOSECONDS = 1_000_000_000
@@ -334,6 +338,40 @@ def probe_matroska(data: bytes) -> Probed:
     return Probed(mime=WEBM_MIME, duration_s=duration * scale / NANOSECONDS,
                   width=video["width"], height=video["height"],
                   codec=MATROSKA_CODECS[video["codec"]])
+
+
+# --- M4: the header of a download still in progress -----------------------------
+def probe_header(data) -> Probed | None:
+    """What a header-first ISO file says before its media has arrived, or None.
+
+    The probe of every top-level box up to the end of the first `moov`. None when there is
+    nothing to read yet - not ISO base media, the `moov` still arriving, or the media first
+    (the `moov` is then at the end, and only the whole object says anything). Never a
+    refusal of its own: a prefix that does not probe is left to `probe` on the whole object.
+    A `Probed` from here is read from bytes the whole-object probe reads the same way, so a
+    profile refusal based on it is one the complete download would also get - it only comes
+    sooner. `data` may be the fetcher's growing `bytearray`; nothing here keeps it.
+    """
+    if data[4:8] != b"ftyp":
+        return None
+    at = 0
+    try:
+        for _ in range(MAX_ELEMENTS):
+            size, kind = _u(data, at, 4), data[at + 4:at + 8]
+            if size == 1:
+                size = _u(data, at + 8, 8)
+            if kind == b"moov":
+                # Still arriving is "nothing yet", found without copying the prefix: a moov
+                # declared tens of MiB long would otherwise be copied and walked every look.
+                if at + size > HEADER_PROBE_MAX:
+                    return None
+                return probe(data[:at + size]) if at + size <= len(data) else None
+            if size < BOX_HEADER:          # "to the end of the file": no header after it
+                return None
+            at += size
+    except errors.UnsupportedMedia:        # truncated, or a moov that does not probe (yet)
+        return None
+    return None
 
 
 # --- the entry point ---------------------------------------------------------

@@ -17,14 +17,18 @@ import dataclasses
 import pathlib
 import shutil
 import tempfile
+from unittest import mock
 
 import httpx
 from fastapi import FastAPI
 
 from infrx.config import Settings, validate_runtime
+from infrx.contracts.conformance.v2_fakes import fake_v2_harness
+from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.limits import DEFAULTS
+from infrx.gateway import app as composition
 from infrx.gateway.app import Runtime, create_app
-from infrx.gateway.routes import ingress
+from infrx.gateway.routes import health, ingress, models
 
 CHAT_PATH = ingress.CHAT_PATH
 HEALTH_PATH = ingress.HEALTH_PATH
@@ -32,19 +36,22 @@ READY_PATH = ingress.READY_PATH
 
 ORG = "1a1a1a1a-0000-4000-8000-000000000001"
 KEY = "3c3c3c3c-0000-4000-8000-000000000003"
-ROW = {"id": KEY, "org_id": ORG, "revoked_at": None}
+USER = "2b2b2b2b-0000-4000-8000-000000000002"
+# A consumer key as 0009 stores it: the audience and the individual it belongs to.
+# PostgREST answers every selected column, null or not, so the stand-in rows carry all of
+# `auth.context.KEY_COLUMNS` (a row missing one is a narrower cached read: a miss).
+ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "consumer", "user_id": USER,
+       "created_by": USER, "provider_org_id": None, "endpoint_id": None}
 REQUEST_ID = "4d4d4d4d-0000-4000-8000-000000000004"
 TOKEN = "sk-infrx-g1-test"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
 # A raw `content=` post carries no content type of its own and the ingress requires
 # one; `json=` sets it.
 RAW = {**AUTH, "content-type": "application/json"}
-# The public model id a caller names, and the revision the store prices. Deliberately
-# different strings: copying one into the other is the defect the served-model map
-# exists to prevent, and the revision is the one the contracts fake prices.
+# The public alias a caller names, and its R62 pin (the form the v1 contracts fake
+# prices). Both resolve through the catalog; the ingress passes on whichever was asked.
 PUBLIC_MODEL = "nemostation/marlin-2b"
 MODEL_REVISION = "nemostation/marlin-2b@2026-09-01"
-SERVED_MODELS = {PUBLIC_MODEL: MODEL_REVISION}
 BODY = {"model": PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
 # Per run, and removed when the process exits: a bare `mkdtemp` left one directory
 # behind per run *and per mutant subprocess* - 345 of them before this line. The legacy
@@ -87,19 +94,56 @@ def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase
                     **{k: v for k, v in overrides.items() if k not in PILOT_FIELDS})
 
 
+# The router list G2's cutover produces: the metered ingress in place of legacy `chat`.
+CUTOVER = (health, models, ingress)
+
+
+def as_cutover():
+    """`app.ROUTERS` as the cutover leaves it, for the length of a `with`. `pilot` refuses
+    to validate while the legacy chat route is composed (G1R / E3B dr17), and these apps
+    are the cutover's, so they are validated as the cutover will be."""
+    return mock.patch.object(composition, "ROUTERS", CUTOVER)
+
+
 def runtime(config=None, *, sb=None, clock=None, seen=None):
     rt = Runtime(config if config is not None else settings(), client=upstream(),
                  sb=sb if sb is not None else supabase(seen=seen),
                  clock=clock if clock is not None else (lambda: 1_790_000_000.0))
-    rt.mode = validate_runtime(rt.settings)
+    with as_cutover():
+        rt.mode = validate_runtime(rt.settings)
     return rt
 
 
+IDS = v2fix.IDS
+DEV_MODEL = v2fix.DEV_REQUESTED_MODEL
+# A provider dev key and an operator key as 0009 stores them.
+PROVIDER_ROW = {"id": IDS.provider_dev_key, "org_id": IDS.provider_org, "revoked_at": None,
+                "audience": "provider_dev", "user_id": None, "created_by": IDS.provider_member,
+                "provider_org_id": IDS.provider_org, "endpoint_id": IDS.dev_endpoint}
+OPERATOR_ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "operator",
+                "user_id": None, "created_by": USER, "provider_org_id": None, "endpoint_id": None}
+
+
+def preview_card():
+    """An approved internal card for the private dev deployment (the fixture leaves it
+    unpriced on purpose: an operator-funded preview still needs one)."""
+    return v2fix.BUILDERS["rate_card_marlin.json"]().model_copy(update={
+        "deployment_revision_id": IDS.dev_deployment, "rate_card_version": "rc_internal_preview"})
+
+
+def catalog():
+    """The operator-seeded catalog (the F2P fixtures D1R seeds verbatim), fresh per call,
+    with the bare public alias listed beside its R62 pin as D1R's resolver reads both."""
+    directory = fake_v2_harness().catalog
+    directory.move_alias(PUBLIC_MODEL, directory.aliases[MODEL_REVISION])
+    return directory
+
+
 def deps(**kw):
-    """`IngressDeps` with both startup probes answering and the served model mapped,
-    unless overridden."""
+    """`IngressDeps` with both startup probes answering and the seeded catalog, unless
+    overridden."""
     kw.setdefault("checks", {"price_source": lambda: True, "journal": lambda: True})
-    kw.setdefault("served_models", SERVED_MODELS)
+    kw.setdefault("catalog", catalog())
     return ingress.IngressDeps(**kw)
 
 

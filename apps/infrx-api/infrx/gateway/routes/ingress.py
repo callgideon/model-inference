@@ -2,8 +2,8 @@
 
 What this module owns is the part of a request that happens before any durable
 state exists: mint the identity, bound the body, authenticate the tenant, validate
-the shape, and hand a `NormalizedRequest` plus an `AuthContext` to whatever accepts
-it. It never touches money, capacity or the queue - `JobStore.admit` does all
+the shape, resolve the model for the credential's audience, and hand a
+`NormalizedRequest` plus an `AuthContextV2` to whatever accepts it. It never touches money, capacity or the queue - `JobStore.admit` does all
 three in one transaction, and G never duplicates settlement in a route.
 
 Three seams, all on one injected object (`IngressDeps`) so the coordinator's
@@ -19,6 +19,9 @@ integration request is a single wiring change rather than four:
   probe.
 * `consent_for` / `entitlement_version` - the trace policy and entitlement version
   sources; both default to the fail-safe answer (`off`, version 0).
+* `catalog` - G1R: the trusted `CatalogDirectory` a requested model resolves through
+  for the credential's audience. Required: there is no default catalog, because an
+  ingress without one could only guess what a model name means.
 
 Cutover (the integration request): the coordinator replaces `chat` with this
 module in `app.ROUTERS` and flips `config.validate_runtime`'s unset branch from
@@ -68,7 +71,7 @@ class IngressDeps:
     checks: dict[str, Callable[[], bool]] = field(default_factory=dict)
     consent_for: Callable | None = None
     entitlement_version: Callable[[str], int] | None = None
-    served_models: dict[str, str] | None = None
+    catalog: object | None = None               # contracts.v2.ports.CatalogDirectory
     # One per process, shared by every request: the bound is on the process's loop.
     large_bodies: "intake.LargeBodies | None" = None
     new_request_id: Callable[[], str] = ids.new_request_id
@@ -108,15 +111,12 @@ class Ingress:
         # Built before the routes exist: in `pilot` a shared legacy key or a missing
         # identity source raises here (r1 R51), so the app never serves one request.
         self.auth = AuthResolver(rt, entitlement_version=self.deps.entitlement_version)
-        self.validator = Validator(rt, consent_for=self.deps.consent_for,
-                                   served_models=self.deps.served_models)
+        if self.deps.catalog is None:
+            raise RuntimeMisconfigured(rt.mode, detail="the ingress needs a model catalog "
+                                                       "(IngressDeps.catalog)")
+        self.validator = Validator(rt, catalog=self.deps.catalog,
+                                   consent_for=self.deps.consent_for)
         self.slots = self.deps.large_bodies or intake.LargeBodies()
-        # An empty map used to copy the public id through as the revision, i.e. the
-        # defect the map exists to prevent, reintroduced by omission.
-        default = rt.settings.model_id
-        if default not in self.validator.served_models:
-            raise RuntimeMisconfigured(rt.mode,
-                                       detail=f"MODEL_ID is not in the served-model map")
         self.startup_state = assert_startup(rt, self.deps)
 
     async def validated(self, request: Request, request_id: str):
@@ -143,7 +143,8 @@ class Ingress:
             text = intake.decode_utf8(raw)
             intake.check_structure(text, MAX_OPENERS, MAX_SEPARATORS)
             body = intake.parse_object(text)
-            normalized = self.validator.normalize(body, auth, request_id, request.headers)
+            normalized = await self.validator.normalize(body, auth, request_id,
+                                                        request.headers)
             idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
             return auth, normalized, idem
         finally:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import shutil
 import sys
 
 from ..contracts import mutants as shared
@@ -32,6 +33,7 @@ V = "gateway/routes/validate.py"
 N = "gateway/routes/ingress.py"
 A = "auth/context.py"
 K = "auth/keys.py"                      # F1's caches: G owns the file, and the bounds
+C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential's audience
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -143,10 +145,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("seed_unranged", "seed is 0..2**63-1",
        V, "        if seed is not None and not 0 <= seed <= MAX_SEED:", "        if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
-    _m("model_copied_into_the_revision", "a public model id is mapped, never copied",
-       V, "        revision = self.served_models.get(model)",
-       "        revision = self.served_models.get(model, model)",
-       "test_f_base__an_unserved_model_is_refused_without_naming_what_is_served", dies_by=("KeyError",)),
+    _m("unknown_model_resolves_the_default", "a name resolves itself, never a fallback",
+       V, "        resolved = await resolve(self.catalog, auth, model)",
+       "        resolved = await resolve(self.catalog, auth, self.rt.settings.model_id)",
+       "test_f_base__an_unserved_model_is_refused_without_naming_what_is_served",
+       "test_split_contract__the_operator_seeded_catalog_serves_without_lab",
+       dies_by=("KeyError",)),
     _m("model_length_unbounded", "a model name is bounded",
        V, "        if len(model) > MAX_MODEL_CHARS:", "        if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code",
@@ -193,15 +197,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_dur_rls__a_miss_expires_on_its_own_shorter_ttl",
        "test_dur_rls__a_revocation_takes_effect_when_the_cache_expires"),
     _m("key_id_not_passed_to_the_store", "the key the store rechecks is the caller's key",
-       A, "            return AuthContext(org_id=org_id, key_id=key_id, principal=key_id, role=API_KEY_ROLE,",
-       "            return AuthContext(org_id=org_id, key_id=org_id, principal=key_id, role=API_KEY_ROLE,",
+       A, "        return AuthContextV2(audience=audience, org_id=org_id, key_id=key_id, principal=key_id,",
+       "        return AuthContextV2(audience=audience, org_id=org_id, key_id=org_id, principal=key_id,",
        "test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass",
-       "test_dur_rls__a_known_key_becomes_an_auth_context"),
+       "test_dur_rls__a_known_key_becomes_an_auth_context",
+       "test_api_auth__a_provider_dev_key_never_spends_a_consumer_wallet"),
     _m("orgless_row_becomes_an_identity", "an identity row names a tenant",
-       A, "        if not org_id or not key_id:", "        if False:",
+       A, "    if not org_id or not key_id:", "    if False:",
        "test_dur_rls__an_identity_row_without_a_tenant_is_not_an_identity"),
     _m("malformed_row_raises_a_validation_error", "a malformed identity row is a typed failure",
-       A, "        except ValueError:", "        except KeyboardInterrupt:",
+       A, "    except ValueError:\n        raise errors.InternalError(",
+       "    except KeyboardInterrupt:\n        raise errors.InternalError(",
        "test_dur_rls__a_malformed_identity_row_fails_closed_without_a_trace", dies_by=("ValidationError",)),
     # --- review r1 item 7: FastAPI's own answers -------------------------------
     # Without the handler Starlette's own 404 body has no `error` key, so the case reads
@@ -228,7 +234,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__every_answer_carries_a_freshly_minted_inference_id", dies_by=("KeyError",)),
     _m("retry_after_header_dropped", "429/503 carry retry guidance",
        I, "        if public.retry_after_s is not None:", "        if False:",
-       "test_f_base__retry_guidance_rides_with_every_429_and_503", dies_by=("KeyError",)),
+       "test_f_base__retry_guidance_rides_with_every_429_and_503",
+       "test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once",
+       "test_dur_cap__the_headless_client_retries_denied_capacity_with_its_own_key",
+       dies_by=("KeyError",)),
     _m("unhandled_exception_text_leaks", "an unexpected exception never reaches the client",
        I, "            except Exception:\n"
           "                log.exception(\"%s: unhandled error on request %s\", request.url.path, request_id)\n"
@@ -276,7 +285,9 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- shape and parameters ------------------------------------------------
     _m("unsupported_parameters_ignored", "the parameter set is closed and explicit",
        V, "            if name in UNSUPPORTED or name not in SUPPORTED:", "            if False:",
-       "test_f_base__an_unsupported_parameter_is_named_and_refused"),
+       "test_f_base__an_unsupported_parameter_is_named_and_refused",
+       "test_api_auth__no_body_field_or_header_can_name_a_wallet_rate_or_policy",
+       "test_api_auth__refusals_leave_no_hold_job_or_journal_reservation"),
     _m("n_greater_than_one_accepted", "only n=1 is supported",
        V, "        if count is not None and count != 1:", "        if False:",
        "test_f_base__only_n_equals_one_is_supported", dies_by=("KeyError",)),
@@ -286,11 +297,9 @@ MUTANTS: tuple[Mutant, ...] = (
     # A ceiling pair that does not fit the context window is refused by the store (R55), so
     # the honest kill is that typed refusal rather than an assertion about a number.
     _m("input_ceiling_ignores_the_output", "the input ceiling is the context limit minus output",
-       V, "        return self.limits.max_context_tokens - output, output",
-       "        return self.limits.max_context_tokens, output",
-       "test_dur_admit__admit_accepts_the_ingress_ceilings_and_derives_the_hold",
-       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor",
-       dies_by=("ContextLengthExceeded",)),
+       V, "        return min(deployment.max_input_tokens, self.limits.max_context_tokens - output), output",
+       "        return min(deployment.max_input_tokens, self.limits.max_context_tokens), output",
+       "test_split_contract__the_ceilings_are_the_deployments_own"),
     _m("deadline_beyond_the_budgets", "the deadline is one the store can keep (R29)",
        V, "                                                 + budgets.generation_s)),",
        "                                                 + 2 * budgets.generation_s)),",
@@ -452,16 +461,18 @@ MUTANTS: tuple[Mutant, ...] = (
        V, "        output = requested if requested is not None else alternative",
        "        output = requested",
        "test_f_base__max_completion_tokens_alone_is_the_output_ceiling"),
-    _m("omitted_model_not_mapped", "an omitted model goes through the served map",
-       V, "            return self.served_models.get(default, default)", "            return default",
+    _m("omitted_model_not_mapped", "an omitted model is MODEL_ID, resolved like any name",
+       V, "            return self.rt.settings.model_id", '            return "nemostation/marlin-2b"',
        "test_f_base__an_omitted_model_goes_through_the_served_map"),
     _m("deps_not_read_from_rt", "register reads its deps from the runtime",
        N, 'ingress = Ingress(rt, deps if deps is not None else getattr(rt, "ingress", None))',
        "ingress = Ingress(rt, deps)",
-       "test_f_base__register_reads_its_deps_from_the_runtime"),
-    _m("default_model_not_served", "the served map contains MODEL_ID",
-       N, "        if default not in self.validator.served_models:", "        if False:",
-       "test_f_base__the_default_model_must_be_in_the_served_map"),
+       # G1R: default deps carry no catalog, so the ingress now refuses to register -
+       # the missing runtime deps, observed as a typed startup refusal.
+       "test_f_base__register_reads_its_deps_from_the_runtime", dies_by=("RuntimeMisconfigured",)),
+    _m("catalog_optional", "the ingress refuses to start without a catalog",
+       N, "        if self.deps.catalog is None:", "        if False:",
+       "test_f_base__the_ingress_refuses_to_start_without_a_catalog"),
     _m("disconnect_not_caught", "a client disconnect is not a server error",
        I, "    except ClientDisconnect:", "    except KeyboardInterrupt:",
        "test_dur_rls__a_client_that_disconnects_mid_body_is_not_a_server_error"),
@@ -663,10 +674,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("disagreeing_output_ceilings_accepted", "max_tokens and max_completion_tokens must agree",
        V, "        if requested is not None and alternative is not None and requested != alternative:",
        "        if False:", "test_f_base__max_tokens_and_max_completion_tokens_must_agree"),
-    _m("model_revision_replaced", "the requested model revision passes through untouched",
-       V, "            model_revision=revision,",
-       "            model_revision=self.rt.settings.model_id,",
-       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor"),
+    # CREDIT-RATE, G's half: admission re-resolves what the caller asked for; a name
+    # pinned here would freeze a revision the store never re-read.
+    _m("requested_model_pinned_at_validation", "the requested name passes through untouched",
+       V, "            model_revision=model,",
+       "            model_revision=resolved.serving.model_revision,",
+       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor",
+       "test_credit_rate__admission_takes_the_publication_current_at_admission",
+       "test_credit_rate__an_alias_moved_after_acceptance_moves_no_admitted_job_or_replay"),
     _m("api_key_is_an_operator", "an API key is a service principal, never an operator",
        A, "API_KEY_ROLE = Role.service", "API_KEY_ROLE = Role.operator",
        "test_dur_rls__a_known_key_becomes_an_auth_context"),
@@ -689,6 +704,164 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except Exception:\n            raise",
        "test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500",
        "test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable", dies_by=("ConnectionError",)),
+    # --- G1R item 1: the audience and identity are the key row's -----------------
+    _m("audience_defaults_to_consumer", "a row with no audience is not a credential",
+       A, "        audience = CredentialAudience(audience)",
+       '        audience = CredentialAudience(audience or "consumer")',
+       "test_api_auth__a_row_without_a_usable_audience_is_not_a_credential"),
+    _m("consumer_without_individual_accepted", "a consumer key names its individual",
+       A, "    if consumer and not user_id:", "    if False:",
+       "test_api_auth__a_row_without_a_usable_audience_is_not_a_credential"),
+    _m("legacy_creator_ignored", "a pre-0009 consumer key is its creator's (D2's coalesce)",
+       A, '            user_id=row.get("user_id") or row.get("created_by"),',
+       '            user_id=row.get("user_id"),',
+       "test_api_auth__each_audience_carries_only_its_own_identity"),
+    _m("creator_overrides_the_individual", "a key's own user_id wins over its creator",
+       A, '            user_id=row.get("user_id") or row.get("created_by"),',
+       '            user_id=row.get("created_by") or row.get("user_id"),',
+       "test_api_auth__each_audience_carries_only_its_own_identity"),
+    _m("individual_kept_for_every_audience", "only a consumer key carries an individual",
+       A, "                             user_id=user_id if consumer else None,",
+       "                             user_id=user_id,",
+       "test_api_auth__each_audience_carries_only_its_own_identity"),
+    _m("provider_key_under_another_org", "a provider dev key's org is its provider's (review S4)",
+       A, "    if audience is CredentialAudience.provider_dev and provider_org_id != org_id:",
+       "    if False:",
+       "test_api_auth__a_row_without_a_usable_audience_is_not_a_credential"),
+    _m("consumer_scope_scrubbed", "a consumer row carrying provider scope is refused, not "
+       "silently scrubbed (review S3)",
+       A, "                             provider_org_id=provider_org_id, endpoint_id=endpoint_id)",
+       "                             provider_org_id=None if consumer else provider_org_id,\n"
+       "                             endpoint_id=None if consumer else endpoint_id)",
+       "test_api_auth__a_row_without_a_usable_audience_is_not_a_credential"),
+    _m("provider_scope_dropped", "a provider dev key carries its provider and endpoint",
+       A, "                             provider_org_id=provider_org_id, endpoint_id=endpoint_id)",
+       "                             provider_org_id=None, endpoint_id=None)",
+       "test_api_auth__each_audience_carries_only_its_own_identity"),
+    _m("ingress_reads_f1_columns", "the ingress reads 0009's audience and scope columns",
+       A, 'KEY_COLUMNS = "id,org_id,revoked_at,audience,user_id,created_by,provider_org_id,endpoint_id"',
+       'KEY_COLUMNS = "id,org_id,revoked_at"',
+       "test_api_auth__the_ingress_reads_the_0009_columns_and_the_legacy_route_does_not",
+       "test_api_auth__a_pre_0009_schema_fails_closed_and_retryable"),
+    _m("http_error_ignored", "an HTTP error from the identity source is a failed lookup (review C3)",
+       K, "                r.raise_for_status()", "                pass",
+       "test_api_auth__a_pre_0009_schema_fails_closed_and_retryable"),
+    _m("cached_row_serves_any_select", "a row cached by a narrower select is a miss (review S1)",
+       K, "        if hit is not None and hit[1] is not None and not set(select.split(\",\")) <= hit[1].keys():",
+       "        if False:",
+       "test_api_auth__a_row_cached_by_the_legacy_select_is_not_an_identity_without_audience"),
+    _m("legacy_route_reads_0009", "the legacy route keeps F1's columns (hosted has no 0009)",
+       K, '    async def authenticate(self, req, select="id,org_id,revoked_at"):',
+       '    async def authenticate(self, req, select="id,org_id,revoked_at,audience"):',
+       "test_api_auth__the_ingress_reads_the_0009_columns_and_the_legacy_route_does_not"),
+    # --- G1R item 2: resolution for the audience, publication, price, capability ---
+    # It proves the status (403, not 404); that an operator runs no inference at all (R66)
+    # is audience_rule_ignored's kill (review H2).
+    _m("operator_runs_inference", "an operator credential is refused forbidden, not not_found",
+       C, "    if callable_ is None:\n        raise errors.Forbidden(",
+       "    if False:\n        raise errors.Forbidden(",
+       "test_split_contract__an_operator_key_runs_no_inference",
+       "test_api_auth__refusals_leave_no_hold_job_or_journal_reservation"),
+    _m("audience_rule_ignored", "each audience calls only its own kind of deployment",
+       C, "    callable_ = CALLABLE.get(auth.audience)",
+       "    callable_ = CALLABLE.get(CredentialAudience.consumer)",
+       "test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint",
+       "test_split_contract__an_operator_key_runs_no_inference"),
+    _m("other_endpoint_reached", "a provider dev key reaches only its own endpoint (review S2; "
+       "the contract's check, proven here over a leaky catalog)",
+       "contracts/v2/ports.py", "        if auth.endpoint_id != deployment.endpoint_id:",
+       "        if False:",
+       "test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint"),
+    _m("rival_provider_reached", "a provider dev key reaches only its own provider's endpoint",
+       "contracts/v2/ports.py", "        if auth.provider_org_id != deployment.provider_org_id:",
+       "        if False:",
+       "test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint"),
+    _m("publication_state_ignored", "only an active (or ready private) revision is callable",
+       C, "        if deployment is not None and (deployment.visibility, deployment.state) != callable_:",
+       "        if deployment is not None and deployment.visibility != callable_[0]:",
+       "test_credit_rate__only_an_active_published_deployment_is_callable",
+       "test_credit_rate__a_revoked_publication_is_not_found"),
+    _m("refusal_confirms_the_artifact", "an uncallable deployment answers like an unknown one",
+       C, "            deployment = None                        # the same answer as an unknown model",
+       '            raise errors.Forbidden("not callable by this credential")',
+       "test_split_contract__a_consumer_key_cannot_reach_a_private_dev_endpoint",
+       "test_credit_rate__only_an_active_published_deployment_is_callable"),
+    _m("wrong_unit_card_accepted", "a card not priced in CREDIT is no card (R64/R69)",
+       C, "        rate_card=card if priced_in_credit(card) else None, policy=policy)",
+       "        rate_card=card, policy=policy)",
+       "test_credit_rate__an_unpriced_or_wrong_unit_model_is_refused",
+       "test_api_auth__refusals_leave_no_hold_job_or_journal_reservation"),
+    _m("usd_amounts_accepted", "a unit is a type: USD amounts are not CREDIT",
+       C, "            and isinstance(card.input_rate_per_million, Credit)\n"
+          "            and isinstance(card.output_rate_per_million, Credit))",
+       "            )",
+       "test_credit_rate__an_unpriced_or_wrong_unit_model_is_refused"),
+    _m("usd_unit_accepted", "a card's unit is CREDIT",
+       C, "card.unit == CREDIT", 'card.unit in (CREDIT, "USD")',
+       "test_credit_rate__an_unpriced_or_wrong_unit_model_is_refused"),
+    _m("unpriced_is_free", "an unpriced deployment is unserveable (R69), seen at the ingress",
+       "contracts/v2/ports.py", "    if rate_card is None:\n        raise errors.InvalidRequest(",
+       "    if False:\n        raise errors.InvalidRequest(",
+       "test_credit_rate__a_provider_preview_needs_its_own_approved_card",
+       "test_credit_rate__an_unpriced_or_wrong_unit_model_is_refused"),
+    _m("catalog_outage_is_a_500", "a catalog outage is retryable, not an internal error",
+       C, "    except Exception:\n        # A lookup that failed",
+       "    except KeyboardInterrupt:\n        # A lookup that failed",
+       "test_split_contract__a_catalog_outage_is_retryable_not_a_missing_model"),
+    _m("modalities_unchecked", "only declared input modalities are accepted",
+       C, "    if not needed <= set(capability.input_modalities):", "    if False:",
+       "test_split_contract__only_declared_capabilities_are_accepted"),
+    _m("text_needs_no_modality", "a text part needs the text modality too",
+       C, '                      else (MODALITY[part["type"]] for part in content))',
+       '                      else (MODALITY[part["type"]] for part in content\n'
+       '                            if part["type"] != "text"))',
+       "test_split_contract__only_declared_capabilities_are_accepted"),
+    _m("stream_capability_unchecked", "a stream needs a serving revision that streams",
+       C, "    if mode is ExecutionMode.stream and not capability.stream_output:", "    if False:",
+       "test_split_contract__only_declared_capabilities_are_accepted"),
+    _m("default_output_is_not_the_ceiling", "an unstated output ceiling reserves the whole envelope",
+       V, "        output = ceiling if output is None else output",
+       "        output = 1 if output is None else output",
+       "test_dur_admit__admit_accepts_the_ingress_ceilings_and_derives_the_hold"),
+    _m("deployment_output_limit_ignored", "the output ceiling is the deployment's too",
+       V, "        ceiling = min(self.limits.max_output_tokens, deployment.max_output_tokens)",
+       "        ceiling = self.limits.max_output_tokens",
+       "test_split_contract__the_ceilings_are_the_deployments_own"),
+    _m("deployment_input_limit_ignored", "the input ceiling never exceeds the deployment's",
+       V, "        return min(deployment.max_input_tokens, self.limits.max_context_tokens - output), output",
+       "        return self.limits.max_context_tokens - output, output",
+       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor",
+       "test_f_base__max_completion_tokens_alone_is_the_output_ceiling"),
+    # --- G1R item 3: the idempotency scope is what keeps a replay on its admission ---
+    _m("idempotency_key_dropped", "the caller's Idempotency-Key reaches admission",
+       V, '    key = headers.get("idempotency-key")', "    key = None",
+       "test_credit_rate__a_rate_published_after_acceptance_moves_no_admitted_job_or_replay",
+       "test_credit_rate__an_alias_moved_after_acceptance_moves_no_admitted_job_or_replay",
+       "test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once",
+       dies_by=("KeyError",)),
+    # --- G1R item 4: pilot never serves chat through the legacy route (E3B dr17) -----
+    # `config.validate_runtime` is the coordinator's hook; G1R's brief places this refusal
+    # there, so these three edit it in the temporary copy.
+    _m("pilot_serves_the_legacy_route", "pilot refuses while the legacy chat route is composed",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if False:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("legacy_route_beside_the_ingress", "the legacy route beside the ingress still refuses",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if ingress not in composition.ROUTERS:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("no_metered_ingress_accepted", "a pilot with no metered ingress refuses (I0's predicate)",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if chat in composition.ROUTERS:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    # --- G1R item 5: the headless client's declared surface is served -------------
+    _m("https_video_refused", "an https video reference is served",
+       V, "    if not source.lower().startswith(HTTP_SCHEMES):", "    if True:",
+       "test_api_auth__the_headless_quickstart_is_served_over_both_media_forms"),
+    _m("inline_video_refused", "an inline data: video is served",
+       V, '    if match.group("mime").lower() not in allowed_mime:', "    if True:",
+       "test_api_auth__the_headless_quickstart_is_served_over_both_media_forms",
+       "test_dur_cap__the_headless_client_retries_denied_capacity_with_its_own_key"),
     # These two edit files G does not own, in the temporary copy only: they are the
     # cutover itself, and they say exactly which cases pin today's behaviour.
     _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",
@@ -732,8 +905,23 @@ def case_names() -> set[str]:
     return set(_definitions())
 
 
-#: F2R item 9: the shared runner, with G's per-mutant file selection.
-RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)))
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """The repository's shape, because `test_client_smoke` drives `client_example.py`,
+    which imports `models/marlin2b/bench.py`: `<tmp>/apps/infrx-api/{infrx,tests,...}`
+    plus `<tmp>/models` linked to the real tree (read only; bytecode goes to the copy's
+    own `PYTHONPYCACHEPREFIX`)."""
+    api = root / "apps" / "infrx-api"
+    junk = shutil.ignore_patterns("__pycache__")
+    for name in (PACKAGE, "tests"):
+        shutil.copytree(API_DIR / name, api / name, ignore=junk)
+    for name in ("pyproject.toml", "client_example.py"):
+        shutil.copy2(API_DIR / name, api / name)
+    (root / "models").symlink_to(API_DIR.parents[1] / "models")
+    return api
+
+
+#: F2R item 9: the shared runner, with G's per-mutant file selection and layout.
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout)
 
 
 def run_mutant(mutant) -> Result:

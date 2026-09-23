@@ -124,6 +124,21 @@ ALLOWED_LEGACY_CHANGES = {
         "six headless operator actions appended",
 }
 
+#: D2 fills the bodies of the 0004 boundaries it owns. The BODY may change; SECURITY
+#: DEFINER, the fixed search_path and the ACL (service_role only) may not - the inventory
+#: value is `md5(definition) secdef acl`, and only the md5 is allowed to move.
+FILLED_BOUNDARIES = frozenset({("function", "infrx", "infrx.admit(jsonb)"),
+                               ("function", "infrx", "infrx.prepare(jsonb)"),
+                               # D3 (0016): claim, heartbeat, cancel; terminalize's fence.
+                               ("function", "infrx", "infrx.claim(jsonb)"),
+                               ("function", "infrx", "infrx.heartbeat(jsonb)"),
+                               ("function", "infrx", "infrx.cancel(jsonb)"),
+                               ("function", "infrx", "infrx.terminalize(jsonb)")})
+
+
+def _same_boundary(old: str, new: str | None) -> bool:
+    return new is not None and old.split(" ", 1)[1] == new.split(" ", 1)[1]
+
 
 def inventory(conn) -> dict:
     """Constraints, triggers, function bodies and ACLs, relation/column ACLs, RLS,
@@ -190,15 +205,19 @@ def check_legacy_schema_unchanged(conn, before: dict) -> str:
         new = after.get(key)
         if new == old or (new is not None and key in ALLOWED_LEGACY_CHANGES):
             continue
+        if key in FILLED_BOUNDARIES and _same_boundary(old, new):
+            continue
         changed.append(f"{key}: {old!r} -> {new!r}")
     assert not changed, "D1R rewrote 0001-0005 schema:\n  " + "\n  ".join(changed[:30])
     # Named, because these are what the brief lists: the USD wallet trigger and the
     # narrow financial RPC grants still exist exactly as they were.
     for key in (("trigger", "public.credit_ledger", "credit_ledger_moves_wallet"),
                 ("function", "infrx", "infrx.grant_credit(jsonb)"),
-                ("function", "infrx", "infrx.admit(jsonb)"),
                 ("function", "public", "public.org_wallet_summary(uuid)")):
         assert key in before and after.get(key) == before[key], f"{key} changed or vanished"
+    for key in FILLED_BOUNDARIES:
+        assert key in before and _same_boundary(before[key], after.get(key)), \
+            f"{key}: its grants or SECURITY DEFINER changed ({before[key]!r} -> {after.get(key)!r})"
     return (f"{len(before)} objects of 0001-0005 unchanged "
             f"({len(ALLOWED_LEGACY_CHANGES)} named allowances)")
 
@@ -317,6 +336,8 @@ CARD = "rc_marlin2b_2026_09_provisional"
 POLICY = "dap_2026_09_01"
 DEV_CARD = "rc_marlin2b_dev_internal"
 PROVIDER_WALLET = "b0000003-0000-4000-8000-000000000003"
+SERVING_2 = "d0000005-0000-4000-8000-000000000005"        # D1R review (c): a real second
+DEPLOYMENT_2 = "c0000005-0000-4000-8000-000000000005"     # serving version and deployment
 
 
 def apply_seed(conn) -> None:
@@ -598,10 +619,48 @@ def check_grant(conn) -> str:
     return "grant: one row, idempotent across op/campaign/org, 4 refusals"
 
 
+class _Rollback(Exception):
+    pass
+
+
 def check_grant_race(connect, database: str, attempts: int = 8, rounds: int = 10) -> str:
     """CREDIT-GRANT under a race: in each round, N concurrent callers for one fresh
     individual produce exactly one ledger row, and every caller is handed that same row.
-    Several rounds, because a race that loses one time in five is still a race."""
+    Several rounds, because a race that loses one time in five is still a race.
+
+    The rounds are probabilistic: the interleaving that matters - a caller passing the
+    per-user check and then colliding on the per-personal-org index - happens only
+    sometimes (the mutant `d1r_grant_race_arbitrates_one_index` died 4 runs in 5). So it is
+    first produced DETERMINISTICALLY (D3, for D2's request 8): an individual whose personal
+    organization already funds another individual's wallet collides on the personal-org
+    index ALONE. `on conflict do nothing` absorbs that collision and the grant answers the
+    typed rollout hold; a conflict target naming only the per-user index surfaces a raw
+    unique violation instead, every time."""
+    squatter = "c2000000-0000-4000-8000-00000000dead"
+    victim = "c2000000-0000-4000-8000-00000000beef"
+    with connect(database) as c:
+        try:
+            with c.transaction():
+                for user in (squatter, victim):
+                    c.execute("insert into auth.users (id, email) values (%s, %s)",
+                              (user, f"{user[-4:]}@example.com"))
+                c.execute("insert into infrx.credit_wallets (kind, owner_user_id, "
+                          "personal_org_id) values ('consumer', %s, %s)",
+                          (squatter, personal_org(c, victim)))
+                try:
+                    with c.transaction():
+                        grant(c, victim, op=None)
+                except psycopg.Error as refused:
+                    state = refused.sqlstate
+                else:
+                    state = None
+                assert state == "55000", (
+                    f"a personal-org-only collision answered {state!r}, not the typed "
+                    f"rollout hold (55000): the insert does not absorb a conflict on the "
+                    f"per-personal-org index")
+                raise _Rollback()
+        except _Rollback:
+            pass
     for n in range(rounds):
         user = RACER if n == 0 else f"c2000000-0000-4000-8000-{n:012d}"
         if n:
@@ -643,7 +702,9 @@ def check_no_unit_conversion(conn) -> str:
     together (so none can sum or convert across units), and nothing is named like a
     converter. `public.console_usage` shows the two columns side by side, never combined."""
     usd = ("delta_usd", "cost_usd", "infrx.wallets", "infrx.credit_holds", "usd_per_m",
-           "price_versions", "public.credit_ledger")
+           "price_versions", "public.credit_ledger",
+           # D1R review (b): the legacy statement and the regime's own name.
+           "console_legacy_usd_statement", "legacy_usd")
     credit = ("credit_wallets", "infrx.credit_ledger", "credit_wallet_holds",
               "charged_credits", "signup_entitlements", "rate_card_versions")
     # Row-per-request projections that label each amount with its own unit.
@@ -670,22 +731,38 @@ def check_no_unit_conversion(conn) -> str:
     return f"{len(objects)} functions/views: none converts or combines units"
 
 
+#: Every CREDIT amount column (D1R review (b): the fixture is executed against the COLUMN
+#: types, so a migration that narrows one is caught, not a literal cast nobody stores).
+CREDIT_AMOUNT_COLUMNS = (("infrx.credit_ledger", "amount"),
+                         ("infrx.credit_wallets", "ledger_total"),
+                         ("infrx.credit_wallets", "reserved_total"),
+                         ("infrx.credit_wallet_holds", "amount"),
+                         ("public.usage_events", "charged_credits"),
+                         ("infrx.rate_card_versions", "input_rate_per_million"),
+                         ("infrx.rate_card_versions", "output_rate_per_million"))
+
+
 def check_money_unit_cases(conn) -> str:
-    """The F2P `money_unit_cases` fixture as SQL: every valid amount round-trips through
-    numeric(20,8) to its canonical eight-digit text, and the out-of-range one is refused
-    by the column type. (Rounding refusals - `0.000000001`, `1e3` - are the service
-    parser's: PostgreSQL's numeric input rounds, so the trust boundary is money_units.)"""
+    """The F2P `money_unit_cases` fixture as SQL, through the type of every CREDIT amount
+    column: each valid amount round-trips to its canonical eight-digit text and 10^12 is
+    refused. (Rounding refusals - `0.000000001`, `1e3` - are the service parser's:
+    PostgreSQL's numeric input rounds, so the trust boundary is money_units.)"""
     n = 0
-    for case in _load("money_unit_cases"):
-        if case["valid"]:
-            text, = conn.execute("select %s::numeric(20,8)::text", (case["input"],)).fetchone()
-            assert text == case["canonical"], f"{case}: the database spells it {text}"
-            n += 1
-        elif case["input"] == "1000000000000.00000000":
-            assert attempt(conn, "select %s::numeric(20,8)", (case["input"],)) is not None, \
-                "numeric(20,8) accepted 10^12"
-            n += 1
-    return f"{n} money_unit_cases executed as SQL"
+    for table, column in CREDIT_AMOUNT_COLUMNS:
+        kind, = conn.execute("select format_type(atttypid, atttypmod) from pg_attribute "
+                             "where attrelid = %s::regclass and attname = %s",
+                             (table, column)).fetchone()
+        for case in _load("money_unit_cases"):
+            if case["valid"]:
+                text, = conn.execute(f"select %s::{kind}::text", (case["input"],)).fetchone()
+                assert text == case["canonical"], \
+                    f"{table}.{column} ({kind}) spells {case['input']} as {text}"
+                n += 1
+            elif case["input"] == "1000000000000.00000000":
+                assert attempt(conn, f"select %s::{kind}", (case["input"],)) is not None, \
+                    f"{table}.{column} ({kind}) accepted 10^12"
+                n += 1
+    return f"{n} money_unit_cases executed through {len(CREDIT_AMOUNT_COLUMNS)} CREDIT columns"
 
 
 def check_regime_on_usage(conn) -> str:
@@ -833,6 +910,9 @@ def _registry_cases() -> tuple[tuple, tuple]:
         ("widening a deployment's validated limits",
          f"update infrx.deployment_revisions set max_output_tokens = 100000 "
          f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("an active deployment moved back to proposed_public",
+         f"update infrx.deployment_revisions set state = 'proposed_public' "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
         ("an active deployment going back to draft",
          f"update infrx.deployment_revisions set state = 'validating' "
          f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
@@ -978,16 +1058,18 @@ def check_registry(conn) -> str:
 # =============================================================================
 def credit_job(rid: str, handle: str, org: str, wallet: str, *, card: str = CARD,
                deployment: str = PUBLIC_DEPLOYMENT, serving: str = SERVING,
-               model: str = MODEL, policy: str = POLICY, hold: str = "10.01440000") -> str:
+               model: str = MODEL, policy: str = POLICY, hold: str = "10.01440000",
+               key: str | None = None) -> str:
     """A CREDIT-regime admission row, the shape D2 writes: every pin, no USD price."""
-    return f"""insert into infrx.jobs (request_id, job_handle, org_id, model_revision,
+    return f"""insert into infrx.jobs (request_id, job_handle, org_id, key_id, model_revision,
       execution_mode, state, operation, payload_ref, payload_digest, max_input_tokens,
       max_output_tokens, maximum_hold, consent_version, trace_mode, admitted_at, deadline_at,
       budget_preparation_s, budget_queue_wait_s, budget_generation_s, budget_first_token_s,
       budget_stall_s, preparation_deadline_at, accounting_regime, wallet_id, model_id,
       requested_model, deployment_revision_id, serving_version_id, rate_card_version,
       policy_version)
-    values ('{rid}', '{handle}', '{org}', 'nemostation/marlin-2b@2026-09-01', 'sync',
+    values ('{rid}', '{handle}', '{org}', {f"'{key}'" if key else 'null'},
+      'nemostation/marlin-2b@2026-09-01', 'sync',
       'queued', 'chat.completions', 'infrx-payload:{rid}', '{checks.DIGEST}', 23500, 512,
       {hold}, 1, 'off', infrx.now(), infrx.now() + interval '10 minutes', 120, 10, 300, 60,
       20, infrx.now() + interval '2 minutes', 'credit', '{wallet}', '{model}',
@@ -1019,6 +1101,10 @@ def check_resolve_pins(conn) -> str:
             assert got[k] == fx[k], f"resolve({model}).{k}: {got[k]!r}, fixture {fx[k]!r}"
         assert got["requested_model"] == model and got["provisional"] is True
         assert got["model_revision"] == "nemostation/marlin-2b@2026-09-01", got
+        # D1R review (c): the rates are the fixture card's, to the digit, as text.
+        card = _load("rate_card_marlin")
+        for k in ("input_rate_per_million", "output_rate_per_million"):
+            assert got[k] == card[k], f"resolve({model}).{k}: {got[k]!r}, card {card[k]!r}"
     refusals = (
         ("an unknown alias", "nobody/nothing", "P0002"),
         ("an unknown revision label", "nemostation/marlin-2b@2031-01-01", "P0002"),
@@ -1057,9 +1143,30 @@ def check_resolve_pins(conn) -> str:
     return f"alias and pin == admission_pins fixture; {len(refusals) + len(staged)} refusals"
 
 
+PDEV_KEY = "c6000000-0000-4000-8000-000000000001"
+
+
+def _provider_dev_key(org: str, audience: str = "provider_dev") -> str:
+    """NEMO's provider_dev key on its dev endpoint, filed in `org` (inside the case).
+    `audience="other_provider"`: a provider_dev key of ANOTHER provider (review M5)."""
+    if audience == "other_provider":
+        return (f"insert into public.api_keys (id, org_id, name, prefix, key_hash, audience, "
+                f"provider_org_id, endpoint_id) values ('{PDEV_KEY}', '{org}', 'k', "
+                f"'sk-infrx-pdev0000', 'hash-pdev', 'provider_dev', '{OTHER_PROVIDER}', "
+                f"'{OTHER_ENDPOINT}')")
+    if audience == "consumer":
+        return (f"insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash) "
+                f"values ('{PDEV_KEY}', '{org}', '{PROVIDER_DEV_USER}', 'k', 'sk-infrx-pdev0000', "
+                f"'hash-pdev')")
+    return (f"insert into public.api_keys (id, org_id, name, prefix, key_hash, audience, "
+            f"provider_org_id, endpoint_id) values ('{PDEV_KEY}', '{org}', 'k', "
+            f"'sk-infrx-pdev0000', 'hash-pdev', 'provider_dev', '{NEMO}', '{DEV_ENDPOINT}')")
+
+
 def _admission_cases(conn) -> tuple[tuple, tuple]:
     w1, w2 = wallet_of(conn, CONSUMER_1), wallet_of(conn, CONSUMER_2)
     o1, o2 = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
+    op = personal_org(conn, PROVIDER_DEV_USER)
     j = "5c000000-0000-4000-8000-0000000000"
     usage = ("insert into public.usage_events (id, org_id, model_id, status, "
              "settlement_regime, outcome, settlement_state, usage_certainty, "
@@ -1088,8 +1195,29 @@ def _admission_cases(conn) -> tuple[tuple, tuple]:
          .replace(", 'legacy_usd'", "") + ")"),
         ("spending another individual's wallet through one's own organization",
          credit_job(j + "04", "job_c_04", o1, w2)),
+        # Through the provider's own provider_dev key, so only the dev-deployment rule
+        # can refuse it (the key rule is its own case below).
         ("a provider dev wallet paying for public production",
-         credit_job(j + "05", "job_c_05", o1, PROVIDER_WALLET)),
+         _provider_dev_key(op) + "; "
+         + credit_job(j + "05", "job_c_05", op, PROVIDER_WALLET, key=PDEV_KEY)),
+        # D2 (D1R review (a)): R70 as a database invariant, and the provider's own key.
+        ("a consumer wallet spending on the private dev deployment",
+         credit_job(j + "0c", "job_c_0c", o1, w1, card=DEV_CARD, deployment=DEV_DEPLOYMENT)),
+        ("a consumer wallet spending on a draining public deployment",
+         f"update infrx.deployment_revisions set state = 'draining' where "
+         f"deployment_revision_id = '{PUBLIC_DEPLOYMENT}'; "
+         + credit_job(j + "0d", "job_c_0d", o1, w1)),
+        ("a provider dev job admitted without a key",
+         credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,
+                    deployment=DEV_DEPLOYMENT)),
+        ("a provider dev job admitted through another provider's provider_dev key",
+         _provider_dev_key(op, "other_provider") + "; "
+         + credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,
+                      deployment=DEV_DEPLOYMENT, key=PDEV_KEY)),
+        ("a provider dev job admitted through a consumer key",
+         _provider_dev_key(op, "consumer") + "; "
+         + credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,
+                      deployment=DEV_DEPLOYMENT, key=PDEV_KEY)),
         ("a hold beyond the available credit",
          credit_job(j + "06", "job_c_06", o1, w1) + "; "
          + hold(j + "06", o1, w1, amount="10000.00000001")),
@@ -1107,6 +1235,25 @@ def _admission_cases(conn) -> tuple[tuple, tuple]:
          f"('rc_next', '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', 1, 1, now(), 'ops', "
          f"false); " + credit_job(j + "0b", "job_c_0b", o1, w1)
          + f"; update infrx.jobs set rate_card_version = 'rc_next' where request_id = '{j}0b'"),
+        ("re-pointing an admitted job at a real second serving version and its deployment",
+         f"insert into infrx.serving_versions (serving_version_id, model_version_id, model_id, "
+         f"provider_org_id, revision_label, prompt_harness_ref, preprocessor_profile_version, "
+         f"runtime_image_ref, engine_options_digest, precision, capability, created_by) "
+         f"select '{SERVING_2}', model_version_id, model_id, provider_org_id, '2026-09-02', "
+         f"prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+         f"engine_options_digest, precision, capability, 'ops' from infrx.serving_versions "
+         f"where serving_version_id = '{SERVING}'; "
+         f"insert into infrx.deployment_revisions (deployment_revision_id, endpoint_id, "
+         f"provider_org_id, environment, serving_version_id, visibility, state, "
+         f"max_input_tokens, max_output_tokens, created_by) values ('{DEPLOYMENT_2}', "
+         f"'{PROD_ENDPOINT}', '{NEMO}', 'prod', '{SERVING_2}', 'public', 'proposed_public', "
+         f"30720, 2048, 'ops'); insert into infrx.rate_card_versions (rate_card_version, "
+         f"model_id, deployment_revision_id, serving_version_id, input_rate_per_million, "
+         f"output_rate_per_million, effective_at, approved_by, provisional) values "
+         f"('rc_sv2', '{MODEL}', '{DEPLOYMENT_2}', '{SERVING_2}', 1, 1, now(), 'ops', false); "
+         + admitted + f"; update infrx.jobs set serving_version_id = '{SERVING_2}', "
+         f"deployment_revision_id = '{DEPLOYMENT_2}', rate_card_version = 'rc_sv2' "
+         f"where request_id = '{j}01'"),
         ("switching an admitted job's regime",
          admitted + f"; update infrx.jobs set accounting_regime = 'legacy_usd' "
                     f"where request_id = '{j}01'"),
@@ -1155,9 +1302,10 @@ def _admission_cases(conn) -> tuple[tuple, tuple]:
         ("a hold of exactly the available credit",
          credit_job(j + "09", "job_c_09", o1, w1, hold="10000") + "; "
          + hold(j + "09", o1, w1, amount="10000")),
-        ("a provider dev wallet on its own dev deployment",
-         credit_job(j + "0a", "job_c_0a", o1, PROVIDER_WALLET, card=DEV_CARD,
-                    deployment=DEV_DEPLOYMENT)),
+        ("a provider dev wallet on its own dev deployment, through its provider_dev key",
+         _provider_dev_key(op) + "; "
+         + credit_job(j + "0a", "job_c_0a", op, PROVIDER_WALLET, card=DEV_CARD,
+                      deployment=DEV_DEPLOYMENT, key=PDEV_KEY)),
         ("unknown usage keeps its hold, then releases it",
          admitted + f"; update infrx.credit_wallet_holds set state = 'unknown', "
                     f"reconcile_after = now() where request_id = '{j}01'; "
@@ -1190,6 +1338,16 @@ def check_credit_admission_rows(conn) -> str:
         row = conn.execute("select ledger_total::text, reserved_total::text from "
                            "infrx.credit_wallets where wallet_id = %s", (w1,)).fetchone()
         assert row == ("9990.02400000", "0.00000000"), f"after one settlement: {row}"
+        check_credit_reconciles(conn)
+        raise psycopg.Rollback()
+    # D1R review (c): reconciliation holds while an UNKNOWN hold is outstanding too.
+    with conn.transaction():
+        conn.execute(accepted[0][1].split("; update infrx.credit_wallet_holds")[0])
+        conn.execute("update infrx.credit_wallet_holds set state = 'unknown', reconcile_after "
+                     "= infrx.now() + interval '1 day' where request_id = %s", (j + "01",))
+        reserved = conn.execute("select reserved_total::text from infrx.credit_wallets "
+                                "where wallet_id = %s", (wallet_of(conn, CONSUMER_1),)).fetchone()
+        assert reserved == ("10.01440000",), f"an unknown hold left the reservation: {reserved}"
         check_credit_reconciles(conn)
         raise psycopg.Rollback()
     return f"{n} admission/hold/settlement violations refused, {m} controls accepted"
@@ -1411,6 +1569,13 @@ def check_credit_privileges(conn) -> str:
             if conn.execute("select has_table_privilege('service_role', %s, %s)",
                             (f"infrx.{table}", verb)).fetchone()[0]:
                 problems.append(f"service_role may {verb} infrx.{table}")
+    # D1R review (c): the immutable registry relations are not even UPDATE-able by the
+    # platform role (the triggers are the second wall, not the only one).
+    for table in ("provider_orgs", "model_versions", "serving_versions", "endpoints",
+                  "rate_card_versions", "data_access_policies", "catalog_listings"):
+        if conn.execute("select has_table_privilege('service_role', %s, 'UPDATE')",
+                        (f"infrx.{table}",)).fetchone()[0]:
+            problems.append(f"service_role may UPDATE immutable infrx.{table}")
     for column in ("enabled", "updated_by", "reason"):
         if not conn.execute("select has_column_privilege('service_role', "
                             "'infrx.feature_flags', %s, 'UPDATE')", (column,)).fetchone()[0]:
@@ -1840,6 +2005,10 @@ def check_operator_seams(conn) -> str:
          f"select infrx.bootstrap_operator_key('{o1}', 'ops', 'sk-infrx-o1', '{'1' * 64}', "
          f"'ops', 'bootstrap'); select infrx.bootstrap_operator_key('{o1}', 'ops', "
          f"'sk-infrx-o2', '{'2' * 64}', 'ops', 'bootstrap')"),
+        ("bootstrapping the operator key onto a consumer key's hash",
+         key + f"('{o1}', '{CONSUMER_1}', 'c', 'sk-infrx-c0000009', '{'3' * 64}', 'consumer', "
+               f"null, null, null); select infrx.bootstrap_operator_key('{o1}', 'ops', "
+               f"'sk-infrx-o3', '{'3' * 64}', 'ops', 'bootstrap')"),
         ("a plaintext key given to the bootstrap",
          f"select infrx.bootstrap_operator_key('{o1}', 'ops', 'sk-infrx-o1', "
          f"'sk-infrx-secret', 'ops', 'bootstrap')"),

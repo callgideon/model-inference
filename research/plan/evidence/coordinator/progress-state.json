@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-22T22:35:57Z",
+  "updated": "2026-09-23T05:16:20Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in phase in flight (codex-f2p-wirein)",
+      "phase": "wire-in round 2 (MONEY-C1 + test strength) then coordinator check and merge",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -17,21 +17,27 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
+      "phase": "phase 2 implementing on codex-e3b2 / codex/e3b-phase2-gate (real-store gate; namespace e3b2 56700-56799)",
       "since": "2026-09-22T18:46:49Z",
-      "note": "gate not passable until G/D/W/Q lanes merge"
+      "note": "phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)"
     },
-    "D2": {
-      "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "dispatched (admission transaction, outbox, M3 tables, D1R follow-ups)",
-      "since": "2026-09-22T20:55:35Z",
-      "note": "real JobStore over PostgreSQL"
+    "D4": {
+      "lane": "codex-d4 / codex/d4-stream-journal",
+      "phase": "implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md"
     },
-    "A1": {
-      "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "implementing (signup grant, backfill, retention)",
-      "since": "2026-09-22T22:35:57Z",
-      "note": "new files only; migrations 0015+; D2 in flight"
+    "G2": {
+      "lane": "codex-g2 / codex/g2-chat-relay",
+      "phase": "implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md"
+    },
+    "G4U": {
+      "lane": "codex-g4u / codex/g4u-upload-adapter",
+      "phase": "implementing (upload routes over M3's MediaUploads; new files only)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; fakes only; brief G4U.md"
     }
   },
   "reviews": {},
@@ -85,6 +91,18 @@
       "what": "Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md",
       "blocks": "publishing any cost-per-video-hour figure (S2M \u00a75.2, E1B protocol)",
       "owner": "pricing owner / user"
+    },
+    {
+      "id": "P-04-sweep",
+      "what": "W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside",
+      "blocks": "ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 \u26a0\ufe0f / cutover keeps 32 explicitly); W4's first input",
+      "owner": "W4 (tuning) / W3 (record)"
+    },
+    {
+      "id": "P-20",
+      "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) \u2014 until then the pilot admits what the engine cannot serve",
+      "blocks": "E4B certification; G2's validation ceiling",
+      "owner": "W4 decides; G2 applies"
     }
   ],
   "checkpoints": [
@@ -179,6 +197,10 @@
     {
       "at": "2026-09-22T22:14:13Z",
       "what": "F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark"
+    },
+    {
+      "at": "2026-09-23T00:46:03Z",
+      "what": "Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)"
     }
   ],
   "cadence_windows": [
@@ -192,7 +214,8 @@
   ],
   "authorizations": [
     "merge to main at reviewed green checkpoints (user, 2026-09-22)",
-    "FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations \u2014 logged with cost and rollback before each irreversible step"
+    "FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations \u2014 logged with cost and rollback before each irreversible step",
+    "2026-09-23: finish in-flight lanes only; no new task dispatch (user instruction, session limits)"
   ],
   "not_authorized": [
     "nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover"
@@ -202,6 +225,51 @@
       "merged": "S2M @ 3aa3535 merged --no-ff",
       "at": "2026-09-22T16:30:52Z",
       "note": "profile v1 frozen; digests measured on box; registry oid \u26a0\ufe0f HF_TOKEN (W3)"
+    },
+    "G1R": {
+      "merged": "G1R @ 3552ce3 merged --no-ff (b609cc9) + follow-up 67e0320 (requests 3/4/5, C2)",
+      "at": "2026-09-23T02:33:26Z",
+      "note": "review pass at d50afa5 (wf_a62153d6-049), 17 nonblocking folded in and verified (tests/g 333, G list 199, ops 68); C1 hunk pending the wire-in; G2 owns C4/S5; D1R owns the S4 CHECK"
+    },
+    "M4": {
+      "merged": "M4 @ f689753 merged --no-ff (4185f4d)",
+      "at": "2026-09-23T03:03:16Z",
+      "note": "review pass at 2e323be (wf_564484b4-b63); 13 nonblocking folded in (2176681); M list 242 on the lane, tests/m 343 on the merged tree; measured on the dev host only \u2014 pilot-box harness run (E1B/P-04) remains the gate"
+    },
+    "I3B": {
+      "merged": "I3B @ 9250eec merged --no-ff (8e01fe0)",
+      "at": "2026-09-23T03:06:53Z",
+      "note": "review fix_required at 48d3bb2 \u2192 fix round 5ec6f40 confirmed pass \u2192 residuals folded (10bfd90); mutants_i3b 78 = 77 + control; merged-tree layer-2 run detached; hosted backup rehearsal (restore.md A0\u2013A9) still a coordinator operation; five PENDING drills wait on G2/D3/M3/W3/I2B"
+    },
+    "Q3": {
+      "merged": "Q3 @ 6fa13bf merged --no-ff (25de7ab) + Makefile follow-up 88a48d7",
+      "at": "2026-09-23T03:57:39Z",
+      "note": "review + confirmation pass; 14 residuals folded; tests/q 169 on the merged tree; Q lists detached (.claude-logs/q3-merged-88a48d7.log) \u2014 read the tail next session"
+    },
+    "D2": {
+      "merged": "D2 @ 2e386f0 merged --no-ff (24b4589) + follow-up (harness 0010-0014, api-mutants += tests/d/test_code_mutants.py)",
+      "at": "2026-09-23T04:13:18Z",
+      "note": "three review rounds; pre-merge 393 passed; merged-tree tests/d both images detached (.claude-logs/d2-merged-*.log); OB-5b implemented by D3; migrations 0010-0014 unapplied on hosted"
+    },
+    "A1": {
+      "merged": "A1 @ fb3a5a1 merged --no-ff (2d9d9c5) + follow-up (harness 0015, api-mutants += tests/d/test_signup.py, R85)",
+      "at": "2026-09-23T04:18:26Z",
+      "note": "four review rounds (abbf066 review; 47b0382, d8a3e84, dc3cb9c confirmations; round 4 tests/notes only); D list 228 = 193 + 35; merged-tree tests/d verification pending on the D2 sweep's port | follow-up e366ae8 (round 5): infrx.individual_usd_hold; the unit scan passes on the merged tree (42 passed incl. test_credit_schema + test_signup)"
+    },
+    "D3": {
+      "merged": "D3 @ 92687f8 merged --no-ff (f237237) + follow-up d57e04e (harness 0016, TASK_PORTS d3)",
+      "at": "2026-09-23T04:38:47Z",
+      "note": "review fix_required \u2192 fix round confirmed pass \u2192 five residuals folded (87 mutants); merged-tree tests/d both images running; CREDIT jobs not claimable until WorkV2 (MY-3); complete() past the fence is D5's"
+    },
+    "W3": {
+      "merged": "W3 @ c81ef36 merged --no-ff (65e2c99); follow-up: tests/i real-script case passes the pilot gate; api-mutants += tests/w/test_w3_mutants.py",
+      "at": "2026-09-23T04:45:36Z",
+      "note": "review + confirmation pass; box inventory/capability measured (image equals the pin, KV 2,644,426 tokens); concurrency sweep HELD (P-04-sweep); registry oids \u26a0\ufe0f HF_TOKEN; software half only \u2014 box rollout not done"
+    },
+    "I2B": {
+      "merged": "I2B @ e82d77f merged --no-ff (08d3240) in the same step as W3 (FC-1)",
+      "at": "2026-09-23T04:45:36Z",
+      "note": "three review rounds (M1, S1 Caddy admin socket, RB-1 revert order, RB-2 grammar, RC2-X backup naming); I list 189; rehearsal 44/0; box rollout per the runbook is a separate coordinator operation (not done); I3B's --max-age 180 alert timer has no unit yet (composition item)"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

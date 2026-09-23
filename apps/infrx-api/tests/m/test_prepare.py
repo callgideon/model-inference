@@ -313,7 +313,12 @@ def test_preparation_runs_at_most_the_pool_width_at_once(tmp_path):
     async def slow(data):
         live[0] += 1
         peak[0] = max(peak[0], live[0])
-        await asyncio.sleep(0)
+        # M4 fold-in: data: URLs decode in worker threads now, so under load the parts can
+        # reach the probe one at a time; wait up to ~0.2 s for a third one to show up.
+        for _ in range(100):
+            if live[0] > 2:
+                break
+            await asyncio.sleep(0.002)
         live[0] -= 1
         return probe.probe(data)
 
@@ -855,3 +860,192 @@ def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path)
         run(adapter.attach("00000099-0000-4000-8000-000000000099", theirs))
     with pytest.raises(errors.NotFound):
         run(adapter.prepare("00000099-0000-4000-8000-000000000099", "profile-2"))
+
+
+# --- M4: full-body work off the event loop --------------------------------------------
+def test_no_full_body_digest_runs_on_the_event_loop(tmp_path, monkeypatch):
+    """M4: measured before this change, the digests in `materialize`, `prepare` and the
+    `data:` URL decoder held the event loop for ~0.8 ms per MiB each (~53 ms at the 64 MiB
+    cap on the measurement host), delaying every other request the process was serving. They
+    run in a worker thread now: a digest that finds a running loop in its thread is on it."""
+    on_loop = []
+
+    def watched(real):
+        def digest(data):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(len(data))
+            except RuntimeError:
+                pass
+            return real(data)
+        return digest
+
+    monkeypatch.setattr(store, "digest_of", watched(store.digest_of))
+    monkeypatch.setattr(prepare, "digest_of", watched(prepare.digest_of))
+    monkeypatch.setattr(fetch, "digest_of", watched(fetch.digest_of))      # data: URLs
+    # A store double whose own digest is not `store.digest_of`, so only the adapter's count.
+    adapter = preparation(tmp_path / "cache", bodies=[CLIP],
+                          objects=support.FileObjectStore(tmp_path / "objects"),
+                          jobs={"job-1": b.ORG_A})
+    ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    asyncio.run(adapter.attach("job-1", (ref,)))
+    asyncio.run(adapter.prepare("job-1", "v1"))
+    asyncio.run(adapter.materialize(b.ORG_A, data_url(WEBM, "video/webm")))
+    assert on_loop == []
+
+
+# --- M4: refusing from the header of a download still in progress -------------------
+FTYP = support.box(b"ftyp", b"isom\x00\x00\x02\x00isom")
+CHUNK = 64 << 10
+
+
+def _moov(seconds: float, pad: int = 0) -> bytes:
+    extra = (support.box(b"udta", bytes(pad)),) if pad else ()
+    return support.box(b"moov", support.mvhd(round(seconds * 1000)), support.trak(), *extra)
+
+
+def _streamed(body: bytes) -> support.Chunks:
+    return support.Chunks([body[at:at + CHUNK] for at in range(0, len(body), CHUNK)])
+
+
+def _served(tmp_path, stream):
+    return preparation(tmp_path, transport=support.Transport(support.response(stream=stream)))
+
+
+def test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives(tmp_path):
+    """M4: measured before this, a 56 MB header-first clip of 150 s was read to its last
+    byte and then refused. Its `moov` says 121 s in the first look (1 MiB), and the other
+    3 MiB are never read; nothing is stored, and the log line says why."""
+    body = FTYP + _moov(121.0) + support.box(b"mdat", bytes(4 << 20))
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    with pytest.raises(errors.UnsupportedMedia) as caught:
+        run(adapter.materialize(b.ORG_A, URL))
+    assert "longer than 120s" in caught.value.detail
+    assert getattr(caught.value, "reason", None) == "header"
+    assert stream.read < fetch.EARLY_LOOK_BYTES + CHUNK < len(body)
+    assert adapter.objects.objects == {} and adapter.refs == {}
+    # Review S4: the same refusal the whole object gets, apart from the operator's tag.
+    with pytest.raises(errors.UnsupportedMedia) as whole:
+        run(_served(tmp_path / "media-first", _streamed(
+            FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(121.0))).materialize(b.ORG_A, URL))
+    early, full = caught.value, whole.value
+    assert {k: v for k, v in vars(early).items() if k != "reason"} == vars(full)
+    assert early.code == full.code and early.args == full.args
+
+
+def test_a_header_that_is_not_complete_yet_is_looked_at_again(tmp_path):
+    """The first look sees half a `moov` (1.5 MB of `udta`); its probe refuses, which must
+    stay inside the look. The second look settles it: at the cap, so accepted."""
+    body = FTYP + _moov(DEFAULTS.max_video_seconds, pad=1_500_000) \
+        + support.box(b"mdat", bytes(2 << 20))
+    stream = _streamed(body)
+    ref = run(_served(tmp_path, stream).materialize(b.ORG_A, URL))
+    assert ref.duration_s == DEFAULTS.max_video_seconds and stream.read == len(body)
+
+
+def test_a_media_first_clip_over_the_cap_is_refused_once_it_has_arrived(tmp_path):
+    """No gain and no change where the header comes last: nothing can be read early, and
+    the whole-object probe is still the one that refuses."""
+    body = FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(121.0)
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    with pytest.raises(errors.UnsupportedMedia) as caught:
+        run(adapter.materialize(b.ORG_A, URL))
+    assert "longer than 120s" in caught.value.detail and stream.read == len(body)
+    assert adapter.objects.objects == {}
+
+
+def test_a_media_first_clip_within_the_cap_is_read_to_the_end_and_accepted(tmp_path):
+    """Every look at a media-first download ends inside a box header (the `mdat` runs past
+    the prefix); that truncation is "nothing yet", never a refusal of a good clip."""
+    body = FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(60.0)
+    stream = _streamed(body)
+    ref = run(_served(tmp_path, stream).materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+
+
+def test_the_header_scan_stops_where_the_probe_would(monkeypatch):
+    """The early walk reads at most MAX_ELEMENTS box headers, like the probe. The answer
+    would be None either way (the probe refuses a file with that many boxes); the bound is
+    what keeps a prefix of 8-byte boxes from costing ~130k header reads per MiB per look."""
+    moov = _moov(121.0)
+    assert probe.probe_header(FTYP + moov) is not None                  # non-vacuous
+    reads = []
+    real = probe._u
+    monkeypatch.setattr(probe, "_u", lambda data, at, size: reads.append(at) or real(data, at, size))
+    many = FTYP + support.box(b"free") * (4 * probe.MAX_ELEMENTS) + moov
+    assert probe.probe_header(many) is None
+    assert len(reads) <= probe.MAX_ELEMENTS
+
+
+def test_a_header_still_arriving_is_not_probed(monkeypatch):
+    """A `moov` not yet complete is answered from its box header alone: the prefix is not
+    copied and walked at every look for a `moov` that declares tens of MiB."""
+    probed = []
+    monkeypatch.setattr(probe, "probe", lambda data: probed.append(len(data)))
+    moov = _moov(121.0)
+    assert probe.probe_header(FTYP + moov[:-1]) is None and probed == []
+    probe.probe_header(FTYP + moov)
+    assert probed == [len(FTYP + moov)]                                  # non-vacuous
+
+
+def test_a_moov_too_large_for_a_look_is_left_to_the_whole_object(monkeypatch):
+    """Review S1: a complete `moov` ending past HEADER_PROBE_MAX is not copied and probed
+    at a look (a 60 MiB one held the loop 43.8 ms per look); the whole object decides."""
+    probed = []
+    monkeypatch.setattr(probe, "probe", lambda data: probed.append(len(data)))
+    probe.probe_header(FTYP + _moov(121.0))
+    assert probed == [len(FTYP + _moov(121.0))]                         # non-vacuous
+    probed.clear()
+    assert probe.probe_header(FTYP + _moov(121.0, pad=probe.HEADER_PROBE_MAX)) is None
+    assert probed == []
+
+
+def test_a_settled_header_is_not_looked_at_again(tmp_path):
+    """Review S1: the first complete `moov` is the only one the walk reads, so once it
+    passed the profile the download is not looked at again (an 8 MiB body: one look, not
+    four)."""
+    body = FTYP + _moov(60.0) + support.box(b"mdat", bytes(8 << 20))
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    answers = []
+    real = adapter.refuse_early
+    adapter.refuse_early = lambda head: answers.append(real(head)) or answers[-1]
+    ref = run(adapter.materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+    assert answers == [True]
+
+
+def test_an_injected_probe_is_the_only_one_that_decides(tmp_path):
+    """Review H2: the header walk is the built-in probe; with another one injected (M2's
+    drills), the early look does not refuse behind its back. Here the injected probe says
+    60 s, so the header's 121 s is never read as a refusal."""
+    import dataclasses
+
+    body = FTYP + _moov(121.0) + support.box(b"mdat", bytes(2 << 20))
+    stream = _streamed(body)
+    adapter = preparation(tmp_path, transport=support.Transport(support.response(stream=stream)),
+                          probe_fn=lambda data: dataclasses.replace(probe.probe(data),
+                                                                    duration_s=60.0))
+    ref = run(adapter.materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+
+
+def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():
+    """At most seven looks up to the 64 MiB cap: an 8 MiB body in 64 KiB chunks is looked
+    at four times, at 1, 2, 4 and 8 MiB; a 32 MiB one in 1 MiB chunks six times, the last
+    at 32 MiB (review S3: a moov completing past 16 MiB is still looked at)."""
+    mib = 1 << 20
+    for size, stream, expected in (
+            (8 * mib, _streamed, [1, 2, 4, 8]),
+            (32 * mib, lambda body: support.Chunks(
+                [body[at:at + mib] for at in range(0, len(body), mib)]), [1, 2, 4, 8, 16, 32])):
+        body = FTYP + support.box(b"mdat", bytes(size - len(FTYP) - 8))
+        looks = []
+        fetcher = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                                     transport=support.Transport(
+                                         support.response(stream=stream(body))).transport,
+                                     monotonic=support.Ticker(), log=support.Records())
+        run(fetcher.fetch(URL, early=lambda head: looks.append(len(head))))
+        assert looks == [n * mib for n in expected]

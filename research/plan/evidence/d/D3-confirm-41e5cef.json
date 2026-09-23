@@ -1,0 +1,383 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "CM-1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_leases.py",
+      "line": "check_cancel H-4 step (direct terminalize_no_usage call on the cancelled `busy` job); guard at apps/app/supabase/migrations/0016_fenced_leases.sql l.97",
+      "claim_broken": "H-4 says terminalize_no_usage refuses any terminal job. The killing check exercises only a job in state 'cancelled', so a guard narrowed to one terminal state is not pinned.",
+      "evidence": "My mutant own_terminal_check_only_cancelled (`if j.settled_at is not null then` -> `if j.state = 'cancelled' then`) SURVIVED on the plain image under all 10 D3 checks (claim_generation, lease_fence, preparation_fence, cancel, recover_requeue, recover_preparation, recover_unknown_release, recover_isolation, lease_privileges, lease_races), and under `cancel` on supabase. No money effect: every caller (cancel, fence_lease, recover_job, release_aged_unknown) re-checks settled_at under the job lock before calling it. My P7 probe shows the committed code refuses already_terminal on released_free, USD held_unknown and CREDIT held_unknown jobs with nothing moved. The shipped d3_terminalization_of_a_terminal_job is killed for the right reason.",
+      "minimal_fix": "In the H-4 step, also call terminalize_no_usage directly on a failed or expired job (for example the job the check already reaps), or on the held_unknown `shown` job. That kills the state-narrowed variant. Optional.",
+      "lens": "money"
+    },
+    {
+      "id": "FC-1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_leases.py",
+      "line": "check_fence (advance 40 then advance TTL); code 0016 fence_lease l.198",
+      "claim_broken": "FE-2 fix: 'the lease expiry instant is pinned'. Only the stale side is pinned. Nothing tests that a heartbeat one microsecond before expires_at still renews.",
+      "evidence": "The code is correct. Probe P1 on the plain image: a heartbeat at expires_at-1us renews to now+TTL, the reaper at renewed.expires_at-1us returns [], and at exactly expires_at both heartbeat and load_work return stale_lease while the reaper requeues at that same instant. Hand mutant `if v_now >= a.expires_at - interval '1 microsecond'` SURVIVED check_fence. It also survived the whole non-mutant tests/d: '214 passed, 3 skipped, 7 deselected, 24 xfailed, 1 xpassed'. The 1 s, 60 s and 79 s variants also SURVIVED the named check lease_fence (check_fence renews with 80 s left). The 10 s and 79 s variants are killed only by the conformance case dur_fence__preparation_is_claimed_and_fenced_like_execution ('StaleLease: preparation lease expired at ...'). The mutant runner does not score that case, because it runs only the named check. Only an early refusal under about 10 s goes unkilled, and its only effect is on a heartbeat that arrives very late. This is consistency, not a hole, the same grading as the original FE-2.",
+      "minimal_fix": "In check_fence, before the exactly-at-TTL step, move to the renewed expires_at minus 1 microsecond and assert that heartbeat renews. Then go to the new expires_at and assert stale_lease. Register the mutant `v_now >= a.expires_at - interval '1 microsecond'` on lease_fence.",
+      "lens": "fence"
+    },
+    {
+      "id": "FC-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_leases.py",
+      "line": "check_recover_preparation; code 0016 recover_job preparing branch l.396-398",
+      "claim_broken": "OB-5b: 'two reaper ticks on the same lapsed lease produce one fresh row'. This holds on the race path (a tick whose scan saw the expired lease but decides after the first tick committed) only because of `and released_at is null` in the preparing branch's attempt select. No test kills losing that filter.",
+      "evidence": "Probe P7: after one recover, call infrx.recover_job(job, now, R, 86400) directly, which models the late decision the way checks_leases._decide does for inference. Original code: [] and 2 prepare_dispatch rows. With the preparing branch changed to `where job_id = p_id and kind = 'preparation' order by generation desc limit 1`, P7 found 3 rows, the named check recover_preparation SURVIVED, and so did test_leases.py plus test_lease_races.py plus my P4 concurrent-tick probe. That probe cannot reach the window because T2 hits SKIP LOCKED while T1 holds the lock, and after the commit the scan no longer selects the job. The only effect would be a duplicate candidate that claim_preparation refuses (Limit 10). Sequential ticks and ticks during an uncommitted tick are correct and tested (P4: exactly one fresh row).",
+      "minimal_fix": "In check_recover_preparation, after a reap, call `_decide(conn, request.request_id)` and assert it is [] and the prepare_dispatch count is unchanged. Register the dropped-filter mutant on recover_preparation.",
+      "lens": "fence"
+    },
+    {
+      "id": "FC-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_leases.py",
+      "line": "check_claim_generation FE-4 block",
+      "claim_broken": "FE-4 (commit 2575c8f): claim 'refuses a job with a live attempt of either kind'. Only the preparation kind is pinned.",
+      "evidence": "Probe P3: a queued row with a live preparation attempt and a queued row with a live inference attempt (running job forced back to queued) both return not_claimable, and exactly one live attempt remains in each case. So the code is correct. Hand mutant restricting the exists() to `kind = 'preparation'` SURVIVED claim_generation. The inference half is backstopped by 0003's attempts_one_active_per_kind_idx, so under the mutant a second live inference attempt still cannot exist. The caller gets an untyped 23505 instead of not_claimable. The state is unreachable through any boundary.",
+      "minimal_fix": "Add a second case to the FE-4 block: a running job forced to state='queued', claim returns not_claimable, and live attempts stay [('inference',1,'w1')]. Register the kind-restricted mutant.",
+      "lens": "fence"
+    },
+    {
+      "id": "FC-4",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0012_dispatch_outbox.sql",
+      "line": "reopen_dispatch",
+      "claim_broken": "The task's premise that 'reopen takes the job row lock' does not match the code. The fix round (592a670, addendum A4, Limit 9) says openly that it takes no lock, and argues that none is needed.",
+      "evidence": "I reproduced the race both ways. P6a: reopen during an uncommitted claim_preparation reopens 1 row, and after the commit dispatch_pending redelivers it, because a preparing job is still dispatch_wanted. The second claim_preparation is refused not_claimable, and the live attempts stay [('preparation',1,'prep-a')]. P6b: reopen during an uncommitted reaper requeue reopens 0 rows (the job looks running in its snapshot), and exactly one pending inference_dispatch row (the fresh one) is left after the commit. The shipped race test test_race__a_rebuild_during_a_claim_never_sees_half_a_claim covers the claim case and passed. The worst outcome matches the disclosure: a duplicate candidate that claim refuses. The disclosure covers claim_preparation too, and nothing makes a second lease.",
+      "minimal_fix": "None required. Optionally add the claim_preparation interleaving (P6a) to the race test next to the claim one, because that is the variant where the reopened row is actually redelivered rather than superseded.",
+      "lens": "fence"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "d3_quarantine_releases_the_credit_hold (shipped)",
+          "edit": "quarantine_hold_credit sets state='released', reconcile_after=null",
+          "result": "killed both images",
+          "killed_by": "cancel -> 'published CREDIT output was not quarantined: ('released', None)' (R83: correct reason)"
+        },
+        {
+          "name": "d3_published_credit_released_not_quarantined (shipped)",
+          "edit": "terminalize_no_usage published+credit -> release_hold_credit",
+          "result": "killed both images",
+          "killed_by": "cancel -> same text ('released', None)"
+        },
+        {
+          "name": "d3_published_credit_quarantined_as_legacy (shipped)",
+          "edit": "credit held_unknown branch -> if false (falls to the legacy quarantine)",
+          "result": "killed both images",
+          "killed_by": "cancel -> '...not quarantined: ('held', None)'"
+        },
+        {
+          "name": "d3_unknown_release_keeps_the_credit_hold (shipped)",
+          "edit": "release_aged_unknown credit branch -> null",
+          "result": "killed both images",
+          "killed_by": "recover_unknown_release -> 'the CREDIT unknown hold was not released at the window, ledger untouched'"
+        },
+        {
+          "name": "d3_unknown_release_keeps_the_hold (shipped, now USD-only)",
+          "edit": "release_aged_unknown USD branch -> null",
+          "result": "killed both images",
+          "killed_by": "recover_unknown_release -> 'the unknown hold was not released'"
+        },
+        {
+          "name": "d3_settled_usage_may_become_absorbed (shipped, MY-2)",
+          "edit": "0003 guard source in ('held_unknown','settled')",
+          "result": "killed both images",
+          "killed_by": "recover_unknown_release -> 'settled -> released_platform_absorbed allowed'"
+        },
+        {
+          "name": "d3_claim_leases_a_credit_job (shipped, MY-3)",
+          "edit": "claim credit refusal -> if false",
+          "result": "killed both images",
+          "killed_by": "claim_generation -> 'a CREDIT job was leased with no v2 work loader'"
+        },
+        {
+          "name": "d3_terminalization_of_a_terminal_job (shipped, H-4)",
+          "edit": "terminalize_no_usage terminal guard -> if false",
+          "result": "killed both images",
+          "killed_by": "cancel -> 'a terminal job was terminalized again: None, [...usage_projection x2...]'"
+        },
+        {
+          "name": "other selected shipped money mutants (d3_published_output_released, d3_terminalization_keeps_the_{hold,credit_hold,reservations,attempts}, d3_terminalization_without_its_usage_projection, d3_quarantine_releases_the_hold, d3_unknown_released_{early,twice}, d3_unknown_release_refused)",
+          "edit": "as registered",
+          "result": "all killed on both images (18/18 selected); kill texts name the invariant. d3_unknown_release_refused dies via 'not only outcomes: unsettleable 23514', which is still the right reason",
+          "killed_by": "cancel / recover_unknown_release"
+        },
+        {
+          "name": "own_release_hold_credit_ignores_unknown",
+          "edit": "0012 release_hold_credit: state in ('held','unknown') -> state = 'held'",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release (CREDIT hold not released at the window)"
+        },
+        {
+          "name": "own_aged_credit_released_as_legacy",
+          "edit": "release_aged_unknown credit branch -> release_hold_legacy_usd",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release"
+        },
+        {
+          "name": "own_aged_usd_released_as_credit",
+          "edit": "release_aged_unknown USD branch -> release_hold_credit",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release ('the unknown hold was not released')"
+        },
+        {
+          "name": "own_credit_quarantine_window_is_now",
+          "edit": "quarantine_hold_credit reconcile_after = infrx.now()",
+          "result": "killed both",
+          "killed_by": "cancel ('not quarantined: ('unknown', <now>)')"
+        },
+        {
+          "name": "own_credit_quarantine_window_is_now_lost",
+          "edit": "same edit, run against recover_unknown_release",
+          "result": "survived that check (it asserts the lost-path hold state only), but the same edit is killed by cancel, so the suite kills it",
+          "killed_by": "cancel"
+        },
+        {
+          "name": "own_guard_released_free_absorbable",
+          "edit": "0003 guard source in ('held_unknown','released_free')",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release ('released_free -> released_platform_absorbed allowed')"
+        },
+        {
+          "name": "own_terminal_check_only_cancelled",
+          "edit": "terminalize_no_usage `if j.settled_at is not null` -> `if j.state = 'cancelled'`",
+          "result": "SURVIVED all 10 D3 checks (plain) and cancel (supabase); see CM-1, nonblocking, no caller reaches it"
+        },
+        {
+          "name": "own_aged_release_one_second_early",
+          "edit": "recover reconcile_after <= v_now + 1s",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release ('released before the window')"
+        },
+        {
+          "name": "own_aged_release_one_tick_late",
+          "edit": "recover reconcile_after < v_now",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release (bare message '{}' from the set(released) assert; right reason, terse text)"
+        },
+        {
+          "name": "own_aged_release_leaves_job_held",
+          "edit": "release_aged_unknown leaves the job held_unknown",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release"
+        },
+        {
+          "name": "own_unpublished_credit_quarantined",
+          "edit": "unpublished credit terminalization -> quarantine_hold_credit(v_now)",
+          "result": "killed both",
+          "killed_by": "cancel; also killed by claim_generation's MY-3 expiry step"
+        },
+        {
+          "name": "own_claim_credit_refused_only_first_time",
+          "edit": "claim credit refusal only when attempts > 0",
+          "result": "killed both",
+          "killed_by": "claim_generation"
+        },
+        {
+          "name": "own_reconcile_window_doubled",
+          "edit": "terminalize_no_usage v_reconcile = now + 2*window",
+          "result": "killed both",
+          "killed_by": "recover_unknown_release"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-d3> archive 41e5cef | tar -x -C /tmp/claude-1000/confirm-d3-money-3412029 && make api-env; harness patched in scratch only: LocalService(container=infrx-confirm-d3-money-postgres, port 55561, database infrx_d3), lock /tmp/infrx-confirm-d3-money.lock",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_leases.py  (plain 16.14)",
+          "exit": 0,
+          "tail": "12 passed in 7.35s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_migration_mutants.py -k 'd3_quarantine or d3_published or d3_unknown or d3_settled or d3_claim_leases_a_credit or d3_terminalization'  (plain)",
+          "exit": 0,
+          "tail": "18 passed, 371 deselected in 33.65s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_leases.py",
+          "exit": 0,
+          "tail": "12 passed in 11.42s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all ... test_migration_mutants.py -k <same>",
+          "exit": 0,
+          "tail": "18 passed, 371 deselected in 23.88s (rerun with -s: 18 passed in 34.03s, every one 'killed by <named check>')"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all ... test_migration_mutants.py -k '<same> or well_formed' -s  (plain, kill texts)",
+          "exit": 0,
+          "tail": "386 mutants over 68 checks; 386 selected (all) / 19 passed, 370 deselected in 26.26s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/d/test_zz_money_probe.py  (scratch probe P1-P8, plain)",
+          "exit": 0,
+          "tail": "P1 wallet before (14.74560000, 10000) after (0E-8, 10000) amount 14.74560000 / P6 claim -> not_claimable live [] / P6 expiry -> [('queue_wait_expired','released_free','0.00000000')] / P6 wallet before admit (0E-8,10000) held (14.7456,10000) after (0E-8,10000) / P8A cancel blocked on the release: True -> None released_platform_absorbed / P8B cancel(uncommitted) -> held_unknown ; concurrent sweep -> [] / P8C reaper ['lost_after_publication'] cancel blocked: True -> lost_after_publication usage projections: 1 hold unknown / 8 passed in 5.98s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -s tests/d/test_zz_money_probe.py",
+          "exit": 0,
+          "tail": "P5 settled -> absorbed: 23514 / P7 (...'held_unknown') -> already_terminal / P8C reaper ['lost_after_publication'] cancel blocked: True ... usage projections: 1 hold unknown / 8 passed in 10.26s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/d/test_zz_own_mutants.py  (14 own mutants via migration_mutants.kill, plain then supabase)",
+          "exit": 0,
+          "tail": "plain: 12 killed, own_credit_quarantine_window_is_now_lost survived (same edit killed by cancel), own_terminal_check_only_cancelled survived / 14 passed in 19.01s; supabase: identical outcomes, 14 passed in 30.32s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/d/test_zz_own_sweep.py  (own_terminal_check_only_cancelled x 10 D3 checks, plain)",
+          "exit": 0,
+          "tail": "SWEEP ... x lease_races: survived -> / 10 passed in 14.55s (survived under all 10)"
+        }
+      ],
+      "fabrication_check": "Every number and tail above comes from this session's runs on 41e5cef in the scratch archive, on my own container infrx-confirm-d3-money-postgres(-supabase) on port 55561. I did not use a Valkey, so 55562 was never bound. I checked the addendum's claims directly. FE-1/MY-1: a published CREDIT job that is cancelled or loses its lease leaves hold ('unknown', now + 86400). reserved_total stays at 14.7456 through window-1. At the window the hold is released: reserved goes from 14.7456 to 0E-8 (down by exactly the hold amount), ledger_total stays 10000, and a second sweep and a later cancel move nothing. The same holds for the USD twin (hold 0.0073728). A CREDIT or USD job cancelled before publication is released_free with the hold released immediately. MY-2: on a settled CREDIT job, release_aged_unknown returns [], recover never selects it, release_hold_credit leaves the 'settled' hold alone, and a direct update to absorbed is refused with 23514. MY-3/G2: claim answers not_claimable and leaves no attempt. The job waits out its 10 s queue remainder (nothing released at -1 s), then expires queue_wait_expired / released_free with debit 0. The wallet goes back exactly to its pre-admission reserved_total, ledger is unchanged, and dispatch_pending has nothing pending for the job. H-4: already_terminal on every terminal kind, with nothing moved. A double cancel returns the identical outcome and writes no new rows. On the cancel-vs-24 h release race: cancel blocks on the release's row lock and then answers released_platform_absorbed, released once. With an uncommitted cancel holding the lock, the sweep skips the job and releases it on the next sweep, once. Cancel racing the reaper at lease expiry gives one terminalization and one usage_projection. Limits: the published-CREDIT paths go through the credit_running fixture (it writes claim's row directly), as Limit 3' discloses. I did not rerun the full tests/d sweep; the 607/609 headline rows are the implementer's, not mine. The H-4 finding is a coverage nit, not a money hole.",
+      "cleanup": "The harness removed both of my containers at exit; `docker ps -a | grep confirm-d3-money` returns 0. I deleted the lock /tmp/infrx-confirm-d3-money.lock and the scratch tree /tmp/claude-1000/confirm-d3-money-3412029 (the probe and own-mutant test files lived only there). I touched no other container and did not use ports 55432/55433/55434 or 55562. The codex-d3 worktree is clean at 41e5cef, with no edits or commits in any worktree."
+    },
+    {
+      "lens": "fence",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "d3_fence_* / d3_retries_* / d3_claim_beside_a_live_attempt / d3_prep_* / d3_requeue_* (shipped, 29 selected)",
+          "edit": "as registered in tests/d/migration_mutants.py (includes d3_fence_expiry_off_by_one, d3_retries_checked_before_publication, d3_requeue_reopens_the_old_row, d3_prep_redispatch_reopens_the_old_row, d3_fence_without_a_live_attempt, d3_fence_serves_a_released_attempt)",
+          "result": "all 29 killed as declared (29 passed)",
+          "killed_by": "named checks lease_fence / claim_generation / recover_requeue / recover_preparation"
+        },
+        {
+          "name": "h2_no_live_attempt (by hand)",
+          "edit": "fence_lease: `if not found then` -> `if false then` after the live-attempt select",
+          "result": "KILLED",
+          "killed_by": "check_fence at checks_leases.py:288 'a lease with no live attempt behind it loaded the work' (its own assertion, no longer untyped 22004)"
+        },
+        {
+          "name": "h2_released_attempt (by hand)",
+          "edit": "fence_lease: drop `and released_at is null`",
+          "result": "KILLED",
+          "killed_by": "check_fence at checks_leases.py:291 'a spent preparation lease loaded the work of the job it handed over'"
+        },
+        {
+          "name": "own_fence_expiry_minus_1us",
+          "edit": "`v_now >= a.expires_at` -> `v_now >= a.expires_at - interval '1 microsecond'`",
+          "result": "SURVIVED lease_fence and the whole non-mutant tests/d (FC-1)",
+          "killed_by": ""
+        },
+        {
+          "name": "own_fence_expiry_minus_1s / _60s / _79s",
+          "edit": "same with 1 s / 60 s / 79 s",
+          "result": "SURVIVED lease_fence; 79 s (and 10 s) killed by the conformance suite",
+          "killed_by": "test_jobstore_conformance dur_fence__preparation_is_claimed_and_fenced_like_execution (StaleLease) for 10 s and 79 s"
+        },
+        {
+          "name": "own_reaper_expiry_gt",
+          "edit": "recover_job `p_now < a.expires_at` -> `<=`",
+          "result": "KILLED",
+          "killed_by": "check_recover_requeue:149 'expected one index_event: []'"
+        },
+        {
+          "name": "own_prep_redispatch_available_later",
+          "edit": "fresh prepare_dispatch available_at p_now -> p_now + 1 hour",
+          "result": "KILLED",
+          "killed_by": "check_recover_preparation:647 'not one fresh redispatch: []'"
+        },
+        {
+          "name": "own_requeue_redispatch_available_later",
+          "edit": "fresh inference_dispatch available_at p_now -> p_now + 1 hour",
+          "result": "KILLED",
+          "killed_by": "check_recover_requeue:565 'the requeue is not the relay's one new pending row'"
+        },
+        {
+          "name": "own_prep_reap_redispatches_twice",
+          "edit": "preparing branch: when no live attempt is found, insert another prepare_dispatch",
+          "result": "SURVIVED recover_preparation (the race-path path, FC-2)",
+          "killed_by": ""
+        },
+        {
+          "name": "own_prep_reap_sees_released",
+          "edit": "preparing branch attempt select drops `released_at is null` (order by generation desc limit 1)",
+          "result": "SURVIVED recover_preparation, test_leases, test_lease_races, and P4. Killed by my P7 (3 rows instead of 2)",
+          "killed_by": "scratch probe P7 only (FC-2)"
+        },
+        {
+          "name": "own_claim_only_prep_attempts",
+          "edit": "claim exists() restricted to kind='preparation'",
+          "result": "SURVIVED claim_generation (FC-3)",
+          "killed_by": ""
+        },
+        {
+          "name": "own_claim_only_inference_attempts",
+          "edit": "claim exists() restricted to kind='inference'",
+          "result": "KILLED",
+          "killed_by": "check_claim_generation:246 'a job with a live preparation lease was claimed as well'"
+        },
+        {
+          "name": "own_terminalize_no_usage_no_terminal_guard",
+          "edit": "drop H-4's already_terminal refusal in terminalize_no_usage",
+          "result": "KILLED",
+          "killed_by": "check_cancel:458 'a terminal job was terminalized again'"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-d3 archive 41e5cef | tar -x -C /tmp/claude-1000/confirm-d3-fence-3410953 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": "(scratch pgharness: container infrx-confirm-d3-fence-postgres, port 55563, lock /tmp/infrx-confirm-d3-fence.lock; Valkey infrx-confirm-d3-fence-valkey:55564) uv run --frozen pytest -q -rs tests/d/test_leases.py tests/d/test_lease_races.py tests/d/test_outbox_relay.py",
+          "exit": 0,
+          "tail": "37 passed in 26.54s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -rs tests/d/test_migration_mutants.py -k 'd3_fence or d3_retries or d3_claim_beside or d3_prep or d3_requeue'",
+          "exit": 0,
+          "tail": "29 passed, 360 deselected in 56.69s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/d/test_confirm_fence.py (scratch probes P1-P7 on original 0016)",
+          "exit": 0,
+          "tail": "P1 ok: renew at expires_at-1us, stale at expires_at, reaper requeues at expires_at / P2 ok: lost_after_publication held_unknown / P3 ok: both refused not_claimable, one live attempt each / P4 ok: fresh prepare_dispatch bb871860-... available_at 2026-09-20 12:00:30+00:00 delivered once / P5 ok: fresh inference_dispatch 1d68b8cd-... / P6a reopen during uncommitted claim_preparation: reopened 1 redelivered 1 second claim not_claimable live [('preparation', 1, 'prep-a')] / P6b reopen during uncommitted requeue: reopened 0 pending rows 1 / P7 late decision: [] prepare_dispatch rows 2"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.d.confirm_hand (hand-applied H-2 and own mutants, admission seed, named check)",
+          "exit": 0,
+          "tail": "h2_no_live_attempt -> KILLED fence at checks_leases.py:288 ... / h2_released_attempt -> KILLED fence at checks_leases.py:291 ... / own_fence_expiry_minus_1us -> SURVIVED fence / own_prep_reap_redispatches_twice -> SURVIVED recover_preparation / own_claim_only_prep_attempts -> SURVIVED claim_generation / own_prep_reap_sees_released -> SURVIVED recover_preparation / (others KILLED)"
+        },
+        {
+          "cmd": "0016 patched prep-branch released filter dropped; pytest -k p7 test_confirm_fence.py",
+          "exit": 1,
+          "tail": "P7 late decision: [] prepare_dispatch rows 3 / 1 failed, 6 deselected in 2.90s (0016 restored after)"
+        },
+        {
+          "cmd": "0016 patched fence `- interval '79 seconds'`; pytest -x tests/d --ignore=test_migration_mutants.py",
+          "exit": 1,
+          "tail": "FAILED ...test_jobstore_conformance_on_postgres[dur_fence__preparation_is_claimed_and_fenced_like_execution] (StaleLease) / 1 failed, 125 passed, 7 deselected, 5 xfailed in 144.37s"
+        },
+        {
+          "cmd": "0016 patched fence `- interval '1 microsecond'`; pytest -x tests/d --ignore=test_migration_mutants.py --ignore=test_pgharness.py",
+          "exit": 0,
+          "tail": "214 passed, 3 skipped, 7 deselected, 24 xfailed, 1 xpassed in 171.93s (0:02:51)"
+        },
+        {
+          "cmd": "0016 patched fence `- interval '10 seconds'`; same selection",
+          "exit": 1,
+          "tail": "StaleLease: preparation lease expired at 2026-09-20 12:00:30+00 / 1 failed, 125 passed, 7 deselected, 5 xfailed in 134.37s"
+        }
+      ],
+      "fabrication_check": "Every tail above is quoted from logs I ran in this session on the plain image (postgres 16.14 digest) in my own container on port 55563. The addendum's claims that I checked all hold. FE-2: d3_fence_expiry_off_by_one is killed, but only the stale side is pinned (FC-1). FE-3: d3_retries_checked_before_publication is killed, and P2 independently shows a job with spent retries lost after publication gets lost_after_publication/held_unknown, no new inference_dispatch, and claim returns already_terminal. FE-4: done in the code, the preparation half is killed, the inference half is backstopped by a unique index (FC-3). OB-5b (A1): fresh rows with a new event_id and available_at = the sweep's now(), the old acknowledged row unchanged, delivered exactly once through dispatch_pending under a worker id, a blank worker refused with invalid_request, and another relay's ack gets 0 (P4, P5). A4 (reopen takes no lock, worst case a refused duplicate) is disclosed honestly and I reproduced it (P6a, P6b). The task premise that reopen 'takes the job row lock' is not what 592a670 claims. H-1: the 0003 header carries D2's dated note ('D2 amendment 2026-09-22') and D3's dated R84 note ('D3 amendment 2026-09-23 (R84, ...)'). R84 needs a dated note naming the task, which both have. H-2: both mutants die on their own assertion. Not run by me: the supabase image; the Q3 Reconciler (it is not in this tree; the addendum's Limit 15 discloses a partial scratch run). I exercised only D2's SQL relay protocol and OutboxRelay. I made no edits or commits in any worktree; the codex-d3 status is clean.",
+      "cleanup": "Container infrx-confirm-d3-fence-postgres and the Valkey container were removed by the harness at exit (docker ps -a count 0). Lock files /tmp/infrx-confirm-d3-fence.lock and /tmp/infrx-confirm-d3-fence-valkey-55564.lock are deleted. The scratch tree /tmp/claude-1000/confirm-d3-fence-3410953, its probe files (test_confirm_fence.py, confirm_hand.py), the logs and the env log are deleted. The Monitor task is stopped. I never touched ports 55432, 55433 or 55434 or any other container."
+    }
+  ]
+}

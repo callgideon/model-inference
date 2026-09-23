@@ -8,6 +8,10 @@
 -- through narrow `infrx` functions only. Units are never combined (R73): the CREDIT
 -- wallet summary and the legacy USD statement are separate calls with separate units.
 -- Re-runnable (create or replace).
+--
+-- D2 amendment 2026-09-22 (in place: 0006-0009 are applied to no hosted project; D1R
+-- review (e), R84): a comment only, on `console_legacy_usd_statement` - the requested
+-- `infrx.now()` for `as_of` is declined there, with the reason. No object changes.
 
 -- ======================================================= admission-pin resolution ===
 -- `model -> deployment_revision -> serving_version + rate_card_version + policy_version`
@@ -154,6 +158,11 @@ end $$;
 -- The legacy USD statement (06a LegacyUsdStatement): historical `credit_ledger` USD, its
 -- own unit, and `rollout_hold` whenever the balance is nonzero - no product decision
 -- exists to convert or discard it (R72). Never summed with CREDIT.
+-- D1R review (e) asked for `infrx.now()` here; NOT done, on purpose: this is SECURITY
+-- INVOKER for browser sessions, which may not execute anything in `infrx` (0004), and a
+-- DEFINER body would make `is_service_client()` true for every caller (it tests
+-- `current_user`) and open the guard below. `as_of` is a display instant, not one of R7's
+-- expiry/lease/24 h decisions.
 create or replace function public.console_legacy_usd_statement(p_org uuid)
 returns table (org_id uuid, accounting_regime text, unit text, balance text,
                entry_count bigint, as_of timestamptz, rollout_hold boolean)

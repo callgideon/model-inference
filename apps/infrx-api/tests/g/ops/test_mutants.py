@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """R32/R40: every invariant `tests/g/ops` claims is killed by a named single edit.
 
-The runner's own honesty (a syntax error is not a kill, a no-op survives, every named
-case must notice) is pinned by the self-tests below, since this runner is G6B's own.
+The runner is the shared one (R83) with G6B's stricter `require_every_case`; the
+self-tests below pin that the delegation kept its honesty: a no-op survives, a syntax
+error is `broken_runner` (decided by `compile()`), a blind named case is `misdeclared`,
+and a missing anchor is `misdeclared`.
 
     uv run --frozen pytest -q tests/g/ops/test_mutants.py                     # subset
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/ops/test_mutants.py   # all

@@ -72,6 +72,10 @@ EXPECTED_VIEWS = (
 #: 06 §"Mutation boundaries". `grant` is `grant_credit` (reserved word).
 RPC_NAMES = ("admit", "prepare", "claim", "heartbeat", "append", "cancel", "terminalize",
              "grant_credit", "accept_feedback", "reserve_judge", "record_submission")
+#: The boundaries D2 has filled (0011 `admit`, 0012 `prepare`); the rest are still stubs.
+FILLED_RPCS = ("admit", "prepare",
+               # D3 (0016); `terminalize` has D3's fenced prefix, its settlement is D5's.
+               "claim", "heartbeat", "cancel", "terminalize")
 
 _JOB_COLUMNS = """
   request_id, job_handle, org_id, key_id, model_revision, execution_mode, state,
@@ -605,11 +609,17 @@ def check_rpc_boundary(conn) -> str:
         assert grantees <= {"postgres", "service_role"}, \
             f"infrx.{name}() is executable beyond the service role: {acl}"
         assert "service_role" in grantees, f"infrx.{name}() is not granted to service_role"
-    # The body is absent on purpose: the boundary fails closed until its task fills it.
+    # A body that is absent fails closed (feature_not_supported) until its task fills it;
+    # a filled one (D2: `FILLED_RPCS`) refuses a malformed call as a typed invalid_request.
     for name in RPC_NAMES:
         try:
             conn.execute(f"select infrx.{name}('{{}}'::jsonb)")
         except psycopg.errors.FeatureNotSupported:
+            assert name not in FILLED_RPCS, f"infrx.{name}() is filled but still a stub"
+            continue
+        except psycopg.errors.RaiseException as refused:
+            assert name in FILLED_RPCS and str(refused).startswith("invalid_request:"), \
+                f"infrx.{name}() refused '{{}}' with {refused}"
             continue
         raise AssertionError(f"infrx.{name}() did not fail closed")
     return f"{len(RPC_NAMES)} boundaries: security definer, fixed search_path, service only"
@@ -2380,7 +2390,19 @@ def check_test_clock(conn, second_session=None) -> str:
     conn.execute("select infrx_test.set_offset(0)")
     back, = conn.execute("select infrx.now() - now()").fetchone()
     assert back.total_seconds() == 0
-    return "movable in a task-local database, visible to every session"
+    # D2: a frozen instant is exact in every transaction, then the wall clock resumes.
+    conn.execute("select infrx_test.freeze('2026-09-20T12:00:00Z')")
+    frozen = {conn.execute("select infrx.now()").fetchone()[0] for _ in range(3)}
+    assert len(frozen) == 1 and frozen.pop().isoformat() == "2026-09-20T12:00:00+00:00", \
+        "a frozen clock moved between transactions"
+    conn.execute("select infrx_test.advance(30)")
+    later, = conn.execute("select infrx.now()").fetchone()
+    assert later.isoformat() == "2026-09-20T12:00:30+00:00", f"frozen advance: {later}"
+    conn.execute("select infrx_test.unfreeze()")
+    conn.execute("select infrx_test.set_offset(0)")
+    resumed, = conn.execute("select infrx.now() - now()").fetchone()
+    assert resumed.total_seconds() == 0, f"unfreeze left the clock at {resumed}"
+    return "movable and freezable in a task-local database, visible to every session"
 
 
 def check_production_clock(conn) -> str:
@@ -2397,4 +2419,8 @@ def check_production_clock(conn) -> str:
     after, = conn.execute("select infrx.now() - now()").fetchone()
     assert after.total_seconds() == 0, \
         f"a non-task-local database honoured a test clock offset: {after}"
+    conn.execute("select infrx_test.freeze('2000-01-01T00:00:00Z')")
+    frozen, = conn.execute("select infrx.now() - now()").fetchone()
+    assert frozen.total_seconds() == 0, \
+        f"a non-task-local database honoured a frozen test clock: {frozen}"
     return f"{database}: offset ignored although infrx_test.clock exists and is set"

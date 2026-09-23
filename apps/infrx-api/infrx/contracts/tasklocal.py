@@ -21,6 +21,17 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "c1": {"postgres": 55441},
     # R63: per-task Valkey ports for Q lanes (the track port 56379 stays the shared default)
     "q2": {"valkey": 55461}, "q3": {"valkey": 55462},
+    # D2's relay drills need both a PostgreSQL and a Valkey of their own
+    "d2": {"postgres": 55433, "valkey": 55463},
+    # D3's drills run D2's Valkey relay on the lane's own container
+    "d3": {"postgres": 55434, "valkey": 55464},
+    # D4's relay/journal drills and G2's relay drill each get a Valkey of their own
+    "d4": {"postgres": 55435, "valkey": 55465},
+    "g2": {"valkey": 55466},
+    # E3B phase 2 runs the E2 stack as compose namespace `e3b2` in the reserved block
+    # 56700-56799 (the harness derives service ports from INFRX_E2_NAMESPACE; a block is
+    # not a single port, so it is recorded here as the namespace's first port)
+    "e3b2": {"postgres": 56701},
 }
 
 # track -> {service: (host port, extra ports)}

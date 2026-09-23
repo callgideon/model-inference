@@ -646,6 +646,37 @@ gate's counterpart: when `ROUTERS` gains the ingress, this check starts passing 
 same run's `validate_runtime` refusal is what keeps an incomplete pilot from serving.
 I2B reuses `apply` as its atomic configuration step rather than writing a second one.
 
+## 5.2 The packaged backend (I2B)
+
+**Implemented in the repository and rehearsed locally; not on the host** until the
+coordinator runs [the rollout runbook](rollout/README.md). What §2 proposed, as built:
+
+| Piece | Where | Rule |
+|---|---|---|
+| Runtime image | `apps/infrx-api/deploy/Dockerfile` | `python:3.12.14-slim-trixie` and `uv 0.11.8` by digest, `uv.lock` frozen, uids 10001 (gateway) / 10002 (worker) in group 10000, no root; built on the host from the release commit with `--provenance=false`, and its content id is the pin (`INFRX_IMAGE` in the env file) |
+| Units | `deploy/*.service` | gateway, worker (`PartOf=` the engine; W3's `WorkerService` runs the store's `recover()` reaper in process, so no timer), Valkey (digest, loopback, no persistence, `noeviction`) and the engine; every container read-only, `--cap-drop ALL`, `no-new-privileges`, memory/pid bounds (`est.`); `TimeoutStopSec` > `docker stop -t` everywhere; worker drain 330 s > `GENERATION_TIMEOUT_S` |
+| One configuration authority | `/etc/marlin2b-gateway.env`, written only by `preflight.py apply` | the manifest keys plus `--set` tunables, which must be names the runtime reads (the schema is every name `config.from_env` reads, pinned by a test); systemd reads `INFRX_IMAGE`, the containers and serve.sh read the rest |
+| Media root R | `PROCESSING_CACHE_DIR=/opt/dlami/nvme/processing` | **changed from §2's `/var/lib/infrx/media`** to W3's proposal: a rebuildable 7-day cache on the instance-store NVMe (386 G free, I1B), one value for the gateway (writer), worker and engine (read-only); the units recreate it with its owner at every start because a stop wipes the NVMe |
+| Usage spill | `/var/lib/infrx/usage/usage.jsonl` | row `M-SCRATCH`: root EBS, survives a stop |
+| Install backups | `/var/backups/infrx/<UTC>-<sha>/` (`files.tar`, `absent`) | each holds the **previous env file, secrets included** (`SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`): root-only (directories 0700, archive 0600); a run the preflight refuses removes its own; nothing prunes them automatically - the coordinator removes those older than the last accepted release's under the lock (runbook step 11), so a rotated secret does not live on in them |
+| Disk budget | `preflight.DISK_BUDGET` | pilot refuses below 10 GiB free for `/var/lib/infrx` and 60 GiB for R (`est.`) |
+| Edge | `deploy/Caddyfile`, `Caddyfile.maintenance` | pinned Caddy; `/metrics`, `/readyz`, `/internal` 404; public `/health` is `{"ok":true}` / `{"ok":false}` only; no route to the engine; bodies bounded at `MAX_REQUEST_BYTES` (declared length refused up front); maintenance is the active site, so it survives a Caddy restart |
+| Scripts | `install.sh` (deploy), `migrate.py`, `drain.sh`, `rollback.sh`, `rehearse.sh` | install: commit → image → backup → preflight (secrets, probe in the image, rename) → units → engine → runtime → readiness → edge; a refusal changes nothing. migrate: reviewed plan digest, one transaction, Supabase CLI history. rollback: files back; a pilot is never returned to an unmetered runtime without the operator's statement that no pilot request was accepted (§8) |
+
+**Edge admin API, and what remains of its risk.** Caddy's admin API replaces the whole
+running configuration on one unauthenticated request, and the gateway and worker - the
+processes that decode untrusted media - run `--network host`, so on loopback it would put
+the public site one POST away from any of them (a `reverse_proxy 127.0.0.1:8000` makes the
+private engine public; a `file_server` on `/data` serves the TLS private keys). Both
+Caddyfiles therefore set `admin unix//config/admin.sock`, a socket in the `caddy_config`
+volume that only the Caddy container mounts; every reload names it
+(`lib.sh caddy_reload`), `tests/i` pins both, and `verify-external.sh` still checks that
+:2019 does not answer from outside. Residual: Caddy runs as root **inside** its container
+(`--cap-drop ALL` plus `NET_BIND_SERVICE`, read-only root) with the `caddy_data` volume -
+the certificates and their private keys - mounted read-write, so a compromise of the Caddy
+process itself is a compromise of the certificate; and anyone who can `docker exec` on the
+host can reach the socket, which is already root-equivalent.
+
 ## 6. Backup and restore per durable layer
 
 No EC2 snapshot, AMI or AWS Backup plan exists in us-east-1 (row `O-BACKUPS`);
@@ -705,6 +736,15 @@ runbook that turns these rules into a drilled procedure is matrix row
    may stop new activity but preserves durable state and retention obligations.
 5. Every rollback appends to the lock record: trigger, actions, durable state
    before and after, and whether any accepted job changed state.
+
+How I2B's `rollback.sh` applies rule 3: it refuses to put a `pilot` host back on a runtime
+without a pilot mode unless `ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` is given
+(runbook R2, a failed first cutover). That is an **operator attestation, not a check**: the
+script reads only the two env files' modes, and nothing on the host proves that no pilot
+request was accepted (the usage spill is not an admission record). The coordinator
+corroborates it before stating it - a read-only count of the hosted pilot job and ledger
+rows written since the cutover step, which must be zero - and records the statement and
+the count in the lock record (rule 5).
 
 ## 9. Deferred to I4 (not pilot scope)
 
@@ -1013,3 +1053,18 @@ target group.
     seventh-pass entry records that the "57" stated in both fifth-pass entries was
     wrong (55), why, and the complete list of log entries that were edited in place
     before this rule took effect.
+- 2026-09-22 (I2B, local only; no AWS call, nothing run against the pilot host or hosted
+  Supabase): added §5.2, the packaged backend. One design change against §2 is recorded
+  there rather than silently: the media root moved to the instance-store NVMe
+  (W3's proposal), and the root-EBS budget shrank accordingly. `install.sh` now installs
+  unit files **after** the env file is validated (I0 installed them before, inert), so a
+  refused install leaves the units untouched as well. The rollout is `rollout/README.md`,
+  coordinator-run. Row `O-FAILOPEN` still describes the deployed host.
+- 2026-09-23 (I2B review fix S1, local only): §5.2 records the edge admin API moved from
+  loopback :2019 to a unix socket in the `caddy_config` volume, and the residual risk (Caddy
+  as in-container root with the certificate volume; `docker exec` reaches the socket).
+- 2026-09-23 (I2B review fix M5): §8 states that `rollback.sh`'s unmetered-rollback
+  statement is operator-attested and how the coordinator corroborates it (read-only hosted
+  counts), rather than implying the script verifies it.
+- 2026-09-23 (I2B review fix S3): §5.2 row "Install backups" - they hold past env files
+  (secrets), are root-only, are removed on a refused run, and are pruned by the coordinator.

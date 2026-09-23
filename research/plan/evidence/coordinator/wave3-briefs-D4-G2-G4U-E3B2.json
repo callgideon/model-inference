@@ -1,0 +1,286 @@
+{
+  "briefs": [
+    {
+      "task": "D4",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/D4.md",
+      "summary": "I wrote the D4 brief (persistent stream journal and replay). It sets the lane up on branch codex/d4-stream-journal in worktree .claude/worktrees/codex-d4, based on 3160a1c; bb7de86 is a coordinator-log commit made after that base and is not in the lane's base. The acceptance is quoted verbatim from handoffs/D-durable-state.md \u00a7D4, because the manifest entry has no acceptance field. The oracles are DUR-OUTPUT and DUR-FENCE, with DUR-CAP and API-STREAM also touched.\n\nThe brief has nine numbered items, one commit each, and each names its killing tests and single-edit mutants:\n1. **Fenced append.** Fill the body of the infrx.append stub in 0017. It calls infrx.fence_lease(lease, array['inference'], reconcile_s) first and returns a refusal as data (R39). It refuses a terminal event anywhere in a batch (R30). Event bytes are computed in SQL, and an oversized event is refused whole (R25). A per-job ceiling holds back 1024 bytes for the terminal event. Sequences continue within each generation. Timestamps come from the database clock. The same transaction sets jobs.published. Rows are returned only after commit.\n2. **Global journal budget without a lock.** Appends never raise the global charge, because the charge is max(reservation, stored) and stored stays under the reservation. So append must never take the admission advisory lock.\n3. **One terminal journal event per job.** An AFTER UPDATE OF settled_at trigger in 0017 writes it for every terminalization path: 0012's preparation failure, 0016's cancel, the deadline check inside the fence and every recover cause, and D5's future terminalize. The brief warns explicitly against redefining 0012 or 0016 functions, because that would silently disarm the D2/D3 mutants anchored in those files. finalize_in_transaction is a read-back.\n4. **Tenant-bound replay.** read_owned is bounded and paged, and returns typed errors for a replay gap, an expired journal and a cursor past the head.\n5. **Pruning.** expire(now) never runs ahead of the database clock (R7), keeps a persisted prune watermark and frees bytes exactly once. infrx.journal_usage() and PgStreamStore.usage() report usage, and usage() is also the body of the journal readiness probe.\n6. **Races under real transactions.** Append against cancel, recover, heartbeat, expire, a second append on the same lease, and a stale generation.\n7. **Adapter and harness.** PgStreamStore, a pgtesting `stream` hook, the real append replacing D3's `publish` stand-in, and make_streamstore_factory. All 17 StreamStore conformance cases run on the real store, with the ones that need D5's complete marked strict-xfail. The JobStore partition is redone.\n8. **E3B drills on PostgreSQL.** dr05, dr06, dr08 and dr10 run verbatim in tests/d.\n9. **Housekeeping.** CREDIT jobs through checks_leases.credit_running, a privileges check, 0017 rollback notes, deriving DECOY_PORT from the task port, and a login-role note in the evidence (I2B request 8).\n\nIt quotes every integration request addressed to D4 by merged lanes, with its source:\n- D3 request 3, Limit 2 and handback delta\n- D2 evidence l.72 and l.117\n- E3B pending drills dr05, dr06, dr08 and dr10, plus the gate's \"D4 7\" count\n- G1R request 1, the journal probe\n- W2 request 6 and limit 3\n- I2B request 8\n\nM3/M4, Q3 and W3 evidence contain no request addressed to D4 (their \"D4\" hits are drill, probe or review ids). The brief also lists what is out of scope and who owns it.\n\nDependencies are given by merge SHA. The F2P wire-in (codex/f2p-wirein, head e3be01b) is reviewed but not merged; G2 composes against it, and it leaves StreamStore unchanged. No pending input blocks D4.\n\nThe brief lists the verification commands (tests/d focused run, both images, INFRX_D_TASK=d4 on port 55435, Valkey on 55465), the handback format, seven integration requests the lane should hand back, and the rules.",
+      "owned_paths": [
+        "apps/app/supabase/migrations/0017_stream_journal.sql",
+        "apps/infrx-api/infrx/state/journal.py",
+        "apps/infrx-api/infrx/state/pgtesting.py (additive)",
+        "apps/infrx-api/infrx/state/credit_schema.py (SEAMS, additive)",
+        "apps/infrx-api/tests/d/** (new files; additive lines in migration_mutants.py, test_migration_mutants.py, checks.py, checks_credit.py, test_jobstore_conformance.py, test_e3b_drills.py, test_pgharness.py)",
+        "research/plan/evidence/d/D4-<impl-sha>.md"
+      ],
+      "depends_on_merged": [
+        "D3 f237237 (+d57e04e) on claude/backend-impl",
+        "D2 24b4589",
+        "A1 2d9d9c5 + e366ae8",
+        "Q3 25de7ab",
+        "W3 65e2c99",
+        "I2B 08d3240",
+        "G1R b609cc9 (+67e0320)",
+        "I3B 8e01fe0",
+        "E3B phase 1 c7d715f",
+        "F2P additive 9faaa57"
+      ],
+      "open_inputs": [
+        "F2P wire-in codex/f2p-wirein (head e3be01b) not merged: it changes contracts/fakes/state.py and the conformance suites (StreamStore port unchanged), so the coordinator re-runs D4's suites after it merges; G2 composes against it",
+        "TASK_PORTS has no d4 Valkey entry: the lane uses INFRX_D2_VALKEY_PORT=55465 / infrx-d4-valkey until the coordinator registers it",
+        "JOURNAL_* byte limits are provisional (08 \u00a75) until E validates them under load (P-18/E4B); none blocks D4",
+        "Terminal-event mechanism: the brief prefers a 0017 trigger; an in-place R84 amendment of 0012/0016 only if the trigger route proves impossible",
+        "Where the prune watermark lives (columns on infrx.jobs or a service-only table) is left to the implementer, who must record it"
+      ],
+      "risks": [
+        "Byte measure differs from the fake: SQL octet_length(payload::text) is larger than the fake's compact_bytes by jsonb's separators, so a delta W sized to the fake's limit could be refused near 1 MiB; the brief requires a limit/limit+1 pin and an evidence note",
+        "Redefining 0012/0016 functions in 0017 would silently disarm D2/D3 migration mutants anchored in those files; the brief forbids it",
+        "Lock order: append must take only the job row (fence) and never the admission advisory lock, or it inverts 0011's order; the brief makes the no-global-charge argument an explicit killed test",
+        "Several StreamStore/JobStore conformance cases need D5's complete and must be strict-xfail with the reason, never counted as passes",
+        "Shared DECOY_PORT 55598 in test_pgharness.py has made parallel tests/d sweeps collide; the brief assigns deriving it from the task port (item 9d)",
+        "Expected merge-time conflicts in shared list files (migration_mutants.py, test_jobstore_conformance.py); tests/integration/test_harness.py must learn 0017 (coordinator)"
+      ]
+    },
+    {
+      "task": "G2 \u2014 Synchronous chat and persistent SSE relay (brief)",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/G2.md",
+      "summary": "I wrote the G2 brief: 222 lines, one new file, nothing else edited or committed. It uses branch codex/g2-chat-relay, worktree codex-g2 (clean at base 3160a1c), and refers to the common brief rather than copying it.\n\n**Status the brief allows.** At most \"implemented\", not integrated. D5 (settlement) is not started, D4 (the journal) is in flight, and no real CatalogDirectory adapter exists yet.\n\n**Acceptance.** The manifest entry has test ids but no acceptance field, so the acceptance is quoted from the track handoff (G-gateway.md \u00a7G2). Oracles are API-MODES, API-STREAM and DUR-OUTPUT.\n\n**Owned paths.** New `routes/relay.py` and `gateway/pilot.py`, G's accept/readiness parts of `ingress.py`, new files under `tests/g`, and mutants appended to the existing G list, so the Makefile needs no edit. No migration. Tests use fakes only, plus a Valkey of its own on 55465 if a drill needs one.\n\n**Six items, each with the rulings that bind it and example killing mutants:**\n1. Acceptor: prepare_request \u2192 stage \u2192 admit (by accounting regime) \u2192 attach, with idempotent replay, a check that the pinned serving revision still has the requested capabilities, and explicit async refused before admission.\n2. Synchronous wait: success only after the terminal commit, durable cancel on disconnect or timeout, Server-Timing.\n3. SSE relay from the committed journal: the first frame carries the job handle, keepalives are comments, only `visible` text is relayed, and a stream that never started still cancels.\n4. The cancel-answer contract, quoted verbatim from D3.\n5. The composition helper, a loopback-only `/readyz`, and the full cutover diff, which the lane verifies and then reverts.\n6. The sync/SSE matrix and DUR-OUTPUT drills on fakes.\n\nThe brief quotes every integration request from merged lanes that names G2 (G1R, D2, D3, Q3, W2, W3, I0, I2B, I3B, M2, F2R-A/B, the wire-in, E3B, S2M) and lists four new requests the lane must raise. It says plainly that the lane builds against codex/f2p-wirein (unmerged, head 36a4472 at writing), must not merge or rebase onto it, and waits for the coordinator to name a head to merge.",
+      "owned_paths": [
+        "apps/infrx-api/infrx/gateway/routes/relay.py (new)",
+        "apps/infrx-api/infrx/gateway/pilot.py (new)",
+        "apps/infrx-api/infrx/gateway/routes/ingress.py (accept seam, /readyz, route-table assertion only)",
+        "apps/infrx-api/tests/g/** (not tests/g/ops/**); new mutants appended to tests/g/mutants.py",
+        "research/plan/evidence/g/G2-<impl-sha>.md",
+        "no migration; container infrx-g2-valkey on port 55465 only if a drill needs it"
+      ],
+      "depends_on_merged": [
+        "G1R b609cc9 (+67e0320)",
+        "D1R f302091",
+        "D2 24b4589 (+fe73f21)",
+        "D3 f237237 (+d57e04e)",
+        "A1 2d9d9c5 / e366ae8",
+        "Q2 e86b1c0",
+        "Q3 25de7ab (+88a48d7)",
+        "W2 32cc0cb",
+        "W3 65e2c99",
+        "M2 8156f78",
+        "M3 e2188f3",
+        "M4 4185f4d",
+        "I0 0ac073e",
+        "I2B 08d3240",
+        "I3B 8e01fe0",
+        "G6B ed6da07",
+        "E3B phase 1 c7d715f",
+        "F2P additive 9faaa57",
+        "F2R-A e1a33d1 / 5f7ca02",
+        "S2M 277bedf",
+        "E1B 164e43e"
+      ],
+      "open_inputs": [
+        "F2P wire-in not merged (codex/f2p-wirein, head 36a4472 at writing, confirmation fold-in in progress); G2 builds against it read-only and uses tests/g/credit.py until it merges",
+        "D5 settlement (complete/complete_credit) not written; it is a manifest integration dependency",
+        "D4 real StreamStore and a terminal journal event for D3's terminalizations (codex/d4-stream-journal, in flight)",
+        "D psycopg CatalogDirectory adapter over 0007 (G1R request 2b), still unbuilt",
+        "infrx.cancel always records client_cancelled; the port has no way to record client_disconnected or sync_deadline (new request to D)",
+        "No claimable CREDIT job until WorkV2 exists (0016 MY-3 refuses the claim)",
+        "Worker timings have no durable carrier across processes (W3 request 9)",
+        "TASK_PORTS['g2'] = {'valkey': 55465} needs registering by the coordinator",
+        "P-01 approved rate card, P-18 latency targets, P-04 box (coordinator only)"
+      ],
+      "risks": [
+        "The day ingress enters ROUTERS, E3B dr11, the six sync/SSE journey cells and I3B rc03 go from PENDING to FAIL. The route flip must land together with E3B phase 2's test bodies.",
+        "/readyz currently requires a tenant key, but I2B's deploy/lib.sh wait_ready polls it unauthenticated. Unchanged, a pilot install never opens the edge; the brief tells the lane to switch it to a loopback-only gate.",
+        "Dropping the legacy health router breaks Caddy's public /health, which is proxied to the gateway. The brief keeps (health, models, ingress), as G1R requested, not G1 R-1's (models, ingress).",
+        "G4U runs in parallel and may also need ingress.py; the coordinator must serialize them.",
+        "The G mutant list takes about 10\u201315 min before G2's additions and must run detached.",
+        "The route will record the wrong cancel cause until D adds a cause argument. No money moves today because cancel settles debit 0, but R21 status and analytics will be wrong."
+      ]
+    },
+    {
+      "task": "G4U",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/G4U.md",
+      "summary": "The G4U brief (107 lines, file not committed) is written. It covers the owned upload HTTP adapter on branch codex/g4u-upload-adapter in worktree .claude/worktrees/codex-g4u, based on 3160a1c. The manifest entry has no acceptance field, so the brief quotes the binding acceptance from 09-amendment-workstreams.md \u00a7G4U word for word. It also quotes the MEDIA-SEC and DUR-RLS rows from 04-verification.md and lists the binding rulings: R17, R22, R32/R40/R83, R47, R51, R61(1), R66 and R82. Scope: three routes over M3's MediaUploads, all new files: POST /v1/uploads (the body is M3's closed constraint set), PUT /v1/uploads/{handle} and POST /v1/uploads/{handle}/complete. The PUT route is the constrained destination because the frozen UploadCreated has no URL field. Each route authenticates first, refuses operator keys, checks the upl_ handle format and returns 404 otherwise. Bodies are read with the existing intake helpers and share one large-body limit with chat. The PUT read stops at MAX_MEDIA_BYTES. The completion response uses UploadCompleted.of, so no storage key leaves the server. If no media store is supplied, the routes are not mounted. The brief names the reused symbols, the killing tests and example mutants for each item, and a separate G4U mutant list so it does not collide with the G2 lane's tests/g/mutants.py. Section 5 quotes every request from merged lanes that names this task: M3 request 2 and limit 10, the coordinator's bench.py field-name ruling, G6B request 13, E1B limit 5, G1R limit 6, the three E3B/I3B video_upload journey cases, I2B request 2 and D2's handback on the 0010 tables. It then lists the four requests G4U will submit: (a) coordinator mounts the router with the same MediaUploads and LargeBodies instances G2 uses, (b) a Makefile api-mutants entry, (c) an exact bench.py upload() diff for E, (d) doc wording updates. The brief also covers out-of-scope owners, dependencies (merged SHAs, the unmerged F2P wire-in at e8f72cd whose confirmation was fix_required, parallel lanes G2/E3B2/D4), exact verification commands (including the D2 media case on both images), the handback format and the rules.",
+      "owned_paths": [
+        "apps/infrx-api/infrx/gateway/routes/uploads.py",
+        "apps/infrx-api/tests/g/test_uploads.py",
+        "apps/infrx-api/tests/g/uploads_mutants.py",
+        "apps/infrx-api/tests/g/test_uploads_mutants.py",
+        "research/plan/evidence/g/G4U-<impl-sha>.md"
+      ],
+      "depends_on_merged": [
+        "G1R b609cc9 (codex/g1r-audience-ingress 3552ce3)",
+        "M3 e2188f3 (codex/m3-owned-uploads 815a926)",
+        "F2R-A e1a33d1 + follow-ups 5f7ca02 (R61(1) fixture, R82, R83 runner)",
+        "D2 24b4589 (0010 media_uploads/media_objects)",
+        "M4 4185f4d",
+        "F2P additive 9faaa57",
+        "I2B 08d3240 (edge body bound)",
+        "E3B phase 1 c7d715f"
+      ],
+      "open_inputs": [
+        "The contract names no status codes for the upload routes; the brief defaults to 201 for create, 204 for PUT and 200 for complete, for the coordinator to confirm or change",
+        "R33 does not list upload creation among the actions a suspended organization loses (org_suspended); the brief defaults to no suspension check in the route",
+        "The PUT read deadline reuses INTAKE_TIMEOUT_S (30 s, so at least ~2.2 MB/s is needed for a 64 MiB body); a separate setting only if measurement shows a need",
+        "No lane owns binding MediaUploads to the durable media_uploads/media_objects tables (0010) or the collector timer, which D2's handback assigned to M; until that exists, the database half of DUR-RLS stays pending",
+        "Owner of the bench.py upload() alignment (the coordinator ruled it an E1B follow-up at W3/G4U time; the brief routes it as an integration request to E / E3B phase 2)"
+      ],
+      "risks": [
+        "Upload records live in process memory (M3 limit 1): the gateway must use one MediaUploads instance for both uploads and G2's staging, and the setup is single-process until durable rows are wired",
+        "The lane can only report implemented: the three E3B video_upload journey cases also need G2, D4, G3 and D5 plus the coordinator mounting the router",
+        "The G2 lane works in parallel on tests/g and gateway/routes; the brief limits G4U to new files, but the coordinator must mount both routers in app.py",
+        "The F2P wire-in (not yet merged) changes the shared mutation runner (Runner.env); the G4U mutant list is built on the runner API at the base, so check it at merge",
+        "Running tests/d uses the shared D harness lock on port 55432; expect HarnessBusy retries while D4 and other lanes are running"
+      ]
+    },
+    {
+      "task": "E3B phase 2 brief (backend-only durability/security/protocol gate, real-store phase)",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/E3B.md",
+      "summary": "I wrote the E3B phase-2 brief (186 lines) to the path above, replacing the phase-1 text. The phase-1 brief is still kept as E3B-phase1.md. The brief uses the common-brief structure by reference. Base is 3160a1c. Branch codex/e3b-phase2-gate, worktree .claude/worktrees/codex-e3b2.\n\nIt has 10 items, each with its oracles, rulings, symbols and the mutant or rolled-back-transaction drill that must catch it:\n- **0. Namespaced harness.** The E2 harness hard-codes infrx-e2 and ports 555xx in about 30 places. Item 0 makes the namespace selectable (infrx-e3b2, ports 567xx at +1200) and asks the coordinator to register `e3b2` in tasklocal.\n- **1. Per-drill pending probe.** The phase-1 rig pends while any `infrx.unimplemented` stub exists. Three D6 stubs (0004 l.209-211) are never removed in backend-first scope, so every `[postgres]` drill would pend forever. The probe must check only the RPCs each drill uses. The pending vocabulary drops merged tasks, gains F2P, and a case forbids naming a merged task as a blocker.\n- **2. Real PostgreSQL rig.** Built from `pgtesting.make_jobstore_factory` on the lane's own stack. dr01\u2013dr04 and dr09 must pass. Two new drills, db06 and db07, prove missing acceptance and a stale fence on the real store.\n- **3. CREDIT admission on the real store.** Uses `admit_credit` with the provisional seed (P-01, never quoted as a price).\n- **4. dr13 snapshot from PostgreSQL** through Q3's `Reconciler`.\n- **5. Reaper through W3's `WorkerService.reap_once`.**\n- **6. Tenants through G6B's `Operations` service.** Identity and signup grant use A1's real `PgSignup`. The other four ports stay on labelled fakes, because no PostgreSQL adapter exists for them.\n- **7. RLS matrix rows for 0003\u20130016**, plus a completeness case that fails when a relation has no row.\n- **8. Wire I3B's mutants** into the mutation stage.\n- **9. The gate run and merged-tree checks.**\n\nThe brief quotes every integration request addressed to E3B, with its source file and number: D2 #1, D3 #6, Q3 #4, G1R #5 (already applied at 67e0320), the G6B handback, I3B #8 and #4, the E2R handback, I2B #9, and E3B's own findings 4, 5 and 7. It states that M3, M4, W3 and S2M address nothing to E3B. It says the F2P wire-in (codex/f2p-wirein ced6751, fix round 2 in flight) is not merged and is what G2 composes against. It lists merged SHAs, in-flight lanes (D4, G2, G4U; D5 and G3 stacked), pending inputs, verification commands, the handback format and the rules.\n\nI ran the backend suite read-only on the base without the service stack: 2 failed, 52 passed, 56 skipped. Both failures are in I3B's tests, and the brief records them as findings, not the lane's to fix:\n- rc10 fails because I2B's `deploy/rollback.sh` now exists.\n- The I3B mutant-list check fails because one mutant's (i3bm57) anchor in `worker/loop.py` changed with the W3 merge.",
+      "owned_paths": [
+        "tests/integration/backend/** (excluding tests/integration/backend/recovery/**, which is I3B's)",
+        "tests/integration/harness.py",
+        "tests/integration/pgstate.py",
+        "tests/integration/run.py",
+        "tests/integration/mutants.py",
+        "tests/integration/compose.yaml",
+        "tests/integration/test_harness.py",
+        "tests/integration/test_run.py",
+        "research/plan/evidence/e/E3B-<impl-sha>.md"
+      ],
+      "depends_on_merged": [
+        "D1R f302091",
+        "G6B ed6da07",
+        "M3 e2188f3",
+        "W2 32cc0cb",
+        "F2R-A e1a33d1",
+        "E3B phase 1 c7d715f",
+        "G1R b609cc9 (+67e0320 follow-up)",
+        "M4 4185f4d",
+        "I3B 8e01fe0",
+        "Q3 25de7ab",
+        "D2 24b4589",
+        "A1 2d9d9c5 (+e366ae8)",
+        "D3 f237237",
+        "W3 65e2c99",
+        "I2B 08d3240",
+        "base 3160a1c on claude/backend-impl"
+      ],
+      "open_inputs": [
+        "Coordinator: register an e3b2 compose block (56700-56799) in infrx/contracts/tasklocal.py; TASK_PORTS cannot express a range today, so the lane sends the exact diff as integration request #1",
+        "Coordinator: name an owner/id for the PostgreSQL adapters of G6B's TenantStore/AuditLog/Registry/AccountView and G1R's CatalogDirectory (G1R req 2b); until then item 6 keeps them on labelled fakes",
+        "Coordinator: decide whether I3B's two red cases on base (rc10, and the mutant-list check failing on i3bm57's stale anchor) are fixed by an I3B follow-up or delegated to E3B2",
+        "Coordinator: optionally approve a supabase/postgres digest whose auth.uid() reads request.jwt.claims (phase-1 finding 2)",
+        "P-01 rate still provisional (the seed card must not be quoted as a price)",
+        "The F2P wire-in merge (codex/f2p-wirein ced6751, fix round 2 in flight) unpends the [fake] CREDIT twins (credit_jobstore_factory)"
+      ],
+      "risks": [
+        "On base 3160a1c the backend suite already has 2 failures in I3B-owned tests (rc10 and the I3B mutant-list check). Until someone fixes them the layer-3 gate reports FAIL, not PENDING, whatever E3B2 does.",
+        "The e3b2 namespace needs a coordinator tasklocal edit early; if it is late, the lane cannot run layer 2/3 without colliding with infrx-e2 in other checkouts",
+        "The tests/d share of make check still contends for D port 55432 while the D4/D5 lanes run; HarnessBusy retries may stretch the run",
+        "G6B provisioning is only partly real (A1 PgSignup); TenantStore/AuditLog/Registry/AccountView stay fakes until an adapter owner is named, so API-OPS is not fully integrated",
+        "The journeys (BACKEND-JOURNEY) remain pending on G2/G3/G4U/D4/D5; phase 2 cannot pass the gate",
+        "When the F2P wire-in, D4 or G2 merges during the lane, pending ids and the rig change; the coordinator must relay each merge (no rebase allowed)",
+        "E-verification.md has no E3B phase-2 section; scope rests on 18 \u00a7E3B and the phase-1 handback, so a reviewer may read the scope differently"
+      ]
+    }
+  ],
+  "critic": {
+    "conflicts": [
+      {
+        "between": "D4 / G2",
+        "what": "Same host port: D4 runs `infrx-d4-valkey` on 55465 (its integration request 5 asks for TASK_PORTS d4 valkey 55465), and G2 was told to run `infrx-g2-valkey` on 55465 and ask for TASK_PORTS g2 = 55465.",
+        "resolution": "Fixed in G2.md: G2 now uses 55466 and asks for that port; D4 keeps 55465. Nothing in tasklocal.all_host_ports() uses 55466."
+      },
+      {
+        "between": "G2 / G4U",
+        "what": "Overlapping owned paths: G2 claimed all of `tests/g/**`, which includes G4U's new `tests/g/test_uploads.py`, `uploads_mutants.py` and `test_uploads_mutants.py`. Both lanes also rely on `tests/g/support.py`: G2 may edit it, and G4U imports its helpers.",
+        "resolution": "Fixed in G2.md: G2 owns `tests/g/**` except G4U's three files, and may only add to `support.py` (the helpers G4U imports are listed). `tests/g/mutants.py` stays G2's alone; G4U keeps its own separate list."
+      },
+      {
+        "between": "G2 / G4U / M3 (merged request 3)",
+        "what": "G2 item 5 built `MediaPreparation(...)`. M3's merged request 3 says to build `MediaUploads` in its place, and G4U request (a) needs one shared instance on `rt.media_store`, the same one G2's acceptor stages from. With G2's version, finalized uploads could never be staged.",
+        "resolution": "Fixed in G2.md: G2 builds `MediaUploads` (a subclass of `MediaPreparation`, so `prepare_request`, `stage` and `attach` work as before). G2 exposes that instance as `rt.media_store` and the single `LargeBodies` as `rt.large_bodies`, and a kill case (`two_large_body_bounds`) was added."
+      },
+      {
+        "between": "G2 / D4 (readiness probe)",
+        "what": "G2 described the journal check as `<one-row read>`, while D4 request 2 says `checks[\"journal\"]` is a sync wrapper over `PgStreamStore.usage()`. `ingress.REQUIRED_CHECKS` probes are sync `Callable[[], bool]` called from the async `/readyz`, but `usage()` is async, so a naive wrapper would block the event loop or try to start a nested one.",
+        "resolution": "Fixed in G2.md: the probe body is D4's `usage()`/`infrx.journal_usage()`, served from a cached result that the process's lifetime task refreshes, and it returns False when no stream store is present. G2 also now takes the `StreamStore` as a parameter (D4 is not merged) and refuses to build the pilot without it. This remains a design choice for the G2 lane to confirm at handback."
+      },
+      {
+        "between": "G2 / F2P wire-in (unmerged)",
+        "what": "G2 item 1 dispatches admission on the regime, and item 5 compares `pilot.active_rate_card_version`. Both `DeploymentSettings.accounting_regime` and `active_rate_card_version` exist only on `codex/f2p-wirein`, which contradicts \u00a77's instruction to code only against names on the base.",
+        "resolution": "Fixed in G2.md: the regime and the active card are parameters of `build_ingress_deps` until the wire-in merges, and the settings reads go into the cutover diff. The coordinator merges the wire-in before G2 and then gives G2 the head to merge with `--no-ff`."
+      },
+      {
+        "between": "G2 / R21 (08 \u00a710)",
+        "what": "G2 cancels on disconnect and on the sync timeout through `JobStore.cancel`, but `infrx.cancel` (0016 l.331-350) always records `client_cancelled`. R21 treats `sync_deadline` as platform-absorbed and `client_disconnected` as a separate billable cause, so the recorded cause is wrong. The money outcome is not affected: `terminalize_no_usage` never has authoritative usage, so it never debits.",
+        "resolution": "Keep G2's D-new request and add an owner: D5 (or a small D follow-up) adds `cancel(org, handle, *, cause)` in a new migration (0018), or amends 0016 in place under R84. Not 0017, because D4 must not `create or replace` 0016 functions. G2 must not claim that API-MODES 'correct cancellation' passes on cause reporting until this lands."
+      },
+      {
+        "between": "D4 / E3B phase 2 (tests/integration/test_harness.py, pgstate role matrix)",
+        "what": "D4 integration request 1 edits `tests/integration/test_harness.py`, adding 0017 to an exact migration list, which is a file E3B2 is editing. E3B2 item 7 adds a completeness case that fails on any relation or security-definer function without a matrix row, so whichever of the two merges second turns the other red.",
+        "resolution": "Fixed in both briefs. E3B.md: do not restructure that function (the coordinator adds the 0017 line at merge), and the template migrates from `pgstate.migration_files()` rather than a hard-coded 0001\u20130016. D4.md: new integration request 8 lists every 0017 object with its expected anon, authenticated and service_role access. The coordinator adds those rows at whichever merge lands second."
+      },
+      {
+        "between": "E3B phase 2 stage case (item 1c) / every other lane's merge",
+        "what": "E3B2's new stage case fails whenever a pending id names a task that tasks.json marks implemented. Merging D4, G4U or G2, with the tracker flipped to implemented, therefore turns E3B's gate red until someone updates `stack.PENDING` in `tests/integration/backend`, which E3B2 owns.",
+        "resolution": "Coordinator procedure: at each merge of D4, G4U or G2, update stack.PENDING and journey `unblocking()` in the same merge commit, or add a `RESIDUAL` entry. If E3B2 is still in flight, tell it the merge head so it can `git merge --no-ff`. Merging E3B2 last among the four minimizes this churn."
+      },
+      {
+        "between": "D4 / G2 / G4U / E3B2 (shared D harness)",
+        "what": "Every lane's `make check` runs tests/d on the default D harness: 55432, `infrx-d2-valkey:55463`, and the `test_pgharness` decoy `infrx-e2r-dharness-postgres:55598`. D4 on d4 still shared the decoy container name and port, the collision D3/D2 hit twice. D4's \u00a77 `make check` also left out the Valkey variables, so it would fall back to the shared `infrx-d2-valkey`.",
+        "resolution": "Fixed in D4.md: item 9d now derives both the decoy container name and the port from INFRX_D_TASK, keeping d1's values byte-identical, and must be committed first, before any tests/d run. D4's `make check` now sets INFRX_D2_VALKEY_PORT/CONTAINER. Fixed in G2, G4U and E3B: run `make check` last and detached, and retry on HarnessBusy. Until D4's 9d merges, the coordinator should stagger the three default-harness `make check` runs."
+      },
+      {
+        "between": "E3B phase 2 / default E2 namespace",
+        "what": "E3B \u00a77's mutant commands (`run.py --layer 2 --keep`, `mutants.py --layer all`, `harness.down()`) did not set the namespace. Run as written, they would start, mutate and tear down the default `infrx-e2` stack that another checkout owns.",
+        "resolution": "Fixed in E3B.md: every one of these commands carries INFRX_E2_NAMESPACE=e3b2."
+      },
+      {
+        "between": "G2 / D4 (terminal journal event)",
+        "what": "G2 listed 'D4: a terminal journal event for D3's terminalizations' as a new request, but D4 item 3 already covers it (the AFTER UPDATE OF settled_at trigger).",
+        "resolution": "Fixed in G2.md: G2 confirms the event at D4's handback instead of raising a new request, and keeps its `get_owned*` [DONE] fallback until then."
+      }
+    ],
+    "dispatch_order": [
+      "Now, concurrently: D4, G4U, G2 and E3B phase 2. Their owned paths no longer overlap, and none shares a port or container. D4 uses 55435/55465 plus its own derived decoy, E3B2 uses 56700-56799 in namespace e3b2, and G2 and G4U use fakes only (G2 takes 55466 only if it needs Valkey). No lane has started: all four worktrees are clean at 3160a1c.",
+      "D4: commit item 9d (the task-derived decoy name and port) before any tests/d run. Its two-image sweeps take 31-35 min each, so run them detached; they are the heaviest Docker load while E3B2's compose stack is also up.",
+      "Serialize the default D-harness `make check` runs of G2, G4U and E3B2 (55432, 55463, decoy 55598). HarnessBusy retry already handles this; staggering avoids long retry loops.",
+      "Merge order: G4U first (smallest, independent). Then the F2P wire-in, after the coordinator check (MONEY-C1 round 2). Then D4. Then G2, which first merges in the wire-in head with `git merge --no-ff`; its composition expects D4's PgStreamStore. E3B phase 2 merges last, updating stack.PENDING for whatever has merged.",
+      "Stacked follow-ons at handback: D5 on D4's head (port 55436; it also owns the cancel-cause change and the terminalize body, and inherits D4's trigger). G3 on G2's head. E3B phase 2 re-runs its gate after D4 and D5 land (dr05/dr06/dr10 unblock automatically through the per-drill stub probe)."
+    ],
+    "gaps": [
+      "No owner or task id for the psycopg `CatalogDirectory` (G1R request 2b). G2 cannot build a pilot without it, and E3B's open input (b) waits on it. Assign one before G2's cutover diff can be applied.",
+      "No owner for PostgreSQL adapters of G6B's TenantStore, AuditLog, Registry and AccountView. E3B item 6 stays on fakes, labelled as such.",
+      "Cancel-cause port change (`client_disconnected` / `sync_deadline`, R21) has no owner. Proposed D5 via 0018, or an R84 amendment of 0016; D4 must not do it in 0017.",
+      "At base 3160a1c, `make check` has a pre-existing red: `tests/i/test_mutants.py` fails 183/183 as broken_runner, fixed at 37b1294, which is after every lane's base. All four briefs now tell lanes to report it as pre-existing. The coordinator could also have each lane merge 37b1294 so `make check` is green at handback.",
+      "`tests/d/test_code_mutants_d3.py` is not in `make api-mutants` (Makefile at 37b1294). Only a full `tests/d` run covers D3's code mutants. D4 request 1 adds d4's list; the coordinator should add d3's too.",
+      "A leftover `infrx-d2-postgres` container is running on 55433; it belongs to none of these four lanes. No lane may touch it; the coordinator should find out whose it is.",
+      "E3B needs the tasklocal `e3b2` range registered (TASK_PORTS cannot express a range; E3B request #1). Also coordinator-only: TASK_PORTS d4 valkey 55465 and g2 valkey 55466.",
+      "D4 item 3 said nothing about whether the terminal event's bytes count toward `journal_stored_bytes`, which would make item 5's per-chunk decrement asymmetric. Filled in D4.md (count them in the trigger, plus a mutant). The D4 lane should confirm this works with `jobs_guard` and the AFTER-trigger's nested update.",
+      "The F2P wire-in head moves (c66989e at this check). The briefs cited four different stale SHAs; they now say 'head moving' and give the check-time SHA. The coordinator should state the head again at each lane's merge."
+    ],
+    "fixes_applied": [
+      "D4.md status line: commits after the base are bb7de86/517e09d (plan-only) and 37b1294, which fixes tests/i/mutants.py::_layout. Previously it said only bb7de86 followed.",
+      "D4.md \u00a76: F2P wire-in head e3be01b replaced with 'head moving, c66989e at the 2026-09-23 check'.",
+      "D4.md item 3: the trigger adds the terminal event's bytes to jobs.journal_stored_bytes (a terminal row's column is not frozen by jobs_guard; the nested update does not re-fire the trigger). Added mutant d4_terminal_event_bytes_uncounted, killed by \u2026__frees_bytes_exactly_once.",
+      "D4.md item 9b: added privilege mutants d4_append_granted_to_authenticated and d4_journal_usage_granted_to_anon.",
+      "D4.md item 9d: derive the decoy container name `infrx-e2r-dharness-postgres` as well as DECOY_PORT from INFRX_D_TASK (d1 byte-identical; the d4 port outside all_host_ports and E2's published ports), and commit it first, before any tests/d run.",
+      "D4.md \u00a77 item 5: `make check` now sets INFRX_D2_VALKEY_PORT=55465 and INFRX_D2_VALKEY_CONTAINER=infrx-d4-valkey (otherwise it falls back to the shared infrx-d2-valkey:55463). Added the note about the pre-existing tests/i red at base.",
+      "D4.md handback: added integration request 8, listing 0017's objects and their access for E3B phase 2's role-matrix completeness case, and noting that the test_harness.py line lands at merge in a file E3B2 is editing.",
+      "G2.md \u00a72: Valkey port 55465 changed to 55466 in both places, and TASK_PORTS g2 = 55466.",
+      "G2.md \u00a72: tests/g/** now excludes G4U's three files; edits to support.py are additive only.",
+      "G2.md item 1: the regime setting exists only on the wire-in, so it is a parameter until the wire-in merges and the settings read goes into the cutover diff. Item 5: active_rate_card_version is likewise wire-in-only.",
+      "G2.md item 5: MediaPreparation replaced with MediaUploads (M3 request 3), exposed as rt.media_store and rt.large_bodies (G4U request (a)). Added a `stream` StreamStore parameter. The journal check is now a non-blocking sync wrapper over D4's usage(), replacing '<one-row read>'. Added kill names pilot_built_without_catalog, pilot_built_without_stream, readyz_open_behind_proxy, second_chat_route_tolerated and two_large_body_bounds.",
+      "G2.md \u00a75: the 'D4 terminal event' new request now points to D4 item 3.",
+      "G2.md \u00a77: wire-in head 36a4472 replaced with 'head moving, c66989e'.",
+      "G2.md \u00a78: fixed a contradiction. `make check` does run tests/d on the default harness (plain image), so run it last, detached, retrying HarnessBusy; only the supabase-image pass is 'not run'. Added the pre-existing tests/i note.",
+      "G4U.md: wire-in head e8f72cd replaced with 'head moving, c66989e'. \u00a78 make check: the harness is shared with G2 and E3B2, so run it last, detached, retrying HarnessBusy; added the pre-existing tests/i note.",
+      "E3B.md base line: 37b1294 is not plan-only; it fixes tests/i/mutants.py.",
+      "E3B.md owned paths: added tests/integration/{test_services.py,fake_vllm.py,test_fake_vllm.py}, which hold functional infrx-e2/infrx_e2/55580 literals that item 0 must derive (e.g. test_services.py l.490/568). Item 0 now exempts I3B's recovery/** mentions (a skip message and a docstring) and routes them to request #2. Added a warning not to restructure the migration-list test the coordinator extends when D4 merges.",
+      "E3B.md item 2: the template migrates every file pgstate.migration_files() returns, replacing the hard-coded 0001\u20130016, so D4's 0017 needs no edit.",
+      "E3B.md item 7: rows for D4's 0017 objects come from D4 integration request 8 through the coordinator; do not guess them.",
+      "E3B.md \u00a75/\u00a76: wire-in head ced6751 replaced with 'head moving, c66989e'.",
+      "E3B.md \u00a77: every stack, mutant and teardown command carries INFRX_E2_NAMESPACE=e3b2, so the default infrx-e2 stack is never started or torn down. `make check` notes the shared D harness, Valkey and decoy, plus the pre-existing tests/i red. Originals are backed up at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/briefs-orig/."
+    ]
+  }
+}

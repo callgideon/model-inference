@@ -18,6 +18,7 @@ Two rules run through all of it, and they are the same two the fake encodes:
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -153,6 +154,11 @@ def media_handle(digest: str) -> str:
 class MediaStaging:
     """`ports.MediaStore`, for the operations M1 owns."""
 
+    #: M4: what the fetcher shows the head of a download to (`MediaFetcher.fetch` `early=`).
+    #: M1 has no probe, so nothing is refused early; `MediaPreparation` refuses from the
+    #: header of a clip the profile would refuse anyway.
+    refuse_early = None
+
     def __init__(self, objects: ObjectStore, *, limits: PilotSettings = DEFAULTS,
                  fetcher: MediaFetcher | None = None, job_org=None,
                  profile_version: str = "v1") -> None:
@@ -217,17 +223,22 @@ class MediaStaging:
         """
         org_id = valid_org(org_id)          # before any outbound request is made
         if source.startswith(DATA_PREFIX):
-            fetched, kind = decode_data_url(source, self.limits, self.fetcher.allowed_mime), \
-                MediaKind.inline
+            # M4: in a worker thread, so decoding's digest (hashlib releases the GIL) is
+            # off the event loop; the base64 decode itself still holds the GIL.
+            fetched, kind = await asyncio.to_thread(
+                decode_data_url, source, self.limits, self.fetcher.allowed_mime), MediaKind.inline
         elif source.startswith(HTTP_PREFIXES):
-            fetched, kind = await self.fetcher.fetch(source), MediaKind.url
+            fetched, kind = await self.fetcher.fetch(source, early=self.refuse_early), \
+                MediaKind.url
         else:
             raise errors.InvalidRequest("a media source must be an http(s) or data: URL")
         if len(fetched.data) > self.limits.max_media_bytes:
             raise errors.RequestTooLarge(f"{len(fetched.data)} bytes exceeds MAX_MEDIA_BYTES")
         # Measured here rather than taken from the fetcher: the digest is the object's
         # identity, its key and its handle, so it is computed from the bytes being stored.
-        digest = digest_of(fetched.data)
+        # M4: in a worker thread - hashlib releases the GIL, so a 64 MiB digest no longer
+        # stalls every other request on this event loop (M4 evidence).
+        digest = await asyncio.to_thread(digest_of, fetched.data)
         # Before the write, so a clip the profile refuses costs no object (M2).
         mime, duration_s = await self.facts(fetched.data, fetched.mime)
         ref = MediaRef(org_id=org_id, handle=media_handle(digest), kind=kind,

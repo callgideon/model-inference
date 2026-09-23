@@ -23,7 +23,6 @@ fixtures in `tests/m` need neither.
 from __future__ import annotations
 
 import asyncio
-import base64
 import binascii
 import hashlib
 import logging
@@ -68,6 +67,10 @@ UNDECLARED_TYPES = ("", "application/octet-stream", "binary/octet-stream")
 # reason; this exists only for the phases no injected clock can see, so it must not win
 # the race against them.
 BACKSTOP_GRACE_S = 1.0
+# M4: the first time a download's head is shown to `early`, and then each time it has
+# doubled - so at most seven looks up to the 64 MiB cap, and none for a body so small that
+# refusing it early saves nothing worth a look.
+EARLY_LOOK_BYTES = 1 << 20
 DATA_PREFIX = "data:"
 HTTP_PREFIXES = ("http://", "https://")
 
@@ -160,9 +163,14 @@ def decode_data_url(url: str, limits: PilotSettings = DEFAULTS, allowed=ALLOWED_
     memory, and `validate=True` refuses the padding and whitespace tricks that make
     two different texts decode to the same bytes.
     """
-    header, comma, payload = url[len(DATA_PREFIX):].partition(",")
-    if not comma:
+    # M4: the payload is sliced out of the text once and decoded from it directly; the
+    # slice-then-partition and `b64decode`'s ASCII re-encoding were two more full copies of
+    # up to 85 MiB of text (M4 evidence). `a2b_base64(strict_mode=True)` is exactly what
+    # `b64decode(validate=True)` calls, and a non-ASCII text is a ValueError in both.
+    comma = url.find(",", len(DATA_PREFIX))
+    if comma < 0:
         raise refused("bad-data-url")
+    header, payload = url[len(DATA_PREFIX):comma], url[comma + 1:]
     parameters = [part.strip().lower() for part in header.split(";")]
     if "base64" not in parameters[1:]:
         raise refused("bad-data-url")            # only base64 is a bounded encoding
@@ -173,7 +181,7 @@ def decode_data_url(url: str, limits: PilotSettings = DEFAULTS, allowed=ALLOWED_
     if len(payload) > (cap + 2) // 3 * 4:
         raise refused("too-large", exc=errors.RequestTooLarge)
     try:
-        data = base64.b64decode(payload, validate=True)
+        data = binascii.a2b_base64(payload, strict_mode=True)
     except (binascii.Error, ValueError):
         raise refused("bad-base64") from None
     if len(data) > cap:
@@ -213,15 +221,20 @@ class MediaFetcher:
             trust_env=False,
             transport=self.transport)
 
-    async def fetch(self, url: str) -> Fetched:
-        """Materialize an http(s) source once. Raises a typed `DomainError`."""
+    async def fetch(self, url: str, *, early=None) -> Fetched:
+        """Materialize an http(s) source once. Raises a typed `DomainError`.
+
+        `early(head)` (M4), when given, is shown the body received so far once it reaches
+        `EARLY_LOOK_BYTES` and each time it has doubled since; it refuses by raising, and
+        the rest of the body is then never read. A true answer says the head has settled
+        everything it can, and it is not shown again."""
         try:
             # The backstop on the real clock: the injected `monotonic` bounds the phases
             # this module can see, and this bounds the ones it cannot (a resolver or a
             # transport that never returns at all). It deliberately fires a moment *after*
             # the per-phase budgets, so a refusal that can name its host and reason does.
             async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):
-                return await self._fetch(url)
+                return await self._fetch(url, early)
         except errors.DomainError as refusal:
             self.log.warning("media fetch refused: host=%s reason=%s",
                              getattr(refusal, "host", "") or "-",
@@ -236,7 +249,7 @@ class MediaFetcher:
             self.log.warning("media fetch failed: type=%s", type(exc).__name__)
             raise refused("fetch-failed") from None
 
-    async def _fetch(self, url: str) -> Fetched:
+    async def _fetch(self, url: str, early=None) -> Fetched:
         limits = self.limits
         cap = limits.max_media_bytes
         expires_at = self.monotonic() + limits.media_fetch_timeout_s
@@ -302,18 +315,29 @@ class MediaFetcher:
                     declared = response.headers.get("content-length", "")
                     if declared.isdigit() and int(declared) > cap:
                         raise refused("too-large", host=host, exc=errors.RequestTooLarge)
+                    # M4: the digest is taken as the bytes arrive, so it is finished when the
+                    # last one lands, and the body is copied once at the end. Measured on the
+                    # 64 MiB cap: one full copy and one full hash less on the event loop, and
+                    # a high-water of about 2x the body instead of 3x (M4 evidence).
+                    hasher = hashlib.sha256()
+                    look = EARLY_LOOK_BYTES
                     async for chunk in response.aiter_raw():
                         body += chunk
                         if len(body) > cap:
                             # Aborted mid-body: the rest is never read, so a lying
                             # Content-Length buys an attacker nothing.
                             raise refused("too-large", host=host, exc=errors.RequestTooLarge)
+                        hasher.update(chunk)
+                        if early is not None and len(body) >= look:
+                            look = 2 * len(body)
+                            if early(body):
+                                early = None      # settled: no later look can change it
                         if self.monotonic() >= expires_at:
                             raise refused("timeout", host=host)
                     if not body:
                         raise refused("empty-body", host=host)
-                    return Fetched(mime=mime, data=bytes(body), digest=digest_of(bytes(body)),
-                                   host=host)
+                    return Fetched(mime=mime, data=bytes(body),
+                                   digest="sha256:" + hasher.hexdigest(), host=host)
                 finally:
                     await response.aclose()
             raise refused("too-many-redirects")

@@ -241,3 +241,91 @@ def webm_tracks(codec: bytes = b"V_VP9", width: int = 640, height: int = 480,
                    element(0xAE, element(0x83, bytes([track_type])) + element(0x86, codec)
                            + element(0xE0, element(0xB0, width.to_bytes(2, "big"))
                                      + element(0xBA, height.to_bytes(2, "big")))))
+
+
+# --- M4: a second object store and the parity facts ----------------------------
+import os
+import pathlib
+from types import SimpleNamespace
+
+from infrx.config import Settings
+from infrx.media.fetch import digest_of
+from infrx.media.video import Media
+
+
+class FileObjectStore:
+    """The `store.ObjectStore` port on a directory, so MEDIA-PARITY can compare two stores
+    that share no code. Keys are server-built (`store.py`), so a key is a relative path; the
+    digest and type live in a sidecar written with the object. A test double: I/O is
+    synchronous, and there is nothing concurrent inside one `put_if_absent`."""
+
+    def __init__(self, root) -> None:
+        self.root = pathlib.Path(root)
+
+    def _path(self, key: str) -> pathlib.Path:
+        path = (self.root / key).resolve()
+        assert path.is_relative_to(self.root.resolve()), key
+        return path
+
+    def _meta(self, key: str) -> tuple[str, str] | None:
+        side = self._path(key + ".meta")
+        return tuple(side.read_text().split("\n", 1)) if side.exists() else None
+
+    async def head(self, key):
+        meta = self._meta(key)
+        return meta[0] if meta else None
+
+    async def get(self, key):
+        return self._path(key).read_bytes() if self._meta(key) else None
+
+    async def put_if_absent(self, key, data, content_type):
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "xb") as handle:
+                handle.write(data)
+        except FileExistsError:
+            return False
+        self._path(key + ".meta").write_text(f"{digest_of(bytes(data))}\n{content_type}")
+        return True
+
+    async def describe(self, key):
+        meta = self._meta(key)
+        return (self._path(key).stat().st_size, meta[1]) if meta else None
+
+    async def keys(self, prefix):
+        found = (p.relative_to(self.root).as_posix() for p in self.root.rglob("*")
+                 if p.is_file() and not p.name.endswith(".meta"))
+        return sorted(k for k in found if k.startswith(prefix))
+
+    async def delete(self, key):
+        for path in (self._path(key), self._path(key + ".meta")):
+            path.unlink(missing_ok=True)
+
+
+BUDGET = Media(SimpleNamespace(settings=Settings()))
+
+
+async def prepared_facts(adapter, org_id: str, source: str, job_id: str) -> dict:
+    """Everything a prepared clip is, as the engine and the store will see it.
+
+    Materialize one source, attach it to a job, prepare it at profile v1 and read back
+    what was produced: the prepared ref, the digest of the durable prepared object and of
+    the local file the engine opens, that file's place under the cache root, and the
+    frame/pixel budget the engine derives from the measured duration, plus the frame size and
+    codec the probe read. MEDIA-PARITY is
+    "these facts are equal" across runs, stores and cache expiry."""
+    ref = await adapter.materialize(org_id, source)
+    await adapter.attach(job_id, (ref,))
+    (prepared,) = await adapter.prepare(job_id, "v1")
+    local = adapter.local_uri(prepared).removeprefix("file://")
+    with open(local, "rb") as handle:
+        local_digest = digest_of(handle.read())
+    probed = adapter.cache.get(prepared.org_id, prepared.digest, prepared.profile_version).probed
+    return {"source_digest": ref.digest,
+            "probed": {"width": probed.width, "height": probed.height, "codec": probed.codec},
+            "ref": prepared.model_dump(mode="json", exclude={"kind"}),
+            "prepared_digest": digest_of(await adapter.objects.get(prepared.storage_ref)),
+            "local_digest": local_digest,
+            "local_path": os.path.relpath(local, adapter.cache.root),
+            "budget": BUDGET.budget_kwargs(prepared.duration_s)}
