@@ -215,7 +215,9 @@ def _https_url(value: str) -> bool:
 
 
 def _positive_int(value: str) -> bool:
-    return value.isdigit() and int(value) > 0
+    # serve.sh's grammar: ASCII, no leading zero (`isdigit` takes '007' and '٣', and
+    # `int('²')` raises)
+    return bool(re.fullmatch(r"[1-9][0-9]*", value))
 
 
 def _abs_path(value: str) -> bool:
