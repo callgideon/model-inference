@@ -35,6 +35,7 @@ SETTLEMENT = "test_complete_credit__a_settlement_exactly_when_settled_at_the_rec
 CAUSE = "test_cancel__sends_the_cause_and_defaults_to_the_clients_own"
 WORK = "test_load_work_credit__the_admitted_work_and_a_legacy_job_refused"
 RELEASED = "test_recover__a_24h_release_is_reported_in_released"
+LOOKUP = "test_lookup__answers_the_jobs_own_regime_and_sends_the_stores_ttl"
 
 
 def _m(name, invariant, old, new, *cases, file=J) -> Mutant:
@@ -95,6 +96,19 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("released_never_cleared", "each sweep reports its own releases",
        "        self.released = tuple(released)", "        self.released += tuple(released)",
        RELEASED),
+    # --- R91: the lookup -----------------------------------------------------------------
+    _m("lookup_crosses_regimes", "the answer is the job's own regime's record",
+       '        admission = admission_of(doc) if doc["accounting_regime"] == "legacy_usd" \\\n'
+       '            else admission_v2_of(doc)',
+       '        admission = admission_of(doc)', LOOKUP),
+    _m("lookup_sends_the_default_ttl", "the store's own tombstone TTL decides expiry",
+       '            "limits": {"idempotency_ttl_s": self.limits.idempotency_ttl_s}})\n'
+       '        if doc is None:',
+       '            "limits": {"idempotency_ttl_s": DEFAULTS.idempotency_ttl_s}})\n'
+       '        if doc is None:', LOOKUP),
+    _m("lookup_drops_the_outcome", "a terminal mapping answers its committed outcome",
+       '        return admission, _outcome(doc["outcome"])', '        return admission, None',
+       LOOKUP),
     # --- item 7: the operator adapters -------------------------------------------------
     _m("key_lookup_ignores_org", "a key is read only within its own organization",
        '_KEY + "id = %s and org_id = %s", (key_id, org_id))', '_KEY + "id = %s", (key_id,))',

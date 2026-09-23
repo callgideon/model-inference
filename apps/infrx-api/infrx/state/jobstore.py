@@ -225,10 +225,20 @@ class PgJobStore:
         return admission_v2_of(doc), _outcome(doc["outcome"])
 
     async def lookup(self, org_id: str, idem: IdempotencyRef):
-        """R91 (`ports.JobStore.lookup`): the SQL read is D5's. Until then this refuses before
-        any query, typed (`param="lookup"`), and a caller falls back to admitting (whose own
-        replay answer is unchanged)."""
-        raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
+        """R91 (`ports.JobStore.lookup` / `CreditJobStore.lookup`): one read-only statement
+        over D2's idempotency mapping (0018 `infrx.idempotency_lookup`) - `(admission,
+        outcome)` in the job's OWN regime (`Admission` for a legacy job, the pinned
+        `AdmissionV2` for a CREDIT one), marked replayed; None for no key, no mapping or an
+        expired one (never a new job); a changed payload is `idempotency_conflict`; a scope
+        naming another organization than `org_id` is `forbidden` (R10). Nothing is written."""
+        doc = await self._call("idempotency_lookup", {
+            "org_id": org_id, "idem": idem.model_dump(mode="json"),
+            "limits": {"idempotency_ttl_s": self.limits.idempotency_ttl_s}})
+        if doc is None:
+            return None
+        admission = admission_of(doc) if doc["accounting_regime"] == "legacy_usd" \
+            else admission_v2_of(doc)
+        return admission, _outcome(doc["outcome"])
 
     # --- preparation (D2 item 2) ----------------------------------------------------
     @staticmethod

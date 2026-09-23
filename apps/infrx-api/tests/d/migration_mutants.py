@@ -2617,6 +2617,29 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "      'infrx.settle_legacy_usd(uuid, numeric)', 'infrx.settle_credit(uuid, numeric)']",
        "      'infrx.settle_legacy_usd(uuid, numeric)']", "admission", "d5_privileges",
        "the platform role debits a CREDIT wallet outside any settlement"),
+    # --- R91: the read-only lookup -------------------------------------------------------
+    _m("d5_lookup_any_payload", SETTLE,
+       "  if i.payload_digest <> v_idem->>'payload_hash' then\n"
+       "    perform infrx.refuse('idempotency_conflict',\n"
+       "                         'same idempotency key, different canonical payload');\n"
+       "  end if;\n  return infrx.job_admission(i.request_id) || '{\"replayed\": true}';",
+       "  return infrx.job_admission(i.request_id) || '{\"replayed\": true}';",
+       "admission", "lookup", "a changed body is answered another request's job (R6)"),
+    _m("d5_lookup_expired_answers", SETTLE,
+       "  if v_expires is not null and infrx.now() >= v_expires then\n    return null;",
+       "  if false then\n    return null;", "admission", "lookup",
+       "an expired mapping keeps answering its old job instead of none"),
+    _m("d5_lookup_active_mapping_expires", SETTLE,
+       "  select coalesce(i.expires_at, j.settled_at + make_interval(",
+       "  select coalesce(i.expires_at, j.admitted_at + make_interval(",
+       "admission", "lookup", "an active job's mapping expires under it (01)"),
+    _m("d5_lookup_any_org_scope", SETTLE,
+       "  if v_idem->>'org_id' is distinct from p_args->>'org_id' then\n"
+       "    perform infrx.refuse('forbidden', 'the idempotency scope must name the caller''s "
+       "org');",
+       "  if false then\n"
+       "    perform infrx.refuse('forbidden', 'the idempotency scope must name the caller''s "
+       "org');", "admission", "lookup", "one organization reads another's jobs by key (R10)"),
     # --- item 5b: the released record -----------------------------------------------------
     _m("d5_release_reported_as_outcome", SETTLE,
        "  return jsonb_build_array(jsonb_build_object('released',",
@@ -2798,6 +2821,7 @@ _CHECKS = {
     "cancel_cause": checks_settle.check_cancel_cause,
     "cancel_refuses_a_cause": checks_settle.check_cancel_refuses_a_cause,
     "settle_released": checks_settle.check_settle_released,
+    "lookup": checks_settle.check_lookup,
     "credit_settle": checks_settle.check_credit_settle,
     "credit_grid": checks_settle.check_credit_grid,
     "credit_usd_untouched": checks_settle.check_credit_usd_untouched,

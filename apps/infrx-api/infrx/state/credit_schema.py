@@ -93,6 +93,7 @@ SEAMS.update({
     "infrx.grant_credit(jsonb)": (_SERVICE, ()),         # 06 boundary, body D5
     "infrx.reconcile(jsonb)": (_SERVICE, ()),
     "infrx.load_work_credit(jsonb)": (_SERVICE, ()),
+    "infrx.idempotency_lookup(jsonb)": (_SERVICE, ()),   # R91: read-only, no lock
 })
 
 #: The admission lock order (0011). Every D writer takes these in this order; a grant

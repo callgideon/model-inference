@@ -107,3 +107,8 @@ def test_credit_rate__a_card_published_after_admission_is_ignored() -> None:
 
 def test_credit_rate__retired_wallet_still_settles() -> None:
     print(checks_settle.check_credit_retired(_db()))
+
+
+# --- R91 (G2): the read-only lookup over D2's mapping -----------------------------------------
+def test_dur_admit__lookup_reads_the_mapped_job_and_writes_nothing() -> None:
+    print(checks_settle.check_lookup(_db()))

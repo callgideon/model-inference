@@ -213,7 +213,8 @@ def check_reconcile_tenant(conn) -> str:
 #: `create or replace`, the new ones granted), and the internal bodies nobody may call.
 D5_SERVICE = ("infrx.terminalize(jsonb)", "infrx.cancel(jsonb)", "infrx.claim(jsonb)",
               "infrx.grant_credit(jsonb)", "infrx.reconcile(jsonb)",
-              "infrx.load_work_credit(jsonb)", "infrx.job_admission(uuid)")
+              "infrx.load_work_credit(jsonb)", "infrx.idempotency_lookup(jsonb)",
+              "infrx.job_admission(uuid)")
 D5_INTERNAL = ("infrx.settle_legacy_usd(uuid,numeric)", "infrx.settle_credit(uuid,numeric)",
                "infrx.debit_legacy_usd(jsonb,integer,integer)",
                "infrx.debit_credit(text,integer,integer)", "infrx.usage_doc(integer,integer)",

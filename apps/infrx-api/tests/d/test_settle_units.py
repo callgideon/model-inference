@@ -132,5 +132,34 @@ def test_recover__a_24h_release_is_reported_in_released() -> None:
     assert store.released == (), "a previous sweep's releases were reported again"
 
 
+def test_lookup__answers_the_jobs_own_regime_and_sends_the_stores_ttl() -> None:
+    """R91: one statement with the store's own tombstone TTL; the answer in the job's OWN
+    regime (`Admission` for a legacy job, the pinned `AdmissionV2` for a CREDIT one),
+    `replayed`, with its outcome; no mapping answers None."""
+    from infrx.contracts.fakes.factories import jobstore_factory
+    from infrx.contracts.records import Admission
+    from infrx.contracts.v2.records import AdmissionV2
+    h = jobstore_factory()
+    h.extra["grant"](b.ORG_A, "25")
+    request = b.request(h)
+    idem = b.idem(request, "k")
+    legacy = asyncio.run(h.port.admit(request, idem)).model_dump(mode="json")
+    credit = v2fix.BUILDERS["admission.json"]().model_dump(mode="json")
+    store, conn = _store({**legacy, "accounting_regime": "legacy_usd", "replayed": True,
+                          "outcome": OUTCOME},
+                         {**credit, "accounting_regime": "credit", "replayed": True,
+                          "outcome": None}, None,
+                         limits=DEFAULTS.replace(idempotency_ttl_s=99.0))
+    mapped, outcome = _ok(store.lookup(request.org_id, idem))
+    assert type(mapped) is Admission and mapped.replayed, mapped
+    assert outcome == TerminalOutcome(**OUTCOME), outcome
+    sent = _args(conn)
+    assert (sent["org_id"], sent["idem"], sent["limits"]) == \
+        (request.org_id, idem.model_dump(mode="json"), {"idempotency_ttl_s": 99.0}), sent
+    mapped, outcome = _ok(store.lookup(request.org_id, idem))
+    assert type(mapped) is AdmissionV2 and mapped.replayed and outcome is None, mapped
+    assert _ok(store.lookup(request.org_id, idem)) is None
+
+
 if __name__ == "__main__":                              # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))

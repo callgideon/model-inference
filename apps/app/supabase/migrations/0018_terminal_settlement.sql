@@ -19,6 +19,7 @@
 --                        card and data-access policy).
 --   grant_credit         the audited, idempotent operator movement on a CREDIT wallet.
 --   reconcile            the 24 h rule as an audited operator operation (never a debit).
+--   idempotency_lookup   R91: the job an idempotency scope maps to, read-only.
 --
 -- Settlement is the fake's `_terminalize`, case for case: published with no usage ->
 -- held_unknown (hold quarantined for the window); no usage or a cause R21 does not bill ->
@@ -43,7 +44,8 @@
 -- and 0016's `infrx.terminalize` (the fenced prefix and its `infrx.unimplemented` line),
 -- `infrx.cancel`, `infrx.claim` (with MY-3's CREDIT refusal - stop CREDIT admission first,
 -- or a claimed CREDIT job has no worker path) and `infrx.release_aged_unknown`. Drop the
--- functions this file adds: `infrx.load_work_credit`, `infrx.reconcile`, `infrx.usage_doc`,
+-- functions this file adds: `infrx.load_work_credit`, `infrx.reconcile`,
+-- `infrx.idempotency_lookup`, `infrx.usage_doc`,
 -- `infrx.cause_carries_state`, `infrx.debit_legacy_usd`, `infrx.debit_credit`,
 -- `infrx.settle_legacy_usd`, `infrx.settle_credit` and `infrx.jobs_settlement_record_guard`
 -- with its trigger. Then `alter table infrx.jobs drop constraint
@@ -762,11 +764,56 @@ begin
                             'replayed', false);
 end $$;
 
+-- ============================================================== R91 lookup ===
+-- `JobStore`/`CreditJobStore.lookup` (08 §10 R91): the job an idempotency scope already maps
+-- to, READ-ONLY, over D2's mapping (org + operation + key) - no lock, no write - so a
+-- caller learns it is replaying before it prepares anything. `admission_replay`'s rules:
+-- no key or no mapping answers null; a changed payload digest is `idempotency_conflict`; an
+-- expired mapping (its tombstone clock started at the terminal state, 01: kept at least 24 h
+-- after it; an active job's never expires) answers null - never a new job. The idempotency
+-- scope must name the caller's organization (R10). The job answers in its own regime.
+-- Args `{org_id, idem, limits: {idempotency_ttl_s}}`; answers the admission document with
+-- `replayed: true`, or null.
+create or replace function infrx.idempotency_lookup(p_args jsonb) returns jsonb
+language plpgsql stable security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_idem jsonb := p_args->'idem';
+  i infrx.idempotency%rowtype;
+  v_expires timestamptz;
+begin
+  if jsonb_typeof(v_idem) is distinct from 'object' or p_args->>'org_id' is null then
+    perform infrx.refuse('invalid_request', 'lookup takes {org_id, idem, limits}');
+  end if;
+  if v_idem->>'org_id' is distinct from p_args->>'org_id' then
+    perform infrx.refuse('forbidden', 'the idempotency scope must name the caller''s org');
+  end if;
+  if v_idem->>'key' is null then
+    return null;
+  end if;
+  select * into i from infrx.idempotency
+   where org_id = (v_idem->>'org_id')::uuid and operation = v_idem->>'operation'
+     and key = v_idem->>'key';
+  if not found then
+    return null;
+  end if;
+  select coalesce(i.expires_at, j.settled_at + make_interval(
+           secs => infrx.lease_limit(p_args, 'idempotency_ttl_s')))
+    into v_expires from infrx.jobs j where j.request_id = i.request_id;
+  if v_expires is not null and infrx.now() >= v_expires then
+    return null;
+  end if;
+  if i.payload_digest <> v_idem->>'payload_hash' then
+    perform infrx.refuse('idempotency_conflict',
+                         'same idempotency key, different canonical payload');
+  end if;
+  return infrx.job_admission(i.request_id) || '{"replayed": true}';
+end $$;
+
 -- ================================================================ privileges ===
 -- `terminalize`, `cancel`, `claim` keep 0004's grant and `job_admission` 0011's
 -- (service_role only), `release_aged_unknown` 0016's (nobody), `grant_credit` 0004's
--- (service_role only): `create or replace` preserves them. `load_work_credit` and
--- `reconcile` are platform operations: service_role only.
+-- (service_role only): `create or replace` preserves them. `load_work_credit`,
+-- `reconcile` and `idempotency_lookup` are platform operations: service_role only.
 -- Everything new here is internal: only a SECURITY DEFINER body or a trigger calls it.
 do $$
 declare
@@ -782,7 +829,8 @@ begin
     execute format('revoke all on function %s from public, anon, authenticated, service_role',
                    f);
   end loop;
-  foreach f in array array['infrx.load_work_credit(jsonb)', 'infrx.reconcile(jsonb)']
+  foreach f in array array['infrx.load_work_credit(jsonb)', 'infrx.reconcile(jsonb)',
+                           'infrx.idempotency_lookup(jsonb)']
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

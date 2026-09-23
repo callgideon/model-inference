@@ -945,3 +945,64 @@ def check_settle_races(connect, database: str) -> str:
     assert two[0] == "stale_lease", f"a superseded generation settled: {two}"
     assert_no_drift(owner, "races")
     return "duplicates replay, cancel answers the settlement, no scope lock, stale refused"
+
+
+# --------------------------------------------------------------------- R91 lookup
+def lookup(conn, org, idem, ttl: float = DEFAULTS.idempotency_ttl_s):
+    """(code, admission document or None) of `infrx.idempotency_lookup`, as the adapter
+    sends it."""
+    return outcome(conn, "idempotency_lookup", {"org_id": str(org),
+                                                "idem": idem.model_dump(mode="json"),
+                                                "limits": {"idempotency_ttl_s": ttl}})
+
+
+def check_lookup(conn) -> str:
+    """R91 on D2's mapping: `lookup` answers the job an idempotency scope maps to - its own
+    regime's admission (a CREDIT job with its pins), `replayed`, and its committed outcome -
+    and writes nothing (every relation an admission owns unchanged). No key, an unmapped key
+    and another org's own unmapped scope answer None; a changed payload is
+    `idempotency_conflict`; a scope naming another org than the caller is `forbidden`
+    (R10); an ACTIVE job's mapping never expires; a terminal one's expires
+    `idempotency_ttl_s` after its terminal state (01), then answers None."""
+    world = ca.World(conn)
+
+    def body():
+        request = cl.gateway_request(world)
+        idem = b.idem(request, "look-1")
+        ca.admit(conn, request, idem)
+        before = ca.footprint(conn)
+        code, doc = lookup(conn, request.org_id, idem)
+        assert code is None and doc is not None, f"a mapped scope answered {code}"
+        assert (doc["request_id"], doc["replayed"], doc["outcome"]) == \
+            (request.request_id, True, None), doc
+        assert ca.footprint(conn) == before, "lookup wrote something"
+        assert lookup(conn, request.org_id, b.idem(request, None)) == (None, None)
+        assert lookup(conn, request.org_id, b.idem(request, "never-used")) == (None, None)
+        code, _ = lookup(conn, request.org_id, b.idem(request, "look-1", payload="changed"))
+        assert code == "idempotency_conflict", f"a changed payload: {code}"
+        other = b.request(world, org_id=b.ORG_B, key_id=b.KEY_B)
+        assert lookup(conn, b.ORG_B, b.idem(other, "look-1")) == (None, None)
+        assert lookup(conn, b.ORG_B, idem)[0] == "forbidden", "another org read the scope"
+        org = cc.personal_org(conn, cc.CONSUMER_1)
+        credit_request = ca.credit_request(world, ca.C1_KEY, org)
+        credit_idem = b.idem(credit_request, "look-credit")
+        ca.admit(conn, credit_request, credit_idem, regime="credit")
+        code, credit_doc = lookup(conn, org, credit_idem)
+        assert (code, credit_doc["accounting_regime"], credit_doc["pins"]["rate_card_version"]) \
+            == (None, "credit", cc.CARD), credit_doc
+        advance(conn, DEFAULTS.idempotency_ttl_s + 1)            # still active: never expires
+        code, active = lookup(conn, request.org_id, idem)
+        assert active is not None and active["request_id"] == request.request_id, \
+            f"an active job's mapping expired: {code}"
+        code, cancelled = outcome(conn, "cancel", {
+            "org_id": request.org_id, "limits": LIMITS,
+            "job_handle": cl.row(conn, request.request_id)["job_handle"]})
+        code, terminal = lookup(conn, request.org_id, idem)
+        assert terminal is not None and terminal["outcome"] == cancelled, (code, terminal)
+        advance(conn, DEFAULTS.idempotency_ttl_s - 1)
+        assert lookup(conn, request.org_id, idem)[1] is not None, "expired inside the tombstone"
+        advance(conn, 1)
+        assert lookup(conn, request.org_id, idem) == (None, None), \
+            "an expired mapping answered a job"
+        return "read-only; own regime; conflict, forbidden, never-while-active, expiry"
+    return ca._in_rollback(conn, body)

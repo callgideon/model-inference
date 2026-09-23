@@ -31,8 +31,8 @@ pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 
 #: D5: every case that needed the settlement passes - the former `_D5` cases (23 at D3,
-#: unchanged by D4), the cancel-cause case (0018's `infrx.cancel` records the cause) and the
-#: former `RACY` case, now strict whichever transaction wins (complete settles, or cancel
+#: unchanged by D4), the cancel-cause case (0018's `infrx.cancel` records the cause), G2's
+#: R91 lookup case (0018's `infrx.idempotency_lookup`) and the former `RACY` case, now strict whichever transaction wins (complete settles, or cancel
 #: commits first and complete is `already_terminal`). Only a case NO real store can pass
 #: as written stays pending, with its reason.
 PENDING: dict[str, str] = {
@@ -42,10 +42,6 @@ PENDING: dict[str, str] = {
     # The per-scope limits themselves pass in tests/d/test_admission.py (capacity check).
     "dur_cap__total_org_and_key_limits_reject_with_retry_guidance":
         "F2 conformance: the case reuses one key across two organizations",
-    # R91 (G2, merged 2391d4d): PgJobStore.lookup refuses (UnsupportedParameter,
-    # param="lookup") until D5's SQL read behind it lands.
-    "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing":
-        "D5: the SQL read behind JobStore.lookup (R91)",
 }
 
 CASES = jobstore_cases()
@@ -53,9 +49,7 @@ CASES = jobstore_cases()
 
 #: D4 review H2: the exception each pending case must die of (the refused key for the F2
 #: case), so a regression before that step fails, never xfails.
-RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey,
-          "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing":
-              errors.UnsupportedParameter}
+RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey}
 
 
 def _param(case):
