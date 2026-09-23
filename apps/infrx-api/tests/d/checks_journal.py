@@ -223,6 +223,12 @@ def check_append_oversize(conn) -> str:
         assert [c["bytes"] for c in answer["chunks"]] == [limit], answer["chunks"][0]["bytes"]
         compact = len(compact_bytes(exact))
         assert size(conn, exact) == compact + 1, (size(conn, exact), compact)
+        # review M1: what jsonb cannot store dies UNTYPED at the boundary (the adapter
+        # refuses it typed first - test_journal_units.py)
+        for payload, state in (({"content": "a\x00b"}, "22P05"), ({"x": float("nan")}, "22P02"),
+                               ({"x": float("inf")}, "22P02")):
+            code, _ = append_docs(conn, lease, [{"type": "delta", "payload": payload}])
+            assert code == f"untyped {state}", f"jsonb stored {payload}: {code}"
         return f"limit {limit} accepted, {limit + 1} refused (fake compact measure {compact})"
     return ca._in_rollback(conn, body)
 

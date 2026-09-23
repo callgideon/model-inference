@@ -10,6 +10,7 @@ the chunks this returns are durable, and they are the only notification a relay 
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -21,6 +22,20 @@ from .jobstore import Connect, PgJobStore, _outcome
 #: `records.Chunk`'s fields, in the order `finalize_in_transaction` selects them.
 _CHUNK_FIELDS = ("job_id", "generation", "sequence", "event_type", "payload", "bytes",
                  "persisted_at", "expires_at")
+
+
+def _journalable(value: Any) -> bool:
+    """What jsonb can store (review M1): no NUL character in any string, key or value
+    (22P05), and no NaN or infinity (22P02). Anything else JSON can say, it can."""
+    if isinstance(value, str):
+        return "\x00" not in value
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, dict):
+        return all(_journalable(key) and _journalable(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_journalable(item) for item in value)
+    return True
 
 
 class PgStreamStore:
@@ -43,7 +58,15 @@ class PgStreamStore:
     async def append(self, lease: Lease, events: tuple[EngineEvent, ...]) -> tuple[Chunk, ...]:
         """The fence, then the batch, the stored bytes and the publication marker, in one
         transaction; the chunks returned are the committed rows. A refusal that followed a
-        committed R29 terminalization (and its terminal event) is raised here (R39)."""
+        committed R29 terminalization (and its terminal event) is raised here (R39).
+
+        A payload jsonb cannot store (a NUL character, NaN, an infinity) is refused
+        `journal_write_failed` before anything is sent, the whole batch with it - typed, as
+        R25 refuses an oversize event, instead of a raw database error the worker cannot
+        classify. (The fake stores such payloads: recorded delta, coordinator request.)"""
+        if not all(_journalable(event.payload) for event in events):
+            raise errors.JournalWriteFailed("an event carries a NUL character or a non-finite "
+                                            "number, which the journal cannot store")
         answer = await self._db._call("append", self._append_args(lease, events))
         rows = PgJobStore._answer(answer)["chunks"]
         return tuple(Chunk.model_validate(row) for row in rows)

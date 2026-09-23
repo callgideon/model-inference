@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import Chunk, Cursor, TerminalOutcome
+from infrx.contracts.records import Chunk, Cursor, EngineEvent, TerminalOutcome
 from infrx.state.journal import PgStreamStore
 
 from .test_adapter_units import _Conn, _refused
@@ -98,3 +98,37 @@ def test_expire__passes_the_callers_bound_and_counts() -> None:
     assert asyncio.run(store.expire(WHEN)) == 3
     assert _sent(conn) == {"now": WHEN.isoformat()}, _sent(conn)
     assert asyncio.run(store.expire()) == 0 and _sent(conn, 1) == {"now": None}
+
+
+UNJOURNALABLE = ({"content": "a\x00b"}, {"a\x00b": "key"}, {"logprob": float("nan")},
+                 {"logprob": float("inf")}, {"top": [{"logprob": float("-inf")}]},
+                 {"top": [["\x00"]]})
+
+
+def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
+    """Review M1: a NUL character (in a key or a value, at any depth) or a non-finite number
+    is `journal_write_failed` for the whole batch and nothing reaches the database (jsonb
+    would raise an untyped 22P05/22P02); the literal text `\\u0000` and finite floats are
+    journalable. The FAKE stores all six today (pinned below): when F makes it refuse them
+    too (coordinator request) this assertion is the one to flip."""
+    store, conn = _stream({"chunks": [ROW]})
+    for payload in UNJOURNALABLE:
+        _refused(errors.JournalWriteFailed,
+                 store.append(LEASE, (*b.events("fine"), EngineEvent(type="delta",
+                                                                     payload=payload))))
+    assert conn.sent == [], "an unjournalable batch reached the database"
+    asyncio.run(store.append(LEASE, (EngineEvent(type="delta", payload={
+        "content": "\\u0000", "logprob": -3.2e-07}),)))
+    assert len(conn.sent) == 1, "a journalable payload was refused"
+
+    async def fake_stores_them():
+        from infrx.contracts.conformance.jobs import _stream_job
+        from infrx.contracts.fakes.factories import streamstore_factory
+        harness = streamstore_factory()
+        harness.extra["grant"](b.ORG_A, "25")
+        _, _, lease = await _stream_job(harness)
+        return [len(await harness.port.append(lease, (EngineEvent(type="delta",
+                                                                  payload=payload),)))
+                for payload in UNJOURNALABLE]
+    assert asyncio.run(fake_stores_them()) == [1] * len(UNJOURNALABLE), \
+        "the fake now refuses unjournalable payloads: drop this delta and its request"

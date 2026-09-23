@@ -23,6 +23,7 @@ ROWS = "test_append__answers_the_committed_rows_not_its_input"
 READ = "test_read_owned__sends_the_cursor_and_returns_the_next_one"
 FINALIZE = "test_finalize__the_outcome_is_a_lookup_key_not_content"
 EXPIRE = "test_expire__passes_the_callers_bound_and_counts"
+JSONB = "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
 
 
 def _m(name, invariant, old, new, *cases) -> Mutant:
@@ -56,6 +57,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if outcome != _outcome(stored):", "        if False:", FINALIZE),
     _m("finalize_answers_after_expiry", "an expired journal is 410, never a terminal chunk",
        "        if expired:", "        if False:", FINALIZE),
+    # review M1: what jsonb cannot store is refused typed, before anything is sent
+    _m("the_unjournalable_payload_is_sent", "a NUL or a non-finite number is refused typed",
+       "        if not all(_journalable(event.payload) for event in events):",
+       "        if False:", JSONB),
+    _m("a_nul_in_a_key_is_sent", "a NUL character in a key is refused",
+       "        return all(_journalable(key) and _journalable(item) for key, item in value.items())",
+       "        return all(_journalable(item) for key, item in value.items())", JSONB),
+    _m("a_non_finite_number_is_sent", "NaN and the infinities are refused",
+       "        return math.isfinite(value)", "        return True", JSONB),
+    _m("a_nul_inside_a_list_is_sent", "a NUL at any depth is refused",
+       "        return all(_journalable(item) for item in value)", "        return True", JSONB),
     _m("expire_drops_the_callers_bound", "a caller's tighter bound is kept (R7)",
        '            "now": None if now is None else now.isoformat()}))',
        '            "now": None}))', EXPIRE),
