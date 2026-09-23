@@ -36,6 +36,21 @@ def test_the_fixture_root_holds_exactly_the_two_revisions():
         set(v2fix.MODELS) | set(v2fix.TABLES))
 
 
+def test_a_stray_entry_at_the_fixture_root_fails_the_guard(monkeypatch):
+    """F2P review CFG-4: the "nothing else" half of the guard above. A third revision
+    directory planted beside v1/ and v2/ must fail it."""
+    import pathlib
+    root, real = fixtures.DIR.parent, pathlib.Path.iterdir
+
+    def planted(self):
+        yield from real(self)
+        if self == root:
+            yield root / "v3"
+    monkeypatch.setattr(pathlib.Path, "iterdir", planted)
+    with pytest.raises(AssertionError):
+        test_the_fixture_root_holds_exactly_the_two_revisions()
+
+
 @pytest.mark.parametrize("name", sorted(fixtures.MODELS))
 def test_fixture_round_trips_byte_stably(name):
     """F-CONTRACT: file -> model -> file is the identity."""
