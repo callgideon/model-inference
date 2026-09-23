@@ -2309,7 +2309,7 @@ MUTANTS = MUTANTS + D4_MUTANTS
 
 #: D5 (0018, plus one 0016 edit; scenario "admission"). One per claimed invariant, each
 #: killed by its named `checks_settle` check.
-from . import checks_settle  # noqa: E402
+from . import checks_operations, checks_settle  # noqa: E402
 _S_REPLAY = (
     "  if found then\n"
     "    if j.accounting_regime <> v_regime then\n"
@@ -2551,6 +2551,59 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "    perform infrx.refuse('not_claimable', 'no v2 work loader');\n  end if;\n"
        "  if j.state <> 'queued' then\n",
        "admission", "credit_settle", "the lift's control: a CREDIT job is never leased (MY-3)"),
+    # --- item 4: operator money ----------------------------------------------------------
+    _m("d5_adjust_replay_appends", SETTLE,
+       "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if found then",
+       "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if false then",
+       "admission", "adjust", "an operator retry moves the money twice"),
+    _m("d5_adjust_without_audit", SETTLE, "         'grant_credit:' || v_op;",
+       "         'grant_credit:' || v_op where false;", "admission", "adjust",
+       "an operator moved credit and nothing records who or why (R34)"),
+    _m("d5_adjust_below_reserved", SETTLE,
+       "  if w.ledger_total + v_amount < w.reserved_total then", "  if false then",
+       "admission", "adjust", "an adjustment below the holds surfaces as a spend refusal (402)"),
+    _m("d5_allocation_to_consumer_wallet", SETTLE,
+       "  if v_kind = 'operator_allocation' and w.kind <> 'provider_dev' then", "  if false then",
+       "admission", "allocation", "consumer credit minted by allocation (0006 kind rule, 500)"),
+    _m("d5_amount_not_bounded", SETTLE,
+       "     or v_text !~ '^-?[0-9]{1,12}(\\.[0-9]{1,8})?$' then", "     or false then",
+       "admission", "adjust", "an over-scale or exponent amount reaches the ledger (R11)"),
+    _m("d5_reconcile_on_callers_clock", SETTLE,
+       "  v_now timestamptz := infrx.now();\n  v_key text := 'reconcile:'",
+       "  v_now timestamptz := coalesce((p_args->>'at')::timestamptz, infrx.now());\n"
+       "  v_key text := 'reconcile:'", "admission", "reconcile_clock",
+       "an operator releases an unknown hold before its window (R7)"),
+    _m("d5_reconcile_debits", SETTLE,
+       "    perform infrx.release_aged_unknown(j.request_id, v_now);\n",
+       "    perform infrx.release_aged_unknown(j.request_id, v_now);\n"
+       "    insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id,\n"
+       "      request_id, actor) select j.wallet_id, w.kind, 'inference_debit', -1,\n"
+       "      gen_random_uuid(), j.request_id, 'late' from infrx.credit_wallets w\n"
+       "      where w.wallet_id = j.wallet_id;\n", "admission", "reconcile_clock",
+       "late evidence becomes a delayed customer debit (02)"),
+    _m("d5_reconcile_any_tenant", SETTLE,
+       "   where request_id = (p_args->>'request_id')::uuid and org_id = (p_args->>'org_id')"
+       "::uuid\n   for update;",
+       "   where request_id = (p_args->>'request_id')::uuid\n   for update;",
+       "admission", "reconcile_tenant", "an operator path reconciles another tenant's request"),
+    _m("d5_reconcile_replay_audits_again", SETTLE,
+       "  if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then",
+       "  if false then", "admission", "reconcile_clock",
+       "a retried reconcile fails on its own audit row"),
+    # --- item 10a: the privilege surface --------------------------------------------------
+    _m("d5_reconcile_granted_to_anon", SETTLE,
+       "    execute format('grant execute on function %s to service_role', f);",
+       "    execute format('grant execute on function %s to service_role, anon', f);",
+       "admission", "d5_privileges", "an anonymous browser releases unknown-usage holds"),
+    _m("d5_grant_credit_granted_to_authenticated", SETTLE,
+       "comment on function infrx.grant_credit(jsonb) is",
+       "grant execute on function infrx.grant_credit(jsonb) to authenticated;\n"
+       "comment on function infrx.grant_credit(jsonb) is", "admission", "d5_privileges",
+       "a signed-in browser adjusts a wallet"),
+    _m("d5_settle_helper_callable_by_the_service", SETTLE,
+       "      'infrx.settle_legacy_usd(uuid, numeric)', 'infrx.settle_credit(uuid, numeric)']",
+       "      'infrx.settle_legacy_usd(uuid, numeric)']", "admission", "d5_privileges",
+       "the platform role debits a CREDIT wallet outside any settlement"),
     # --- item 5b: the released record -----------------------------------------------------
     _m("d5_release_reported_as_outcome", SETTLE,
        "  return jsonb_build_array(jsonb_build_object('released',",
@@ -2738,6 +2791,11 @@ _CHECKS = {
     "credit_regimes": checks_settle.check_credit_regimes,
     "credit_rate": checks_settle.check_credit_rate,
     "credit_retired": checks_settle.check_credit_retired,
+    "adjust": checks_operations.check_adjust,
+    "allocation": checks_operations.check_allocation,
+    "reconcile_clock": checks_operations.check_reconcile_clock,
+    "reconcile_tenant": checks_operations.check_reconcile_tenant,
+    "d5_privileges": checks_operations.check_d5_privileges,
 }
 
 

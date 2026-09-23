@@ -17,6 +17,8 @@
 --   claim                0016's body without the MY-3 refusal: a CREDIT job is claimable,
 --   load_work_credit     because this fenced read carries its WorkV2 (the admitted pins,
 --                        card and data-access policy).
+--   grant_credit         the audited, idempotent operator movement on a CREDIT wallet.
+--   reconcile            the 24 h rule as an audited operator operation (never a debit).
 --
 -- Settlement is the fake's `_terminalize`, case for case: published with no usage ->
 -- held_unknown (hold quarantined for the window); no usage or a cause R21 does not bill ->
@@ -31,20 +33,23 @@
 -- idempotency row (the tombstone), then its hold, then its wallet. Never the admission
 -- scope lock (0011's lock 1): a settlement holds a job row, and admission takes the scope
 -- lock first. Admission takes idempotency (2) before a wallet (5) too, so no cycle exists.
+-- `grant_credit` takes only the wallet (0011: "a grant takes only 5"); `reconcile` takes
+-- the job row, then (through `release_aged_unknown`) its hold and wallet - the settlement's
+-- order.
 --
--- ROLLBACK (0018 alone; nothing before it is edited): restore 0016's bodies of
--- `infrx.terminalize` (the fenced prefix and the `infrx.unimplemented` line), `infrx.cancel`,
--- `infrx.claim` (with MY-3's CREDIT refusal - stop CREDIT admission first, or a claimed
--- CREDIT job has no worker path) and `infrx.release_aged_unknown`, and 0011's
--- `infrx.job_admission` (re-run those
--- `create or replace` statements; grants are kept); drop the functions this file adds
--- (`infrx.load_work_credit`, `infrx.usage_doc`, `infrx.cause_carries_state`,
--- `infrx.debit_legacy_usd`,
--- `infrx.debit_credit`, `infrx.settle_legacy_usd`, `infrx.settle_credit`,
--- `infrx.jobs_settlement_record_guard` with its trigger); `alter table infrx.jobs drop
--- constraint jobs_settled_usage_is_one_fact, drop column proposal, drop column
--- usage_prompt_tokens, drop column usage_completion_tokens`. Settled jobs, ledger rows and
--- usage rows stay: they are money history (append-only), never un-settled.
+-- ROLLBACK (0018 alone; nothing before it is edited). Re-run the earlier `create or
+-- replace` statements (grants are kept): 0004's `grant_credit` stub (`perform
+-- infrx.unimplemented('grant_credit', 'D5'); return null;`), 0011's `infrx.job_admission`,
+-- and 0016's `infrx.terminalize` (the fenced prefix and its `infrx.unimplemented` line),
+-- `infrx.cancel`, `infrx.claim` (with MY-3's CREDIT refusal - stop CREDIT admission first,
+-- or a claimed CREDIT job has no worker path) and `infrx.release_aged_unknown`. Drop the
+-- functions this file adds: `infrx.load_work_credit`, `infrx.reconcile`, `infrx.usage_doc`,
+-- `infrx.cause_carries_state`, `infrx.debit_legacy_usd`, `infrx.debit_credit`,
+-- `infrx.settle_legacy_usd`, `infrx.settle_credit` and `infrx.jobs_settlement_record_guard`
+-- with its trigger. Then `alter table infrx.jobs drop constraint
+-- jobs_settled_usage_is_one_fact, drop column proposal, drop column usage_prompt_tokens,
+-- drop column usage_completion_tokens`. Settled jobs, ledger, usage and audit rows stay:
+-- they are money history (append-only), never un-settled.
 --
 -- Additive and re-runnable.
 
@@ -603,10 +608,157 @@ begin
                  from infrx.data_access_policies p where p.policy_version = j.policy_version));
 end $$;
 
+-- ===================================================== operator money (item 4) ===
+-- The one audited, idempotent operator movement on a CREDIT wallet (G6B request 6, A1
+-- request 7): `operator_adjustment` on a consumer wallet (signed, nonzero - drift correction
+-- is this with a reason, reconcile.md#drift) or `operator_allocation` on a provider_dev
+-- wallet (positive), 0006's kind rules. USD admin grants stay the legacy
+-- `public.credit_ledger` writer (R65/R72): this body names no USD relation. One
+-- transaction: the wallet row only (0011's lock 5), the ledger row (its trigger moves the
+-- total), one `admin_adjust` audit row. A replayed operation id answers the existing entry,
+-- `replayed`, and appends nothing; the same id for another movement is a conflict. A
+-- frozen (retired) wallet accepts an adjustment (0015 guards only holds and signup grants).
+-- Args `{wallet_id, kind, amount, operation_id, actor, reason, at}` (`at` is the caller's
+-- clock: audit data only, R7); answers `{entry, replayed}`.
+create or replace function infrx.grant_credit(p_args jsonb) returns jsonb
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_kind text := p_args->>'kind';
+  v_text text := p_args->>'amount';
+  v_amount numeric(20,8);
+  v_op uuid;
+  w infrx.credit_wallets%rowtype;
+  l infrx.credit_ledger%rowtype;
+begin
+  -- R11 at the port boundary: exact decimal text, at most 8 places, |v| < 10^12, nonzero.
+  if v_kind is null or v_kind not in ('operator_adjustment', 'operator_allocation') then
+    perform infrx.refuse('invalid_request', 'grant_credit moves operator_adjustment or '
+                         || 'operator_allocation');
+  end if;
+  if jsonb_typeof(p_args->'amount') is distinct from 'string'
+     or v_text !~ '^-?[0-9]{1,12}(\.[0-9]{1,8})?$' then
+    perform infrx.refuse('invalid_request', 'an amount is exact CREDIT text: at most 12 '
+                         || 'integer digits and 8 decimal places');
+  end if;
+  v_amount := v_text::numeric;
+  if v_amount = 0 or (v_kind = 'operator_allocation' and v_amount < 0) then
+    perform infrx.refuse('invalid_request', 'an adjustment is nonzero and an allocation '
+                         || 'positive');
+  end if;
+  if coalesce(p_args->>'operation_id', '') !~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
+     or p_args->>'wallet_id' !~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$' then
+    perform infrx.refuse('invalid_request', 'a wallet id and an operation id are uuids');
+  end if;
+  if length(btrim(coalesce(p_args->>'actor', ''))) not between 1 and 200
+     or length(btrim(coalesce(p_args->>'reason', ''))) not between 1 and 500 then
+    perform infrx.refuse('invalid_request', 'an operator movement names its actor and reason');
+  end if;
+  v_op := (p_args->>'operation_id')::uuid;
+  -- The wallet row only: a racing replay of the same operation waits here, then finds it.
+  select * into w from infrx.credit_wallets
+   where wallet_id = (p_args->>'wallet_id')::uuid for update;
+  if not found then
+    perform infrx.refuse('not_found', 'no CREDIT wallet ' || (p_args->>'wallet_id'));
+  end if;
+  select * into l from infrx.credit_ledger where operation_id = v_op;
+  if found then
+    if l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount <> v_amount then
+      perform infrx.refuse('idempotency_conflict', 'operation ' || v_op
+                           || ' recorded another movement');
+    end if;
+    return jsonb_build_object('entry', to_jsonb(l), 'replayed', true);
+  end if;
+  if v_kind = 'operator_allocation' and w.kind <> 'provider_dev' then
+    perform infrx.refuse('invalid_request', 'an operator allocation funds a provider_dev '
+                         || 'wallet; consumer credit is adjusted, never allocated');
+  end if;
+  if v_kind = 'operator_adjustment' and w.kind <> 'consumer' then
+    perform infrx.refuse('invalid_request', 'an operator adjustment corrects a consumer wallet');
+  end if;
+  if w.ledger_total + v_amount < w.reserved_total then
+    perform infrx.refuse('invalid_request', 'the movement would take the wallet below its '
+                         || 'reserved total');
+  end if;
+  insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, actor,
+                                   reason, created_at)
+  values (w.wallet_id, w.kind, v_kind, v_amount, v_op, btrim(p_args->>'actor'),
+          p_args->>'reason', infrx.now())
+  returning * into l;
+  insert into infrx.audit_entries (id, at, actor_principal, action, target_org_id, reason,
+                                   before, after, idempotency_key)
+  select gen_random_uuid(), infrx.now(), btrim(p_args->>'actor'), 'admin_adjust',
+         w.personal_org_id, p_args->>'reason',
+         jsonb_build_object('wallet_id', w.wallet_id, 'ledger_total', w.ledger_total::text,
+                            'reserved_total', w.reserved_total::text),
+         jsonb_build_object('entry_id', l.entry_id, 'kind', l.kind,
+                            'amount', l.amount::text, 'operation_id', l.operation_id,
+                            'requested_at', p_args->>'at'),
+         'grant_credit:' || v_op;
+  return jsonb_build_object('entry', to_jsonb(l), 'replayed', false);
+end $$;
+
+-- The 24 h rule as an operator operation (G6B request 6; 02): a job whose usage is unknown
+-- is released platform-absorbed through D3's `release_aged_unknown` - never a debit, no
+-- late charge - once the DATABASE clock is past `reconcile_after` (R7: the caller's `at` is
+-- audit data). Another organization's request is the same `not_found` as an unknown one
+-- (R10); before the window, or a job with no unknown usage, is `state_conflict`. Audited
+-- `admin_reconcile`; a replayed operation id answers the state and writes nothing. Args
+-- `{org_id, request_id, operation_id, actor, at}`; answers `{settlement_state, replayed}`.
+create or replace function infrx.reconcile(p_args jsonb) returns jsonb
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_now timestamptz := infrx.now();
+  v_key text := 'reconcile:' || (p_args->>'operation_id');
+  j infrx.jobs%rowtype;
+  v_before text;
+begin
+  if coalesce(p_args->>'org_id', '') !~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
+     or coalesce(p_args->>'request_id', '') !~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
+     or length(btrim(coalesce(p_args->>'operation_id', ''))) not between 1 and 200
+     or length(btrim(coalesce(p_args->>'actor', ''))) not between 1 and 200 then
+    perform infrx.refuse('invalid_request', 'reconcile takes {org_id, request_id, '
+                         || 'operation_id, actor, at}');
+  end if;
+  -- The job row first (lock order); tenant-bound (R10).
+  select * into j from infrx.jobs
+   where request_id = (p_args->>'request_id')::uuid and org_id = (p_args->>'org_id')::uuid
+   for update;
+  if not found then
+    perform infrx.refuse('not_found', 'no request ' || (p_args->>'request_id')
+                         || ' in organization ' || (p_args->>'org_id'));
+  end if;
+  if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then
+    return jsonb_build_object('settlement_state', j.settlement_state, 'replayed', true);
+  end if;
+  if j.usage_certainty is distinct from 'unknown' then
+    perform infrx.refuse('state_conflict', 'request ' || j.request_id
+                         || ' has no unknown usage to reconcile');
+  end if;
+  v_before := j.settlement_state;
+  if j.settlement_state = 'held_unknown' then
+    if v_now < j.reconcile_after then
+      perform infrx.refuse('state_conflict', 'unknown usage is held until '
+                           || j.reconcile_after::text);
+    end if;
+    perform infrx.release_aged_unknown(j.request_id, v_now);
+  end if;
+  insert into infrx.audit_entries (id, at, actor_principal, action, target_org_id, reason,
+                                   before, after, idempotency_key)
+  values (gen_random_uuid(), v_now, btrim(p_args->>'actor'), 'admin_reconcile', j.org_id,
+          'unknown usage reconciled after the 24 h window',
+          jsonb_build_object('request_id', j.request_id, 'settlement_state', v_before),
+          jsonb_build_object('request_id', j.request_id,
+                             'settlement_state', 'released_platform_absorbed',
+                             'requested_at', p_args->>'at'), v_key);
+  return jsonb_build_object('settlement_state', 'released_platform_absorbed',
+                            'replayed', false);
+end $$;
+
 -- ================================================================ privileges ===
 -- `terminalize`, `cancel`, `claim` keep 0004's grant and `job_admission` 0011's
--- (service_role only), `release_aged_unknown` 0016's (nobody): `create or replace` preserves
--- them. `load_work_credit` is a platform operation: service_role only.
+-- (service_role only), `release_aged_unknown` 0016's (nobody), `grant_credit` 0004's
+-- (service_role only): `create or replace` preserves them. `load_work_credit` and
+-- `reconcile` are platform operations: service_role only.
 -- Everything new here is internal: only a SECURITY DEFINER body or a trigger calls it.
 do $$
 declare
@@ -622,7 +774,7 @@ begin
     execute format('revoke all on function %s from public, anon, authenticated, service_role',
                    f);
   end loop;
-  foreach f in array array['infrx.load_work_credit(jsonb)']
+  foreach f in array array['infrx.load_work_credit(jsonb)', 'infrx.reconcile(jsonb)']
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);
@@ -631,6 +783,12 @@ end $$;
 comment on function infrx.terminalize(jsonb) is
   'Mutation boundary (06). Signature and grants owned by D1; fenced prefix D3 (0016); the '
   'settling transaction D5 (0018): replay, fence, validation, one settling update, money.';
+comment on function infrx.grant_credit(jsonb) is
+  'Mutation boundary (06). Signature and grants owned by D1; body D5 (0018): the audited, '
+  'idempotent operator adjustment/allocation on a CREDIT wallet. service_role only.';
+comment on function infrx.reconcile(jsonb) is
+  'D5 (0018): the 24 h unknown-usage release as an audited operator operation, on the '
+  'database clock, tenant-bound, never a debit. service_role only.';
 comment on function infrx.cancel(jsonb) is
   'Mutation boundary (06). Signature and grants owned by D1; body D3 (0016), cause D5 '
   '(0018): cancellation with its R21 cause, released or quarantined in one transaction.';
