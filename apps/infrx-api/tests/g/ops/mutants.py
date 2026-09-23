@@ -1,36 +1,37 @@
 #!/usr/bin/env python3
 """R32/R40 for G6B: one single-edit defect per invariant `tests/g/ops` claims.
 
-Vocabulary (`Mutant`, `Outcome`, `Result`, `_failing_ids`) is the contracts list's.
-The runner is this file's because two of the mutated files sit outside `infrx/`
-(`client_example.py`, which imports `models/marlin2b/bench.py`), so the throwaway copy
-keeps the repository layout: `<tmp>/apps/infrx-api/{infrx,tests,client_example.py}` and
-`<tmp>/models` linked read-only to the real tree. A kill needs pytest exit 1, failures
-only among the named cases, and **every** named case failing (Q1's r2 rule).
+The list is G6B's; the runner and its rules are the shared one (`tests/contracts/mutants.py`,
+R83): a mutant that does not compile is `broken_runner`, every failing test must be a named
+case, every death must be an assertion or a typed `DomainError` unless the mutant declares
+it in `dies_by`, and the list's cases must pass unmutated first. G6B's own stricter rule is
+kept: **every** named case must notice (`require_every_case`, Q1's r2 rule).
+
+Two mutated files sit outside `infrx/` (`client_example.py`, which imports
+`models/marlin2b/bench.py`, and `tests/g/ops/fakes.py`), so a mutant's `file` is relative
+to `apps/infrx-api` (`package=""`) and the copy keeps the repository shape - the G list's
+layout: `<tmp>/apps/infrx-api/{infrx,tests,pyproject.toml,client_example.py}` plus
+`<tmp>/models` linked read-only to the real tree.
 
     uv run --frozen pytest -q tests/g/ops/test_mutants.py                  # subset
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/ops/test_mutants.py
-    uv run --frozen python tests/g/ops/mutants.py --list
+    uv run --frozen python -m tests.g.ops.mutants --list
 """
 from __future__ import annotations
 
-import argparse
 import ast
-import os
 import pathlib
-import shutil
-import subprocess
 import sys
-import tempfile
 
 API_DIR = pathlib.Path(__file__).resolve().parents[3]
-REPO = API_DIR.parents[1]
 SUITE = "tests/g/ops"
 
 if str(API_DIR) not in sys.path:        # `python tests/g/ops/mutants.py`
     sys.path.insert(0, str(API_DIR))
 
-from tests.contracts.mutants import Mutant, Outcome, Result, _failing_ids  # noqa: E402
+from tests.contracts import mutants as shared  # noqa: E402
+from tests.contracts.mutants import Mutant, Outcome, Result, Runner  # noqa: E402,F401
+from tests.g.mutants import _layout  # noqa: E402
 
 S = "infrx/operations/service.py"
 C = "infrx/operations/cli.py"
@@ -38,8 +39,9 @@ X = "client_example.py"
 F = "tests/g/ops/fakes.py"           # the port contract D5 must match
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by))
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -111,7 +113,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "only a verified individual is provisioned (declared: the defect surfaces as an "
        "AttributeError on the missing identity)",
        S, "        if identity is None:", "        if False:",
-       "test_credit_identity__an_unverified_user_gets_no_grant_and_no_key"),
+       "test_credit_identity__an_unverified_user_gets_no_grant_and_no_key",
+       dies_by=("AttributeError",)),
     _m("key_without_wallet", "no key is issued without a bound, metered wallet",
        S, "        await self.ops.bound_wallet(identity)          # no key without a metered wallet",
        "        pass",
@@ -130,7 +133,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "the wallet validator's ValueError instead of invalid_request)",
        F, "        except ValueError:\n            raise errors.InvalidRequest",
        "        except ArithmeticError:\n            raise errors.InvalidRequest",
-       "test_credit_identity__an_adjustment_never_overdraws_the_wallet"),
+       "test_credit_identity__an_adjustment_never_overdraws_the_wallet",
+       dies_by=("ValidationError",)),
     _m("zero_adjustment_accepted", "an adjustment moves a nonzero amount",
        S, "        if value.is_zero:", "        if False:",
        "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
@@ -138,7 +142,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "a malformed amount is a typed invalid_request (declared: the defect surfaces as the "
        "parser's own exception instead)",
        S, "        except (ValueError, ArithmeticError, TypeError):", "        except ArithmeticError:",
-       "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
+       "test_api_ops__an_adjustment_moves_only_the_individuals_wallet", dies_by=("ValueError",)),
     _m("direct_balance_edit", "operations never edit a balance directly",
        S, "        wallet = await self.ops.bound_wallet(identity)\n\n        async def write(operation_id):\n            entry,",
        "        wallet = (await self.ops.bound_wallet(identity)).model_copy(update={\"ledger_total\": value})\n\n        async def write(operation_id):\n            entry,",
@@ -209,7 +213,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "publication times carry an explicit offset (declared: the naive time surfaces as a "
        "record validation error instead of the refusal)",
        C, "        if created.utcoffset() is None or effective.utcoffset() is None:", "        if False:",
-       "test_api_ops__the_cli_publishes_the_provisional_marlin_release"),
+       "test_api_ops__the_cli_publishes_the_provisional_marlin_release",
+       dies_by=("ValidationError",)),
     # --- G6B.c: the headless client -------------------------------------------
     _m("resume_resends_finished_items", "a resume skips items whose outcome is terminal",
        X, "    todo = [i for i in items if prior.get(i[\"item_key\"], {}).get(\"status\") not in TERMINAL]",
@@ -223,10 +228,14 @@ MUTANTS: tuple[Mutant, ...] = (
        X, "            await SLEEP(min(wait if wait is not None else 2 ** attempt, MAX_RETRY_AFTER_S))",
        "            await SLEEP(min(2 ** attempt, MAX_RETRY_AFTER_S))",
        "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
-    _m("client_errors_retried", "a 400/409 is quarantined, never retried unchanged",
+    _m("client_errors_retried",
+       "a 400/409 is quarantined, never retried unchanged (declared: the extra request "
+       "exhausts the case's scripted replies, so the defect surfaces as the transport's "
+       "RuntimeError from the spent iterator)",
        X, "RETRYABLE = frozenset({429, 500, 502, 503, 504})",
        "RETRYABLE = frozenset({400, 409, 429, 500, 502, 503, 504})",
-       "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
+       "test_api_ops__failures_are_explicit_and_never_retried_blindly",
+       dies_by=("RuntimeError",)),
     _m("expired_key_quarantined", "a 410 asks for a re-derived re-run",
        X, "        if resp.status_code == 410:", "        if False:",
        "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
@@ -238,7 +247,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "a 200 with a non-JSON body is a failed item, not an exception out of the sweep "
        "(declared: the defect surfaces as the JSON decoder's exception)",
        X, "    except ValueError:\n        return None", "    except TypeError:\n        return None",
-       "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
+       "test_api_ops__failures_are_explicit_and_never_retried_blindly",
+       dies_by=("JSONDecodeError",)),
     _m("wallet_exhaustion_ignored", "a 402 pauses the sweep instead of burning the dataset",
        X, "            cfg[\"stop\"].set()             # do not burn the dataset against 401/402/403",
        "            pass",
@@ -273,13 +283,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "    return err.get(\"code\") if isinstance(err, dict) else None",
        "test_api_auth__the_client_key_never_reaches_argv_or_state"),
     # --- the CLI ---------------------------------------------------------------
-    _m("cli_accepts_a_key_on_argv", "a key on argv is refused",
+    _m("cli_accepts_a_key_on_argv",
+       "a key on argv is refused (declared: unrefused, the CLI goes on to prompt for the "
+       "operator secret, which pytest's captured stdin answers with OSError)",
        C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",
-       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file"),
-    _m("cli_overwrites_a_secret_file", "an existing secret file is never replaced",
+       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file",
+       dies_by=("OSError",)),
+    _m("cli_overwrites_a_secret_file",
+       "an existing secret file is refused before a key exists (declared: without the "
+       "check the key is issued first and O_EXCL then raises FileExistsError - the late "
+       "refusal is the defect)",
        C, "        if os.path.exists(a.secret_file):     # refuse before a key exists, not after",
        "        if False:",
-       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file"),
+       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file",
+       dies_by=("FileExistsError",)),
     _m("cli_secret_file_world_readable", "the secret file is created 0600",
        C, "os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)", "os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)",
        "test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it"),
@@ -296,49 +313,13 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
+#: The shared runner (R83), in the repository's shape, every named case required to notice.
+RUNNER = Runner(name="g-ops", package="", targets=(SUITE,), layout=_layout,
+                extra_args=(f"--ignore={SUITE}/test_mutants.py",), require_every_case=True)
+
+
 def run_mutant(mutant: Mutant) -> Result:
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"g6b-mutant-{mutant.name}-") as tmp:
-        api = pathlib.Path(tmp) / "apps" / "infrx-api"
-        junk = shutil.ignore_patterns("__pycache__", ".venv")
-        for name in ("infrx", "tests"):
-            shutil.copytree(API_DIR / name, api / name, ignore=junk)
-        if (API_DIR / X).exists():
-            shutil.copy2(API_DIR / X, api / X)
-        os.symlink(REPO / "models", pathlib.Path(tmp) / "models")
-        target = api / mutant.file
-        source = target.read_text()
-        found = source.count(mutant.old)
-        if found != 1:
-            return Result(Outcome.misdeclared,
-                          f"anchor appears {found} times in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", "-o", "addopts=--import-mode=importlib",
-             "-o", "testpaths=tests", SUITE, "-k", " or ".join(mutant.cases)],
-            cwd=api, capture_output=True, text=True, timeout=300,
-            env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (0, 1):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if "no tests ran" in summary or not any(w in summary for w in ("passed", "failed")):
-            return Result(Outcome.misdeclared, f"no case matched: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors: {errored[:3]}")
-        if done.returncode == 0 or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [t for t in failed if not any(case in t for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        unproven = [c for c in mutant.cases if not any(c in t for t in failed)]
-        if unproven:
-            return Result(Outcome.misdeclared, f"named cases that did not notice: {unproven}")
-        return Result(Outcome.killed, summary)
+    return shared.run_mutant(mutant, RUNNER)
 
 
 def case_names() -> set[str]:
@@ -354,25 +335,7 @@ def case_names() -> set[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="run G6B's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:36s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({c for m in MUTANTS for c in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad = []
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad.append(mutant.name)
-    print(f"\n{len(chosen) - len(bad)}/{len(chosen)} killed" + (f"; not killed: {bad}" if bad else ""))
-    return 1 if bad else 0
+    return shared.main(MUTANTS, RUNNER, "run G6B's mutation list")
 
 
 if __name__ == "__main__":
