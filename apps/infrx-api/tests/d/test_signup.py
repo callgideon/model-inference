@@ -300,8 +300,9 @@ def test_race__retries_backfill_and_shared_addresses() -> None:
 
 
 @needs_pg
-def test_retirement_race__a_racing_claim_waits_and_answers() -> None:
-    """A claim racing an uncommitted retirement waits for it and answers `retired`."""
+def test_retirement_race__a_racing_claim_or_retirement_waits_and_answers() -> None:
+    """A claim or a second retirement racing an uncommitted retirement waits for it, then
+    answers `retired` / the same retired_at."""
     _db()
     print(checks_signup.check_retirement_race(pgharness.connect, SIGNUP_DB))
 

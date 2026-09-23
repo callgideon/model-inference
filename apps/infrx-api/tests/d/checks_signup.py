@@ -564,20 +564,28 @@ def _behind(connect, database: str, first, second) -> dict:
 
 
 def check_retirement_race(connect, database: str) -> str:
-    """A claim racing a retirement of the same individual: A retires x and holds its
-    transaction open, B claims x. B waits for A, then answers `retired`; nothing is
-    minted (a claim that raises 23514 frozen instead is the defect)."""
-    x = uid(0xb, 1)
+    """Racing an uncommitted retirement of the same individual (A retires, holds its
+    transaction open): B's claim waits for A, then answers `retired` and mints nothing (a
+    claim raising 23514 frozen is the defect); B's second retirement waits for A, then
+    returns A's retired_at (a 23505 is the defect)."""
+    x, y = uid(0xb, 1), uid(0xb, 2)
     with connect(database) as c:
         gotrue_columns(c)
         individual(c, x, "rx11@example.com")
+        individual(c, y, "ry11@example.com")
+    at: dict = {}
+    twice = _behind(connect, database, lambda a: at.setdefault("a", retire(a, y)),
+                    lambda b: retire(b, y, "retire-b"))
+    assert "error" not in twice and twice["got"] == at["a"], \
+        f"two retirements of one individual: A {at['a']}, B {twice}"
     out = _behind(connect, database, lambda a: retire(a, x), lambda b: claim(b, x))
     assert "error" not in out and out["got"][0] == "retired", \
         f"a claim racing a retirement: {out}"
     with connect(database) as c:
         assert (wallet_of(c, x), ledger_rows(c, x), entitlements(c, x)) == (None, 0, 0), \
             "a claim racing a retirement minted"
-    return f"retirement race: a racing claim waited={out.get('waited', False)}, answered retired"
+    return (f"retirement race: a racing claim waited={out.get('waited', False)}, answered "
+            f"retired; a racing retirement waited={twice.get('waited', False)}, same retired_at")
 
 
 # =============================================================================
