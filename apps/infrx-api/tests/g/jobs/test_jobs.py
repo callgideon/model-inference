@@ -20,13 +20,14 @@ from datetime import timedelta
 import pytest
 
 from infrx.contracts import fixtures, wire
-from infrx.contracts.records import ExecutionMode, HoldState, JobState, OutboxKind
+from infrx.contracts.records import (ExecutionMode, HoldState, JobState, OutboxKind,
+                                     SettlementState, TerminalCause, TerminalOutcome)
 from infrx.gateway.routes import jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
 from infrx.observe.metrics import Registry
 
 from .. import relay_support as rs
-from .world import JobsWorld, job_path, send
+from .world import FIXED_ID, OTHER_ROW, JobsWorld, job_path, send
 
 CHAT = rs.support.CHAT_PATH
 JOBS = jobs_router.JOBS_PATH
@@ -237,3 +238,124 @@ def test_api_modes__a_credit_async_job_is_admitted_on_its_wallet():
     again = post(world, key="credit-1")
     assert again.status == 202 and again.json()["idempotency_replayed"] is True
     assert again.json()["state"] == "cancelled" and world.released(job)
+
+
+# --- item 2: status --------------------------------------------------------------------
+def status(world, handle=None, **kw):
+    return get(world, job_path(handle or world.handle()), **kw)
+
+
+def test_api_modes__status_reports_the_committed_row_and_result_availability():
+    """`JobStatus` from the committed row: admitted, then running, then succeeded with the
+    committed cause, settlement instant, authoritative usage and a result available until
+    `result_ttl_s` after settlement (job_status.json's fields)."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    first = status(world)
+    assert first.status == 200 and first.headers.get(wire.HEADER_INFERENCE_ID) == job.id
+    assert first.json() == {"job_handle": job.admission.job_handle, "request_id": job.id,
+                            "state": "preparing", "result_available": False,
+                            "created_at": "2026-09-20T12:00:00Z",
+                            "updated_at": "2026-09-20T12:00:00Z"}
+    lease = rs.run(world.lease())
+    assert status(world).json()["state"] == "running"
+    world.clock.advance(9)
+    rs.run(world.complete(lease))
+    done = wire.JobStatus.model_validate(status(world).json())
+    assert set(status(world).json()) == set(fixtures.load("job_status.json"))
+    outcome = job.outcome
+    assert (done.state, done.cause, done.result_available) == (JobState.succeeded,
+                                                               outcome.cause, True)
+    assert (done.created_at, done.updated_at) == (job.admission.admitted_at, outcome.settled_at)
+    assert done.updated_at > done.created_at
+    assert done.result_expires_at == outcome.settled_at + timedelta(
+        seconds=world.limits.result_ttl_s)
+    assert done.usage == wire.ChatUsage.of(outcome.usage)
+    assert done.usage_certainty == "authoritative"
+
+
+def test_api_modes__status_outlives_the_result_and_the_journal():
+    """Status stays readable after the result expired and after the journal expired (01:
+    metadata policy): `result_available` false and no expiry instant, while the result is 410
+    `result_expired` and the events 410 `journal_expired`."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    rs.run(world.work())
+    job = world.only_job()
+    world.clock.advance(world.limits.result_ttl_s)
+    after_result = status(world)
+    assert after_result.status == 200
+    body = after_result.json()
+    assert (body["state"], body["result_available"]) == ("succeeded", False)
+    assert "result_expires_at" not in body and body["usage_certainty"] == "authoritative"
+    assert refusal(get(world, job_path(world.handle(), "/result"))) == (410, "result_expired")
+    assert rs.run(world.stream.expire()) > 0 and job.id in world.stream.expired_jobs
+    after_journal = status(world)
+    assert after_journal.status == 200 and after_journal.json() == body
+    assert refusal(get(world, job_path(world.handle(), "/events"))) == (410, "journal_expired")
+
+
+def test_api_modes__a_success_without_usage_reports_none_and_no_result():
+    """Published output whose completion carried no usage settles `held_unknown`: the status
+    reports `usage_certainty: unknown` and no usage, and there is no chat result to serve
+    (its shape requires usage, and none is invented) - the result is the outcome alone."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    ref = rs.run(world.put_result(lease.job_id, "Two people"))
+    rs.run(world.jobs.complete(lease, TerminalOutcome(
+        job_id=lease.job_id, state=JobState.succeeded, cause=TerminalCause.completed,
+        usage=None, result_ref=ref, settlement_state=SettlementState.released_free,
+        settled_at=world.clock.now())))
+    job = world.only_job()
+    assert job.outcome.settlement_state is SettlementState.held_unknown
+    body = status(world).json()
+    assert (body["state"], body["usage_certainty"], body["result_available"]) == (
+        "succeeded", "unknown", False)
+    assert "usage" not in body and "result_expires_at" not in body
+    result = get(world, job_path(world.handle(), "/result"))
+    assert result.status == 200
+    assert "response" not in result.json() and "usage" not in result.json()
+
+
+def test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404():
+    """Every handle route: a malformed handle (refused before any store read), a handle one
+    character off, and another tenant's real handle get byte-identical 404s, and the job is
+    untouched - still admitted, its hold held, nothing cancelled or relayed."""
+    world = JobsWorld()
+    world.new_request_id = lambda: FIXED_ID
+    world.restart()
+    assert post(world).status == 202
+    job = world.only_job()
+    handle = world.handle()
+    unknown = handle[:-1] + ("x" if handle[-1] != "x" else "y")
+    world.as_key(OTHER_ROW)                                        # another organization
+    journal_reads = world.failures.count("read_owned")
+    for method, tail in (("GET", ""), ("GET", "/result"), ("GET", "/events"), ("DELETE", "")):
+        reads = world.failures.count("get_owned")
+        malformed = rs.run(send(world.app, method, job_path("job_short", tail)))
+        assert world.failures.count("get_owned") == reads, "a malformed handle was read"
+        answers = [malformed] + [rs.run(send(world.app, method, job_path(name, tail)))
+                                 for name in (unknown, handle)]
+        assert refusal(answers[0]) == (404, "not_found"), (method, tail, answers[0].body)
+        assert all(a.messages == answers[0].messages for a in answers), (method, tail)
+    assert not job.terminal and job.state is JobState.preparing
+    assert world.jobs.holds[job.id].state is HoldState.held
+    assert world.failures.count("read_owned") == journal_reads     # no journal was read
+
+
+def test_dur_rls__an_operator_key_owns_no_job():
+    """R33 / R66: an operator credential of the very organization owns no job - every handle
+    route answers 404, and nothing is read out or cancelled."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    handle = world.handle()
+    world.as_key(rs.support.OPERATOR_ROW)
+    assert rs.support.OPERATOR_ROW["org_id"] == world.org
+    for method, tail in (("GET", ""), ("GET", "/result"), ("GET", "/events"), ("DELETE", "")):
+        reply = rs.run(send(world.app, method, job_path(handle, tail)))
+        assert refusal(reply) == (404, "not_found"), (method, tail, reply.body)
+    assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held

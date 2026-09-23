@@ -45,6 +45,11 @@ EXPIRED_KEY = "test_dur_admit__an_expired_mapping_is_410_and_never_a_new_billabl
 TWICE = "test_dur_admit__two_concurrent_submissions_with_one_key_admit_once"
 DETACHED = "test_api_modes__a_detached_202_never_cancels_its_job"
 CREDIT_202 = "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
+STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
+OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
+NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
+ONE_404 = "test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404"
+OPERATOR = "test_dur_rls__an_operator_key_owns_no_job"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -101,6 +106,30 @@ MUTANTS: tuple[Mutant, ...] = (
        ST, '            raise errors.IdempotencyExpired(f"idempotency key expired at '
            '{record.expires_at}")',
        "            return None", EXPIRED_KEY),
+    # === item 2: status (API-MODES, DUR-RLS) ============================================
+    _m("handle_grammar_unchecked", "a malformed handle is refused before any store read",
+       J, "        if auth.audience not in OWNERS or not ids.JOB_HANDLE_RE.fullmatch(handle):",
+       "        if auth.audience not in OWNERS:", ONE_404),
+    _m("operator_owns_jobs", "an operator credential owns no job (R33/R66)",
+       J, "        if auth.audience not in OWNERS or not ids.JOB_HANDLE_RE.fullmatch(handle):",
+       "        if not ids.JOB_HANDLE_RE.fullmatch(handle):", OPERATOR),
+    _m("status_leaks_foreign", "a foreign handle is the unknown handle's 404 (the store's check)",
+       ST, "        if job is None or job.request.org_id != org_id:", "        if job is None:",
+       ONE_404),
+    _m("status_state_invented", "a job not yet terminal reports its committed state",
+       J, "        return admission.state", "        return JobState.preparing", STATUS),
+    _m("updated_at_is_created", "updated_at is the settlement instant once terminal",
+       J, "            updated_at=outcome.settled_at if outcome is not None else admission.admitted_at,",
+       "            updated_at=admission.admitted_at,", STATUS),
+    _m("status_ignores_the_ttl", "result_available turns false once the TTL passed (store clock)",
+       J, "        available = expires is not None and now < expires",
+       "        available = expires is not None", OUTLIVES),
+    _m("usage_invented", "usage is authoritative only when the store has it",
+       J, "        certainty = (UsageCertainty.authoritative if usage is not None",
+       "        certainty = (UsageCertainty.authoritative if outcome is not None", NO_USAGE),
+    _m("unknown_usage_served_as_result", "no chat result is rendered without authoritative usage",
+       J, "                or outcome.usage is None or not outcome.result_ref):",
+       "                or not outcome.result_ref):", NO_USAGE),
 )
 
 
