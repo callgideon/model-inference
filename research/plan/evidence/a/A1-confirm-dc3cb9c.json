@@ -1,0 +1,170 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "RV3-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/d/checks_signup.py",
+      "line": "241-244 (check_binding docstring) and 263-277 (the race case); guarded code 0015:74-75",
+      "claim_broken": "Round 3 widened check_binding's docstring to say the bound owner is 'neither removed, demoted nor moved - also when the membership change races the claim, in either order'. Only the join is raced in the test. Nothing can kill a mutant that reopens the owner-removal or move race.",
+      "evidence": "Reviewer mutant r3_guard_new_only (0015:74 `array[old.org_id, new.org_id]` -> `array[new.org_id]`, so a DELETE locks nothing and a move locks only the target org): the named check signup_binding PASSES on both images. The real behaviour does regress under this mutant. Probe P7, claim-first: A claims and holds the transaction; B runs `delete from org_members where org_id = personal_org`. Under the mutant B does not wait and succeeds (waited=False, got=None), so a commit would leave a wallet bound to an org with 0 members. Under the mutant, delete-first followed by the claim answers `granted`. Pristine 0015 on both images: claim-first delete -> B waits, then 23514 frozen; claim-first demote -> waits, then 23514; so the code is right and the test is missing. Money effect of the reopened race is small: no second individual can spend the grant, because joins stay guarded. It is still a claimed invariant with no killable test.",
+      "minimal_fix": "Either (a) add a third _behind case to check_binding, about 3 lines: `gone = _behind(pgharness.connect, conn.info.dbname, lambda a: claim(a, c3), lambda b: attempt(b, 'delete from public.org_members where org_id = %s', (oc3,)))`, asserting `got` starts with 23514 and the org keeps 1 member. This kills r3_guard_new_only; register it as a mutant. Or (b) narrow the docstring to 'a member joining races the claim, in either order'.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I read the code and could not refute the finding, so I didn't run the experiment. I checked codex-a1 at dc3cb9c.\n\nWhat makes the mutant survive:\n- The only lock in 0015:74-75 is `perform 1 from public.organizations where id = any(array[old.org_id, new.org_id]) for share`. It serialises a membership change against the claim's `for no key update` at 0015:207-208.\n- In a DELETE trigger, NEW is NULL. Under r3_guard_new_only, `array[new.org_id]` locks nothing on a DELETE, and on a move it locks only the target org.\n- The wallet check at 0015:76-78 still reads `array[old.org_id, new.org_id]`. It uses a READ COMMITTED snapshot, so it can't see the wallet A's uncommitted claim has just inserted.\n- Nothing in grant_signup_credit (0006:505-525) locks org_members rows. The count(*) takes no row locks. So B's delete or move does not block on A, and it succeeds. When both commit, a consumer wallet is bound to a personal org with 0 members, or with the owner moved away.\n- In pristine code, B's FOR SHARE on the old org conflicts with A's FOR NO KEY UPDATE. B waits, then sees the committed wallet and gets 23514. This matches the reviewer's probe P7.\n\nWhy no current test catches it:\n- In check_binding, \"owner leaves\" and \"moved\" (lines 256-260) run one after the other. The mutant keeps the full array in the wallet check, so both are still refused.\n- The two race cases (263-277) only race an INSERT (a join). For an INSERT, old is NULL, so the mutant locks the same org as pristine.\n- A grep of tests/d finds no other check that runs a delete or move of org_members against a claim.\n- signup_mutants.py has a1_binding_guard_unlocked, which removes the whole lock line. It does not have an old-org-only variant.\n\nSo the round-3 docstring (checks_signup.py:241-244) claims the owner-removal and move races are guarded in both orders, and no test can kill r3_guard_new_only.\n\nWhy it blocks: rule R32 in research/plan/08-contracts-v1-encoding.md says every invariant a conformance case names must be killable, and a surviving mutant is a failed suite. R40 says survivors that concern money or tenant isolation block the owning track, and this is a wallet binding. The code itself is correct. The fix is either (a) a third `_behind` race that deletes the owner's membership and expects 23514, with the mutant registered, or (b) narrowing the docstring to cover only a member joining.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this from the code at dc3cb9c and did not run the experiment again. The reviewer's P7 matches what the code implies.\n\n**Why the mutant survives.** The mutant changes 0015:74 from `array[old.org_id, new.org_id]` to `array[new.org_id]`. For a DELETE, `new` is null, so the trigger takes no organizations lock. For a move, it locks only the target org.\n- Nothing else makes a racing DELETE or move wait on the claim:\n  - `claim_signup_grant` (0015:205-208) takes FOR NO KEY UPDATE on the organizations row.\n  - `grant_signup_credit` (0006:505-525) only reads org_members, with a plain count and no row lock.\n  - The wallet FK takes FOR KEY SHARE on organizations, and deleting an org_members row never locks the parent.\n- So in the claim-first order, B's delete sees no committed wallet in the wallet check (0015:76-77, unchanged by the mutant) and succeeds without waiting. After A commits, a wallet is bound to an org with zero members.\n\n**Why no check catches it.**\n- In `check_binding` (checks_signup.py:251-277), the four sequential refusals run against a committed wallet, so the unchanged wallet check still raises 23514.\n- Both `_behind` race cases use INSERT (join). An INSERT has `old` = null, so the mutant locks the same `new.org_id` as the original.\n- The registered mutants in signup_mutants.py (a1_membership_not_frozen, a1_owner_removable, a1_binding_guard_unlocked) mutate the wallet check or delete the whole lock. None narrows the lock array, so r3_guard_new_only is not registered and nothing kills it.\n\nThe docstring says the owner cannot be removed, demoted or moved \"also when the membership change races the claim, in either order\". Only joins are raced, so that claim has no test.\n\n**Severity: nonblocking.** The code is correct as written. The gap is in the test and the docstring. The money effect is limited because joins stay guarded, so no second individual can spend the grant. The fix is small: either add a delete-race `_behind` case and register the mutant, or narrow the docstring to cover joins only.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "RV3-2",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/a/A1-38aea7f.md",
+      "line": "Limits (round 3), bullet 2; 0015:207-208",
+      "claim_broken": "The Limits text says two concurrent claims for one individual with several created orgs could deadlock (40P01). That path cannot happen. The real deadlock path is not stated: a claim racing a transaction that writes memberships in two or more orgs the claimant created, in the opposite order. There the claim raises 40P01 instead of answering. 0015's header says 'Denials are answers, not exceptions', and the A2 fixture table does not list 40P01.",
+      "evidence": "P4, lane's scenario: a user with 3 created orgs (the personal org's tuple moved to the end), two claims behind a Barrier, 20 rounds. Plain 20/20 and supabase 20/20 gave (granted, replayed), 0x 40P01, exactly 1 ledger row each. The second claim waits on the signup_identity_claims unique index before it reaches the org lock, so two claims never hold org locks at the same time. P4b, the real surface: a writer inserts a member into the claim's last-scanned side org and holds; the claim locks the earlier orgs and waits; the writer then inserts into an org the claim already holds. Result: claim raised 40P01 in 5/5 rounds on both images; the writer committed; no wallet or ledger row was written. `order by o.id` (mutant r3_claim_order_by_id) does not fix it: 3/5 rounds still raised 40P01 on both images, because the writer's order is its own. Locking only the org 0006 will bind (mutant r3_claim_personal_only: `o.id = (first created+owned org by created_at, id)`) gave 0/5 deadlocks, and check_binding, P1 (10x each order) and P7 all pass on both images. Related pre-existing raised path: after the owner membership of the personal org is deleted, the claim raises P0002 'no personal organization' (0006:509-511), both sequentially and when it races (P7 delete-first). Impact: platform role only, a window as long as the claim, idempotent retry, backfill counts `error:40P01` and continues, no money effect. Not required before merge.",
+      "minimal_fix": "Correct the Limits bullet: two same-user claims serialise on the identity claim (measured 20/20, no 40P01); the deadlock surface is a multi-org membership writer, and the claim then raises 40P01 (retryable, nothing minted). Add 40P01 as 'retry' to the A2 fixture table. Optionally lock only the personal org (0006's selection) in 0015:207, which removes the surface; `order by o.id` is not sufficient.",
+      "lens": "money"
+    },
+    {
+      "id": "RV3-3",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "260-274 (retire_individual loop); R-A1 'shared ... left as is'",
+      "claim_broken": "RV2-2's restated scope says an org 'shared with another member ... is left as is'. That does not hold when a member joins the individual's solo created org concurrently with the retirement.",
+      "evidence": "P5b, 3 rounds x 2 orders, plain and supabase, identical. Join first (held open) then retire: the retirement waits for the guard's FOR SHARE, then renames and suspends the org, which now has 2 members: ('retired', True). Retire first then join: the join waits, then succeeds into the retired, suspended org. The not-exists check in the loop reads a statement snapshot. This predates round 3; round 3 only makes the join wait. There is no money effect, since a side org has no wallet, but the other member's org is suspended. Barrier three-way P5 (20 rounds): 8-9 of 20 ended with a 2-member org retired and suspended, no wallet, no deadlock.",
+      "minimal_fix": "Record it as a race limit in R-A1 (operator-initiated; the suspension can be lifted with set_suspension). Alternatively, lock each candidate org FOR UPDATE in its own statement, then re-run the not-exists check in a fresh statement before renaming.",
+      "lens": "money"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "a1_binding_guard_unlocked (round 3, by hand)",
+          "edit": "0015:74-75 delete `perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id]) for share;`",
+          "result": "KILLED plain + supabase (also killed in the runner: mm slice 35 passed)",
+          "killed_by": "signup_binding: AssertionError 'a member joined a personal org while the claim bound it: {'pid': 72, 'got': None}' (R83 assertion-shaped; got=None means the join succeeded)"
+        },
+        {
+          "name": "a1_claim_binding_unlocked (round 3, by hand)",
+          "edit": "0015:207-208 delete `perform 1 from public.organizations o where o.created_by = p_user_id for no key update;`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_binding: same assertion message (claim-first order)"
+        },
+        {
+          "name": "a1_retirement_ignores_created_by (round 3, by hand)",
+          "edit": "0015:267 `where o.created_by = p_user` -> `where true`",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_retirement: AssertionError 'an organization the individual owns but did not create was retired' (P6 under the mutant: kept -> ('retired', True))"
+        },
+        {
+          "name": "r3_guard_key_share",
+          "edit": "0015:75 `for share;` -> `for key share;` (compatible with the claim's NO KEY UPDATE)",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_binding: 'a member joined a personal org while the claim bound it'"
+        },
+        {
+          "name": "r3_claim_for_share",
+          "edit": "0015:208 `for no key update;` -> `for share;` (compatible with the guard's FOR SHARE)",
+          "result": "KILLED plain + supabase",
+          "killed_by": "signup_binding: 'a member joined a personal org while the claim bound it'"
+        },
+        {
+          "name": "r3_guard_new_only",
+          "edit": "0015:74 `array[old.org_id, new.org_id]` -> `array[new.org_id]`",
+          "result": "SURVIVED plain + supabase (finding RV3-1). Real regression: a claim-first owner DELETE no longer waits (P7: waited=False, succeeded)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "r3_claim_order_by_id",
+          "edit": "0015:207 add `order by o.id` before `for no key update`",
+          "result": "SURVIVED plain + supabase (equivalent for the suite; does not remove the P4b deadlock: 3/5 still 40P01)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "r3_claim_personal_only",
+          "edit": "0015:207 lock only `o.id = (first org created_by and owned by p_user_id, order by created_at, id)`",
+          "result": "SURVIVED plain + supabase (an acceptable alternative: check_binding, P1 10x each order and P7 pass, and P4b deadlocks drop from 5/5 to 0/5)",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-a1 archive dc3cb9c | tar -x -C /tmp/claude-1000/reconfirm-a1r3-2799644; patch tests/d/pgharness.py (PORT=55541, CONTAINER=infrx-review-a1r3-postgres, lock /tmp/infrx-review-a1r3.lock); make api-env",
+          "exit": 0,
+          "tail": "uv sync --frozen --all-extras / Checked 41 packages"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py (plain)",
+          "exit": 0,
+          "tail": "33 passed in 43.23s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k 'a1_ or well_formed' (plain)",
+          "exit": 0,
+          "tail": "35 passed, 194 deselected in 44.38s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py",
+          "exit": 0,
+          "tail": "33 passed in 46.15s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k 'a1_ or well_formed'",
+          "exit": 0,
+          "tail": "35 passed, 194 deselected in 44.46s"
+        },
+        {
+          "cmd": "uv run --frozen python -m probe_r3 - (pristine, plain: P1,P2,P4,P4b,P5,P5b,P6,P7)",
+          "exit": 0,
+          "tail": "p1 {'claim_first ok=True waited=True': 10, 'member_first ok=True waited=True later=granted members=1': 10}; p2 side org created by claimant waited=True then joined, org not created waited=False, new-user signup during claim waited=False (both directions); p4 (granted,replayed) x20, 0x 40P01; p4b claim=raised 40P01 writer=committed wallet=False x5; p5 20 rounds, no violations; p5b join_first/retire_first -> 2-member org ('retired', True); p6 personal/solo retired, kept ('kept',False), co-owned ('coown',False); p7 claim-first delete/demote waited then 23514; delete-first -> claim raised P0002"
+        },
+        {
+          "cmd": "uv run --frozen python -m probe_r3 - p5c (three-way claim-first: A holds claim, retire + join both wait)",
+          "exit": 0,
+          "tail": "10/10: ('granted', retire ok, join ('err','23514'), 'wallet', members 1, suspended True, 'both_waited')"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen python -m probe_r3 - ; ... - p5c",
+          "exit": 0,
+          "tail": "identical to plain: p1 10/10 both orders waited; p4 20/20 no 40P01; p4b 5/5 40P01; p5c 10/10 granted/23514/1 member; p6 co-owned kept; p7 same"
+        },
+        {
+          "cmd": "for m in binding_guard_unlocked claim_binding_unlocked guard_key_share claim_for_share guard_new_only claim_personal_only claim_order_by_id: probe_r3 $m cb,p1,p4b,p7 (plain; the same five minus key_share/for_share on supabase)",
+          "exit": 0,
+          "tail": "cb FAIL for the unlocked/key_share/for_share mutants ('a member joined a personal org while the claim bound it'); cb PASS for guard_new_only, claim_personal_only, claim_order_by_id; p4b: personal_only 0/5 40P01, order_by_id 3/5 40P01"
+        },
+        {
+          "cmd": "probe_r3 retirement_ignores_created_by cr,p6 (plain + supabase)",
+          "exit": 0,
+          "tail": "cr FAIL an organization the individual owns but did not create was retired; p6 kept=('retired', True)"
+        },
+        {
+          "cmd": "git rev-parse d653e7c:\u2026/0015_signup_eligibility.sql dc3cb9c:\u2026/0015_signup_eligibility.sql",
+          "exit": 0,
+          "tail": "195b62117651cccec3d5f768356dee02c64bc337 (x2; matches the evidence's R84 digest)"
+        },
+        {
+          "cmd": "python -c 'signup_mutants.MIGRATION_MUTANTS'",
+          "exit": 0,
+          "tail": "34 ['a1_binding_guard_unlocked', 'a1_claim_binding_unlocked', 'a1_retirement_ignores_created_by']"
+        }
+      ],
+      "fabrication_check": "Everything reported was re-derived at dc3cb9c. The four suite tails match the lane's evidence counts (33 passed / 35 passed, 194 deselected on each image). The 0015 blob digest 195b621\u2026 matches the evidence's R84 line. There are 34 A1 migration mutants, including the 3 new names. The kill messages of the round-3 mutants match the evidence table ('a member joined a personal org while the claim bound it: {\u2026, 'got': None}'; 'an organization the individual owns but did not create was retired'). The 0015 line-1 header is present, dated 2026-09-23, names the amending task A1 and lists RV2-1 and RV2-2, as R84 requires. The retire bullet (line 22) and the loop comment (260-263) state the created-and-alone-owned scope. RV2-1 is closed: 10x per order on both images the racing change waited, then answered 23514 (claim first) or rollout_hold with no wallet (member first); a later claim after the member was removed was granted 10/10. RV2-2 is closed: solo retired, kept kept, on both images; its mutant is killed. The lane's Limits bullet on a two-claim 40P01 is inaccurate: 0/40 across both images, because the claims serialise on the identity claim. One probe artifact was found and removed: in a first combined run, P1 round 0 collided on email p2@example.com with check_binding's user p (answer 'identity_reused'). Probe emails were renamed and the supabase runs used the fix. The plain runs of the three mutants that showed 1/10 at the time were caused by that same collision, not by the mutants.",
+      "cleanup": "Only my own container infrx-review-a1r3-postgres (port 55541) was used. The harness removed it at exit: `docker ps -a | grep -c infrx-review-a1r3` -> 0. /tmp/infrx-review-a1r3.lock (no holder) and the scratch tree /tmp/claude-1000/reconfirm-a1r3-2799644 were removed. No other container, port (55432 untouched), lock or worktree was touched, and nothing was edited or committed in any worktree. No hosted project was used."
+    }
+  ]
+}
