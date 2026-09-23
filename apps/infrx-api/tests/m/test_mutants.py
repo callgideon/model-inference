@@ -29,7 +29,10 @@ SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
           # M3: one per new file, plus the two acceptance pins - a live job's input is
           # never collected, and a refused upload stays refused.
           "upload_owner_unchecked", "liveness_ignored", "consent_org_unchecked",
-          "lookup_failure_fails_open", "refusal_not_recorded")
+          "lookup_failure_fails_open", "refusal_not_recorded",
+          # M4: no new file; the two pins - a download's header reaches the profile, and a
+          # prepared clip is the same file on every run.
+          "early_look_not_wired", "cache_file_name_varies")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
