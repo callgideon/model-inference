@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:03:16Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:04:42Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 13 done · 10 in progress · 7 remaining (of 30).**
 
@@ -69,7 +69,7 @@ Generated 2026-09-23T03:03:16Z from `tasks.json` (manifest v4) and `progress-sta
 - A1: codex-a1 / codex/a1-signup-grant — round 2 (RM-1 retirement scope unkillable; 8 nonblocking) after closure review of 47b0382 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — fix round (S1 partly-dead pool liveness) after review of a0eeaf4 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- Q3: codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
+- Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 - I3B: codex-i3b / codex/i3b-recovery-observe — confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
 
