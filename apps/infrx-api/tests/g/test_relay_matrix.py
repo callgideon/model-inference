@@ -9,8 +9,8 @@ scripted vLLM (`worker/fakes.FakeUpstream`, W1's `VllmEngine`) - one process, on
 Every drill asserts store state: job state, hold settled or released, journal, attempts.
 
 Matrix: text and video-by-URL, each sync and SSE. Video by upload is G4U's (pending G4U).
-The engine runs behind `relay_support.RecordKeysDropped`, the effect of integration
-request W-new (W1 refuses `stream`/`max_tokens` in the frozen record's `parameters`).
+The engine is W1's own, with W-new merged (a15fa4b): `stream`/`max_tokens` in the frozen
+record's `parameters` are consumed by the record, not refused.
 """
 from __future__ import annotations
 

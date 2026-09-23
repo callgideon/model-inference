@@ -170,8 +170,7 @@ class World:
         return FakeUpstream(fault=fault, clock=self.clock, limits=self.limits, **kw)
 
     def runner(self, upstream: FakeUpstream, worker_id: str = "worker-a") -> AttemptRunner:
-        return AttemptRunner(jobs=self.jobs, stream=self.stream,
-                             engine=RecordKeysDropped(upstream.engine()),
+        return AttemptRunner(jobs=self.jobs, stream=self.stream, engine=upstream.engine(),
                              clock=self.clock, worker_id=worker_id,
                              count_prompt_tokens=lambda work: upstream.prompt_tokens,
                              put_result=self.put_result, limits=self.limits)
@@ -199,28 +198,6 @@ class World:
         return await self.stream.append(lease, tuple(
             EngineEvent(type=ChunkEventType.delta, payload={"visible": text, "raw": text})
             for text in texts))
-
-
-# Keys the frozen `normalized_request.json` fixture carries in `parameters` that the record
-# already consumed (`execution_mode`, `max_output_tokens`). W1's `VllmEngine.check_parameters`
-# refuses them, so every validated request with `stream` or `max_tokens` settles
-# `platform_error` today. The fix is W's (G2 integration request W-new: skip these three in
-# `check_parameters`); this shim is that fix's effect, in the test world only.
-RECORD_KEYS = frozenset({"stream", "max_tokens", "max_completion_tokens"})
-
-
-class RecordKeysDropped:
-    """W1's engine with the W-new fix applied from outside (test-only; see above)."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
-
-    def generate(self, lease, prepared):
-        kept = {k: v for k, v in (prepared.parameters or {}).items() if k not in RECORD_KEYS}
-        return self.engine.generate(lease, prepared.model_copy(update={"parameters": kept}))
-
-    def __getattr__(self, name):
-        return getattr(self.engine, name)
 
 
 # --- the ASGI driver ------------------------------------------------------------
