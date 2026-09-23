@@ -270,8 +270,11 @@ class PgJobStore:
     async def gc_outbox(self, *, retention_s: float = OUTBOX_RETENTION_S,
                         limit: int = 1000) -> dict[str, int]:
         """Expire dispatch rows of terminal jobs; delete acknowledged rows past
-        `retention_s` that no live job or consumer can still need (0013). Bounded."""
-        return await self._call("gc_outbox", {"retention_s": retention_s, "limit": limit})
+        `retention_s` that no live job, tombstone or consumer can still need (0013).
+        The tombstone is the store's own idempotency TTL. Bounded."""
+        return await self._call("gc_outbox", {
+            "retention_s": retention_s, "tombstone_s": self.limits.idempotency_ttl_s,
+            "limit": limit})
 
     # --- W2 / M3 requests (D2 item 4) --------------------------------------------
     async def is_live(self, job_id: str) -> bool:

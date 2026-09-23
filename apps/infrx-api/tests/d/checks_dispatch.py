@@ -322,17 +322,23 @@ def check_outbox_gc(conn) -> str:
                 "select kind, acknowledged_at is not null, coalesce(last_error, '') from "
                 "infrx.outbox where aggregate_id = %s", (request_id,)).fetchall())
 
-        first = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        gc = {"retention_s": 3600, "tombstone_s": 7200, "limit": 1000}
+        first = call(conn, "gc_outbox", gc)
         assert first == {"expired": 1, "deleted": 0}, first
         assert rows(dead.request_id) == [
             ("callback_delivery", True, ""), ("prepare_dispatch", True, "expired: job terminal"),
             ("trace_projection", False, ""), ("usage_projection", False, "")], \
             rows(dead.request_id)
         advance(conn, 3600)
-        assert call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000}) == \
+        # exactly at the retention instant (no tombstone in the way): kept
+        assert call(conn, "gc_outbox", dict(gc, tombstone_s=0)) == \
             {"expired": 0, "deleted": 0}, "a row inside its retention was deleted"
         advance(conn, 1)
-        second = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        # past the retention, but the job is still inside its tombstone (OB-3)
+        assert call(conn, "gc_outbox", gc) == {"expired": 0, "deleted": 0}, \
+            "a terminal job's rows were deleted inside its idempotency tombstone"
+        advance(conn, 3600)
+        second = call(conn, "gc_outbox", gc)
         assert second == {"expired": 0, "deleted": 1}, second
         assert rows(dead.request_id) == [
             ("callback_delivery", True, ""), ("trace_projection", False, ""),
@@ -344,9 +350,12 @@ def check_outbox_gc(conn) -> str:
         for m in more:
             conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
                          (m.request_id,))
-        counts = [call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1})["expired"]
-                  for _ in range(4)]
+        counts = [call(conn, "gc_outbox", dict(gc, limit=1))["expired"] for _ in range(4)]
         assert counts == [1, 1, 1, 0], counts
+        # and the delete step is bounded the same way, once they are past both windows
+        advance(conn, 7201)
+        deleted = [call(conn, "gc_outbox", dict(gc, limit=1))["deleted"] for _ in range(4)]
+        assert deleted == [1, 1, 1, 0], f"the delete step is not bounded: {deleted}"
         # OB-2: a LIVE job's undelivered dispatch row survived every call above
         assert rows(waiting.request_id) == [("prepare_dispatch", False, "")], \
             f"GC expired or deleted a live job's pending dispatch: {rows(waiting.request_id)}"
