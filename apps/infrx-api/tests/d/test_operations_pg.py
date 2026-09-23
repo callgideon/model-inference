@@ -253,6 +253,12 @@ def test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a
     again, replayed = run(ledger.adjust(wallet, Credit("2.50000000"), op, "ops@test",
                                         "goodwill", AT))
     assert (again, replayed) == (entry, True)
+    # review CF-2: the caller is the actor of the ledger row AND of the audit row the SQL
+    # writes with it
+    assert entry.actor == "ops@test", entry
+    assert owner.execute("select actor_principal from infrx.audit_entries where "
+                         "idempotency_key = %s", (f"grant_credit:{op}",)).fetchall() == \
+        [("ops@test",)]
     assert run(wallets.consumer_wallet_for_user(cc.CONSUMER_2)).ledger_total == \
         wallet.ledger_total + Credit("2.50000000")
     with pytest.raises(errors.NotFound):
@@ -368,6 +374,15 @@ def test_api_ops__the_operations_service_runs_on_the_postgres_adapters() -> None
         result = await op.reconcile(org, unknown.request_id, idempotency_key="rc2", reason=R)
         assert result["settlement"] == "released_platform_absorbed", result
     run(go())
+    # review CF-2: the D5 rows the service's movements wrote name the operator principal the
+    # service audits its own request under
+    principal = owner.execute("select actor_principal from infrx.audit_entries where "
+                              "idempotency_key = 'a1'").fetchone()[0]
+    assert owner.execute(
+        "select action, actor_principal from infrx.audit_entries where action in "
+        "('admin_adjust', 'admin_reconcile') and (idempotency_key like 'grant_credit:%%' or "
+        "idempotency_key like 'reconcile:%%') order by action").fetchall() == \
+        [("admin_adjust", principal), ("admin_reconcile", principal)], principal
     audits = owner.execute("select idempotency_key, count(*) from infrx.audit_entries where "
                            "idempotency_key in ('g1', 'k1', 'a1', 's1', 's2', 'r1', 'c1', "
                            "'rc2') group by 1 order by 1").fetchall()

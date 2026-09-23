@@ -135,6 +135,13 @@ MUTANTS: tuple[Mutant, ...] = (
        '"select request_id, state, amount from infrx.active_holds(%s) "\n'
        '            "where accounting_regime = \'credit\'"',
        '"select request_id, state, amount from infrx.active_holds(%s) "', ACCOUNT, file=O),
+    _m("adjust_sends_another_actor", "review CF-2: the operator is the adjustment's actor",
+       '"amount": str(amount), "operation_id": operation_id, "actor": actor,',
+       '"amount": str(amount), "operation_id": operation_id, "actor": "system",',
+       LEDGER, file=O),
+    _m("reconcile_sends_another_actor", "review CF-2: the operator is the reconcile's actor",
+       '"actor": actor, "at": at.isoformat()})', '"actor": "system", "at": at.isoformat()})',
+       LEDGER, file=O),
     _m("adjust_allocates", "an adjustment is an operator_adjustment",
        '"wallet_id": wallet.wallet_id, "kind": "operator_adjustment",',
        '"wallet_id": wallet.wallet_id, "kind": "operator_allocation",', LEDGER, file=O),

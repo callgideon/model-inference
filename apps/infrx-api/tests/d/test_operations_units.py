@@ -104,12 +104,16 @@ def test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry() -> None
     got, replayed = _ok(ledger.adjust(wallet, Credit("2.5"), v2fix.IDS.signup_operation,
                                       "ops@test", "goodwill", AT))
     sent = conn.sent[0][1][0].obj
-    assert (sent["kind"], sent["amount"], sent["wallet_id"]) == \
-        ("operator_adjustment", "2.50000000", wallet.wallet_id), sent
+    assert (sent["kind"], sent["amount"], sent["wallet_id"], sent["actor"]) == \
+        ("operator_adjustment", "2.50000000", wallet.wallet_id, "ops@test"), sent
     assert (str(got.amount), replayed) == ("2.50000000", True), (got, replayed)
     state = _ok(ledger.reconcile(b.ORG_A, v2fix.IDS.request, "op", "ops@test", AT))
     assert state == "released_platform_absorbed"
-    assert conn.sent[1][1][0].obj["org_id"] == b.ORG_A
+    sent = conn.sent[1][1][0].obj
+    # review CF-2: the caller is the actor on both movements (the ledger row and the audit
+    # row the SQL writes carry it; test_operations_pg reads them back)
+    assert (sent["org_id"], sent["actor"], sent["operation_id"]) == (b.ORG_A, "ops@test", "op"), \
+        sent
 
 
 def test_registry__the_alias_moves_at_the_deployments_newest_effective_card() -> None:
