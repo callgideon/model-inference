@@ -112,6 +112,9 @@ Exit 0 and `"equal": true` is the pass: every row of every project table and of 
 tables (count + md5), and the relations, columns, policies, functions, triggers,
 constraints, indexes, views, schema ACLs and default privileges are identical, and the
 wallet detectors show no drift. Any line in `problems` is a failed rehearsal: stop.
+ACLs are compared by the privileges they grant (R92): an object whose ACL equals its owner's
+default is written by pg_dump as nothing and restored as NULL, which is the same set
+(`infrx.job_results` is one), while an ACL emptied by a revoke is still a difference.
 
 ### A7 Rehearse the apply on the restored copy
 
@@ -253,3 +256,7 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   `*.dump` and `infrx-backups/`.
 - 2026-09-23 (confirmation fold-in, RS-1 residual): the source identity is resolved like
   libpq (bk01e_c); A5 names the emptiness guard as the operative one.
+- 2026-09-23 (I3B follow-up, R92): the check normalises NULL ACLs with `acldefault()`
+  (relations, sequences, functions, schemas); the E3B2 gate's bk01 red on `infrx.job_results`
+  was that spelling, not a lost privilege. Drilled by `bk01g` and `bk01h` (put_result and
+  read_result still work as service_role after a restore) on the D harness.

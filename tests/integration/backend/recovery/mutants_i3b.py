@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -277,6 +278,30 @@ MUTANTS += (
     Mutant("i3bm66", "RS-3: the check compares a function's pinned configuration (search_path)",
            PGRESTORE, ", coalesce(p.proconfig::text, '') from pg_proc p", " from pg_proc p",
            RESTORE, "bk01f and functions_config", layer=2),
+    # R92: the check compares effective privileges; each normalisation is one mutant. The
+    # `'{}'` edit puts back exactly what the check did before R92 (NULL read as no privilege).
+    Mutant("i3bm86", "R92: a relation's NULL ACL compares as its owner's default "
+                     "(infrx.job_results after a restore)", PGRESTORE,
+           "unnest(coalesce(c.relacl, acldefault(", "unnest(coalesce(c.relacl, '{}', acldefault(",
+           RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm87", "R92: a function's NULL ACL compares as its owner's default", PGRESTORE,
+           "unnest(coalesce(p.proacl, acldefault('f', ",
+           "unnest(coalesce(p.proacl, '{}', acldefault('f', ", RESTORE, "bk01g", layer=2),
+    Mutant("i3bm88", "R92: a schema's NULL ACL compares as its owner's default", PGRESTORE,
+           "unnest(coalesce(nspacl, acldefault('n', ",
+           "unnest(coalesce(nspacl, '{}', acldefault('n', ", RESTORE, "bk01g", layer=2),
+    Mutant("i3bm89", "R92: a sequence's default is a sequence's (acldefault 's'), not a table's",
+           PGRESTORE, "when 'S' then 's' else 'r' end", "when 'S' then 'r' else 'r' end",
+           RESTORE, "bk01g", layer=2),
+    Mutant("i3bm90", "R92: an ACL emptied by a revoke from the owner is still a loss", PGRESTORE,
+           "unnest(coalesce(c.relacl, acldefault(",
+           # measured: a revoked-to-empty ACL is not `= '{}'` (1 dimension, 0 items)
+           "unnest(coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, acldefault(",
+           RESTORE, "bk01g", layer=2),
+    Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
+                     "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
+           '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',
+           '        if " ACL " in line:', RESTORE, "bk01h", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),
@@ -325,8 +350,11 @@ def _copy_with_infra(destination: Path, _copy=mutants._copy_trees) -> None:
 def run(selected, *, stack_available: bool) -> dict:
     mutants._copy_trees = _copy_with_infra
     results = []
+    # INFRX_I3B_PG=d: test_restore runs on the D harness, so its layer-2 mutants can run too.
+    on_d = os.environ.get("INFRX_I3B_PG") == "d"
     for mutant in selected:
-        result = mutants.run_one(mutant, stack_available=stack_available)
+        result = mutants.run_one(mutant, stack_available=stack_available
+                                 or (on_d and mutant.suite == RESTORE))
         print(f"[{result['status']:>13}] {result['id']}  {result['invariant']}", flush=True)
         results.append(result)
     return mutants.summarise(results)

@@ -14,7 +14,8 @@ ARE that rehearsal, on the pinned `supabase/postgres` 17.6 image (hosted runs 17
   bk01b/bk01c/bk01d prove the check catches a lost trigger, widened privileges and a
   damaged backup; bk01f damages one catalog family (or one row) of a good restore at a
   time and the check names exactly that family; bk01e refuses a non-empty target and the backup's own source before any
-  write.
+  write. bk01g/bk01h (R92): an ACL is compared by what it grants, so an owner-only table
+  restored with a NULL ACL is equal, and its SECURITY DEFINER RPCs still work.
 * bk02 - a database shaped like hosted today (0001-0002, four users, two keys, one usage
   row, no ledger): back it up, restore it, apply 0003-0009 to the RESTORED copy, and prove
   the rows the deployed pre-refactor gateway reads and writes are value-identical and its
@@ -26,11 +27,18 @@ ARE that rehearsal, on the pinned `supabase/postgres` 17.6 image (hosted runs 17
 
 Scratch databases are `infrx_i3b_*` inside E2's PostgreSQL container, created from its
 template and dropped at the end of each case; `infrx_e2` is only ever read (`pg_dump`).
+
+`INFRX_I3B_PG=d` runs the same cases on the D harness instead (`tests/d/pgharness.py`: one
+task-local container on `INFRX_D_TASK`'s port, `INFRX_D1_IMAGE`'s image, removed at exit), with
+its task database migrated and seeded the way `run.py` builds `infrx_e2` as the source. No
+compose stack; bk03 (a SIGKILL of E2's compose service) still needs E2's.
 """
 from __future__ import annotations
 
 import contextlib
 import importlib.util
+import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -58,14 +66,72 @@ pg = _load("i3b_pgrestore", kit.ROOT / "infra" / "runbooks" / "pgrestore.py")
 @pytest.fixture(autouse=True)
 def _password(monkeypatch):
     """The tool reads the password from the environment only, as it does against hosted."""
-    monkeypatch.setenv("PGPASSWORD", harness.PG_PASSWORD)
+    monkeypatch.setenv("PGPASSWORD", pg_password())
 
 
 # ------------------------------------------------------------------ database plumbing
 
+ON_D = os.environ.get("INFRX_I3B_PG") == "d"
+_d_harness = None
+_d_source = None
+
+
+def d_harness():
+    """D's `tests/d/pgharness.py`, loaded once (its lock and container are per process)."""
+    global _d_harness
+    if _d_harness is None:
+        _d_harness = _load("i3b_pgharness", harness.API_ROOT / "tests" / "d" / "pgharness.py")
+    return _d_harness
+
+
+def pg_port() -> int:
+    return d_harness().PORT if ON_D else harness.PORTS["postgres"]
+
+
+def pg_password() -> str:
+    return d_harness().PASSWORD if ON_D else harness.PG_PASSWORD
+
+
+def needs_pg() -> None:
+    """E2's stack, or the D harness's container (started here, removed at exit)."""
+    if not ON_D:
+        return kit.needs_stack()
+    why = d_harness().unavailable()
+    if why:
+        pytest.skip(why)
+    d_harness().ensure()
+
+
+def source_db() -> str:
+    """The populated database the bk01 cases dump: `infrx_e2`, which `run.py` migrated and
+    seeded; on the D harness its task database, built the same way once per process."""
+    global _d_source
+    if not ON_D:
+        return harness.PG_DATABASE
+    if _d_source is None:
+        import pgstate
+        name = d_harness().DATABASE
+        _create(name)
+        with connect(name) as conn:
+            pgstate.apply_migrations(conn)
+            pgstate.install_test_clock(conn)
+            pgstate.seed_fixtures(conn)
+        _d_source = name
+    return _d_source
+
+
 def _admin(*statements: str) -> None:
     """As the image's superuser over the local socket, like E2's `provision_database`."""
     import subprocess
+    if ON_D:
+        d = d_harness()
+        for statement in statements:
+            if d.ON_SUPABASE:
+                d._sb("template1", statement)
+            else:                                   # D's plain image: `postgres` is superuser
+                with d.connect("postgres") as conn:
+                    conn.execute(statement)
+        return
     argv = ["docker", "exec", "-i", harness.assert_ours(harness.container_of("postgres")),
             "psql", "-U", harness.PG_ADMIN_ROLE, "-d", "template1", "-v", "ON_ERROR_STOP=1"]
     for statement in statements:
@@ -76,6 +142,13 @@ def _admin(*statements: str) -> None:
 
 
 def _create(name: str) -> None:
+    if ON_D:
+        d = d_harness()
+        d.recreate(name)                            # the Supabase template's copy, or a
+        if d.NEEDS_SHIM:                            # plain database plus D's shim
+            from infrx.state import migrations as d_migrations
+            d.apply(name, (("supabase_shim.sql", d_migrations.SHIM.read_text()),))
+        return
     terminate = ("select pg_terminate_backend(pid) from pg_stat_activity "
                  f"where datname = '{harness.PG_TEMPLATE_SOURCE}' and pid <> pg_backend_pid()")
     last = None
@@ -94,7 +167,7 @@ def _create(name: str) -> None:
 @contextlib.contextmanager
 def scratch(*names: str):
     """Fresh `infrx_i3b_*` databases from the image's template, dropped afterwards."""
-    kit.needs_stack()
+    needs_pg()
     assert all(name.startswith("infrx_i3b_") for name in names)
     try:
         for name in names:
@@ -107,7 +180,7 @@ def scratch(*names: str):
 
 def conninfo(database: str) -> str:
     """What the runbook passes for hosted, pointed at E2's published port instead."""
-    return (f"host=127.0.0.1 port={harness.PORTS['postgres']} user={harness.PG_USER} "
+    return (f"host=127.0.0.1 port={pg_port()} user={harness.PG_USER} "
             f"dbname={database} sslmode=disable")
 
 
@@ -168,20 +241,20 @@ def test_i3b_bk01_a_backup_restores_every_row_privilege_and_policy(tmp_path, rec
     rows, RLS/policies/ACLs/functions/triggers/constraints/indexes/default privileges
     identical, detectors zero drift on both. The pinned client image is the runbook's. The
     check's sessions are read-only, observed from outside (A6 fingerprints LIVE hosted)."""
-    kit.needs_stack()
+    needs_pg()
     assert pg.IMAGE == harness.compose_images()["postgres"]
     with scratch("infrx_i3b_restored") as (target,):
-        timings = backup_and_restore(harness.PG_DATABASE, target, tmp_path / "backup")
+        timings = backup_and_restore(source_db(), target, tmp_path / "backup")
         seen: list = []
         with monkeypatch.context() as patched:
             patched.setattr(pg, "connect", _watched_connect(seen))
-            before, after = fingerprint(harness.PG_DATABASE), fingerprint(target)
+            before, after = fingerprint(source_db()), fingerprint(target)
         assert seen == ["on", "on"], seen
         assert pg.compare(before, after) == []
-        assert pg.main(["check", "--source", conninfo(harness.PG_DATABASE),
+        assert pg.main(["check", "--source", conninfo(source_db()),
                         "--target", conninfo(target)]) == 0      # the runbook's own check
         assert sum(count for count, _ in before["rows"].values()) > 0, "nothing to restore"
-        assert drift(harness.PG_DATABASE) == [] and drift(target) == []
+        assert drift(source_db()) == [] and drift(target) == []
         for name, value in {**timings, "rows": sum(c for c, _ in after["rows"].values())}.items():
             record_property(name, value)
 
@@ -190,16 +263,16 @@ def test_i3b_bk01b_detects_a_restore_that_lost_the_signup_trigger(tmp_path):
     """Intentional defect: the backup's record of the project's trigger on auth.users (the
     step a schema-scoped dump cannot carry) is lost. The check must name it."""
     import json
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_restored") as (target,):
         backup = tmp_path / "backup"
-        pg.dump(conninfo(harness.PG_DATABASE), backup)
+        pg.dump(conninfo(source_db()), backup)
         meta = json.loads((backup / "meta.json").read_text())
         assert meta["auth_triggers"], "the source has no trigger on auth.users to lose"
         (backup / "meta.json").write_text(json.dumps({**meta, "auth_triggers": []}))
         _resum(backup)
         pg.restore(conninfo(target), backup)
-        problems = pg.compare(fingerprint(harness.PG_DATABASE), fingerprint(target))
+        problems = pg.compare(fingerprint(source_db()), fingerprint(target))
         assert any(problem.startswith("triggers differ") for problem in problems), problems
 
 
@@ -207,24 +280,24 @@ def test_i3b_bk01c_detects_a_restore_that_widened_browser_privileges(tmp_path):
     """Intentional defect, and the pitfall bk01 found: a plain restore under the template's
     default privileges hands anon/authenticated ALL on the tenant tables. The check must
     name the widened relations."""
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_restored") as (target,):
-        backup_and_restore(harness.PG_DATABASE, target, tmp_path / "backup", neutralize=False)
+        backup_and_restore(source_db(), target, tmp_path / "backup", neutralize=False)
         with connect(target) as conn:
             acl = conn.execute("select relacl::text from pg_class "
                                "where oid = 'public.api_keys'::regclass").fetchone()[0]
         assert "anon=arwdDxtm" in acl, acl
-        problems = pg.compare(fingerprint(harness.PG_DATABASE), fingerprint(target))
+        problems = pg.compare(fingerprint(source_db()), fingerprint(target))
         assert any(problem.startswith("relations differ") for problem in problems), problems
 
 
 def test_i3b_bk01d_detects_a_damaged_backup_and_restores_nothing(tmp_path):
     """A backup whose bytes no longer match its checksums is refused before anything is
     written to the target."""
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_restored") as (target,):
         backup = tmp_path / "backup"
-        pg.dump(conninfo(harness.PG_DATABASE), backup)
+        pg.dump(conninfo(source_db()), backup)
         damaged = bytearray((backup / "project.dump").read_bytes())
         damaged[len(damaged) // 2] ^= 0xFF
         (backup / "project.dump").write_bytes(bytes(damaged))
@@ -253,11 +326,11 @@ def test_i3b_bk01e_a_a_non_empty_target_is_refused_before_any_write(tmp_path):
     shape where the unguarded tool got past the auth rows and emptied `public`'s default
     privileges before failing on CREATE SCHEMA infrx) raises before writing anything:
     pg_default_acl and auth.users are identical before and after."""
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_live") as (live,):
         apply(live, migrations(1, 9))
         backup = tmp_path / "backup"
-        pg.dump(conninfo(harness.PG_DATABASE), backup)
+        pg.dump(conninfo(source_db()), backup)
         before = _write_state(live)
         assert before[0], "the live-shaped target has no default privileges to lose"
         with pytest.raises(RuntimeError, match="the target is not empty"):
@@ -269,11 +342,11 @@ def test_i3b_bk01e_b_a_backup_is_never_restored_onto_its_own_source(tmp_path):
     """RS-1: the backup records the database it came from (host, port, user, dbname) and
     `restore` refuses that target - even when it is empty, which is the one case the
     emptiness guard cannot see."""
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_empty_source") as (source,):
         backup = tmp_path / "backup"
         meta = pg.dump(conninfo(source), backup)
-        assert meta["source"] == {"host": "127.0.0.1", "port": str(harness.PORTS["postgres"]),
+        assert meta["source"] == {"host": "127.0.0.1", "port": str(pg_port()),
                                   "user": harness.PG_USER, "dbname": source}
         before = _write_state(source)
         with pytest.raises(RuntimeError, match="the backup's own source"):
@@ -341,9 +414,9 @@ def good_restore(tmp_path_factory):
     """One good restore of E2's database, checked equal, reused as the template of every
     damaged copy (a template copy takes a second; a restore takes a minute under load)."""
     with pytest.MonkeyPatch.context() as env, scratch("infrx_i3b_good") as (good,):
-        env.setenv("PGPASSWORD", harness.PG_PASSWORD)    # module scope: before `_password`
-        backup_and_restore(harness.PG_DATABASE, good, tmp_path_factory.mktemp("f") / "backup")
-        source = fingerprint(harness.PG_DATABASE)
+        env.setenv("PGPASSWORD", pg_password())          # module scope: before `_password`
+        backup_and_restore(source_db(), good, tmp_path_factory.mktemp("f") / "backup")
+        source = fingerprint(source_db())
         assert pg.compare(source, fingerprint(good)) == []
         yield good, source
 
@@ -369,6 +442,87 @@ def test_i3b_bk01f_the_check_names_each_damaged_family(good_restore, family):
             problems
     finally:
         _admin(f"drop database if exists {damaged} with (force)")
+
+
+# R92: the check compares what an ACL grants, not how the catalog spells it.
+ACLS = ("select (select nspacl from pg_namespace where nspname = 'infrx') is null, "
+        "(select relacl from pg_class where oid = 'infrx.t'::regclass) is null, "
+        "(select relacl from pg_class where oid = 'infrx.s'::regclass) is null, "
+        "(select proacl from pg_proc where oid = 'infrx.f()'::regprocedure) is null")
+
+
+def test_i3b_bk01g_an_acl_is_compared_by_the_privileges_it_grants():
+    """R92: a NULL ACL is its owner's default (`acldefault`). The same privileges written
+    out - which is what pg_dump turns back into NULL on a restore - compare equal, for a
+    schema, a table, a sequence and a function; an ACL emptied by a revoke from the owner
+    (`{}`, not NULL) is a real loss and is still named."""
+    with scratch("infrx_i3b_acl") as (database,):
+        with connect(database) as conn:
+            conn.execute("create schema infrx")
+            conn.execute("create table infrx.t (id int)")
+            conn.execute("create sequence infrx.s")
+            conn.execute("create function infrx.f() returns int language sql as 'select 1'")
+            assert conn.execute(ACLS).fetchone() == (True,) * 4, "the premise: all NULL"
+        implicit = fingerprint(database)
+        with connect(database) as conn:           # the owner's defaults, spelled out
+            conn.execute("grant all on schema infrx to postgres")
+            conn.execute("grant all on table infrx.t to postgres")
+            conn.execute("grant all on sequence infrx.s to postgres")
+            conn.execute("grant execute on function infrx.f() to public, postgres")
+            assert conn.execute(ACLS).fetchone() == (False,) * 4, "the premise: explicit"
+        assert pg.compare(implicit, fingerprint(database)) == []
+        with connect(database) as conn:
+            conn.execute("revoke all on table infrx.t from postgres")
+        problems = pg.compare(implicit, fingerprint(database))
+        assert {_family(problem) for problem in problems} == {"relations"}, problems
+
+
+def _service_role(conn, sql: str, params=None):
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        return conn.execute(sql, params).fetchone()[0]
+
+
+def test_i3b_bk01h_a_restored_job_results_keeps_its_rpcs_and_stays_owner_only(tmp_path):
+    """R92 on the object the E3B2 gate tripped over. 0014 leaves `infrx.job_results`
+    owner-only by an explicit revoke; pg_dump writes no ACL for it (it equals the owner's
+    default), so the restore leaves it NULL. That is the same privilege set: the check is
+    equal, the SECURITY DEFINER `put_result`/`read_result` (owner `postgres`) still write and
+    read it as service_role, and service_role still cannot touch the table itself."""
+    import psycopg
+    d = _d_checks()
+    with scratch("infrx_i3b_results", "infrx_i3b_results_back") as (source, target):
+        apply(source, migrations(1, 9999))
+        with connect(source) as conn:
+            d.seed_fixtures(conn)
+            kept = _service_role(conn, "select infrx.put_result(%s::jsonb)",
+                                 (json.dumps({"job_id": d.JOB_TERMINAL, "text": "kept"}),))
+        backup_and_restore(source, target, tmp_path / "backup")
+        acl = "select relacl::text from pg_class where oid = 'infrx.job_results'::regclass"
+        with connect(source) as conn:
+            assert conn.execute(acl).fetchone()[0] == "{postgres=arwdDxtm/postgres}"
+        with connect(target) as conn:
+            assert conn.execute(acl).fetchone()[0] is None, "the premise: restored as NULL"
+            # the effective access, both ways: the definer and service_role keep theirs, and
+            # nobody gains any (a PUBLIC execute or a service_role table grant is a widening)
+            assert conn.execute(
+                "select has_table_privilege('postgres', 'infrx.job_results', 'select, insert'),"
+                " has_schema_privilege('service_role', 'infrx', 'usage'),"
+                " has_function_privilege('service_role', 'infrx.put_result(jsonb)', 'execute'),"
+                " has_function_privilege('service_role', 'infrx.read_result(uuid, text)', "
+                "'execute'), has_function_privilege('anon', 'infrx.put_result(jsonb)', "
+                "'execute'), has_table_privilege('service_role', 'infrx.job_results', "
+                "'select')").fetchone() == (True, True, True, True, False, False)
+        assert pg.compare(fingerprint(source), fingerprint(target)) == []
+        with connect(target) as conn:             # the RPCs, used: a read and a new write
+            assert _service_role(conn, "select infrx.read_result(%s, %s)",
+                                 (d.ORG_A, kept)) == "kept"
+            fresh = _service_role(conn, "select infrx.put_result(%s::jsonb)",
+                                  (json.dumps({"job_id": d.JOB_QUEUED, "text": "new"}),))
+            assert _service_role(conn, "select infrx.read_result(%s, %s)",
+                                 (d.ORG_A, fresh)) == "new"
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                _service_role(conn, "select count(*) from infrx.job_results")
 
 
 def _resum(backup: Path) -> None:
@@ -472,7 +626,7 @@ def test_i3b_bk02_the_hosted_apply_rehearsal_backup_restore_migrate_and_roll_bac
     the deployed pre-refactor gateway reads is value-identical, (2) its four statements
     still run as `service_role`, (3) no detector drift and no flag enabled by the apply;
     then restore the pre-apply backup as the rollback and prove it equals the original."""
-    kit.needs_stack()
+    needs_pg()
     with scratch("infrx_i3b_hosted", "infrx_i3b_hosted_copy",
                  "infrx_i3b_hosted_back") as (hosted, copy, back):
         apply(hosted, migrations(1, 2))
@@ -606,7 +760,7 @@ def test_i3b_bk04_maintenance_refuses_every_admission_write_and_writes_nothing()
     no job, hold or ledger row behind; switched back on, the same admission is accepted.
     Everything inside one rolled-back transaction on a scratch database."""
     import psycopg
-    kit.needs_stack()
+    needs_pg()
     d = _d_checks()
     count = ("select (select count(*) from infrx.jobs), (select count(*) from infrx.credit_holds), "
              "(select count(*) from public.credit_ledger)")
