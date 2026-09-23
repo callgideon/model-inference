@@ -1155,6 +1155,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "S1: a complete moov that passed the profile settles the download's looks",
        R, "        return True                                 # settled", "        return False",
        "test_a_settled_header_is_not_looked_at_again"),
+    _m("early_shown_a_copy",
+       "S2: a look is shown the live buffer, so the body is still held at most about twice",
+       F, "                            if early(body):", "                            if early(bytes(body)):",
+       "test_a_fetched_body_is_held_at_most_about_twice"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",

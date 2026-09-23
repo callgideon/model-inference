@@ -595,10 +595,15 @@ def test_the_digest_covers_every_chunk_in_the_order_it_arrived():
     assert got.digest == fetch.digest_of(b"".join(chunks))
 
 
-def test_a_fetched_body_is_held_at_most_about_twice():
+@pytest.mark.parametrize("looked", [False, True], ids=["no-look", "look"])
+def test_a_fetched_body_is_held_at_most_about_twice(looked):
     """M4, bounded memory: the body grows once and is copied once. Measured on this path
     before M4 the high-water was ~3x the body (one growing buffer plus two full copies);
-    the bound here sits between 2x and 3x so the extra copy cannot come back unnoticed."""
+    the bound here sits between 2x and 3x so the extra copy cannot come back unnoticed.
+
+    Review S2: `look` runs the production path's looks, with an `early` that keeps every
+    head it is shown. The live buffer costs nothing to keep; a copy per look would hold up
+    to the body again (meas. 2.94x), which a look that keeps nothing cannot show (2.07x)."""
     import tracemalloc
 
     size, chunk = 8 << 20, 64 << 10
@@ -608,11 +613,13 @@ def test_a_fetched_body_is_held_at_most_about_twice():
     tracemalloc.start()
     try:
         base = tracemalloc.get_traced_memory()[0]
-        got = asyncio.run(fetcher(transport=transport).fetch(URL))
+        seen = []
+        got = asyncio.run(fetcher(transport=transport).fetch(
+            URL, early=seen.append if looked else None))
         peak = tracemalloc.get_traced_memory()[1] - base
     finally:
         tracemalloc.stop()
-    assert got.data == body
+    assert got.data == body and len(seen) == (3 if looked else 0)     # 1, 2 and 4 MiB
     assert peak < 2.5 * size, f"peak {peak / size:.2f}x the body"
 
 
