@@ -151,6 +151,17 @@ The list is now **42 mutants** (17 need S3), all killed on MinIO. The runner pas
 | `uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py` | `1 failed, 1022 passed in 25.15s` — the same pre-existing `test_cancel_cause` failure |
 | `uv run --frozen pytest -q tests/i/test_install.py tests/i/test_packaging.py` | `64 passed in 16.92s` |
 
+## Verifier follow-up (`M1L2-verify-0b9fc50.json`: PASS, four nonblocking fixture items folded in)
+
+| Item | Commit | Case | Mutant (killed) |
+|---|---|---|---|
+| V1 the cleanup's registration unpinned | `c558ada` | `test_what_a_case_writes_is_removed_after_it` asserts the store is registered and runs the fixture's own teardown (`empty_what_was_written`), not `remove_prefix` | `own_v_cleanup_unregistered` (S3) |
+| V2 the cleanup guard an `assert` on `startswith("test/m1l2/")` | `a782b67` | `test_the_cleanup_empties_only_one_cases_own_prefix` (no Docker: `infrx/`, bare `test/m1l2/`, another run's, a nested and a non-m1l2 prefix refused before any call reaches the bucket); the guard is now `fullmatch(r"test/m1l2/[0-9a-f]{32}/")` with a `raise`; the pair fixture uses two sibling case prefixes | `own_v_cleanup_guard_dropped` |
+| V3 CreateBucket without the flag unpinned | `0808aa2` | `test_no_bucket_is_created_without_local_credentials` (Stubber: nothing queued without the flag, one CreateBucket with it) | `own_v_bucket_created_without_flag` |
+| V4 the timeout refusal's text unpinned | `e430b7d` | the bounded-wait case passes `S3_ENDPOINT_URL` and asserts neither the bucket nor the endpoint host is named | `own_v_timeout_refusal_names_bucket` |
+
+Runs on the private MinIO (`127.0.0.1:55661`, `INFRX_M_S3_LOCAL_CREDS=1`): `tests/m/test_s3.py` `40 passed in 13.46s` (no endpoint: `24 passed, 16 skipped`); `INFRX_MUTANTS=all tests/m/test_s3_mutants.py` `47 passed in 231.83s` (**46 mutants**, 18 need S3, plus the list check). An unmutated run leaves the bucket empty (counted: 0 objects after `40 passed`); the only leftovers after the full mutant list (3 objects) are written by mutated copies by design - `s3_key_without_the_prefix` writes outside any prefix, the two cleanup mutants leak their case's object - and the box never runs mutants.
+
 ## Limits
 
 1. **No lifecycle, encryption or versioning settings.** The adapter sets none (no SSE/KMS header, no object lock, no lifecycle rule); the bucket's configuration and the instance role's permission on it are the coordinator's (request 1).
@@ -185,3 +196,4 @@ The list is now **42 mutants** (17 need S3), all killed on MinIO. The runner pas
 - 2026-09-23: Report written at `eae07a9` after items 1–3; the cutover merge and `make api-test` are appended below.
 - 2026-09-23: `make api-test` at `eae07a9` finished: `23 failed, 2902 passed, 591 skipped` - the pre-existing `test_cancel_cause` failure and 22 contracts-mutant pristine-baseline refusals it causes (Runs). Next: merge `origin/codex/cutover-mount`.
 - 2026-09-23: Review fix round on `M1L2-review-e1bb54f.json` (A1–A7, one commit each, `0d682cd`..`0c24660`); Limits 3, 4, 5, 8 and 10, the conformance paragraph, Integration requests 1 and 5 and proposed ruling (2)/(3) corrected in place (the fixture text in the first round said no case could reach AWS, and Limit 8 claimed a box run the fixture could not do).
+- 2026-09-23: Verifier follow-up V1–V4 (`c558ada`..`e430b7d`) folded in after `M1L2-verify-0b9fc50.json` (PASS, nonblocking); 46 mutants, all killed.
