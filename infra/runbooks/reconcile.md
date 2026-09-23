@@ -3,7 +3,8 @@
 Conventions: [README.md](README.md). The invariant every I3B drill ends with
 (`recoverykit.World.reconcile()`): no accepted job lost, pins unchanged, holds equal to what
 is still held, one terminal usage projection per job (plus one when an unknown-usage hold is
-released), a debit only when settled, and per tenant `ledger = granted - settled debits`,
+released), a debit only when settled and then exactly the frozen price snapshot's debit of
+the terminal usage, and per tenant `ledger = granted - settled debits`,
 `reserved = holds still held`, `available >= 0`. On PostgreSQL the same thing is two
 detector views (R59-7), and nothing here edits money: wallet totals move only through the
 ledger trigger.
@@ -50,6 +51,16 @@ the reaper releases it as platform-absorbed after `UNKNOWN_USAGE_RECONCILE_S` (2
 as a late customer debit (`rc01` drills the release). A growing backlog means the engine
 stopped reporting usage or workers keep dying after publishing: [restart.md](restart.md#engine).
 
+Counting what the reaper returned: `JobStore.recover()` returns that release as a
+`TerminalOutcome` of a job that was **already terminal**, indistinguishable by type from a
+new terminalization (I3B Finding 3; a distinct record is requested from D3/D5). Until then
+tell them apart by `settled_at`: the release keeps the job's ORIGINAL `settled_at`, so an
+outcome with `settled_at <= now - UNKNOWN_USAGE_RECONCILE_S` is a release - pass its job id
+in `metrics.record_recovery(reg, produced, released=...)` - and never a second terminal job
+(counting it twice reports `infrx_jobs_terminal_total{failed,lost_after_publication} = 2`
+for one job). A heuristic with a known ceiling: it relies on the reference store's behaviour
+and goes when D3/D5 return the release as its own record.
+
 ## Sanitizer
 
 `MetricsSanitizerRejections`: a call site tried to write an undeclared label value (a prompt,
@@ -62,3 +73,6 @@ a URL, an error message, an unknown code) or a bad number into a metric; it was 
 - 2026-09-22 (I3B.c): Written from the drills' `reconcile()` and the detector views of
   0003/0006 (read on E2's stack by `bk01`-`bk04`). The reconciler and the correction
   operation are PENDING Q3/D5. Nothing run on hosted.
+- 2026-09-23 (I3B fix round, D1/D5): the invariant names the debit amount (drilled by
+  `reconcile()`); the `settled_at` rule for telling a released hold from a new terminal job
+  is written down until D3/D5 return a distinct record.
