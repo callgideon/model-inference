@@ -605,22 +605,33 @@ def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
     assert app.state.runtime.mode == "pilot"
 
 
+@pytest.mark.parametrize("setting", ["MAX_MESSAGES", "MAX_INDEX_ITEMS"])
 @pytest.mark.parametrize("mode", ["", "dev", "test", "pilot"])
-def test_a_bad_deployment_value_refuses_before_anything_mounts(mode):
+def test_a_bad_deployment_value_refuses_before_anything_mounts(mode, setting):
     """`create_app` validates before it builds the app, so a bad value is a startup
     failure in every mode rather than a surprise on the first request that reaches the
     setting. No app object exists to serve, which is the observable form of "nothing
     mounted"."""
-    env = {"MAX_MESSAGES": "0"}
+    env = {setting: "0"}
     if mode:
         env["INFRX_MODE"] = mode
     if mode == "pilot":
         env.update(METERED, **AUTHENTICATED)
-    with pytest.raises(config.RuntimeMisconfigured, match="MAX_MESSAGES"):
+    with pytest.raises(config.RuntimeMisconfigured, match=setting):
         _app(env)
     # And the same configuration with the value corrected does start, so the refusal is
     # about the value and not about the mode.
-    assert _app({**env, "MAX_MESSAGES": "64"}) is not None
+    assert _app({**env, setting: "64"}) is not None
+
+
+def test_a_zero_index_cap_refuses_to_start():
+    """F2P review M-3: the two scheduler index caps moved from the deployment table to
+    `PilotSettings` (item 5) and kept their startup refusal: a zero cap would reach Q2's
+    adapter and disable the bound. Named here, not derived from `MUST_BE_POSITIVE`, so
+    dropping a name from that list fails this case."""
+    for name in ("MAX_INDEX_ITEMS", "MAX_INDEX_BYTES"):
+        with pytest.raises(config.RuntimeMisconfigured, match=name):
+            _app({name: "0"})
 
 
 def test_the_g1_and_q1_constants_match_the_deployment_defaults():

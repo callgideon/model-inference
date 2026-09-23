@@ -1903,6 +1903,16 @@ MUTANTS: tuple[Mutant, ...] = (
            new='    provider_dev_allocation_ceiling_credit: Credit = Credit("1000.00000000")',
            cases=("test_the_allocation_ceiling_is_a_credit_amount_defaulting_to_nothing",
                   "test_every_configuration_name_and_default_is_frozen")),
+    Mutant(name="CFG-V2-06", invariant="a zero pilot bound refuses startup in every mode (review M-3)",
+           file="config.py",
+           old="        if getattr(pilot, name) <= 0:\n"
+               '            raise RuntimeMisconfigured(mode, detail=f"{env_name(name)} must be positive")',
+           new="        if False:\n            pass",
+           cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",
+                  "test_a_zero_index_cap_refuses_to_start")),
+    Mutant(name="CFG-V2-07", invariant="the index caps are pilot bounds a zero disables (review M-3)",
+           file="config.py", old='    "max_index_items", "max_index_bytes",\n', new="",
+           cases=("test_a_zero_index_cap_refuses_to_start",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",

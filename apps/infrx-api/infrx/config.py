@@ -243,6 +243,12 @@ def validate_runtime(settings):
     # startup failure in every mode, legacy included. A zero pool or an unrotatable spool
     # segment is not something the legacy path is entitled to either.
     deployment = validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)
+    # The pilot bounds a zero would disable, at startup and in every mode too. `validate_pilot`
+    # checks them as well but nothing calls it at runtime, so without this `MAX_INDEX_ITEMS=0`
+    # (moved here from the deployment table, item 5) would start and reach the scheduler.
+    for name in MUST_BE_POSITIVE:
+        if getattr(pilot, name) <= 0:
+            raise RuntimeMisconfigured(mode, detail=f"{env_name(name)} must be positive")
     # R69 at startup: a CREDIT-regime deployment with no approved card would admit nothing
     # (every model unpriced) or, worse, be read as free. Any mode, legacy included.
     if deployment.accounting_regime == CREDIT_REGIME \
