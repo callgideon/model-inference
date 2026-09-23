@@ -8,6 +8,9 @@
 # Names, ports and lifetime (research/plan/08-contracts-v1-encoding.md §8, R48):
 #   - project `infrx-e2`, every container `infrx-e2-<service>`;
 #   - host ports only in 55500-55599 (E's range), bound to 127.0.0.1 so nothing is exposed;
+#   - E3B phase 2: the project name and every host port come from `harness.compose_env()`
+#     (`INFRX_E2_NAMESPACE` moves them as one block; unset they are exactly the above), and
+#     `:?` refuses to run without them, so no port of another namespace can be defaulted;
 #   - volumes are project-scoped and disposable (`down -v` removes them);
 #   - credentials are fixed local test strings. No production credential is ever needed,
 #     and nothing here may be pointed at Supabase production or AWS.
@@ -26,7 +29,7 @@
 # There is no healthcheck block on purpose: readiness is polled from the host in
 # `harness.py`, one mechanism for four images instead of four guesses about which client
 # binary each image happens to ship.
-name: infrx-e2
+name: ${INFRX_E2_PROJECT:?exported by tests/integration/harness.py}
 
 x-checkout: &checkout
   ai.infrx.e2.checkout: ${INFRX_E2_CHECKOUT:?exported by tests/integration/harness.py}
@@ -40,30 +43,30 @@ services:
   # target database matches D1's `current_database() like 'infrx\_%'` clock gate.
   postgres:
     image: supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd  # 17.6.1.173
-    container_name: infrx-e2-postgres
+    container_name: ${INFRX_E2_PROJECT:?}-postgres
     labels: *checkout
     environment:
       POSTGRES_PASSWORD: infrx-e2-local
     ports:
-      - "127.0.0.1:55532:5432"
+      - "127.0.0.1:${INFRX_E2_PORT_POSTGRES:?}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     stop_grace_period: 5s
 
   valkey:
     image: valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1  # 8.1-alpine
-    container_name: infrx-e2-valkey
+    container_name: ${INFRX_E2_PROJECT:?}-valkey
     labels: *checkout
     # Disposable by construction: no RDB snapshot, no AOF. A restart is an empty index,
     # which is what DUR-OUTBOX's "lose Valkey data" injection wants to be cheap.
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "127.0.0.1:55579:6379"
+      - "127.0.0.1:${INFRX_E2_PORT_VALKEY:?}:6379"
     stop_grace_period: 5s
 
   clickhouse:
     image: clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146  # 25.8.33.6-alpine
-    container_name: infrx-e2-clickhouse
+    container_name: ${INFRX_E2_PROJECT:?}-clickhouse
     labels: *checkout
     environment:
       CLICKHOUSE_DB: infrx_e2
@@ -71,8 +74,8 @@ services:
       CLICKHOUSE_PASSWORD: infrx-e2-local
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
-      - "127.0.0.1:55523:8123"
-      - "127.0.0.1:55590:9000"
+      - "127.0.0.1:${INFRX_E2_PORT_CLICKHOUSE_HTTP:?}:8123"
+      - "127.0.0.1:${INFRX_E2_PORT_CLICKHOUSE_NATIVE:?}:9000"
     ulimits:
       nofile:
         soft: 262144
@@ -83,14 +86,14 @@ services:
 
   s3:
     image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # RELEASE.2025-09-07T16-13-09Z
-    container_name: infrx-e2-s3
+    container_name: ${INFRX_E2_PROJECT:?}-s3
     labels: *checkout
     command: ["server", "/data", "--address", ":9000"]
     environment:
       MINIO_ROOT_USER: infrxe2minio
       MINIO_ROOT_PASSWORD: infrx-e2-local-secret
     ports:
-      - "127.0.0.1:55500:9000"
+      - "127.0.0.1:${INFRX_E2_PORT_S3:?}:9000"
     volumes:
       - s3-data:/data
     stop_grace_period: 5s

@@ -672,6 +672,14 @@ MUTANTS: tuple[Mutant, ...] = (
            '    report.add("backend", PASS, {"postgrest": postgrest, **summary},\n',
            "tests/integration/backend/test_stage.py", "reports_the_summary",
            cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
+
+    # ---------------- E3B phase 2 (one per item; the item number is in the invariant)
+    Mutant("e3bm13", "E3B2 item 0: no port of E2's block is left literal in a derived place",
+           "tests/integration/compose.yaml",
+           '      - "127.0.0.1:${INFRX_E2_PORT_POSTGRES:?}:5432"',
+           '      - "127.0.0.1:55532:5432"',
+           "tests/integration/test_harness.py", "compose_file_publishes and e3b2",
+           cases=("test_the_compose_file_publishes_exactly_those_ports_on_loopback[e3b2]",)),
 )
 
 
@@ -696,7 +704,7 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     # behind, not only the one the guarded case watches. Anything new under our own prefix is
     # removed afterwards - never anything that was there before, and never the state file.
     litter_before = _temp_litter()
-    with tempfile.TemporaryDirectory(prefix=f"infrx-e2-{mutant.id}-") as tmp:
+    with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
         # E3B: a defect in module code is injected into a copy of `infrx`, which the suite

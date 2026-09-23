@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness                                          # noqa: E402
 import pgstate                                          # noqa: E402
 
-NO_STACK = ("no infrx-e2 stack with seeded fixtures: run "
+NO_STACK = (f"no {harness.PROJECT} stack with seeded fixtures: run "
             "`apps/infrx-api/.venv/bin/python tests/integration/run.py`")
 
 
@@ -487,7 +487,7 @@ def test_a_stack_labelled_for_another_checkout_is_refused_not_destroyed():
     decoy = f"{harness.PREFIX}otherco"
     image = harness.compose_images()["valkey"]
     harness.run(["docker", "create", "--name", decoy,
-                 "--label", "com.docker.compose.project=infrx-e2",
+                 "--label", f"com.docker.compose.project={harness.PROJECT}",
                  "--label", f"{harness.CHECKOUT_LABEL}=/somewhere/else/tests/integration",
                  image, "true"], timeout=120)
     try:
@@ -519,7 +519,7 @@ def test_an_unlabelled_volume_with_our_name_is_refused_not_deleted():
     harness.run(["docker", "volume", "create", "--label", "reviewer=e2", victim], timeout=60)
     try:
         reported = [item for item in harness.foreign("volume") if item["name"] == victim]
-        assert reported and "no infrx-e2 checkout label" in reported[0]["why"], reported
+        assert reported and f"no {harness.PROJECT} checkout label" in reported[0]["why"], reported
         with pytest.raises(harness.HarnessError, match="refusing to provision or tear down"):
             harness.assert_nothing_foreign()
         survived = harness.run(["docker", "volume", "inspect", victim], check=False, timeout=60)
@@ -539,7 +539,7 @@ def test_an_unlabelled_network_with_our_name_is_refused_not_removed():
     harness.run(["docker", "network", "create", "--label", "reviewer=e2", victim], timeout=120)
     try:
         reported = [item for item in harness.foreign("network") if item["name"] == victim]
-        assert reported and "no infrx-e2 checkout label" in reported[0]["why"], reported
+        assert reported and f"no {harness.PROJECT} checkout label" in reported[0]["why"], reported
         assert victim not in harness.owned("network")
         with pytest.raises(harness.HarnessError, match="refusing to provision or tear down"):
             harness.assert_nothing_foreign()
@@ -565,7 +565,7 @@ def test_the_target_database_is_a_template_copy_owned_by_postgres():
         name, owner = conn.execute(
             "select d.datname, pg_get_userbyid(d.datdba) from pg_database d"
             " where d.datname = current_database()").fetchone()
-        assert name == harness.PG_DATABASE == "infrx_e2"
+        assert name == harness.PG_DATABASE == f"infrx_{harness.NAMESPACE}"
         assert conn.execute("select current_database() like 'infrx\\_%'").fetchone()[0] is True, \
             "the name must match D1's clock gate"
         assert owner == harness.PG_USER, \

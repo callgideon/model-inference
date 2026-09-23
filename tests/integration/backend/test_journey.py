@@ -92,7 +92,7 @@ def test_an_unknown_pending_id_is_refused():
 
 def _postgrest_or_skip():
     if stack.postgrest_owner() != "ours":
-        pytest.skip("no infrx-e3b-postgrest of this checkout: run "
+        pytest.skip(f"no {stack.POSTGREST} of this checkout: run "
                     "`tests/integration/run.py --layer 3`")
     import httpx
     return httpx.Client(base_url=stack.postgrest_url(), timeout=5.0)

@@ -436,12 +436,12 @@ def _event(h, job_id):
 
 @pytest.fixture
 def valkey_index():
-    """Q2's adapter on E2's Valkey, in a namespace of our own under `infrx_e2:`, removed
+    """Q2's adapter on E2's Valkey, in a namespace of our own under `harness.VALKEY_PREFIX`, removed
     afterwards (E2's suite asserts the shared prefix is left empty). Returns a factory so a
     drill can set the caps."""
     state = harness.load_state()
     if not state or not harness.owned_containers():
-        pytest.skip("no infrx-e2 stack: run `tests/integration/run.py --layer 3`")
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
     from valkey.asyncio import Valkey
 
     from infrx.scheduling.valkey import ValkeyScheduler

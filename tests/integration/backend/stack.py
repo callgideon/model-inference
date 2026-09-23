@@ -176,9 +176,12 @@ def provision_two_tenants(jobs=None, *, grant: str = "5") -> tuple[Tenant, Tenan
 # ------------------------------------------------------------------ PostgREST
 
 COMPOSE_FILE = HERE / "compose.yaml"
-PROJECT = "infrx-e3b"
+# E3B phase 2: derived from E2's namespace. The default is phase 1's `infrx-e3b`; any other
+# namespace's project must not start with `harness.PREFIX`, or E2's own guard would see this
+# container as a foreign one of its project and refuse to provision or tear down.
+PROJECT = "infrx-e3b" if harness.NAMESPACE == "e2" else f"{harness.PROJECT}rest"
 POSTGREST = f"{PROJECT}-postgrest"
-POSTGREST_PORT = 55530                     # inside E's 55500-55599 (08 §8), loopback only
+POSTGREST_PORT = harness.PORT_RANGE.start + 30      # E2: 55530 (08 §8), loopback only
 CHECKOUT_LABEL = "ai.infrx.e3b.checkout"
 # A local literal that exists in no other file and signs only tokens this suite mints.
 JWT_SECRET = "infrx-e3b-local-jwt-secret-not-a-real-one-0001"
@@ -195,7 +198,10 @@ def _checkout() -> str:
 def _compose(*args: str, check: bool = True):
     return harness.run(["docker", "compose", "-p", PROJECT, "-f", str(COMPOSE_FILE), *args],
                        check=check, timeout=300.0,
-                       env={"INFRX_E3B_CHECKOUT": _checkout()})
+                       env={"INFRX_E3B_CHECKOUT": _checkout(), "INFRX_E3B_PROJECT": PROJECT,
+                            "INFRX_E3B_POSTGREST_PORT": str(POSTGREST_PORT),
+                            "INFRX_E2_PROJECT": harness.PROJECT,
+                            "INFRX_E2_DATABASE": harness.PG_DATABASE})
 
 
 def postgrest_owner() -> str | None:

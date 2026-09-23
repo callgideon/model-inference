@@ -468,7 +468,8 @@ def test_compose_always_carries_the_checkout_label_value():
     seen = {}
     with patched(harness, run=lambda argv, **kwargs: seen.update(kwargs) or _Completed(0)):
         harness.compose("ps")
-    assert seen["env"] == {"INFRX_E2_CHECKOUT": harness.working_dir()}
+    assert seen["env"]["INFRX_E2_CHECKOUT"] == harness.working_dir()
+    assert seen["env"] == harness.compose_env(), "and the namespace's project and ports"
     assert "INFRX_E2_CHECKOUT" in harness.COMPOSE_FILE.read_text()
     assert ":?" in harness.COMPOSE_FILE.read_text(), "compose must refuse without the value"
 
@@ -563,7 +564,7 @@ def test_sigterm_tears_down_and_orphans_no_fake_server():
     import signal
     import subprocess as _subprocess
     import time as _time
-    marker = Path(os.environ.get("TMPDIR", "/tmp")) / "infrx-e2-sigterm-drill.json"
+    marker = Path(os.environ.get("TMPDIR", "/tmp")) / f"{harness.PROJECT}-sigterm-drill.json"
     marker.unlink(missing_ok=True)
     port = harness.PORTS["fake_vllm"] + 3
     driver = f"""

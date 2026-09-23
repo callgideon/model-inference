@@ -1,8 +1,10 @@
 """Task-local service lifecycle, readiness and fault injection for E2.
 
 Everything here is scoped to one namespace: compose project `infrx-e2`, containers
-`infrx-e2-<service>`, host ports inside E's 55500-55599 range, ClickHouse database
-`infrx_e2`, Valkey key prefix `infrx_e2:`, object prefix `test/e2/`. Every destructive
+`infrx-e2-<service>`, host ports inside E's 55500-55599 range, PostgreSQL database
+`infrx_e2`, Valkey key prefix `infrx_e2:`, object prefix `test/e2/`. `INFRX_E2_NAMESPACE`
+selects another namespace, which moves every one of those names and the whole port block
+together (`NAMESPACES`); unset, every value is E2's own. Every destructive
 helper refuses a container it did not create, because other sessions run containers on
 this host and a teardown that guesses is a teardown that deletes someone else's work.
 
@@ -30,15 +32,10 @@ COMPOSE_FILE = HERE / "compose.yaml"
 API_ROOT = REPO_ROOT / "apps" / "infrx-api"
 MIGRATIONS_DIR = REPO_ROOT / "apps" / "app" / "supabase" / "migrations"
 
-TASK = "e2"
-PROJECT = "infrx-e2"
-PREFIX = f"{PROJECT}-"            # every container name starts with this
-NETWORK = f"{PROJECT}_default"    # compose's default network for this project
-
-# 08 §8 / R48: E's compose range. `tasklocal.local_services("e2")` is the authority;
-# test_harness.py asserts these against it rather than trusting the copy.
-PORT_RANGE = range(55500, 55600)
-PORTS = {
+# 08 §8 / R48: E2's layout inside E's compose range. `tasklocal.local_services(<ns>)` is
+# the authority; test_harness.py asserts every namespace against it rather than trusting
+# the copy.
+E2_PORTS = {
     "postgres": 55532,
     "valkey": 55579,
     "clickhouse_http": 55523,
@@ -46,6 +43,28 @@ PORTS = {
     "s3": 55500,
     "fake_vllm": 55580,          # a host process, not a container (see fake_vllm.py)
 }
+# E3B phase 2: namespace -> offset of its block from E2's. A namespace moves the whole
+# layout, so two checkouts can run the stack at once (e3b2: 56700-56799, E2's +1200).
+NAMESPACES = {"e2": 0, "e3b2": 1200}
+NAMESPACE = os.environ.get("INFRX_E2_NAMESPACE") or "e2"
+if NAMESPACE not in NAMESPACES:
+    raise ValueError(f"INFRX_E2_NAMESPACE={NAMESPACE!r}: expected one of {sorted(NAMESPACES)}")
+
+
+def ports_for(namespace: str) -> dict[str, int]:
+    return {service: port + NAMESPACES[namespace] for service, port in E2_PORTS.items()}
+
+
+def range_for(namespace: str) -> range:
+    return range(55500 + NAMESPACES[namespace], 55600 + NAMESPACES[namespace])
+
+
+TASK = NAMESPACE
+PROJECT = f"infrx-{NAMESPACE}"
+PREFIX = f"{PROJECT}-"            # every container name starts with this
+NETWORK = f"{PROJECT}_default"    # compose's default network for this project
+PORT_RANGE = range_for(NAMESPACE)
+PORTS = ports_for(NAMESPACE)
 
 # Local test credentials. Fixed literals on purpose: an integration run must need no
 # secret, so there is nothing to leak and nothing to forget to unset.
@@ -56,12 +75,12 @@ PG_USER, PG_PASSWORD = "postgres", "infrx-e2-local"
 # D1's `current_database() like 'infrx\_%'` gate on the test clock - production is
 # `postgres`, so that gate is what keeps a movable clock out of it. See
 # `provision_database()` for the two things the copy needs.
-PG_DATABASE = "infrx_e2"
+PG_DATABASE = f"infrx_{NAMESPACE}"
 PG_ADMIN_ROLE = "supabase_admin"     # the image's superuser; `postgres` is not one
 PG_TEMPLATE_SOURCE = "postgres"
 CH_USER, CH_PASSWORD, CH_DATABASE = "infrx_e2", "infrx-e2-local", "infrx_e2"
 S3_ACCESS_KEY, S3_SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
-S3_BUCKET = "infrx-e2"
+S3_BUCKET = PROJECT
 OBJECT_PREFIX = f"test/{TASK}/"
 VALKEY_PREFIX = f"infrx_{TASK}:"
 
@@ -205,10 +224,14 @@ def working_dir() -> str:
     return os.environ.get("INFRX_E2_CHECKOUT") or str(COMPOSE_FILE.parent)
 
 
-def compose_env() -> dict[str, str]:
-    """What every `docker compose` invocation must carry. compose.yaml uses `:?`, so a
-    missing value is a refusal rather than an unlabelled resource."""
-    return {"INFRX_E2_CHECKOUT": working_dir()}
+def compose_env(namespace: str | None = None) -> dict[str, str]:
+    """What every `docker compose` invocation must carry: the checkout label, and the
+    namespace's project name and host ports. compose.yaml uses `:?` for each, so a missing
+    value is a refusal rather than an unlabelled resource or a port of another namespace."""
+    namespace = namespace or NAMESPACE
+    return {"INFRX_E2_CHECKOUT": working_dir(), "INFRX_E2_PROJECT": f"infrx-{namespace}",
+            **{f"INFRX_E2_PORT_{service.upper()}": str(port)
+               for service, port in ports_for(namespace).items()}}
 
 
 def _docker_ls(kind: str) -> list[str]:
@@ -277,7 +300,7 @@ def foreign(kind: str) -> list[dict]:
                       "project": labels.get("com.docker.compose.project"),
                       "checkout": other,
                       "why": (f"another checkout's run ({other})" if other
-                              else "no infrx-e2 checkout label: not created by this harness")})
+                              else f"no {PROJECT} checkout label: not created by this harness")})
     return found
 
 

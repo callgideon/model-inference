@@ -210,7 +210,7 @@ def preflight(report: Report, *, want_services: bool) -> bool:
         if busy:
             report.add("preflight", FAIL,
                        f"these task-local ports are already in use: {busy} - stop whatever holds "
-                       f"them (a previous `--keep` run, or `docker compose -p infrx-e2 down -v`)")
+                       f"them (a previous `--keep` run, or `docker compose -p {harness.PROJECT} down -v`)")
             return False
     except harness.HarnessError as exc:
         report.add("preflight", FAIL, str(exc))
@@ -549,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="1 = nothing that needs a container; 3 = all + the E3B backend "
                              "gate (exits 3 while any backend case is pending)")
     parser.add_argument("--keep", action="store_true",
-                        help="leave the stack running (still only infrx-e2-* containers)")
+                        help=f"leave the stack running (still only {harness.PREFIX}* containers)")
     parser.add_argument("--pull", action="store_true", help="pull the pinned digests first")
     parser.add_argument("--canary", action="store_true",
                         help="also prove an intentional failure is detected")

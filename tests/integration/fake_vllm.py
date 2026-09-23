@@ -637,7 +637,8 @@ SERVE = _serve
 
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="controllable fake vLLM for E2")
-    parser.add_argument("--port", type=int, default=55580)
+    import harness                       # the namespace's port (E2: 55580)
+    parser.add_argument("--port", type=int, default=harness.PORTS["fake_vllm"])
     parser.add_argument("--host", default="127.0.0.1",
                         help="loopback only unless --allow-non-loopback is given")
     parser.add_argument("--allow-non-loopback", action="store_true",
