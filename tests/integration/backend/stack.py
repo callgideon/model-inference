@@ -52,7 +52,9 @@ if importlib.util.find_spec("infrx") is None:
 # kind of pending: `pending()` refuses an id that is not here. E3B phase 2: no merged task
 # (tasks.json implemented/integrated) is a blocker of an E3B case; the ones still listed are
 # `RESIDUAL`, kept only for I3B's recovery cases, which are read-only here and extend this
-# vocabulary (`recovery/recoverykit.PENDING`). `test_stage.py` holds both lists to tasks.json.
+# vocabulary (`recovery/recoverykit.PENDING`), with owner references that are no task
+# (`recoverykit.OWNERS`, e.g. `I2B-R4`, `M1-L2`: never an E3B blocker, never stale).
+# `test_stage.py` holds all of them to tasks.json.
 PENDING = {
     "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
           "mounts the metered ingress in gateway.app.ROUTERS",

@@ -18,34 +18,36 @@ XML = """<testsuites><testsuite>
 <testcase classname="b.test_drills" name="test_e3b_dr01[fake]"/>
 <testcase classname="b.test_schema" name="test_e3b_db03_detects_a_missing_settlement_guard"/>
 <testcase classname="b.test_drills" name="test_e3b_dr01[postgres]">
-  <skipped message="PENDING[D2] no adapter"/></testcase>
+  <skipped message="PENDING[X1] no adapter"/></testcase>
 <testcase classname="b.test_journey" name="test_backend_journey[sync-text]">
-  <skipped message="Skipped: PENDING[G1R,G2] not mounted"/></testcase>
+  <skipped message="Skipped: PENDING[X2,X3] not mounted"/></testcase>
 %s
 </testsuite></testsuites>"""
+# X1-X3 are no task: the arithmetic must not depend on which tasks tasks.json has merged
+# (a merged id is stale - `test_a_pending_id_naming_a_merged_task_fails_the_stage`).
 
 
 def test_pending_cases_are_counted_by_their_unblocking_id_and_never_as_passes():
     cases = run.classify(XML % "")
     assert cases["passed"] == ["b.test_drills::test_e3b_dr01[fake]",
                                "b.test_schema::test_e3b_db03_detects_a_missing_settlement_guard"]
-    assert cases["pending"] == {"D2": ["b.test_drills::test_e3b_dr01[postgres]"],
-                                "G1R": ["b.test_journey::test_backend_journey[sync-text]"],
-                                "G2": ["b.test_journey::test_backend_journey[sync-text]"]}
+    assert cases["pending"] == {"X1": ["b.test_drills::test_e3b_dr01[postgres]"],
+                                "X2": ["b.test_journey::test_backend_journey[sync-text]"],
+                                "X3": ["b.test_journey::test_backend_journey[sync-text]"]}
     assert run.backend_verdict(cases, 0) == run.PENDING
     status, summary = run.backend_summary(cases, 0)
     assert status == run.PENDING, "the stage's own status, not only the verdict helper"
     assert (summary["passed"], summary["pending"], summary["failed"]) == (2, 2, 0)
     assert summary["detected"] == ["test_e3b_db03_detects_a_missing_settlement_guard"]
-    assert summary["pending_by_id"] == {"D2": 1, "G1R": 1, "G2": 1}
+    assert summary["pending_by_id"] == {"X1": 1, "X2": 1, "X3": 1}
 
 
 def test_an_expected_failure_is_not_pending_even_if_it_says_so():
     """rv08: `pytest.xfail("PENDING[D2] ...")` is not `stack.pending()`: it lands in
     `skipped`, which fails the stage."""
     cases = run.classify(XML % '<testcase classname="x" name="xf"><skipped '
-                               'type="pytest.xfail" message="PENDING[D2] later"/></testcase>')
-    assert cases["skipped"] == ["x::xf"] and "x::xf" not in cases["pending"].get("D2", [])
+                               'type="pytest.xfail" message="PENDING[X1] later"/></testcase>')
+    assert cases["skipped"] == ["x::xf"] and "x::xf" not in cases["pending"].get("X1", [])
     assert run.backend_summary(cases, 0)[0] == run.FAIL
 
 
@@ -100,21 +102,29 @@ def test_a_drill_pends_only_on_the_stubs_it_drives():
     assert stack.stubbed(("terminalize", "cancel"), {}) == {}
 
 
-def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual():
-    """1c: every pending id is a task of tasks.json, and one tasks.json marks implemented or
-    integrated is a blocker only as a RESIDUAL with its reason - and never for an E3B case
-    (`stack.pending` refuses it)."""
+def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeypatch):
+    """1c: every pending id is a task of tasks.json - or one of I3B's owner references
+    (`recoverykit.OWNERS`: work no task schedules, named by its document and owner) - and one
+    tasks.json marks implemented or integrated is a blocker only as a RESIDUAL with its reason,
+    and never for an E3B case (`stack.pending` refuses it)."""
     tasks = {task["id"]: task["status"] for task in json.loads(
         (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
     # Review H2: every vocabulary a counted pending comes through - E3B's and I3B's kit.
     sys.path.insert(0, str(Path(__file__).resolve().parent / "recovery"))
     import recoverykit
     vocabulary = {**stack.PENDING, **recoverykit.PENDING}
-    assert set(vocabulary) <= set(tasks), set(vocabulary) - set(tasks)
-    merged = {task for task in vocabulary if tasks[task] in ("implemented", "integrated")}
+    owners = set(getattr(recoverykit, "OWNERS", {}))       # the I3B follow-up adds OWNERS
+    # ... which are no task, and which the stage's PENDING[..] parser reads whole.
+    assert owners.isdisjoint(tasks) and all(run.PENDING_MARK.fullmatch(f"PENDING[{o}]")
+                                            for o in owners)
+    assert set(vocabulary) - owners <= set(tasks), set(vocabulary) - owners - set(tasks)
+    merged = {task for task in vocabulary if tasks.get(task) in ("implemented", "integrated")}
     assert merged == set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
     assert all(reason.strip() for reason in stack.RESIDUAL.values())
     import pytest
+    # A synthetic RESIDUAL id as well, so the refusal stays pinned the day RESIDUAL empties.
+    monkeypatch.setitem(stack.PENDING, "X9", "synthetic")
+    monkeypatch.setitem(stack.RESIDUAL, "X9", "synthetic")
     refused = []
     for task in stack.RESIDUAL:
         try:
@@ -135,6 +145,10 @@ def test_a_pending_id_naming_a_merged_task_fails_the_stage():
     assert run.stale_pending(cases) == ["D1R"]
     status, summary = run.backend_summary(cases, 0)
     assert (status, summary["stale_pending"]) == (run.FAIL, ["D1R"])
+    # An owner reference (I3B's recoverykit.OWNERS) is no task: pending, never stale.
+    owner = run.classify(XML % '<testcase classname="x" name="rc08b"><skipped '
+                               'message="PENDING[I2B-R4] no worker entry point"/></testcase>')
+    assert owner["pending"]["I2B-R4"] == ["x::rc08b"] and run.stale_pending(owner) == []
     assert run.backend_summary(run.classify(XML % ""), 0)[1]["stale_pending"] is None
 
 
