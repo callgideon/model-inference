@@ -64,6 +64,11 @@ class Rig:
     def queued(self) -> str:
         return cl.queued(self.owner, self.world).request_id
 
+    def preparing(self) -> str:
+        request = cl.gateway_request(self.world)
+        ca.admit(self.owner, request, b.idem(request, request.request_id))
+        return request.request_id
+
     def running(self, worker: str = "w1") -> Lease:
         job = self.queued()
         code, answer = rpc(self.service(), "claim", {"job_id": job, "worker_id": worker,
@@ -199,6 +204,35 @@ def test_race__a_rebuild_during_a_claim_never_sees_half_a_claim() -> None:
         assert job not in {e["job_id"] for e in cl.pump(relay)}, \
             "the row reopened during the claim dispatched a running job"
     assert live(rig, job) == [("inference", 1, "w1")], live(rig, job)
+
+
+def test_race__a_rebuild_during_a_preparation_claim_redelivers_a_row_the_claim_refuses() -> None:
+    """The `claim_preparation` side of the same interleaving (confirmation FC-4): the fence,
+    run during the uncommitted preparation claim, reopens the delivered `prepare_dispatch`
+    row; after the commit the job is still `preparing`, so the relay REDELIVERS the row (not
+    superseded, as for a running job) - and the second claimer it feeds is `not_claimable`.
+    A duplicate candidate, never a second lease (Limit 9)."""
+    rig = Rig()
+    job = rig.preparing()
+    observer = rig.service()
+    since = observer.execute("select infrx.now()").fetchone()[0]
+    with rig.service() as relay:                     # the dispatch was delivered: acknowledged
+        cl.pump(relay)
+    claimer = rig.service()
+    claimer.execute("begin")
+    code, _ = rpc(claimer, "claim_preparation", {"job_id": job, "worker_id": "prep-a",
+                                                 "limits": cl.LIMITS})
+    assert code is None, code
+    assert observer.execute("select infrx.reopen_dispatch(%s)", (Jsonb({
+        "since": since.isoformat()}),)).fetchone()[0] == 1, "the fence did not reopen the row"
+    claimer.execute("commit")
+    with rig.service() as relay:
+        again = [e["kind"] for e in cl.pump(relay) if e["job_id"] == job]
+    assert again == ["prepare_dispatch"], f"the reopened row was not redelivered: {again}"
+    code, _ = rpc(rig.service(), "claim_preparation", {"job_id": job, "worker_id": "prep-b",
+                                                       "limits": cl.LIMITS})
+    assert code == "not_claimable", f"the redelivered candidate leased again: {code}"
+    assert live(rig, job) == [("preparation", 1, "prep-a")], live(rig, job)
 
 
 # --------------------------------------------------------------------- recover vs heartbeat
