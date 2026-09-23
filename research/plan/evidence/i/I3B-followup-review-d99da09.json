@@ -1,103 +1,97 @@
 {
-  "verdict": "pass",
+  "verdict": "fix_required",
   "head": "d99da09",
   "reviews": [
     {
-      "lens": "restore",
+      "lens": "drill",
       "verdict_hint": "fix_required",
-      "fabrication_check": "Every number and quoted string above comes from runs in this session on the scratch merge d99da09 + 3438d86. The lane's d3/Supabase numbers (23/1 for test_restore.py; 52/9 for the recovery dir) and its plain-image numbers (5 failed / 10 passed / 1 skipped / 8 errors) reproduced exactly. The lane's diagnosis also reproduced: a 17.6 client container into a 16.14 server, and bk02's confirmed_at coming from the shim. i3bm86-91 were each applied by hand as one edit. Each was killed by an AssertionError at the lines the lane cites (255, 479, 483, 514). The lane's evidence was checked against E3B2 at 8fb3ea2; my merge base is 3438d86 (the branch's current tip). I did not run the E runner's mutation stage, rc10's drill in isolation, or the E3B2 review JSON. The attack cases and mutant driver lived only in the scratch clone and the session scratchpad.",
-      "cleanup": "I removed the scratch clone /tmp/claude-1000/review-i3bf-restore-3835171, including its private TMPDIR and d3 port locks. pgharness removed the d3 containers (infrx-d3-postgres-supabase and the plain variant) at process exit; docker ps -a showed no d3 container afterwards. The restore tool's client containers are --rm: one transient pgclient appeared and was gone on recheck. I left /tmp/infrx-d3-postgres-55434.lock (12:37Z) and /tmp/infrx-d3-valkey-55464.lock (03:50Z) alone: both predate this session and are not mine. I never touched the shared 55432, other lanes' containers or the E2 stack. The codex-i3bf worktree was not modified. The only copies of the attack file and mutant driver are in the session scratchpad.",
+      "fabrication_check": "Every count and quoted string above comes from commands I ran in this session. The scratch was d99da09 merged with origin/codex/e3b-phase2-gate at c587ddc, the WIP head. It merged cleanly, so I did not fall back to 5e9bbf1. One exception is the pristine tests/i count: I ran tests/i only with rv1 applied (143 passed), not unmutated. I did not rerun the whole of tests/integration, so the lane's 124/81 is not reproduced.\n\nWhat reproduced: the lane's layer-0 count of 90 passed / 28 skipped at the head; 52/9 for the recovery directory on d3/Supabase; and the mutant list result of 86 (84 killed, 1 control, i3bm33 no-cases). I also checked the lane's rc10 description against rollback.sh and lib.sh. For a pilot to pilot rollback with an empty absent file and ENGINE unset, the argv sequence it lists is exactly what the script issues. The stub records every call, and rc10 compares the whole list for equality, so no call is swallowed without an assertion. The calls rc10 never reaches are the stop fallback, `systemctl disable --now` for absent units, the ENGINE=restart path and wait_http retries. tests/i covers them, apart from the pilot not-ready path (DR-3).\n\nThe refusal case matches rollback.sh:29-37. It computes current=pilot and restored='' and dies with exit 2 before any systemctl call. rc10 asserts issued == [] and the host files unchanged. The byte-for-byte check compares file contents (a path to text map), not names. For the edge files it is vacuous (DR-1).\n\nThe 'afterwards' invariants run on the fake store. A real PgJobStore would add four things: the maintenance flags gating the product's own admission (in the drill, maintenance runs on a scratch database that the fake store never consults, and nothing is admitted while it is on); the SQL fence and recover() RPC; terminalize's ledger debit, which is still a D5 stub; and a Q3 rebuild from a PostgreSQL snapshot.\n\ni3bm48 dies from pgrestore's own fail-closed guard, 'refusing to fingerprint: the session is not read-only'. The test reports 'failed', not an error, and i3bm49 is its assertion-shaped witness at test_restore.py:254. I judge that acceptable under R83. On the 24 spurious baseline-reds: I did not reproduce them as a single full run. I did reproduce the same shape through the mechanism described in DR-2.",
+      "cleanup": "I removed my scratch clone /tmp/claude-1000/review-i3bf-drill-1105445 along with its two worktrees (-head, -mut), its private TMPDIR (which held the d3 locks my runs created) and its output directory. Copies of the reports, the mutant driver and the concurrency script are in the session scratchpad under i3bf-drill/. pgharness removed the d3 containers at process exit, and afterwards `docker ps -a` showed no container matching d3 or i3b.\n\nI left several things alone. The shared /tmp/infrx-d3-postgres-55434.lock (12:37Z) and /tmp/infrx-d3-valkey-55464.lock predate this session. The /tmp/claude-1000/review-i3bf-drill-3835286* directories belong to another reviewer. I never touched the infrx-e3b2-*, infrx-d2-* or 55432 containers, the E2 stack, the network, AWS or the box.\n\nThe codex-i3bf worktree is unmodified: status is clean and HEAD is still d99da09.",
       "mutants": [
         {
-          "name": "i3bm86 (lane)",
-          "edit": "pgrestore.py relations: unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(c.relacl, '{}', acldefault(",
+          "name": "rv1_edge_not_restored",
+          "edit": "rollback.sh: tar -C \"${ROOT:-/}\" -xpf \"$backup/files.tar\" -> ... --exclude=etc/caddy",
+          "result": "SURVIVED rc10 (1 passed) and all tests/i (143 passed)",
+          "killed_by": "none; killed by rc10 once DR-1's fix marks the edge files per release"
+        },
+        {
+          "name": "rv2_worker_probe_result_ignored",
+          "edit": "lib.sh wait_ready pilot: '&& wait_http \"$WORKER_READY\"' -> '; wait_http \"$WORKER_READY\"'",
+          "result": "SURVIVED rc10; killed by tests/i",
+          "killed_by": "tests/i/test_scripts.py install exit-4 case (AssertionError: assert 0 == 4)"
+        },
+        {
+          "name": "rv3_not_ready_still_reloads",
+          "edit": "rollback.sh: wait_ready \"${restored:-legacy}\" \\ -> wait_ready \"${restored:-legacy}\" || true \\",
+          "result": "SURVIVED rc10; killed by tests/i",
+          "killed_by": "tests/i r2 revert (assert 4 == 4 and 'the restored runtime is not ready' \u2026)"
+        },
+        {
+          "name": "rv4_refusal_off",
+          "edit": "rollback.sh: [ \"$restored\" != pilot ] -> [ \"$restored\" = nothing ]",
           "result": "killed",
-          "killed_by": "bk01_a test_restore.py:255 AssertionError (relations differ ... '{}')"
+          "killed_by": "rc10 AssertionError assert (0 == 2)"
         },
         {
-          "name": "i3bm87 (lane)",
-          "edit": "functions: coalesce(p.proacl, acldefault('f', -> coalesce(p.proacl, '{}', acldefault('f',",
+          "name": "rv5_no_daemon_reload",
+          "edit": "rollback.sh: systemctl daemon-reload -> :",
           "result": "killed",
-          "killed_by": "bk01g :479 AssertionError (functions differ)"
+          "killed_by": "rc10 AssertionError issued == ROLLBACK_COMMANDS"
         },
         {
-          "name": "i3bm88 (lane)",
-          "edit": "schemas: coalesce(nspacl, acldefault('n', -> coalesce(nspacl, '{}', acldefault('n',",
+          "name": "rv6_edge_reload_skipped",
+          "edit": "rollback.sh: '  caddy_reload' -> '  :'",
           "result": "killed",
-          "killed_by": "bk01g :479 AssertionError (schemas differ)"
+          "killed_by": "rc10 AssertionError issued == ROLLBACK_COMMANDS"
         },
         {
-          "name": "i3bm89 (lane)",
-          "edit": "when 'S' then 's' -> when 'S' then 'r'",
+          "name": "rv7_absent_not_removed",
+          "edit": "rollback.sh absent loop: rm -f \"${ROOT:-}/$path\" -> true",
+          "result": "SURVIVED rc10 (its absent file is empty); killed by tests/i",
+          "killed_by": "tests/i rollback_restores_every_replaced_file (assert not True / exists())"
+        },
+        {
+          "name": "rv8_env_file_not_restored",
+          "edit": "rollback.sh tar ... --exclude=etc/marlin2b-gateway.env",
           "result": "killed",
-          "killed_by": "bk01g :479 AssertionError (relations differ)"
+          "killed_by": "rc10 AssertionError on_host(root) == release(previous) (bbbb vs aaaa)"
         },
         {
-          "name": "i3bm90 (lane)",
-          "edit": "coalesce(c.relacl, ...) -> coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, ...)",
-          "result": "killed",
-          "killed_by": "bk01g :483 AssertionError: []"
+          "name": "pk1_unknown_pending_id_accepted",
+          "edit": "recoverykit.pending: unknown = [task for task in ids if task not in PENDING] -> unknown = []",
+          "result": "SURVIVED (layer 0 at d99da09: 90 passed, 28 skipped)",
+          "killed_by": "none"
         },
         {
-          "name": "i3bm91 (lane)",
-          "edit": "restorable(): ' DEFAULT ACL ' filter -> if \" ACL \" in line (drop every ACL TOC entry)",
-          "result": "killed",
-          "killed_by": "bk01h :514 AssertionError (privilege tuple)"
+          "name": "pk2_rc03_probe_dead",
+          "edit": "rc03: if stack.ingress_is_mounted(): -> if False:",
+          "result": "SURVIVED (90/28)",
+          "killed_by": "none (pre-existing; nothing mounts the ingress in I3B's list)"
         },
         {
-          "name": "M1_rel_kind_f",
-          "edit": "relations acldefault kind else 'r' -> else 'f'",
-          "result": "killed",
-          "killed_by": "bk01_a :255 AssertionError"
+          "name": "pk3_rc04_empty_stubs_not_fail",
+          "edit": "rc04: if not stubs: -> if stubs is None:",
+          "result": "SURVIVED at layer 0 (rc04 is a needs_stack skip); by reading, on a stack kit.pending(*[]) raises AssertionError, so it fails closed",
+          "killed_by": "not runnable without E2's stack"
         },
         {
-          "name": "M2_rel_owner_const",
-          "edit": "acldefault(..., c.relowner) -> acldefault(..., 10::oid)",
-          "result": "killed",
-          "killed_by": "bk01_a :255 AssertionError (supabase_admin default)"
+          "name": "pk4_rc05b_owner_swapped",
+          "edit": "rc05b: kit.pending(\"M1-L2\" -> kit.pending(\"G2\"",
+          "result": "SURVIVED (90/28)",
+          "killed_by": "none"
         },
         {
-          "name": "M3_rel_ignore_acl",
-          "edit": "unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(null, acldefault( (relations blind to ACL)",
-          "result": "killed",
-          "killed_by": "bk01c :293 AssertionError and bk01g :483"
-        },
-        {
-          "name": "M4_fn_ignore_acl",
-          "edit": "unnest(coalesce(p.proacl, acldefault('f', -> unnest(coalesce(null, acldefault('f', (functions blind to ACL)",
-          "result": "killed",
-          "killed_by": "bk01f[functions] :447 AssertionError: []"
-        },
-        {
-          "name": "M5_schema_ignore_acl",
-          "edit": "unnest(coalesce(nspacl, acldefault('n', -> unnest(coalesce(null, acldefault('n', (schemas blind to ACL)",
-          "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
-          "killed_by": "none - finding RST-1"
-        },
-        {
-          "name": "M6_drop_sequences",
-          "edit": "c.relkind in ('r','p','v','m','S') -> ('r','p','v','m')",
-          "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
-          "killed_by": "none - finding RST-4"
-        },
-        {
-          "name": "M7_fn_owner_const",
-          "edit": "acldefault('f', p.proowner) -> acldefault('f', 10::oid)",
-          "result": "killed",
-          "killed_by": "bk01g :479 AssertionError"
-        },
-        {
-          "name": "M8_schema_owner_const",
-          "edit": "acldefault('n', nspowner) -> acldefault('n', 10::oid)",
-          "result": "killed",
-          "killed_by": "bk01g :479 AssertionError"
+          "name": "lane list (86) via mutants_i3b.py --layer all on the scratch merge",
+          "edit": "i3bm01-93 + i3bc01",
+          "result": "86: 84 killed, 1 control survived, 1 not_killed (i3bm33 no-cases); death sites: 74 AssertionError, 7 Failed (i3bm71/72/73/39/57/47/43), 1 RuntimeError (i3bm48 at pgrestore.py:291), 2 not visible in the tail (i3bm11/12, ob07 'failed')",
+          "killed_by": "i3bm57 test_recovery.py:575 Failed; i3bm92 :777 AssertionError (rebuild == 3); i3bm93 test_runbooks.py:73; i3bm80-83 test_restore.py:384 AssertionError from the `contacted` stub; i3bm56 test_runbooks.py:60; i3bm44 test_restore.py:306; i3bm86 :255; i3bm87-89 :479; i3bm90 :483; i3bm91 :514"
         }
       ],
       "commands": [
         {
-          "cmd": "git clone --shared -q .../infrx-impl /tmp/claude-1000/review-i3bf-restore-3835171 && git checkout -q d99da09 && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (3438d86)",
+          "cmd": "git clone --shared \u2026 /tmp/claude-1000/review-i3bf-drill-1105445 && git checkout -q d99da09 && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (c587ddc WIP)",
           "exit": 0,
-          "tail": "merge=0; d5c8568 Merge remote-tracking branch 'origin/codex/e3b-phase2-gate' into HEAD (no conflict)"
+          "tail": "merge=0; 09d0485 Merge remote-tracking branch 'origin/codex/e3b-phase2-gate' into HEAD (no conflict; no fallback to 5e9bbf1 needed)"
         },
         {
           "cmd": "make api-env",
@@ -105,70 +99,335 @@
           "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
         },
         {
-          "cmd": "TMPDIR=<scratch>/tmp INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey pytest tests/integration/backend/recovery/test_restore.py",
-          "exit": 0,
-          "tail": "23 passed, 1 skipped in 46.66s (skip: bk03 needs the infrx-e2 stack); bk01_a, bk01f x8, bk01g, bk01h pass"
-        },
-        {
-          "cmd": "same env, pytest -s test_restore.py -k review (appended scratch attack cases, 13 attacks + scratch-kind case)",
+          "cmd": "TMPDIR=<private> $PY -m pytest -q test_harness.py backend/test_stage.py test_run.py backend/recovery  (merge)",
           "exit": 1,
-          "tail": "4 failed (3 need a sequence / NULL-ACL function, and none exists in public or infrx: premise probe 'seq None nullfn None'), 10 passed. Every real loss or widening named: rev_fn_service->functions, grant_anon_tbl->relations, grant_anon_fn->functions, owner_tbl_null->relations, owner_fn->functions, schema_usage_anon->schemas, schema_create_anon->schemas, mv_grant_anon->relations, f revoke public->functions. col_grant_lost->[], col_grant_widen->[], empty_acl_owner_change->[]. The premise job_results (None,'postgres') after restore held live."
+          "tail": "FAILED test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual ({'I2B-R4','M1-L2'}); 1 failed, 105 passed, 28 skipped, 1 xfailed (the documented need for request 1's diff)"
         },
         {
-          "cmd": "same env without INFRX_D1_IMAGE (plain image) pytest -rA test_restore.py",
+          "cmd": "same layer 0 at d99da09 alone (worktree)",
+          "exit": 0,
+          "tail": "90 passed, 28 skipped; PENDING[G2], PENDING[M1-L2], PENDING[I2B-R4]"
+        },
+        {
+          "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey $PY -m pytest -rs -v tests/integration/backend/recovery (merge)",
+          "exit": 0,
+          "tail": "52 passed, 9 skipped in 50.07s; rc10, rb08, bk01_a, bk01f x8, bk01g, bk01h PASSED; skips: 3 PENDING + 6 'no infrx-e2 stack'"
+        },
+        {
+          "cmd": "D env, TMPDIR=<private> $PY tests/integration/backend/recovery/mutants_i3b.py --layer all --report m-all.json (merge, 14:23:17Z-14:32:15Z)",
           "exit": 1,
-          "tail": "5 failed, 10 passed, 1 skipped, 8 errors; 12x 'pg_restore failed (1): ... unrecognized configuration parameter \"transaction_timeout\" Command was: SET transaction_timeout = 0;' from infrx-i3b-pgclient-*; bk02: UndefinedColumn confirmed_at"
+          "tail": "{\"mutants\": 86, \"killed\": 84, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; report sha256 53a4e3f7783d7398"
         },
         {
-          "cmd": "docker run --rm --network none --entrypoint pg_restore <pgrestore.IMAGE> --version; docker run ... postgres <PLAIN_IMAGE> --version; pg_restore --version",
-          "exit": 0,
-          "tail": "pg_restore (PostgreSQL) 17.6 / postgres (PostgreSQL) 16.14 / host pg_restore 16.15 (not used by the tool)"
+          "cmd": "mutants_i3b.py --only i3bm93 at d99da09 alone",
+          "exit": 1,
+          "tail": "FileNotFoundError: \u2026/infrx-e2-i3bm93-hei51g75/infra/runbooks/rollback.md"
         },
         {
-          "cmd": "python scratchpad/mut.py <14 mutants> (one edit each, pytest -k <selector> --tb=line on d3/Supabase, git checkout after each)",
+          "cmd": "mutants_i3b.py --only i3bm93 --only i3bm57 --only i3bm56 (merge)",
           "exit": 0,
-          "tail": "12 killed by AssertionError at named lines; M5_schema_ignore_acl exit 0 '21 passed'; M6_drop_sequences exit 0 '21 passed'; git status clean after (only ?? tmp/)"
+          "tail": "3 killed, problems null"
         },
         {
-          "cmd": "same env pytest -rs -q tests/integration/backend/recovery",
+          "cmd": "hand mutants rv1-rv8 (rc10 on d3 + tests/i/test_scripts.py) via scratch driver",
           "exit": 0,
-          "tail": "52 passed, 9 skipped in 57.55s (PENDING G2, M1-L2, I2B-R4; 6 need infrx-e2), matching the lane's claim"
+          "tail": "rv1 survives rc10+test_scripts; rv2/rv3/rv7 survive rc10 and die in tests/i; rv4/5/6/8 killed by rc10"
         },
         {
-          "cmd": "docker ps -a | grep -E 'd3|i3b'; rm -rf scratch",
+          "cmd": "cd apps/infrx-api && pytest -q tests/i with rv1 applied",
           "exit": 0,
-          "tail": "one transient infrx-i3b-pgclient-48d9761f168a seen, then gone (--rm); no d3 containers; scratch removed"
+          "tail": "143 passed in 157.55s (0:02:37)"
+        },
+        {
+          "cmd": "rc10 with the DR-1 fix: pristine, then with rv1",
+          "exit": 1,
+          "tail": "pristine: 1 passed, 11 deselected in 6.04s; with rv1: AssertionError \u2026 Differing items"
+        },
+        {
+          "cmd": "pending mutants pk1-pk4 on layer 0 at d99da09",
+          "exit": 0,
+          "tail": "each: 90 passed, 28 skipped (all survive)"
+        },
+        {
+          "cmd": "conc.sh shared: two concurrent mutants_i3b.py --only i3bm43/87/88/89, same outer TMPDIR",
+          "exit": 0,
+          "tail": "a: 4 baseline-red; b: 3 baseline-red, i3bm43 killed (test_restore.py:785 Failed)"
+        },
+        {
+          "cmd": "conc.sh private: same, distinct outer TMPDIRs",
+          "exit": 0,
+          "tail": "a: 3 baseline-red + i3bm43 killed; b: 4 baseline-red"
+        },
+        {
+          "cmd": "two concurrent pytest -k bk01g on d3: same TMPDIR / distinct TMPDIRs",
+          "exit": 1,
+          "tail": "same: a 1 passed, b HarnessBusy (lock works); distinct: a OperationalError 'server closed the connection unexpectedly', b ForeignContainer 'refusing to remove infrx-d3-postgres-supabase: it does not exist'"
         }
       ]
     }
   ],
-  "confirmed_blocking": [],
-  "refuted_blocking": [
+  "confirmed_blocking": [
+    {
+      "id": "DR-1-rc10-edge-restore-vacuous",
+      "severity": "blocking",
+      "file": "tests/integration/backend/recovery/test_recovery.py",
+      "line": "649-652 (release(); assertion at on_host(root) == release(IMAGE['previous']))",
+      "claim_broken": "The evidence (rc10 spec, step 3) and rollback.md step 4 say that rc10 proves 'the three edge files equal the previous release's byte for byte'. release() marks only the env file and the units with the release. The two infrx sites and the active Caddyfile are copied verbatim from deploy/ for both releases, so the previous and current edge files are identical and the drill cannot tell whether rollback.sh restored them. A rollback.sh that never restores the edge passes rc10.",
+      "evidence": "Mutant rv1 was one edit to rollback.sh: `tar -C \"${ROOT:-/}\" -xpf \"$backup/files.tar\"` became `... --exclude=etc/caddy`. I checked that the edit works: a standalone tar experiment left dst/etc/caddy/{Caddyfile,infrx/Caddyfile} as 'old'/'oldi'. Under the mutant, rc10 on d3 gave '1 passed, 11 deselected in 6.73s'. The whole of I2B's tests/i also passed with the mutant applied: '143 passed in 157.55s'. So no test anywhere kills a rollback that leaves the edge files alone. With the one-line fix below, pristine rc10 still passes ('1 passed \u2026 6.04s') and rv1 is killed ('AssertionError: assert {...} == {...} Differing items').",
+      "minimal_fix": "In release(), mark each site with its release the way the units are marked: `files[f\"etc/caddy/infrx/{site}\"] = (DEPLOY / site).read_text() + f\"# {image}\\n\"`. The active Caddyfile already copies it. Then add rv1 to mutants_i3b.py as i3bm94 (RB file, selector rc10, layer 2).",
+      "lens": "drill",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The finding holds at d99da09. I did not run Docker. The code alone settles it.\n\n- **The edge files are the same in both releases.** In `tests/integration/backend/recovery/test_recovery.py`, `release()` (lines 643-653) adds the `# {image}` marker only to the env file (the image pin) and the four units (line 649). The two sites `etc/caddy/infrx/{Caddyfile,Caddyfile.maintenance}` (line 651) are copied verbatim from `apps/infrx-api/deploy/`. The active `etc/caddy/Caddyfile` is copied from the infrx site (line 652).\n- **Experiment:** I rebuilt the edge part of `release()` for `IMAGE['previous']` and `IMAGE['current']` and compared them. The comparison returned `True`, so they are identical.\n- **rc10 cannot tell whether the edge was restored.** At line 740 rc10 installs the current release over the root. Before `rollback.sh` runs, the three edge files on the host already equal the previous release's. So the check `on_host(root) == release(IMAGE['previous'])` at line 773 passes whether or not `rollback.sh` restores `etc/caddy`. The reviewer's mutant (`tar ... --exclude=etc/caddy`) must survive. The refused-rollback check (line 769) and the later steps never look at the edge contents.\n- **The documents claim what the drill does not prove.** The rc10 docstring says \"every unit and edge file are the previous release's, byte for byte\". `infra/runbooks/rollback.md:33` makes the same byte-for-byte claim for the edge files. `mutants_i3b.py` has no mutant against the edge restore; only i3bm92 and i3bm93 target rc10.\n\n**Severity: blocking.** The documented invariant has no test that can kill a mutant against it, and the gap hides a restore-fidelity hole in the rollback drill.\n\n**Fix:** the proposed one-line fix works. In `release()`, append `f\"# {image}\\n\"` to each site, the way the units are marked. The active Caddyfile copies the infrx site, so it is marked too. Then add rv1 to `mutants_i3b.py` as i3bm94 (the RB file, selector rc10, layer 2).",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The finding holds at d99da09, confirmed from the code and one small experiment. In tests/integration/backend/recovery/test_recovery.py:650-652, release() adds `# {image}` only to the env file and the four units. The two infrx sites are copied verbatim from deploy/, and the active Caddyfile is a copy of the infrx site. I imported test_recovery and compared release(IMAGE['previous']) with release(IMAGE['current']). The env file and all 4 units differ between the two releases, but etc/caddy/infrx/Caddyfile, etc/caddy/infrx/Caddyfile.maintenance and etc/caddy/Caddyfile are equal (True). So after rollback.sh the host's edge files already equal the previous release's whether or not `tar -xpf files.tar` restored them. The assertion at line 773, `on_host(root) == release(IMAGE['previous'])`, cannot tell a restored edge from one left alone, yet the evidence (rc10 spec: 'the three edge files equal the previous release's byte for byte') and the test's own docstring say it proves exactly that. I also looked for other tests that could catch it. test_scripts.py::rollback_restores_every_replaced_file checks only the env file and the units. In the R2 test the active Caddyfile ends up correct because 90-revert's `drain.sh resume` rewrites it, not because rollback.sh restored it. That fits the reviewer's report that tests/i passed 143/143 with the mutant applied. I did not rerun Docker. The survival is certain from the code alone: identical inputs mean the equality holds with or without the restore. This is blocking because the evidence claims a restore-fidelity invariant that no test can fail, a hole in what the drill proves. The proposed fix works: mark each site with its release (the active Caddyfile already copies the site) and add rv1 as a mutant with selector rc10.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
     {
       "id": "RST-1-schemas-family-unkillable",
       "severity": "blocking",
-      "file": "tests/integration/backend/recovery/test_restore.py",
-      "line": "396",
-      "claim_broken": "restore.md A6 (infra/runbooks/restore.md:113) says schema ACLs must be identical, and R92 says a real ACL difference is still named after normalisation. But no test fails when the schemas family stops reading nspacl at all. bk01g only proves the equal direction for a schema (NULL vs the owner default spelled out). Its only real-loss assertion (the '{}' revoke) is on a table, and bk01f's DAMAGE has no schemas entry.",
-      "evidence": "Mutant M5 (pgrestore.py:274), one edit: `unnest(coalesce(nspacl, acldefault('n', ` -> `unnest(coalesce(null, acldefault('n', `. The schemas family then compares only the owner's default and is blind to every schema grant. Whole test_restore.py on d3/Supabase with this mutant: exit 0, `21 passed, 3 deselected` (the 3 are E2-only). SURVIVED. On pristine code the attack `grant usage on schema infrx to anon` against a good restore gives exactly [\"schemas differ: ... extra [('infrx', '{anon=U/postgres,postgres=UC/postgres,service_role=U/postgres}')]\"]. So the check works today, but nothing pins it. Keeping infrx hidden from anon is a tenant-boundary property (0008). This gap predates R92, but R92 edited this same expression and tested only its equal direction.",
-      "minimal_fix": "Add one bk01f DAMAGE entry, `\"schemas\": \"grant usage on schema infrx to anon\"` (measured: compare names exactly {schemas}). Add a mutant in mutants_i3b.py with M5's edit, named bk01f and schemas.",
+      "file": "infra/runbooks/pgrestore.py / tests/integration/backend/recovery/test_restore.py",
+      "line": "pgrestore.py:274; test_restore.py:396",
+      "claim_broken": "restore.md A6 says schema ACLs must be identical and R92 says a real ACL difference is still named after normalisation, but no test fails when the schemas family stops reading nspacl at all (bk01g proves only the equal direction for a schema; bk01f's DAMAGE has no schemas entry).",
+      "evidence": "Mutant M5: 'unnest(coalesce(nspacl, acldefault('n', ...' -> 'unnest(coalesce(null, acldefault('n', ...' (schemas blind to ACL) SURVIVED the whole test_restore.py: 21 passed, exit 0 (d3, Supabase image, scratch merge with E3B2).",
+      "minimal_fix": "Add a schemas entry to bk01f's DAMAGE (grant usage on a schema to anon in the restored database) and assert the schemas family names it; register the mutant.",
       "lens": "restore",
-      "votes": []
-    }
-  ],
-  "unverified_blocking": [
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this from the code at d99da09 in the codex-i3bf worktree. I did not rerun Docker because the code settles it.\n\n1. pgrestore.py:274 reads nspacl in the \"schemas\" family, and compare() (lines 321-332) reports a family only when its rows differ. With M5 (nspacl replaced by null), the schemas row becomes nspname plus acldefault('n', nspowner). A schema ACL change then never shows up, whatever the privileges are.\n2. Only one statement in tests/integration/backend/recovery/ changes a schema ACL: bk01g's `grant all on schema infrx to postgres` (test_restore.py:474). It is meant to compare equal, and it does whether or not M5 is applied. bk01g's revoke-to-empty damage is on the table infrx.t and expects {\"relations\"}.\n3. bk01f's DAMAGE (lines 396-410) has no schemas entry. None of the other cases change a schema ACL or assert on \"schemas differ\". bk01/bk02 compare equal restores. bk01c widens relation ACLs through default privileges, and those never touch pg_namespace. bk01h checks has_schema_privilege directly, not through compare().\n4. mutants_i3b.py lists only i3bm88 for schemas ('{}' in the coalesce), which bk01g kills in the equal direction. Nothing covers blindness to the ACL itself, and there is no \"_schemas\" family-removal mutant like i3bm62/63.\n\nSo restore.md A6 says schema ACLs are identical, and R92 says a real ACL difference is still named, including the schema equivalents. That invariant has no test that fails when it is broken. M5, or deleting the family outright, would pass test_restore.py. The reviewer's reported survivor matches this.\n\nThe production check is correct as written, so this is a test-coverage hole, not a restore defect. It is still blocking because the task's rubric counts an invariant with no killable test as blocking, and this one is the tenant-boundary schema grant.\n\nFix: add a bk01f DAMAGE entry, `\"schemas\": \"grant usage on schema infrx to anon\"`, and register a mutant that turns nspacl into null (or removes the family), killed by \"bk01f and schemas\".",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this from the code at d99da09. I did not run Docker because the mutant's survival follows from what the tests contain. The schemas family in pgrestore.py (CATALOG[\"schemas\"], around line 274) is the only place a schema's nspacl is read. compare() reports it only as a \"schemas differ\" problem. In tests/integration/backend/recovery/ nothing expects that problem: a grep for \"schemas differ\", \"schemas\" or \"on schema\" finds only bk01g's `grant all on schema infrx to postgres`, and that is the equal direction (the owner's default spelled out, asserted == []). bk01f's DAMAGE dict (test_restore.py:396) covers policies, columns, functions, indexes, default_acls, triggers, functions_config and rows, with no schemas entry. bk01g's non-equal half revokes on table infrx.t and expects only {\"relations\"}. bk01c widens table grants and is named under relations. The registered schema mutant in mutants_i3b.py (~line 295) is `coalesce(nspacl, '{}', acldefault(...))`, which tests only the NULL-to-default direction. So swapping nspacl for null makes every schema compare as its owner's default, which makes compare() more lenient. No case can fail from that, since every case either expects equality or expects a different family, so the mutant survives. restore.md A6 lists \"schema ACLs ... are identical\" as part of the pass, and its R92 paragraph says an ACL emptied by a revoke \"is still a difference\", but for schemas no test can fail on that invariant. A restore that loses or widens USAGE on infrx or public for anon, authenticated or service_role would pass A6, and the tenant boundary depends on those grants. The gap goes back to 32f94b3, where the schemas family was added. The R92 follow-up rewrote this exact expression and registered only the equal-direction mutant. By the brief's criteria this is a restore-fidelity invariant with no killable test, so it is real and blocking. The suggested fix is small: add a schema-grant damage to bk01f, for example `grant usage on schema infrx to anon`, expect {\"schemas\"}, and register the nspacl->null mutant against bk01f.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
     {
-      "id": "RST-1-schemas-family-unkillable",
+      "id": "RST-4-sequence-family-empty",
       "severity": "blocking",
-      "file": "tests/integration/backend/recovery/test_restore.py",
-      "line": "396",
-      "claim_broken": "restore.md A6 (infra/runbooks/restore.md:113) says schema ACLs must be identical, and R92 says a real ACL difference is still named after normalisation. But no test fails when the schemas family stops reading nspacl at all. bk01g only proves the equal direction for a schema (NULL vs the owner default spelled out). Its only real-loss assertion (the '{}' revoke) is on a table, and bk01f's DAMAGE has no schemas entry.",
-      "evidence": "Mutant M5 (pgrestore.py:274), one edit: `unnest(coalesce(nspacl, acldefault('n', ` -> `unnest(coalesce(null, acldefault('n', `. The schemas family then compares only the owner's default and is blind to every schema grant. Whole test_restore.py on d3/Supabase with this mutant: exit 0, `21 passed, 3 deselected` (the 3 are E2-only). SURVIVED. On pristine code the attack `grant usage on schema infrx to anon` against a good restore gives exactly [\"schemas differ: ... extra [('infrx', '{anon=U/postgres,postgres=UC/postgres,service_role=U/postgres}')]\"]. So the check works today, but nothing pins it. Keeping infrx hidden from anon is a tenant-boundary property (0008). This gap predates R92, but R92 edited this same expression and tested only its equal direction.",
-      "minimal_fix": "Add one bk01f DAMAGE entry, `\"schemas\": \"grant usage on schema infrx to anon\"` (measured: compare names exactly {schemas}). Add a mutant in mutants_i3b.py with M5's edit, named bk01f and schemas.",
-      "lens": "restore"
+      "file": "infra/runbooks/pgrestore.py",
+      "line": "relkind set",
+      "claim_broken": "The relations family claims to cover sequences ('S' -> acldefault 's'), but no sequence exists in public or infrx on the migrated schema, so dropping 'S' from the relkind set survives every restore case.",
+      "evidence": "Mutant M6: c.relkind in ('r','p','v','m','S') -> ('r','p','v','m') SURVIVED the whole test_restore.py: 21 passed, exit 0.",
+      "minimal_fix": "Either create a sequence in the restore fixture's damage step and assert the family names its ACL, or drop the sequence branch and say the schema has no sequences.",
+      "lens": "restore",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The observation holds at d99da09, but it is not a blocker. No migration from 0001 to 0017 creates a sequence in public or infrx. That includes 0017 on origin/codex/e3b-phase2-gate. There are no serial, bigserial or identity columns, no CREATE SEQUENCE and no nextval. supabase_shim.sql only grants on sequences; it creates none. On this schema no row of relkind 'S' can appear in the CATALOG \"relations\" query, so the 'S' filter entry and the CASE branch that yields acldefault('s') are dead. M6 is an equivalent mutant for every fixture built from the migrations, and survival is certain without running Docker. Why nonblocking: the branch is correct Postgres (a sequence's default ACL comes from acldefault('s', owner)), and it guards nothing that exists. The restore loses no fidelity today, no drill skips a real step, and the NULL-ACL fix that matters (R92, infrx.job_results) is covered by bk01g and bk01h. The only real cost is that restore.md's R92 log line lists \"sequences\" as covered when no test exercises that. Fix it by dropping 'S' and noting the schema has no sequences, or by creating a sequence in the damage step. Either is cleanup, not a merge gate.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The survival is real, but it is a test gap, not a defect. At d99da09 the pgrestore.py code is correct: CATALOG[\"relations\"] includes 'S' and maps it to acldefault 's'. The migrations under apps/app/supabase/migrations create no sequences (no serial, no identity column, no CREATE SEQUENCE), so a restore of the real schema has no sequence ACL to lose. The mutant also survives on reading the tests, without running it. bk01g (test_restore.py:459-483) does create infrx.s, but it only checks that NULL and the spelled-out owner default compare equal. Without 'S', infrx.s is missing from both fingerprints, so they still match. The one damage case, the revoke, hits table infrx.t and still names 'relations'. No DAMAGE entry (test_restore.py:396-410) touches a sequence. i3bm89 kills the acldefault kind ('s' vs 'r'), not the relkind filter. So nothing checks the filter. Not blocking: the code is right, today's schema has no sequence, and nothing is hidden from a restore check. To close it, add one line to bk01g ('revoke all on sequence infrx.s from postgres', then assert 'relations' is named). That kills M6 and makes restore.md:260's 'sequences' claim tested.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
     }
   ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
   "nonblocking": [
+    {
+      "id": "DR-2-d-mode-lock-defeated-by-private-tmpdir",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/mutants_i3b.py",
+      "line": "352-357 (on_d) with tests/integration/mutants.py run_one private TMPDIR",
+      "claim_broken": "The evidence (Limits 5) says the cause of #12's 24 spurious baseline-reds was not identified, and it treats the E runner's private TMPDIR as what makes concurrent runs safe.",
+      "evidence": "D's pgharness keeps its per-port lock in tempfile.gettempdir(). E3B2's run_one gives every copy under tests/integration a private TMPDIR (root/tmp), so an I3B D-mode run (INFRX_I3B_PG=d, this lane's on_d) never shares the d3 lock. The container label is the same checkout, so a second run's ensure() `docker rm -f`s the first run's live container. Measured with two concurrent runner invocations on --only i3bm43/87/88/89. With a shared outer TMPDIR, run a had 4 baseline-red and run b 3 baseline-red. With private outer TMPDIRs, run a had 3 baseline-red plus i3bm43 'killed', and run b had 4 baseline-red. The outer TMPDIR makes no difference. Two plain pytest runs of -k bk01g behave differently. With the same TMPDIR the second gets 'HarnessBusy: another run holds \u2026/infrx-d3-postgres-55434.lock' (the lock works). With distinct TMPDIRs both die: a with 'psycopg.OperationalError: \u2026 server closed the connection unexpectedly', b with 'ForeignContainer: refusing to remove infrx-d3-postgres-supabase: it does not exist'. The cause is therefore E's private-TMPDIR rule combined with this branch's D-mode path, not the list. It fails closed at the baseline (baseline-red) but fails open in the mutant phase: a container removed mid-mutant gives '1 failed', which the runner counts as killed. My solo full run showed no such effect.",
+      "minimal_fix": "Keep the D harness lock shared for D-mode runs. In run_one, use `private = None` also when `os.environ.get(\"INFRX_I3B_PG\") == \"d\"`, as E already does for apps/infrx-api suites 'because their port lock lives there'. Alternatively, have pgharness take its lock directory from an env var the runner passes through. Record the cause in Limits 5.",
+      "lens": "drill"
+    },
+    {
+      "id": "DR-3-rc10-readiness-is-order-only",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/test_recovery.py",
+      "line": "ROLLBACK_COMMANDS / STUB (curl always exit 0)",
+      "claim_broken": "rollback.md step 4 says rollback.sh 'waits for the gateway's and the worker's /readyz \u2026 Exit 4 is a restored runtime that is not ready; the edge is untouched'. rc10 checks only the order of the probes.",
+      "evidence": "rv2 (lib.sh wait_ready pilot: `&& wait_http \"$WORKER_READY\"` changed to `; wait_http \u2026`) and rv3 (rollback.sh `wait_ready \u2026 || true`) both survive rc10 ('1 passed'). tests/i kills rv2 through install.sh ('assert 0 == 4') and rv3 through the legacy R2 revert ('the restored runtime is not ready'). No test covers a pilot to pilot rollback whose worker /readyz never answers. The lane's evidence says openly that readiness is probe order, so this does not count as a hidden stub.",
+      "minimal_fix": "Add a sub-case to rc10 in which the curl stub exits 1 for 8002/readyz: assert exit 4, no `docker exec caddy` line and the edge files unchanged. Or label rc10 partial for readiness in the rollback.md drill line.",
+      "lens": "drill"
+    },
+    {
+      "id": "DR-4-pending-ids-not-pinned",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/recoverykit.py",
+      "line": "87-92 (pending)",
+      "claim_broken": "The pending-honesty claim is: rc05b to M1-L2, rc08b to I2B-R4, rc03 to G2, and unknown ids refused.",
+      "evidence": "Checked against layer 0 at d99da09 (90 passed, 28 skipped baseline). Three mutants survive with that exact count. pk1: kit.pending's `unknown = [...]` replaced by `unknown = []`. pk4: rc05b's `kit.pending(\"M1-L2\"` changed to `kit.pending(\"G2\"`. pk2: rc03's `if stack.ingress_is_mounted():` changed to `if False:`. run.stale_pending uses tasks.get(), so an unknown or typo id is counted as pending and never flagged as stale. The ids and owners themselves are genuine. In tasks.json G2 and D5 are 'planned'. I2B-574a7e0.md Handback item 4 is the worker composition root. M1-5ec51e1.md Limits item 2 is 'No real object store'.",
+      "minimal_fix": "Add one layer-0 case: kit.pending('NOPE', why='x') raises AssertionError. Optionally pin each I3B case's pending id in the stage expectation, the way E3B pins pending_by_id.",
+      "lens": "drill"
+    },
+    {
+      "id": "DR-5-rc04-pends-whole-drill-on-D5",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/test_recovery.py",
+      "line": "249-261 (rc04)",
+      "claim_broken": "The claim is that no runnable case hides behind a pending.",
+      "evidence": "E3B2's head provides stack.stubbed (stack.py:141) and stub_owners. On the migrations, infrx.admit (0011:568) and infrx.claim (0016:206) are real; only terminalize is a stub (0016:370 `infrx.unimplemented('terminalize \u2026', 'D5')`). On the gate, rc04 therefore pends on D5 alone, and its admission and claim across a PostgreSQL restart through PgJobStore could run today. When nothing is stubbed the case fails loudly. I checked that `if stubs is None` still ends in kit.pending(*[]) and so an AssertionError. rc04 is only a plain skip without the stack, so this could not be exercised here.",
+      "minimal_fix": "Split rc04 into rc04a (admit and claim across a PG restart on PgJobStore, runnable now at layer 3) and rc04b, which pends on stubbed(('terminalize',)). Or record in the evidence that the admit and claim half is deliberately deferred.",
+      "lens": "drill"
+    },
+    {
+      "id": "DR-6-merge-dependency-standalone",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/recovery/mutants_i3b.py",
+      "line": "deleted _copy_with_infra",
+      "claim_broken": "The claim is that mutants_i3b.py still runs standalone.",
+      "evidence": "On the merge, `--only i3bm93 --only i3bm57 --only i3bm56` gave 3 killed (OWNED_TREES includes infra). On d99da09 alone, --only i3bm93 crashes the entire run with 'FileNotFoundError: \u2026/infrx-e2-i3bm93-\u2026/infra/runbooks/rollback.md' instead of reporting a verdict. This matches the documented merge order (IR 2). On the merge without request-1's diff, layer 0 is '1 failed, 105 passed, 28 skipped, 1 xfailed': test_no_pending_id_names_a_merged_task\u2026 reports {'I2B-R4','M1-L2'}, as the lane's #10 predicts.",
+      "minimal_fix": "None beyond the documented merge order: E3B2 first, then apply request 1's stack.py/test_stage.py diff at the merge.",
+      "lens": "drill"
+    }
+  ],
+  "restore_lens": {
+    "lens": "restore",
+    "verdict_hint": "fix_required",
+    "fabrication_check": "Every number and quoted string above comes from runs in this session on the scratch merge d99da09 + 3438d86. The lane's d3/Supabase numbers (23/1 for test_restore.py; 52/9 for the recovery dir) and its plain-image numbers (5 failed / 10 passed / 1 skipped / 8 errors) reproduced exactly. The lane's diagnosis also reproduced: a 17.6 client container into a 16.14 server, and bk02's confirmed_at coming from the shim. i3bm86-91 were each applied by hand as one edit. Each was killed by an AssertionError at the lines the lane cites (255, 479, 483, 514). The lane's evidence was checked against E3B2 at 8fb3ea2; my merge base is 3438d86 (the branch's current tip). I did not run the E runner's mutation stage, rc10's drill in isolation, or the E3B2 review JSON. The attack cases and mutant driver lived only in the scratch clone and the session scratchpad.",
+    "cleanup": "I removed the scratch clone /tmp/claude-1000/review-i3bf-restore-3835171, including its private TMPDIR and d3 port locks. pgharness removed the d3 containers (infrx-d3-postgres-supabase and the plain variant) at process exit; docker ps -a showed no d3 container afterwards. The restore tool's client containers are --rm: one transient pgclient appeared and was gone on recheck. I left /tmp/infrx-d3-postgres-55434.lock (12:37Z) and /tmp/infrx-d3-valkey-55464.lock (03:50Z) alone: both predate this session and are not mine. I never touched the shared 55432, other lanes' containers or the E2 stack. The codex-i3bf worktree was not modified. The only copies of the attack file and mutant driver are in the session scratchpad.",
+    "mutants": [
+      {
+        "name": "i3bm86 (lane)",
+        "edit": "pgrestore.py relations: unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(c.relacl, '{}', acldefault(",
+        "result": "killed",
+        "killed_by": "bk01_a test_restore.py:255 AssertionError (relations differ ... '{}')"
+      },
+      {
+        "name": "i3bm87 (lane)",
+        "edit": "functions: coalesce(p.proacl, acldefault('f', -> coalesce(p.proacl, '{}', acldefault('f',",
+        "result": "killed",
+        "killed_by": "bk01g :479 AssertionError (functions differ)"
+      },
+      {
+        "name": "i3bm88 (lane)",
+        "edit": "schemas: coalesce(nspacl, acldefault('n', -> coalesce(nspacl, '{}', acldefault('n',",
+        "result": "killed",
+        "killed_by": "bk01g :479 AssertionError (schemas differ)"
+      },
+      {
+        "name": "i3bm89 (lane)",
+        "edit": "when 'S' then 's' -> when 'S' then 'r'",
+        "result": "killed",
+        "killed_by": "bk01g :479 AssertionError (relations differ)"
+      },
+      {
+        "name": "i3bm90 (lane)",
+        "edit": "coalesce(c.relacl, ...) -> coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, ...)",
+        "result": "killed",
+        "killed_by": "bk01g :483 AssertionError: []"
+      },
+      {
+        "name": "i3bm91 (lane)",
+        "edit": "restorable(): ' DEFAULT ACL ' filter -> if \" ACL \" in line (drop every ACL TOC entry)",
+        "result": "killed",
+        "killed_by": "bk01h :514 AssertionError (privilege tuple)"
+      },
+      {
+        "name": "M1_rel_kind_f",
+        "edit": "relations acldefault kind else 'r' -> else 'f'",
+        "result": "killed",
+        "killed_by": "bk01_a :255 AssertionError"
+      },
+      {
+        "name": "M2_rel_owner_const",
+        "edit": "acldefault(..., c.relowner) -> acldefault(..., 10::oid)",
+        "result": "killed",
+        "killed_by": "bk01_a :255 AssertionError (supabase_admin default)"
+      },
+      {
+        "name": "M3_rel_ignore_acl",
+        "edit": "unnest(coalesce(c.relacl, acldefault( -> unnest(coalesce(null, acldefault( (relations blind to ACL)",
+        "result": "killed",
+        "killed_by": "bk01c :293 AssertionError and bk01g :483"
+      },
+      {
+        "name": "M4_fn_ignore_acl",
+        "edit": "unnest(coalesce(p.proacl, acldefault('f', -> unnest(coalesce(null, acldefault('f', (functions blind to ACL)",
+        "result": "killed",
+        "killed_by": "bk01f[functions] :447 AssertionError: []"
+      },
+      {
+        "name": "M5_schema_ignore_acl",
+        "edit": "unnest(coalesce(nspacl, acldefault('n', -> unnest(coalesce(null, acldefault('n', (schemas blind to ACL)",
+        "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
+        "killed_by": "none - finding RST-1"
+      },
+      {
+        "name": "M6_drop_sequences",
+        "edit": "c.relkind in ('r','p','v','m','S') -> ('r','p','v','m')",
+        "result": "SURVIVED (whole test_restore.py: 21 passed, exit 0)",
+        "killed_by": "none - finding RST-4"
+      },
+      {
+        "name": "M7_fn_owner_const",
+        "edit": "acldefault('f', p.proowner) -> acldefault('f', 10::oid)",
+        "result": "killed",
+        "killed_by": "bk01g :479 AssertionError"
+      },
+      {
+        "name": "M8_schema_owner_const",
+        "edit": "acldefault('n', nspowner) -> acldefault('n', 10::oid)",
+        "result": "killed",
+        "killed_by": "bk01g :479 AssertionError"
+      }
+    ],
+    "commands": [
+      {
+        "cmd": "git clone --shared -q .../infrx-impl /tmp/claude-1000/review-i3bf-restore-3835171 && git checkout -q d99da09 && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (3438d86)",
+        "exit": 0,
+        "tail": "merge=0; d5c8568 Merge remote-tracking branch 'origin/codex/e3b-phase2-gate' into HEAD (no conflict)"
+      },
+      {
+        "cmd": "make api-env",
+        "exit": 0,
+        "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+      },
+      {
+        "cmd": "TMPDIR=<scratch>/tmp INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey pytest tests/integration/backend/recovery/test_restore.py",
+        "exit": 0,
+        "tail": "23 passed, 1 skipped in 46.66s (skip: bk03 needs the infrx-e2 stack); bk01_a, bk01f x8, bk01g, bk01h pass"
+      },
+      {
+        "cmd": "same env, pytest -s test_restore.py -k review (appended scratch attack cases, 13 attacks + scratch-kind case)",
+        "exit": 1,
+        "tail": "4 failed (3 need a sequence / NULL-ACL function, and none exists in public or infrx: premise probe 'seq None nullfn None'), 10 passed. Every real loss or widening named: rev_fn_service->functions, grant_anon_tbl->relations, grant_anon_fn->functions, owner_tbl_null->relations, owner_fn->functions, schema_usage_anon->schemas, schema_create_anon->schemas, mv_grant_anon->relations, f revoke public->functions. col_grant_lost->[], col_grant_widen->[], empty_acl_owner_change->[]. The premise job_results (None,'postgres') after restore held live."
+      },
+      {
+        "cmd": "same env without INFRX_D1_IMAGE (plain image) pytest -rA test_restore.py",
+        "exit": 1,
+        "tail": "5 failed, 10 passed, 1 skipped, 8 errors; 12x 'pg_restore failed (1): ... unrecognized configuration parameter \"transaction_timeout\" Command was: SET transaction_timeout = 0;' from infrx-i3b-pgclient-*; bk02: UndefinedColumn confirmed_at"
+      },
+      {
+        "cmd": "docker run --rm --network none --entrypoint pg_restore <pgrestore.IMAGE> --version; docker run ... postgres <PLAIN_IMAGE> --version; pg_restore --version",
+        "exit": 0,
+        "tail": "pg_restore (PostgreSQL) 17.6 / postgres (PostgreSQL) 16.14 / host pg_restore 16.15 (not used by the tool)"
+      },
+      {
+        "cmd": "python scratchpad/mut.py <14 mutants> (one edit each, pytest -k <selector> --tb=line on d3/Supabase, git checkout after each)",
+        "exit": 0,
+        "tail": "12 killed by AssertionError at named lines; M5_schema_ignore_acl exit 0 '21 passed'; M6_drop_sequences exit 0 '21 passed'; git status clean after (only ?? tmp/)"
+      },
+      {
+        "cmd": "same env pytest -rs -q tests/integration/backend/recovery",
+        "exit": 0,
+        "tail": "52 passed, 9 skipped in 57.55s (PENDING G2, M1-L2, I2B-R4; 6 need infrx-e2), matching the lane's claim"
+      },
+      {
+        "cmd": "docker ps -a | grep -E 'd3|i3b'; rm -rf scratch",
+        "exit": 0,
+        "tail": "one transient infrx-i3b-pgclient-48d9761f168a seen, then gone (--rm); no d3 containers; scratch removed"
+      }
+    ]
+  },
+  "restore_lens_nonblocking": [
     {
       "id": "RST-2-plain-image-not-refused",
       "severity": "nonblocking",
@@ -209,6 +468,5 @@
       "minimal_fix": "Optional: add relowner::regrole / proowner::regrole / nspowner::regrole columns to the three families. This matters most for SECURITY DEFINER functions, whose owner is their privilege.",
       "lens": "restore"
     }
-  ],
-  "coordinator_note": "PARTIAL: the drill lens and both refuters of RST-1 died at the session limit (Opus 429, resets 14:00 UTC). Restore lens: verdict_hint fix_required with RST-1 (schemas family unkillable: pgrestore reading no nspacl survives test_restore) and RST-4 (dropping sequences from the relkind set survives) \u2014 UNVERIFIED (no refuter votes). Not a pass; rerun the drill lens + refuters."
+  ]
 }

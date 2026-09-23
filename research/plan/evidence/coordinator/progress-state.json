@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T14:18:55Z",
+  "updated": "2026-09-23T14:44:06Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -21,12 +21,6 @@
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
-    "W4": {
-      "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "round 4 b1eee7c; verifier RERUN wf_09c50070-a9c running \u2192 MERGE",
-      "since": "2026-09-23T05:40:38Z",
-      "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
-    },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
       "phase": "round 2 cb096fb; confirmation RERUN wf_e024f4f2-8dc running; merges G2's round-3 head when it lands",
@@ -35,7 +29,7 @@
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "review drill lens + RST-1/RST-4 refuters RERUN wf_28258566-66d running; merge after E3B2",
+      "phase": "review fix_required at d99da09 (3 blocking: rc10 edge-file restore vacuous, schemas ACL family unkillable, sequence family empty; 5 + 3 nonblocking) \u2192 fix round dispatched (Opus, new agent); merge after E3B2",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
@@ -54,7 +48,7 @@
   },
   "reviews": {
     "W4": {
-      "phase": "verifier rerun at b1eee7c running",
+      "phase": "MERGED f36c17c after the round-4 verifier pass",
       "since": "2026-09-23T14:18:55Z"
     },
     "G4U": {
@@ -78,8 +72,8 @@
       "since": "2026-09-23T14:18:55Z"
     },
     "I3B-followup": {
-      "phase": "drill lens + refuters rerun at d99da09 running",
-      "since": "2026-09-23T14:18:55Z"
+      "phase": "fix_required at d99da09 (wf_cb972a2c-da6 restore lens + wf_28258566-66d drill lens; JSON evidence/i/I3B-followup-review-d99da09.json) \u2192 fix round",
+      "since": "2026-09-23T14:44:06Z"
     }
   },
   "gates": {
@@ -355,6 +349,11 @@
       "merged": "D4 @ 90efcb0 merged --no-ff (93ba108) + harness 0017 + Makefile list (e2a52b2)",
       "at": "2026-09-23T12:56:22Z",
       "note": "review fix_required a4598b0 \u2192 round 2 7d3ef59 (journal pass) \u2192 round 3 90efcb0 verified pass; 53 migration + 17 code mutants; sweeps 788/802 both images; pgstate rows at the E3B2 merge; D4 requests 2 (G2), 3 (W3), 4 (I3B), 9 (W), 10 (F) recorded"
+    },
+    "W4": {
+      "merged": "W4 phase A @ b1eee7c merged --no-ff + Makefile list (f36c17c)",
+      "at": "2026-09-23T14:44:06Z",
+      "note": "review fix_required db12a5a \u2192 rounds 2\u20134 \u2192 verifier pass (evidence/w/W4-verify-b1eee7c.json); 107 mutants; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window); merged-tree tests/w + W4 list + bench running"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
