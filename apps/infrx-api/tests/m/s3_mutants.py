@@ -57,6 +57,7 @@ CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_t
 CLEANUP = "test_what_a_case_writes_is_removed_after_it"
 STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
 NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
+WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -83,8 +84,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("s3_put_not_conditional", "put_if_absent is write-once (If-None-Match: *)",
        S3, '            IfNoneMatch="*",\n', "", WRITE_ONCE, NO_CHECKSUM, s3=True),
     _m("s3_any_error_is_absence", "only a 404 is absent; a refused call is an error",
-       S3, "            if code in MISSING:", "            if True:",
-       DENIED, WRITE_ONCE, NO_CHECKSUM, s3=True),
+       S3, "            if absent_ok and code in MISSING:", "            if True:",
+       DENIED, WRITE_ONCE, NO_CHECKSUM, STUBBED, WRITE_404, NO_BUCKET, s3=True),
     _m("s3_absence_is_an_error", "a missing object is None, not a failure",
        S3, 'MISSING = ("404", "NoSuchKey")', "MISSING = ()", MISSING_KEY, ISOLATION, s3=True),
     _m("s3_precondition_is_an_error", "an occupied key is False, not a failure",
@@ -155,6 +156,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("own_conflict_is_not_written", "a 409 conditional-write conflict is a retryable error, "
        "never 'occupied'", S3, '            if code == "PreconditionFailed":',
        '            if code in ("PreconditionFailed", "ConditionalRequestConflict"):', STUBBED),
+    # === review A3: absent is a read's answer only ========================================
+    _m("own_404_absent_everywhere", "a 404 from a write or a listing is an error, not absence",
+       S3, "            if absent_ok and code in MISSING:", "            if code in MISSING:",
+       WRITE_404),
 )
 
 

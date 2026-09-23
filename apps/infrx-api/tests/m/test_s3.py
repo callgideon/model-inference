@@ -479,6 +479,22 @@ def test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent():
     stub.assert_no_pending_responses()
 
 
+def test_a_404_on_a_write_or_a_listing_is_an_error_not_absence():
+    """Review A3: "absent" is an answer only a one-object read (and delete) has. A write
+    answered 404 was not written and did not find anything there; a listing answered 404
+    listed nothing - both are dependency_unavailable (the collector would otherwise iterate
+    over None, and `_write_once` would call a fault a content conflict)."""
+    objects, stub = stubbed()
+    stub.add_client_error("put_object", "404", http_status_code=404)
+    stub.add_client_error("list_objects_v2", "NoSuchKey", http_status_code=404)
+    for call in (objects.put_if_absent(SOURCE, b"x", "video/mp4"), objects.keys("media/")):
+        with pytest.raises(errors.DependencyUnavailable):
+            run(call)
+    stub.add_client_error("delete_object", "NoSuchKey", http_status_code=404)
+    assert run(objects.delete(SOURCE)) is None
+    stub.assert_no_pending_responses()
+
+
 @needs_s3
 def test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing(monkeypatch):
     """Limit 3, pinned: HeadObject's 404 has no body, so `head`/`describe` cannot tell a
