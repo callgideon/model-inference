@@ -822,6 +822,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '                     "infrx.provider_orgs",\n',
            "tests/integration/test_services.py", "role_matrix_holds", layer=2,
            cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e3bm37", "E3B2 review H1: a suite under apps/infrx-api runs against a copied infrx",
+           "tests/integration/mutants.py",
+           ' or mutant.suite.startswith("apps/infrx-api/"):\n',
+           ":\n",
+           "tests/integration/test_run.py", "copied_infrx",
+           cases=("test_a_suite_under_the_api_tree_runs_against_a_copied_infrx",)),
 )
 
 
@@ -866,7 +872,11 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
         # E3B: a defect in module code is injected into a copy of `infrx`, which the suite
         # then imports through PYTHONPATH instead of the checkout's.
         api_root = harness.API_ROOT
-        if mutant.path.startswith(API_TREE + "/"):
+        # E3B phase 2 (found by the pristine baseline, review H1): a suite under
+        # apps/infrx-api/tests resolves `infrx` beside ITSELF (tests/d spawns children with
+        # PYTHONPATH=<its api root>), so the copy needs the package too, or the unmutated
+        # case fails in the copy and every "kill" of it was vacuous (e2m64-66).
+        if mutant.path.startswith(API_TREE + "/") or mutant.suite.startswith("apps/infrx-api/"):
             shutil.copytree(harness.REPO_ROOT / API_TREE, root / API_TREE,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             api_root = root / "apps" / "infrx-api"

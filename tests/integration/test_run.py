@@ -1034,3 +1034,18 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     assert other["status"] == runner.FAIL
     assert other["detail"]["unexpected_skips"] == [
         "task-local PostgreSQL unavailable: docker is not installed"]
+
+
+def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):
+    """Found by the pristine baseline (review H1): tests/d spawns children with
+    PYTHONPATH=<its own api root>, so in a copy without `infrx` its cases failed UNMUTATED and
+    e2m64-66 were counted killed for nothing. A mutant whose suite lives under apps/infrx-api
+    now runs with the package copied beside it."""
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root: seen.append(
+        (api_root, (api_root / "infrx").is_dir())) or (0, ".\n1 passed in 0.1s\n"))
+    mutant = next(m for m in mutants.MUTANTS if m.id == "e2m64")
+    mutants.run_one(mutant, stack_available=False)
+    assert seen and all(root != harness.API_ROOT and has_infrx for root, has_infrx in seen), seen
