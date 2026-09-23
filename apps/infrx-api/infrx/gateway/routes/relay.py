@@ -140,7 +140,9 @@ class Relay:
         too): the R91 lookup, then prepare, stage and one admission by regime, then the
         recheck and the attach. Returns `(job, admission, headers)`; the headers name the
         job (`Inference-Id`, the admission's id, also on a replay) and say whether it is a
-        replay. A mapped job is answered in the mode of the request that asks for it."""
+        replay. A replay always arrives in the job's own mode: R94 puts the mode in the
+        idempotency identity, so a key reused with another mode is `idempotency_conflict`
+        (G3's ingress digest)."""
         began = self.clock()
         # R91 (review money-B1): a keyed request that replays a known job is answered from
         # that job before anything is prepared, so a lost answer is recovered by its key
