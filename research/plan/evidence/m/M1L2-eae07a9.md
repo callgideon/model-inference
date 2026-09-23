@@ -122,7 +122,7 @@ The S3 service: only the E2 stack's `s3` service, namespace `e2` (`infrx-e2-s3`,
 | `uv run --frozen pytest -q tests/g` (without the four mutant files; G4U uploads, relay, composition) | `509 passed, 2 warnings in 27.42s` |
 | `uv run --frozen pytest -q tests/i` | `144 passed in 160.16s` |
 | `uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py` | `1 failed, 1022 passed in 28.30s` — the failure is `test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record` (`DID NOT RAISE UnsupportedParameter`), **pre-existing**: it fails identically on the base `43fe900` in a detached scratch worktree (`1 failed, 1 deselected`); D5's 0018 changed `PgJobStore.cancel` and the test was not updated. Not this lane's |
-| `make api-test` | see the verification log |
+| `DOCKER_HOST=unix:///nonexistent/docker.sock INFRX_M_S3_ENDPOINT=http://127.0.0.1:55500 make api-test` (at `eae07a9`) | `23 failed, 2902 passed, 591 skipped, 2 warnings in 1454.63s (0:24:14)`. The 23 are **one** pre-existing failure and its fallout: `test_cancel_cause.py::test_dur_settle__before_0018…` (above), plus 22 in `tests/contracts/test_mutants.py` (19 subset mutants and 3 runner self-tests), every one refused by the R83(b) pristine baseline naming that same test (`pristine baseline: the unmutated tree fails the list's own cases … test_cancel_cause.py::test_dur_settle__before_0018…`). No other failure; the M1-L2, G, I and M suites pass. The Docker suites were skipped (limit 11) |
 
 ## Limits
 
@@ -156,3 +156,4 @@ The S3 service: only the E2 stack's `s3` service, namespace `e2` (`infrx-e2-s3`,
 ## Verification log
 
 - 2026-09-23: Report written at `eae07a9` after items 1–3; the cutover merge and `make api-test` are appended below.
+- 2026-09-23: `make api-test` at `eae07a9` finished: `23 failed, 2902 passed, 591 skipped` - the pre-existing `test_cancel_cause` failure and 22 contracts-mutant pristine-baseline refusals it causes (Runs). Next: merge `origin/codex/cutover-mount`.
