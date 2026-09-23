@@ -27,17 +27,17 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T16:02:37Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T16:04:40Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
-<div class="tile done"><b>25</b><span>done</span></div>
-<div class="tile prog"><b>4</b><span>in progress</span></div>
+<div class="tile done"><b>26</b><span>done</span></div>
+<div class="tile prog"><b>3</b><span>in progress</span></div>
 <div class="tile rem"><b>1</b><span>remaining</span></div>
 <div class="tile blk"><b>2</b><span>GPU-gated</span></div>
-<div class="tile"><b>83%</b><span>of 30 backend packages</span></div>
+<div class="tile"><b>87%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">6 done · 0 in progress · 0 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:88.2%"></i><i class="p" style="width:11.8%"></i><i class="r" style="width:0.0%"></i></div><div class="c">15 done · 2 in progress · 0 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:94.1%"></i><i class="p" style="width:5.9%"></i><i class="r" style="width:0.0%"></i></div><div class="c">16 done · 1 in progress · 0 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">2 done · 2 in progress · 0 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">2 done · 0 in progress · 0 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
@@ -63,7 +63,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill prog">in-progress</span></td><td class="note">routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job&#x27;s media never attached (G2 request b)</td></tr>
+<tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G4U</code></td><td>Owned upload HTTP adapter</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G6B</code></td><td>Headless endpoint provisioning and operations</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B2</td><td><code>E3B</code></td><td>Backend-only durability, security and protocol integration gate</td><td><span class="pill prog">in-progress</span></td><td class="note">namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges</td></tr>
@@ -75,7 +75,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 </tbody></table></div></section>
 <section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
-<p class="big">Local software (through E3B and the software half of the rest, 3 packages): ~4 h at the observed cadence, ~9 h at half of it.</p>
+<p class="big">Local software (through E3B and the software half of the rest, 2 packages): ~3 h at the observed cadence, ~6 h at half of it.</p>
 <p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
 <p><b>GPU-gated packages (E1B, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
@@ -97,17 +97,16 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — fix round running on codex-e3b2 @ f97bfb7+ (its layer-3 gate on infrx-e3b2-* running) → confirmation → merge since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges</li>
-<li><code>G3</code> — codex-g3 / codex/g3-jobs — round 3 HANDED BACK 9133efe (G2 r3 merged clean; B1/B2/B3/C1 + N1/N3/C2/C3/C4 closed; G3 list 79 mutants; tests/g 559); re-confirmation running → MERGE after G2 since 2026-09-23T10:09:50Z — routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job&#x27;s media never attached (G2 request b)</li>
-<li><code>I3B-followup</code> — codex-i3bf / codex/i3b-followup — round 2 HANDED BACK 662c07c (DR-1/RST-1/RST-4 closed + DR-3/DR-4/RST-2/RST-3; I3B list 96/94 on the E3B2 merge); confirmation running (restore + drill) → merge after E3B2 with R2-A/R2-B/request-1 stack.py since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)</li>
+<li><code>I3B-followup</code> — codex-i3bf / codex/i3b-followup — round-2 confirmation at 662c07c fix_required (DRL-1 readiness retry unpinned; restore lens pass; 8 nonblocking) → round 3 dispatched → single verifier → merge after E3B2 since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)</li>
 <li><code>D5</code> — codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items</li>
 <li><code>F-fakes-followup</code> — codex-ffakes / codex/f-fakes-followup — round 2 HANDED BACK 0cf5cd6 (P1/P2 pinned, P3 TTL fixed, H1 dies_by); verifier on PostgreSQL running → merge after G3 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2&#x27;s lookup/_replay; flips D4&#x27;s pinned fake-delta assertion</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
-<li>review <code>G2</code> — MERGED 2391d4d after the round-3 confirmation pass at 76ba3bb (evidence/g/G2-confirm-76ba3bb.json); merged-tree checks running (g2-merged-2391d4d.log) since 2026-09-23T15:38:21Z</li>
+<li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
 <li>review <code>E3B2</code> — fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) → fix round; confirmation next since 2026-09-23T11:20:35Z</li>
 <li>review <code>D4</code> — MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z</li>
-<li>review <code>G3</code> — round-3 confirmation at 9133efe running (admission + stream lenses + refuters) since 2026-09-23T15:33:16Z</li>
-<li>review <code>I3B-followup</code> — round-2 confirmation at 662c07c running (wf_f6e063df-a4a) since 2026-09-23T15:38:21Z</li>
+<li>review <code>G3</code> — MERGED b560b51 (+ Makefile 31bfd05) after the round-3 confirmation pass at 9133efe; merged-tree checks running (g3-merged-31bfd05.log) since 2026-09-23T16:04:40Z</li>
+<li>review <code>I3B-followup</code> — fix_required at 662c07c (wf_f6e063df-a4a; JSON evidence/i/I3B-followup-confirm-662c07c.json) → round 3 since 2026-09-23T16:04:40Z</li>
 <li>review <code>F-fakes-followup</code> — round-2 verification at 0cf5cd6 running (single Opus parity verifier + refuters) since 2026-09-23T16:02:37Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>

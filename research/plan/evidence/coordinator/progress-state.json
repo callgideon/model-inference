@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:02:37Z",
+  "updated": "2026-09-23T16:04:40Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -15,15 +15,9 @@
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
-    "G3": {
-      "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "round 3 HANDED BACK 9133efe (G2 r3 merged clean; B1/B2/B3/C1 + N1/N3/C2/C3/C4 closed; G3 list 79 mutants; tests/g 559); re-confirmation running \u2192 MERGE after G2",
-      "since": "2026-09-23T10:09:50Z",
-      "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
-    },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round 2 HANDED BACK 662c07c (DR-1/RST-1/RST-4 closed + DR-3/DR-4/RST-2/RST-3; I3B list 96/94 on the E3B2 merge); confirmation running (restore + drill) \u2192 merge after E3B2 with R2-A/R2-B/request-1 stack.py",
+      "phase": "round-2 confirmation at 662c07c fix_required (DRL-1 readiness retry unpinned; restore lens pass; 8 nonblocking) \u2192 round 3 dispatched \u2192 single verifier \u2192 merge after E3B2",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
@@ -50,7 +44,7 @@
       "since": "2026-09-23T10:33:10Z"
     },
     "G2": {
-      "phase": "MERGED 2391d4d after the round-3 confirmation pass at 76ba3bb (evidence/g/G2-confirm-76ba3bb.json); merged-tree checks running (g2-merged-2391d4d.log)",
+      "phase": "MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306",
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
@@ -62,12 +56,12 @@
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "round-3 confirmation at 9133efe running (admission + stream lenses + refuters)",
-      "since": "2026-09-23T15:33:16Z"
+      "phase": "MERGED b560b51 (+ Makefile 31bfd05) after the round-3 confirmation pass at 9133efe; merged-tree checks running (g3-merged-31bfd05.log)",
+      "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "round-2 confirmation at 662c07c running (wf_f6e063df-a4a)",
-      "since": "2026-09-23T15:38:21Z"
+      "phase": "fix_required at 662c07c (wf_f6e063df-a4a; JSON evidence/i/I3B-followup-confirm-662c07c.json) \u2192 round 3",
+      "since": "2026-09-23T16:04:40Z"
     },
     "F-fakes-followup": {
       "phase": "round-2 verification at 0cf5cd6 running (single Opus parity verifier + refuters)",
@@ -357,6 +351,11 @@
       "merged": "2391d4d",
       "when": "2026-09-23T15:38:21Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters | confirmation pass at 76ba3bb; cutover HELD"
+    },
+    "G3": {
+      "merged": "b560b51",
+      "when": "2026-09-23T16:04:40Z",
+      "note": "explicit jobs API; confirmation pass at 9133efe; ROUTERS += jobs HELD for the cutover"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"

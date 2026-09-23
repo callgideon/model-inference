@@ -1,0 +1,477 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "head": "662c07c",
+ "reviews": [
+  {
+   "lens": "restore",
+   "verdict_hint": "pass",
+   "fabrication_check": "I reproduced the lane's restore-lens claims. test_restore.py gives 26 passed plus 1 skip (bk03), and the recovery dir gives 58 passed / 9 skipped on d3 Supabase. The kill sites quoted in the evidence are exact: i3bm95 at :464, i3bm96 at :502, i3bm103 at :464, i3bm102 at :122 'DID NOT RAISE'. They match both by hand and through E's runner, where all 4 were killed with problems null. The plain image starts no container, and the same cases pass on Supabase. restore.md's statement that there is no sequence, serial or identity column in 0001-0017 is confirmed by a grep and by a catalog query on the good restore. The bk01g and bk01h premises still hold: both pass on Supabase. Discrepancies: (1) the plain-image count is 6 passed / 21 skipped, not 20, off by one because bk03's skip was left out (RST-R2-3); (2) calling i3bm103 'family dropped' overstates it, since it is a key rename (RST-R2-1); (3) E3B2's remote head is now f883a0a, not f97bfb7, but its extra commits do not touch the recovery code. I found no invented numbers.",
+   "cleanup": "I removed the scratch clone /tmp/claude-1000/confirm-i3bf-restore-2645380, the 662c07c-only clone, the private TMPDIR /tmp/claude-1000/restore-tmp (including the one lock file the runner put there), the attack test file, the mutant script, the logs and the docker-events log. docker ps -a shows no d3 or i3b container, and every D-harness container was removed at exit. I touched no other lane's container and never used port 55432. /tmp/infrx-d3-postgres-55434.lock existed before this session and is not mine, so I left it alone. The lane worktree codex-i3bf is unmodified: git status is clean.",
+   "mutants": [
+    {
+     "name": "i3bm95 (by hand)",
+     "edit": "pgrestore schemas: unnest(coalesce(nspacl, acldefault('n', -> unnest(coalesce(null, acldefault('n',",
+     "result": "killed",
+     "killed_by": "bk01f[schemas] test_restore.py:464 'AssertionError: [] assert set() == {'schemas'}'"
+    },
+    {
+     "name": "i3bm96 (by hand)",
+     "edit": "pgrestore relations: c.relkind in ('r','p','v','m','S') -> ('r','p','v','m')",
+     "result": "killed",
+     "killed_by": "bk01g test_restore.py:502 'AssertionError: [] assert ([] == ['relations']'"
+    },
+    {
+     "name": "i3bm103 (by hand)",
+     "edit": "CATALOG key \"column_acls\" -> \"_column_acls\"",
+     "result": "killed (by name mismatch only; see RST-R2-1)",
+     "killed_by": "bk01f[column_acls] test_restore.py:464 \"assert {'_column_acls'} == {'column_acls'}\""
+    },
+    {
+     "name": "i3bm102 (by hand)",
+     "edit": "needs_pg: delete 'if not d_harness().ON_SUPABASE: pytest.skip(PLAIN_IMAGE)'",
+     "result": "killed",
+     "killed_by": "bk00 test_restore.py:122 'Failed: DID NOT RAISE <class Skipped>'"
+    },
+    {
+     "name": "i3bm95/96/102/103 through E's runner",
+     "edit": "mutants_i3b.py --layer all --only x4, private TMPDIR, R2-A/R2-B/request-1 stack half applied",
+     "result": "4 mutants, 4 killed, problems null, exit 0",
+     "killed_by": "same sites :464/:502/:464/:122"
+    },
+    {
+     "name": "R1",
+     "edit": "column_acls: 'and a.attacl is not null' -> 'and a.attacl is null'",
+     "result": "killed",
+     "killed_by": "lane: bk01f[indexes] :464 (incidentally: the index's attribute row appears); reviewer: attack column_grant_added :46. bk01f[column_acls] itself PASSED under R1"
+    },
+    {
+     "name": "R2",
+     "edit": "column_acls: add 'and false' to the WHERE clause (real family drop)",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls] :464; attacks column_grant_added, column_grant_lost_avatar, real-sequence/view round trip"
+    },
+    {
+     "name": "R3",
+     "edit": "schemas: where nspname = any(%(s)s) -> where nspname = 'public'",
+     "result": "killed",
+     "killed_by": "bk01f[schemas] :464; attacks schema_usage_revoked, schema_owner_changed"
+    },
+    {
+     "name": "R4",
+     "edit": "relations: case c.relkind when 'S' then 's' else 'r' end::\"char\" -> 'r'::\"char\" (sequence default as table default)",
+     "result": "killed",
+     "killed_by": "bk01g :496 (implicit vs explicit sequence ACL)"
+    },
+    {
+     "name": "R5",
+     "edit": "compare(): if have != want -> if have - want (losses hidden, extras only)",
+     "result": "killed",
+     "killed_by": "bk01f[policies], [indexes], [column_acls] :464; attacks column_grant_lost_avatar, round trip"
+    },
+    {
+     "name": "R6",
+     "edit": "column_acls: a.attnum > 0 -> a.attnum > 1",
+     "result": "SURVIVED lane suite (bk01f x10, bk01g); killed only by reviewer round-trip attack (grant select (id) on identity table)",
+     "killed_by": "test_zz_attack.py:113 (reviewer only)"
+    },
+    {
+     "name": "R7",
+     "edit": "schemas: acldefault('n', nspowner) -> acldefault('n', 10::oid)",
+     "result": "killed",
+     "killed_by": "bk01g :496 \"schemas differ: missing [('infrx', '{supabase_admin=UC/supabase_admin}')]\""
+    },
+    {
+     "name": "R8",
+     "edit": "column_acls: array(select unnest(a.attacl)::text order by 1)::text -> cardinality(a.attacl)::text",
+     "result": "SURVIVED lane suite (18 passed); killed only by reviewer grantee-swap attack",
+     "killed_by": "test_zz_attack.py:50 column_grant_swapped (reviewer only)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared ... /tmp/claude-1000/confirm-i3bf-restore-2645380; checkout 662c07c; merge --no-ff f97bfb7",
+     "exit": 0,
+     "tail": "Merge commit 'f97bfb7' into HEAD (20c139b), clean. Note: origin/codex/e3b-phase2-gate has moved to f883a0a (+2 commits touching only E3B evidence and tests/integration/test_run.py); I merged the named f97bfb7"
+    },
+    {
+     "cmd": "apply in scratch: request 1 stack.py half (PENDING loses the G1R/D2/D3/M3/W3 RESIDUAL block, RESIDUAL: dict[str,str] = {}), R2-A OWNED_TREES += (\"apps/infrx-api/deploy\",) on its own line, R2-B (INFRX_I3B_PG=d recovery suites -> private=None). f97bfb7 had none of the three. Committed as a scratch commit",
+     "exit": 0,
+     "tail": "stack.py +3/-20, mutants.py +9; anchors asserted to occur exactly once"
+    },
+    {
+     "cmd": "UV_OFFLINE=1 make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey pytest -rs -q tests/integration/backend/recovery/test_restore.py",
+     "exit": 0,
+     "tail": "SKIPPED [1] recoverykit.py:101: no infrx-e2 stack; 26 passed, 1 skipped in 63.27s"
+    },
+    {
+     "cmd": "same env, pytest -rs -q tests/integration/backend/recovery",
+     "exit": 0,
+     "tail": "PENDING[G2], PENDING[M1-L2], PENDING[I2B-R4] + 6 no-e2-stack skips; 58 passed, 9 skipped, 2 warnings in 68.08s; no d3/i3b container left"
+    },
+    {
+     "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 (no INFRX_D1_IMAGE) pytest -rs -q test_restore.py, with docker events watched",
+     "exit": 0,
+     "tail": "SKIPPED [10] :109 UNSUPPORTED[plain D image] ...; SKIPPED [10] :447 UNSUPPORTED[plain D image] ...; SKIPPED [1] bk03 no e2 stack; 6 passed, 21 skipped in 0.76s; zero d3/i3b container events"
+    },
+    {
+     "cmd": "same plain-image run on a clone at 662c07c alone",
+     "exit": 0,
+     "tail": "6 passed, 21 skipped in 1.10s"
+    },
+    {
+     "cmd": "hand mutants i3bm95/i3bm96/i3bm103/i3bm102 (apply one edit, pytest -k selector, git checkout)",
+     "exit": 1,
+     "tail": "each 1 failed: :464 schemas / :502 bk01g / :464 column_acls (name mismatch) / :122 DID NOT RAISE Skipped"
+    },
+    {
+     "cmd": "reviewer attack file test_zz_attack.py (scratch only) on d3 Supabase",
+     "exit": 0,
+     "tail": "7 passed in 23.24s (8 with grantee swap): schema usage revoked -> schemas; owner default spelled -> []; schema owner changed -> schemas; column grant added / lost / swapped -> column_acls; no '{}' ACL and no sequence in public/infrx after a good restore; real sequence + identity sequence + view column grant survive backup/restore with compare == [] and each post-restore revoke/grant is named with exact family and object"
+    },
+    {
+     "cmd": "reviewer mutants R1-R8 with -k 'bk01f or bk01g or attack'",
+     "exit": 1,
+     "tail": "R1,R2,R3,R4,R5,R7 killed by lane cases; R6 and R8 survive the lane cases, killed only by reviewer attacks"
+    },
+    {
+     "cmd": "TMPDIR=<private> mutants_i3b.py --layer all --only i3bm95 --only i3bm96 --only i3bm102 --only i3bm103 --report",
+     "exit": 0,
+     "tail": "{\"mutants\": 4, \"killed\": 4, \"controls_survived\": 0, \"not_killed\": 0, \"pending\": 0, \"problems\": null}; the lock landed in the private TMPDIR (R2-B)"
+    },
+    {
+     "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 (plain image) pytest -q tests/integration/backend/recovery",
+     "exit": 0,
+     "tail": "37 passed, 30 skipped, 2 warnings in 5.91s"
+    },
+    {
+     "cmd": "grep -liE 'serial|bigserial|identity|create sequence|nextval' over 0001-0017 migrations",
+     "exit": 1,
+     "tail": "no match (restore.md's 'no sequence today' holds)"
+    }
+   ]
+  },
+  {
+   "lens": "drill",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every round-2 count and kill site the lane quotes matches my run on the merge (662c07c + origin/codex/e3b-phase2-gate). One difference: that branch is now f883a0a, not f97bfb7 (f97bfb7 is an ancestor, and the merge is still clean).\n\nCounts:\n- Layer 0: 110 passed / 30 skipped / 1 xfailed, reproduced once request 1's stack.py half and R2-A are applied. Without them it is 2 failed (test_stage RESIDUAL still lists I2B; every_list_through_one_runner). So both requests are still needed on f883a0a, and the stack.py half is all that is left of request 1.\n- tests/i: 143 passed.\n- Recovery dir on D/Supabase: 58 passed / 9 skipped.\n- Full list: 96 mutants, 94 killed, 1 control survived, i3bm33 no-cases, byte-for-byte equal to R11's summary. No baseline-red.\n\nKill sites: i3bm94 :815, i3bm97/98 :849, i3bm99/100/101 :600/:607/:609, i3bm48 pgrestore.py:299 RuntimeError, all as claimed.\n\nR2-A: the FileNotFoundError crash without it reproduces.\n\nP-21 is confirmed, with one nuance: only a client socket WITHOUT SO_REUSEADDR (ESTABLISHED or in TIME-WAIT) blocks the bind. That is the normal ephemeral client, so the lane's explanation holds.\n\nrc10 checked against rollback.sh + lib.sh:\n- The asserted argv order matches the script for pilot->pilot with ENGINE unset: stop, tar, absent loop, daemon-reload, restart, 8001, 8002, docker inspect, docker exec reload.\n- BACKED_UP equals install.sh's backup paths, including the ACTIVE etc/caddy/Caddyfile. rc10 compares all of them byte for byte after rollback.\n- The premise assert fails when release() stops marking a site.\n\nrc10b:\n- Exit 4 is rollback.sh's real 'not ready' die.\n- The restore (tar) precedes wait_ready, so after exit 4 a real host is left on the backup's files with the restored units restarted but not ready. The running Caddy keeps its last-loaded config, but the file on disk is the backup's. rollback.sh never rolls forward, and the operator fixes things then runs drain.sh resume.\n- lib.sh does retry (probe shown), but no drill or I2B test pins the retry: DRL-1.\n\nrc00: refusals and pins verified. rc03 fails with the ingress really mounted. No pending case could run today, except that the DR-5 reason is imprecise (DRL-3).\n\nNothing in these findings comes from the lane's evidence without being re-run.",
+   "cleanup": "Removed: scratch clone /tmp/claude-1000/confirm-i3bf-drill-2644603, hand-mutant copy, private TMPDIR, lock file /tmp/infrx-confirm-i3bf-drill.lock, probe script and logs. Harness containers: none left (`docker ps -a --filter name=confirm-i3bf` -> 0). The P-21 run's Created container was removed by the next successful run. I started no Valkey or decoy container: no case in my lens needed one. I never touched 55432, 55434 or other lanes' containers (infrx-d*/e3b2/gideon), and never ran the E2 stack, network, AWS or the box. The lane worktree codex-i3bf is unmodified (git status empty). Kept: the runner JSON report at <session scratchpad>/confirm-i3bf-drill-2644603-mall.json (sha256 51604be3896228a1) and its log.",
+   "mutants": [
+    {
+     "name": "i3bm94 (by hand)",
+     "edit": "rollback.sh tar -xpf files.tar -> ... --exclude=etc/caddy",
+     "result": "killed (1 failed in 6.65s, D harness supabase)",
+     "killed_by": "test_recovery.py:815 AssertionError (rc10 on_host == release(previous))"
+    },
+    {
+     "name": "i3bm97 (by hand)",
+     "edit": "rollback.sh wait_ready ... \\ -> wait_ready ... || true \\",
+     "result": "killed",
+     "killed_by": "test_recovery.py:849 AssertionError (rc10b exit code)"
+    },
+    {
+     "name": "i3bm98 (by hand)",
+     "edit": "lib.sh '&& wait_http \"$WORKER_READY\"' -> '; wait_http ...'",
+     "result": "killed",
+     "killed_by": "test_recovery.py:849 AssertionError (rc10b[8001])"
+    },
+    {
+     "name": "i3bm99 (by hand)",
+     "edit": "recoverykit.pending unknown = [...] -> unknown = []",
+     "result": "killed",
+     "killed_by": "test_recovery.py:600 AssertionError (rc00)"
+    },
+    {
+     "name": "i3bm100 (by hand)",
+     "edit": "rc05b kit.pending(\"M1-L2\") -> kit.pending(\"G2\")",
+     "result": "killed",
+     "killed_by": "test_recovery.py:607 AssertionError (rc00)"
+    },
+    {
+     "name": "i3bm101 (by hand)",
+     "edit": "rc03 if stack.ingress_is_mounted(): -> if False:",
+     "result": "killed",
+     "killed_by": "test_recovery.py:609 AssertionError (rc00)"
+    },
+    {
+     "name": "H1 no-retry (own)",
+     "edit": "lib.sh wait_http: until curl ... \"$1\"; do -> until curl ... \"$1\" || return 1; do",
+     "result": "SURVIVED rc10b (2 passed), rc10 (1 passed, D harness) and tests/i (143 passed): DRL-1",
+     "killed_by": ""
+    },
+    {
+     "name": "H2 exit code (own)",
+     "edit": "rollback.sh not-ready die ... 4 -> ... 1",
+     "result": "killed",
+     "killed_by": "test_recovery.py:849 AssertionError (rc10b)"
+    },
+    {
+     "name": "H3 empty ids (own)",
+     "edit": "recoverykit.pending if not ids or unknown -> if unknown",
+     "result": "killed",
+     "killed_by": "test_recovery.py:601 AssertionError (rc00 'no id')"
+    },
+    {
+     "name": "H4 rc08b owner (own)",
+     "edit": "rc08b kit.pending(\"I2B-R4\") -> kit.pending(\"M1-L2\")",
+     "result": "killed",
+     "killed_by": "test_recovery.py:607 AssertionError (rc00)"
+    },
+    {
+     "name": "H5 rc03 owner (own)",
+     "edit": "rc03 kit.pending(\"G2\") -> kit.pending(\"D5\")",
+     "result": "killed",
+     "killed_by": "test_recovery.py:607 AssertionError (rc00)"
+    },
+    {
+     "name": "H6 probe order (own)",
+     "edit": "lib.sh wait_ready pilot: 8001 then WORKER_READY -> WORKER_READY then 8001",
+     "result": "killed",
+     "killed_by": "test_recovery.py:854 AssertionError (rc10b head)"
+    },
+    {
+     "name": "H8 reload on failure (own)",
+     "edit": "rollback.sh '|| die \"the restored runtime is not ready' -> '|| caddy_reload || die ...'",
+     "result": "killed",
+     "killed_by": "test_recovery.py:849 AssertionError (rc10b; exit 0 because the stubbed reload succeeds, and a docker call is recorded)"
+    },
+    {
+     "name": "H9 no restore (own)",
+     "edit": "rollback.sh tar -C ... -xpf files.tar -> true",
+     "result": "killed",
+     "killed_by": "test_recovery.py:855 AssertionError (rc10b on_host == previous: confirms the restore precedes the readiness wait)"
+    },
+    {
+     "name": "H10 absent kept (own)",
+     "edit": "rollback.sh absent loop rm -f \"${ROOT:-}/$path\" -> :",
+     "result": "survived rc10 (3 passed): the previous backup has an empty absent list, so this is outside rc10's scope. I2B's own mutant rollback_keeps_new_units (tests/i/mutants.py:633) covers it",
+     "killed_by": ""
+    },
+    {
+     "name": "H11 sites unmarked (own, test side)",
+     "edit": "release(): Caddyfile/Caddyfile.maintenance no longer get '# <image>'",
+     "result": "killed: the premise assert fires before any database work",
+     "killed_by": "test_recovery.py:778 AssertionError (premise: no backed-up file equal across releases). Direct construction: unmarked sites -> 3 equal paths; active copy alone unmarked -> ['etc/caddy/Caddyfile']"
+    },
+    {
+     "name": "H12 no daemon-reload (own)",
+     "edit": "rollback.sh systemctl daemon-reload -> :",
+     "result": "killed",
+     "killed_by": "test_recovery.py:814 AssertionError (issued == ROLLBACK_COMMANDS)"
+    },
+    {
+     "name": "H13 edge before ready (own)",
+     "edit": "rollback.sh systemctl restart $units -> systemctl restart $units; caddy_reload",
+     "result": "killed",
+     "killed_by": "test_recovery.py:814 AssertionError"
+    },
+    {
+     "name": "sample of 15 from the runner report (R83 shape)",
+     "edit": "i3bm31, 15, 44, 59, 70, 73, 88, 08, 92, 91, 71, 65, 18, 05, 07",
+     "result": "all killed. Sites: recoverykit.py:256, test_observe.py:231/549/133/432/107/130 AssertionError; test_observe.py:543/540 Failed; test_restore.py:319/496/539/464 AssertionError; test_runbooks.py:137 AssertionError; test_recovery.py:819 AssertionError. i3bm48 dies at pgrestore.py:299 RuntimeError('refusing to fingerprint: the session is not read-only'). I accept that: it is the tool's own read-only guard firing, raised inside the named case as a test failure, and its message names the invariant. i3bm49 (SET and self-check both deleted) is killed separately",
+     "killed_by": "see result"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared -q <infrx-impl> /tmp/claude-1000/confirm-i3bf-drill-2644603 && git fetch -q origin && git checkout -q 662c07c && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate",
+     "exit": 0,
+     "tail": "merge clean. origin/codex/e3b-phase2-gate is f883a0a (f97bfb7 is an ancestor, +f06585e, f883a0a), not f97bfb7. f883a0a has neither R2-A nor request 1's stack.py half"
+    },
+    {
+     "cmd": "make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+    },
+    {
+     "cmd": "pytest -q -rs tests/integration/test_harness.py tests/integration/backend/test_stage.py tests/integration/test_run.py tests/integration/backend/recovery (merge, BEFORE request 1 stack.py half and R2-A)",
+     "exit": 1,
+     "tail": "2 failed, 108 passed, 30 skipped, 1 xfailed (rerun: 3 failed). test_stage.py:122 ({'D2','D3','G1R','M3','W3'}, {..,'I2B',..}); test_run.py:913 assert ['i3bm94','i3bm97','i3bm98'] == []; flaky extra test_busy_ports... OSError Address already in use on E2's fake_vllm 55580 (another lane's port)"
+    },
+    {
+     "cmd": "TMPDIR=<private> mutants_i3b.py --only i3bm97 (without R2-A)",
+     "exit": 1,
+     "tail": "FileNotFoundError: [Errno 2] No such file or directory: '.../infrx-e2-i3bm97-l0_tp7v6/apps/infrx-api/deploy/rollback.sh'"
+    },
+    {
+     "cmd": "apply request-1 stack.py half (RESIDUAL entries removed from PENDING; RESIDUAL: dict[str,str] = {}), R2-A (OWNED_TREES += deploy on its own line), R2-B; check e3bm23/e3bm31 anchor counts",
+     "exit": 0,
+     "tail": "e3bm23 1 1 / e3bm31 1 1 / OWNED_TREES (..., 'infra', 'apps/infrx-api/deploy')"
+    },
+    {
+     "cmd": "layer 0 (same 4 paths) on the merge with the requests applied",
+     "exit": 0,
+     "tail": "PENDING[G2], [M1-L2], [I2B-R4] once each; 110 passed, 30 skipped, 1 xfailed, 2 warnings in 18.86s"
+    },
+    {
+     "cmd": "pytest -q tests/integration/test_run.py -k every_list_through_one_runner (R2-A applied)",
+     "exit": 0,
+     "tail": "1 passed, 45 deselected in 0.04s"
+    },
+    {
+     "cmd": "cd apps/infrx-api && pytest -q -rs tests/i",
+     "exit": 0,
+     "tail": "143 passed in 206.59s (0:03:26)"
+    },
+    {
+     "cmd": "probe: kit.pending('NOPE'), kit.pending(), kit.pending('G2','NOPE') refused; G2/M1-L2/I2B-R4/D5 in tasks.json or OWNERS; rc03 with infrx.gateway.routes.ingress really appended to composition.ROUTERS",
+     "exit": 1,
+     "tail": "2 passed; rc03 -> test_recovery.py:244 Failed: the pilot ingress is mounted: write the gateway restart drill body now (the expected failure)"
+    },
+    {
+     "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=confirm-i3bf-drill INFRX_D1_IMAGE=supabase pytest -q -k 'rc10 or rc00' test_recovery.py",
+     "exit": 0,
+     "tail": "4 passed, 11 deselected in 10.37s"
+    },
+    {
+     "cmd": "same D env: pytest -rs -q tests/integration/backend/recovery",
+     "exit": 0,
+     "tail": "58 passed, 9 skipped, 2 warnings in 78.26s (3 PENDING + 6 no infrx-e2 stack)"
+    },
+    {
+     "cmd": "same D env, TMPDIR=<private>: mutants_i3b.py --layer all --report m-all.json (15:44:45Z-15:56:23Z, detached + Monitor)",
+     "exit": 1,
+     "tail": "{\"mutants\": 96, \"killed\": 94, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; i3bc01 SURVIVED (control), i3bm33 no-cases (1 skipped); zero baseline-red. sha256 51604be3896228a1"
+    },
+    {
+     "cmd": "hand mutants (separate copy, one edit each, reverted): i3bm97 98 99 100 101, H1-H9 on rc10b/rc00; i3bm94, H10-H13, H1 on rc10 (D harness); H1/H10 on tests/i",
+     "exit": 0,
+     "tail": "all killed except H1 (survives rc10b 2 passed, rc10 1 passed, tests/i 143 passed) and H10 (outside rc10 scope; I2B's mutant covers it)"
+    },
+    {
+     "cmd": "probe: a stub where 8001/readyz fails once then answers; rollback.sh with the real lib.sh, then with the no-retry lib.sh",
+     "exit": 0,
+     "tail": "real: exit 0, curl 8001 x2, curl 8002, docker inspect, docker exec reload / no-retry: exit 4 'the restored runtime is not ready', 1 curl"
+    },
+    {
+     "cmd": "P-21: client socket bound to 127.0.0.1:55537 WITH SO_REUSEADDR, ESTABLISHED; run rc10",
+     "exit": 0,
+     "tail": "1 passed, 14 deselected in 8.74s (a client with SO_REUSEADDR does not block docker's bind)"
+    },
+    {
+     "cmd": "P-21: client socket bound to 127.0.0.1:55537 without SO_REUSEADDR, ESTABLISHED; run rc10",
+     "exit": 1,
+     "tail": "failed to bind host port 127.0.0.1:55537/tcp: address already in use / 1 failed, 14 deselected in 1.17s / container infrx-confirm-i3bf-drill-postgres-supabase left Created"
+    },
+    {
+     "cmd": "P-21: rerun while 127.0.0.1:55537 -> :34979 is in client TIME-WAIT",
+     "exit": 1,
+     "tail": "failed to bind host port 127.0.0.1:55537/tcp: address already in use / 1 failed, 14 deselected in 1.00s"
+    },
+    {
+     "cmd": "P-21: rerun after the TIME-WAIT expired (15:59:55Z)",
+     "exit": 0,
+     "tail": "1 passed, 14 deselected in 4.84s; the Created container is gone"
+    },
+    {
+     "cmd": "simulation: d486142's tasks.json (G2 implemented) in the merge copy; pytest test_stage.py test_run.py",
+     "exit": 1,
+     "tail": "AssertionError: ({'G2'}, set()) / FAILED test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual / 1 failed, 54 passed"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "DRL-1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "833-855 (rc10b), 739-748/814 (rc10)",
+   "claim_broken": "DR-3 / the rc10b docstring say rollback.sh 'gives up after READY_S with exit 4' and that the failing probe is retried ('only retries of the failing probe'). Nothing checks that a probe is retried at all. rc10's stubs answer 200 on the first call, and rc10b only asserts `retries and set(retries) == {probe}`, which a single call satisfies. This is a claimed invariant with no killable test, and a drill that passes while rollback.sh would fail on a real host where the restarted gateway is not ready on the first curl.",
+   "evidence": "Hand mutant H1 changes lib.sh wait_http `until curl -fsS -o /dev/null --max-time 5 \"$1\"; do` to `until curl ... \"$1\" || return 1; do` (one try, no retry). It SURVIVES rc10b (`2 passed, 13 deselected`), rc10 on the private D harness (`1 passed, 14 deselected in 7.07s`) and all of tests/i (`143 passed in 199.89s`). I2B's tests/i/mutants.py has no wait_http retry mutant either. Direct probe (stub: 8001/readyz fails once, then 200): with the real lib.sh, rollback.sh exits 0 after curl 8001, curl 8001, curl 8002, docker inspect, docker exec reload, so lib.sh does retry and the second 200 ends the wait. With H1 it exits 4 ('the restored runtime is not ready') after one curl. The drills cannot tell the two apart.",
+   "minimal_fix": "In rc10b, assert `len(retries) > 1`. With READY_S=1 and POLL_S=0.01 it makes about 100 calls. Better, add an rc10 variant, or give rc10 a stub, whose 8001/readyz fails once and then answers: assert exit 0, `issued.count(curl 8001) == 2`, and then the 8002 probe and the edge reload. Declare H1 as an i3bm mutant killed there.",
+   "lens": "drill",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed at 662c07c. lib.sh:27-33 wait_http loops `until curl ...; do [deadline] || return 1; sleep POLL_S; done`. The rc10 STUB (test_recovery.py:674-675) exits 0 unless argv matches INFRX_I3B_FAIL, so in rc10 every readiness probe answers on the first call and the retry loop never runs. The rc10b assertion `retries and set(retries) == {curl ... ready}` (line 853) is satisfied by a single call. Smallest experiment: I copied the worktree to scratch and applied H1 (`until curl ... \"$1\" || return 1; do`, so one try and no retry) to apps/infrx-api/deploy/lib.sh. Then I ran `pytest -k rc10b test_recovery.py`, which resolves DEPLOY through kit.ROOT = HERE.parents[3], meaning the mutated copy. Result: `2 passed, 13 deselected in 0.29s`. The unmutated original gives `2 passed in 2.06s`, so the mutant was exercised: it gives up immediately where the original waits READY_S. rc10 cannot kill H1 because its probes never fail. The only wait_http mutant in mutants_i3b.py (line 236) flips `&&` to `;` between the two probes. None targets the retry. So DR-3 and rc10b's docstring ('gives up after READY_S with exit 4') claim an invariant with no killable test, and a rollback.sh that would exit 4 on a real host whose restarted gateway is not ready at the first curl passes every drill. Under the stated rubric this is an invariant with no killable test, so it is blocking, although production lib.sh is correct today. Fix as proposed: assert `len(retries) > 1` in rc10b, or better add a fail-once stub case (exit 0, curl 8001 issued twice, then 8002 and the edge reload) and declare H1 as an i3bm mutant. I started no container, removed the scratch copy, and left the worktree clean.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I confirmed the finding at 662c07c. rc10b checks `retries and set(retries) == {probe}`, and a single curl satisfies that. rc10's stub exits 0 on its first call, so no test ever sends a second probe. I ran rc10b from a git-archive copy of HEAD in scratch, with an extra print of len(retries). With H1 applied to lib.sh wait_http (`until curl ... \"$1\" || return 1; do`), both cases pass (2 passed) and each makes 1 retry. With the original lib.sh, both pass with 48 and 71 retries. So a wait_http that gives up after one attempt is indistinguishable from one that polls for READY_S. rollback.sh exits 4 either way, and rc10 never exercises a probe that fails and then succeeds.\n\nThe claim this leaves untested is written down in two places: the rc10b docstring says rollback.sh \"gives up after READY_S with exit 4\", and the DR-3 row of the I3B-followup evidence says rc10b checks \"only retries of the failing probe\". The only mutants declared against DR-3 are i3bm97 (wait_ready || true) and i3bm98 (&& to ;). The I3B mutant list and tests/i/mutants.py have no mutant against wait_http's retry.\n\nOn a real host a restarted gateway that is not ready on the first curl would get exit 4 from H1, and the drill would still pass. That is an invariant the drill claims but has no test that can kill, so it counts as blocking under the stated rubric.\n\nMinimal fix: in rc10b, assert len(retries) > 1. Add an rc10 variant whose stub fails 8001/readyz once and then answers 200, and assert exit 0, exactly two 8001 curls, then the 8002 probe and the edge reload. Declare H1 as an i3bm mutant killed by that variant.\n\nThe scratch copy is removed. I used no container, because rc10b needs no database and the survival follows from rc10's first-call-200 stub.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "unverified_blocking": [],
+ "nonblocking": [
+  {
+   "id": "RST-R2-1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/mutants_i3b.py",
+   "line": "i3bm103 entry (after i3bm96)",
+   "claim_broken": "i3bm103 is described as 'family dropped' and is said to prove that the check compares column privileges. It does not remove the comparison.",
+   "evidence": "The edit renames the CATALOG key 'column_acls' to '_column_acls'. The renamed query still runs and still reports the loss: \"AssertionError: [\\\"_column_acls differ: missing [('public.profiles', 'full_name', '{authenticated=w/postgres}')], extra []\\\"] assert {'_column_acls'} == {'column_acls'}\". The kill therefore comes from the name mismatch in bk01f's family assertion, not from a lost detection. The invariant itself can still be killed: my mutant R2, which adds 'and false' to the column_acls WHERE clause and so really drops the family, is killed by bk01f[column_acls] at test_restore.py:464 ('set() == {column_acls}').",
+   "minimal_fix": "Make i3bm103 a real drop of the family, for example '\"and a.attnum > 0 and not a.attisdropped' -> '\"and false and a.attnum > 0 and not a.attisdropped', or delete the whole entry. Correct the evidence's 'family dropped' wording.",
+   "lens": "restore"
+  },
+  {
+   "id": "RST-R2-2",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_restore.py",
+   "line": "DAMAGE['column_acls'] (~426)",
+   "claim_broken": "Column privileges are supposed to be compared by their content (the sorted attacl). The only witness, bk01f[column_acls], checks presence only.",
+   "evidence": "The damage 'revoke update (full_name) on public.profiles from authenticated' turns the column's attacl into NULL, so the row simply disappears. My mutant R8 (column_acls 'array(select unnest(a.attacl)::text order by 1)::text' -> 'cardinality(a.attacl)::text') SURVIVES bk01f (all 10) and bk01g: '18 passed, 16 deselected'. Only my same-cardinality grantee swap kills it (revoke update(full_name) from authenticated, then grant update(full_name) to anon), at test_zz_attack.py:50. The production code is correct: unmutated, the swap is reported as column_acls. This is a gap in the test, not a hole in restore fidelity. A similar gap exists for R6 (attnum > 0 -> > 1): the project's column grants all sit on attnum >= 2, so R6 survives the lane's suite and is killed only by my grant on an identity column's first column.",
+   "minimal_fix": "Make DAMAGE['column_acls'] content-sensitive: 'revoke update (full_name) on public.profiles from authenticated; grant update (full_name) on public.profiles to anon' (the grantee swapped at the same cardinality). Alternatively, add a second bk01f parameter for that swap and a mutant (cardinality) that it kills.",
+   "lens": "restore"
+  },
+  {
+   "id": "RST-R2-3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/i/I3B-followup-0737ebe.md",
+   "line": "R5 row and RST-2 row (Round 2)",
+   "claim_broken": "The evidence quotes the plain-image result as '6 passed, 20 skipped'.",
+   "evidence": "On the lane head alone (662c07c) and on the scratch merge, 'INFRX_I3B_PG=d INFRX_D_TASK=d3 pytest tests/integration/backend/recovery/test_restore.py' with no INFRX_D1_IMAGE gives '6 passed, 21 skipped': 10 UNSUPPORTED at :109, 10 UNSUPPORTED at :447 (the good_restore fixture of bk01f) and 1 bk03 'no infrx-e2 stack'. The substance of the claim holds: every skip is typed, nothing fails, and no d3/i3b container event appeared in docker events. The count is off by one, apparently because bk03's skip was left out.",
+   "minimal_fix": "Quote '6 passed, 21 skipped (20 UNSUPPORTED[plain D image] + bk03)'.",
+   "lens": "restore"
+  },
+  {
+   "id": "RST-R2-4",
+   "severity": "nonblocking",
+   "file": "tests/integration/mutants.py",
+   "line": "IR R2-B (the private = None override in run_one)",
+   "claim_broken": "IR R2-B is meant to keep the D harness lock shared (DR-2). It shares the lock only with whatever TMPDIR the parent process has.",
+   "evidence": "In my runner run (TMPDIR=/tmp/claude-1000/restore-tmp, R2-B applied), the children's lock landed at /tmp/claude-1000/restore-tmp/infrx-d3-postgres-55434.lock, not in the shared /tmp. For my run, R2-B changed only where the lock lives: all 4 mutants were killed, with problems null. Under the protocol's required private TMPDIR, R2-B does not coordinate with another lane that holds /tmp/infrx-d3-postgres-55434.lock. The lane's DR-2 measurement (lock held in $TMPDIR) is consistent with this, but 'the harness lock stays shared' holds only when the parent TMPDIR is the shared one.",
+   "minimal_fix": "Document in IR R2-B that the D-mode mutant run must be started with the shared TMPDIR (or have pgharness put its lock in a fixed directory independent of TMPDIR). Alternatively, rely on the port-owner label check instead.",
+   "lens": "restore"
+  },
+  {
+   "id": "DRL-2",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "243-245 (rc03), 600-609 (rc00 pin)",
+   "claim_broken": "rc00 pins rc03 to PENDING[G2] as an unmerged owner. On the coordinator head d486142, tasks.json has G2 'implemented' (merged 2391d4d, cutover HELD), so once this lane integrates, rc03 pends on a merged task.",
+   "evidence": "I copied d486142's research/plan/tasks.json into the merge copy. test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual then fails with `AssertionError: ({'G2'}, set())` (1 failed, 54 passed). The ingress is still not mounted on d486142: ROUTERS = health, models, chat. So rc03 is still honestly not runnable, but its owner id is stale. Part of this is E3B2's (stack.PENDING lists G2).",
+   "minimal_fix": "At integration, re-point rc03 and the rc00 pin to whoever owns the held cutover: a coordinator owner reference in recoverykit.OWNERS, or a RESIDUAL entry with its reason. Record this in the integration requests.",
+   "lens": "drill"
+  },
+  {
+   "id": "DRL-3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/i/I3B-followup-0737ebe.md",
+   "line": "Round 2 findings table, DR-5 row",
+   "claim_broken": "The reason DR-5 is left open says rc04's admit/claim half 'needs E3B2's stack.pg_jobstore() on E2's compose stack'. On this tree only terminalize is still a stub (0016:370, owner D5). admit (0011:568) and claim (0016:206) are implemented, and pgtesting.make_jobstore_factory takes any (fresh_database, dsn_for).",
+   "evidence": "grep of the migrations finds `perform infrx.unimplemented(` only for terminalize. rc04 calls kit.needs_stack() first, then stack.stubbed(), whose stub_owners() connects to E2's harness.pg_dsn(). So on E3B2's head, without E2's stack, rc04 cannot reach stubbed() at all. With the stack, it pends on {'terminalize': 'D5'}. The admit/claim-across-a-restart half could run on D's harness: make_jobstore_factory plus a restart of the lane's own D container. Nothing forces E2's stack.",
+   "minimal_fix": "Either correct the reason (the choice is deliberate scope, not impossibility), or split rc04 into an admit/claim-across-restart case on D's harness (runnable today) and a settlement half pending on D5.",
+   "lens": "drill"
+  },
+  {
+   "id": "DRL-4",
+   "severity": "nonblocking",
+   "file": "tests/integration/mutants.py (IR R2-B, E's runner)",
+   "line": "run_one, after `private = None if ...`",
+   "claim_broken": "R2-B says it makes D-mode recovery suites keep the harness lock shared. The pgharness lock is `gettempdir()/<container>-<port>.lock`, so it is shared only among runs with the same TMPDIR. The evidence's own advice to run each list under a private TMPDIR recreates DR-2 between two concurrent list runs on d3.",
+   "evidence": "Applied in scratch. e3bm23 and e3bm31 anchors each still occur exactly once (checked via mutants.MUTANTS before/occurrences: 1/1). For my run, R2-B changed nothing for locking, because my private task's lock is the absolute /tmp/infrx-confirm-i3bf-drill.lock. Its only effect was that the children used my run's TMPDIR instead of the per-mutant copy's tmp. The full list still gave 96/94/1/1.",
+   "minimal_fix": "Keep R2-B. Put the D-mode lock at a TMPDIR-independent path (for example /tmp or /run/lock), or have R2-C/the runner document that D-mode list runs must share one TMPDIR.",
+   "lens": "drill"
+  }
+ ]
+}
