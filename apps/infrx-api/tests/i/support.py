@@ -115,6 +115,22 @@ with (here / "argv.log").open("a") as log:
 os.execv({python!r}, [{python!r}, *sys.argv[1:]])
 '''
 
+# A fake `docker run --rm -i --network none IMAGE python /app/deploy/preflight.py probe …`:
+# records its argv, then runs this checkout's preflight in this interpreter, as the image
+# would - the staged file still arrives on stdin, exactly as it does in production.
+DOCKER_STUB = '''#!{python}
+import os, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+with (here / "argv.log").open("a") as log:
+    log.write("docker " + " ".join(sys.argv[1:]) + "\\n")
+args = sys.argv[1:]
+rest = args[args.index({image_preflight!r}) + 1:]
+os.execv({python!r}, [{python!r}, {preflight!r}, *rest])
+'''
+
+# A runtime image id, i.e. what `install.sh` passes as `--image` after its build.
+IMAGE = "sha256:" + "a" * 64
+
 # A digest-pinned engine image, i.e. what W3 owes the pilot. `models/marlin2b/serve.sh`
 # defaults to the floating `:nightly` tag today, which is the recorded pending gap.
 PINNED = "vllm/vllm-openai@sha256:" + "0" * 64
@@ -122,7 +138,7 @@ PINNED = "vllm/vllm-openai@sha256:" + "0" * 64
 SERVE_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 IMAGE=${{IMAGE:-{image}}}
-exec docker run --rm --name "marlin2b-$PORT" "$IMAGE" /model \\
+exec docker run --rm --name "marlin2b-$PORT" -p "${{BIND:-127.0.0.1}}:$PORT:8000" "$IMAGE" /model \\
   --served-model-name marlin2b \\
   --hf-overrides '{{"architectures":["Qwen3_5ForConditionalGeneration"]}}' \\
   --dtype bfloat16 {extra} "$@"
@@ -175,6 +191,11 @@ def stubs(tmp_path, monkeypatch, parameters=None, **codes) -> Stubs:
     made = Stubs(directory)
     made._write("aws", AWS_STUB)
     made._write("systemctl", SYSTEMCTL_STUB)
+    docker = directory / "docker"
+    docker.write_text(DOCKER_STUB.format(python=sys.executable,
+                                         image_preflight=preflight.IMAGE_PREFLIGHT,
+                                         preflight=str(API_DIR / "deploy" / "preflight.py")))
+    docker.chmod(0o755)
     made.set_parameters(parameters if parameters is not None else
                         {name: {"value": value} for name, value in VALID.items()})
     made.fail_systemctl(**codes)
@@ -189,14 +210,21 @@ def runtime_stub(tmp_path, name: str, body: str) -> str:
     return str(path)
 
 
-def serve_script(tmp_path, image="vllm/vllm-openai:nightly", extra="") -> pathlib.Path:
+def serve_script(tmp_path, image="vllm/vllm-openai:nightly", extra="",
+                 recorded=True) -> pathlib.Path:
     """A stand-in for `models/marlin2b/serve.sh` with the flags a case needs.
 
     Generated rather than copied so a case can add `--reasoning-parser` without
     editing a file another track owns; `test_prereqs.py` checks the real script too.
+    A digest-pinned image also gets W3's `serving-version.json` beside it recording that
+    digest, unless `recorded=False`.
     """
     path = tmp_path / "serve.sh"
     path.write_text(SERVE_SCRIPT.format(image=image, extra=extra))
+    pin = tmp_path / preflight.SERVING_VERSION
+    pin.unlink(missing_ok=True)
+    if recorded and "@sha256:" in image:
+        pin.write_text(json.dumps({"image": image}))
     return path
 
 
@@ -213,7 +241,9 @@ def config(tmp_path, mode="dev", previous="PREVIOUS=1\n", **overrides):
         env_file.write_text(previous)
     settings = dict(mode=mode, env_file=env_file, owner=owner_name(),
                     runtime_python=sys.executable,
-                    units=("marlin2b-vllm", "marlin2b-gateway"))
+                    units=("marlin2b-vllm", "marlin2b-gateway"),
+                    # a pilot runs the pinned runtime image (the docker stub stands in)
+                    image=IMAGE if mode == "pilot" else "")
     settings.update(overrides)
     # Only generate the default script when the case did not bring its own: both land
     # at `tmp_path/serve.sh`, so generating it unconditionally would overwrite the

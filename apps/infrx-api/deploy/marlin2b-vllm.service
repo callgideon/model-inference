@@ -1,5 +1,5 @@
 [Unit]
-Description=vLLM serving Marlin-2B (docker, localhost:8000)
+Description=vLLM serving Marlin-2B (docker, 127.0.0.1:8000; never public)
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -7,10 +7,19 @@ Requires=docker.service
 User=ubuntu
 Environment=WEIGHTS_ROOT=/opt/dlami/nvme
 Environment=HOME=/home/ubuntu
-# serve.sh runs `docker run --rm` in the foreground, so systemd owns the lifecycle.
+# One source per setting (W3): serve.sh reads ENGINE_MAX_NUM_SEQS and PROCESSING_CACHE_DIR
+# under the names the runtime reads, from the same validated file, and refuses a second
+# value on its command line - so this unit passes none. Its image pin, flags, loopback
+# publish and read-only media mount are W3's; preflight.py checks them before a pilot.
+EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000
-ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh --max-num-seqs 32
-ExecStop=/usr/bin/docker stop marlin2b-8000
+ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}
+ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh
+# W3's request: 30 s, because nothing is in flight by then - the worker is PartOf= this
+# unit and ordered After= it, so it drains first. systemd waits longer than docker, or it
+# would kill only the client.
+ExecStop=/usr/bin/docker stop -t 30 marlin2b-8000
+TimeoutStopSec=60
 Restart=always
 RestartSec=5
 TimeoutStartSec=900

@@ -34,6 +34,7 @@ This module mutates one file and calls `systemctl`. It performs no AWS write, an
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import logging
 import os
@@ -60,11 +61,25 @@ ALL_MODES = MODES
 # 2026-09-22): CPython 3.12.0-3.12.3 answer `is_private` from older special-purpose
 # tables, so the media path's address policy depends on the interpreter build.
 REQUIRED_PYTHON = (3, 12, 4)
+# Where the Dockerfile puts this file inside the runtime image.
+IMAGE_PREFLIGHT = "/app/deploy/preflight.py"
 
 # W3 owns the engine image and flags. The adapter cannot read a reasoning-parser
 # stream and does not tolerate per-chunk usage, so an installer that finds either
 # flag refuses rather than deploying an engine the gateway cannot parse.
 FORBIDDEN_ENGINE_FLAGS = ("--reasoning-parser", "continuous_usage_stats")
+# W3's record of the served engine, next to serve.sh (models/marlin2b/).
+SERVING_VERSION = "serving-version.json"
+LOOPBACK_PUBLISH = ("127.0.0.1:", "${BIND:-127.0.0.1}:")
+# The worker unit starts `python -m infrx.worker`: the composition root around W3's
+# WorkerService (claims, the in-process recover() reaper, drain, loopback readiness). A
+# pilot image without it would install a unit that crash-loops.
+WORKER_ENTRIES = ("infrx.worker.__main__",)
+
+# est. budgets (infra/README.md §2), checked where each directory lives or will live: the
+# usage spill and logs on the root EBS volume (5 GiB + headroom), and the media root on
+# the instance-store NVMe (media/staging 60 GiB; a rebuildable cache, W3's proposed R).
+DISK_BUDGET = (("/var/lib/infrx", 10 * 2**30), ("/opt/dlami/nvme/processing", 60 * 2**30))
 
 # infra/README.md §5: `/model-inference/price_table_version` was **withdrawn**, not
 # reassigned - contracts v1 resolves the price from D1's `price_versions` by model and
@@ -113,6 +128,19 @@ MANIFEST: tuple[Key, ...] = (
     Key("MODEL_ID", "served model pin", "model_id"),
     Key("MAX_INFLIGHT", "capacity bound", "positive_int"),
     Key("USAGE_LOG", "usage sink (legacy jsonl spill)", "abs_path"),
+    # I2B: the units run this image, and systemd reads the id from this same file, so the
+    # image and the configuration it was probed with are replaced by one rename. A pilot
+    # never runs on a host interpreter.
+    Key("INFRX_IMAGE", "runtime image pin (built image id)", "image_id",
+        required_in=("pilot",)),
+    # The engine is never public (I2B.b): whatever the flags say, the gateway only ever
+    # dials it on loopback, and so does the scheduling index.
+    Key("UPSTREAM", "engine address, loopback only", "loopback_url"),
+    Key("VALKEY_URL", "scheduling index, loopback only", "loopback_valkey_url",
+        required_in=("pilot",)),
+    # R61 (2) / W2 request 5: ONE root R shared by the processing cache, the engine
+    # adapter's `local_media_root` and vLLM's `--allowed-local-media-path`.
+    Key("PROCESSING_CACHE_DIR", "shared media root", "abs_path", required_in=("pilot",)),
     Key("SUPABASE_URL", "identity source", "https_url",
         param="supabase_url", required_in=("pilot",)),
     Key("SUPABASE_SERVICE_ROLE_KEY", "identity source", "opaque",
@@ -128,6 +156,55 @@ MANIFEST: tuple[Key, ...] = (
 )
 
 
+# --- the config schema: every other name the runtime reads (I2B.a) -----------------
+# `config.from_env` reads these, and a deployment may set them only as
+# `apply --set NAME=VALUE` (not secrets: a secret is a MANIFEST key read from SSM). The
+# values are the runtime's to validate - the probe runs `validate_runtime(from_env(...))`
+# over the staged bytes - so a mistyped number refuses the install. A mistyped *name* is
+# refused here: `MAX_ACTIVE_JOB=4` would otherwise be ignored, and the operator would
+# believe the cap was set. Names only; `tests/i` pins this list, the manifest and
+# `NOT_SETTABLE` to exactly the names the runtime reads.
+TUNABLE = (
+    # 08 §5 (contracts.limits.PilotSettings)
+    "MAX_REQUEST_BYTES", "INTAKE_TIMEOUT_S", "MAX_MEDIA_BYTES", "MAX_VIDEO_SECONDS",
+    "MEDIA_FETCH_CONNECT_TIMEOUT_S", "MEDIA_FETCH_TIMEOUT_S", "MEDIA_FETCH_MAX_REDIRECTS",
+    "PROBE_TIMEOUT_S", "PREPARATION_TIMEOUT_S", "TRANSCODE_MIN_TIMEOUT_S",
+    "TRANSCODE_DURATION_FACTOR", "PREPARATION_CONCURRENCY", "MAX_PREPARING_JOBS",
+    "QUEUE_WAIT_INTERACTIVE_S", "QUEUE_WAIT_ASYNC_S", "GENERATION_TIMEOUT_S",
+    "TTFT_TIMEOUT_S", "TPOT_STALL_S", "LEASE_TTL_S", "PREPARATION_LEASE_TTL_S",
+    "LEASE_HEARTBEAT_S", "MAX_PREPUBLICATION_RETRIES", "SSE_KEEPALIVE_S", "STREAM_BATCH_MS",
+    "JOURNAL_EVENT_MAX_BYTES", "JOURNAL_JOB_RESERVE_BYTES", "JOURNAL_TOTAL_BYTES",
+    "JOURNAL_CHUNK_TTL_S", "RESULT_TTL_S", "PROCESSING_CACHE_TTL_S", "IDEMPOTENCY_TTL_S",
+    "TRACE_CONTENT_MAX_DAYS", "TRACE_METADATA_MONTHS", "MAX_ACTIVE_JOBS",
+    "MAX_ACTIVE_JOBS_PER_ORG", "MAX_ACTIVE_JOBS_PER_KEY", "ENGINE_MAX_NUM_SEQS",
+    "WORKER_CONCURRENCY", "MAX_OUTPUT_TOKENS", "MAX_CONTEXT_TOKENS", "TRACE_CAPTURE_BYTES",
+    "TRACE_METADATA_RESERVE_BYTES", "TRACE_QUEUE_MAX", "TRACE_SPOOL_DIR",
+    "TRACE_SPOOL_MAX_BYTES", "TRACE_SPOOL_MIN_FREE_BYTES", "TRACE_FSYNC_INTERVAL_S",
+    "S3_MEDIA_BUCKET", "S3_TRACE_BUCKET", "UNKNOWN_USAGE_RECONCILE_S",
+    # 08 §5.1 (config.DeploymentSettings)
+    "TRACE_SPOOL_SEGMENT_BYTES", "MAX_INDEX_ITEMS", "MAX_INDEX_BYTES",
+    "DATABASE_POOL_MIN_SIZE", "DATABASE_POOL_MAX_SIZE", "DATABASE_POOL_CONNECT_TIMEOUT_S",
+    "DATABASE_POOL_STATEMENT_TIMEOUT_MS", "MAX_MESSAGES", "MAX_PARTS",
+    "MAX_TEXT_CODEPOINTS", "MAX_URL_CHARS", "MAX_NUMBER_DIGITS", "LARGE_BODY_LIMIT",
+    "LARGE_BODY_THRESHOLD_BYTES",
+    # the F1 names that keep theirs until G/W retire them (08 §5)
+    "MAX_VIDEO_MB", "FETCH_TIMEOUT_S", "MAX_REDIRECTS", "ALLOWED_VIDEO_MIME",
+    "USAGE_FAILED_LOG", "MODELS_DOC",
+)
+# Tunables with a shape of their own. The runtime reads 0 here as a valid count (it refuses
+# only negatives), and serve.sh hands it to vLLM, which does not start on it: refused
+# before anything changes rather than found after the engine restart.
+TUNABLE_SHAPES = {"ENGINE_MAX_NUM_SEQS": "positive_int", "WORKER_CONCURRENCY": "positive_int"}
+# Read by the runtime, never written by this installer.
+NOT_SETTABLE = {
+    "CONSOLE_CURSOR_SECRET": "a signing key, and the console's rather than this gateway's "
+                             "(08 §5.1); a secret belongs in SSM, not in an argument",
+    "CLICKHOUSE_URL": "T's DSN, which carries a credential; SSM when T2 deploys",
+    "JUDGE_MODE": "live judging is a separately authorized paid budget",
+    "JUDGE_LIVE_BUDGET_USD": "live judging is a separately authorized paid budget",
+}
+
+
 def _matches(pattern: str):
     compiled = re.compile(pattern)
     return lambda value: bool(compiled.fullmatch(value))
@@ -138,7 +215,9 @@ def _https_url(value: str) -> bool:
 
 
 def _positive_int(value: str) -> bool:
-    return value.isdigit() and int(value) > 0
+    # serve.sh's grammar: ASCII, no leading zero (`isdigit` takes '007' and '٣', and
+    # `int('²')` raises)
+    return bool(re.fullmatch(r"[1-9][0-9]*", value))
 
 
 def _abs_path(value: str) -> bool:
@@ -153,8 +232,14 @@ SHAPES = {
     "abs_path": _abs_path,
     "https_url": _https_url,
     "pg_dsn": _matches(r"postgres(?:ql)?://[^\s]+"),
+    # `docker image inspect --format {{.Id}}`: a content address, never a tag.
+    "image_id": _matches(r"sha256:[0-9a-f]{64}"),
+    "loopback_url": _matches(r"http://(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}/?"),
+    "loopback_valkey_url": _matches(r"(?:valkey|redis)://(?:127\.0\.0\.1|localhost):\d{1,5}(?:/\d{1,2})?"),
     # A shared secret shorter than this is a typo, a placeholder or a truncated read.
     "opaque": lambda value: 20 <= len(value) <= 4096,
+    # The runtime types a tunable; the probe's `validate_runtime` is what refuses `abc`.
+    "tunable": lambda value: len(value) <= 4096,
 }
 
 
@@ -234,8 +319,16 @@ class Config:
     units: tuple[str, ...] = ()
     model_id: str = "nemostation/marlin-2b"
     max_inflight: str = "16"
-    usage_log: str = "/opt/dlami/nvme/logs/usage.jsonl"
+    # Row M-SCRATCH: the usage spill survives a stop only on the root EBS volume.
+    usage_log: str = "/var/lib/infrx/usage/usage.jsonl"
+    image: str = ""                   # INFRX_IMAGE; set, the probe runs inside it
+    upstream: str = "http://127.0.0.1:8000"
+    valkey_url: str = "valkey://127.0.0.1:6379/0"
+    media_root: str = "/opt/dlami/nvme/processing"
+    settings: tuple[str, ...] = ()    # `--set NAME=VALUE`, schema names only
+    disk: tuple[tuple[str, int], ...] = ()
     aws: tuple[str, ...] = ("aws",)
+    docker: tuple[str, ...] = ("docker",)
     systemctl: tuple[str, ...] = ("systemctl",)
     calls: list[str] = field(default_factory=list)   # the systemctl calls this run made
 
@@ -243,7 +336,9 @@ class Config:
 def local_values(cfg: Config) -> dict[str, str]:
     """The keys the installer supplies rather than reading from SSM."""
     return {"INFRX_MODE": cfg.mode, "MODEL_ID": cfg.model_id,
-            "MAX_INFLIGHT": cfg.max_inflight, "USAGE_LOG": cfg.usage_log}
+            "MAX_INFLIGHT": cfg.max_inflight, "USAGE_LOG": cfg.usage_log,
+            "INFRX_IMAGE": cfg.image, "UPSTREAM": cfg.upstream,
+            "VALKEY_URL": cfg.valkey_url, "PROCESSING_CACHE_DIR": cfg.media_root}
 
 
 def collect(cfg: Config) -> tuple[dict[str, str], list[str]]:
@@ -265,8 +360,9 @@ def collect(cfg: Config) -> tuple[dict[str, str], list[str]]:
             continue
         if key.param is None:
             value = supplied.get(key.env)
-            if value is None:
-                problems.append(f"{key.env}: no value supplied ({key.role})")
+            if not value:
+                if key.needed(cfg.mode):
+                    problems.append(f"{key.env}: no value supplied ({key.role})")
                 continue
         else:
             name = f"{cfg.param_prefix}/{key.param}"
@@ -285,8 +381,30 @@ def collect(cfg: Config) -> tuple[dict[str, str], list[str]]:
             problems.append(problem)
             continue
         values[key.env] = value
+    problems += tunables(cfg.settings, values)
     problems += withdrawn(values)
     return values, problems
+
+
+def tunables(settings, values: dict[str, str]) -> list[str]:
+    """`--set NAME=VALUE` pairs, added to `values`: schema names only, each once."""
+    problems = []
+    for pair in settings:
+        name, _, value = pair.partition("=")
+        if name not in TUNABLE:
+            problems.append(f"--set {name}: not a tunable name (`preflight.py manifest` "
+                            f"lists them)" + (f"; {NOT_SETTABLE[name]}"
+                                              if name in NOT_SETTABLE else ""))
+        elif name in values:
+            problems.append(f"--set {name}: given twice")
+        else:
+            problem = shape_problem(Key(name, "tunable", TUNABLE_SHAPES.get(name, "tunable")),
+                                    value)
+            if problem:
+                problems.append(problem)
+            else:
+                values[name] = value
+    return problems
 
 
 def withdrawn(values: dict[str, str]) -> list[str]:
@@ -297,7 +415,7 @@ def withdrawn(values: dict[str, str]) -> list[str]:
 
 def render(values: dict[str, str]) -> str:
     """The env file body, in manifest order so a diff of two installs is readable."""
-    order = [key.env for key in MANIFEST]
+    order = [key.env for key in MANIFEST] + list(TUNABLE)
     return "".join(f"{name}={values[name]}\n" for name in order if name in values)
 
 
@@ -336,6 +454,36 @@ def engine_problems(script: pathlib.Path | None, mode: str) -> list[str]:
             problems.append(f"{script} does not pin the engine image by digest "
                             f"(IMAGE default is not a @sha256: reference); pilot needs "
                             f"a pinned image - pending on W3")
+        # I2B: the engine is private. Every port serve.sh publishes must be on loopback
+        # (`-p "127.0.0.1:…"`, or the older `${BIND:-127.0.0.1}` default): anything else
+        # is an OpenAI endpoint with no key on the host's public address.
+        publishes = re.findall(r'-p\s+"?([^"\s]+)', text)
+        if not publishes or not all(spec.startswith(LOOPBACK_PUBLISH) for spec in publishes):
+            problems.append(f"{script} publishes the engine beyond 127.0.0.1; the engine "
+                            f"is never public")
+        # The named placeholder for W3's pin record. Present, it must record the digest
+        # serve.sh actually runs, so the two cannot disagree about what "pinned" means.
+        pin = script.parent / SERVING_VERSION
+        if not pin.exists():
+            problems.append(f"PENDING(W3): {pin} does not exist; the pilot engine pin "
+                            f"(image digest, flags, EOS ids) is recorded there")
+        elif "@sha256:" in image and image.partition("@")[2] not in pin.read_text():
+            problems.append(f"{pin} does not record the image digest {script} runs")
+    return problems
+
+
+def disk_problems(budget) -> list[str]:
+    """Free bytes below a declared budget refuse a pilot install: a full disk is lost
+    usage spill and failed preparations, discovered on the first busy hour."""
+    problems = []
+    for path, need in budget:
+        where = pathlib.Path(path)
+        while not where.exists():
+            where = where.parent
+        free = shutil.disk_usage(where).free
+        if free < need:
+            problems.append(f"{path}: {free // 2**30} GiB free, the pilot budget is "
+                            f"{need // 2**30} GiB (est.)")
     return problems
 
 
@@ -422,9 +570,36 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
         problems.append("INFRX_MODE=pilot requires the pilot routers to be composed in "
                         "infrx/gateway/app.py ROUTERS (the G2 cutover); refusing to "
                         "write pilot mode for a runtime that would serve legacy routes")
+    if mode == "pilot":
+        if os.geteuid() == 0:
+            problems.append("the runtime runs as root; the image's USER must be an "
+                            "unprivileged uid")
+        for entry in WORKER_ENTRIES:
+            if not _importable(entry):
+                problems.append(f"PENDING(W3): {entry} is not in the runtime; the worker "
+                                f"unit starts it")
     problems += transport_logger_problems()
     return {"ok": not problems, "python": version, "mode": mode,
             "validated_mode": validated, "problems": problems, "warnings": warnings}
+
+
+def _importable(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ImportError:
+        return False
+
+
+def probe_command(cfg: Config, staged: pathlib.Path) -> list[str]:
+    """In the image when there is one: its interpreter, its package and its user are the
+    ones that serve. No network, and the staged file arrives on stdin, so no mount and
+    no permission on the 0600 file is needed inside."""
+    if cfg.image:
+        return [*cfg.docker, "run", "--rm", "-i", "--network", "none", cfg.image,
+                "python", IMAGE_PREFLIGHT, "probe", "--mode", cfg.mode,
+                "--env-file", "/dev/stdin"]
+    return [cfg.runtime_python, os.path.abspath(__file__), "probe",
+            "--mode", cfg.mode, "--env-file", str(staged)]
 
 
 def run_probe(cfg: Config, staged: pathlib.Path) -> dict:
@@ -436,11 +611,12 @@ def run_probe(cfg: Config, staged: pathlib.Path) -> dict:
     """
     path = str(API_DIR)
     inherited = os.environ.get("PYTHONPATH")
-    done = subprocess.run([cfg.runtime_python, os.path.abspath(__file__), "probe",
-                           "--mode", cfg.mode, "--env-file", str(staged)],
-                          capture_output=True, text=True, cwd=path,
-                          env={**os.environ,
-                               "PYTHONPATH": f"{path}:{inherited}" if inherited else path})
+    with open(staged, "rb") as body:
+        done = subprocess.run(probe_command(cfg, staged), stdin=body,
+                              capture_output=True, cwd=path,
+                              env={**os.environ,
+                                   "PYTHONPATH": f"{path}:{inherited}" if inherited else path})
+    done.stdout, done.stderr = done.stdout.decode(errors="replace"), done.stderr.decode(errors="replace")
     try:
         return json.loads(done.stdout)
     except (json.JSONDecodeError, TypeError):
@@ -528,6 +704,8 @@ def apply(cfg: Config) -> int:
         return REFUSED
     values, problems = collect(cfg)
     problems += engine_problems(cfg.serve_script, cfg.mode)
+    if cfg.mode == "pilot":
+        problems += disk_problems(cfg.disk)
     if problems:
         report(problems)
         return REFUSED
@@ -569,7 +747,10 @@ def build(args) -> Config:
                   runtime_python=args.runtime_python,
                   serve_script=pathlib.Path(args.serve_script) if args.serve_script else None,
                   units=tuple(args.restart), model_id=args.model_id,
-                  max_inflight=args.max_inflight, usage_log=args.usage_log)
+                  max_inflight=args.max_inflight, usage_log=args.usage_log,
+                  image=args.image, upstream=args.upstream, valkey_url=args.valkey_url,
+                  media_root=args.media_root, settings=tuple(args.set),
+                  disk=DISK_BUDGET)
 
 
 def main(argv=None) -> int:
@@ -589,7 +770,14 @@ def main(argv=None) -> int:
                               help="unit to restart after a successful install")
     apply_parser.add_argument("--model-id", default="nemostation/marlin-2b")
     apply_parser.add_argument("--max-inflight", default="16")
-    apply_parser.add_argument("--usage-log", default="/opt/dlami/nvme/logs/usage.jsonl")
+    apply_parser.add_argument("--usage-log", default="/var/lib/infrx/usage/usage.jsonl")
+    apply_parser.add_argument("--image", default="",
+                              help="runtime image id (sha256:...); the probe runs in it")
+    apply_parser.add_argument("--upstream", default="http://127.0.0.1:8000")
+    apply_parser.add_argument("--valkey-url", default="valkey://127.0.0.1:6379/0")
+    apply_parser.add_argument("--media-root", default="/opt/dlami/nvme/processing")
+    apply_parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
+                              help="a tunable from the schema (`manifest` lists them)")
 
     probe_parser = sub.add_parser("probe", help="runtime checks (run by apply)")
     probe_parser.add_argument("--mode", required=True)
@@ -609,6 +797,8 @@ def main(argv=None) -> int:
             state = ("forbidden" if key.banned(args.mode)
                      else "required" if key.needed(args.mode) else "optional")
             print(f"{key.env:28s} {state:9s} {where:32s} {key.shape:13s} {key.role}")
+        print("tunable (--set NAME=VALUE): " + " ".join(TUNABLE))
+        print("never written: " + " ".join(sorted(NOT_SETTABLE)))
         return 0
     return apply(build(args))
 
