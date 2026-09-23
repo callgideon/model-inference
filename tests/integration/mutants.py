@@ -929,6 +929,11 @@ MUTANTS: tuple[Mutant, ...] = (
            '                  if tasks.get(task) in ("implemented",)\n',
            "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
            cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
+    Mutant("e3bm53", "E3B2 round 3 (G-N1): a red make target names its failing cases",
+           "tests/integration/run.py",
+           'SUITE_ADDOPTS = "-rfEs"\n', 'SUITE_ADDOPTS = "-rs"\n',
+           "tests/integration/test_run.py", "names_its_failures",
+           cases=("test_a_red_make_target_names_its_failures_and_its_skips",)),
 )
 
 

@@ -209,6 +209,8 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
             # Every red case by id, not only the 12-line tail (the round-2 gate's suites stage
             # reported '4 failed' while its tail named three).
             "failures": re.findall(r"^(?:FAILED|ERROR) (\S+)", output, re.M),
+            # ... and each one's first line, so a flaky red can be attributed (G-N1).
+            "failure_lines": re.findall(r"^((?:FAILED|ERROR) \S+.*)$", output, re.M)[:50],
             "named": None if needle is None else (needle.lower() in output.lower()),
             "tail": "\n".join(output.strip().splitlines()[-12:])}
 
@@ -409,6 +411,10 @@ def engine(report: Report) -> None:
 # lands: D4's pgtesting `stream` hook ("missing optional hook 'stream'", tests/d's conformance)
 # landed with 0017, so none is expected today.
 KNOWN_API_SKIPS: tuple[str, ...] = ()
+# pytest's short summary for the make targets and the backend suite: failures and errors (its
+# default, "fE") AND skip reasons. A bare `-rs` REPLACES the default, and a red run then names
+# no failing case at all (confirmation G-N1, measured).
+SUITE_ADDOPTS = "-rfEs"
 
 
 def suites(report: Report, *, own_only: bool) -> None:
@@ -423,7 +429,7 @@ def suites(report: Report, *, own_only: bool) -> None:
             # E3B phase 2: the D suite alone has grown past 30 min on a shared host. `-rs`
             # makes pytest name every skip, so an unexpected one fails the stage (below).
             runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0,
-                              env={"PYTEST_ADDOPTS": "-rs"}))
+                              env={"PYTEST_ADDOPTS": SUITE_ADDOPTS}))
     failed = [run["argv"] for run in runs if run["exit"] != 0]
     # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
     # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose
@@ -443,8 +449,8 @@ def suites(report: Report, *, own_only: bool) -> None:
     unread = [run["argv"] for run in runs if run["argv"] == "make api-test"
               and run["counts"].get("skipped") and not run.get("skips")]
     report.add("suites", FAIL if (failed or silent or unexpected or unread) else PASS,
-               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips", "failures")}
-                         for run in runs],
+               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips",
+                                                  "failure_lines")} for run in runs],
                 "nonzero_exit": failed or None,
                 "reported_no_tests": silent or None,
                 "unexpected_skips": unexpected or None,
@@ -599,7 +605,7 @@ def backend(report: Report) -> None:
         with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-e3b-") as tmp:
             junit = Path(tmp) / "backend.xml"
             run = shell([sys.executable, "-m", "pytest", "-q", BACKEND_SUITE, "-p",
-                         "no:cacheprovider", "-rs", f"--junitxml={junit}"],
+                         "no:cacheprovider", SUITE_ADDOPTS, f"--junitxml={junit}"],
                         cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "off"})
             cases = classify(junit.read_text()) if junit.exists() else \
                 {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}

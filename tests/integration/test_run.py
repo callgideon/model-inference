@@ -1150,7 +1150,7 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     def stage(skips, skipped=None):
         def fake_shell(argv, **kw):
             if "api-test" in argv:
-                assert kw.get("env", {}).get("PYTEST_ADDOPTS") == "-rs", kw
+                assert kw.get("env", {}).get("PYTEST_ADDOPTS") == runner.SUITE_ADDOPTS, kw
             counts = {"passed": 5, **({"skipped": skipped} if skipped and "api-test" in argv
                                       else {})}
             return {"argv": " ".join(argv), "exit": 0, "counts": counts,
@@ -1171,6 +1171,24 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     unread = stage([], skipped=1)
     assert (unread["status"], unread["detail"]["skips_without_reasons"]) == (
         runner.FAIL, ["make api-test"]), unread["detail"]
+
+
+def test_a_red_make_target_names_its_failures_and_its_skips(tmp_path):
+    """Confirmation G-N1: a real pytest run under the make targets' options (`PYTEST_ADDOPTS`)
+    names every failing case with its first line AND every skip reason - `-rs` alone replaced
+    pytest's default `-rfE`, so a red api-test named no failure."""
+    suite = tmp_path / "test_red.py"
+    suite.write_text("import pytest\n\ndef test_ok():\n    pass\n\n"
+                     "def test_red():\n    assert 1 == 2, 'boom'\n\n"
+                     "def test_skip():\n    pytest.skip('a reason')\n")
+    result = runner.shell([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           str(suite)], cwd=harness.REPO_ROOT,
+                          env={"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS})
+    assert [case.rsplit("/", 1)[-1] for case in result["failures"]] == [
+        "test_red.py::test_red"], result
+    assert [line.rsplit("/", 1)[-1] for line in result["failure_lines"]] == [
+        "test_red.py::test_red - AssertionError: boom"], result
+    assert result["skips"] == ["a reason"], result
 
 
 def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):
