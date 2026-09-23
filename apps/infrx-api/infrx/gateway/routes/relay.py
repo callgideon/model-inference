@@ -130,15 +130,27 @@ class Relay:
             raise errors.UnsupportedParameter("respond-async is not served on this route",
                                               param="Prefer")
         began = self.clock()
-        # M2 request 5: preparation replaces the record G1 built, so the staged payload and
-        # the admission carry our media refs, never the customer's URL or inline bytes.
-        prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
-        refs = await _dependency(self.media.stage(auth.org_id, prepared))
+        # R91 (review money-B1): a keyed request that replays a known job is answered from
+        # that job before anything is prepared, so a lost answer is recovered by its key
+        # even once the customer's media URL has expired, and nothing is fetched again.
+        found = await self._lookup(auth.org_id, idem)
+        prepared = refs = None
+        if found is None or found[1] is None:
+            # M2 request 5: preparation replaces the record G1 built, so the staged payload
+            # and the admission carry our media refs, never the customer's URL or bytes.
+            prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
+            refs = await _dependency(self.media.stage(auth.org_id, prepared))
         timings = {"prepare": max(0.0, self.clock() - began)}
-        # The requested name and the idempotency scope exactly as handed (R66, R78).
-        admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
-            else self.jobs.admit(prepared, idem)
-        admission = await _dependency(admit)
+        if found is None:
+            # The requested name and the idempotency scope exactly as handed (R66, R78).
+            admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
+                else self.jobs.admit(prepared, idem)
+            admission = await _dependency(admit)
+            if admission.replayed:              # a replay the lookup could not see yet
+                found = (admission, (await _dependency(
+                    self._owned(admission.org_id, admission.job_handle)))[1])
+        else:
+            admission = found[0]
         deadline = request.deadline_at if self.regime == CREDIT else admission.deadline_at
         job = _Job(org_id=admission.org_id, handle=admission.job_handle,
                    request_id=admission.request_id, model=request.model_revision,
@@ -148,11 +160,14 @@ class Relay:
         headers = {wire.HEADER_INFERENCE_ID: job.request_id,
                    wire.HEADER_SERVER_TIMING: metrics.server_timing(timings)}
         if admission.replayed:
-            # Nothing is re-admitted, re-attached or regenerated: the answer attaches to the
-            # same job's wait or stream, and a terminal job answers its committed result.
+            # Nothing is re-admitted or regenerated: the answer attaches to the same job's
+            # wait or stream, and a terminal job answers its committed result.
             headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"
-        else:
+        if found is None or found[1] is None:
+            # A fresh admission, or the replay of a job still in flight whose first
+            # acceptance may have been cut short (money-B2): the same idempotent steps.
             await self._admitted(job, admission, prepared, refs)
+        if not admission.replayed:
             self._count("infrx_jobs_accepted_total", mode=request.execution_mode,
                         tenant=auth.org_id)
         if self.registry is not None:
@@ -161,9 +176,30 @@ class Relay:
             return _Stream(self, job, headers)
         return _Answer(self, job, headers)
 
+    async def _lookup(self, org_id: str, idem):
+        """R91: the job a keyed request replays, with its outcome, or None. Until D5 the
+        PostgreSQL store cannot look up (`param="lookup"`, refused before any SQL); then
+        admission's own replay answer decides, as before (ponytail: interim, D5 lifts it)."""
+        if idem.key is None:
+            return None
+        try:
+            found = await _dependency(self.jobs.lookup(org_id, idem))
+        except errors.UnsupportedParameter as refused:
+            if refused.param != "lookup":
+                raise
+            return None
+        if found is not None and getattr(found[0], "accounting_regime", LEGACY) != self.regime:
+            # One key, one regime (the store's own admit rule).
+            raise errors.IdempotencyConflict("the key names a job of another accounting regime")
+        return found
+
     async def _admitted(self, job: _Job, admission, prepared, refs) -> None:
-        """What a fresh admission still has to pass, then the staged refs bound to it. A
-        refusal here cancels the job it just admitted (nothing ran, nothing is billed)."""
+        """Complete an acceptance: the pinned card and capability rechecks (CREDIT), then the
+        staged refs bound to the job - before the refs, so a refused job can never run. Run
+        on a fresh admission and on the replay of a job still in flight; both steps are
+        idempotent. A definitive refusal cancels the job (nothing ran, nothing is billed)
+        and is answered; a dependency that failed leaves the job for the same-key retry its
+        503 invites (money-B2; the stored deadline ends it otherwise)."""
         try:
             if self.regime == CREDIT:
                 pins = admission.pins
@@ -183,8 +219,15 @@ class Relay:
                 await _dependency(self.media.attach(job.request_id, refs))
             finally:
                 self._attaching.pop(job.request_id, None)
-        except BaseException:
-            await self.cancel(job.org_id, job.handle, quiet=True)
+        except errors.DependencyUnavailable:
+            raise
+        except BaseException as refused:
+            ended = await self.cancel(job.org_id, job.handle, quiet=True)
+            if ended is None and isinstance(refused, errors.DomainError):
+                # money-N1: the job is not cancelled yet, so the refusal is not final; the
+                # retry this 503 invites cancels it and answers the refusal.
+                raise errors.DependencyUnavailable("the refused job is not cancelled yet") \
+                    from None
             raise
 
     def job_org(self, job_id: str) -> str:

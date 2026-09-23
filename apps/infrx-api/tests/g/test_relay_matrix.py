@@ -170,10 +170,12 @@ def test_api_stream__an_upstream_error_is_an_honest_terminal_error(fault, mode):
 
 
 @pytest.mark.parametrize("outage", ["database", "object_store"])
-def test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_no_side_effects(outage):
+def test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_nothing_admitted(outage):
     """A durable dependency that fails at acceptance: a typed 503 with `Retry-After`, the
     driver's text in no answer, and no job, hold or journal reservation behind. (The index
-    is not touched at acceptance at all: dispatch is the outbox's, Q3's relay feeds it.)"""
+    is not touched at acceptance at all: dispatch is the outbox's, Q3's relay feeds it.)
+    Objects already staged are not claimed gone (review money-N3): a payload or source
+    object whose admission never committed is the collector's stray sweep (M, carried)."""
     world = rs.World()
     if outage == "database":
         world.failures.fail("admit", error=ConnectionError(
