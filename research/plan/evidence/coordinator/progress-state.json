@@ -110,7 +110,12 @@
       "blocks": "publishing any cost-per-video-hour figure (S2M \u00a75.2, E1B protocol)",
       "owner": "pricing owner / user"
     },
-    "P-04 concurrency sweep on the box: needs a checkout with bench.py + corpus build (~12 min) \u2014 held per user instruction (no new work); ENGINE_MAX_NUM_SEQS stays 32"
+    {
+      "id": "P-04-sweep",
+      "what": "W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box's measured value) until then.",
+      "blocks": "W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status",
+      "owner": "coordinator (box op)"
+    }
   ],
   "checkpoints": [
     {

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:18:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:21:53Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
 
@@ -52,6 +52,7 @@ Generated 2026-09-23T03:18:54Z from `tasks.json` (manifest v4) and `progress-sta
 | P-18 | Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent | E4B certification; provisional criteria allowed | workload owner |
 | P-01 | Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate) | public metered publication only; a provisional fixture rate is used meanwhile | user/operator |
 | P-19 (new) | Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md | publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol) | pricing owner / user |
+| P-04-sweep | W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box's measured value) until then. | W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status | coordinator (box op) |
 
 ## ETA (provisional, cadence-based — not a commitment)
 
@@ -67,7 +68,7 @@ Generated 2026-09-23T03:18:54Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — re-confirmation of round 2 at d8a3e84; merge after D2 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
-- W3: codex-w3 / codex/w3-drain-pin — confirmation PASS at d80c04d; fold-in (5 nonblocking) then box measurements (P-04) then merge with I2B since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
+- W3: codex-w3 / codex/w3-drain-pin — confirmation PASS; fold-in running; box inventory + capability done (image equals pin); concurrency sweep held (P-04); merge with I2B since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — confirmation review of fix round at 0653c8a; merge with/after W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2's head after review of b4b1ec7 since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
