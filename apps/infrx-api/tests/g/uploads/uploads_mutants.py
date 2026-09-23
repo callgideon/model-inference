@@ -83,6 +83,13 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "timeout_s=limits.intake_timeout_s, clock=rt.clock)",
        "timeout_s=limits.intake_timeout_s * 100, clock=rt.clock)",
        "test_media_sec__a_slow_control_body_is_cut_at_the_deadline"),
+    # R83: the translation itself goes, the request id stays - so the store's typed refusal
+    # escapes the route (a `DomainError` death) instead of a changed signature answering 422.
+    _m("refusals_not_translated", "the store's refusals leave as the contract's envelope",
+       U, "        translated = guard(handler)",
+       "        translated = lambda request: handler(request, ids.new_request_id())  # noqa",
+       "test_media_sec__the_destination_is_write_once_over_http",
+       "test_media_sec__completion_refusals_leave_in_the_envelope"),
     _m("refusals_keep_the_connection", "every upload refusal closes the connection",
        U, '                answer.headers["Connection"] = "close"', "                pass",
        "test_media_sec__every_refusal_closes_the_connection"),
@@ -117,9 +124,6 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "        context = await tenant(request)\n        handle = handle_of(request)\n        mime",
        "        handle = handle_of(request)\n        mime",
        "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer_an_upload"),
-    _m("destination_unguarded", "the store's refusals leave as the envelope",
-       U, "    @guarded\n    async def put_upload(", "    async def put_upload(",
-       "test_media_sec__the_destination_is_write_once_over_http"),
     _m("stored_is_not_204", "stored bytes are 204 (the section 7 default)",
        U, "Response(status_code=204,", "Response(status_code=200,",
        "test_media_sec__the_destination_is_write_once_over_http"),
@@ -136,9 +140,6 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "        if await control_body(request) != {}:",
        "        if await control_body(request) is None:",
        "test_media_sec__completion_takes_no_fields"),
-    _m("completion_unguarded", "the store's completion refusals leave as the envelope",
-       U, "    @guarded\n    async def complete_upload(", "    async def complete_upload(",
-       "test_media_sec__completion_refusals_leave_in_the_envelope"),
     _m("completion_reads_before_identity", "identity is resolved before completion reads a body",
        U, "        context = await tenant(request)\n        handle = handle_of(request)\n"
           "        if await control_body",
