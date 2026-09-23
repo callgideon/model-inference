@@ -117,6 +117,30 @@ def test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_re
     assert world.only_job() is job and job.outcome.state is JobState.succeeded
 
 
+@pytest.mark.parametrize("lookup", ["served", "refused_until_d5"])
+def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry(lookup):
+    """G3's DUR-ADMIT probe (G3 request (b)2): the admission committed and the answer was
+    lost before the staged refs were bound to the job. The same-key retry finds the job in
+    flight and re-runs the (idempotent) attach, so the job is prepared and answered -
+    rather than ending unbilled at its preparation deadline. Through R91's lookup, and
+    through admission's replay answer while the store refuses the lookup (until D5)."""
+    world = rs.World()
+    if lookup == "refused_until_d5":
+        async def refused(org_id, idem):
+            raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
+        world.jobs.lookup = refused
+    world.failures.crash_after_commit("admit")
+    first = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-9"))
+    assert (first.status, first.json()["error"]["code"]) == (503, "dependency_unavailable")
+    job = world.only_job()
+    assert job.outcome is None and job.id not in world.media.by_job
+    world.during.append(world.work)
+    again = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-9"))
+    assert again.status == 200, again.body
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    assert world.only_job() is job and job.outcome.state is JobState.succeeded
+
+
 def test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable():
     """CREDIT: the catalog read behind the pinned-revision recheck fails after
     `admit_credit` committed. That is a 503 with the job left, and the same-key retry

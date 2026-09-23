@@ -129,6 +129,17 @@ class Relay:
             # happens, and this route never answers 202.
             raise errors.UnsupportedParameter("respond-async is not served on this route",
                                               param="Prefer")
+        job, admission, headers = await self.admit(auth, request, idem)
+        if request.execution_mode is ExecutionMode.stream:
+            return _Stream(self, job, headers)
+        return _Answer(self, job, headers)
+
+    async def admit(self, auth, request, idem):
+        """The durable half of acceptance, the same for every mode (G3's async hook calls it
+        too): the R91 lookup, then prepare, stage and one admission by regime, then the
+        recheck and the attach. Returns `(job, admission, headers)`; the headers name the
+        job (`Inference-Id`, the admission's id, also on a replay) and say whether it is a
+        replay. A mapped job is answered in the mode of the request that asks for it."""
         began = self.clock()
         # R91 (review money-B1): a keyed request that replays a known job is answered from
         # that job before anything is prepared, so a lost answer is recovered by its key
@@ -172,9 +183,7 @@ class Relay:
                         tenant=auth.org_id)
         if self.registry is not None:
             self.registry.observe_phases(timings)
-        if request.execution_mode is ExecutionMode.stream:
-            return _Stream(self, job, headers)
-        return _Answer(self, job, headers)
+        return job, admission, headers
 
     async def _lookup(self, org_id: str, idem):
         """R91: the job a keyed request replays, with its outcome, or None. Until D5 the

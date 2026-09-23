@@ -962,7 +962,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("inflight_replay_skips_completion", "an in-flight replay completes the acceptance",
        R, "        if found is None or found[1] is None:\n            # A fresh admission",
        "        if found is None:\n            # A fresh admission",
-       "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry"),
+       "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",
+       "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry"),
     # --- money-N1, N5; honesty-H-N3, H-N4(a) ----------------------------------------------
     _m("refusal_final_before_its_cancel", "a refusal whose cancel is unconfirmed is a 503",
        R, "            if ended is None and isinstance(refused, errors.DomainError):",
