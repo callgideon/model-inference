@@ -755,7 +755,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '    async def authenticate(self, req, select="id,org_id,revoked_at,audience"):',
        "test_api_auth__the_ingress_reads_the_0009_columns_and_the_legacy_route_does_not"),
     # --- G1R item 2: resolution for the audience, publication, price, capability ---
-    _m("operator_runs_inference", "an operator credential runs no inference (R66)",
+    # It proves the status (403, not 404); that an operator runs no inference at all (R66)
+    # is audience_rule_ignored's kill (review H2).
+    _m("operator_runs_inference", "an operator credential is refused forbidden, not not_found",
        C, "    if callable_ is None:\n        raise errors.Forbidden(",
        "    if False:\n        raise errors.Forbidden(",
        "test_split_contract__an_operator_key_runs_no_inference",
