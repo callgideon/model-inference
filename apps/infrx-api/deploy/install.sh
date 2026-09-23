@@ -52,8 +52,12 @@ echo "release $sha image $image"
 # 3. the backup: every path this run may replace, and which of them did not exist. It holds
 # the previous env file - secrets - so it is root-only (0700, the archive 0600), and a run
 # that step 4 refuses removes it again.
-backup=$BACKUPS/$(date -u +%Y%m%dT%H%M%SZ)-$sha
-mkdir -p "$backup" && chmod 0700 "$BACKUPS" "$backup"
+# Never an existing directory: a second run writing into it would overwrite that run's copy,
+# and a refused one would delete it. The name carries nanoseconds and still sorts by time.
+backup=$BACKUPS/$(date -u +%Y%m%dT%H%M%S.%NZ)-$sha
+mkdir -p "$BACKUPS"
+mkdir "$backup" 2>/dev/null || die "backup $backup exists already; nothing was changed" 2
+chmod 0700 "$BACKUPS" "$backup"
 paths=("${ENV_FILE#/}" etc/caddy/Caddyfile etc/caddy/infrx/Caddyfile etc/caddy/infrx/Caddyfile.maintenance)
 for f in $UNIT_FILES; do paths+=("etc/systemd/system/$f"); done
 present=()

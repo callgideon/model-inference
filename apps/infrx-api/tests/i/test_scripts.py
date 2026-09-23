@@ -374,6 +374,22 @@ def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatc
     assert not [e for e in host.events if e.startswith("systemctl restart marlin2b-vllm")]
 
 
+def test_ops_recover__an_install_never_writes_into_an_existing_backup(tmp_path, monkeypatch):
+    """Two installs stamped with the same time must not share a backup directory: the
+    second would overwrite the first's copy of the replaced files, and a refused one would
+    delete it. An existing directory stops the install (exit 2), the earlier backup intact."""
+    host = Host(tmp_path, monkeypatch)
+    (host.bin / "date").write_text("#!/usr/bin/env bash\necho 20260923T000000.000000000Z\n")
+    (host.bin / "date").chmod(0o755)
+    host.monolith()
+    assert host.run("install.sh", INFRX_MODE="dev").returncode == 0
+    [backup] = backups(host)
+    first = (backup / "files.tar").read_bytes()
+    done = host.run("install.sh", INFRX_MODE="dev")
+    assert done.returncode == 2 and "exists already" in done.stderr
+    assert backups(host) == [backup] and (backup / "files.tar").read_bytes() == first
+
+
 def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime(
         tmp_path, monkeypatch):
     """infra/README.md §8: a host that served pilot is not rolled back to a runtime that
