@@ -106,6 +106,27 @@ def test_a_drill_pends_only_on_the_stubs_it_drives():
     assert stack.stubbed(("terminalize", "cancel"), {}) == {}
 
 
+def test_a_drill_driving_a_stub_pends_on_its_owner_before_building_a_store(monkeypatch):
+    """1a, the other half, at layer 1 (E3B phase 3: D5 merged, so no drill on the stack drives
+    a stub any more and e3bm15 moved here): `rig` asks the probe which of ITS functions are
+    stubs, and a drill driving one pends on the task that stub names - before any store is
+    built - while a D6 stub it never calls holds nothing back."""
+    import pytest
+    import test_drills
+    monkeypatch.setitem(stack.PENDING, "X9", "synthetic")
+    monkeypatch.setattr(stack, "has_stack", lambda: True)
+    monkeypatch.setattr(stack, "stub_owners",
+                        lambda: {"terminalize": "X9", "accept_feedback": "D6"})
+
+    def built(limits=None):
+        raise AssertionError("a drill driving a stub built its store")
+    monkeypatch.setattr(stack, "pg_jobstore", built)
+    with pytest.raises(pytest.skip.Exception, match=r"^PENDING\[X9\] \['terminalize'\]"):
+        test_drills.rig("postgres", "admit", "terminalize")
+    with pytest.raises(AssertionError, match="built its store"):
+        test_drills.rig("postgres", "admit", "claim")
+
+
 def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeypatch):
     """1c: every pending id is a task of tasks.json - or one of I3B's owner references
     (`recoverykit.OWNERS`: work no task schedules, named by its document and owner) - and one

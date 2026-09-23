@@ -696,10 +696,10 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py",
            "        if stubs:\n            stack.pending(",
            "        if False:\n            stack.pending(",
-           # D4 merged: `append` is no stub, so the drill still held back by one is dr07c
-           # (D5's `terminalize`), which fails by name the moment it runs.
-           "tests/integration/backend/test_drills.py", "dr07c", layer=2,
-           cases=("test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction",)),
+           # E3B phase 3: D5 merged, so no drill on the stack drives a stub any more; the
+           # layer-1 case gives `rig` a synthetic stub and a store that must not be built.
+           "tests/integration/backend/test_stage.py", "stub_pends_on_its_owner",
+           cases=("test_a_drill_driving_a_stub_pends_on_its_owner_before_building_a_store",)),
     Mutant("e3bm16", "E3B2 item 1c: an E3B case cannot name a merged task as its blocker",
            "tests/integration/backend/stack.py",
            "    unknown = [task for task in ids if task not in PENDING or task in RESIDUAL]\n",
@@ -962,6 +962,19 @@ MUTANTS: tuple[Mutant, ...] = (
            '    return "recovery" in case\n',
            "tests/integration/backend/test_stage.py", "held_cutover",
            cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+
+    # ---------------- E3B phase 3 (the bodies that pended on D5 and on the held cutover)
+    Mutant("e3bm59", "E3B3 dr07c: the CREDIT settlement the port reports is the admitted "
+                     "card's charge, not the hold",
+           "apps/infrx-api/infrx/state/jobstore.py",
+           '"charged": doc["charged_credits"],', '"charged": doc["maximum_hold"],',
+           "tests/integration/backend/test_drills.py", "dr07c", layer=2,
+           cases=("test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet",)),
+    Mutant("e3bm60", "E3B3 dr07[postgres]: the real store's settled debit reaches the port",
+           "apps/infrx-api/infrx/state/jobstore.py",
+           '"debit", "settled_at", "reconcile_after")', '"settled_at", "reconcile_after")',
+           "tests/integration/backend/test_drills.py", "dr07 and postgres and not dr07c",
+           layer=2, cases=("test_e3b_dr07_a_duplicate_settlement_settles_once[postgres]",)),
 )
 
 

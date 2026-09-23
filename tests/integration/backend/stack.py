@@ -62,12 +62,9 @@ if importlib.util.find_spec("infrx") is None:
 OWNERS = {"G2-R1": "the cutover that mounts the metered ingress in gateway.app.ROUTERS: G2 "
                    "integration request 1 (G2-e5e7d3a.md), owned by the coordinator and HELD "
                    "until the adapters exist (tasks.json, G2's disposition); G2 is merged"}
-PENDING = {
-    **OWNERS,
-    "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
-          "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
-          "Registry/AccountView and G1R's CatalogDirectory",
-}
+# E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
+# no id here; the cases that pended on it (dr07c, dr07[postgres], every journey) run.
+PENDING = {**OWNERS}
 # Merged tasks still in the vocabulary, and why. Integration request #2 asks I3B to rename
 # its blockers; E3B's own cases may not name these (`pending()` refuses them).
 RESIDUAL: dict[str, str] = {}

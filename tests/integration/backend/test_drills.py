@@ -449,14 +449,18 @@ def footprint() -> tuple:
 
 
 def assert_credit_conserved(person) -> None:
-    """Per CREDIT wallet: ledger = the one signup grant - settled debits (none settle
-    before D5); reserved = its holds still held; available never negative."""
+    """Per CREDIT wallet: ledger = the one signup grant - settled debits; reserved = its holds
+    still held; available never negative. A CREDIT job's v1 `debit` is 0 (R64): its charge is
+    the usage row's `charged_credits` (0018 `settle_credit`), read here, not the ledger the
+    total is summed from."""
     with stack.connect() as conn:
         held, = conn.execute("select coalesce(sum(amount), 0) from infrx.credit_wallet_holds "
                              "where wallet_id = %s and state = 'held'",
                              (person.wallet_id,)).fetchone()
-        debited, = conn.execute("select coalesce(sum(debit), 0) from infrx.jobs where "
-                                "wallet_id = %s and settled_at is not null",
+        debited, = conn.execute("select coalesce(sum(u.charged_credits), 0) from infrx.jobs j "
+                                "join public.usage_events u on u.id = j.request_id where "
+                                "j.wallet_id = %s and j.settled_at is not null "
+                                "and u.accounting_regime = 'credit'",
                                 (person.wallet_id,)).fetchone()
     wallet = credit_wallet(person)
     assert wallet["ledger"] == stack.SIGNUP_GRANT - debited, (wallet, debited)
@@ -641,12 +645,101 @@ def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
     run(body)
 
 
-def test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction():
-    """CREDIT-SPEND settlement (R73, R79): one debit on the CREDIT wallet, the hold released,
-    usage projected once. Pending while the settlement after terminalize's fence is a stub;
-    the day it is not, this fails until its body is written."""
-    rig("postgres", *RUN, "terminalize")
-    pytest.fail("terminalize is implemented: write the CREDIT settlement drill body now")
+def _newer_card() -> None:
+    """R68: an approved card published AFTER admission, effective now, and the listing that
+    points new admissions at it. It must never reach a job admitted before it."""
+    with stack.connect() as conn:
+        conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                     "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                     "output_rate_per_million, effective_at, approved_by, provisional) values "
+                     "('rc_e3b3_newer', %s, %s, %s, 4000, 12000, infrx.now(), 'e3b3 drill', "
+                     "true)", (stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING))
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) values (%s, 2, %s, %s, %s, 'rc_e3b3_newer', "
+                     "infrx.now(), 'e3b3 drill')",
+                     (stack.CREDIT_ALIAS, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT,
+                      stack.SEED_SERVING))
+
+
+def settlement_writes(request_id) -> dict:
+    """Everything the CREDIT settlement of one job wrote, each row with the transaction id
+    that wrote it (`xmin`): one id across them all is ONE settling transaction."""
+    with stack.connect() as conn:
+        def rows(sql):
+            return conn.execute(sql, (request_id,)).fetchall()
+        return {
+            "debits": rows("select amount, kind, xmin::text from infrx.credit_ledger "
+                           "where request_id = %s"),
+            "hold": rows("select state, xmin::text from infrx.credit_wallet_holds "
+                         "where request_id = %s"),
+            "usage": rows("select accounting_regime, charged_credits, rate_card_version, "
+                          "prompt_tokens, completion_tokens, xmin::text "
+                          "from public.usage_events where id = %s"),
+            "projections": rows("select kind, xmin::text from infrx.outbox where "
+                                "aggregate_id = %s and kind = 'usage_projection'"),
+            "events": rows("select event_type, xmin::text from infrx.stream_chunks "
+                           "where job_id = %s order by generation, sequence"),
+            "job": rows("select xmin::text from infrx.jobs where request_id = %s")}
+
+
+def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
+    """CREDIT-SPEND / DUR-SETTLE on the real store (R64, R68, R73, R79; D5's 0018): the
+    settling commit's answer is lost, and a card published after admission is active. ONE
+    transaction wrote: the job's outcome, one `inference_debit` on the individual's CREDIT
+    wallet at the ADMITTED card, the hold `held -> settled` (reserved back to its prior value),
+    one usage projection and one CREDIT usage row, and 0017's trigger's one terminal journal
+    event, last. The identical retry replays it (the adapter's `SettlementV2` is
+    `v2.settle(admission, usage, settled_at)`); a different proposal is `AlreadyTerminal`; a
+    late cancel answers the same outcome and writes nothing. The legacy USD books never move;
+    the wallet is conserved per unit."""
+    from infrx.contracts.v2 import records as v2
+    h = rig("postgres", *RUN, "append", "terminalize", "cancel")
+    world = credit_rig(h, "postgres")
+    alpha = world.people["alpha"]
+
+    async def body():
+        usd = h.extra["balance"](alpha.org_id)
+        before = world.wallet(alpha)
+        request = credit_request(h, alpha, world.alias)
+        admission = await h.port.admit_credit(request, b.idem(request, "s1"))
+        _newer_card()
+        lease = await running(h, admission)
+        await h.extra["stream"].append(lease, b.events("answer"))
+        tokens = b.usage(1200, 340)
+        proposal = b.outcome(request.request_id, h, tokens=tokens)
+        h.failures.crash_after_commit("complete_credit")
+        with pytest.raises(CrashAfterCommit):
+            await h.port.complete_credit(lease, proposal)
+        _, first = await h.port.get_owned_credit(alpha.org_id, admission.job_handle)
+        assert (first.state, first.settlement_state, first.debit) == (
+            JobState.succeeded, SettlementState.settled, 0), first
+        again, settlement = await h.port.complete_credit(lease, proposal)
+        assert again == first, (again, first)
+        assert settlement == v2.settle(admission, tokens, first.settled_at), \
+            f"not the admitted card's settlement: {settlement}"
+        charged = admission.rate_card.debit(1200, 340).raw("CREDIT")
+        with pytest.raises(errors.AlreadyTerminal):
+            await h.port.complete_credit(lease, b.outcome(request.request_id, h,
+                                                          tokens=b.usage(1, 1)))
+        assert await h.port.cancel(alpha.org_id, admission.job_handle) == first
+        wrote = settlement_writes(request.request_id)
+        tx = wrote["job"][0][0]
+        assert wrote["debits"] == [(-charged, "inference_debit", tx)], \
+            f"not one debit at the admitted card in the settling transaction: {wrote}"
+        assert wrote["hold"] == [("settled", tx)], \
+            f"the hold was not released in the settling transaction: {wrote}"
+        assert wrote["usage"] == [("credit", charged, world.card, 1200, 340, tx)], wrote
+        assert wrote["projections"] == [("usage_projection", tx)], wrote
+        assert [e for e in wrote["events"] if e[0] == "terminal"] == [("terminal", tx)] \
+            and wrote["events"][-1][0] == "terminal", f"not one terminal event, last: {wrote}"
+        after = world.wallet(alpha)
+        assert (after["ledger"], after["reserved"]) == (before["ledger"] - charged,
+                                                        before["reserved"]), (before, after)
+        assert world.holds(request.request_id)["usd"] == 0
+        assert h.extra["balance"](alpha.org_id) == usd, "the legacy USD books moved"
+        world.conserved(alpha)
+    run(body)
 
 
 # ------------------------------------------------------------------ live defects, real store
@@ -759,6 +852,43 @@ def test_e3b_db08_detects_a_credit_hold_on_the_usd_books(monkeypatch):
     with pytest.raises(AssertionError, match="not one hold on the CREDIT wallet"):
         test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(
             "postgres")
+
+
+def _hold_left_held():
+    """`infrx.settle_credit` with its `held -> settled` move removed: the debit lands and
+    the hold stays reserved beside it."""
+    source = stack.function_source("infrx.settle_credit", "uuid, numeric")
+    move = re.search(r"update infrx\.credit_wallet_holds set state = 'settled'.*?end if;",
+                     source, re.S)
+    assert move, "the hold move moved: the drill no longer describes 0018"
+    stack.defect(source.replace(move.group(0), "", 1))
+
+
+def _debit_at_the_active_card():
+    """`infrx.terminalize` pricing a CREDIT job at the alias's CURRENT listing's card."""
+    source = stack.function_source("infrx.terminalize", "jsonb")
+    pinned = "infrx.debit_credit(j.rate_card_version, v_in, v_out)"
+    assert source.count(pinned) == 1, "the admitted-card debit moved: the drill is stale"
+    stack.defect(source.replace(pinned, (
+        "infrx.debit_credit((select l.rate_card_version from infrx.catalog_listings l "
+        "where l.public_model_id = j.requested_model order by l.version desc limit 1), "
+        "v_in, v_out)")))
+
+
+def test_e3b_db12_detects_a_credit_hold_left_held_beside_its_debit(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-SPEND, R73): a CREDIT settlement that
+    debits and leaves its hold reserved. dr07c's own assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _hold_left_held)
+    with pytest.raises(AssertionError, match="hold was not released"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
+
+
+def test_e3b_db13_detects_a_credit_debit_at_the_active_card(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-RATE, R68): a card published after
+    admission reaching the admitted job's charge. dr07c's own assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _debit_at_the_active_card)
+    with pytest.raises(AssertionError, match="not the admitted card's settlement"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
 
 
 def test_e3b_dr11_client_disconnect_mid_stream_is_pending():

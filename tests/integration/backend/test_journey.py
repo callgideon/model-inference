@@ -10,7 +10,7 @@ modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell
 2: only unmerged tasks and owner references; G1R, G6B, D2, D3, D4, W3, Q3, M3, F2P, G4U, G2
 and G3 have merged):
 
-* every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with);
+* every cell: nothing more (D5's settlement and adapters merged, E3B phase 3);
 * every mode: G2-R1, the HELD cutover (G2 integration request 1, with G3's jobs router in
   gateway.app.ROUTERS): G2's relay, D4's journal and G3's job routes are merged, and
   nothing mounts them until the coordinator releases it (R3-1);
@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stack                                            # noqa: E402
 
-COMMON = ("D5",)
+COMMON = ()
 BY_MODE = {"sync": ("G2-R1",), "sse": ("G2-R1",), "async": ("G2-R1",)}
 BY_INPUT = {"text": (), "video_url": (), "video_upload": ()}
 
@@ -54,7 +54,7 @@ def test_backend_journey__dataset_client_resume():
     """04 BACKEND-JOURNEY: resume a bounded dataset client; no duplicate accepted items or
     charges after an interrupted run (E1B's bench client is the client)."""
     if not stack.ingress_is_mounted():
-        stack.pending("G2-R1", "D5",
+        stack.pending("G2-R1",
                       why="resume needs idempotent explicit jobs on the metered endpoint, "
                           "which the held cutover has not mounted")
     pytest.fail("the pilot ingress is mounted: write the dataset-resume journey body now")
