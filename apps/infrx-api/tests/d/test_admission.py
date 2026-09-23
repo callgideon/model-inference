@@ -107,3 +107,8 @@ def test_outbox__the_relays_small_print() -> None:
     latest event, phase attempt counter, either lease kind."""
     from . import checks_dispatch
     print(checks_dispatch.check_dispatch_details(_db()))
+
+
+def test_privileges__d2_helpers_by_nobody_operations_by_service_role_only() -> None:
+    """Review SEC-3: the privilege boundary of every D2 function, as one named invariant."""
+    print(checks_admission.check_d2_function_privileges(_db()))

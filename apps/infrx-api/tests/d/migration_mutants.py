@@ -1304,6 +1304,24 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "  if v_hold <= 0 then\n    perform infrx.refuse('invalid_request', 'a zero hold would",
        "  if false then\n    perform infrx.refuse('invalid_request', 'a zero hold would",
        "admission", "admission_refusals", "a zero hold meters nothing (D1R review (d))"),
+    # --- review SEC-3: nobody executes a helper -------------------------------------------
+    _m("helpers_executable_by_service_role", ADMISSION,
+       "    execute format('revoke all on function %s from public, anon, authenticated, "
+       "service_role',", "    execute format('revoke all on function %s from public, anon, "
+       "authenticated',", "admission", "d2_function_privileges",
+       "the platform role can call admit_credit with a caller-chosen regime or skip admit's "
+       "checks by calling a helper"),
+    _m("dispatch_helpers_executable_by_service_role", DISPATCH,
+       "    execute format('revoke all on function %s from public, anon, authenticated, "
+       "service_role',", "    execute format('revoke all on function %s from public, anon, "
+       "authenticated',", "admission", "d2_function_privileges",
+       "the platform role can terminalize or release holds outside any fence"),
+    _m("credit_guard_executable_by_service_role", CREDIT,
+       "revoke all on function infrx.jobs_credit_admission_guard(infrx.jobs)\n"
+       "  from public, anon, authenticated, service_role;",
+       "revoke all on function infrx.jobs_credit_admission_guard(infrx.jobs)\n"
+       "  from public, anon, authenticated;", "admission", "d2_function_privileges",
+       "the platform role probes wallets through the admission guard"),
     # --- the review's fold-ins (M2-M7) ------------------------------------------------
     _m("d2_usd_hold_checked_against_the_ledger", ADMISSION,
        "  select w.available into v_available from infrx.wallets w",
@@ -1651,6 +1669,7 @@ _CHECKS = {
     "credit_terminalization": checks_dispatch.check_credit_job_terminalization_releases_credit,
     "dispatch_relay": checks_dispatch.check_dispatch_relay,
     "dispatch_details": checks_dispatch.check_dispatch_details,
+    "d2_function_privileges": checks_admission.check_d2_function_privileges,
     "outbox_gc": checks_dispatch.check_outbox_gc,
     "results_and_prompt_tokens": checks_dispatch.check_results_and_prompt_tokens,
     "media_uploads": checks_media.check_media_uploads,

@@ -614,3 +614,53 @@ def _end_everything(conn) -> None:
                  "released_at = infrx.now() where active")
     conn.execute("update infrx.credit_holds set state = 'released' where state = 'held'")
     conn.execute("update infrx.wallets set reserved_total = 0")
+
+
+#: Review SEC-3: D2's internal helpers - only a SECURITY DEFINER body calls them, so NOBODY
+#: holds EXECUTE, service_role included - and the platform operations service_role calls.
+D2_HELPERS = (
+    "infrx.refuse(text,text,integer)", "infrx.refuse_json(text,text)",
+    "infrx.admission_lock_key()", "infrx.hold_for(integer,integer,numeric,numeric)",
+    "infrx.journal_bytes_charged()", "infrx.is_entitled(uuid,text)",
+    "infrx.admission_replay(jsonb,double precision,timestamp with time zone,text)",
+    "infrx.admission_checks(jsonb,jsonb,jsonb,text,timestamp with time zone)",
+    "infrx.admission_rows(jsonb,jsonb,jsonb,text,timestamp with time zone)",
+    "infrx.admission_insert_job(jsonb,jsonb,jsonb,jsonb,timestamp with time zone,"
+    "timestamp with time zone,text,text,text,jsonb,jsonb,numeric)",
+    "infrx.admit_legacy_usd(jsonb)", "infrx.admit_credit(jsonb)",
+    "infrx.jobs_admission_record_guard()", "infrx.release_hold_legacy_usd(uuid)",
+    "infrx.release_hold_credit(uuid)", "infrx.terminalize_unstarted(uuid,text)",
+    "infrx.lease_doc(infrx.attempts)", "infrx.index_event(infrx.outbox,infrx.jobs)",
+    "infrx.dispatch_wanted(text,text)", "infrx.jobs_credit_admission_guard(infrx.jobs)",
+    "infrx.media_uploads_guard()")
+D2_OPERATIONS = (
+    "infrx.admit(jsonb)", "infrx.prepare(jsonb)", "infrx.claim_preparation(jsonb)",
+    "infrx.dispatch_pending(jsonb)", "infrx.acknowledge_dispatch(jsonb)",
+    "infrx.dispatch_snapshot()", "infrx.reopen_dispatch(jsonb)",
+    "infrx.release_dispatch(jsonb)", "infrx.fail_dispatch(jsonb)", "infrx.gc_outbox(jsonb)",
+    "infrx.job_admission(uuid)", "infrx.put_result(jsonb)", "infrx.read_result(uuid,text)",
+    "infrx.touch_media_object(text,uuid)",
+    "infrx.delete_media_object_if_idle(text,timestamp with time zone)")
+
+
+def check_d2_function_privileges(conn) -> str:
+    """SEC-3 as a named invariant: no role executes a D2 helper (service_role included);
+    every D2 operation is executable by service_role and by no browser role; none is
+    executable by PUBLIC."""
+    problems = []
+    for signature in D2_HELPERS + D2_OPERATIONS:
+        roles = {role: conn.execute("select has_function_privilege(%s, %s::regprocedure, "
+                                    "'execute')", (role, signature)).fetchone()[0]
+                 for role in ("anon", "authenticated", "service_role")}
+        public = conn.execute("select exists (select 1 from aclexplode((select proacl from "
+                              "pg_proc where oid = %s::regprocedure)) a where a.grantee = 0)",
+                              (signature,)).fetchone()[0]
+        want_service = signature in D2_OPERATIONS
+        if roles["anon"] or roles["authenticated"] or public:
+            problems.append(f"{signature}: browser/PUBLIC execute {roles} public={public}")
+        if roles["service_role"] != want_service:
+            problems.append(f"{signature}: service_role execute={roles['service_role']}, "
+                            f"expected {want_service}")
+    assert not problems, "D2 function privileges:\n  " + "\n  ".join(problems)
+    return (f"{len(D2_HELPERS)} helpers executable by nobody, {len(D2_OPERATIONS)} "
+            f"operations by service_role only")
