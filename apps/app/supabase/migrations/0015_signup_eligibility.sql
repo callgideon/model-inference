@@ -1,4 +1,4 @@
--- 0015 · A1 · 2026-09-22; amended 2026-09-23 in the A1 review rounds (M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2, RV3-1..3: tests and notes only, no SQL change); applied to no hosted or shared environment (R84).
+-- 0015 · A1 · 2026-09-22; amended 2026-09-23 in the A1 review rounds (M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2, RV3-1..3: tests and notes only, no SQL change; round 5: the R72 predicate moved into `infrx.individual_usd_hold`, for the unit scan); applied to no hosted or shared environment (R84).
 -- A1: verified individual signup eligibility, the frozen personal-org binding, and the
 -- retention policy for an individual who owns a wallet (research/plan/09 §A1;
 -- platforms/02-credits; rulings R59, R64-R66, R71, R72).
@@ -125,6 +125,20 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
   select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l where l.org_id = p_org;
 $$;
 
+-- R72 for an individual: does ANY organization they created hold nonzero legacy USD? The
+-- whole USD-side predicate lives here, so the grant function below names no USD object
+-- (round 5: the unit scan also matches `legacy_usd` in a called function's name).
+-- Scope: EVERY organization this individual created (the personal one and any later
+-- one), not only the one the wallet would bind; a shared org's billing owner is 02's
+-- transition. `created_by` is the boundary: an organization with a NULL `created_by` is
+-- outside it (its USD still reads rollout_hold on its own statement). No product path
+-- creates one: 0001's `handle_new_user` is the only insert and always sets it.
+create or replace function infrx.individual_usd_hold(p_user uuid) returns boolean
+language sql stable security definer set search_path = infrx, public, pg_temp as $$
+  select exists (select 1 from public.organizations o
+                 where o.created_by = p_user and infrx.legacy_usd_rollout_hold(o.id));
+$$;
+
 -- status: granted | replayed | unverified | identity_reused | rollout_hold | retired.
 -- The grant columns are set for granted/replayed only. An unknown user answers
 -- `unverified`, exactly like a known unverified one (no enumeration).
@@ -180,15 +194,10 @@ begin
     return;
   end if;
 
-  -- R72: a nonzero legacy USD balance is a rollout hold - never converted, never dropped.
-  -- Scope: EVERY organization this individual created (the personal one and any later
-  -- one), not only the one the wallet would bind; a shared org's billing owner is 02's
-  -- transition. Fail closed: the account waits for the P-02 runbook either way.
-  -- `created_by` is the boundary: an organization with a NULL `created_by` is outside it
-  -- (its USD still reads rollout_hold on its own statement). No product path creates one:
-  -- 0001's `handle_new_user` is the only insert and always sets it.
-  if exists (select 1 from public.organizations o
-             where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then
+  -- R72: a nonzero legacy USD balance in any organization this individual created is a
+  -- rollout hold - never converted, never dropped (scope: `infrx.individual_usd_hold`).
+  -- Fail closed: the account waits for the P-02 runbook either way.
+  if infrx.individual_usd_hold(p_user_id) then
     v_status := 'rollout_hold';
   else
     v_digest := encode(sha256(convert_to(lower(btrim(v_email)), 'UTF8')), 'hex');
@@ -299,6 +308,8 @@ end $$;
 revoke all on function infrx.personal_org_binding_guard() from public, anon, authenticated;
 revoke all on function infrx.retired_wallet_guard() from public, anon, authenticated;
 revoke all on function infrx.legacy_usd_rollout_hold(uuid)
+  from public, anon, authenticated, service_role;
+revoke all on function infrx.individual_usd_hold(uuid)
   from public, anon, authenticated, service_role;
 revoke all on function infrx.record_signup_denial(uuid, text)
   from public, anon, authenticated, service_role;

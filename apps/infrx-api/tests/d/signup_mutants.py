@@ -52,15 +52,15 @@ MIGRATION_MUTANTS = (
        "  select coalesce(sum(l.delta_usd), 0) > 0 from public.credit_ledger l",
        "signup_eligibility", "R72: an account that owes legacy USD is granted anyway"),
     _m("a1_usd_hold_personal_org_only",
-       "             where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then",
-       "             where o.created_by = p_user_id and o.id = (select v.personal_org_id from "
-       "infrx.verified_user(p_user_id) v) and infrx.legacy_usd_rollout_hold(o.id)) then",
+       "                 where o.created_by = p_user and infrx.legacy_usd_rollout_hold(o.id));",
+       "                 where o.created_by = p_user and o.id = (select v.personal_org_id from "
+       "infrx.verified_user(p_user) v) and infrx.legacy_usd_rollout_hold(o.id));",
        "signup_eligibility", "R72: USD owed through a second organization is ignored"),
     _m("a1_usd_hold_summed_across_orgs",
-       "  if exists (select 1 from public.organizations o\n"
-       "             where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then",
-       "  if (select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l join "
-       "public.organizations o on o.id = l.org_id where o.created_by = p_user_id) then",
+       "  select exists (select 1 from public.organizations o\n"
+       "                 where o.created_by = p_user and infrx.legacy_usd_rollout_hold(o.id));",
+       "  select (select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l join "
+       "public.organizations o on o.id = l.org_id where o.created_by = p_user);",
        "signup_eligibility", "R72: USD owed in one organization is netted against USD held "
        "in another"),
     _m("a1_campaign_length_unchecked",
