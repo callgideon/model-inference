@@ -87,3 +87,20 @@ def test_read__bounded_and_paged() -> None:
 
 def test_read__gap_expired_and_past_head_are_typed() -> None:
     print(checks_journal.check_read_typed(_db()))
+
+
+# --- item 5: pruning and usage ---------------------------------------------------------------
+def test_expire__never_on_the_callers_clock() -> None:
+    print(checks_journal.check_expire_clock(_db()))
+
+
+def test_expire__prefix_then_whole_journal() -> None:
+    print(checks_journal.check_expire_prefix(_db()))
+
+
+def test_expire__frees_bytes_exactly_once() -> None:
+    print(checks_journal.check_expire_bytes(_db()))
+
+
+def test_expire__usage_reports_the_charge() -> None:
+    print(checks_journal.check_usage(_db()))

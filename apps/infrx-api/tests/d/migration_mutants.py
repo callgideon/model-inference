@@ -2161,6 +2161,15 @@ D4_MUTANTS: tuple[Mutant, ...] = (
     _m("d4_no_terminal_event_on_cancel", JOURNAL, _J_WHEN,
        "                    and new.journal_reserved_bytes > 0 and new.state <> 'cancelled')",
        "admission", "terminal_every_path", "a cancelled stream never ends for its client"),
+    _m("d4_terminal_event_bytes_uncounted", JOURNAL,
+       "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes + v_bytes\n"
+       "   where request_id = new.request_id;\n", "",
+       "admission", "expire_bytes", "pruning the terminal event frees bytes never charged"),
+    _m("d4_terminal_event_below_the_watermark", JOURNAL,
+       "    v_sequence := case when v_generation = new.journal_pruned_generation\n"
+       "                       then new.journal_pruned_sequence + 1 else 1 end;",
+       "    v_sequence := 1;",
+       "admission", "expire_prefix", "the end of an expired journal is written unreadable"),
     # --- item 4: replay -------------------------------------------------------------------
     _m("d4_read_any_tenant", JOURNAL,
        "   where org_id = (p_args->>'org_id')::uuid and job_handle = p_args->>'job_handle';",
@@ -2190,6 +2199,34 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "  if not found and j.journal_pruned_generation is not null then", "  if false then",
        "admission", "read_typed", "an expired journal reads as something other than 410"),
     # --- item 5: pruning and usage --------------------------------------------------------
+    _m("d4_expire_on_the_callers_clock", JOURNAL,
+       "least(coalesce((p_args->>'now')::timestamptz, v_db_now), v_db_now)",
+       "coalesce((p_args->>'now')::timestamptz, v_db_now)",
+       "admission", "expire_clock", "a caller destroys a live replay window (R7)"),
+    _m("d4_prune_without_a_watermark", JOURNAL,
+       "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes - v_bytes,\n"
+       "                          journal_pruned_generation = v_generation,\n"
+       "                          journal_pruned_sequence = v_sequence\n",
+       "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes - v_bytes\n",
+       "admission", "expire_prefix", "a pruned prefix replays as if nothing were missing"),
+    _m("d4_prune_not_a_prefix", JOURNAL,
+       "                   where job_id = v_job and (generation, sequence) <= "
+       "(v_generation, v_sequence)",
+       "                   where job_id = v_job and expires_at <= v_bound",
+       "admission", "expire_prefix", "the watermark moves backwards over a missing chunk"),
+    _m("d4_sequence_reissues_a_pruned_cursor", JOURNAL,
+       "                       then j.journal_pruned_sequence else 0 end)",
+       "                       then 0 else 0 end)",
+       "admission", "expire_prefix", "new output is written below the watermark, unreadable"),
+    _m("d4_prune_keeps_bytes_charged", JOURNAL, _J_PRUNE_BYTES,
+       "journal_stored_bytes = journal_stored_bytes,",
+       "admission", "expire_bytes", "pruned bytes are charged for ever (DUR-CAP)"),
+    _m("d4_prune_frees_twice", JOURNAL, _J_PRUNE_BYTES,
+       "journal_stored_bytes = journal_stored_bytes - v_bytes - v_bytes,",
+       "admission", "expire_bytes", "pruning frees bytes still stored (DUR-CAP)"),
+    _m("d4_usage_misreports_the_charge", JOURNAL,
+       "    'charged_bytes', infrx.journal_bytes_charged(),", "    'charged_bytes', 0,",
+       "admission", "usage", "the readiness probe reports a free journal that is full"),
     # --- item 6 ---------------------------------------------------------------------------
     # --- item 9b: privileges --------------------------------------------------------------
 )
@@ -2318,6 +2355,10 @@ _CHECKS = {
     "read_tenant": checks_journal.check_read_tenant,
     "read_bounded": checks_journal.check_read_bounded,
     "read_typed": checks_journal.check_read_typed,
+    "expire_clock": checks_journal.check_expire_clock,
+    "expire_prefix": checks_journal.check_expire_prefix,
+    "expire_bytes": checks_journal.check_expire_bytes,
+    "usage": checks_journal.check_usage,
 }
 
 

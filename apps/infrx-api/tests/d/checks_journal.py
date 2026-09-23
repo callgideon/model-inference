@@ -694,3 +694,144 @@ def check_read_typed(conn) -> str:
                 f"{cursor}: an expired journal read as something else"
         return "head empty, past it invalid_cursor, below the watermark replay_gap, gone expired"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 5: pruning
+def check_expire_clock(conn) -> str:
+    """R7: `expire` prunes on the database clock; a caller's time is a bound at most - a year
+    ahead prunes nothing live, a time in the past prunes nothing - and a chunk goes exactly
+    at its `expires_at`, not a second before."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("still live"))[0] is None
+        now = db_now(conn)
+        for when in (now + timedelta(days=365), now - timedelta(days=1)):
+            assert expire(conn, when) == (None, 0), f"expire({when}) pruned a live chunk"
+        advance(conn, CHUNK_TTL - 1)
+        assert expire(conn) == (None, 0), "a chunk expired before its TTL"
+        advance(conn, 1)
+        assert expire(conn) == (None, 1), "a chunk outlived its expires_at"
+        assert journal(conn, request.request_id) == []
+        return "pruning follows the database clock only"
+    return ca._in_rollback(conn, body)
+
+
+def check_expire_prefix(conn) -> str:
+    """DUR-OUTPUT: pruning removes a PREFIX and persists its watermark. A chunk committed
+    earlier but expiring later (two appends' clocks) goes with the prefix, so the watermark
+    only grows and a cursor below it is always a gap - never the rows after a silently
+    missing one. When nothing is left the journal is expired; a later chunk (an append, or
+    the terminal event) lands past the watermark and is readable from it."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("a", "b"), limits=SHORT)[0] is None
+        advance(conn, 31)
+        assert append(conn, lease, b.events("c", "d", "e", "f"), limits=SHORT)[0] is None
+        assert expire(conn) == (None, 2)
+        job = cl.row(conn, request.request_id)
+        assert (job["journal_pruned_generation"], job["journal_pruned_sequence"]) == (1, 2)
+        assert read(conn, request, at(1, 0))[0] == "replay_gap"
+        # d (1,4) expires 30 s after e (1,5): committed earlier on a later clock (the skew
+        # two concurrent appends can have); f (1,6) lives 60 s longer
+        conn.execute("update infrx.stream_chunks set expires_at = expires_at + case sequence "
+                     "when 4 then interval '30 seconds' when 6 then interval '60 seconds' "
+                     "else interval '0' end where job_id = %s", (request.request_id,))
+        advance(conn, 31)
+        assert expire(conn) == (None, 3), "the pruned set was not the prefix up to e"
+        advance(conn, 31)
+        assert expire(conn) == (None, 0)
+        job = cl.row(conn, request.request_id)
+        assert (job["journal_pruned_generation"], job["journal_pruned_sequence"]) == (1, 5), \
+            "the watermark moved backwards"
+        assert read(conn, request, at(1, 4))[0] == "replay_gap", "a pruned chunk was skipped"
+        code, answer = read(conn, request, at(1, 5))
+        assert code is None and cursors(answer["chunks"]) == [(1, 6, "delta")], answer
+        assert cl.d3(conn, "heartbeat", lease=lease.model_dump(mode="json"))[0] is None
+        advance(conn, 31)
+        assert expire(conn) == (None, 1)
+        assert read(conn, request)[0] == "journal_expired"
+        # the live attempt appends again: past the watermark, never a reissued cursor
+        code, answer = append(conn, lease, b.events("g"))
+        assert code is None and [(c["generation"], c["sequence"]) for c in answer["chunks"]] \
+            == [(1, 7)], f"a pruned cursor was reissued: {code} {answer}"
+        code, answer = read(conn, request, at(1, 6))
+        assert code is None and cursors(answer["chunks"]) == [(1, 7, "delta")], answer
+        # a journal expired while running: the terminal event lands past the watermark too
+        other, lease = running(conn, world, worker="w2")
+        assert append(conn, lease, b.events("x"), limits=SHORT)[0] is None
+        advance(conn, 31)
+        assert expire(conn)[0] is None and read(conn, other)[0] == "journal_expired"
+        assert cancel(conn, other)[0] is None
+        assert read(conn, other)[0] == "replay_gap"
+        code, answer = read(conn, other, at(1, 1))
+        assert code is None and cursors(answer["chunks"]) == [(1, 2, "terminal")], answer
+        return "a prefix per pass, the watermark only grows, later chunks land past it"
+    return ca._in_rollback(conn, body)
+
+
+def check_expire_bytes(conn) -> str:
+    """DUR-CAP: the stored bytes of a journal whose LAST chunk is the terminal event are the
+    sum of its chunks, and pruning frees exactly the pruned chunks' bytes, once: a partial
+    prune leaves the rest counted, the final prune reaches zero, and a further pass frees
+    nothing."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("a", "b"), limits=SHORT)[0] is None
+        advance(conn, 20)
+        assert append(conn, lease, b.events("c"), limits=SHORT)[0] is None
+        assert cancel(conn, request)[0] is None
+        one_terminal_last(conn, request.request_id, "the pruned journal")
+        rows = journal(conn, request.request_id)
+        stored = lambda: cl.row(conn, request.request_id)["journal_stored_bytes"]  # noqa: E731
+        assert stored() == sum(r["bytes"] for r in rows)
+        advance(conn, 11)
+        assert expire(conn) == (None, 2)
+        assert stored() == sum(r["bytes"] for r in rows[2:]), \
+            f"a partial prune freed {sum(r['bytes'] for r in rows) - stored()} bytes"
+        advance(conn, 20)
+        assert expire(conn) == (None, 2)
+        assert stored() == 0, f"{stored()} bytes left after the whole journal was pruned"
+        assert expire(conn) == (None, 0) and stored() == 0, "a second pass freed again"
+        return "pruning frees exactly the pruned bytes, once"
+    return ca._in_rollback(conn, body)
+
+
+def check_usage(conn) -> str:
+    """G1R request 1: `infrx.journal_usage()` reports the live reservations, the stored bytes,
+    the charge admission checks - per job the larger of its live reservation and its stored
+    bytes, never both - and the chunk count."""
+    world = ca.World(conn)
+
+    def truth() -> dict:
+        per_job = conn.execute(
+            "select coalesce(r.amount, 0), j.journal_stored_bytes from infrx.jobs j "
+            "left join infrx.capacity_reservations r on r.request_id = j.request_id "
+            "and r.kind = 'journal_bytes' and r.active").fetchall()
+        return {"reserved_bytes": sum(r for r, _ in per_job),
+                "stored_bytes": sum(s for _, s in per_job),
+                "charged_bytes": sum(max(r, s) for r, s in per_job),
+                "chunks": conn.execute("select count(*) from infrx.stream_chunks").fetchone()[0]}
+
+    def usage() -> dict:
+        return conn.execute("select infrx.journal_usage()").fetchone()[0]
+
+    def body():
+        running(conn, world, worker="idle")
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("a", "b"))[0] is None
+        before = usage(), truth()
+        assert cancel(conn, request)[0] is None
+        after = usage(), truth()
+        for got, want in (before, after):
+            assert got == want, f"journal_usage {got} != {want}"
+        reserve = DEFAULTS.journal_job_reserve_bytes
+        assert before[0]["charged_bytes"] == 2 * reserve and after[0]["charged_bytes"] == \
+            reserve + after[0]["stored_bytes"] and after[0]["chunks"] == 3, (before, after)
+        return "usage = reservations, stored bytes, the admission charge, chunks"
+    return ca._in_rollback(conn, body)
