@@ -1851,3 +1851,4 @@ def _first_line(error: BaseException) -> str:
     # the runner reading it (D2 review H3).
     lines = str(error).strip().splitlines()
     return f"{type(error).__name__}: {(lines[0] if lines else '(no message)')[:160]}"
+from . import signup_mutants  # noqa: E402,F401  A1 (0015): appends its mutants and checks
