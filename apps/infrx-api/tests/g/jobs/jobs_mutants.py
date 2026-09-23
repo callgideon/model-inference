@@ -45,6 +45,7 @@ EXPIRED_KEY = "test_dur_admit__an_expired_mapping_is_410_and_never_a_new_billabl
 TWICE = "test_dur_admit__two_concurrent_submissions_with_one_key_admit_once"
 DETACHED = "test_api_modes__a_detached_202_never_cancels_its_job"
 CREDIT_202 = "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
+NO_SURPRISE = "test_api_modes__plain_chat_is_never_a_surprise_202"
 STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
 OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
@@ -114,6 +115,12 @@ MUTANTS: tuple[Mutant, ...] = (
        J, "        replayed, outcome = admission.replayed, None",
        "        await self.relay.cancel(job.org_id, job.handle, quiet=True)\n"
        "        replayed, outcome = admission.replayed, None", DETACHED),
+    _m("surprise_202", "chat without respond-async is never answered 202",
+       R, "        if request.execution_mode is ExecutionMode.async_:",
+       "        if request.execution_mode is not ExecutionMode.stream:", NO_SURPRISE),
+    _m("async_acceptance_uncounted", "an async acceptance is counted by mode (I3B request 3)",
+       R, '            self._count("infrx_jobs_accepted_total", mode=request.execution_mode,\n'
+          "                        tenant=auth.org_id)", "            pass", ACCEPT),
     _m("replay_readmits", "a retry with the same key is the same job, one hold",
        ST, "            replay = self._replay(idem, now, credit=credit)",
        "            replay = None", LOST_202, TWICE),

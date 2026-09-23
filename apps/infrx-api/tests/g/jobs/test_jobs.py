@@ -249,6 +249,24 @@ def test_api_modes__a_credit_async_job_is_admitted_on_its_wallet():
     assert again.json()["state"] == "cancelled" and world.released(job)
 
 
+def test_api_modes__plain_chat_is_never_a_surprise_202():
+    """With the jobs router mounted, chat stays synchronous unless `respond-async` is asked
+    for: no `Prefer`, or another preference, is answered 200 after the terminal commit, and a
+    stream is a stream."""
+    for headers in ({}, {"prefer": "wait=10"}):
+        world = JobsWorld()
+        world.during.append(world.work)
+        reply = post(world, CHAT, headers=headers)
+        assert reply.status == 200, (headers, reply.status, reply.body)
+        assert wire.HEADER_PREFERENCE_APPLIED not in reply.headers
+        job = world.only_job()
+        assert job.request.execution_mode is ExecutionMode.sync
+        assert job.outcome.state is JobState.succeeded
+    world = JobsWorld()
+    world.during.append(world.work)
+    streamed = post(world, CHAT, rs.body(stream=True))
+    assert streamed.status == 200 and streamed.data()[-1] == "[DONE]"
+
 # --- item 2: status --------------------------------------------------------------------
 def status(world, handle=None, **kw):
     return get(world, job_path(handle or world.handle()), **kw)
