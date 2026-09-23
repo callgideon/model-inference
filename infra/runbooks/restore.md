@@ -61,8 +61,8 @@ $PY infra/runbooks/pgrestore.py dump --conninfo "$HOSTED" --out "$BACKUP"
 
 Prints the server version, the schemas and auth tables it took, and `SHA256SUMS`: paste
 both into the operation log. The directory is 0700, the files 0600. **Never commit it**:
-it holds the project's users' e-mail addresses (four test accounts today). Keeping it past
-the apply is a retention decision for the coordinator.
+it holds the project's users' e-mail addresses (four test accounts today); `.gitignore`
+refuses `*.dump` and `infrx-backups/` should one land in a checkout. Retention: A9.
 
 ### A4 A scratch Supabase to restore into
 
@@ -164,6 +164,15 @@ docker rm -f infrx-i3b-restore
 unset PGPASSWORD
 ```
 
+Retention: the backup is kept, 0700 on the coordinator host and nowhere else, until the
+hosted apply (A8) has been verified and logged with its `SHA256SUMS`; then it is removed.
+A longer period is a coordinator decision recorded in the operation log with its reason.
+
+```bash
+# only after A8 is verified and logged
+rm -rf -- "$BACKUP"; ls -d "$BACKUP" 2>/dev/null && echo "NOT REMOVED"
+```
+
 Windows: `meas. local` (bk01, bk02: E2's stack, ~50-row databases) - dump, restore and
 check each complete in a few seconds; the numbers are in the I3B evidence. Hosted through
 the pooler: ⚠️ TO BE VERIFIED (P-18) - A3 and A6 timings are recorded by the coordinator's
@@ -236,3 +245,5 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   (source identity + empty-target guard before any write), drilled by `bk01e_a`/`bk01e_b`.
 - 2026-09-23 (RS-4): A4 states LOCAL's password as the one deliberate non-secret exception;
   the tool drops pg_restore's DETAIL/CONTEXT lines (row data) from its errors (`rb06`).
+- 2026-09-23 (RS-5): A9 gains the backup's retention and removal step; `.gitignore` refuses
+  `*.dump` and `infrx-backups/`.
