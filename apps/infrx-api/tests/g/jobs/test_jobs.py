@@ -550,7 +550,9 @@ def test_api_modes__status_outlives_the_result_and_the_journal():
     assert (body["state"], body["result_available"]) == ("succeeded", False)
     assert "result_expires_at" not in body and body["usage_certainty"] == "authoritative"
     assert refusal(get(world, job_path(world.handle(), "/result"))) == (410, "result_expired")
-    assert rs.run(world.stream.expire()) > 0 and job.id in world.stream.expired_jobs
+    # The F fakes follow-up (a2779d1) replaced the fake's `expired_jobs` flag with D4's
+    # definition (a prune watermark and no chunk left); the witness is the 410 below.
+    assert rs.run(world.stream.expire()) > 0
     after_journal = status(world)
     assert after_journal.status == 200 and after_journal.json() == body
     assert refusal(get(world, job_path(world.handle(), "/events"))) == (410, "journal_expired")
