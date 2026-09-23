@@ -110,3 +110,41 @@ def test_e4b_the_release_decision_links_resolve_to_files_and_sections():
                 missing.append(f"{doc.name}: {link}#{anchor}")
     assert missing == []
     assert "BACKEND-READY" in DECISION.read_text()
+
+
+def test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers():
+    """Review F9: an error code cited with a status - "`code` (NNN)" in a description or
+    "NNN code" in an example - carries the catalogue's status; a success status a
+    description cites is the one its module answers."""
+    doc = endpoint_doc.render()
+    cited = [*re.findall(r"`(\w+)` \((\d{3})\)", doc),
+             *[(name, status) for status, name in re.findall(r"\b(\d{3}) (\w+)\b", doc)
+               if name in errors.HTTP_ERRORS]]
+    assert len(cited) >= 5, cited
+    wrong = [(name, status) for name, status in cited
+             if name in errors.HTTP_ERRORS and int(status) != errors.http_status(name)]
+    assert wrong == [] and all(name in errors.HTTP_ERRORS for name, _ in cited), cited
+    from infrx.gateway.routes import jobs, uploads
+    for source, status in ((jobs, 202), (uploads, 201), (uploads, 204)):
+        assert f"status_code={status}" in Path(source.__file__).read_text(), (source, status)
+
+
+def test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_modules_implement():
+    """Review F9: DELETE's cause is the one jobs.py passes to the relay; the routes said to
+    need no key are exactly those whose module never authenticates; the Headers list has the
+    202's `Location`; and the streaming refusal on POST /v1/jobs is documented as the module
+    raises it."""
+    from infrx.gateway.routes import jobs
+    source = Path(jobs.__file__).read_text()
+    (cause,) = set(re.findall(r"cause=TerminalCause\.(\w+)", source))
+    delete = endpoint_doc.DESCRIPTIONS[("DELETE", "/v1/jobs/{handle}")]
+    assert f"`{cause}`" in delete and len(re.findall(r"`(\w+)`", delete)) == 1
+    assert endpoint_doc.unauthenticated() == ["/v1/models"]
+    doc = endpoint_doc.render()
+    assert "Every `/v1/` route but `/v1/models` takes `Authorization" in doc
+    headers = doc.split("## Headers")[1].split("\n## ")[0]
+    assert f"`{jobs.HEADER_LOCATION}`" in headers
+    assert 'param="stream"' in source and "errors.InvalidRequest" in source
+    assert ("`POST /v1/jobs` is always async: a body with `\"stream\": true` is refused "
+            f"`invalid_request` ({errors.http_status('invalid_request')}) with `param` `stream`"
+            in " ".join(doc.split()))

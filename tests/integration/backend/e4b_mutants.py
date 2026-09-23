@@ -123,6 +123,8 @@ ROUTES = "test_e4b_every_mounted_route_has_one_description_and_every_description
 CATALOGUE = "test_e4b_the_error_catalogue_is_complete_and_only_public"
 EXAMPLES = "test_e4b_the_examples_call_only_mounted_routes_with_the_headers_the_contract_needs"
 LINKS = "test_e4b_the_release_decision_links_resolve_to_files_and_sections"
+STATUSES = "test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers"
+CAUSE_AUTH = "test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_modules_implement"
 D = "tests/integration/backend/endpoint_doc.py"
 
 
@@ -449,7 +451,27 @@ MUTANTS: tuple[Mutant, ...] = (
        'f"curl -sS -H \\"Authorization: Bearer $INFRX_API_KEY\\" \\"$BASE{job}\\"  # JobStatus",',
        EXAMPLES, file=D),
     _m("r94_example_dropped", "the cross-mode conflict (R94) is shown",
-       "   # 409 idempotency_conflict\",", "   # 200\",", EXAMPLES, file=D),
+       "        f\"# {errors.http_status('idempotency_conflict')} idempotency_conflict\",",
+       "        f\"# 200\",", EXAMPLES, file=D),
+    _m("description_status_hand_typed", "a status the prose cites is the catalogue's",
+       "    (\"GET\", \"/v1/jobs/{handle}/result\"): f\"`JobResult`; {code('result_pending')} while it \"",
+       "    (\"GET\", \"/v1/jobs/{handle}/result\"): f\"`JobResult`; `result_pending` (404) while it \"",
+       STATUSES, file=D),
+    _m("example_status_hand_typed", "a status an example cites is the catalogue's",
+       "        f\"({errors.http_status('result_pending')} result_pending while it runs)\",",
+       "        f\"(404 result_pending while it runs)\",", STATUSES, file=D),
+    _m("cancel_cause_hand_typed", "the DELETE cause is the one the jobs module passes",
+       "    (\"DELETE\", \"/v1/jobs/{handle}\"): f\"cancel (`{cancel_cause()}`), answering the committed \"",
+       "    (\"DELETE\", \"/v1/jobs/{handle}\"): f\"cancel (`sync_deadline`), answering the committed \"",
+       CAUSE_AUTH, file=D),
+    _m("models_listed_as_authenticated", "the unauthenticated routes are read from the modules",
+       "        if \"auth\" not in Path(module.__file__).read_text().lower():\n",
+       "        if False:\n", CAUSE_AUTH, file=D),
+    _m("location_header_dropped", "the 202's Location header is documented",
+       "                   jobs.HEADER_LOCATION})", "                   })", CAUSE_AUTH, file=D),
+    _m("stream_refusal_dropped", "POST /v1/jobs refuses a streaming body, and the doc says so",
+       "        f\"a body with `\\\"stream\\\": true` is refused {code('invalid_request')} with `param` \"",
+       "        f\"a body with `\\\"stream\\\": true` is accepted with `param` \"", CAUSE_AUTH, file=D),
     _m("regeneration_drops_the_log", "a regeneration keeps the verification log",
        "DOC.write_text(body + committed_log())", "DOC.write_text(body + LOG)", KEEPS_LOG, file=D),
     _m("committed_doc_edited_by_hand", "the committed document is the generator's output",

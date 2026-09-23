@@ -44,7 +44,7 @@ Every `/v1/` route but `/v1/models` takes `Authorization: Bearer <key>` (a scope
 | `stream` | `"stream": true` on the chat route (SSE) |
 | `async` | `POST /v1/jobs`, or `Prefer: respond-async` on chat |
 
-`Idempotency-Key` names one operation, one canonical payload **and one mode** (R94): a replay in the same mode answers the same job (the `Idempotency-Replayed` header says so); the same key with another payload or another mode is `409 idempotency_conflict` and writes nothing. A key keeps answering for `idempotency_ttl_s` = 86400 s after terminal. A 202 carries `Retry-After: 2` as the poll hint.
+`Idempotency-Key` names one operation, one canonical payload **and one mode** (R94): a replay in the same mode answers the same job (the `Idempotency-Replayed` header says so); the same key with another payload or another mode is `409 idempotency_conflict` and writes nothing. A key keeps answering for `idempotency_ttl_s` = 86400 s after terminal. A 202 carries `Retry-After: 2` as the poll hint and `Location` naming the job. `POST /v1/jobs` is always async: a body with `"stream": true` is refused `invalid_request` (400) with `param` `stream`.
 
 ## Request parameters
 
@@ -149,7 +149,7 @@ Usage is `authoritative` or `unknown`; only authoritative usage on a billable ca
 
 ## Headers
 
-`Authorization`, `Idempotency-Key`, `Idempotency-Replayed`, `Inference-Id`, `Last-Event-ID`, `Prefer`, `Preference-Applied`, `Retry-After`, `Server-Timing`.
+`Authorization`, `Idempotency-Key`, `Idempotency-Replayed`, `Inference-Id`, `Last-Event-ID`, `Location`, `Prefer`, `Preference-Applied`, `Retry-After`, `Server-Timing`.
 
 ## Response shapes (`contracts.wire`)
 
@@ -209,3 +209,7 @@ curl -sS -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1
   that adds it (integration head `7c52627` + the E4B commits); every table read from the
   code, only the route descriptions and the curl examples are prose. Not run against any
   deployed endpoint: the cutover that mounts these routes is held (G2-R1).
+- 2026-09-23 (E4B review F9): regenerated. Every error status the prose cites is now read
+  from the catalogue (and checked in the examples too), the DELETE cause from the jobs
+  module's call, the routes needing no key from the modules' own sources; the Headers list
+  gains the 202's `Location`, and the POST /v1/jobs streaming refusal is documented.

@@ -40,6 +40,23 @@ ROUTE_MODULES = ("infrx.gateway.routes.health", "infrx.gateway.routes.models",
                  "infrx.gateway.routes.ingress", "infrx.gateway.routes.jobs",
                  "infrx.gateway.routes.uploads", "infrx.observe.route")
 METHODS = ("get", "post", "put", "delete", "patch")
+
+
+def code(name: str) -> str:
+    """An error code as the prose cites it, its status read from the catalogue (review F9)."""
+    return f"`{name}` ({errors.http_status(name)})"
+
+
+def cancel_cause() -> str:
+    """The cause DELETE /v1/jobs/{handle} cancels with, read from the jobs module's call."""
+    tree = ast.parse(Path(jobs.__file__).read_text())
+    causes = {kw.value.attr for node in ast.walk(tree) if isinstance(node, ast.Call)
+              and getattr(node.func, "attr", None) == "cancel" for kw in node.keywords
+              if kw.arg == "cause" and isinstance(kw.value, ast.Attribute)}
+    (cause,) = causes
+    return cause
+
+
 DESCRIPTIONS = {
     ("GET", "/health"): "engine liveness (legacy shape; the edge answers it sanitized)",
     ("GET", "/healthz"): "gateway liveness: `{\"status\": \"ok\"}`, no component state",
@@ -53,11 +70,11 @@ DESCRIPTIONS = {
     ("POST", "/v1/jobs"): "an explicit asynchronous job: the chat body, answered 202 "
                           "`JobAccepted` once admission has committed",
     ("GET", "/v1/jobs/{handle}"): "`JobStatus` from the committed row",
-    ("GET", "/v1/jobs/{handle}/result"): "`JobResult`; `result_pending` (409) while it runs, "
-                                         "`result_expired` (410) past the result's TTL",
+    ("GET", "/v1/jobs/{handle}/result"): f"`JobResult`; {code('result_pending')} while it "
+                                         f"runs, {code('result_expired')} past the result's TTL",
     ("GET", "/v1/jobs/{handle}/events"): "the committed journal as SSE from `Last-Event-ID`; "
                                          "an observer that leaves detaches, never cancels",
-    ("DELETE", "/v1/jobs/{handle}"): "cancel (`client_cancelled`), answering the committed "
+    ("DELETE", "/v1/jobs/{handle}"): f"cancel (`{cancel_cause()}`), answering the committed "
                                      "outcome",
     ("POST", "/v1/uploads"): "create an upload from its constraints: 201 `UploadCreated`",
     ("PUT", "/v1/uploads/{handle}"): "the bytes, to the constrained destination: 204",
@@ -110,6 +127,24 @@ def route_table() -> list[tuple[str, str, str]]:
     return sorted(rows, key=lambda row: (row[1], METHODS.index(row[0].lower())))
 
 
+def unauthenticated() -> list[str]:
+    """The `/v1/` paths whose module never authenticates (review F9: read, not asserted)."""
+    paths = set()
+    for name in ROUTE_MODULES:
+        module = importlib.import_module(name)
+        if "auth" not in Path(module.__file__).read_text().lower():
+            paths |= {path for _, path, short in route_table()
+                      if short == name.rsplit(".", 1)[-1] and path.startswith("/v1/")}
+    return sorted(paths)
+
+
+def headers() -> list[str]:
+    """Every header name the contract declares, and the one the jobs route adds (`Location`
+    on the 202)."""
+    return sorted({*(getattr(wire, name) for name in vars(wire) if name.startswith("HEADER_")),
+                   jobs.HEADER_LOCATION})
+
+
 def _table(header: tuple[str, ...], rows) -> list[str]:
     return ["| " + " | ".join(header) + " |", "|" + "---|" * len(header),
             *("| " + " | ".join(str(cell) for cell in row) + " |" for row in rows)]
@@ -142,7 +177,8 @@ def examples(model: str) -> list[str]:
         f"     \"$BASE{jobs.JOBS_PATH}\" -d '{video}}}'          # 202 JobAccepted: job_handle",
         "JOB=<job_handle>",
         f"curl -sS -H @.auth \"$BASE{job}\"                     # JobStatus",
-        f"curl -sS -H @.auth \"$BASE{job}/result\"              # JobResult (409 result_pending while it runs)",
+        f"curl -sS -H @.auth \"$BASE{job}/result\"              # JobResult "
+        f"({errors.http_status('result_pending')} result_pending while it runs)",
         f"curl -sS -N -H @.auth -H 'Last-Event-ID: <id>' \"$BASE{job}/events\"   # replay from a cursor",
         f"curl -sS -X DELETE -H @.auth \"$BASE{job}\"           # cancel: client_cancelled",
         "",
@@ -162,7 +198,8 @@ def examples(model: str) -> list[str]:
         "",
         "# 6. R94: the same key in another mode is a conflict, and writes nothing",
         f"curl -sS -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1.k1' \\",
-        f"     \"$BASE{chat}\" -d '{video}, \"stream\": true}}'   # 409 idempotency_conflict",
+        f"     \"$BASE{chat}\" -d '{video}, \"stream\": true}}'   "
+        f"# {errors.http_status('idempotency_conflict')} idempotency_conflict",
         "```",
     ]
 
@@ -193,9 +230,9 @@ def render() -> str:
         "",
         "## Routes",
         "",
-        "Every `/v1/` route but `/v1/models` takes `Authorization: Bearer <key>` (a scoped key "
-        "G6B's operator CLI issues); a handle of another tenant, an unknown handle and a "
-        "malformed one are the same 404.",
+        f"Every `/v1/` route but {', '.join(f'`{path}`' for path in unauthenticated())} takes "
+        "`Authorization: Bearer <key>` (a scoped key G6B's operator CLI issues); a handle of "
+        "another tenant, an unknown handle and a malformed one are the same 404.",
         "",
         *_table(("Method", "Path", "Module", "What"),
                 ((method, f"`{path}`", module, DESCRIPTIONS.get((method, path), "⚠️ undescribed"))
@@ -214,7 +251,10 @@ def render() -> str:
         f"`{wire.HEADER_IDEMPOTENCY_REPLAYED}` header says so); the same key with another "
         "payload or another mode is `409 idempotency_conflict` and writes nothing. A key "
         f"keeps answering for `idempotency_ttl_s` = {DEFAULTS.idempotency_ttl_s:g} s after "
-        f"terminal. A 202 carries `{wire.HEADER_RETRY_AFTER}: {jobs.POLL_AFTER_S}` as the poll hint.",
+        f"terminal. A 202 carries `{wire.HEADER_RETRY_AFTER}: {jobs.POLL_AFTER_S}` as the poll hint "
+        f"and `{jobs.HEADER_LOCATION}` naming the job. `POST {jobs.JOBS_PATH}` is always async: "
+        f"a body with `\"stream\": true` is refused {code('invalid_request')} with `param` "
+        "`stream`.",
         "",
         "## Request parameters",
         "",
@@ -271,8 +311,7 @@ def render() -> str:
         "",
         "## Headers",
         "",
-        ", ".join(f"`{getattr(wire, name)}`" for name in sorted(vars(wire))
-                  if name.startswith("HEADER_")) + ".",
+        ", ".join(f"`{name}`" for name in headers()) + ".",
         "",
         "## Response shapes (`contracts.wire`)",
         "",
