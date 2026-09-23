@@ -2372,7 +2372,8 @@ D5_MUTANTS: tuple[Mutant, ...] = (
     _m("d5_settle_before_the_fence", SETTLE,
        "  v_refusal := infrx.fence_lease(p_args->'lease', array['inference'], v_reconcile_s);",
        "  v_refusal := null;", "admission", "settle_late_data",
-       "a superseded or foreign worker settles a live job (DUR-FENCE)"),
+       "a superseded or foreign worker settles a live job (DUR-FENCE): the check's first "
+       "assertion, a foreign worker's completion answered instead of stale_lease"),
     _m("d5_result_ref_unchecked", SETTLE,
        "  if v_ref is not null and (v_ref <> 'infrx-result:' || j.request_id",
        "  if false and (v_ref <> 'infrx-result:' || j.request_id",
@@ -2389,7 +2390,9 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "        or v_cause not in ('completed', 'client_cancelled', 'client_disconnected') then",
        "        or v_cause not in ('completed', 'client_cancelled', 'client_disconnected',\n"
        "                           'sync_deadline') then",
-       "admission", "settle_causes", "the customer pays for our synchronous timeout (R21)"),
+       "admission", "settle_causes",
+       "a synchronous-deadline cancel with usage is billed; 0003's settled-cause CHECK then "
+       "refuses the settlement (untyped 23514, a 500) instead of releasing it (R21)"),
     _m("d5_engine_incomplete_is_a_success", SETTLE,
        "  if v_in is null and v_cause = 'completed' and not j.published then",
        "  if false then", "admission", "settle_causes",
@@ -2406,7 +2409,9 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens\n"
        "       or v_charge > j.maximum_hold then",
        "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens then",
-       "admission", "settle_envelope", "a debit past the reserved hold fails the settlement"),
+       "admission", "settle_envelope",
+       "a debit past the reserved hold is attempted and refused by the hold CHECK (untyped "
+       "23514, a 500) instead of settling as a free platform error"),
     _m("d5_over_envelope_charged", SETTLE,
        "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens\n",
        "    if false\n", "admission", "settle_envelope",
@@ -2474,7 +2479,9 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  -- The money, last, in the job's own unit: hold, then wallet (no body reads both, R64).\n",
        "  insert into infrx.stream_chunks (job_id, generation, sequence, event_type, payload,\n"
        "    bytes, expires_at) values (j.request_id, 99, 1, 'terminal', '{}', 2, v_now);\n",
-       "admission", "settle_terminal_event", "two terminal events, one of them no stored outcome's"),
+       "admission", "settle_terminal_event",
+       "a second terminal event is written; the journal's unique terminal row refuses the "
+       "settlement (untyped 23505, a 500)"),
     _m("d5_settled_usage_rewritable", SETTLE,
        "  if old.settled_at is not null\n     and (new.proposal is distinct from old.proposal",
        "  if false\n     and (new.proposal is distinct from old.proposal",
@@ -2599,7 +2606,9 @@ D5_MUTANTS: tuple[Mutant, ...] = (
     _m("d5_adjust_replay_appends", SETTLE,
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if found then",
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if false then",
-       "admission", "adjust", "an operator retry moves the money twice"),
+       "admission", "adjust",
+       "an operator's retry of one operation is refused (idempotency_conflict via the unique "
+       "operation id) instead of answered replayed - the id stops a double move"),
     # review B1: each part of "another movement" is its own defect
     _m("d5_grant_replay_ignores_wallet", SETTLE,
        "    if l.wallet_id <> w.wallet_id or l.kind <> v_kind or", "    if l.kind <> v_kind or",

@@ -223,6 +223,18 @@ def check_settle_late_data(conn) -> str:
     world = ca.World(conn)
 
     def body():
+        # FIRST (review H-N2: `d5_settle_before_the_fence` dies here, for the fence): a
+        # superseded or foreign worker cannot settle a live job (DUR-FENCE)
+        live, live_lease = cl.running(conn, world)
+        ref = stored(conn, live.request_id)
+        mine = footprint(conn, live.request_id)
+        for label, token in (("a foreign worker",
+                              live_lease.model_copy(update={"worker_id": "w9"})),
+                             ("a stale generation",
+                              live_lease.model_copy(update={"generation": 2}))):
+            code, _ = settle(conn, token, propose(live.request_id, usage=(1200, 340), ref=ref))
+            assert code == "stale_lease", f"{label} settled: {code}"
+            assert footprint(conn, live.request_id) == mine, f"{label} wrote something"
         request, lease = cl.running(conn, world)
         ref = stored(conn, lease.job_id)
         assert settle(conn, lease, propose(lease.job_id, usage=(1200, 340), ref=ref))[0] is None
@@ -248,15 +260,6 @@ def check_settle_late_data(conn) -> str:
                                                  ref=stored(conn, other.request_id)))[0] == \
             "already_terminal", "a completion after the cancel settled"
         assert footprint(conn, other.request_id) == cancelled, "the late completion wrote"
-        # a superseded or foreign worker cannot settle a live job (the fence, DUR-FENCE)
-        live, live_lease = cl.running(conn, world)
-        ref = stored(conn, live.request_id)
-        mine = footprint(conn, live.request_id)
-        for label, token in (("a foreign worker", live_lease.model_copy(update={"worker_id": "w9"})),
-                             ("a stale generation", live_lease.model_copy(update={"generation": 2}))):
-            code, _ = settle(conn, token, propose(live.request_id, usage=(1200, 340), ref=ref))
-            assert code == "stale_lease", f"{label} settled: {code}"
-            assert footprint(conn, live.request_id) == mine, f"{label} wrote something"
         # the settled usage and the winning proposal are as immutable as the outcome
         for column, value in (("usage_prompt_tokens", 1), ("proposal", "{}")):
             try:
