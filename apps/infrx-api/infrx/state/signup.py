@@ -100,7 +100,9 @@ def backfill(conn, campaign: str = "backfill", page: int = 500) -> Counter:
 
     Returns the count per status; a raised refusal counts as `error:<SQLSTATE>` and the
     run continues. Flag off (55000 maintenance) and a missing EXECUTE privilege (42501)
-    stop it: nothing can be granted then.
+    stop it: nothing can be granted then. On a stop, every individual claimed before it
+    stays committed (one transaction each); the refused one wrote nothing and the later
+    ones are untouched, so a rerun resumes, answering the earlier ones as replays.
     """
     counts: Counter = Counter()
     after = _BEFORE_ALL
