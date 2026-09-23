@@ -53,7 +53,7 @@ BACKENDS = ("fake", "postgres")
 
 
 # E3B phase 2, item 2: a live defect for the next `postgres` rig (a callable applying it to
-# that rig's own clone), set by the db06/db07 drills and nothing else.
+# that rig's own clone), set by the live db drills (db06-db11) and nothing else.
 DEFECT = None
 
 
@@ -978,8 +978,9 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
 def test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route(tmp_path):
     """Forced fallback to legacy unmetered ingress: in `pilot` mode `/v1/chat/completions`
     must be the metered ingress, never the legacy F1 chat route (no durable admission, no
-    hold). Today the composition root mounts the legacy route in every mode - the documented
-    pre-cutover state - so this is pending on G1R with the observation recorded."""
+    hold). Before the cutover the composition root mounts the legacy route, and G1R (merged)
+    makes `create_app` refuse pilot mode for it; after the cutover the route is the ingress.
+    Anything else is a failure - G1R is merged, so it is no longer a pending id."""
     from infrx.config import RuntimeMisconfigured
     from infrx.gateway.app import create_app
     try:
@@ -992,4 +993,4 @@ def test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route(t
               if getattr(route, "path", "") == "/v1/chat/completions"}
     if served and all(module.endswith(".ingress") for module in served.values()):
         return
-    stack.pending("G1R", why=f"pilot mode serves /v1/chat/completions from {served}")
+    pytest.fail(f"pilot mode serves /v1/chat/completions from {served}")
