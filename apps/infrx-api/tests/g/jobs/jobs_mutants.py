@@ -76,6 +76,7 @@ RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
 MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
 BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
 DELETE_OUTAGE = "test_dur_fence__a_delete_whose_cancel_fails_is_retryable_never_a_200"
+TERMINAL_READ_OUTAGE = "test_dur_fence__a_delete_after_completion_whose_outcome_read_fails_is_retryable"
 MATRIX = "test_api_modes__the_async_matrix_end_to_end"
 EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result"
 CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
@@ -318,6 +319,11 @@ MUTANTS: tuple[Mutant, ...] = (
        J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
        "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled, quiet=True))",
        DELETE_OUTAGE),
+    _m("already_terminal_read_swallowed", "after already_terminal the outcome is read, or the "
+       "DELETE is a 503 - never a 200 without it (review stream-C3)",
+       R, "            return (await self._owned(org_id, handle))[1]",
+       "            try:\n                return (await self._owned(org_id, handle))[1]\n"
+       "            except Exception:\n                return None", TERMINAL_READ_OUTAGE),
     _m("cancel_resettles_a_completed_job", "a DELETE after completion answers it, one settlement",
        ST, "            if job.terminal:\n                # Completion won the race",
        "            if False:\n                # Completion won the race", RACE),

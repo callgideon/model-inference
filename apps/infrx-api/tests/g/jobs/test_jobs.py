@@ -1089,6 +1089,35 @@ def test_dur_fence__a_delete_whose_cancel_fails_is_retryable_never_a_200():
     assert again.status == 200 and again.json()["state"] == "cancelled"
     assert job.outcome.cause is TerminalCause.client_cancelled
 
+def test_dur_fence__a_delete_after_completion_whose_outcome_read_fails_is_retryable():
+    """PostgreSQL answers a DELETE of a job that already completed with `already_terminal`,
+    and the relay then reads the committed outcome (D3). When that read fails for want of
+    the database the DELETE is a retryable 503 - never a 200 showing the row without its
+    outcome (review stream-C3) - and the retried DELETE answers `succeeded`: one settlement."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    rs.run(world.work())
+    job = world.only_job()
+    outcome, ledger = job.outcome, world.jobs.wallet(world.org).ledger_total
+
+    async def already_terminal(org_id, job_handle, **cause):
+        raise errors.AlreadyTerminal("the job is already terminal")
+
+    world.jobs.cancel = already_terminal                     # PgJobStore's answer
+    world.failures.fail("get_owned", on_call=world.failures.count("get_owned") + 2,
+                        error=ConnectionError("connection to postgresql://infrx:secret@db:5432 "
+                                              "refused"))     # the read after already_terminal
+    down = delete(world)
+    assert refusal(down) == (503, "dependency_unavailable")
+    assert down.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in down.body
+    again = delete(world)
+    assert again.status == 200
+    assert (again.json()["state"], again.json().get("cause")) == ("succeeded", "completed")
+    assert job.outcome is outcome and outcome.settlement_state is SettlementState.settled
+    assert world.jobs.wallet(world.org).ledger_total == ledger
+    assert world.jobs.outbox_kinds(job.id).count(OutboxKind.usage_projection) == 1
+
+
 def test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing():
     """A DELETE carries no body: one that declares one (a length, or chunked) is 400, decided
     from the headers without reading it, and the job runs on."""
