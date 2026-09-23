@@ -835,3 +835,53 @@ def check_usage(conn) -> str:
             reserve + after[0]["stored_bytes"] and after[0]["chunks"] == 3, (before, after)
         return "usage = reservations, stored bytes, the admission charge, chunks"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 6 (SQL half)
+def returns_without_waiting(holder, conn, call, within_s: float = 5.0):
+    """`call(conn)` while `holder` keeps a transaction open: it must answer without waiting;
+    `holder` commits either way (so a waiting call is released and reported, never hung)."""
+    out: dict = {}
+    thread = threading.Thread(target=lambda: out.setdefault("answer", call(conn)))
+    started = time.monotonic()
+    thread.start()
+    thread.join(within_s)
+    waited = thread.is_alive()
+    holder.execute("commit")
+    thread.join(10)
+    assert not waited, f"the call waited {time.monotonic() - started:.1f}s on the holder's lock"
+    return out["answer"]
+
+
+def check_journal_races(connect, database: str) -> str:
+    """DUR-FENCE / DUR-OUTPUT under real transactions (the mutants' concurrency check; the
+    full set is tests/d/test_journal_races.py): two appends on one lease serialize on the job
+    row - the second waits, then continues the sequence, no duplicate - and `expire` never
+    waits on a job row an append holds (SKIP LOCKED): it prunes that job on the next pass."""
+    owner = connect(database)
+
+    def service():
+        conn = connect(database)
+        conn.execute("set role service_role")
+        return conn
+
+    world = ca.World(owner)
+    request, lease = running(owner, world)
+    first, second = cl.lockstep(
+        owner, (service(), lambda c: cl.rpc(c, "append", args(lease, b.events("a", "b")))),
+        (service(), lambda c: cl.rpc(c, "append", args(lease, b.events("c")))))
+    assert first[0] is None and second[0] is None, (first, second)
+    assert [c["sequence"] for c in second[1]["chunks"]] == [3], second
+    assert cursors(journal(owner, request.request_id)) == \
+        [(1, 1, "delta"), (1, 2, "delta"), (1, 3, "delta")]
+    other, held = running(owner, world, worker="w2")
+    assert cl.rpc(service(), "append", args(held, b.events("old"), SHORT))[0] is None
+    advance(owner, SHORT.journal_chunk_ttl_s + 1)
+    holder = service()
+    holder.execute("begin")
+    assert cl.rpc(holder, "append", args(held, b.events("new"), SHORT))[0] is None
+    code, removed = returns_without_waiting(
+        holder, service(), lambda c: cl.rpc(c, "expire_journal", {"now": None}))
+    assert (code, removed) == (None, 0), (code, removed)
+    assert cl.rpc(service(), "expire_journal", {"now": None}) == (None, 1)
+    return "appends serialize on the job row; expire skips a locked job"

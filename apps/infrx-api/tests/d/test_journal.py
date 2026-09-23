@@ -104,3 +104,14 @@ def test_expire__frees_bytes_exactly_once() -> None:
 
 def test_expire__usage_reports_the_charge() -> None:
     print(checks_journal.check_usage(_db()))
+
+
+# --- item 6 (the concurrency check the migration mutants run; committed rows: own DB) --------
+def test_races__appends_serialize_and_expire_skips_a_locked_job() -> None:
+    _db()
+    race_db = f"{DB}_race"
+    pgharness.recreate(race_db)
+    pgharness.apply(race_db, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    with pgharness.connect(race_db) as conn:
+        checks_admission.seed_admission(conn)
+    print(checks_journal.check_journal_races(pgharness.connect, race_db))

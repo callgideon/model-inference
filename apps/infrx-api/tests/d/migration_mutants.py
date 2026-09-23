@@ -2097,6 +2097,9 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "    perform infrx.refuse(v_refusal->>'code', v_refusal->>'detail');",
        "admission", "append_past_the_instant",
        "an overdue append's terminalization is rolled back with its refusal (R39)"),
+    _m("d4_append_without_the_row_lock", JOURNAL, _J_FENCE + _J_SEQUENCE,
+       _J_SEQUENCE + _J_FENCE,
+       "admission", "journal_races", "two appends on one lease mint the same cursor"),
     _m("d4_terminal_event_accepted_when_last", JOURNAL,
        "              where not coalesce(e.event->>'type'",
        "              where e.n < jsonb_array_length(v_events) and not coalesce(e.event->>'type'",
@@ -2228,6 +2231,10 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "    'charged_bytes', infrx.journal_bytes_charged(),", "    'charged_bytes', 0,",
        "admission", "usage", "the readiness probe reports a free journal that is full"),
     # --- item 6 ---------------------------------------------------------------------------
+    _m("d4_expire_waits_on_a_locked_job", JOURNAL,
+       "    perform 1 from infrx.jobs where request_id = v_job for update skip locked;",
+       "    perform 1 from infrx.jobs where request_id = v_job for update;",
+       "admission", "journal_races", "the pruner stalls behind every in-flight append"),
     # --- item 9b: privileges --------------------------------------------------------------
 )
 MUTANTS = MUTANTS + D4_MUTANTS
@@ -2359,6 +2366,7 @@ _CHECKS = {
     "expire_prefix": checks_journal.check_expire_prefix,
     "expire_bytes": checks_journal.check_expire_bytes,
     "usage": checks_journal.check_usage,
+    "journal_races": lambda conn: checks_journal.check_journal_races(pgharness.connect, MUT_DB),
 }
 
 
