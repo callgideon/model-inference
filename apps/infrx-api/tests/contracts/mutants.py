@@ -2027,7 +2027,37 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n})",
        "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n"
        "    TerminalCause.completed,\n})",
-       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"),
+       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_cause_dropped", "a cancel records the cause it is given (R21)",
+       S, "            outcome = self._terminalize(job, cause, None, None, JobState.cancelled)",
+       "            outcome = self._terminalize(job, TerminalCause.client_cancelled, None, None,"
+       " JobState.cancelled)",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("credit_cancel_cause_dropped", "a CREDIT cancel records the cause it is given (R21)",
+       S, "            outcome = self._terminalize(job, cause, None, None, JobState.cancelled)",
+       "            outcome = self._terminalize(job, TerminalCause.client_cancelled, None, None,"
+       " JobState.cancelled)",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("cancel_unknown_cause_mapped_to_client_cancelled", "a refused cause is refused, not recorded as client_cancelled",
+       S, '            raise errors.InvalidRequest(f"{cause!r} is not a cancellation cause")',
+       "            cause = TerminalCause.client_cancelled",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_accepts_any_cause", "any other cause is invalid_request and changes nothing",
+       S, "        if cause not in CANCEL_CAUSES:", "        if False:",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_sync_deadline_charged_to_the_client", "sync_deadline is platform-absorbed (R21)",
+       R, "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n})",
+       "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n"
+       "    TerminalCause.sync_deadline,\n})",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21",
+       "dur_settle__only_three_causes_can_charge"),
+    _m("cancel_client_disconnected_absorbed_by_the_platform", "client_disconnected is the client's cause (R21)",
+       R, "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n})",
+       "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled,\n})",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
 )
 
 
