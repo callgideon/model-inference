@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T17:01:53Z",
+  "updated": "2026-09-23T17:13:29Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "confirmation at b0a64e1 fix_required (6 blocking: 2 closed by rounds 2b/2c, 4 runner/report test gaps) \u2192 round 3 running on 5eb7b85+ \u2192 single verifier \u2192 MERGE (IR2-1, IR2-3) \u2192 I3B (IR2-2)",
+      "phase": "round 3 HANDED BACK 0924cf2 (baseline key, git_head start/end, skips cross-check, -rfEs; e3bm44\u201353); final verification running (gate rerun + runner lens) \u2192 MERGE (IR2-1 one commit, IR2-3 dr04 pin) \u2192 I3B (IR2-2)",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
@@ -42,8 +42,8 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "fix_required at b0a64e1 (wf_1c32b755-7d0; 14 agents; JSON evidence/e/E3B2-confirm-b0a64e1.json) \u2192 round 3",
-      "since": "2026-09-23T16:57:52Z"
+      "phase": "final verification at 0924cf2 running (gate + runner lenses + refuters)",
+      "since": "2026-09-23T17:13:29Z"
     },
     "D4": {
       "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
