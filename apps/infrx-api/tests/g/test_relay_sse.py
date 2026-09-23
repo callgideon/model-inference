@@ -14,7 +14,7 @@ import asyncio
 
 from infrx.contracts.fakes.engine import SPLIT_REASONING_VISIBLE
 from infrx.contracts.records import (ChunkEventType, EngineEvent, HoldState, JobState,
-                                     SettlementState)
+                                     SettlementState, TerminalCause)
 
 from . import relay_support as rs
 
@@ -140,6 +140,7 @@ def test_api_stream__a_disconnect_mid_stream_cancels_durably():
     reply = stream(world, leave=leave)
     job = world.only_job()
     assert job.state is JobState.cancelled
+    assert job.outcome.cause is TerminalCause.client_disconnected    # R21: the true cause
     assert world.jobs.holds[job.id].state is HoldState.unknown       # published: reconcile
     assert reply.text() == "Two people" and "[DONE]" not in reply.body.decode()
 
@@ -159,6 +160,7 @@ def test_api_stream__a_client_gone_before_the_first_byte_still_cancels():
     reply = stream(world, leave=leave, on_send=on_send)
     job = world.only_job()
     assert job.state is JobState.cancelled
+    assert job.outcome.cause is TerminalCause.client_disconnected
     assert job.outcome.settlement_state is SettlementState.released_free
     assert world.jobs.wallet(world.org).reserved_total == 0
     assert len(reply.messages) == 1                              # the failed start only

@@ -943,7 +943,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_api_modes__success_is_answered_only_after_the_terminal_commit",
        "test_api_modes__the_sync_and_sse_matrix_answers_from_committed_state"),
     _m("sync_disconnect_not_cancelled", "a sync client that leaves cancels its job durably",
-       R, "        if gone.done():\n            await self.cancel(job.org_id, job.handle, quiet=True)\n"
+       R, "        if gone.done():\n            await self.cancel(job.org_id, job.handle, "
+          "cause=TerminalCause.client_disconnected,\n                              quiet=True)\n"
           "            return None",
        "        if gone.done():\n            return None",
        "test_api_modes__a_sync_disconnect_cancels_durably"),
@@ -956,9 +957,9 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            return await asyncio.shield(task)", "            return await task",
        "test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job"),
     _m("timeout_leaves_job_running", "past the bound the gateway cancels the job",
-       R, "        outcome = await self.cancel(job.org_id, job.handle, quiet=True)\n"
-          "        if outcome is None:                     # the cancel is unconfirmed",
-       "        outcome = None\n        if outcome is None:                     # the cancel is unconfirmed",
+       R, "        outcome = await self.cancel(job.org_id, job.handle, cause=TerminalCause.sync_deadline,\n"
+          "                                    quiet=True)\n        if outcome is None:",
+       "        outcome = None\n        if outcome is None:",
        "test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline"),
     _m("unconfirmed_cancel_claims_a_state", "a cancel that could not be confirmed claims no state",
        R, "        if outcome is None:                     # the cancel is unconfirmed",
@@ -1017,12 +1018,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_api_stream__an_upstream_error_is_an_honest_terminal_error",
        "test_dur_output__a_kill_after_the_first_committed_chunk_is_never_regenerated"),
     _m("stream_disconnect_not_cancelled", "an SSE client that leaves cancels its job durably",
-       R, "            if gone.done():\n                await self.cancel(job.org_id, job.handle, "
-          "quiet=True)\n                return\n            try:",
+       R, "            if gone.done():\n                await self.cancel(job.org_id, job.handle,\n"
+          "                                  cause=TerminalCause.client_disconnected, quiet=True)\n"
+          "                return\n            try:",
        "            if gone.done():\n                return\n            try:",
        "test_api_stream__a_disconnect_mid_stream_cancels_durably"),
     _m("unstarted_stream_leaks", "a stream that could not go on cancels its job",
-       R, "            ended = await relay.cancel(job.org_id, job.handle, quiet=True)",
+       R, "            ended = await relay.cancel(job.org_id, job.handle, quiet=True, cause=(\n"
+          "                TerminalCause.client_disconnected if left else TerminalCause.client_cancelled))",
        "            ended = None",
        "test_api_stream__a_client_gone_before_the_first_byte_still_cancels",
        "test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels"),
@@ -1060,12 +1063,35 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if outcome.cause in (TerminalCause.deadline_exceeded, TerminalCause.sync_deadline):",
        "test_api_modes__a_credit_job_that_expires_unclaimed_is_rendered_expired"),
     _m("foreign_cancel_swallowed", "another tenant's handle is not_found, like an unknown one",
-       R, "    async def cancel(self, org_id: str, handle: str, *, quiet: bool = False):",
-       "    async def cancel(self, org_id: str, handle: str, *, quiet: bool = True):",
+       R, "                     cause: TerminalCause = TerminalCause.client_cancelled, quiet: bool = False):",
+       "                     cause: TerminalCause = TerminalCause.client_cancelled, quiet: bool = True):",
        "test_api_modes__a_foreign_or_unknown_handle_is_not_found_and_changes_nothing"),
     _m("already_terminal_not_read", "after already_terminal the outcome is read (D3 delta)",
        R, "        except errors.AlreadyTerminal:", "        except errors.StaleLease:",
        "test_api_modes__already_terminal_on_cancel_reads_the_committed_outcome"),
+    # --- the R21 cancel causes (F cancel-cause, merged 6803d2f) and the 0018 interim -------
+    _m("disconnect_cause_dropped", "a sync client that left is recorded client_disconnected",
+       R, "        if gone.done():\n            await self.cancel(job.org_id, job.handle, "
+          "cause=TerminalCause.client_disconnected,",
+       "        if gone.done():\n            await self.cancel(job.org_id, job.handle, "
+       "cause=TerminalCause.client_cancelled,",
+       "test_api_modes__a_sync_disconnect_cancels_durably"),
+    _m("deadline_cause_dropped", "the sync bound is recorded sync_deadline (platform-absorbed)",
+       R, "        outcome = await self.cancel(job.org_id, job.handle, cause=TerminalCause.sync_deadline,",
+       "        outcome = await self.cancel(job.org_id, job.handle, cause=TerminalCause.client_cancelled,",
+       "test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline"),
+    _m("stream_disconnect_cause_dropped", "an SSE client that left is recorded client_disconnected",
+       R, "                                  cause=TerminalCause.client_disconnected, quiet=True)",
+       "                                  cause=TerminalCause.client_cancelled, quiet=True)",
+       "test_api_stream__a_disconnect_mid_stream_cancels_durably"),
+    _m("send_failure_cause_dropped", "a send that failed is a client that left",
+       R, "                TerminalCause.client_disconnected if left else TerminalCause.client_cancelled))",
+       "                TerminalCause.client_cancelled))",
+       "test_api_stream__a_client_gone_before_the_first_byte_still_cancels"),
+    _m("cause_fallback_missing", "a store that cannot record the cause yet still cancels (0018)",
+       R, '            if refused.param != "cause" or cause is TerminalCause.client_cancelled:',
+       "            if True:",
+       "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels"),
     # === G2 item 5: composition, readiness and the route table ===========================
     _m("pilot_built_without_catalog", "no pilot without a CatalogDirectory (D5)",
        P, "        if value is None:", '        if value is None and name != "catalog":',

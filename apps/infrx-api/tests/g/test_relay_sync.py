@@ -146,6 +146,7 @@ def test_api_modes__a_sync_disconnect_cancels_durably():
     assert reply.messages == []
     job = world.only_job()
     assert (job.state, job.outcome.debit) == (JobState.cancelled, Decimal(0))
+    assert job.outcome.cause is TerminalCause.client_disconnected       # R21: the true cause
     assert world.jobs.holds[job.id].state is HoldState.unknown
 
 
@@ -158,10 +159,10 @@ def test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job():
     cancel = world.jobs.cancel
     cancels = []
 
-    async def slow_cancel(org_id, handle):
+    async def slow_cancel(org_id, handle, **cause):
         cancels.append(handle)
         await release.wait()
-        return await cancel(org_id, handle)
+        return await cancel(org_id, handle, **cause)
 
     world.jobs.cancel = slow_cancel
 
@@ -202,8 +203,43 @@ def test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline():
     assert (error["code"], state) == ("deadline_exceeded", "cancelled")
     job = world.only_job()
     assert job.state is JobState.cancelled
+    assert job.outcome.cause is TerminalCause.sync_deadline              # R21: the platform's
     assert job.outcome.settlement_state is SettlementState.held_unknown
     assert job.outcome.debit == 0
+
+
+@pytest.mark.parametrize("ending", ["disconnect", "deadline"])
+def test_api_modes__a_store_that_cannot_record_the_cause_still_cancels(ending):
+    """Interim until D5's 0018: the PostgreSQL store refuses `client_disconnected` and
+    `sync_deadline` (`UnsupportedParameter`, `param="cause"`, before any SQL). The relay then
+    cancels with the default cause - the job is never left running and the caller never
+    sees that 400 - and the recorded cause is `client_cancelled` until D5 lifts it."""
+    world = rs.World()
+    cancel = world.jobs.cancel
+
+    async def as_postgres_today(org_id, handle, *, cause=TerminalCause.client_cancelled):
+        if cause is not TerminalCause.client_cancelled:
+            raise errors.UnsupportedParameter("cause needs migration 0018 (D5)", param="cause")
+        return await cancel(org_id, handle, cause=cause)
+
+    world.jobs.cancel = as_postgres_today
+    leave = asyncio.Event()
+
+    async def publish():
+        await world.commit(await world.lease(), "Two people")
+
+    world.during += [publish, leave.set if ending == "disconnect"
+                     else (lambda: world.clock.advance(3_600))]
+    reply = rs.run(rs.call(world.app, rs.body(), leave=leave))
+    job = world.only_job()
+    assert job.state is JobState.cancelled, job.state
+    assert job.outcome.cause is TerminalCause.client_cancelled
+    if ending == "disconnect":
+        assert reply.messages == []
+    else:
+        error = reply.json()["error"]
+        assert (reply.status, error["code"], rs.state_of(error)) == (504, "deadline_exceeded",
+                                                                     "cancelled")
 
 
 def test_api_modes__a_timeout_whose_cancel_fails_claims_no_state():
@@ -211,7 +247,7 @@ def test_api_modes__a_timeout_whose_cancel_fails_claims_no_state():
     a terminal state it could not confirm - no `state` in the envelope."""
     world = rs.World()
 
-    async def unreachable(org_id, handle):
+    async def unreachable(org_id, handle, **cause):
         raise ConnectionError("postgresql://infrx:secret@db/infrx is unreachable")
 
     world.jobs.cancel = unreachable
@@ -335,7 +371,7 @@ def test_api_modes__already_terminal_on_cancel_reads_the_committed_outcome():
         await world.complete(box["lease"])
         world.clock.advance(3_600)
 
-    async def already_terminal(org_id, handle):
+    async def already_terminal(org_id, handle, **cause):
         raise errors.AlreadyTerminal("terminalize_no_usage on a terminal job (H-4)")
 
     world.jobs.cancel = already_terminal

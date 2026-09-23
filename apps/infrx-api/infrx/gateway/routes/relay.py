@@ -27,10 +27,12 @@ The responses are Starlette `Response`s with their own `__call__` rather than a
 even when the client left before the first byte (a generator that never started has no
 `finally` to run).
 
-Two things are pending on other tasks and named where they bite: the cancel cause (the
-port records `client_cancelled` for every cancel; `client_disconnected`/`sync_deadline` need
-D's `cancel(..., cause=)`, R21) and the worker's timings (no durable carrier across
-processes, W3 request 9) - `Server-Timing` carries the phase the gateway measures itself.
+Every cancel names its cause (R21): `client_disconnected` for a client that left,
+`sync_deadline` past the bound, `client_cancelled` otherwise. Until D5's migration 0018 the
+PostgreSQL store cannot record the first two and refuses them (`param="cause"`); the relay
+then cancels with the default cause rather than leave the job running (an interim, marked
+where it is). The worker's timings are still pending (no durable carrier across processes,
+W3 request 9): `Server-Timing` carries the phase the gateway measures itself.
 """
 from __future__ import annotations
 
@@ -194,13 +196,15 @@ class Relay:
         return org_id
 
     # --- cancellation (item 4) -------------------------------------------------
-    async def cancel(self, org_id: str, handle: str, *, quiet: bool = False):
-        """Durable cancellation, shielded so the caller's own cancellation cannot abort it,
-        answering the COMMITTED outcome (D3 request 2): a job whose completion won returns
-        that outcome; another tenant's handle is `not_found` like an unknown one. `quiet`
-        turns an unanswerable cancel into None (the store's own deadline, R29, then
-        terminalizes the job), for the paths that must not raise over another error."""
-        task = asyncio.ensure_future(self._cancel(org_id, handle))
+    async def cancel(self, org_id: str, handle: str, *,
+                     cause: TerminalCause = TerminalCause.client_cancelled, quiet: bool = False):
+        """Durable cancellation with its R21 cause, shielded so the caller's own cancellation
+        cannot abort it, answering the COMMITTED outcome (D3 request 2): a job whose
+        completion won returns that outcome; another tenant's handle is `not_found` like an
+        unknown one. `quiet` turns an unanswerable cancel into None (the store's own
+        deadline, R29, then terminalizes the job), for paths that must not raise over another
+        error."""
+        task = asyncio.ensure_future(self._cancel(org_id, handle, cause))
         self._cancels.add(task)                 # a strong reference until it is done
         task.add_done_callback(self._cancels.discard)
         try:
@@ -213,12 +217,19 @@ class Relay:
             log.exception("cancel of job %s failed; its stored deadline still ends it", handle)
             return None
 
-    async def _cancel(self, org_id: str, handle: str):
-        # ponytail: the port records `client_cancelled` for every cancel; a disconnect and a
-        # sync deadline are `client_disconnected`/`sync_deadline` under R21 once D's
-        # `cancel(org, handle, *, cause)` exists (request D-new). Not worked around here.
+    async def _cancel(self, org_id: str, handle: str, cause: TerminalCause):
         try:
-            return await self.jobs.cancel(org_id, handle)
+            return await self.jobs.cancel(org_id, handle, cause=cause)
+        except errors.UnsupportedParameter as refused:
+            if refused.param != "cause" or cause is TerminalCause.client_cancelled:
+                raise
+            # ponytail: interim until D5's migration 0018 - the PostgreSQL store cannot record
+            # this cause yet and refuses it before any SQL. The job is cancelled with the
+            # default cause rather than left running for want of the right label (the client
+            # never sees the refusal). D5 lifts it; nothing here changes then.
+            log.warning("cancel cause %s is not recordable yet: cancelling job %s as %s",
+                        cause.value, handle, TerminalCause.client_cancelled.value)
+            return await self._cancel(org_id, handle, TerminalCause.client_cancelled)
         except errors.AlreadyTerminal:
             # D3 handback: after `already_terminal`, the outcome is read, never assumed.
             return (await self._owned(org_id, handle))[1]
@@ -242,7 +253,8 @@ class Relay:
     async def _at_bound(self, job: _Job):
         """Past the bound: cancel, and answer what is committed. A completion that won is
         the answer (01: durable state wins); our own cancel is the synchronous deadline."""
-        outcome = await self.cancel(job.org_id, job.handle, quiet=True)
+        outcome = await self.cancel(job.org_id, job.handle, cause=TerminalCause.sync_deadline,
+                                    quiet=True)
         if outcome is None:                     # the cancel is unconfirmed: claim no state
             raise errors.DeadlineExceeded("the job passed its deadline")
         if outcome.state is JobState.cancelled:
@@ -269,7 +281,8 @@ class Relay:
             await self.cancel(job.org_id, job.handle, quiet=True)
             raise
         if gone.done():
-            await self.cancel(job.org_id, job.handle, quiet=True)
+            await self.cancel(job.org_id, job.handle, cause=TerminalCause.client_disconnected,
+                              quiet=True)
             return None
         return await self._at_bound(job)
 
@@ -293,7 +306,8 @@ class Relay:
         delay, quiet_since = self.poll_s, self._now()
         while True:
             if gone.done():
-                await self.cancel(job.org_id, job.handle, quiet=True)
+                await self.cancel(job.org_id, job.handle,
+                                  cause=TerminalCause.client_disconnected, quiet=True)
                 return
             try:
                 chunks, cursor = await self.stream.read_owned(job.org_id, job.handle, cursor,
@@ -368,12 +382,13 @@ async def _dependency(awaitable):
 def _refusal(outcome, *, stream: bool) -> errors.DomainError:
     """A terminal outcome that is not a success, as the contract's error. Keyed on the
     committed `state` and `cause`: a cancel after publication (`held_unknown`, debit 0)
-    is cancelled, never failed and never billed."""
+    is cancelled, never failed and never billed; one the sync deadline caused is that
+    deadline."""
     detail = {"state": outcome.state.value}
-    if outcome.state is JobState.cancelled:
-        return errors.StateConflict("the job was cancelled", infrx=detail)
     if outcome.state is JobState.expired or outcome.cause in DEADLINE_CAUSES:
         return errors.DeadlineExceeded("the job passed its deadline", infrx=detail)
+    if outcome.state is JobState.cancelled:
+        return errors.StateConflict("the job was cancelled", infrx=detail)
     if outcome.cause is TerminalCause.invalid_media:
         return errors.UnsupportedMedia("the media could not be prepared", infrx=detail)
     failed = errors.StreamInterrupted if stream else errors.InternalError
@@ -498,8 +513,10 @@ class _Stream(_Owned):
         except Exception as failure:
             # A replay gap, an expired journal, the store gone, or the client gone (a send
             # that fails): the relay cannot go on, so the job must not go on for nobody.
-            ended = await relay.cancel(job.org_id, job.handle, quiet=True)
-            if gone.done() or isinstance(failure, OSError):
+            left = gone.done() or isinstance(failure, OSError)       # a send that failed
+            ended = await relay.cancel(job.org_id, job.handle, quiet=True, cause=(
+                TerminalCause.client_disconnected if left else TerminalCause.client_cancelled))
+            if left:
                 return
             error = failure if isinstance(failure, errors.DomainError) \
                 else errors.StatusUnknown("the stream could not continue")
