@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T01:05:29Z",
+  "updated": "2026-09-23T01:10:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "D2": {
       "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "fix round 1 (3 blocking: R29 clock mutants, rebuild/ack fence, gc live-job check; 23 fold-ins)",
+      "phase": "confirmation review of fix round at 0ce4ce6; clean sweep running",
       "since": "2026-09-22T20:55:35Z",
       "note": "real JobStore over PostgreSQL"
     },

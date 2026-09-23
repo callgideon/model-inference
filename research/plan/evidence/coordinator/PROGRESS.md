@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T01:05:29Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T01:10:25Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
@@ -65,7 +65,7 @@ Generated 2026-09-23T01:05:29Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — wire-in phase in flight (codex-f2p-wirein) since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
-- D2: codex-d2 / codex/d2-admission-outbox — fix round 1 (3 blocking: R29 clock mutants, rebuild/ack fence, gc live-job check; 23 fold-ins) since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
+- D2: codex-d2 / codex/d2-admission-outbox — confirmation review of fix round at 0ce4ce6; clean sweep running since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — fix round 1 (negative-USD hold case; frozen-wallet acceptance cases; 12 fold-ins) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — implementing (software half) since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — independent review (3-lens workflow) at 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
