@@ -1,0 +1,651 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "M-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+      "line": "1240-1241 (reconcile: `self._release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id else self.wallet(hold.org_id), hold)`)",
+      "claim_broken": "Port docstring / R64: a CREDIT hold is 'reserved on that CREDIT wallet and never on the organization's USD wallet'. The held_unknown -> 24h reconcile release of a CREDIT hold has no killable case: no CREDIT case publishes output and completes with usage None, so the wallet the reconcile releases on is unproven.",
+      "evidence": "Own mutant `rv_reconcile_releases_a_credit_hold_on_the_usd_wallet` (release always on `self.wallet(hold.org_id)`) run through the branch's runner: `survived 5 passed, 747 deselected` against all five credit_* cases. Probe A17 shows the path exists and behaves (held_reserved 14.7456 on the CREDIT wallet, after recover 0, USD reserved 0) but nothing in the suite asserts it; under the mutant the CREDIT wallet's reserved_total would never return and the USD wallet's would go negative.",
+      "minimal_fix": "Add one case `credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet` (publish via hook(harness,'publish'), complete_credit with tokens=None -> held_unknown and settlement None, clock.advance(unknown_usage_reconcile_s+1), recover(), assert CREDIT reserved back to `before` and USD wallet reserved == 0) and declare a mutant anchored on the reconcile `_release_hold(self.credit_wallet(hold.wallet_id) ...` line.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Could not refute; the finding holds. Code: apps/infrx-api/infrx/contracts/fakes/state.py:1240-1241 releases an aged unknown hold on `self.credit_wallet(hold.wallet_id) if hold.wallet_id else self.wallet(hold.org_id)`, and ports.py:163-164 promises a CREDIT hold is 'reserved on that CREDIT wallet and never on the organization's USD wallet (R64)'. Coverage: `admit_credit`/`complete_credit` are called only from infrx/contracts/conformance/v2_contracts.py; the only two settle cases (`credit_settle__at_the_admitted_card_on_the_credit_wallet_only`, tokens=usage(1200,340); `credit_settle__a_free_outcome_moves_no_credit`, invalid_media, unpublished) never reach `usage is None and job.published` (state.py:1051), so no test drives a CREDIT hold to held_unknown, and the only reconcile mutant (`held_hold_released_early`, mutants.py:389) is anchored on the guard line, not the wallet selection, and killed by USD `dur_settle__*` cases. Experiment: applied the reviewer's mutant (`self._release_hold(self.wallet(hold.org_id), hold)`) on a scratch copy of apps/infrx-api and ran the whole api suite (pytest -q, --ignore=tests/d, 2359 tests): 2323 passed, 36 failed, and every failure was environmental to the copy (24 FileNotFoundError for missing repo siblings in tests/i and test_parity_console, 8+ broken_runner in tests/g/ops/test_mutants and tests/i/test_mutants, 3 HarnessBusy on another session's PG lock in test_v1_projection_pg); no contracts/w/g behavioral test failed. The mutant survives the full suite, not just the five credit cases. Severity judgment: production behavior is correct (reviewer's probe A17 and the code agree; `_release_hold` is given the CREDIT wallet), so this is an unproven R64 invariant on a money path, fixed by one conformance case plus one mutant declaration as the reviewer proposes; not a user-visible defect at e307084.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Could not refute; the claim holds on both counts. (1) Coverage gap is real: `admit_credit`/`complete_credit` are called only from `infrx/contracts/conformance/v2_contracts.py` (no test in tests/g, w, i, j, m, q, t drives a CREDIT job), and none of the five `credit_jobstore_cases()` reaches `held_unknown` - `credit_settle__a_free_outcome_moves_no_credit` completes with tokens=None but cause `invalid_media` (a FREE cause, unpublished), which takes the `_release_hold(wallet, hold)` branch in `_terminalize` (state.py:1072), never `_release_aged_unknown_holds`; `credit_rate__unknown_usage_is_never_settled` only calls the pure `v2.settle()`. `git blame` shows state.py:1240-1241 (`self.credit_wallet(hold.wallet_id) if hold.wallet_id else self.wallet(hold.org_id)`) was introduced by the wire-in commit 88359355, i.e. new CREDIT-store behavior with no killing case, against the runner's own rule (tests/contracts/mutants.py: \"a conformance case is only worth the invariant it can kill\") and the port docstring's R64 promise (ports.py:164). (2) Reproduced on a scratch copy (worktree untouched, `git status` clean): with the reconcile line replaced by `self._release_hold(self.wallet(hold.org_id), hold)`, `pytest tests/contracts/v2/test_conformance_v2.py -k credit_` -> 28 passed (survived). USD holds carry `wallet_id=None`, so v1 cases like `dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed` behave identically under the mutant and cannot kill it. (3) The proposed fix works: a case that publishes, completes CREDIT with tokens=None/client_disconnected (-> held_unknown, settlement None), advances `DEFAULTS.unknown_usage_reconcile_s + 1`, calls `recover()`, and asserts CREDIT reserved back to `before` and USD reserved == 0 fails under the mutant (reserved 24.76 vs 10.0144 - the CREDIT hold never returns) and passes on unmutated code (1 passed). The code at e307084 is currently correct (probe passes; the reviewer's A17 agrees), so this is a killability/evidence gap on a money path introduced by the change, not a live defect; one case plus one mutant anchored on the reconcile line closes it.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "M-2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/contracts/ports.py",
+      "line": "533-535 (CreditJobStore docstring: 'A v1 read of a CREDIT job (get_owned, load_work) and a CREDIT read of a legacy job are not_found')",
+      "claim_broken": "The CREDIT-side half of the cross-regime refusal is a claimed invariant with no killable test: removing the `job.credit is None -> NotFound` guard in `get_owned_credit` (state.py 632-633) or in `complete_credit` (state.py 1010-1011) kills nothing.",
+      "evidence": "Own mutants `rv_get_owned_credit_serves_a_legacy_job` and `rv_complete_credit_serves_a_legacy_job` (both guards -> `if False: pass`): each `survived 5 passed, 747 deselected` across all five credit_* cases. The evidence's coverage row for `credit_admit__the_store_resolves...` only claims the v1->CREDIT direction (`get_owned` not_found), which is killed (`get_owned_serves_a_credit_job`), so the docstring overclaims. Also survived: `rv_credential_org_mismatch_ignored` (`_credit_terms` Forbidden when the key row's org_id != request.org_id, state.py 219-220) - a defensive branch nothing exercises.",
+      "minimal_fix": "In `credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit` also admit one legacy job through v1 `admit` (grant USD to consumer_org first) and `_refused(get_owned_credit(org, legacy.job_handle), NotFound)`; in `credit_settle__at_the_admitted_card...` run a legacy job to a lease and `_refused(complete_credit(lease, outcome), NotFound)`; declare the two mutants (`if False:\\n            pass` replacements). Either test or delete the org-mismatch branch.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed, not refuted. Code reading at e307084: the only callers of get_owned_credit/load_work_credit/complete_credit outside the fake are the five credit_* cases in apps/infrx-api/infrx/contracts/conformance/v2_contracts.py (lines 909, 985, 989, 1013), and every one of them passes a CREDIT job; no test anywhere admits a legacy (v1 `admit`) job and reads it through the CREDIT side. The declared list (tests/contracts/mutants.py) only has `get_owned_serves_a_credit_job` and `load_work_serves_a_credit_job`, i.e. the v1->CREDIT direction; the evidence row for `credit_admit__the_store_resolves...` (research/plan/evidence/f/F2P-wirein-2925d63.md:39) likewise claims only \"v1 get_owned is not_found\". Experiment through the repo's own runner (tests.contracts.mutants.run_mutant, temp-dir copy, worktree untouched, no container needed), each mutant `if False: pass` against all five credit_* cases: rv_get_owned_credit_serves_a_legacy_job (fakes/state.py:634-635) survived \"5 passed, 747 deselected\"; rv_complete_credit_serves_a_legacy_job (state.py:1012-1013) survived; rv_credential_org_mismatch_ignored (state.py:417-418 Forbidden) survived; additionally rv_load_work_credit_serves_a_legacy_job (state.py:747-748, not in the reviewer's claim) also survived. Control `get_owned_serves_a_credit_job` was killed (\"1 failed\"), so the runner works. Without the get_owned_credit guard the fake returns (None, outcome) as an AdmissionV2 for a legacy job silently, so the docstring's second half (ports.py:533-535, \"a CREDIT read of a legacy job is not_found\") is an unproven contract claim that a later PgJobStore could violate undetected. Minor corrections to the claim: line numbers are in infrx/contracts/fakes/state.py (not infrx/gateway/state.py), and the same gap covers load_work_credit too, so the fix should add three refusals/mutants, not two. Note the strict R32 text covers invariants a *case* names and the case docstrings only name the v1 direction; the overclaim is in the port docstring, so an alternative fix is to trim the docstring, but adding the legacy-job refusals is the small and honest fix.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Could not refute; the finding is confirmed from the code and by experiment.\n\nCode: the CreditJobStore docstring (apps/infrx-api/infrx/contracts/ports.py:166-169, not :533-535 as the reviewer cited) claims both directions are not_found. The fake's guards live in apps/infrx-api/infrx/contracts/fakes/state.py: get_owned_credit at 634-635 and complete_credit at 1012-1013 (the reviewer's 'state.py' path is the fakes module). Grepping the whole apps/infrx-api tree (tests/, infrx/contracts/conformance/, gateway code), the only callers of get_owned_credit/complete_credit are the five credit_* conformance cases in v2_contracts.py (lines 909, 989, 1013), and every one of them passes a CREDIT job; no test or route ever hands a legacy job to a CREDIT read. The declared mutant list (tests/contracts/mutants.py:1782-1786 get_owned_serves_a_credit_job, 1817-1822 load_work_serves_a_credit_job) covers only the v1->CREDIT direction, and the evidence row in research/plan/evidence/f/F2P-wirein-2925d63.md:39 likewise only claims 'v1 get_owned is not_found'. Nothing exercises the _credit_terms org-mismatch Forbidden branch (state.py 419-420) either.\n\nExperiment (scratch copies of apps/infrx-api under the session scratchpad, worktree untouched, git status clean; no container needed): I applied each of the three guard removals (`if False: pass`) to a fresh copy and ran the entire API test suite (2152 tests), not just the five credit cases; only the meta mutant-runner files and the two tests that need the sibling apps/app tree were excluded. Baseline: 44 failed / 2108 passed, all 44 in Postgres/Docker-dependent files (tests/d/test_credit_schema.py, tests/d/test_schema_postgres.py, tests/contracts/v2/test_v1_projection_pg.py, tests/i/test_prereqs.py). get_owned_credit guard removed: identical 44 failed set. complete_credit guard removed: identical 44 failed set on the deterministic rerun (a first run showed 46, which did not reproduce and was env noise). org-mismatch guard removed: identical 44 failed set. All three mutants survive the full suite, so the CREDIT-side half of the cross-regime refusal is a documented invariant with no killable test, exactly as claimed. The reviewer's proposed minimal fix (admit one legacy job in the credit_admit and credit_settle cases, assert NotFound from get_owned_credit / complete_credit, declare the two mutants; test or delete the org-mismatch branch) is consistent with what I saw and small.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "M-3",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "160-164 (MUST_BE_POSITIVE gains max_index_items/max_index_bytes) vs 224-248 (validate_runtime never calls validate_pilot)",
+      "claim_broken": "Moving `max_index_items`/`max_index_bytes` from DeploymentSettings to PilotSettings silently removed their startup validation: at base 0cc4936 `DEPLOYMENT_MUST_BE_POSITIVE` (every non-secret deployment field) made `MAX_INDEX_ITEMS=0` a `RuntimeMisconfigured` in every mode via `validate_runtime -> validate_deployment`; at head the names live only in `MUST_BE_POSITIVE`, which is checked by `validate_pilot`, and `validate_pilot` has no caller outside tests (git grep at 0cc4936 and e307084: only test_config_and_imports.py). A zero index cap now starts and reaches Q2's Valkey adapter through `getattr(limits, 'max_index_items')` - exactly the 'limit a zero would disable' the comment names.",
+      "evidence": "Probe A11 at head: `config.validate_runtime(config.from_env({'MAX_INDEX_ITEMS': '0'}))` -> `ACCEPTED (pilot.max_index_items=0)`; `'-1'` -> ValueError from `_coerce`; `'99999999999999999'` accepted; `validate_pilot(DEFAULTS.replace(max_index_items=0))` -> ValueError (never reached at runtime). Own mutant `rv_zero_index_cap_refused_only_by_validate_pilot` (drop the two names from MUST_BE_POSITIVE) survived `test_a_bad_deployment_value_refuses_before_anything_mounts` (5 passed). Base: `git show 0cc4936:apps/infrx-api/infrx/config.py` lines 321-324 include max_index_* in DEPLOYMENT_MUST_BE_POSITIVE. The evidence table claims only 'same env names and defaults', not that the startup refusal survived, so this is a regression it did not notice.",
+      "minimal_fix": "In `validate_runtime`, right after `validate_deployment(...)`: `for name in ('max_index_items', 'max_index_bytes'):\\n        if getattr(pilot, name) <= 0:\\n            raise RuntimeMisconfigured(mode, detail=f'{env_name(name)} must be positive')` and parametrize `test_a_bad_deployment_value_refuses_before_anything_mounts` over (`MAX_MESSAGES`, `MAX_INDEX_ITEMS`) so the mutant is killed in every mode; add the mutant.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed, not refuted. Code at head e307084 (apps/infrx-api/infrx/config.py): `max_index_items`/`max_index_bytes` now live in contracts/limits.PilotSettings (lines 144-145) and appear only in `MUST_BE_POSITIVE` (line 163), which is checked solely by `validate_pilot` (line 407). `git grep validate_pilot(` at head hits only config.py's definition and tests/contracts/test_config_and_imports.py; `validate_runtime` (224-268) calls `validate_deployment` only, and `DEPLOYMENT_MUST_BE_POSITIVE` (337) is derived from DeploymentSettings fields, which no longer include the index caps. `_coerce` refuses negatives but not zero. Runtime probe at head in the worktree venv: `validate_runtime(from_env({'MAX_INDEX_ITEMS':'0'}))` -> ACCEPTED (legacy, dev, test; pilot.max_index_items=0); '-1' -> ValueError; control `MAX_MESSAGES=0` -> RuntimeMisconfigured. Same probe against a scratch export of base 0cc4936 (where the caps were ints on DeploymentSettings, lines 277-278): `MAX_INDEX_ITEMS=0` -> RuntimeMisconfigured 'MAX_INDEX_ITEMS must be positive' in legacy and dev. So a zero cap that was a startup refusal at base now starts, and scheduling/valkey.py:418-420 reads it via `getattr(limits, 'max_index_items', ...)` into `_max_items=0`. The head comment at config.py ~283 ('Folding them into PilotSettings later moves the names, defaults and checks unchanged') is itself false for these two names. Reviewer's minimal fix (positive check on the two pilot names inside validate_runtime after validate_deployment, plus parametrizing the existing startup-refusal test) is correct and sufficient.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed, not refuted. At head e307084, apps/infrx-api/infrx/config.py: `max_index_items`/`max_index_bytes` appear only in `MUST_BE_POSITIVE` (line 157-164), which is consulted solely by `validate_pilot` (line 392/407); `validate_runtime` (line 224-248) calls `validate_deployment` only, and `git grep validate_pilot(` at e307084 finds no caller under infrx/ (only its own definition; gateway/app.py:64 calls `validate_runtime`). Reproduced: head `validate_runtime(from_env({'MAX_INDEX_ITEMS':'0'}))` returns 'legacy' with pilot.max_index_items=0; `validate_pilot` on the same value raises ValueError but is never reached. Base 0cc4936 (scratch git-archive copy run with the same venv): the identical probe raises `RuntimeMisconfigured INFRX_MODE='': MAX_INDEX_ITEMS must be positive` because DEPLOYMENT_MUST_BE_POSITIVE covered every non-secret DeploymentSettings field including max_index_*. The zero value is consumed at runtime by scheduling/valkey.py:418-420 via `getattr(limits, 'max_index_items', ...)`. Startup refusal of a zero index cap is a real regression introduced by the move to PilotSettings.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "CFG-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "160-164 (MUST_BE_POSITIVE), 242-250 (validate_runtime); apps/infrx-api/infrx/contracts/limits.py:142-145",
+      "claim_broken": "Evidence item 5 / Q2 request 3: `max_index_items`/`max_index_bytes` moved to `PilotSettings` with 'same env names and defaults' and the bounds 'a zero would disable' still refused (MUST_BE_POSITIVE += max_index_*). In fact the move took both caps off the startup fail-closed path: `validate_runtime` -> `validate_deployment` enforced them at base in every mode; `MUST_BE_POSITIVE` is enforced only by `validate_pilot`, which `create_app` never calls (grep: the only runtime caller of any validator is `gateway/app.py:64 validate_runtime`). And the only test over MUST_BE_POSITIVE parametrizes over the list itself, so the added names have no killable test.",
+      "evidence": "Base 0cc4936 (archived infrx package, same venv): `create_app(from_env({'MAX_INDEX_ITEMS':'0'}))` -> `RuntimeMisconfigured INFRX_MODE='': MAX_INDEX_ITEMS must be positive`; same for MAX_INDEX_BYTES. Branch e307084: `{'MAX_INDEX_ITEMS':'0'}` -> STARTED mode legacy max_index_items 0; `{'MAX_INDEX_BYTES':'0'}` -> STARTED; `{'INFRX_MODE':'dev','MAX_INDEX_ITEMS':'0'}` -> STARTED mode dev max_index_items 0. Own mutant MUT-A (delete the two names from MUST_BE_POSITIVE): `439 passed` (441 before; two params vanished, nothing failed) - survived. Q2's Valkey adapter reads exactly these names (`scheduling/valkey.py:60 _ITEMS_FIELD, _BYTES_FIELD = \"max_index_items\", \"max_index_bytes\"`), so a zero cap now reaches the scheduler instead of refusing at startup.",
+      "minimal_fix": "In `validate_runtime`, right after `validate_deployment(...)`, refuse the pilot bounds in every mode: `for name in MUST_BE_POSITIVE: if getattr(pilot, name) <= 0: raise RuntimeMisconfigured(mode, detail=f\"{env_name(name)} must be positive\")` (or call `validate_pilot(pilot, settings)` there). Add a startup test naming the two settings explicitly (not derived from the list): `for name in (\"MAX_INDEX_ITEMS\",\"MAX_INDEX_BYTES\"): with pytest.raises(config.RuntimeMisconfigured, match=name): _app({name: \"0\"})`, and a mutant anchored on the new loop.",
+      "lens": "config",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "Confirmed from code and by experiment; could not refute. Code (apps/infrx-api/infrx/config.py @ e307084): `validate_runtime` (l.224-266) calls only `validate_deployment` (l.365, loops `DEPLOYMENT_MUST_BE_POSITIVE`, l.337 = non-str fields of `DeploymentSettings`) plus the CREDIT/rate-card and mode checks; `MUST_BE_POSITIVE` (l.157, now including `max_index_items`/`max_index_bytes`) is looped only in `validate_pilot` (l.407), and grep shows no runtime caller of `validate_pilot` anywhere in `infrx/` - `gateway/app.py:64` calls `validate_runtime` only. On base 0cc4936 the two caps were `DeploymentSettings` fields, so `DEPLOYMENT_MUST_BE_POSITIVE` covered them at startup in every mode; the move to `PilotSettings` (limits.py l.142-145) removed them from that list without adding an equivalent runtime check. Experiment (branch venv, same probe script, `config.validate_runtime(config.from_env(env))`): branch e307084 -> `{'MAX_INDEX_ITEMS':'0'}` ACCEPTED mode legacy pilot.max_index_items=0; `{'MAX_INDEX_BYTES':'0'}` ACCEPTED max_index_bytes=0; `{'INFRX_MODE':'dev','MAX_INDEX_ITEMS':'0'}` ACCEPTED mode dev. Base 0cc4936 (git-archived infrx package on the same venv) -> all three REFUSED `RuntimeMisconfigured ... MAX_INDEX_ITEMS/MAX_INDEX_BYTES must be positive`. Test half also holds: the only test over the bound is `test_bounds_a_zero_would_disable_are_refused` (tests/contracts/test_config_and_imports.py l.166), parametrized over `config.MUST_BE_POSITIVE` itself, so removing the two names removes the cases rather than failing one; no other test or mutant list names MAX_INDEX_* in a config/startup context (only Q's memory.py constant mutants and the env-name table at l.60). `scheduling/valkey.py:60` reads exactly these field names via getattr, so a zero cap is now passed through rather than refused at startup. The evidence line 'same env names and defaults' / 'still refused' is false for the startup path. Blocking because it is a regression of the fail-closed startup invariant versus base in every mode, contradicted by the handback's own evidence text; the fix is the reviewer's two-line loop in `validate_runtime` (or a `validate_pilot(pilot, settings)` call there) plus an explicit startup test naming the two settings."
+        },
+        {
+          "refuted": false,
+          "reason": "CONFIRMED, not refuted. Code (worktree e307084, apps/infrx-api/infrx/config.py): `git diff 0cc4936 HEAD` shows `max_index_items`/`max_index_bytes` removed from `DeploymentSettings` (where `DEPLOYMENT_MUST_BE_POSITIVE` covered every non-str field and `validate_runtime` L245 calls `validate_deployment` in every mode) and added to `PilotSettings` (contracts/limits.py:144-145) plus `MUST_BE_POSITIVE` (config.py:163). `MUST_BE_POSITIVE` is read only by `validate_pilot` (config.py:407); the only runtime caller of any validator is `gateway/app.py:64 validate_runtime`, and `validate_runtime` never calls `validate_pilot` (grep: `validate_pilot` appears otherwise only in tests/contracts). Experiment (same venv, scratch copies, worktree untouched): head `create_app(from_env({'MAX_INDEX_ITEMS':'0'}))`, `{'MAX_INDEX_BYTES':'0'}`, `{'INFRX_MODE':'dev','MAX_INDEX_ITEMS':'0'}` all STARTED; base 0cc4936 (`git archive` of the infrx package) refused both with `RuntimeMisconfigured INFRX_MODE='': MAX_INDEX_ITEMS must be positive` / `MAX_INDEX_BYTES must be positive`. Mutant MUT-A (delete the two names from MUST_BE_POSITIVE): tests/contracts/test_config_and_imports.py 226 passed - survived, because the only test (`test_bounds_a_zero_would_disable_are_refused`, L166) parametrizes over `config.MUST_BE_POSITIVE` itself. The evidence file (research/plan/evidence/f/F2P-wirein-2925d63.md L22, L100) claims 'same env names and defaults' and notes only the empty-value change, not that the zero bound left the startup path; L120 even asks G1R to pass `pilot.max_index_items/max_index_bytes` to `MemoryScheduler`, and `scheduling/valkey.py:417-420` reads them by getattr with no positivity check, so a zero cap reaches the scheduler and every enqueue then hits `len+1 > 0` / `bytes+size > 0` (memory.py:166-171) - the index admits nothing. Minimal fix as the reviewer states: enforce the MUST_BE_POSITIVE loop (or call validate_pilot) inside validate_runtime after validate_deployment, with a startup test naming MAX_INDEX_ITEMS/MAX_INDEX_BYTES explicitly.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "M-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+      "line": "970 (`complete`) / 1003-1013 (`complete_credit`)",
+      "claim_broken": "v1 `complete` accepts a CREDIT job: the CREDIT ledger moves and the v1 caller receives `settled` with `debit=0E-8`, the `SettlementV2` stored on the job but never returned. A v1 consumer (today's W/G settle path) cannot distinguish 'free' from 'charged in CREDIT' - the unit-ambiguous reading R64 exists to prevent - and the outbox `usage_projection` event carries `settled` with no charge.",
+      "evidence": "Probe A1: `complete(lease, outcome(1200,340))` on a CREDIT job -> `{'v1_state': 'settled', 'v1_debit': '0E-8', 'credit_ledger_moved': '0.88800000', 'settlement_hidden': True}`. `load_work` and `get_owned` refuse CREDIT jobs; `complete` does not, and the port docstring is silent about it.",
+      "minimal_fix": "Mirror `load_work`: in `complete`, after fencing, `if job.credit is not None: raise errors.NotFound(f'job {job.id} is a CREDIT job: use complete_credit')` (route `complete_credit` through a private `_complete`), add the refusal to `credit_settle__at_the_admitted_card...` and a mutant; or record in the port docstring that v1 `complete` is permitted on a CREDIT job and the charge is only visible through `complete_credit`.",
+      "lens": "money"
+    },
+    {
+      "id": "M-5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/limits.py",
+      "line": "153-157 (`provider_dev_allocation_ceiling_credit`, comment 'Zero until an operator sets it: no allocation is permitted by default')",
+      "claim_broken": "The ceiling is dead config: nothing reads it, so a zero ceiling is neither fail-closed nor fail-open - it is unread. The fake's only allocation path (`credit_grant`, the harness hook D2 is told to implement) accepts any amount into the provider dev wallet with the ceiling at 0. Disclosed in the evidence's Limits 6, but the code comment states an enforced rule.",
+      "evidence": "Probe A10: `credit_grant(IDS.provider_dev_wallet, '1000000')` with `DEFAULTS.provider_dev_allocation_ceiling_credit == Credit('0')` -> provider ledger `1000000.00000000`. Parsing is sound (A13: `-1`, `NaN`, `1e3`, `0.000000001`, ` 5`, `5 `, `$5`, `-0` all ValueError; `250.5` -> `Credit('250.50000000')`; the negative check is killable: own mutant `rv_negative_ceiling_accepted` killed by `test_nonsense_numbers_are_refused_at_the_boundary`).",
+      "minimal_fix": "Reword the comment to 'not enforced until the allocation port exists (P-08)'; or make the fake's `credit_grant` refuse a provider_dev allocation above `limits.provider_dev_allocation_ceiling_credit` (InvalidRequest), have `credit_admit__refusals_leave_no_job_and_no_hold` set a ceiling before its `credit_grant('100')`, and declare a mutant.",
+      "lens": "money"
+    },
+    {
+      "id": "M-6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "242-248 (R69 startup check) and 407-412 (`validate_pilot` strip check)",
+      "claim_broken": "CFG-V2-04 ('exact text') holds only in `validate_pilot`, which nothing calls at runtime; `validate_runtime` only tests `_configured`. And `ACTIVE_RATE_CARD_VERSION` is never compared with the catalog card `pin_admission` pins, so a configured version other than the active card is neither refused nor pinned - the setting is a presence flag, not the 'one the operator approved for this deployment' the limits.py comment describes.",
+      "evidence": "Probe A8: `{'ACCOUNTING_REGIME': 'credit', 'ACTIVE_RATE_CARD_VERSION': 'rc_x '}` through `validate_runtime` -> ACCEPTED; `' '` and unset -> `RuntimeMisconfigured: requires ACTIVE_RATE_CARD_VERSION` (R69 startup check itself is killable: own mutant `rv_startup_serves_credit_without_a_card` killed). `git grep validate_pilot` at 0cc4936 and e307084: definition + tests only.",
+      "minimal_fix": "Use `pilot.active_rate_card_version.strip() != pilot.active_rate_card_version` in the `validate_runtime` check too (or call `validate_pilot(pilot)` from `validate_runtime` in every mode, which also closes M-3); note for G1R that the composition root must compare the pinned `rate_card_version` with this setting or drop the setting's 'approved for this deployment' wording.",
+      "lens": "money"
+    },
+    {
+      "id": "M-7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/v2/records.py",
+      "line": "967-982 (`project_v1_usage`) and apps/app/lib/contracts/v2/types.ts 174-189",
+      "claim_broken": "Edge semantics of the projection: (a) a half-recorded row (prompt_tokens set, completion_tokens NULL) projects `usage=None`, silently dropping a recorded count rather than refusing; (b) `settled_at` is `created_at` for rows whose `outcome` is absent, so an unsettled row carries a settlement time; (c) the TS `UsageRecordV2` has no runtime rule that a CREDIT row carries usage and outcome (Python's validator does), so candidate ruling (b) exists in one language only.",
+      "evidence": "Probe A21: `{prompt_tokens: 10, completion_tokens: None}` -> `usage None`; `usage_certainty='unknown'` with tokens -> typed `Usage(certainty=unknown)` (fine); `settled_at=None` -> ValidationError. `grep -rn 'credit row|usage === undefined' apps/app/lib/contracts/v2 apps/app/tests/contracts/v2` -> no hits. PG projection tests 3/3 pass on real upgrade05 rows; declared mutants legacy_projection_invents_settled/_zero_usage, credit_row_without_usage and PROJ-01..03 all killed; own mutants rv_credit_row_needs_only_one_of_usage_outcome, rv_projection_invents_zero_usage_object, rv_projection_invents_authoritative_certainty_as_settled killed.",
+      "minimal_fix": "Refuse a half-recorded row (`raise ValueError` when exactly one token count is NULL) and add it to `test_a_pre_cutover_row_keeps_its_absences...`; document `settled_at` as 'the row's created_at for pre-settlement rows' on the field; add the CREDIT-row rule to the console side (an `assertUsageRecordV2` or in `usageTotalsByUnit`) or record the asymmetry in 01a.",
+      "lens": "money"
+    },
+    {
+      "id": "M-8",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/f/F2P-wirein-2925d63.md",
+      "line": "19 (coord. 1: 'its 4 existing mutants re-run: 4/4 killed')",
+      "claim_broken": "Count: exactly three declared mutants name `dur_cap__total_org_and_key_limits_reject_with_retry_guidance` (`cap_total_not_counted`, `cap_org_not_counted`, `cap_key_not_counted`), not four.",
+      "evidence": "`grep -c dur_cap__total_org_and_key_limits_reject_with_retry_guidance tests/contracts/mutants.py` -> 3 (lines 234/238/242). All three killed in this review's run. The case itself does bound both directions per scope (N admitted, N+1 refused with 429/Retry-After, and a sibling key/org still admitted).",
+      "minimal_fix": "Correct the evidence row to 3/3.",
+      "lens": "money"
+    },
+    {
+      "id": "CFG-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "124 (_coerce str kind), 410-412 (validate_pilot), 248-250 (validate_runtime)",
+      "claim_broken": "CFG-V2-04 'ACTIVE_RATE_CARD_VERSION is exact text' and the module's 'a whitespace-only value is not configuration' rule. The exactness check lives only in `validate_pilot` (off the startup path); `_coerce` does not strip `str` pilot values, so a padded card name reaches a running CREDIT deployment.",
+      "evidence": "Branch: `{'ACCOUNTING_REGIME':'credit','ACTIVE_RATE_CARD_VERSION':' rc_x '}` -> STARTED card ' rc_x ' regime 'credit'. Whitespace-only `'  '` is refused (`requires ACTIVE_RATE_CARD_VERSION`) because `_configured` strips, but own mutant MUT-B (`_configured(...)` -> `bool(...)`) survived: `441 passed` - no test feeds a whitespace-only card through startup. Related inconsistency: `PROVIDER_DEV_ALLOCATION_CEILING_CREDIT=' 5'` is refused ('is not a valid Credit') while `Decimal` settings strip first; fail-closed, so not a defect, but the two money kinds now differ.",
+      "minimal_fix": "Strip `str` kinds in `_coerce` (`value = kind(raw.strip())` for str, and `raw.strip()` before `Credit(...)` like the Decimal path), or move the card check into `validate_runtime`; add `\"  \"` and `\" rc_x \"` cases to `test_a_credit_deployment_needs_an_approved_rate_card` (the first kills MUT-B, the second pins the startup behaviour).",
+      "lens": "config"
+    },
+    {
+      "id": "CFG-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/contracts/v2/mutants_v2.py",
+      "line": "whole file (deleted on branch; modified on claude/backend-impl at 9d699dd)",
+      "claim_broken": "Evidence 'G1R overlap: `git merge-file` reported a clean merge'. True for `infrx/config.py` and `tests/contracts/test_config_and_imports.py` (both 0 conflicts against 67e0320), but the whole-branch merge has one modify/delete conflict the evidence does not name.",
+      "evidence": "`git merge e307084` onto 67e0320 in a scratch clone: `CONFLICT (modify/delete): apps/infrx-api/tests/contracts/v2/mutants_v2.py deleted in e307084 and modified in HEAD`. backend-impl's change (9d699dd) adds `dies_by=(\"ValidationError\",)` to `the_pin_hardcodes_a_rate_card_version`; the branch folded that mutant into `tests/contracts/mutants.py:1644` without `dies_by` and instead fixed the case in 2925d63. Resolution = `git rm` the file; after that the folded mutant is killed post-merge (`[killed] the_pin_hardcodes_a_rate_card_version: 1 failed, 751 deselected`) and `tests/contracts/test_config_and_imports.py` with G1R's request-11 hunk applied is `228 passed`.",
+      "minimal_fix": "Coordinator at merge: resolve by deleting `tests/contracts/v2/mutants_v2.py` (the 9d699dd `dies_by` is superseded by 2925d63's case fix); record the conflict in the evidence's G1R-overlap note.",
+      "lens": "config"
+    },
+    {
+      "id": "CFG-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/contracts/test_fixtures.py",
+      "line": "26-36 (test_the_fixture_root_holds_exactly_the_two_revisions)",
+      "claim_broken": "Item 7's 'the root holds exactly v1/ and v2/ and nothing else' - the 'nothing else' half has no killable test.",
+      "evidence": "Own mutant MUT-F (`== {\"v1\",\"v2\"}` -> `>= {\"v1\",\"v2\"}`): `441 passed` - survived. `v2_fixture_table_unclaimed` (declared) is killed, so the per-file claim holds; only the stray-directory clause is untested.",
+      "minimal_fix": "Either drop the 'nothing else' wording or add a mutant/test that plants a stray entry (e.g. monkeypatch `iterdir` to add `v3`) and expects the assertion to fail.",
+      "lens": "config"
+    },
+    {
+      "id": "CFG-5",
+      "severity": "nonblocking",
+      "file": "apps/app/lib/contracts/v2/types.ts",
+      "line": "305-311 (CONTRACT_INSTANT / instantKey)",
+      "claim_broken": "V2-INSTANT-01..04 'canonical-Z only'. The guard refuses `+00:00`, lowercase `z`, naive, 7-digit fractions and a space separator (all verified), but is not anchored at the start in a killable way: a prefixed string is accepted and keyed by its tail.",
+      "evidence": "Own mutant MUT-E (remove `^` from CONTRACT_INSTANT): `node --test tests/contracts/v2/types.test.ts` -> `# pass 11 / # fail 0` - survived. Cross-language check: Python `records._utc` accepts any offset and `_rfc3339` emits `Z` with 0 or 6 fraction digits, which the console regex accepts, so Python-serialized instants never trip the guard; naive datetimes are refused on both sides.",
+      "minimal_fix": "Add `\"x2026-09-22T12:00:00Z\"` to the refused list in the instant test (kills the anchor mutant); optional, the guard is otherwise sound.",
+      "lens": "config"
+    },
+    {
+      "id": "CFG-6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "360-362 (deployment_from_env strip for str kinds)",
+      "claim_broken": "Pre-existing, surfaced by the branch's generalisation of the str branch: the cursor-secret length bound is measured after `.strip()`, and no test distinguishes that from measuring the padded value.",
+      "evidence": "Own mutant MUT-D (`raw.strip() if isinstance(...)` -> `raw if ...`): `441 passed` - survived; a 14-char secret padded with two spaces would then pass the 16-char bound. `ACCOUNTING_REGIME=' credit '` is unaffected (unstripped it is refused as not a regime - fail-closed).",
+      "minimal_fix": "One case in `test_the_cursor_secret_bound_is_exactly_sixteen_characters`: `\" \" + \"s\"*14 + \" \"` must be refused.",
+      "lens": "config"
+    },
+    {
+      "id": "HON-1",
+      "severity": "nonblocking",
+      "file": "apps/app/lib/contracts/types.ts",
+      "line": "780-791 (AUDIT_ACTIONS)",
+      "claim_broken": "Evidence 'AuditAction console alignment to D1's ten values (C0 half)' / ruling candidate (d) 'console AUDIT_ACTIONS are D1's spellings': only the write-side value `admin_grant` is killable (AUDIT-ACTION-01, via the fake); the six read-only values (`admin_key_issue` \u2026 `admin_adjust`) have no test that compares them to 0009's CHECK or to Python's `operations.ports.AUDIT_ACTIONS`.",
+      "evidence": "Own mutant OWN-6 (types.ts `\"admin_key_issue\"` -> `\"key_issue\"`) on a scratch copy: `pnpm test` still 286/288 (the same two IR-C1 cases), `node tests/contracts/run-mutants.mjs` still `195 killed, 0 survived`. `grep AUDIT_ACTIONS tests/contracts/test_parity_console.py` finds nothing; 0009_operator_seams.sql lines 26-29 carry the ten values the console list mirrors by hand.",
+      "minimal_fix": "In `tests/contracts/test_parity_console.py`, assert `ts_string_array(TYPES, \"AUDIT_ACTIONS\")` equals the ten values read from `apps/app/supabase/migrations/0009_operator_seams.sql`'s `audit_entries_action_check` (or from a Python AUDIT_ACTIONS once `operations/ports.py` grows to ten), and add one console mutant on `types.ts` (entry `fixtures` or a parity case) so the read-only six are killable.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/contracts/mutants.py",
+      "line": "2187-2201 (_pytest env) and 2381-2382 (_first_line)",
+      "claim_broken": "'One mutation runner \u2026 there is no second classifier anywhere' (mutants.py 2318-2325) is true, but two known defects of that runner are still in this branch's copy: Q3's HON-3 (the fixed subprocess env `{PYTHONPATH, PATH, HOME, PYTHONPYCACHEPREFIX, TMPDIR}` drops every caller variable, so a per-lane `INFRX_Q2_VALKEY_PORT`/`INFRX_Q_VALKEY_PORT` never reaches a copy) and D2's H3 (`_first_line` on an empty-message `AssertionError` raises `IndexError` out of `assertion_kill`). Neither affects the contracts list (no env, pytest path only), and the console `--entry` runner does inherit the caller's env.",
+      "evidence": "Probe C on the scratch copy: a copy-only test asserting `os.environ.get('INFRX_Q2_VALKEY_PORT') == '55516'` with the variable set in the parent is reported `killed - 1 failed` (the child did not see it). Probe A: `assertion_kill(lambda: raise AssertionError())` -> `CRASHED IndexError list index out of range`. Probes B1-B3 (empty-message `raise AssertionError()`, `assert False, ''`, `pytest.fail('')` through the pytest path) -> `killed`. `git show codex/d2-admission-outbox:\u2026/mutants.py` carries the H3 fix at its line 1791; this branch and claude/backend-impl do not. Node: `spawn(process.execPath, \u2026)` without `env` inherits (`X=probe-env` probe printed `probe-env`).",
+      "minimal_fix": "At merge take D2's `_first_line` hunk (`lines = str(error).strip().splitlines(); (lines[0] if lines else '')`) \u2014 it is in a different region from this branch's CONTRACTS-target hunk, so it merges cleanly \u2014 and give `Runner` an `env: tuple[str, ...] = ()` of names `_pytest` copies from `os.environ` (Q3's HON-3 fix), used by the Valkey lists only.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-3",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/f/F2P-wirein-2925d63.md",
+      "line": "Commands table, row `INFRX_MUTANTS=all \u2026 test_mutants.py` (`393 passed`)",
+      "claim_broken": "The brief's paraphrase '393 Python mutants all killed' overstates: 393 is the pytest item count of `tests/contracts/test_mutants.py` \u2014 374 mutants in `MUTANTS` (313 v1 + 61 folded v2 + this lane's) plus 19 runner self/structure tests. The evidence quotes `393 passed` correctly; only the orchestrator's summary calls them mutants.",
+      "evidence": "`len(new.MUTANTS)` printed 374 by the fold-fidelity script; `393 passed in 1079.45s` re-derived at e307084 (code identical to 2925d63: `git diff --stat 2925d63 e307084` = the evidence file only). Console: 165 conformance + 29 v2 + 1 fixtures = 195.",
+      "minimal_fix": "Wording only: in the evidence and handback say '374 mutants (393 pytest items incl. the runner's own tests)'.",
+      "lens": "honesty"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "rv_v1_debit_copies_the_credit_hold",
+          "edit": "state.py _terminalize: `debit = money.ZERO` -> `debit = hold.amount` (v1 debit copies the CREDIT hold)",
+          "result": "killed",
+          "killed_by": "credit_settle__at_the_admitted_card_on_the_credit_wallet_only (1 failed, 4 passed)"
+        },
+        {
+          "name": "rv_v1_debit_copies_the_credit_charge",
+          "edit": "state.py _terminalize: drop `debit = money.ZERO` after `job.settlement = settle(...)` (v1 debit = CREDIT charge)",
+          "result": "killed",
+          "killed_by": "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"
+        },
+        {
+          "name": "rv_credit_row_needs_only_one_of_usage_outcome",
+          "edit": "v2/records.py UsageRecordV2 validator: `usage is None or outcome is None` -> `and`",
+          "result": "killed",
+          "killed_by": "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"
+        },
+        {
+          "name": "rv_projection_invents_zero_usage_object",
+          "edit": "v2/records.py project_v1_usage: `usage = None` -> `usage = Usage.of(0, 0)`",
+          "result": "killed",
+          "killed_by": "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"
+        },
+        {
+          "name": "rv_projection_invents_authoritative_certainty_as_settled",
+          "edit": "project_v1_usage: `outcome = row.get('settlement_state') or ('settled' if usage is not None else None)`",
+          "result": "killed",
+          "killed_by": "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"
+        },
+        {
+          "name": "rv_reconcile_releases_a_credit_hold_on_the_usd_wallet",
+          "edit": "state.py reconcile: `_release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id else self.wallet(hold.org_id), hold)` -> `_release_hold(self.wallet(hold.org_id), hold)`",
+          "result": "SURVIVED (5 passed, 747 deselected) - finding M-1",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_complete_credit_serves_a_legacy_job",
+          "edit": "state.py complete_credit: `if job is not None and job.credit is None: raise NotFound` -> `if False: pass`",
+          "result": "SURVIVED (5 passed) - finding M-2",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_get_owned_credit_serves_a_legacy_job",
+          "edit": "state.py get_owned_credit: `if job.credit is None: raise NotFound` -> `if False: pass`",
+          "result": "SURVIVED (5 passed) - finding M-2",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_credential_org_mismatch_ignored",
+          "edit": "state.py _credit_terms: `if auth.org_id != request.org_id: raise Forbidden` -> `if False: pass`",
+          "result": "SURVIVED (5 passed) - noted in M-2",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_credit_hold_swaps_the_ceilings",
+          "edit": "state.py _derive_hold (credit): `maximum_hold(max_input_tokens, max_output_tokens)` -> arguments swapped",
+          "result": "killed",
+          "killed_by": "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"
+        },
+        {
+          "name": "rv_settlement_wallet_is_the_org",
+          "edit": "state.py _terminalize: `wallet = self._wallet_of(job)` -> `wallet = self.wallet(job.request.org_id)`",
+          "result": "killed",
+          "killed_by": "credit_settle__at_the_admitted_card_on_the_credit_wallet_only, credit_settle__a_free_outcome_moves_no_credit (2 failed)"
+        },
+        {
+          "name": "rv_startup_serves_credit_without_a_card",
+          "edit": "config.py validate_runtime: `and not _configured(pilot.active_rate_card_version):` -> `and False:`",
+          "result": "killed",
+          "killed_by": "test_a_credit_deployment_needs_an_approved_rate_card"
+        },
+        {
+          "name": "rv_negative_ceiling_accepted",
+          "edit": "config.py _coerce: remove the `value.is_negative` refusal for Amount",
+          "result": "killed",
+          "killed_by": "test_nonsense_numbers_are_refused_at_the_boundary (1 failed, 12 passed)"
+        },
+        {
+          "name": "rv_zero_index_cap_refused_only_by_validate_pilot",
+          "edit": "config.py: drop `max_index_items`, `max_index_bytes` from MUST_BE_POSITIVE",
+          "result": "SURVIVED against test_a_bad_deployment_value_refuses_before_anything_mounts + test_the_g1_and_q1_constants_match_the_deployment_defaults (5 passed) - finding M-3 (startup never checks them)",
+          "killed_by": ""
+        },
+        {
+          "name": "A22 settle() on a model_construct'd AdmissionV2 with a zero-rate card swapped in",
+          "edit": "probe, not a runner mutant: `AdmissionV2.model_construct(**{**adm.__dict__, 'rate_card': evil})` then `v2.settle(...)`",
+          "result": "charged 0.00000000 while `rate_card_version` reports rc_marlin2b_2026_09_provisional - settle trusts its argument; consistent with R78 (enforced at the persistence boundary), the fake settles only from store-owned `job.credit`; no finding",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <worktree> archive e307084 | tar -x -C /tmp/claude-1000/review-wirein-money-1829854 && make api-env (in scratch)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": "git -C <worktree> diff 0cc4936..e307084 --stat",
+          "exit": 0,
+          "tail": "41 files changed, 2749 insertions(+), 1093 deletions(-)"
+        },
+        {
+          "cmd": "(scratch, tests/d/pgharness.py patched: container infrx-review-wirein-money-postgres, host_port 55511, lock /tmp/infrx-review-wirein-money.lock) .venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "3 passed in 4.55s / exit=0 / no wirein-money containers"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py --ignore=tests/contracts/test_mutants.py",
+          "exit": 0,
+          "tail": "996 passed in 32.57s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts/test_mutants.py -k '<25 ids: cap_total/org/key_not_counted, the_pin_hardcodes_a_rate_card_version, contracts_v2_not_a_submodule, credit_hold_lands_on_the_usd_wallet, credit_hold_ignores_the_ceilings, credit_balance_checked_on_the_usd_wallet, get_owned_serves_a_credit_job, credit_wallet_by_organization, credit_replay_crosses_regimes, credit_replay_not_marked, credit_settles_at_the_published_card, credit_charge_in_the_usd_field, credit_settles_on_the_usd_wallet, load_work_serves_a_credit_job, credit_free_outcome_settles, work_prompt_tokens_unbounded/_negative, work_v2_prompt_tokens_unbounded, v2_fixture_table_unclaimed, legacy_projection_invents_settled/_zero_usage, credit_row_without_usage, v2_suite_runs_nothing>'",
+          "exit": 0,
+          "tail": "25 passed, 368 deselected in 81.16s (0:01:21)"
+        },
+        {
+          "cmd": "PYTHONPATH=. .venv/bin/python /tmp/.../attack_money.py (12 probes A1..A22 against credit_jobstore_factory, project_v1_usage, config)",
+          "exit": 0,
+          "tail": "[OK] A1 ... {'v1_state': 'settled', 'v1_debit': '0E-8', 'credit_ledger_moved': '0.88800000', 'settlement_hidden': True} / [OK] A11 ... {\"'0'\": 'ACCEPTED (pilot.max_index_items=0)', ...} / [OK] A17 ... {'state': 'held_unknown', 'settlement': None, 'held_reserved': '14.74560000', 'after_reserved': '0E-8', 'ledger_unmoved': True, 'usd': '0E-8'}"
+        },
+        {
+          "cmd": "PYTHONPATH=. .venv/bin/python /tmp/.../own_mutants.py (14 own mutants through tests/contracts/mutants.run_mutant)",
+          "exit": 0,
+          "tail": "rv_reconcile_releases_a_credit_hold_on_the_usd_wallet survived 5 passed / rv_complete_credit_serves_a_legacy_job survived / rv_get_owned_credit_serves_a_legacy_job survived / rv_credential_org_mismatch_ignored survived / rv_zero_index_cap_refused_only_by_validate_pilot survived; the other 9 killed"
+        },
+        {
+          "cmd": "(apps/app, node_modules symlinked read-only from the worktree) node tests/contracts/run-mutants.mjs --entry v2 --only PROJ-01,PROJ-02,PROJ-03,V2-NS-01,V2-NS-02",
+          "exit": 0,
+          "tail": "baseline (v2): 19 cases pass unmutated / 2 mutants: 2 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 0.7s (PROJ ids are not in entry v2)"
+        },
+        {
+          "cmd": "node tests/contracts/run-mutants.mjs --entry conformance --only PROJ-01,PROJ-02,PROJ-03",
+          "exit": 0,
+          "tail": "3 mutants: 3 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 2.2s"
+        },
+        {
+          "cmd": "git grep -n validate_pilot {0cc4936,e307084} -- apps | grep -v 'def validate_pilot'; git show 0cc4936:apps/infrx-api/infrx/config.py | grep -n 'DEPLOYMENT_MUST_BE_POSITIVE = ' -A3",
+          "exit": 0,
+          "tail": "only config.py docstring + tests/contracts/test_config_and_imports.py at both SHAs; base: tuple(f.name for f in fields(DeploymentSettings) if f.name != 'console_cursor_secret')"
+        },
+        {
+          "cmd": "grep -c dur_cap__total_org_and_key_limits_reject_with_retry_guidance tests/contracts/mutants.py",
+          "exit": 0,
+          "tail": "3"
+        }
+      ],
+      "fabrication_check": "Re-checked against the evidence file's claims: tests/contracts 996 passed here with test_mutants.py and the PG module excluded (the evidence's 1034 includes the default mutant subset + self-tests: consistent); the three PG projection tests 3/3 on a fresh upgrade05 build in my own container, container removed at exit; the 25 declared mutants in my lens (12 credit_*, 3 projection, 3 cap_*, 3 prompt_tokens, the_pin_hardcodes, 3 wiring) all killed; PROJ-01..03 and V2-NS-01/02 killed on the console side (self-tests/baselines as quoted: v2 19 cases; the implementer's 195/195 and 393/393 full runs were not repeated). One count discrepancy: 'dur_cap ... its 4 existing mutants re-run: 4/4' - exactly 3 mutants name that case (M-8). The evidence's disclosed limits (fake-only, ceiling unenforced, DTO swap not done, validate_pilot pilot-mode note) match the code; what it does not disclose is the max_index_* startup regression (M-3) and the untested reconcile/cross-regime branches (M-1, M-2). Not run: make console-test/typecheck, the full api-mutants list, tests/d beyond the projection module, the Valkey lists (no Valkey-dependent claim in this lens). Nothing pushed, no hosted project touched.",
+      "cleanup": "Scratch /tmp/claude-1000/review-wirein-money-1829854 removed (including the read-only node_modules symlink and the two attack scripts); lock /tmp/infrx-review-wirein-money.lock removed; `docker ps -a | grep wirein-money` -> 0 containers (the harness removed infrx-review-wirein-money-postgres at exit; no Valkey container was started); no worktree edited or committed (codex-f2p-wirein status clean); no other checkout's containers, locks or ports touched."
+    },
+    {
+      "lens": "config",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "MUT-A drop max_index_* from MUST_BE_POSITIVE",
+          "edit": "config.py: delete the line `\"max_index_items\", \"max_index_bytes\",`",
+          "result": "SURVIVED - tests/contracts/test_config_and_imports.py + test_fixtures.py: 439 passed (441 pristine; the parametrization shrank, nothing failed)",
+          "killed_by": ""
+        },
+        {
+          "name": "MUT-B whitespace-only card counts as configured",
+          "edit": "config.py validate_runtime: `not _configured(pilot.active_rate_card_version)` -> `not bool(pilot.active_rate_card_version)`",
+          "result": "SURVIVED - 441 passed",
+          "killed_by": ""
+        },
+        {
+          "name": "MUT-C R69 check skipped in legacy mode",
+          "edit": "config.py validate_runtime: add `and mode != MODE_UNSET` to the CREDIT/no-card condition",
+          "result": "KILLED - 1 failed, 440 passed",
+          "killed_by": "test_a_credit_deployment_needs_an_approved_rate_card (mode '')"
+        },
+        {
+          "name": "MUT-D deployment str values not stripped",
+          "edit": "config.py deployment_from_env: `raw.strip() if isinstance(..., str)` -> `raw if isinstance(..., str)`",
+          "result": "SURVIVED - 441 passed (regime with padding still refused downstream; a space-padded 16-char secret would pass the bound)",
+          "killed_by": ""
+        },
+        {
+          "name": "MUT-F fixture root superset accepted",
+          "edit": "test_fixtures.py: `== {\"v1\", \"v2\"}` -> `>= {\"v1\", \"v2\"}`",
+          "result": "SURVIVED - 441 passed",
+          "killed_by": ""
+        },
+        {
+          "name": "MUT-G regime compared case-insensitively",
+          "edit": "config.py validate_deployment: `deployment.accounting_regime not in ACCOUNTING_REGIMES` -> `deployment.accounting_regime.lower() not in ACCOUNTING_REGIMES`",
+          "result": "KILLED - 2 failed, 439 passed",
+          "killed_by": "test_the_accounting_regime_is_a_v2_regime[legacy_usd|credit] (CREDIT accepted)"
+        },
+        {
+          "name": "MUT-E instantKey regex loses its start anchor",
+          "edit": "apps/app/lib/contracts/v2/types.ts: `/^(\\d{4}-` -> `/(\\d{4}-`",
+          "result": "SURVIVED - node --test tests/contracts/v2/types.test.ts: # pass 11, # fail 0",
+          "killed_by": ""
+        },
+        {
+          "name": "Declared list (branch, scratch): DEPLOY-01..07, CFG-V2-01..05, contracts_v2_not_a_submodule, v2_fixture_table_unclaimed",
+          "edit": "python -m tests.contracts.mutants <names>",
+          "result": "14/14 killed (DEPLOY-06 '1 failed', DEPLOY-07 '1 failed', CFG-V2-01 '2 failed', CFG-V2-02 '1 failed', CFG-V2-03 '1 failed, 12 passed', CFG-V2-04 '1 failed', CFG-V2-05 '2 failed')",
+          "killed_by": "the declared cases"
+        },
+        {
+          "name": "Declared list (post-merge onto 67e0320 + request 11): DEPLOY-01..07, CFG-V2-01..05, the_pin_hardcodes_a_rate_card_version",
+          "edit": "python -m tests.contracts.mutants <names> in the merged scratch clone",
+          "result": "13/13 killed",
+          "killed_by": "the declared cases (DEPLOY-03 '4 failed' under G1R's _validated_as_cutover tests)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <worktree> archive e307084 | tar -x -C /tmp/claude-1000/review-wirein-config-1830802 && make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0\nexit=0"
+        },
+        {
+          "cmd": "git -C <worktree> diff 0cc4936..e307084 --stat",
+          "exit": 0,
+          "tail": "41 files changed, 2749 insertions(+), 1093 deletions(-)"
+        },
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_config_and_imports.py  (branch scratch)",
+          "exit": 0,
+          "tail": "228 passed in 2.52s"
+        },
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen python -m tests.contracts.mutants DEPLOY-01 ... DEPLOY-07 CFG-V2-01 ... CFG-V2-05 contracts_v2_not_a_submodule v2_fixture_table_unclaimed",
+          "exit": 0,
+          "tail": "[killed       ] CFG-V2-05: 2 failed, 750 deselected in 1.34s\n\n14/14 killed"
+        },
+        {
+          "cmd": "git merge-file (ours=e307084, base=0cc4936, theirs=67e0320) for infrx/config.py and tests/contracts/test_config_and_imports.py",
+          "exit": 0,
+          "tail": "config.py merge-file exit=0 conflicts: 0\ntest_config_and_imports.py merge-file exit=0 conflicts: 0"
+        },
+        {
+          "cmd": "git diff 0cc4936 67e0320 -- Makefile",
+          "exit": 0,
+          "tail": "(empty: G1R changed no Makefile target)"
+        },
+        {
+          "cmd": "git clone --no-checkout --shared <worktree> mergerepo && git checkout -b sim 67e0320 && git merge --no-edit e307084",
+          "exit": 1,
+          "tail": "Auto-merging apps/infrx-api/infrx/config.py\nAuto-merging apps/infrx-api/tests/contracts/test_config_and_imports.py\nCONFLICT (modify/delete): apps/infrx-api/tests/contracts/v2/mutants_v2.py deleted in e307084 and modified in HEAD.\nAutomatic merge failed; fix conflicts and then commit the result."
+        },
+        {
+          "cmd": "git rm apps/infrx-api/tests/contracts/v2/mutants_v2.py && git commit; apply G1R request-11 hunk to test_a_credit_deployment_needs_an_approved_rate_card; make api-env; uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_config_and_imports.py  (merged scratch)",
+          "exit": 0,
+          "tail": "request 11 applied\n228 passed in 3.38s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants DEPLOY-01..07 CFG-V2-01..05 the_pin_hardcodes_a_rate_card_version  (merged scratch)",
+          "exit": 0,
+          "tail": "[killed       ] CFG-V2-05: 2 failed, 750 deselected in 0.84s\n\n13/13 killed"
+        },
+        {
+          "cmd": ".venv/bin/python startup probes on the branch: create_app(from_env({...})) for MAX_INDEX_ITEMS=0, MAX_INDEX_BYTES=0, ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION variants, PROVIDER_DEV_ALLOCATION_CEILING_CREDIT=' 5'",
+          "exit": 0,
+          "tail": "{'MAX_INDEX_ITEMS': '0'} -> STARTED mode legacy max_index_items 0\n{'MAX_INDEX_BYTES': '0'} -> STARTED mode legacy max_index_items 500\n{'ACCOUNTING_REGIME': 'credit', 'ACTIVE_RATE_CARD_VERSION': ' rc_x '} -> STARTED card ' rc_x ' regime 'credit'\n{'ACCOUNTING_REGIME': 'Credit'} -> refused RuntimeMisconfigured INFRX_MODE='': ACCOUNTING_REGIME must be one of legacy_usd, credit\n{'PROVIDER_DEV_ALLOCATION_CEILING_CREDIT': ' 5'} -> refused ValueError PROVIDER_DEV_ALLOCATION_CEILING_CREDIT is not a valid Credit"
+        },
+        {
+          "cmd": "PYTHONPATH=<archive of 0cc4936 infrx> .venv/bin/python startup probes at base",
+          "exit": 0,
+          "tail": "{'MAX_INDEX_ITEMS': '0'} -> refused RuntimeMisconfigured INFRX_MODE='': MAX_INDEX_ITEMS must be positive\n{'MAX_INDEX_BYTES': '0'} -> refused RuntimeMisconfigured INFRX_MODE='': MAX_INDEX_BYTES must be positive"
+        },
+        {
+          "cmd": "cd apps/app && pnpm install --frozen-lockfile --offline && node tests/contracts/run-mutants.mjs --self-test",
+          "exit": 0,
+          "tail": "14 self-tests, 14 passed, 0 failed"
+        },
+        {
+          "cmd": "cd apps/app && node --test tests/contracts/v2/types.test.ts tests/contracts/fixtures.test.ts",
+          "exit": 0,
+          "tail": "# pass 16\n# fail 0"
+        },
+        {
+          "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --entry v2 ; node tests/contracts/run-mutants.mjs --entry fixtures",
+          "exit": 0,
+          "tail": "29 mutants: 29 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 4.0s\n1 mutants: 1 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 0.6s"
+        },
+        {
+          "cmd": "own mutants MUT-A..G (see table); each edit reverted and config.py diffed against e307084 afterwards",
+          "exit": 0,
+          "tail": "[MUT-A] 439 passed  [MUT-B] 441 passed  [MUT-C] 1 failed, 440 passed  [MUT-D] 441 passed  [MUT-F] 441 passed  [MUT-G] 2 failed, 439 passed\nconfig.py restored clean"
+        },
+        {
+          "cmd": "git -C <worktree> status --short | wc -l; git rev-parse HEAD",
+          "exit": 0,
+          "tail": "0\ne3070840fa0190b2e924c7417d49398bdffac3ec"
+        }
+      ],
+      "fabrication_check": "Claims in my lens re-run and matched: CFG-V2-01..05 and DEPLOY-06/07 killed (14/14 on the branch, 13/13 post-merge); cursor secret refused at 15 / accepted at 16 (DEPLOY-06/07 kills + the test itself); console runner self-tests 14/14; `--entry v2` 29 killed and `--entry fixtures` 1 killed (R62-TRACES-01); canonical-Z guard refuses +00:00, lowercase z, naive, 7-digit fraction and the space separator; tests/contracts/test_config_and_imports.py 228 passed on the branch and 228 passed after the merge onto 67e0320 with G1R's request-11 hunk. Claim checked and found incomplete: 'git merge-file reported a clean merge' is true for the two named files (0 conflicts each) but the whole-branch merge has one modify/delete conflict on tests/contracts/v2/mutants_v2.py (backend-impl 9d699dd vs the branch's deletion) which the evidence does not mention. Claim checked and found wrong in effect: 'max_index_* moved ... same env names and defaults' omits that the move removed the two caps from the startup fail-closed path (CFG-1). accounting_regime: values legacy_usd|credit, `pilot`/`CREDIT`/`credits`/whitespace-only refused, nothing outside config.py branches on it yet (grep over infrx/: only credit_schema column names), and only config.py reads os.environ (one-source holds). Makefile: base 0cc4936 == 67e0320 for api-mutants and console-mutants; entries present only at base are `tests/contracts/v2/test_mutants_v2.py` (api-mutants) and `node tests/contracts/v2/run-mutants-v2.mjs --self-test && node tests/contracts/v2/run-mutants-v2.mjs` (console-mutants), both folded into the contracts runners; the only entry present only on the branch is `node tests/contracts/run-mutants.mjs --self-test &&` prefixed to pnpm test:mutants. Not verified by this lens: the 2500/2499 full-suite orderings, console-test 286/288, the 393-mutant full Python run, the PG projection tests. The brief path `.claude/handoff/wave3/F2P-wirein.md` does not exist in either worktree and `research/plan/handoffs/F-contracts.md` is actually `F-foundation.md`; item 5's spec was read from research/plan/01a-contracts-v2-map.md:170 instead. No container was created (this lens ran no tests/d or Valkey suites).",
+      "cleanup": "Removed /tmp/claude-1000/review-wirein-config-1830802 (scratch archive, its .venv, the base-0cc4936 archive and the mergerepo shared clone with its .venv) and /tmp/claude-1000/review-wirein-config-scratch-path. No Docker containers were created (docker ps -a shows no review-wirein-config-* names). No worktree was edited or committed: codex-f2p-wirein is clean at e307084; every own-mutant edit was applied to the scratch copy only and reverted there (config.py diffed clean against e307084 afterwards)."
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "OWN-1-WRONG-ENTRY (console)",
+          "edit": "V2-BAL-01's real v2 defect (`availableCredit` returns ledger_total) declared with `entry: \"conformance\"` on an app copy",
+          "result": "SURVIVED 'the suite passed' + listed under 'name a case the suite does not have'; exit 1 \u2014 a real defect under the wrong suite is never a kill",
+          "killed_by": "n/a (correctly not killed)"
+        },
+        {
+          "name": "OWN-2-FIXTURES-ENTRY (console)",
+          "edit": "same V2-BAL-01 edit with `entry: \"fixtures\"`",
+          "result": "SURVIVED + misattributed; exit 1",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "OWN-3-MISSPELT (console)",
+          "edit": "PROJ-01 with its case name truncated ('\u2026v2 record')",
+          "result": "SURVIVED 'the suite failed, but not in a declared case (failed: a pre-cutover usage row reads as a legacy USD v2 record and invents nothing)' + misattributed; exit 1",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "OWN-4-THROW-UNDECLARED (console)",
+          "edit": "V2-INSTANT-02's anchor replaced by `throw new TypeError('probe')` without `kills_by`",
+          "result": "RUNNER-ERROR 'declared case failed by exception (TypeError), not by assertion'",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "OWN-5 (console) `--entry v3` / `entry: \"v3\"` on a mutant",
+          "edit": "unknown entry name on the CLI and in a catalogue entry",
+          "result": "CLI: 'no mutants selected' exit 2; catalogue: `Error: mutant \u2026: unknown entry v3` thrown, exit 1 \u2014 visible, not a false pass",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "OWN-6 (console) AUDIT_ACTIONS read-only value renamed",
+          "edit": "types.ts `\"admin_key_issue\"` -> `\"key_issue\"`",
+          "result": "SURVIVED everything: pnpm test 286/288 (unchanged), runner 195/195 killed with the defect in place (finding HON-1)",
+          "killed_by": "nothing"
+        },
+        {
+          "name": "Probe A/B/C (Python runner)",
+          "edit": "empty-message AssertionError via assertion_kill (A); copy-only tests dying by `raise AssertionError()`, `assert False, ''`, `pytest.fail('')` (B1-B3); a copy-only test reading INFRX_Q2_VALKEY_PORT set in the parent (C)",
+          "result": "A: IndexError out of assertion_kill (D2 H3 not in this branch); B1-B3: killed (pytest path fine); C: env not passed (Q3 HON-3 still present) \u2014 finding HON-2",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "Hand-applied: 28 Python list entries (credit_hold_lands_on_the_usd_wallet, credit_hold_ignores_the_ceilings, credit_balance_checked_on_the_usd_wallet, get_owned_serves_a_credit_job, credit_wallet_by_organization, credit_replay_crosses_regimes, credit_replay_not_marked, credit_settles_at_the_published_card, credit_charge_in_the_usd_field, credit_settles_on_the_usd_wallet, load_work_serves_a_credit_job, credit_free_outcome_settles, CFG-V2-01..05, DEPLOY-06/07, legacy_projection_invents_settled, legacy_projection_invents_zero_usage, credit_row_without_usage, v2_suite_runs_nothing, contracts_v2_not_a_submodule, v2_fixture_table_unclaimed, work_prompt_tokens_unbounded/_negative, work_v2_prompt_tokens_unbounded)",
+          "edit": "each applied by hand (`_prepare` + `_pytest` on a copy) and the FAILURES section read",
+          "result": "all 28: anchor occurs exactly once, edit compiles, only the named case(s) fail, death is an assertion/`Failed`/typed DomainError at the invariant's line (e.g. credit_charge_in_the_usd_field -> v2_contracts.py:993 'a CREDIT charge was written into the USD field'; credit_settles_at_the_published_card -> :998 ledger moved by the published card; credit_wallet_by_organization -> 'expected Forbidden' (R66); credit_replay_crosses_regimes -> 'expected IdempotencyConflict'; credit_balance_checked_on_the_usd_wallet -> InsufficientCredit (typed, honest); load_work_serves_a_credit_job -> ValidationError@state.py:737, declared in dies_by; CFG-V2-01 -> \"ACCOUNTING_REGIME='pilot' was accepted\"; CFG-V2-02 -> \"mode '' started a CREDIT deployment with no approved card\"; DEPLOY-06/07 -> 15 accepted / 16 refused; legacy_projection_invents_settled -> `(None, settled) == (None, None)`; v2_suite_runs_nothing -> `assert 0 == 32`; v2_fixture_table_unclaimed -> `{'money_unit_cases.json'}`); runner verdict killed for all 28",
+          "killed_by": "the declared case in every instance"
+        },
+        {
+          "name": "Hand-applied: 16 console list entries (V2-NS-01/02, PROJ-01..03, V2-INSTANT-01..04, AUDIT-ACTION-01, JUDGESAMPLE-04, R62-TRACES-01, XJUDGE-02, JUDGESAMPLE-03, AUDIT-02, AUDIT-04)",
+          "edit": "each applied by hand on an app copy and its entry's suite run under TAP",
+          "result": "all 16: find occurs once, exactly the declared case is `not ok` with ERR_ASSERTION and the invariant's message (V2-NS-01 'v2 is not the v2 DTO module'; V2-NS-02 'the v2 namespace lost the unit module'; PROJ-01 'the outcome is the row's own, or absent'; PROJ-02 'a v1 row is pre-cutover USD'; PROJ-03 'usage exists exactly when tokens were recorded'; V2-INSTANT-03 'Missing expected exception (TypeError): \u2026+00:00'; AUDIT-ACTION-01 'unknown audit action grant'; JUDGESAMPLE-04 'a capped array reports sample_count 50, not the run's own count'; R62-TRACES-01 'trace template model marlin-2b@2026-09-01 lacks its public model id'; XJUDGE-02 'the sample array is not capped, so sample_count must be what it carries 1 !== 0')",
+          "killed_by": "the declared case in every instance"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <worktree> archive e307084 | tar -x -C /tmp/claude-1000/review-wirein-honesty-1831202; make api-env; cd apps/app && pnpm install --frozen-lockfile",
+          "exit": 0,
+          "tail": "uv sync --frozen --all-extras \u2026 exit=0; pnpm 'Done in 4.8s' exit=0"
+        },
+        {
+          "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (detached, 02:58:59Z-03:17:00Z)",
+          "exit": 0,
+          "tail": "393 passed in 1079.45s (0:17:59)"
+        },
+        {
+          "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test",
+          "exit": 0,
+          "tail": "14 self-tests, 14 passed, 0 failed"
+        },
+        {
+          "cmd": "cd apps/app && pnpm test (make console-test body)",
+          "exit": 1,
+          "tail": "# tests 288 / # pass 286 / # fail 2 \u2014 not ok 13 - every conformance case C1 owns passes against the real services; not ok 14 - every failing case fails only because an operation is not implemented in C1"
+        },
+        {
+          "cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit",
+          "exit": 0,
+          "tail": "\u2713 Types generated successfully; tsc no diagnostics"
+        },
+        {
+          "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --entry conformance / --entry v2 / --entry fixtures",
+          "exit": 0,
+          "tail": "baseline (conformance): 49 \u2026 165 mutants: 165 killed, 0 survived, 0 stale, 0 runner errors, 49.4s; baseline (v2): 19 \u2026 29 mutants: 29 killed; baseline (fixtures): 5 \u2026 1 mutants: 1 killed"
+        },
+        {
+          "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs (no --entry)",
+          "exit": 0,
+          "tail": "baseline (conformance): 49, (fixtures): 5, (v2): 19 cases pass unmutated; 195 mutants: 195 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 50.1s"
+        },
+        {
+          "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts (scratch copy: tests/d/pgharness.py SERVICE container=infrx-review-wirein-honesty-postgres host_port=55515; incl. the 3 PG projection tests, container created and removed by the run)",
+          "exit": 0,
+          "tail": "1037 passed in 101.73s (0:01:41)"
+        },
+        {
+          "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_pgharness.py (scratch copy: DECOY=infrx-review-wirein-honesty-decoy, DECOY_PORT=55517)",
+          "exit": 0,
+          "tail": "6 passed in 8.32s; docker ps -a | grep review-wirein: none left"
+        },
+        {
+          "cmd": "fold fidelity: old tests/contracts/v2/mutants_v2.py (0cc4936) vs MUTANTS; old mutants-v2.json vs mutants.json entry=v2",
+          "exit": 0,
+          "tail": "old v2 list: 61; identical: 61; differing: 0; missing: 0; new total: 374 \u2014 console: old 23; identical (mod entry): 20; differing: 3 (V2-ROLE-03, V2-GRANT-01/02 `find` re-anchored to instantKey, as 092960f says); entry=v2 now 29 (+V2-NS-01/02, V2-INSTANT-01..04); total 195"
+        },
+        {
+          "cmd": ".venv/bin/python probe_runner.py (assertion_kill empty message; empty-message deaths via pytest; INFRX_Q2_VALKEY_PORT passthrough)",
+          "exit": 0,
+          "tail": "A assertion_kill(empty msg): CRASHED IndexError; B1/B2/B3: killed; C env passthrough: killed (env dropped)"
+        },
+        {
+          "cmd": "handcheck_py.py <28 names> / handcheck_ts.mjs <16 ids> / run-mutants.mjs --only OWN-1..4 on an app copy / OWN-6 pnpm test + runner",
+          "exit": 0,
+          "tail": "28/28 and 16/16 killed by the declared case at the invariant's line; OWN-1/2/3 SURVIVED (+misattributed, exit 1), OWN-4 RUNNER-ERROR; OWN-6 survived pnpm test 286/288 and runner 195/195"
+        }
+      ],
+      "fabrication_check": "Every count above is quoted from logs written in this session under /tmp/claude-1000/review-wirein-honesty-1831202 (py-mutants.log, console.log, contracts.log, handcheck_py.log, handcheck_ts.log), all removed at cleanup. Evidence attributions checked: (1) `393 passed` re-derived at e307084 (code-identical to 2925d63; `git diff --stat 2925d63 e307084` = evidence file only) \u2014 it is 374 mutants + 19 runner tests, not 393 mutants; (2) `195 killed` re-derived per entry and without --entry, self-tests 14/14; (3) `1034 passed` + 3 PG projection = 1037 reproduced with the PG tests on my own container (the D1R real-row projection claim holds); (4) the track-first single failure: tests/d/test_pgharness.py lines 52-53 hard-code DECOY `infrx-e2r-dharness-postgres`/55598 for every checkout, so the cross-checkout collision attribution is consistent with the file; the drill passes 6/6 alone (decoy renamed into my namespace, proving the name is the only host-wide part); (5) console-test 286/288 with exactly C1's cases 13/14 red, as claimed; (6) the '61 folded mutants field-identical' claim verified programmatically (61/61); the three console re-anchors match 092960f's explanation; (7) G1R request 11 is real: claude/backend-impl's test_config_and_imports.py carries `_validated_as_cutover` (line 172) so this lane's pilot branch of `test_a_credit_deployment_needs_an_approved_rate_card` needs the hunk at merge, as both evidence files say. Not re-run: the two full orderings with tests/d (other lenses), make integration. No worktree was edited or committed; the scratch copy differed from e307084 only in the two harness lines quoted above (diff -r shown).",
+      "cleanup": "Removed /tmp/claude-1000/review-wirein-honesty-1831202 (scratch tree, .venv, node_modules, logs, probe scripts, probe-apps copy) and /tmp/infrx-review-wirein-honesty-postgres-55515.lock; the runner's temp copies (contracts-mutant-*, hand-*, f2ts-mutants-*) were deleted by their own context managers; `docker ps -a` shows no infrx-review-wirein-* or *honesty* container (the PG harness and the renamed decoy were created and removed by their runs); no other container touched; `git status` of the codex-f2p-wirein worktree clean. Six /tmp/contracts-mutant-* dirs belonging to other lanes' concurrent runs were left alone."
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-23T03:35:47Z",
+  "updated": "2026-09-23T03:38:32Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "independent review (3-lens workflow) at e307084",
+      "phase": "wire-in fix round (M-1, M-2, M-3/CFG-1 blocking) after review of e307084",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
