@@ -798,6 +798,26 @@ MUTANTS += (
 )
 
 
+# ROLLOUT-PREP: the release route to the box (deploy/release-bundle.sh).
+RB, RB_OK, RB_BAD = ("deploy/release-bundle.sh",
+                     "test_backend_deploy__a_release_bundle_reaches_the_box_checked_against_its_manifest",
+                     "test_backend_deploy__a_release_bundle_refuses_what_is_not_a_commit")
+MUTANTS += (
+    _m("bundle_manifest_unchecked", "the box checks the bundle against its sha256 before git",
+       RB, '( cd "\\$d" && sha256sum -c "$name.sha256" )\n', "", RB_OK),
+    _m("bundle_ships_head", "the bundle carries the commit named, not HEAD",
+       RB, 'update-ref "$REF" "$sha"', 'update-ref "$REF" "$(git -C "$repo" rev-parse HEAD)"',
+       RB_OK),
+    _m("bundle_uploads_with_stale_keys", "the upload never uses the shell's stale AWS keys",
+       RB, "aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \\",
+       "aws() { env \\", RB_OK),
+    _m("bundle_short_commit_accepted", "only a full lower-case commit id is shipped",
+       RB, "^[0-9a-f]{40}$", "^[0-9a-fA-F]{7,40}$", RB_BAD),
+    _m("bundle_unknown_commit_accepted", "a commit this repository lacks is refused by name",
+       RB, 'git -C "$repo" cat-file -e "$sha^{commit}" 2>/dev/null || { echo "no commit $sha in $repo" >&2; exit 2; }\n',
+       "", RB_BAD),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
