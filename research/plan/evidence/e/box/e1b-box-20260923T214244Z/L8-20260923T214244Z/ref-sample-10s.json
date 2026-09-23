@@ -1,0 +1,22 @@
+{
+  "caption": "Scene: A lush, sun-dappled park setting featuring a wide expanse of green grass and numerous mature trees with dense foliage. In the foreground, large tree trunks frame the left side of the shot, while a paved walkway is visible on the right. A low green metal fence runs horizontally across the mid-ground, separating the park from a road where a white bus is seen passing by. The lighting is bright, with sunlight filtering through the canopy to create a mix of deep shadows and bright patches on the ground. The camera remains stationary throughout the clip, providing a consistent view of the tranquil outdoor environment.\n\nEvents:\n<0.0 - 1.5> The park remains still with no visible movement.\n<1.5 - 4.5> A white bus drives past the green fence.\n<4.5 - 10.1> The park remains still after the bus passes.",
+  "scene": "A lush, sun-dappled park setting featuring a wide expanse of green grass and numerous mature trees with dense foliage. In the foreground, large tree trunks frame the left side of the shot, while a paved walkway is visible on the right. A low green metal fence runs horizontally across the mid-ground, separating the park from a road where a white bus is seen passing by. The lighting is bright, with sunlight filtering through the canopy to create a mix of deep shadows and bright patches on the ground. The camera remains stationary throughout the clip, providing a consistent view of the tranquil outdoor environment.",
+  "events": [
+    {
+      "start": 0.0,
+      "end": 1.5,
+      "description": "The park remains still with no visible movement."
+    },
+    {
+      "start": 1.5,
+      "end": 4.5,
+      "description": "A white bus drives past the green fence."
+    },
+    {
+      "start": 4.5,
+      "end": 10.1,
+      "description": "The park remains still after the bus passes."
+    }
+  ],
+  "raw": "Scene: A lush, sun-dappled park setting featuring a wide expanse of green grass and numerous mature trees with dense foliage. In the foreground, large tree trunks frame the left side of the shot, while a paved walkway is visible on the right. A low green metal fence runs horizontally across the mid-ground, separating the park from a road where a white bus is seen passing by. The lighting is bright, with sunlight filtering through the canopy to create a mix of deep shadows and bright patches on the ground. The camera remains stationary throughout the clip, providing a consistent view of the tranquil outdoor environment.\n\nEvents:\n<0.0 - 1.5> The park remains still with no visible movement.\n<1.5 - 4.5> A white bus drives past the green fence.\n<4.5 - 10.1> The park remains still after the bus passes."
+}

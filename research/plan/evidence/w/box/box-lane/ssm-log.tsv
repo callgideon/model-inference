@@ -1,0 +1,72 @@
+2026-09-23T19:39:17Z	1a607dca-a132-4c2c-8cb9-7c7060ae9ec3	step1 inventory.sh (no HF, read-only)
+2026-09-23T19:39:49Z	c1a0b401-d895-4490-809e-ad37d0e50edb	step1 capability.sh on the live engine (data: URL media, no HF)
+2026-09-23T19:40:31Z	fb16bf96-97f6-4641-88cf-1da82edfbef7	step1 read-only inspection (units, caddy, Caddyfile hash, checkout, disk)
+2026-09-23T19:42:25Z	fe06b414-dbf5-43f0-83a6-407de2e4828d	step2 fetch bundle 37a0d8a into /opt/dlami/nvme/w3-checkout, detach at 37a0d8a
+2026-09-23T19:43:25Z	bfead862-8db8-408f-8724-99fa4ff72593	step3 launch synth.py build + verify (nohup, log w4-logs/synth-build.log)
+2026-09-23T19:43:52Z	8fc62e42-12b3-4703-962e-800c2c3acf27	step3 poll synth-build.log
+2026-09-23T19:44:33Z	588864fb-33b1-423f-b9da-ee0ce9200240	step6-prep read-only: modeling_marlin.py caption()/find() source (vendor file) + synth poll
+2026-09-23T19:47:05Z	c997b7c2-a474-4566-aaa6-fec91edf6b56	step4 open maintenance window: save live Caddyfile, validate + write maintenance in place, reload via localhost:2019
+2026-09-23T19:47:48Z	2c299ba4-0014-4955-8764-bb7c3dfb5e5a	step5 launch E0: candidate.sh CANDIDATE=e0 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e0.log) - W4 command block verbatim
+2026-09-23T19:48:10Z	5edbdf04-f94a-429b-a3ca-26defebd841f	step5 poll e0.log
+2026-09-23T19:49:47Z	3db6f720-cf22-4225-a3a1-18ca137977f7	step5 poll e0.log
+2026-09-23T19:51:43Z	231afdd9-9b8a-424d-aad5-3af8ab919f30	poll /opt/dlami/nvme/w4-logs/e0.log (watch)
+2026-09-23T19:53:53Z	3ce37b01-59b7-4fc5-a8e0-1d74a42a2186	step5 poll e0.log
+2026-09-23T19:54:09Z	ad00189e-2f37-4d62-96a9-00a2f54927b5	poll /opt/dlami/nvme/w4-logs/e0.log (watch)
+2026-09-23T19:55:05Z	88024f82-3830-4c20-b6fc-fe37995e1166	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T19:57:38Z	9ad9db5f-e61e-424a-875e-c94fa4d3ef48	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:00:11Z	fdbda6fb-a290-4033-95ad-c3e227e8a8a4	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:01:29Z	fd0965ec-925c-4c64-be50-f6dca541cd8f	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:04:02Z	e251af6a-8ac0-4009-9f3f-60448b4ffa9b	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:06:35Z	878a4308-1263-479c-9ebc-c9d0ab671f4a	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:08:21Z	89a8cef3-fa4c-4e95-b9bf-57f8d67cbea2	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:10:53Z	5c1e9b82-3adc-47bb-bf9b-f80040df6b3d	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:13:26Z	c29d99a0-5e50-46db-8a60-95d1c3500838	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:15:10Z	6b11e577-00f7-4347-928b-e85ec15d21a4	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:17:43Z	34227a60-e075-4770-88a5-953f7160fac0	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:20:16Z	105d1de2-4b40-473b-9880-f459ec3df29c	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:21:29Z	344a5a8d-f039-4a4e-86c0-b5584af19131	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:24:02Z	102afb43-a9c6-4cd5-8f09-f7d37de228c6	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:24:17Z	95e7c8c3-3a0c-4d6a-ae2f-223856076459	step5 fetch E0: tar w4-e0-20260923T194748Z + e0.log to s3 w4/
+2026-09-23T20:24:45Z	d7f9df92-f6d6-44b9-ad50-c0d97573294d	step5 launch E1: candidate.sh CANDIDATE=e1 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e1.log)
+2026-09-23T20:26:58Z	2e2d11fc-7ea0-48ea-848c-c5c41760022e	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:29:31Z	f5575c33-41cf-47df-ada4-d4f5e1005f09	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:32:04Z	1ee86c7b-0c59-4ff9-a7e5-257cf2e6e377	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:34:18Z	c18bc554-926b-4793-8c33-d3b74a6a41a0	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:36:51Z	dbe9d165-aee9-49d5-8021-c1c7040bd7a9	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:39:24Z	6690bd64-2525-411b-be75-6cb35b50ff41	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:41:39Z	4533b240-ff6c-4646-b98a-e2ecd05ee8f9	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:44:12Z	7e50ff3d-ceee-44f0-96c4-726a593aa76f	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:46:45Z	2f54ffdc-ad59-49f0-9289-0da4ae46e112	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:49:47Z	64e10b1f-3c2f-4e66-9cc3-900be61d85ac	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:52:20Z	6bd2e197-11fb-49f0-9bf6-36dd749fbc91	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:54:52Z	3b6677df-f05b-403c-a92c-0ca95d512531	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:57:36Z	8ffea336-50ff-4d98-860e-b6878edbcfa1	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:00:09Z	18a173ec-b9fa-4853-bc9b-5c2d6fbd034c	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:02:41Z	778e22d6-c4e1-45f4-8986-a05376626968	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:02:55Z	b0e9fa3b-c7ec-4d75-918d-b2b8973f4be1	step5 fetch E1: tar w4-e1-20260923T202445Z + e1.log to s3 w4/
+2026-09-23T21:03:37Z	35af1521-5839-4ef4-bb45-d9ee5f230e8a	step5 launch E3 (e3_trigger=yes c=[8,16,32] on E0): candidate.sh CANDIDATE=e3 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e3.log)
+2026-09-23T21:04:46Z	e3dabf48-0456-41c2-8086-2b9dc2e51536	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:08:28Z	5b44e65b-63c1-48df-8bf1-ff557fa9de72	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:11:00Z	65e3e05d-ca3c-4be5-a73c-8df5524d94a3	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:13:33Z	a72f2049-d6b3-4bdc-80cb-6a566391ea27	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:17:11Z	992a0b33-f2b5-4d8b-a033-035666cb5fd9	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:19:44Z	db92c678-3074-4adb-b86f-9cf3d672bd02	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:22:17Z	f02f9f69-fb37-4c18-84c3-4c7a2348a1df	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:26:04Z	c0898fce-915e-4603-9a86-d28ae2c6febb	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:28:37Z	eb5867aa-94c2-4494-b03c-d5a2281a7314	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:31:09Z	167409d0-64ed-4bb5-b5e7-892569ab4651	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:35:24Z	878b2b65-ad83-4329-b176-900765809d18	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:37:56Z	e188abff-e69b-4b9a-9223-78f9c47dc10b	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:40:29Z	ec07e699-4096-4853-ba8f-5f1fb0142643	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:42:26Z	e9061d88-649c-46df-9ea2-177c583c325b	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:42:45Z	011fb930-1ef7-4489-b5a4-1f5a0c8369be	step6 L0 launch: l0.sh (bench -c 1 -n 12 --subset full, restarted engine from E3's restore, nvsampler hook; nohup, e1b-logs/L0-20260923T214244Z.log)
+2026-09-23T21:44:27Z	73e1b1b6-2108-4a18-830d-0f0dc252684d	step6 L0 poll
+2026-09-23T21:44:40Z	b4c8fc57-3d9f-424b-bfe6-a8ced48dd3da	step5 fetch E3: tar w4-e3-20260923T210337Z + e3.log to s3 w4/
+2026-09-23T21:44:52Z	678eeeaf-e876-4625-82e0-5b9429442ab1	step6 L8 reference launch: l8ref.sh (holds w4-candidate.lock; stops marlin2b-vllm, reference.py x5, restarts unit on EXIT; nohup)
+2026-09-23T21:46:43Z	41b07adc-2d0a-429c-b8f8-ce6500f8c786	step6 L8 reference poll
+2026-09-23T21:49:24Z	fbb2a05e-9e8d-4ecf-a69f-7d4ad292c15f	poll /opt/dlami/nvme/e1b-logs/L8ref-20260923T214244Z.log
+2026-09-23T21:51:57Z	ce16af24-6ee7-4183-ae51-5add05d216bf	poll /opt/dlami/nvme/e1b-logs/L8ref-20260923T214244Z.log
+2026-09-23T21:52:13Z	18464594-410c-47d5-a98d-b4939ba3524b	step6 L8 served launch: l8served.sh (smoke.py x5 clips x {processor default, v1}; nohup)
+2026-09-23T21:54:19Z	e1258e30-87f6-4869-be83-6c57f71f6684	poll /opt/dlami/nvme/e1b-logs/L8served-20260923T214244Z.log
+2026-09-23T21:54:39Z	173fad85-09a1-49c6-a53b-7f34d2c02569	step6 fetch E1B outputs (e1b-logs + checkout results rows) to s3 w4/
+2026-09-23T21:54:51Z	da2eee0c-abab-4866-bae9-b3b15e8300a8	step7 close window: close.sh WUTC=20260923T194704Z (engine checks, restore live Caddyfile ff47f706, reload via unix//config/admin.sock)

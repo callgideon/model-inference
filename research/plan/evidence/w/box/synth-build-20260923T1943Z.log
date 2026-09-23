@@ -1,0 +1,29 @@
+utc=2026-09-23T19:43:25Z head=37a0d8ae
+built 12/12 clips
+build_exit=0
+ models/marlin2b/corpus-synth/manifest.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+### verify (committed manifest)
+verified 12 file(s), 0 missing, 0 error(s)
+verify_exit=0
+### sha256 of the rendered clips
+3a79e59089e05fe81a3409a2fe930a3b8df146300b012a37ff18e6eb9fe975b7  sop-synth-v1/sop00-8s-640x360.mp4
+f7da13a80ddc1589685bb0d86beeda21448f62a4aa465b5e010eb12fd880a866  sop-synth-v1/sop01-8s-854x480-steps_within_one_second.mp4
+562e07939ac523cf4f2d9520bd7d4e4ebba1fad45e44ac2459172825f601efa5  sop-synth-v1/sop02-8s-1280x720.mp4
+e7ceae9e8acd283f1e3991412882fb1568ea329a82a0cc537533c9fdc09f5537  sop-synth-v1/sop03-30s-640x360.mp4
+18be67bf21d0e2d2781e233c5d8f934defe300976bcff7b4b83a0beb796c0309  sop-synth-v1/sop04-30s-854x480-steps_out_of_order.mp4
+8db751c78eb5e6dfb67e6f3bbde77df1e28c61d8836f9111ee936c19c1f84c8c  sop-synth-v1/sop05-30s-1280x720.mp4
+8e7a6d7b2c41aff09d88cf69bae631b7b5a4d05ac8027d199f6be0113ee41310  sop-synth-v1/sop06-60s-640x360.mp4
+4cbc0c64197cd970f708bc83e83890c91c5f066cecbbf2e6588b0410f9e34f23  sop-synth-v1/sop07-60s-854x480-step_absent.mp4
+69727216ecb9cacc0fe9a76d0b9df5b1bc592ccd6f78bdab85f8928902b218fc  sop-synth-v1/sop08-60s-1280x720.mp4
+8aa8aa3467b6aa9283ed5637ab958e1308971bf0a912da1cf12cbf640e30f46c  sop-synth-v1/sop09-120s-640x360.mp4
+734872fb6b78c6009338a307eaab7ab4065a347b9eb8b7496f47bb78967b722f  sop-synth-v1/sop10-120s-854x480-step_spans_segment_boundary.mp4
+919c696de50eed6c6fb9a9283b07636801ba50e104e7aa363b7bd1d038176312  sop-synth-v1/sop11-120s-1280x720.mp4
+### corpus/build.py verify (licensed corpus, candidate.sh's precondition)
+verified 72 file(s), 0 missing, 0 error(s)
+corpus_verify_exit=0
+### parity.py --check
+parity_check present=9 missing=[]
+parity_check_exit=0
+done utc=2026-09-23T19:43:56Z
+

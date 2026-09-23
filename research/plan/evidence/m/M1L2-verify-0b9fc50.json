@@ -1,0 +1,304 @@
+{
+ "verdict": "pass",
+ "head": "0b9fc50",
+ "reviews": [
+  {
+   "verdict_hint": "pass",
+   "findings": [
+    {
+     "id": "V1",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/m/test_s3.py",
+     "line": "116-117 (s3_store: `if secret is None: _WRITTEN.append(objects)`), 618-623",
+     "claim_broken": "A1: 'each S3 case empties its test/m1l2/<uuid>/ prefix'. The cleanup works today: after a clean 38/38 run on my MinIO the bucket held 0 objects. But nothing tests the fixture wiring. The declared mutant s3_cleanup_skipped is killed only because test_what_a_case_writes_is_removed_after_it calls remove_prefix() itself. That test never checks that the autouse fixture runs the cleanup after each case, so the mutant's stated invariant ('deleted after it') claims more than its killing case checks.",
+     "evidence": "Own mutant own_v_cleanup_unregistered deletes `if secret is None:\\n        _WRITTEN.append(objects)\\n` (anchored once). Result: 38 passed and the mutant survives. After that run the MinIO bucket infrx-m1l2 held 2036 leaked objects under test/m1l2/<uuid>/, including 64 MiB bodies. On the box the bucket is the project bucket (llm-bootcamp-..., prefix infrx/), so a regression here would leak into it with every case still green.",
+     "minimal_fix": "Pin the registration. For example, test_what_a_case_writes_is_removed_after_it asserts `objects in _WRITTEN` and does not call remove_prefix itself, or the fixture teardown asserts `list_objects_v2(Prefix=p)['KeyCount'] == 0` for each registered prefix. Add own_v_cleanup_unregistered to s3_mutants.py."
+    },
+    {
+     "id": "V2",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/m/test_s3.py",
+     "line": "94 (`assert objects.prefix.startswith(\"test/m1l2/\"), objects.prefix`)",
+     "claim_broken": "A1 and the evidence both say 'the cleanup refuses any prefix outside test/m1l2/'. The code does this, but no test checks it. The guard also accepts the bare 'test/m1l2/', which would empty the prefixes of every concurrent run.",
+     "evidence": "Probe on my MinIO: remove_prefix refused 'infrx/', 'test/', 'test/m1l2x/' and 'tests/m1l2/' with an AssertionError, and 'infrx/media/keep' and 'test/m1l2x/keep' survived. Own mutant own_v_cleanup_guard_dropped (the assert line removed) survives: 38 passed. remove_prefix(S3ObjectStore(c, B, 'test/m1l2/')) was accepted and deleted another run's 'test/m1l2/otherrun/obj'.",
+     "minimal_fix": "Add one no-Docker case: `with pytest.raises(AssertionError): remove_prefix(S3ObjectStore(None, 'b', 'infrx/'))`. Tighten the guard to `re.fullmatch(r'test/m1l2/[0-9a-f]{32}/', objects.prefix)`, and use an explicit `raise` rather than `assert` so the guard survives `python -O`."
+    },
+    {
+     "id": "V3",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/m/test_s3.py",
+     "line": "118 (`... and secret is None and os.environ.get(LOCAL_FLAG) == \"1\":`)",
+     "claim_broken": "A1 docstring and evidence: without INFRX_M_S3_LOCAL_CREDS 'no bucket is created'. This holds in behaviour but no test checks it. The guard is what stops the box run from sending CreateBucket to the project bucket. In us-east-1, CreateBucket on a bucket you already own answers 200 rather than an error.",
+     "evidence": "Own mutant own_v_bucket_created_without_flag (the flag condition removed) survives: 38 passed. Behaviour today: with the flag unset, working chain credentials (the MinIO literals given as plain AWS_* env) and INFRX_M_S3_BUCKET=infrx-verify-chain-nobucket, the run gave '12 failed, 26 passed, 14 errors in 8.48s' and my listing afterwards showed no such bucket.",
+     "minimal_fix": "In test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones (or a sibling case), monkeypatch S3ObjectStore.connect to return a store on a Stubber client with no create_bucket response queued. Call s3_store with the flag unset, then call stub.assert_no_pending_responses(): any CreateBucket fails the case. Add the mutant."
+    },
+    {
+     "id": "V4",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/m/test_s3.py",
+     "line": "595-601 (test_a_pilot_install_waits_for_the_bucket_a_bounded_time)",
+     "claim_broken": "Ruling (4): 'every refusal names the setting and the error code, never the bucket or the endpoint'. The new timeout refusal is clean today, but its test does not check that it leaves out the bucket or endpoint.",
+     "evidence": "Own mutant own_v_timeout_refusal_names_bucket (`HeadBucket {bucket} did not answer within`) survives: 38 passed. Probe with a fake aws whose child keeps the pipes open, BUCKET_PROBE_TIMEOUT_S=1, and S3_ENDPOINT_URL=http://endpoint-host.example:9000. It refused in 1.0 s with 'S3_MEDIA_BUCKET: HeadBucket did not answer within 1 s; the gateway would refuse to start', and the text contains neither the bucket nor the endpoint.",
+     "minimal_fix": "Pass S3_ENDPOINT_URL in the test's values and assert that neither 'infrx-media-pilot' nor the endpoint host appears in refused[0]."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "s3_local_flag_ignored (declared, by hand)",
+     "edit": "tests/m/test_s3.py: remove `    if secret is None and not local and os.environ.get(LOCAL_FLAG) != \"1\":\\n        return\\n` (anchor count 1)",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
+    },
+    {
+     "name": "s3_cleanup_skipped (declared, by hand)",
+     "edit": "tests/m/test_s3.py: `objects.client.delete_objects(` -> `(lambda **kw: None)(`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_what_a_case_writes_is_removed_after_it (this case calls remove_prefix directly; see V1)"
+    },
+    {
+     "name": "own_nosuchbucket_is_absent (declared, by hand)",
+     "edit": "s3.py: `MISSING = (\"404\", \"NoSuchKey\")` -> add \"NoSuchBucket\"",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
+    },
+    {
+     "name": "own_body_failure_is_absent (declared, by hand)",
+     "edit": "s3.py _get: wrap `return self.client.get_object(...)[\"Body\"].read()` in try/except Exception: return None",
+     "result": "killed (3 failed, 35 passed)",
+     "killed_by": "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent (+ denied-store and missing-bucket cases)"
+    },
+    {
+     "name": "own_conflict_is_not_written (declared, by hand)",
+     "edit": "s3.py: `if code == \"PreconditionFailed\":` -> `if code in (\"PreconditionFailed\", \"ConditionalRequestConflict\"):`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
+    },
+    {
+     "name": "own_404_absent_everywhere (declared, by hand)",
+     "edit": "s3.py: `if absent_ok and code in MISSING:` -> `if code in MISSING:`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
+    },
+    {
+     "name": "own_retries_count_retries (declared, by hand)",
+     "edit": "s3.py: `\"total_max_attempts\": ATTEMPTS}` -> `\"max_attempts\": 3}`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_failing_call_is_tried_twice_and_no_more"
+    },
+    {
+     "name": "own_install_waits_unbounded (declared, by hand)",
+     "edit": "preflight.py: drop `, timeout=BUCKET_PROBE_TIMEOUT_S` from subprocess.run",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
+    },
+    {
+     "name": "own_prefix_may_be_root (declared, by hand)",
+     "edit": "config.py S3_PREFIX_RE trailing `+` -> `*`",
+     "result": "killed (2 failed, 36 passed)",
+     "killed_by": "test_the_store_settings_refuse_a_value_that_cannot_place_an_object (+ test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse)"
+    },
+    {
+     "name": "own_listing_first_page_only (declared, by hand)",
+     "edit": "s3.py _keys: paginator -> a single list_objects_v2 call",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_listing_past_one_page_names_every_key"
+    },
+    {
+     "name": "own_composite_checksum_is_a_digest (declared, by hand)",
+     "edit": "s3.py: `if head.get(\"ChecksumType\", \"FULL_OBJECT\") != \"FULL_OBJECT\":` -> `if False:`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_only_a_whole_object_sha256_is_a_digest"
+    },
+    {
+     "name": "own_v_cleanup_unregistered (mine)",
+     "edit": "tests/m/test_s3.py s3_store: remove `if secret is None:\\n        _WRITTEN.append(objects)\\n`",
+     "result": "SURVIVED (38 passed); 2036 objects leaked into the MinIO bucket (V1)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_v_cleanup_guard_dropped (mine)",
+     "edit": "tests/m/test_s3.py remove_prefix: remove `assert objects.prefix.startswith(\"test/m1l2/\"), objects.prefix`",
+     "result": "SURVIVED (38 passed) (V2)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_v_bucket_created_without_flag (mine)",
+     "edit": "tests/m/test_s3.py s3_store: ` and secret is None and os.environ.get(LOCAL_FLAG) == \"1\":` -> ` and secret is None:`",
+     "result": "SURVIVED (38 passed) (V3)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_v_timeout_refusal_names_bucket (mine)",
+     "edit": "preflight.py: `HeadBucket did not answer within ` -> `HeadBucket {bucket} did not answer within `",
+     "result": "SURVIVED (38 passed) (V4)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_v_delete_not_absent_ok (mine)",
+     "edit": "s3.py delete: drop `absent_ok=True`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
+    },
+    {
+     "name": "own_v_describe_not_absent_ok (mine)",
+     "edit": "s3.py describe: drop `absent_ok=True`",
+     "result": "killed (3 failed, 35 passed)",
+     "killed_by": "test_a_missing_key_is_absent_to_every_operation, test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing, test_two_stores_never_see_each_others_objects"
+    },
+    {
+     "name": "own_v_one_attempt (mine)",
+     "edit": "s3.py: `ATTEMPTS = 2` -> `ATTEMPTS = 1`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_failing_call_is_tried_twice_and_no_more"
+    },
+    {
+     "name": "own_v_absent_type_is_composite (mine)",
+     "edit": "s3.py: `head.get(\"ChecksumType\", \"FULL_OBJECT\")` -> `head.get(\"ChecksumType\", \"COMPOSITE\")`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_only_a_whole_object_sha256_is_a_digest"
+    },
+    {
+     "name": "own_v_timeout_not_caught (mine)",
+     "edit": "preflight.py: `except subprocess.TimeoutExpired:` -> `except OSError:`",
+     "result": "killed (1 failed, 37 passed)",
+     "killed_by": "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git archive 0b9fc50 | tar -x -C /tmp/claude-1000/verify-m1l2-1936087/src; make api-env; docker run -d --name infrx-verify-m1l2-minio -p 127.0.0.1:55681:9000 (quay.io/minio/minio@sha256:14cea493...936e, E2 literals)",
+     "exit": 0,
+     "tail": "container 3fea9dc92bb6 started; venv synced offline from cache"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55681 INFRX_M_S3_LOCAL_CREDS=1 uv run --frozen pytest -q tests/m/test_s3.py",
+     "exit": 0,
+     "tail": "38 passed in 12.77s (bucket listed empty afterwards: infrx-m1l2 0 objects)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -rs tests/m/test_s3.py (endpoint and flag unset)",
+     "exit": 0,
+     "tail": "23 passed, 15 skipped in 4.78s; each skip 'M1-L2 (owner: M): no S3-compatible endpoint ...'"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55681 INFRX_M_S3_LOCAL_CREDS=1 INFRX_MUTANTS=all uv run --frozen pytest -q -rA tests/m/test_s3_mutants.py",
+     "exit": 0,
+     "tail": "43 passed in 159.24s (0:02:39): 42 mutants + list check"
+    },
+    {
+     "cmd": "(endpoint+flag) uv run --frozen pytest -q tests/m --ignore=tests/m/test_mutants.py --ignore=tests/m/test_s3_mutants.py",
+     "exit": 0,
+     "tail": "380 passed, 1 skipped in 14.14s (skip: test_parity.py:113 corpus cache not found; environmental)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/g --ignore the four mutant files (test_mutants, ops/test_mutants, uploads/test_uploads_mutants, jobs/test_jobs_mutants)",
+     "exit": 0,
+     "tail": "509 passed, 2 warnings in 8.74s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/i/test_install.py tests/i/test_packaging.py",
+     "exit": 0,
+     "tail": "64 passed in 16.28s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py",
+     "exit": 1,
+     "tail": "FAILED tests/contracts/test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record; 1 failed, 1022 passed in 20.95s (pre-existing, as declared)"
+    },
+    {
+     "cmd": "attack: flag unset, AWS_* unset, AWS_CONFIG_FILE=AWS_SHARED_CREDENTIALS_FILE=/dev/null, AWS_EC2_METADATA_SERVICE_ENDPOINT=http://127.0.0.1:9, INFRX_M_S3_ENDPOINT=MinIO, INFRX_M_S3_BUCKET=infrx-verify-nocreds pytest tests/m/test_s3.py",
+     "exit": 1,
+     "tail": "13 failed, 25 passed, 14 errors in 10.05s (real 0m10.9s): NoCredentialsError; create_app refusal 'S3_MEDIA_BUCKET did not answer HeadBucket (NoCredentialsError)'; no bucket infrx-verify-nocreds created; no hang"
+    },
+    {
+     "cmd": "attack: flag unset, chain creds = MinIO literals in plain env, INFRX_M_S3_BUCKET=infrx-verify-chain-nobucket pytest tests/m/test_s3.py",
+     "exit": 1,
+     "tail": "12 failed, 26 passed, 14 errors in 8.48s; the chain's credentials were used and no bucket was created"
+    },
+    {
+     "cmd": "probe_cleanup.py: remove_prefix on stores with prefixes infrx/, test/, test/m1l2x/, tests/m1l2/, test/m1l2/",
+     "exit": 0,
+     "tail": "infrx/ refused; test/ refused; test/m1l2x/ refused; tests/m1l2/ refused; left: ['infrx/media/keep','test/m1l2x/keep']; bare test/m1l2/ accepted and deleted another run's object"
+    },
+    {
+     "cmd": "probe2.py: missing bucket on MinIO; a local bare-404 server; 1001 keys in store 'ab/' next to store 'a/'; a real SHA256 multipart (COMPOSITE) upload",
+     "exit": 0,
+     "tail": "minio missing bucket: head None, describe None, get/put/keys/delete DependencyUnavailable | bare-404 server: head None, get None, put DU, keys DU, delete None | A keys 4, B keys 1001, A 'media/' -> 3 | raw head '...=-2' COMPOSITE -> head sha256: (NO_DIGEST); get bytes ok True; put same bytes -> False (_write_once -> Conflict)"
+    },
+    {
+     "cmd": "probe_pf.py: bucket_problems with BUCKET_PROBE_TIMEOUT_S=1, aws=('sh','-c','sleep 20 & sleep 20') (an orphaned child keeps the pipes open), S3_ENDPOINT_URL set",
+     "exit": 0,
+     "tail": "1.0s ['S3_MEDIA_BUCKET: HeadBucket did not answer within 1 s; the gateway would refuse to start']; leaks bucket/endpoint: False (the wrapper shell exited 144 from my own pkill; no orphan left)"
+    },
+    {
+     "cmd": "hand.py: 11 declared + 9 own mutants, each anchored once and applied to the scratch tree, full tests/m/test_s3.py on MinIO, reverted (diff vs 0b9fc50: pristine)",
+     "exit": 0,
+     "tail": "all 11 declared killed by their declared cases; own: 5 killed, 4 survived (V1-V4)"
+    },
+    {
+     "cmd": "scratch merge: clone --shared; checkout 6ac2bec (claude/backend-impl = origin); merge 351d084 (local codex/cutover-mount head; origin/codex/cutover-mount is still 6cb8ebe); merge 0b9fc50",
+     "exit": 0,
+     "tail": "both merges clean, no conflicts: f908793 Merge commit '0b9fc50' / d8a8e8c Merge commit '351d084'"
+    },
+    {
+     "cmd": "merge tree: make api-env; tests/m (endpoint+flag); tests/g quick; tests/i install+packaging+prereqs",
+     "exit": 0,
+     "tail": "380 passed, 1 skipped | 510 passed, 2 warnings | 80 passed"
+    },
+    {
+     "cmd": "merge tree: pytest tests/m/test_s3_mutants.py tests/g/test_mutants.py -k 'not test_mutant_is_killed'; INFRX_MUTANTS=all -k 'own_ or s3_local or s3_cleanup or s3_any_error or s3_unchecksummed'",
+     "exit": 0,
+     "tail": "8 passed, 24 deselected | 17 passed, 26 deselected in 70.87s"
+    },
+    {
+     "cmd": "docker rm -f -v infrx-verify-m1l2-minio; rm -rf /tmp/claude-1000/verify-m1l2-1936087",
+     "exit": 0,
+     "tail": "container removed; scratch gone; nothing on 55681; codex-objstore status clean at 0b9fc50"
+    }
+   ],
+   "fabrication_check": "Every count, time and outcome above comes from a command I ran in this session. The runs used a git archive of 0b9fc50 and my own MinIO, infrx-verify-m1l2-minio on 127.0.0.1:55681 (the image digest and E2 literals from tests/integration/compose.yaml). I never used namespace e2, port 55432, AWS or another lane's container. For the no-credentials attacks I pointed the credential files at /dev/null and IMDS at a dead local port, so nothing reached AWS or ~/.aws. The lane's claims reproduce: test_s3 38 (23 + 15 skips without an endpoint), the mutant list 43/43, tests/g quick 509, contracts 1022 + the pre-existing test_cancel_cause failure, tests/i 64. One environmental difference: tests/m gave 380 + 1 skip here, not the lane's 381. The skip is test_parity's missing corpus cache, not an M1-L2 case. On the merge base: origin/codex/cutover-mount still points at 6cb8ebe, which this branch already contains. I therefore merged the local codex/cutover-mount head 351d084, the newer head the task describes, and name it here. The AWS-specific statements (us-east-1 CreateBucket answering 200 on an owned bucket; AWS DeleteObject answering 204 for a missing key) come from S3's documented behaviour. I did not measure them.",
+   "cleanup": "Removed container infrx-verify-m1l2-minio with docker rm -f -v, which also removed its anonymous volume. Deleted /tmp/claude-1000/verify-m1l2-1936087, which held the archive, its venv, the probe scripts, the logs and the merge clone (the clone was --shared, so the main repository was not written). Also deleted the marker file /tmp/claude-1000/verify-m1l2-dir. No listener remains on 55681, and no orphaned 'sleep 20' process from the preflight probe is left. The codex-objstore worktree was never written to: git status is empty and HEAD is 0b9fc50. No infrx-e2-* container or any other lane's container was touched."
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "V1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "116-117 (s3_store: `if secret is None: _WRITTEN.append(objects)`), 618-623",
+   "claim_broken": "A1: 'each S3 case empties its test/m1l2/<uuid>/ prefix'. The cleanup works today: after a clean 38/38 run on my MinIO the bucket held 0 objects. But nothing tests the fixture wiring. The declared mutant s3_cleanup_skipped is killed only because test_what_a_case_writes_is_removed_after_it calls remove_prefix() itself. That test never checks that the autouse fixture runs the cleanup after each case, so the mutant's stated invariant ('deleted after it') claims more than its killing case checks.",
+   "evidence": "Own mutant own_v_cleanup_unregistered deletes `if secret is None:\\n        _WRITTEN.append(objects)\\n` (anchored once). Result: 38 passed and the mutant survives. After that run the MinIO bucket infrx-m1l2 held 2036 leaked objects under test/m1l2/<uuid>/, including 64 MiB bodies. On the box the bucket is the project bucket (llm-bootcamp-..., prefix infrx/), so a regression here would leak into it with every case still green.",
+   "minimal_fix": "Pin the registration. For example, test_what_a_case_writes_is_removed_after_it asserts `objects in _WRITTEN` and does not call remove_prefix itself, or the fixture teardown asserts `list_objects_v2(Prefix=p)['KeyCount'] == 0` for each registered prefix. Add own_v_cleanup_unregistered to s3_mutants.py."
+  },
+  {
+   "id": "V2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "94 (`assert objects.prefix.startswith(\"test/m1l2/\"), objects.prefix`)",
+   "claim_broken": "A1 and the evidence both say 'the cleanup refuses any prefix outside test/m1l2/'. The code does this, but no test checks it. The guard also accepts the bare 'test/m1l2/', which would empty the prefixes of every concurrent run.",
+   "evidence": "Probe on my MinIO: remove_prefix refused 'infrx/', 'test/', 'test/m1l2x/' and 'tests/m1l2/' with an AssertionError, and 'infrx/media/keep' and 'test/m1l2x/keep' survived. Own mutant own_v_cleanup_guard_dropped (the assert line removed) survives: 38 passed. remove_prefix(S3ObjectStore(c, B, 'test/m1l2/')) was accepted and deleted another run's 'test/m1l2/otherrun/obj'.",
+   "minimal_fix": "Add one no-Docker case: `with pytest.raises(AssertionError): remove_prefix(S3ObjectStore(None, 'b', 'infrx/'))`. Tighten the guard to `re.fullmatch(r'test/m1l2/[0-9a-f]{32}/', objects.prefix)`, and use an explicit `raise` rather than `assert` so the guard survives `python -O`."
+  },
+  {
+   "id": "V3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "118 (`... and secret is None and os.environ.get(LOCAL_FLAG) == \"1\":`)",
+   "claim_broken": "A1 docstring and evidence: without INFRX_M_S3_LOCAL_CREDS 'no bucket is created'. This holds in behaviour but no test checks it. The guard is what stops the box run from sending CreateBucket to the project bucket. In us-east-1, CreateBucket on a bucket you already own answers 200 rather than an error.",
+   "evidence": "Own mutant own_v_bucket_created_without_flag (the flag condition removed) survives: 38 passed. Behaviour today: with the flag unset, working chain credentials (the MinIO literals given as plain AWS_* env) and INFRX_M_S3_BUCKET=infrx-verify-chain-nobucket, the run gave '12 failed, 26 passed, 14 errors in 8.48s' and my listing afterwards showed no such bucket.",
+   "minimal_fix": "In test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones (or a sibling case), monkeypatch S3ObjectStore.connect to return a store on a Stubber client with no create_bucket response queued. Call s3_store with the flag unset, then call stub.assert_no_pending_responses(): any CreateBucket fails the case. Add the mutant."
+  },
+  {
+   "id": "V4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "595-601 (test_a_pilot_install_waits_for_the_bucket_a_bounded_time)",
+   "claim_broken": "Ruling (4): 'every refusal names the setting and the error code, never the bucket or the endpoint'. The new timeout refusal is clean today, but its test does not check that it leaves out the bucket or endpoint.",
+   "evidence": "Own mutant own_v_timeout_refusal_names_bucket (`HeadBucket {bucket} did not answer within`) survives: 38 passed. Probe with a fake aws whose child keeps the pipes open, BUCKET_PROBE_TIMEOUT_S=1, and S3_ENDPOINT_URL=http://endpoint-host.example:9000. It refused in 1.0 s with 'S3_MEDIA_BUCKET: HeadBucket did not answer within 1 s; the gateway would refuse to start', and the text contains neither the bucket nor the endpoint.",
+   "minimal_fix": "Pass S3_ENDPOINT_URL in the test's values and assert that neither 'infrx-media-pilot' nor the endpoint host appears in refused[0]."
+  }
+ ]
+}

@@ -1,0 +1,112 @@
+{
+  "caption": "Scene: The video presents a minimalist digital animation sequence set against a dark, uniform background. A horizontal bar at the bottom of the frame displays a series of small, white, square icons that serve as a progress indicator, resembling a loading bar or a progress counter. The animation consists of a series of square shapes that appear and disappear in the center of the screen, each featuring a different vibrant color: red, blue, green, yellow, and purple. The shapes are simple and geometric, with no internal details or textures. The camera remains completely stationary throughout the entire duration, providing a fixed, centered view of the animation. The sequence is characterized by a clean, modern aesthetic, focusing entirely on the geometric shapes and their color transitions. The background is a consistent dark gray or black, which makes the colorful squares stand out clearly. The animation is smooth and precise, with no visible motion blur or jitter, suggesting a controlled digital environment.\n\nEvents:\n<0.5 - 1.5> A red square appears in the center.\n<1.5 - 8.5> The red square remains static in the center.\n<8.5 - 9.5> The red square disappears from the screen.\n<17.5 - 18.5> A blue square appears in the center.\n<18.5 - 26.0> The blue square remains static in the center.\n<26.0 - 27.0> The blue square disappears from the screen.\n<34.5 - 35.5> A green square appears in the center.\n<35.5 - 43.0> The green square remains static in the center.\n<43.0 - 44.0> The green square disappears from the screen.\n<51.5 - 52.5> A yellow square appears in the center.\n<52.5 - 60.0> The yellow square remains static in the center.\n<60.0 - 61.0> The yellow square disappears from the screen.\n<68.5 - 69.5> A purple square appears in the center.\n<69.5 - 77.0> The purple square remains static in the center.\n<77.0 - 78.0> The purple square disappears from the screen.\n<85.5 - 86.5> A teal square appears in the center.\n<86.5 - 94.0> The teal square remains static in the center.\n<94.0 - 95.0> The teal square disappears from the screen.\n<102.5 - 103.5> A pink square appears in the center.\n<103.5 - 111.0> The pink square remains static in the center.\n<111.0 - 112.0> The pink square disappears from the screen.",
+  "scene": "The video presents a minimalist digital animation sequence set against a dark, uniform background. A horizontal bar at the bottom of the frame displays a series of small, white, square icons that serve as a progress indicator, resembling a loading bar or a progress counter. The animation consists of a series of square shapes that appear and disappear in the center of the screen, each featuring a different vibrant color: red, blue, green, yellow, and purple. The shapes are simple and geometric, with no internal details or textures. The camera remains completely stationary throughout the entire duration, providing a fixed, centered view of the animation. The sequence is characterized by a clean, modern aesthetic, focusing entirely on the geometric shapes and their color transitions. The background is a consistent dark gray or black, which makes the colorful squares stand out clearly. The animation is smooth and precise, with no visible motion blur or jitter, suggesting a controlled digital environment.",
+  "events": [
+    {
+      "start": 0.5,
+      "end": 1.5,
+      "description": "A red square appears in the center."
+    },
+    {
+      "start": 1.5,
+      "end": 8.5,
+      "description": "The red square remains static in the center."
+    },
+    {
+      "start": 8.5,
+      "end": 9.5,
+      "description": "The red square disappears from the screen."
+    },
+    {
+      "start": 17.5,
+      "end": 18.5,
+      "description": "A blue square appears in the center."
+    },
+    {
+      "start": 18.5,
+      "end": 26.0,
+      "description": "The blue square remains static in the center."
+    },
+    {
+      "start": 26.0,
+      "end": 27.0,
+      "description": "The blue square disappears from the screen."
+    },
+    {
+      "start": 34.5,
+      "end": 35.5,
+      "description": "A green square appears in the center."
+    },
+    {
+      "start": 35.5,
+      "end": 43.0,
+      "description": "The green square remains static in the center."
+    },
+    {
+      "start": 43.0,
+      "end": 44.0,
+      "description": "The green square disappears from the screen."
+    },
+    {
+      "start": 51.5,
+      "end": 52.5,
+      "description": "A yellow square appears in the center."
+    },
+    {
+      "start": 52.5,
+      "end": 60.0,
+      "description": "The yellow square remains static in the center."
+    },
+    {
+      "start": 60.0,
+      "end": 61.0,
+      "description": "The yellow square disappears from the screen."
+    },
+    {
+      "start": 68.5,
+      "end": 69.5,
+      "description": "A purple square appears in the center."
+    },
+    {
+      "start": 69.5,
+      "end": 77.0,
+      "description": "The purple square remains static in the center."
+    },
+    {
+      "start": 77.0,
+      "end": 78.0,
+      "description": "The purple square disappears from the screen."
+    },
+    {
+      "start": 85.5,
+      "end": 86.5,
+      "description": "A teal square appears in the center."
+    },
+    {
+      "start": 86.5,
+      "end": 94.0,
+      "description": "The teal square remains static in the center."
+    },
+    {
+      "start": 94.0,
+      "end": 95.0,
+      "description": "The teal square disappears from the screen."
+    },
+    {
+      "start": 102.5,
+      "end": 103.5,
+      "description": "A pink square appears in the center."
+    },
+    {
+      "start": 103.5,
+      "end": 111.0,
+      "description": "The pink square remains static in the center."
+    },
+    {
+      "start": 111.0,
+      "end": 112.0,
+      "description": "The pink square disappears from the screen."
+    }
+  ],
+  "raw": "Scene: The video presents a minimalist digital animation sequence set against a dark, uniform background. A horizontal bar at the bottom of the frame displays a series of small, white, square icons that serve as a progress indicator, resembling a loading bar or a progress counter. The animation consists of a series of square shapes that appear and disappear in the center of the screen, each featuring a different vibrant color: red, blue, green, yellow, and purple. The shapes are simple and geometric, with no internal details or textures. The camera remains completely stationary throughout the entire duration, providing a fixed, centered view of the animation. The sequence is characterized by a clean, modern aesthetic, focusing entirely on the geometric shapes and their color transitions. The background is a consistent dark gray or black, which makes the colorful squares stand out clearly. The animation is smooth and precise, with no visible motion blur or jitter, suggesting a controlled digital environment.\n\nEvents:\n<0.5 - 1.5> A red square appears in the center.\n<1.5 - 8.5> The red square remains static in the center.\n<8.5 - 9.5> The red square disappears from the screen.\n<17.5 - 18.5> A blue square appears in the center.\n<18.5 - 26.0> The blue square remains static in the center.\n<26.0 - 27.0> The blue square disappears from the screen.\n<34.5 - 35.5> A green square appears in the center.\n<35.5 - 43.0> The green square remains static in the center.\n<43.0 - 44.0> The green square disappears from the screen.\n<51.5 - 52.5> A yellow square appears in the center.\n<52.5 - 60.0> The yellow square remains static in the center.\n<60.0 - 61.0> The yellow square disappears from the screen.\n<68.5 - 69.5> A purple square appears in the center.\n<69.5 - 77.0> The purple square remains static in the center.\n<77.0 - 78.0> The purple square disappears from the screen.\n<85.5 - 86.5> A teal square appears in the center.\n<86.5 - 94.0> The teal square remains static in the center.\n<94.0 - 95.0> The teal square disappears from the screen.\n<102.5 - 103.5> A pink square appears in the center.\n<103.5 - 111.0> The pink square remains static in the center.\n<111.0 - 112.0> The pink square disappears from the screen."
+}

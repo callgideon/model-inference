@@ -1,0 +1,49 @@
+
+### when
+utc=2026-09-23T19:39:17Z host=ip-172-31-33-243
+docker=29.7.2 storage=overlayfs
+
+### image
+container=marlin2b-8000 container_image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+image_id=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 repo_digests=[vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42] repo_tags=[vllm/vllm-openai:nightly] created=2026-09-19T05:47:54.316012075Z
+vllm_build_commit=a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b
+pin_index=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 pin_amd64_config=sha256:38e8c0e60293aefc23edee5c074107e44b89d64f26d5399cd2f5956801b6ef24
+image_equals_pin=yes
+
+### flags as served
+args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"]
+ports={"8000/tcp":[{"HostIp":"127.0.0.1","HostPort":"8000"}]}
+mounts=/opt/dlami/nvme/marlin2b:/model:false 
+started=2026-09-20T01:14:43.43577381Z
+
+### engine
+version={"version":"0.29.1rc1.dev397+ga8d1aa9c9"}
+health_status=200
+models={"object":"list","data":[{"id":"marlin2b","object":"model","created":1790192357,"owned_by":"vllm","root":"/model","parent":null,"max_model_len":32768,"permission":[{"id":"modelperm-b914e6c809c20438","object":"model_permission","created":1790192357,"allow_create_engine":false,"allow_sampling":true,"allow_logprobs":true,"allow_search_indices":false,"allow_view":true,"allow_fine_tuning":false,"organization":"*","group":null,"is_blocking":false}]}]}
+
+### kv capacity (engine-reported)
+vllm:kv_cache_usage_perc{engine="0",model_name="marlin2b"} 0.0
+vllm:cache_config_info{_block_size_resolved="True",block_size="544",cache_dtype="auto",effective_attention_block_size="544",enable_mamba_fine_grained_prefix_cache="False",enable_prefix_caching="True",engine="0",gpu_memory_utilization="0.9",is_attention_free="False",kv_cache_dtype_skip_layers="[]",kv_cache_layout="None",kv_cache_max_concurrency="80.70149253731343",kv_cache_memory_bytes="None",kv_cache_size_tokens="2644426",kv_offloading_backend="native",kv_offloading_size="None",kv_sharing_fast_prefill="False",mamba_block_size="544",mamba_cache_dtype="auto",mamba_cache_mode="align",mamba_page_size_padded="None",mamba_ssm_cache_dtype="float32",num_cpu_blocks="None",num_gpu_blocks="5407",num_gpu_blocks_override="None",prefix_cache_retention_interval="0",prefix_caching_hash_algo="sha256",prefix_match_unit="None",replayssm_buffer_len="16",skip_page_size_padded="None",sliding_window="None",swa_bounded_replay="True",use_kda_recoverssm="False",use_replayssm="False",user_specified_block_size="False",user_specified_mamba_block_size="False"} 1.0
+(APIServer pid=1) INFO 09-20 01:15:20 [config.py:625] Mamba cache mode is set to 'align' for Qwen3_5ForConditionalGeneration by default when prefix caching is enabled
+(EngineCore pid=151) INFO 09-20 01:15:38 [core.py:127] Initializing a V1 LLM engine (v0.29.1rc1.dev397+ga8d1aa9c9) with config: model='/model', speculative_config=None, tokenizer='/model', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, per_request_spec_decode_metrics='none', kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=marlin2b, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::qwen4_exp_ple_short_conv', 'vllm::qwen4_exp_qsa_with_output', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 64, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['triton', 'native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, moe_backend='auto', sparse_indexer_topk_backend='auto', linear_backend='auto', linear_backend_per_quant=None)
+(EngineCore pid=151) INFO 09-20 01:15:49 [interface.py:918] Setting attention block size to 544 tokens to ensure that attention page size is >= mamba page size.
+(EngineCore pid=151) INFO 09-20 01:15:49 [interface.py:942] Padding mamba page size by 2.64% to ensure that mamba page size and attention page size are exactly equal.
+(EngineCore pid=151) INFO 09-20 01:17:20 [gpu_worker.py:645] Available KV cache memory: 33.67 GiB
+(EngineCore pid=151) INFO 09-20 01:17:20 [kv_cache_utils.py:2404] GPU KV cache size: 2,644,426 tokens, Maximum concurrency for 32,768 tokens per request: 80.70x
+(EngineCore pid=151) INFO 09-20 01:17:21 [mamba_triton_warmup.py:42] Warmed Mamba batch_memcpy_kernel.
+
+### gpu
+name, driver_version, memory.total [MiB], memory.used [MiB], utilization.gpu [%]
+NVIDIA L40S, 595.91.07, 46068 MiB, 45139 MiB, 0 %
+
+### served bytes (sha256)
+5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7  model-00001-of-00002.safetensors
+01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db  model-00002-of-00002.safetensors
+06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523  tokenizer.json
+273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80  chat_template.jinja
+0d54a28c36c5143413aa18a910f661d17483909e87321f34ad58859b66cf25b4  generation_config.json
+1325d77937ce3a4a54eec9748269206901afdbd365abb1842bf32a42f5cabd20  config.json
+
+### registry oids
+not_run=HF_TOKEN unset (research/workloads/marlin-sop.md §1.3)
+

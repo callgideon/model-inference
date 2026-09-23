@@ -1,0 +1,541 @@
+{
+ "verdict": "fix_required",
+ "head": "37a4652",
+ "reviews": [
+  {
+   "lens": "certify",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count, sha and tail above comes from a command I ran in this session in scratch clones of 37a4652 (/tmp/claude-1000/review-e4b-r1, r1m, r1g, now deleted). My e2 report sha256 is 0c63b88a…056b5f. It differs from the lane's 84643e5b… because the clone path, timestamps and the preconditions outcome differ. The lane's layer 0 184/99, tests/i 143, contracts 1053, the 79 mutants, rls 696 and backend 154/17 were all reproduced. The docker readlink probe under --pid host was denied and not run, so F7(b) on the box is inferred from the code path (`except OSError: continue`) plus a synthetic /proc demonstration, and is labelled as such. The git-less runtime image result is from infrx-i2b-runtime:gate, the local gate image. That the box's 'infrx-runtime:$RELEASE' image has no git is an inference from it.",
+   "cleanup": "The e2 stack my run started was torn down by the runner. After the run `docker ps -a` showed no infrx-e2-*, infrx-e3b-postgrest or e4brev-* containers, and no infrx-e2 volumes or networks. The two probe containers ran with --rm (one was denied before it started). I touched no other lane's container or port and used no AWS, box or secret. Removed: all three scratch clones, the out directory and the api-env log. The worktree .claude/worktrees/codex-e4b was only read: git status clean. A copy of the mutant results was kept at <scratchpad>/e4b-review-mutants.json.",
+   "mutants": [
+    {
+     "name": "untyped_skip_accepted (declared, hand-applied)",
+     "edit": "status in (PENDING, SKIP) -> (PENDING,)",
+     "result": "killed",
+     "killed_by": "test_e4b_a_skip_or_pending_without_a_known_owner_is_a_failure"
+    },
+    {
+     "name": "unknown_owner_accepted (declared)",
+     "edit": "drop `set(owners) - set(OWNERS)`",
+     "result": "killed",
+     "killed_by": "test_e4b_a_skip_or_pending_without_a_known_owner_is_a_failure"
+    },
+    {
+     "name": "skip_exits_zero (declared)",
+     "edit": "statuses - {PASS, SKIP}",
+     "result": "killed",
+     "killed_by": "test_e4b_the_report_carries_both_heads…"
+    },
+    {
+     "name": "pending_suite_is_pass (declared)",
+     "edit": "status = PASS",
+     "result": "killed",
+     "killed_by": "test_e4b_the_backend_suite_splits…"
+    },
+    {
+     "name": "parity_without_baseline_runs (declared)",
+     "edit": "if False:",
+     "result": "killed",
+     "killed_by": "test_e4b_sop_parity_pairs…"
+    },
+    {
+     "name": "interruption_unchecked (declared)",
+     "edit": "if False:",
+     "result": "killed",
+     "killed_by": "test_e4b_the_resume_drill_counts…"
+    },
+    {
+     "name": "resent_unchecked (declared)",
+     "edit": "if False:",
+     "result": "killed",
+     "killed_by": "test_e4b_the_resume_drill_counts…"
+    },
+    {
+     "name": "sum_unchecked (declared)",
+     "edit": "if False:",
+     "result": "killed",
+     "killed_by": "test_e4b_the_ledger_reconciles…"
+    },
+    {
+     "name": "missing_ledger_passes (declared)",
+     "edit": "PENDING -> PASS",
+     "result": "killed",
+     "killed_by": "test_e4b_the_dataset_drill_pends…"
+    },
+    {
+     "name": "moved_setting_accepted (declared)",
+     "edit": "if False]",
+     "result": "killed",
+     "killed_by": "test_e4b_the_config_pin_names_every_setting…"
+    },
+    {
+     "name": "published_digest_read_from_the_record (declared)",
+     "edit": "published from record",
+     "result": "killed",
+     "killed_by": "test_e4b_the_config_pin_names_every_setting…"
+    },
+    {
+     "name": "a_shell_naming_next_counts (declared)",
+     "edit": "substring match",
+     "result": "killed",
+     "killed_by": "test_e4b_app_and_lab_servers…"
+    },
+    {
+     "name": "within_cap_refusal_accepted (declared)",
+     "edit": "drop `or refused`",
+     "result": "killed",
+     "killed_by": "test_e4b_an_envelope_rung_judges…"
+    },
+    {
+     "name": "refusal_without_retry_after_accepted (declared)",
+     "edit": "drop Retry-After test",
+     "result": "killed",
+     "killed_by": "test_e4b_overload_refusals_are_429…"
+    },
+    {
+     "name": "overload_5xx_accepted (declared)",
+     "edit": "if False:",
+     "result": "killed",
+     "killed_by": "test_e4b_overload_refusals_are_429…"
+    },
+    {
+     "name": "climb_skips_a_failed_rung (declared)",
+     "edit": "break -> continue",
+     "result": "killed",
+     "killed_by": "test_e4b_the_supported_rate_is_the_highest_rung…"
+    },
+    {
+     "name": "memory_growth_limit_ignored (declared)",
+     "edit": "decide.PASS",
+     "result": "killed",
+     "killed_by": "test_e4b_the_soak_judges_memory…"
+    },
+    {
+     "name": "crashed_client_accepted (declared)",
+     "edit": "client_exit always PASS",
+     "result": "killed",
+     "killed_by": "test_e4b_the_load_cells_run…"
+    },
+    {
+     "name": "runner_error_escapes (declared)",
+     "edit": "except KeyboardInterrupt",
+     "result": "killed",
+     "killed_by": "test_e4b_a_runner_error_is_a_recorded_failure…"
+    },
+    {
+     "name": "r94_example_dropped (declared)",
+     "edit": "# 200",
+     "result": "killed",
+     "killed_by": "test_e4b_the_endpoint_doc_is_what_the_code_generates"
+    },
+    {
+     "name": "own_declared_published_is_placeholder",
+     "edit": "DECLARED published_engine_options_digest = 'sha256:'+'44'*32",
+     "result": "survived (F6)"
+    },
+    {
+     "name": "own_declared_published_image_is_tag",
+     "edit": "DECLARED published_runtime_image = vllm/vllm-openai:nightly",
+     "result": "survived (F6)"
+    },
+    {
+     "name": "own_declared_max_num_seqs_32",
+     "edit": "DECLARED engine_max_num_seqs '8' -> '32'",
+     "result": "survived (F6)"
+    },
+    {
+     "name": "own_local_run_labelled_measured",
+     "edit": "local_target label FAKE -> MEAS",
+     "result": "survived (F5)"
+    },
+    {
+     "name": "own_remote_run_labelled_fake",
+     "edit": "remote_target label MEAS -> FAKE",
+     "result": "survived (F5)"
+    },
+    {
+     "name": "own_unreadable_engine_is_idle",
+     "edit": "if busy != 0 -> if busy not in (0, None)",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_retries_hide_refusals",
+     "edit": "--retries 0 -> 3",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_box_runs_fast_subset",
+     "edit": "--subset always fast",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_signalled_exit_unchecked",
+     "edit": "drop `and first['exit'] == 130`",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_quarantined_item_resent_ok",
+     "edit": "terminal = accepted only",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_accepted_without_id_ok",
+     "edit": "drop `or None in seen`",
+     "result": "survived (F8)"
+    },
+    {
+     "name": "own_doc_result_pending_404",
+     "edit": "DESCRIPTIONS result_pending (409)->(404), doc regenerated",
+     "result": "survived (F9)"
+    },
+    {
+     "name": "own_doc_cancel_cause_wrong",
+     "edit": "DELETE description client_cancelled -> sync_deadline, regenerated",
+     "result": "survived (F9)"
+    },
+    {
+     "name": "own_doc_models_needs_auth",
+     "edit": "'every /v1/ route takes Authorization', regenerated",
+     "result": "survived (F9)"
+    },
+    {
+     "name": "own_protocol_window_read_elsewhere",
+     "edit": "os.environ.get('E4B_WINDOW_OK','1')",
+     "result": "killed",
+     "killed_by": "test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared … /tmp/claude-1000/review-e4b-r1; git checkout 37a4652; make api-env",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0 / exit=0"
+    },
+    {
+     "cmd": "docker ps -a --format {{.Names}} | grep infrx-e2- (before the stack run)",
+     "exit": 1,
+     "tail": "(empty: e2 free; only infrx-cutover-*, infrx-d2..d5-postgres, infrx-e3b2-*, infrx-q3-valkey, infrx-review-m1l2-minio, gideon-* present, none touched)"
+    },
+    {
+     "cmd": "layer 0: apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration (repo root, namespace unset)",
+     "exit": 0,
+     "tail": "184 passed, 99 skipped, 2 warnings in 37.50s"
+    },
+    {
+     "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/i",
+     "exit": 0,
+     "tail": "143 passed in 160.67s (0:02:40)"
+    },
+    {
+     "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+     "exit": 0,
+     "tail": "1053 passed in 104.13s (0:01:44) (the pg projection file was left out: its D harness needs a private port, and E4B changes no contract)"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py",
+     "exit": 0,
+     "tail": "79 passed in 207.16s (0:03:27)"
+    },
+    {
+     "cmd": "pytest tests/integration/backend/test_endpoint_doc.py; endpoint_doc.py --check",
+     "exit": 0,
+     "tail": "6 passed in 0.77s; doc check exit=0"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e2 CORPUS_CACHE=<main>/.claude/corpus-cache certify.py --workdir … --report …/report.json (detached, 21:07:31Z, 172.4 s)",
+     "exit": 1,
+     "tail": "report sha256 0c63b88a33590b2f3be2561228a85c946efb9844b371281c1690b99251056b5f; git_head=git_head_end=37a4652 dirty false, namespace e2; preconditions PASS (App pids outside this clone's roots - F7); config-pin FAIL (B1); preflight/services/migrate PASS; rls PASS 696 cases; backend PENDING 154 passed/17 pending/0 failed {D5:13,G2-R1:12,I2B-R4:1,M1-L2:1}; e4b.a.protocol PENDING[D5,G2-R1] 87 passed; e4b.b.recovery PENDING[D5,G2-R1,I2B-R4,M1-L2] 67 passed; teardown PASS still_named_ours_but_not_ours []; sop-parity PASS (fake); dataset-resume/envelope/soak/overload PENDING[BOX] (fake)"
+    },
+    {
+     "cmd": "make -n api-mutants",
+     "exit": 0,
+     "tail": "two separate recipe lines: `cd apps/infrx-api && INFRX_MUTANTS=all uv run … tests/i/test_mutants.py` then `INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py` (root; no shadowing or duplication)"
+    },
+    {
+     "cmd": "own + 20 hand-applied declared mutants (script: apply one edit, run test_certify.py + test_endpoint_doc.py, git checkout)",
+     "exit": 0,
+     "tail": "20/20 declared KILLED; own: 14 SURVIVED, 1 KILLED (table above)"
+    },
+    {
+     "cmd": "env PATH=/nonexistent certify.py --no-stack --box --target http://127.0.0.1:9/v1 --engine-url http://127.0.0.1:9 --report X",
+     "exit": 2,
+     "tail": "FileNotFoundError: [Errno 2] No such file or directory: 'git'; no report file written"
+    },
+    {
+     "cmd": "docker run --rm --network none --entrypoint sh infrx-i2b-runtime:gate -c 'command -v git || echo no git; python -c \"import httpx, infrx\"'",
+     "exit": 0,
+     "tail": "no git / imports ok"
+    },
+    {
+     "cmd": "docker run --pid host --user 0 … readlink /proc/<App pid>/cwd",
+     "exit": 1,
+     "tail": "denied by the sandbox permission classifier; not retried, and F7(b) on the box is stated as reasoning"
+    },
+    {
+     "cmd": "python: rung_verdicts/envelope_summary/soak_verdicts/overload_problems on synthetic transport-failure rows",
+     "exit": 0,
+     "tail": "envelope ('PASS', (), 2.0); all-transport ('PENDING', ('BOX',), 2.0); overload with resets []; soak ('PASS', ())"
+    },
+    {
+     "cmd": "merge sim: backend-impl d611004 + 37a4652 (clean), then + codex/d5-terminal-transaction ef01549 (clean); make api-env; layer 0",
+     "exit": 1,
+     "tail": "E4B only: 184 passed, 99 skipped; +D5: 1 failed (test_harness migration list, 0018_terminal_settlement.sql), 183 passed, 99 skipped; backend-impl+D5 without E4B: same failure (D5's)"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "F1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "136-141 (Report.exit_code); run.py 103/129/138-145",
+   "claim_broken": "Protocol §6.3 says a report is invalid if git_head and git_head_end differ, or if either is dirty. The ruling candidate says 'a certification counts at one clean SHA'. The runner enforces neither: the exit code looks only at stage statuses.",
+   "evidence": "At 37a4652 in a scratch clone: (a) an untracked file made the tree dirty; Report with one PASS gave git_head {'sha':'37a4652…','dirty':True}, exit_code 0. (b) Report.head set to a different SHA: 'start aaaaaaa end 37a4652 exit_code 0'. (c) harness.REPO_ROOT not a git tree: git_head {'sha': None, 'dirty': False}, exit 0. git_head() writes dirty=False when git fails, so an unknown tree is recorded as clean. test_e4b_the_report_carries_both_heads… only checks that the keys exist, so no case can kill this.",
+   "minimal_fix": "In certify.Report.exit_code/as_json, add a FAIL 'release-identity' entry when head.sha or head_end.sha is None, when either is dirty, or when the two SHAs differ. Make git_head() record dirty=None (unknown) when git fails. Add a case plus a mutant for each of the three conditions.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute it, and the smallest experiment reproduces all three cases. At 37a4652, in a scratch clone (now removed) with an untracked `stray` file, I ran a probe with `apps/infrx-api/.venv/bin/python probe.py 2>&1 | tail -8`. The probe builds `certify.Report`, adds one PASS, and prints the heads and exit code. The tail was:\n`a {'sha': '37a46526…', 'dirty': True} {'sha': '37a46526…', 'dirty': True} 0`\n`b aaaaaaa 37a4652 0`\n`c {'sha': None, 'dirty': False} {'sha': None, 'dirty': False} 0`\n(each line followed `[ok  ] e4b.x: ok`)\n\nFrom the code:\n- `certify.Report.exit_code` (certify.py:136-141) looks only at stage statuses.\n- `run.Report.as_json` (run.py:129) records `git_head` and `git_head_end` but never compares them.\n- `run.git_head()` (run.py:138-145) returns `\"\"` when git fails, so `dirty` becomes `bool(\"\") = False`. A tree whose state is unknown is written down as clean.\n- `test_e4b_the_report_carries_both_heads…` only checks that the keys exist (test_certify.py:46), so no case or mutant can kill a regression here.\n\nMitigations I weighed:\n- (1) Protocol §6.3 is written as a rule for whoever reads a report. The runner's own docstring promises only \"Exit 0 = every entry PASS\", and it keeps that promise.\n- (2) Box checklist step 0.2 requires a person to confirm `git_head == git_head_end`, both `dirty: false`.\n- (3) `git_head()` is older than E4B (added in 13c276d, E3B2 H7).\n\nNone of these saves it:\n- The ruling candidate \"A certification counts at one clean SHA\" (E4B-9aa7ffe.md:314) is a promoted criterion. No code and no killable test holds it.\n- The box plan (step 5) expects the runtime image to have no `git`, so \"`git_head` reads null\". In that case `git_head()` writes `dirty: false` at both start and end. That matches the literal \"both `dirty: false`, equal\" shape the checklist asks a person to confirm, while the tree's cleanliness was never observed.\n- An exit of 0 therefore does not prove a clean, single-SHA release.\n\nThis falls under the blocking categories: a doc/ruling claim not held to code, and an invariant with no killable test. The reviewer's minimal fix is sound:\n- In `certify.Report`, add a FAIL `release-identity` entry when either SHA is None, when either head is dirty, or when the two SHAs differ.\n- Make `git_head()` record `dirty: None` when git fails.\n- Add one case and one mutant for each condition.\n\nOn the box without git, that FAIL (or a PENDING owned by `BOX` that step 7's recorded SHA closes) would then be explicit instead of a false clean.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": true,
+     "reason": "The reviewer describes the behavior correctly, but it is not a defect in E4B. Reproduced in a scratch clone at 37a4652 with an untracked file added, command `cd $S/tests/integration/backend && <codex-e4b venv python> -c \"import json,certify; r=certify.Report({'kind':'local'}); r.check('e4b.x',certify.PASS,'ok'); d=json.loads(r.as_json()); print(d['git_head'],d['git_head_end'],d['exit_code'])\"`, tail: `{'sha': '37a46526…', 'dirty': True} {'sha': '37a46526…', 'dirty': True} 0`. So exit_code does ignore the heads.\n\nWhy no documented claim is broken:\n(1) Protocol §6 is headed \"What invalidates a result\". Its items are rules for whoever reads the report. Item 1 (\"any number from the local target quoted without the label\") is one no runner can enforce. §6.3 sits in the same list and does not say certify.py's exit code enforces it.\n(2) certify.py's docstring defines the exit rule as \"Exit 0 = every entry PASS, 1 = any FAIL, 3 = otherwise\". It also says \"Nothing here decides BACKEND-READY\". The code does exactly this.\n(3) run.py:125-127 says \"the report is evidence for one clean tree only when both say so\". That is a reader rule, and the report states the dirty flag truthfully (dirty: True above). The flag measurement is already guarded by E3B mutant e3bm47.\n(4) The ruling candidate \"a certification counts at one clean SHA\" is written as a release-decision rule (\"A release decision cites a dev-host report and a box report whose git_head equals git_head_end, both clean\"). The E4B box checklist enforces it as the human gate 0.2: \"Required: git_head == git_head_end, both dirty: false\".\n(5) The proposed fix contradicts the protocol. Box step 5 expects git_head to read null when the runtime image has no git (\"the report's git_head reads null and step 7 records the SHA\"). A FAIL on sha None would make every box certification exit 1.\n\nThe one real residue is that git_head() in run.py records dirty=False when git fails. It came from E3B commit 13c276d, not from E4B. It never passes silently, because sha is recorded as null next to it, and a null sha can never be \"at the release SHA\". Recording dirty=None there is a reasonable follow-up nit.\n\nThe heads-exist-only test does not leave an invariant unkillable, because the runner never claimed this invariant.\n\nIf it were judged real, it would be nonblocking.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "F2",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "1001 (Report() outside the try); research/plan/evidence/e/E4B-9aa7ffe.md box step 5",
+   "claim_broken": "Two claims fail: 'an unexpected runner error is a recorded FAIL and the report is still written', and box step 5's 'if the image has no git, the report's git_head reads null'.",
+   "evidence": "`docker run --network none infrx-i2b-runtime:gate sh -c 'command -v git'` printed 'no git'. The runtime image the box protocol runs certify in has no git. With PATH set to a directory without git: `certify.Report(...)` raised FileNotFoundError: 'git'. `certify.py --no-stack --box --target … --report X` exited 2 with a traceback, and X was never written. The box run as written in the checklist produces no report at all.",
+   "minimal_fix": "Build the Report inside the try, or catch OSError in git_head. Record an unknown SHA, which then FAILs through F1. For the box, take the SHA from the deployed gateway (see F3) or from a required --release-sha, and compare it.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652. `certify.main` builds `Report(...)` at certify.py:1001, before the `try` at :1004 that records runner-error. `Report.__init__` calls `run.Report.__init__`, which sets `self.head = git_head()` (run.py:103). `git_head` then calls `subprocess.run([\"git\", ...])` (run.py:141). It catches a non-zero returncode but not OSError, so with no git binary it raises FileNotFoundError. That happens outside the try, so there is no FAIL entry and no report.\n\nThe runtime image lacks git. The Dockerfile is `FROM python:3.12.14-slim-trixie` with no git install, and `docker run --rm --network none --entrypoint sh infrx-i2b-runtime:gate -c 'command -v git || echo no git'` printed `no git`. Box step 5 in E4B-9aa7ffe.md runs certify inside `infrx-runtime:$RELEASE`. It claims 'if the image has no git, the report's git_head reads null'. That claim is false.\n\nSmallest experiment, with PATH holding only a python symlink:\n`env PATH=/tmp/claude-1000/nogit INFRX_E2_NAMESPACE=e2 python certify.py --no-stack --box --target https://127.0.0.1:9 --engine-url http://127.0.0.1:9 --workdir $SC/nogitrun/work --report $SC/nogitrun/X.json`\nTail: `certify.py, line 1001, in main -> certify.py line 124 __init__ -> run.py line 103 __init__ -> run.py line 144 git_head -> line 141 git ... FileNotFoundError: [Errno 2] No such file or directory: 'git'`, then `exit 1`. `ls nogitrun/` shows only `work`, so X.json was never written. No stack or containers were touched.\n\nIt is blocking. It is a doc claim not held to code: the box checklist's null-git_head promise, and the 'runner error is a recorded FAIL, report still written' invariant, whose test only covers exceptions raised inside the try. The box certification run as written produces no report. Minimal fix: in run.git_head, catch OSError and return sha None. Or build the Report inside the try. Then check the SHA against a required --release-sha.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652, with two separate escape points. (1) In certify.py:1001, `Report(...)` is built before the `try`. `run.Report.__init__` (tests/integration/run.py:103) calls `git_head()`, which runs `subprocess.run([\"git\", ...])` at run.py:141. That call handles a nonzero return code but not a missing binary. (2) `Report.as_json` (run.py:129) calls `git_head()` again for `git_head_end`, and certify.py:1026 calls `as_json` after the try. So moving Report inside the try would not be enough on its own; the git_head fix is the one that covers both. Smallest experiment, run with PATH pointed at a directory holding only the venv python: `env PATH=$S/nogit $PY -c \"import certify; certify.Report({})\"` printed `Report(): FileNotFoundError [Errno 2] No such file or directory: 'git'`. On the image: `docker run --rm --network none --entrypoint sh infrx-i2b-runtime:gate -c 'command -v git || echo no git'` printed `no git`. apps/infrx-api/deploy/Dockerfile builds infrx-runtime from python:3.12.14-slim-trixie and has no step that installs git. So the box command in step 5 of research/plan/evidence/e/E4B-9aa7ffe.md (docker run infrx-runtime:$RELEASE python certify.py --no-stack --box ...) dies with a traceback before any JSON is written. The doc's statement \"if the image has no git, the report's git_head reads null\" does not match the code. The claim that a runner error is a recorded FAIL and the report is still written also fails for this error class. The test runner_error_is_a_recorded_failure only covers exceptions raised inside the try. Blocking: a documented claim the code does not hold, on the one path meant to produce the box evidence. Fix: catch OSError in `run.git_head` so the SHA reads null, then FAIL the missing SHA or check it against a required --release-sha or the deployed gateway's SHA.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "F3",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "218-243 (release_hashes), 941-946 (remote_target)",
+   "claim_broken": "The report's hashes are meant to identify the release under test. On the box they are computed from the measurement checkout (/repo). Nothing ties that checkout to the gateway actually serving --target, and a missing gateway image is not a failure.",
+   "evidence": "The gateway exports `infrx_build_info{revision=…}` (infrx/observe/metrics.py:153, 'labelled with the deployed git revision'). certify scrapes --metrics-url during the soak but never compares that revision to git_head. On a --box run, gateway_image falls back to a '⚠️ TO BE MEASURED' string when INFRX_CERTIFY_GATEWAY_IMAGE is unset, and the exit code is unaffected. The box report could carry hashes of one tree while the endpoint serves another.",
+   "minimal_fix": "On --box, scrape infrx_build_info from --metrics-url and FAIL unless its revision equals report.head sha. FAIL if INFRX_CERTIFY_GATEWAY_IMAGE is unset. Add a case plus a mutant.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "Confirmed at 37a4652, with one correction to the reviewer's evidence and fix.\n\nWhat the code does:\n- In tests/integration/backend/certify.py, `release_hashes()` (218-243) hashes only files under harness.REPO_ROOT. In the box protocol that root is the `/repo` bind mount of /opt/dlami/nvme/w3-checkout, which is a separate checkout from /home/ubuntu/model-inference, the tree that 40-checkout.sh and install.sh deploy.\n- `gateway_image` is `os.environ.get(\"INFRX_CERTIFY_GATEWAY_IMAGE\") or \"⚠️ TO BE MEASURED …\"`. It is written into `report.hashes` and never compared with anything.\n- `Report.exit_code` looks only at `report.stages`, so a missing or mismatched image cannot change the exit code.\n- `scrape()` (655-676) reads rss, gpu, drift, unsettleable, running and waiting. It never reads a revision.\n- `remote_target()` (941-946) takes `--target` as given, with no identity check.\n- The box runbook in E4B-9aa7ffe.md step 5 says that if the runtime image has no git, `git_head` reads null and a human records the SHA in step 7. So even `git_head` is not bound on the box.\n- E4B-release-decision.md §2 says \"Release identity (computed, never typed) … The box report's block is authoritative\". That is a doc claim the code does not enforce, so this is blocking.\n\nExperiment (read-only, in the codex-e4b worktree):\n`cd apps/infrx-api && INFRX_CERTIFY_GATEWAY_IMAGE= .venv/bin/python ../../tests/integration/backend/certify.py --hashes | tail -4`\nTail:\n```\n    \"rate_card_version\": \"rc_marlin2b_20260901T000000Z_provisional_p01\"\n  },\n  \"gateway_image\": \"⚠️ TO BE MEASURED on the box: `docker image inspect` of the image install.sh built\"\n}\n```\nThe run exits 0 with the placeholder. In `main()` the same dict goes into `report.hashes` with no check entry.\n\nCorrection: `infrx_build_info` is only declared in the Spec table at infrx/observe/metrics.py:153. `grep -rn build_info` over the .py, .sh and Dockerfile files finds no other occurrence anywhere, so the gateway never emits it. The reviewer's proposed fix (scrape `infrx_build_info` and compare its revision) would always fail, or would need the gauge wired up first. Workable minimal fix:\n1. On `--box`, record a FAIL entry (for example `e4b.b.release-identity`) when INFRX_CERTIFY_GATEWAY_IMAGE is unset.\n2. Also FAIL when that image does not equal the id of `infrx-runtime:<report git sha>`. install.sh:48 tags the runtime image `infrx-runtime:$sha`, so the release SHA and the gateway image can be tied. Alternatively, emit `infrx_build_info` in the gateway and compare it.\n3. FAIL when `git_head` is null or dirty.\n4. Add a case and a mutant for each."
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "I could not refute this. The finding holds at 37a4652, but the fix it proposes would not work.\n\n**What the code does**\n- `release_hashes()` (certify.py:218-243) hashes the measurement checkout (`run.git_head()` and the files under `harness.REPO_ROOT`).\n- `gateway_image` falls back to a placeholder string when `INFRX_CERTIFY_GATEWAY_IMAGE` is unset (lines 241-242).\n- `report.hashes` is only assigned (line 1006) and written out in `as_json` (line 146). No `report.check` reads it.\n- `Report.exit_code` (lines 136-140) looks only at the check statuses, so neither the placeholder nor a mismatched tree changes the exit code.\n- `remote_target` (lines 941-946) records nothing about which build the gateway is serving.\n- `test_certify.py` and `e4b_mutants.py` have no case or mutant for `gateway_image`, a revision or `build_info` (grep returns nothing).\n\n**Experiment** (worktree venv, read-only):\n`env -u INFRX_CERTIFY_GATEWAY_IMAGE PYTHONDONTWRITEBYTECODE=1 apps/infrx-api/.venv/bin/python tests/integration/backend/certify.py --hashes`\nOutput tail:\n`\"gateway_image\": \"⚠️ TO BE MEASURED on the box: \\`docker image inspect\\` of the image install.sh built\"` then `}` and `exit 0`.\n`git status --porcelain` stayed empty afterwards.\n\n**Why it is blocking: two doc claims the code does not enforce**\n1. E4B-release-decision.md §1 says the Release SHA is \"the integration SHA the box runs (the box report's `git_head` …)\".\n2. Its §2 says the release identity is \"computed, never typed\" and that \"the box report's block is authoritative\".\n\nThe box protocol makes the gap concrete (E4B-9aa7ffe.md step 5):\n- It runs the runner inside `infrx-runtime:$RELEASE`, with `/repo` = `/opt/dlami/nvme/w3-checkout`. That is a different checkout from the one `install.sh` built the serving `infrx-gateway` from.\n- It passes the gateway's image id through `INFRX_CERTIFY_GATEWAY_IMAGE` but never compares it with anything.\n- It accepts a null `git_head` (\"if the image has no git … step 7 records the SHA\"), which is a typed identity.\n\nSo a box report can show every check passing and carry one tree's hashes while the endpoint serves another build. That fits two of the rubric's categories: \"a check that passes without proving its claim\" and \"a doc claim not held to code\".\n\n**Problem with the proposed fix**\n`infrx_build_info` exists only as a declared metric (metrics.py:153). Nothing in `apps/infrx-api/infrx` sets it; I3B-32f94b3.md:287 lists \"set `infrx_build_info{revision}` at startup\" as a pending integration request to the coordinator. Scraping it and failing on a mismatch would therefore fail every box run today, or would need that request done first.\n\n**Fix that works now:** on `--box`, fail when:\n- `INFRX_CERTIFY_GATEWAY_IMAGE` is unset, or\n- it differs from a second passed-in id, the image id of `infrx-runtime:<RELEASE>`, taken with `docker image inspect` in step 5, or\n- `git_head` is null or differs from `RELEASE`.\n\nAdd a case and a mutant for each condition. The `build_info` comparison can be added once the gateway emits the metric."
+    }
+   ]
+  },
+  {
+   "id": "F4",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "747-753 (rung_verdicts), 795-800 (soak_verdicts), 841-843 (overload_problems)",
+   "claim_broken": "PERF-ENVELOPE requires 'reliably within a measured envelope'. The failure criteria use bench.is_platform_failure only, so an attempt with outcome 'failed' and a transport error class (ReadTimeout, ConnectError, RemoteProtocolError, as bench.py:883 records them) counts against no criterion. That swallows a FAIL.",
+   "evidence": "Direct calls at 37a4652. 84 accepted + 36 transport failures per rung: failure_rate 'pass' '0/120'; envelope_summary over three such rungs = ('PASS', (), 2.0). Every attempt a transport failure: ('PENDING', ('BOX',), 2.0), i.e. a supported rate of 2 req/s for an endpoint that answered nothing. Soak with 36 of 66 failing: ('PASS', ()). An overload burst with 16 connection resets: overload_problems == [].",
+   "minimal_fix": "In the certification cells, count every attempt that is not accepted, rejected or cancelled as a failure: use `outcome == 'failed'` in the rate, or add an 'unanswered' criterion that must be 0. Also require accepted > 0 per rung. Add the matching cases and mutants.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute the finding; the experiment confirms it at 37a46526 (codex-e4b worktree, left unchanged: `git status --short | wc -l` gives 0).\n\n**What the code does**\n- `bench.is_platform_failure` (models/marlin2b/bench.py:93-97) counts a failure only when `outcome=='failed'` and the error is a 5xx or one of four stream error classes.\n- When a request raises, bench.py:882-883 records the exception type (ReadTimeout, ConnectError, RemoteProtocolError) as its error class. None of those three classes is in that set.\n- `certify.rung_verdicts` (747-753), `soak_verdicts` (795-800) and `overload_problems` (841-843) all judge failures with `is_platform_failure` alone. No criterion counts unattributed failures, even though bench's own summary has an `unattributed_failed_attempts` count.\n\n**Why `client_exit` does not catch it**\nbench's main returns `0 if res[\"accepted\"] ... else 1`, so a run with even one accepted request exits 0.\n\n**Experiment**\nCommand: `PYTHONDONTWRITEBYTECODE=1 apps/infrx-api/.venv/bin/python <scratch>/exp.py` and `<scratch>/exp2.py`, which call the certify functions directly with synthetic rows. Output tail:\n```\n[('failure_rate', 'pass', '0/168'), ('rejections','pass',...), ('ttft_p95_short','pass','p95 0.5 over 84 samples (needs 60)'), ('e2e_p95_per_clip_minute','pass',...)]\nenvelope 50% ReadTimeout: ('PASS', (), 2.0)\n('PENDING', ('BOX',), 2.0)   # all 120 attempts ConnectError: still certifies 2 req/s as supported\nsoak: [('failure_rate','pass','0/66'), ...] -> ('PASS', ())   # 36/66 ReadTimeout\noverload with 16 RemoteProtocolError resets: []\n```\n- Envelope: 84 accepted and 84 ReadTimeouts per rung (a 50% failure rate) give `failure_rate` 'pass' with detail '0/168'. With one over-ceiling clip refused (413) so the duration cap resolves, `envelope_summary` returns PASS at a supported rate of 2.0.\n- All attempts ConnectError: the verdict is PENDING (only for lack of latency samples), yet it still names 2.0 as the supported rate.\n- Soak with 36 of 66 ReadTimeouts: PASS.\n- Overload burst with 16 RemoteProtocolError resets: `overload_problems` returns `[]`.\n\n**Mitigating context**\nE4B-protocol.md line 58 does say \"platform-caused failure rate\", and the bench.py comment deliberately keeps transport errors out of that count. So the code matches the E4B protocol text.\n\n**Why it is still blocking**\nThe oracle is PERF-ENVELOPE in research/plan/04-verification.md:136, which requires \"Raw denominators include errors/rejects\" and \"measured successful-work throughput\". A certification that passes while half the requests time out does not prove its claim. It is a check that passes without proving what it says, and the protocol wording weakens the oracle rather than holding to it.\n\n**Fix**\nThe reviewer's fix is right:\n- Count every `outcome=='failed'` attempt, or require the unattributed count to be 0.\n- Require `accepted > 0` per rung.\n- Treat transport errors under the overload burst as problems.\n- Add the matching cases and mutants.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652 (codex-e4b worktree, read-only; experiment run from a private scratch dir because the shared scratchpad's exp.py was overwritten by another agent mid-run). The code path is as claimed. bench.is_platform_failure (models/marlin2b/bench.py:93-97) is true only for outcome=='failed' with a 5xx or a class in PLATFORM_ERROR_CLASSES {stream_error_event, truncated_stream, no_content_delta, malformed_sse_chunk}. bench.py:881-883 records a transport exception as outcome 'failed', error_class type(e).__name__, so ReadTimeout, ConnectError and RemoteProtocolError never reach certify's failure_rate (certify.py:747-751), the soak failure_rate (795-800) or overload's `broken` (841-843). No other criterion counts them either: rejections counts only 'rejected', and the p95s look only at accepted rows. No certify test contains ConnectError, ReadTimeout or RemoteProtocolError (grep over tests/integration/backend returned nothing).\n\nCommand: `cd $S && PYTHONDONTWRITEBYTECODE=1 $W/apps/infrx-api/.venv/bin/python t.py $W | tail -8`. Rows per rung: 84 accepted, 36 transport failures and one over-ceiling clip refused with 413. Tail:\nrung [('duration_cap','pass',...), ('failure_rate','pass','0/120'), ('rejections','pass',...), ('ttft_p95_short','pass','p95 0.5 over 84 samples (needs 60)'), ('e2e_p95_per_clip_minute','pass',...)]\nenvelope ('PASS', (), 2.0)\nallbad ('PENDING', ('BOX',), 2.0)\nsoak [('failure_rate','pass'), ('host_growth_mib','pass'), ('gpu_growth_mib','pass'), ('reconciled_at_end','pass'), ('latency_drift','pass')] ('PASS', ())\noverload []\n\nSo an envelope with 30% unanswered requests certifies PASS at 2 req/s and reports '0/120' failures. An endpoint that answered nothing still gets a supported rate of 2.0 (its status is PENDING, not FAIL). A soak with 36 of 66 failing passes. A burst with 16 RemoteProtocolError resets shows no overload problem.\n\nBest refutation attempt: the predeclared protocol E4B-protocol.md §4 says the envelope counts only a 'platform-caused failure rate', and bench.py:84-88 says unattributable failures are 'counted separately'. For the envelope and overload rows, the code therefore matches its protocol text. That rationale is about not inflating R21 free-failure attribution, though, not about certifying reliability. 'Counted separately' is also never carried into any certify verdict or detail, which prints '0/120'. The soak row in the protocol says plain 'failure rate below max_failure_rate', so there the code is looser than its own doc. BACKEND-READY (18-marlin-backend-first.md:200) and PERF-ENVELOPE ('raw denominators include errors/rejects') require reliability within the envelope. A check that passes a rung where 30% of requests got no answer, with no test that can kill it, proves nothing about that claim. So this is blocking. The fix the reviewer proposes is right: count every non-accepted/rejected/cancelled attempt, or add an 'unanswered' criterion that must be 0; require accepted > 0 per rung; and amend the protocol row to match.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "F5",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "934-946 (local_target/remote_target labels), 993-996 (argument rules)",
+   "claim_broken": "The claim is that every number from the local target is labelled 'fake-engine, not a measurement' and that `meas.` comes only from the box. In fact any --target run gets the MEAS label, with or without --box and the box preconditions, and no case holds either label.",
+   "evidence": "My mutants own_local_run_labelled_measured (local_target label FAKE→MEAS) and own_remote_run_labelled_fake (remote label MEAS→FAKE) both SURVIVED test_certify + test_endpoint_doc (26 passed). main() rejects only --box without --target, so `--target <any URL, including the fake engine> --engine-url …` without --box labels envelope/soak/overload/dataset `meas.` and skips the window, idle and clip preconditions.",
+   "minimal_fix": "Label MEAS only when --box is set and preconditions PASS; otherwise use 'unverified target, not a measurement', or reject --target without --box. Add a case that asserts local_target()['label']==FAKE and the rule for remote targets.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute the finding. Both halves hold at 37a4652.\n\n**1. The code.** Labels are set in one place:\n- `certify.py:74` defines `FAKE, MEAS = \"fake-engine, not a measurement\", \"meas.\"`.\n- `local_target()` (l.937) hard-codes `\"label\": FAKE`.\n- `remote_target()` (l.945) hard-codes `\"label\": MEAS` and never reads `args.box`.\n- In `main()` (l.993-996) the only argument rules are \"--target needs --engine-url\" and \"--box needs --target\". `--target X --engine-url Y` without `--box` is accepted, and the run gets `remote_target` and `MEAS`.\n- `preconditions_check(report, target, box)` runs the window, idle-engine and parity-clip checks only when `box` is set. Without `--box`, every entry (parity, dataset, envelope, soak, overload) is labelled `meas.` with those preconditions never run. The report records `\"box\": false` in its header, but the label itself is unconditional.\n\nProbe command:\n`python -c \"import argparse,certify; a=argparse.Namespace(target='http://127.0.0.1:18080/v1',engine_url='http://127.0.0.1:18080',scale=None,box=False); print(certify.remote_target(a)['label']); print(certify.local_target('tiny',1)['label'])\"`\n\nTail:\n`remote no --box label: meas.`\n`local label: fake-engine, not a measurement`\n\n**2. No test holds the labels.** `grep -rn \"local_target\\|remote_target\" tests/ models/ apps/ research/` finds only the definitions and the one call site in `main()`. `test_certify.py` builds its own TARGET dicts with the labels written in. `e4b_mutants.py` has no label mutant.\n\n**3. Smallest experiment.** In a scratch clone at 37a4652 (removed afterwards), I swapped the labels with `sed -i '937s/\"label\": FAKE/\"label\": MEAS/; 945s/\"label\": MEAS/\"label\": FAKE/' certify.py`. The diff showed both lines flipped.\n\nCommand: `pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py tests/integration/backend/test_endpoint_doc.py`\nTail: `26 passed in 1.52s`. Unmutated, the same command also gives `26 passed`. The mutant survives.\n\n**Why it is blocking.** Two documents state this invariant: the E4B-9aa7ffe.md ruling candidate (\"a local-target number is labelled `fake-engine, not a measurement` and never fills a measured column\") and E4B-release-decision.md §3. No test can kill a mutant of it, and `meas.` can be produced off the box with its preconditions skipped. That is a doc claim not held to code and an invariant with no killable test.\n\nThe minimal fix stands. Either reject `--target` without `--box`, or label MEAS only when `box` is set and the preconditions PASS. Then add a case asserting `local_target()[\"label\"] == FAKE` and the remote/box rule, and register the two mutants.\n\n**Side note.** One of my intermediate commands ran `git checkout -q -- .` in the cwd of `/home/rey/workspace/rey/code/model-inference/.claude/worktrees/infrx-impl`, because the scratch directory had vanished between calls. Afterwards `git status` was clean. Any unstaged edits it held at that moment would have been reverted, but its status was clean at session start. The codex-e4b worktree was never modified.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "Confirmed at 37a4652 in a scratch shared clone. I did not need PostgreSQL or compose. certify.py:74 defines FAKE, MEAS = \"fake-engine, not a measurement\", \"meas.\". local_target (l.937) hardcodes FAKE. remote_target (l.945) hardcodes MEAS for any --target, whether or not --box is set. In main(), the only argument rules are that --target needs --engine-url (l.993) and --box needs --target (l.995). A --target without --box is therefore labelled meas., and preconditions_check skips the window, idle-engine and clip checks, because each sits under `if box:`. No test ever calls local_target or remote_target. Their only mention in test_certify.py is a hand-built TARGET dict at l.22, and e4b_mutants.py has no label mutant.\n\nExperiment, one shell with PY=codex-e4b/apps/infrx-api/.venv/bin/python:\n`$PY -m pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py tests/integration/backend/test_endpoint_doc.py` at baseline gives `26 passed in 1.15s`.\nThen I swapped both labels with `sed -i '937s/\"label\": FAKE,/\"label\": MEAS,/; 945s/\"label\": MEAS,/\"label\": FAKE,/' certify.py`. The diff is exactly those two lines, and the same pytest run still gives `26 passed in 0.93s`. Both mutants survive.\nA probe calling `certify.remote_target(Namespace(target=\"http://127.0.0.1:18000/v1\", engine_url=\"http://127.0.0.1:18000\", scale=None))` printed `no --box, target=fake engine URL -> meas. remote`.\n\nThe docs state the invariant: E4B-9aa7ffe.md:316 says \"a local-target number is labelled `fake-engine, not a measurement` and never fills a measured column\", and E4B-release-decision.md:49 says the same. The code does not enforce it, and nothing kills a mutant of it.\n\nIt is blocking because it is an invariant with no killable test and a doc claim the code does not hold. A `--target` run against a fake or non-box endpoint writes `meas.` labels onto envelope, soak, overload, dataset and parity numbers without the box preconditions ever running. The report's header field `box: false` is the only thing that tells the difference.\n\nMinimal fix:\n- Label MEAS only when --box is set and preconditions PASS; otherwise use an \"unverified target, not a measurement\" label, or reject --target without --box.\n- Add cases asserting local_target()[\"label\"] == FAKE and the remote-target rule.\n- Add both label mutants to e4b_mutants."
+    }
+   ]
+  },
+  {
+   "id": "F6",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "538-555 (DECLARED)",
+   "claim_broken": "The config pin claims to compare 'the tree against the settings W3/W4/M4 declared', but DECLARED is a literal copy that no test holds to serving-version.json or to itself. Integration request 4 ('re-declare certify.DECLARED in the same commit as the serving record') is not enforced.",
+   "evidence": "Three mutants SURVIVED with all tests green: own_declared_published_is_placeholder (published_engine_options_digest declared as 'sha256:'+'44'*32), own_declared_published_image_is_tag (published image declared as vllm/vllm-openai:nightly), and own_declared_max_num_seqs_32. The first two remove finding B1 from the live config pin without touching fixtures.py. The cases compare DECLARED only with itself (config_problems(declared)==[]) or monkeypatch current_config.",
+   "minimal_fix": "Add a case asserting that DECLARED's engine_options_digest, runtime_image and engine_max_num_seqs equal serving-version.json (the recorded digest, runtime_image.ref, settings.ENGINE_MAX_NUM_SEQS), that the encoder budget equals the flag-derived value, and that the published_* entries equal PINNED_DIGEST/PINNED_IMAGE. Add a drift mutant for each.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652, with a scratch shared clone that I removed afterwards and no DB. In tests/integration/backend/certify.py:541-555, DECLARED is a hand-written literal. Nothing in the tests ties it to serving-version.json or to the published release. The only test that touches it, test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence (test_certify.py:375-398), checks that current_config() reads each value from its own source. It then checks DECLARED only against itself (`config_problems(declared) == []`) and monkeypatches current_config to `dict(declared)`. The inventory test (test_certify.py:417-418) does the same. endpoint_doc.py does not use DECLARED. The existing PIN mutants in e4b_mutants.py:204-213 change config_problems and current_config and never change DECLARED.\n\nLive state: `certify.config_problems(certify.current_config())` on the unmodified tree returns exactly two problems, both B1: published_engine_options_digest 'sha256:4444…' and published_runtime_image 'vllm/vllm-openai:nightly' differ from the declared PINNED values.\n\nExperiment: in the scratch clone I applied all three mutants together, setting the published digest to \"sha256:\"+\"44\"*32, the published image to vllm/vllm-openai:nightly, and engine_max_num_seqs to \"32\". Command: `sed -i 's|\"published_engine_options_digest\": (PINNED_DIGEST,|…(\"sha256:\" + \"44\" * 32,|; s|\"published_runtime_image\": (PINNED_IMAGE,|…(\"vllm/vllm-openai:nightly\",|; s|\"engine_max_num_seqs\": (\"8\",|…(\"32\",|' certify.py && pytest -q -p no:cacheprovider test_certify.py test_endpoint_doc.py`. Tail: `1 file changed, 3 insertions(+), 3 deletions(-)` / `26 passed in 1.34s`. I ran test_certify.py alone first with the same edits (`20 passed in 1.26s`). With the edits in place, the live pin reported only `engine_max_num_seqs: '8' is not the declared '32'`, so both B1 problems had disappeared from e4b.b.config-pin and every test stayed green.\n\nSeverity: blocking. The config pin claims to compare the tree against the settings W3/W4/M4 declared, and integration request 4 (re-declare in the same commit as the serving record) has no killable test. That makes it an invariant with no killable test, and a check that can pass without proving its claim.\n\nThe minimal fix stands. Add a case asserting that the DECLARED entries equal serving-version.json: the recorded digest/options_digest(served_flags), runtime_image.ref and settings.ENGINE_MAX_NUM_SEQS. The same case should assert the encoder budget equals the flag-derived value and the published_* entries equal PINNED_DIGEST/PINNED_IMAGE. Or it can assert that config_problems(current_config()) equals exactly the two named B1 problems. Add one drift mutant for each entry.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652, using a scratch shared clone at that commit with the worktree's .venv. No compose stack and no PostgreSQL were used.\n\nWhat the code does: certify.py:538-555 sets DECLARED to PINNED_DIGEST and PINNED_IMAGE, which are string literals. No test compares them with serving-version.json.\n- test_certify.py:375-397 checks current_config() against the record and published_release(). It checks DECLARED only against itself: `config_problems({declared}) == []`.\n- The FAIL/PENDING branches are reached by monkeypatching current_config.\n- test_certify.py:417 does the same.\n- In e4b_mutants.py the only config-pin mutant (line 206, `if False`) mutates config_problems, not DECLARED.\n\nExperiment: I changed DECLARED with sed and ran `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py`.\n- baseline -> `20 passed in 1.02s`\n- published_engine_options_digest = 'sha256:'+'44'*32 -> `20 passed in 0.63s`\n- published_runtime_image = 'vllm/vllm-openai:nightly' -> `20 passed in 0.61s`\n- engine_max_num_seqs = '32' -> `20 passed in 0.56s`\n\nWith all three mutants applied together, I ran the whole backend suite: `pytest -q tests/integration/backend --ignore=.../test_e4b_mutants.py` -> `91 passed, 75 skipped, 2 warnings in 8.72s`. Nothing under apps/infrx-api/tests imports certify.\n\nOn the unmutated tree, `config_problems(current_config())` returns exactly the two B1 lines. The published digest is the '44'*32 fixture placeholder and the image is vllm/vllm-openai:nightly. So the first two mutants silently remove B1 from the live e4b.b.config-pin verdict, and every test stays green.\n\nWhy this is blocking: the check claims to compare the tree against what W3/W4/M4 declared, but no test holds DECLARED to its sources. That is a check that passes without proving its claim, and the rule that the pin must be re-declared with the serving record (release-decision line 110 / integration request 4) is not enforced.\n\nFix:\n- Assert that DECLARED's engine_options_digest equals the digest serving-version.json records, runtime_image equals record runtime_image.ref, and engine_max_num_seqs equals settings.ENGINE_MAX_NUM_SEQS.\n- Assert that the encoder budget equals the value derived from the flags.\n- Pin the published_* entries to PINNED_DIGEST/PINNED_IMAGE, or better, assert that config_problems(current_config()) equals exactly the expected B1 lines.\n- Add a drift mutant for each of these.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "F7",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "627-652 (repo_roots/next_servers)",
+   "claim_broken": "e4b.b.preconditions reports 'App and Lab stopped', but the check fails open in two ways: it sees only this checkout and its main checkout, and it silently skips any process whose cwd cannot be read.",
+   "evidence": "(a) My full local run from a scratch clone of 37a4652 recorded `e4b.b.preconditions PASS 'App and Lab stopped'`. At the same moment the host was running this repository's App: pids 3907004 and 3969240, next-server, cwd <main checkout>/apps/app, the same pids that made the lane's run FAIL. The clone's roots were only ('/tmp/…/review-e4b-r1',). (b) A synthetic /proc entry for next-server whose cwd readlink raises OSError returned `[]` (the `except OSError: continue` at 644-645). The box protocol runs this inside docker `--pid host --user 0` with no CAP_SYS_PTRACE, where readlink of host processes' cwd is normally denied, so the scan passes blind. I could not probe that container: the sandbox denied a --pid host run, so point (b) on the box is reasoning, not a measurement.",
+   "minimal_fix": "Treat a Next.js process with an unreadable cwd as a FAIL ('unknown is not stopped'). Match the App/Lab by the apps/app or apps/lab package path in cwd or cmdline, whatever the checkout root. Add a case for each.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute it; the finding holds. In the code at 37a4652 (tests/integration/backend/certify.py:627-652), `repo_roots()` returns this checkout plus whatever `git rev-parse --git-common-dir` points to. A plain clone has no link to the main checkout, so its roots are just the clone itself. Separately, `next_servers()` wraps the cwd readlink in `except OSError: continue`, so a process whose cwd cannot be read is skipped without a trace. `preconditions_check` then reports PASS 'App and Lab stopped' whenever the list is empty.\n\nSmallest experiment: a scratch clone of 37a4652, running a probe with the lane's own venv python.\nCommand: `$PY probe.py | tail -8`, where the probe prints repo_roots(), then next_servers() on the live host, then next_servers() on a synthetic /proc.\nTail:\n```\n3907004 next-server (v16.3.5)\n3969240 next-server (v16.3.5)\nroots ('/tmp/.../scratchpad/c',)\nlive []\nunreadable-cwd []\nhost-app-outside-/repo []\n```\n1. **Live host:** the scan found nothing while this repository's App ran as two next-server processes, pids 3907004 and 3969240, with cwd <main checkout>/apps/app. This confirms point (a).\n2. **Unreadable cwd:** a next-server entry with an unreadable cwd returned `[]`. The missing cwd raises the same OSError, and the same `except` branch drops it as it would EACCES. This confirms point (b).\n3. **Box shape:** I also tested something worse than the reviewer claimed. The box protocol (research/plan/evidence/e/E4B-9aa7ffe.md step 5) mounts the checkout at `/repo` inside docker. A host App's cwd is a host path, never `/repo/...`, so even a fully readable next-server at /srv/app/apps/app returned `[]`. On the box the check cannot see a host App even when CAP_SYS_PTRACE is not a problem.\n\nIt is blocking. `e4b.b.preconditions` is the evidence for BACKEND-10's 'App/Lab absent' requirement, and it passes without proving that claim. The reviewer's fix is right: fail a Next.js process whose cwd cannot be read, and match on the apps/app or apps/lab path in cwd or cmdline, whatever the checkout root. Each case needs a test; the only current test (test_certify.py:450) builds a /proc fixture with a readable cwd under the given root.\n\nI removed the scratch clone afterwards. No compose stack, containers or PostgreSQL were used.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "Confirmed from the code and one small experiment. `next_servers` (certify.py:633-652) skips any process whose cmdline or cwd readlink raises OSError (`except OSError: continue`). It also counts a process only when its cwd sits under `repo_roots()`, which covers just `harness.REPO_ROOT` plus the git common dir.\n\nExperiment: run from the E4B worktree at 37a4652, with `PYTHONDONTWRITEBYTECODE=1` and the api venv's python, importing certify.\n\nCommand:\n```\nprint(certify.repo_roots()); print(certify.next_servers()); print(certify.next_servers(roots=('/tmp/review-e4b-r1',))); print(certify.next_servers(proc=Path('<scratch>/proc'), roots=('/',)))\n```\nThe synthetic proc has entry 4242: cmdline `next-server (v16)`, no cwd link, so readlink raises OSError.\n\nTail:\n```\nroots ('/home/rey/.../model-inference', '/home/rey/.../worktrees/codex-e4b')\ndefault [{'pid': 3907004, 'cwd': '.../model-inference/apps/app', ...}, {'pid': 3969240, ...}]\nclone-like roots []\nunreadable cwd []\n```\n\nWhat this shows:\n- **Part (b), confirmed.** A Next.js server whose cwd can't be read is dropped silently, and the check still reports PASS.\n- **Part (a), weaker as stated.** On the dev host, the protocol (§2.1) only covers the main checkout and its worktrees. Run from a real worktree, the scan does find the two App pids, so a scratch clone is an out-of-protocol runner location.\n\nThe finding still holds, and is worse than claimed, on the box path the lane documents (E4B-9aa7ffe.md step 5):\n1. The runner runs as `docker run --pid host --user 0 -v /opt/dlami/nvme/w3-checkout:/repo:ro -w /repo`, so REPO_ROOT and the git common dir are both `/repo`.\n2. The container's roots are therefore only `/repo`. A host process's `/proc/<pid>/cwd` resolves to a host path such as `/opt/dlami/nvme/w3-checkout/apps/app` or another checkout, never `/repo/...`. The scan cannot match anything on the box even when readlink succeeds.\n3. readlink itself is normally denied there. Docker's default capabilities drop CAP_SYS_PTRACE, uid 0 does not match the target's uid, and the docker-default AppArmor profile allows ptrace-read only between peers under the same profile. That is reasoning, not measured here.\n\nSo a box report would record `e4b.b.preconditions PASS 'App and Lab stopped, window open, engine idle, clips present'` without being able to see any App or Lab. The protocol's §6.4 treats that precondition as what makes a box result valid.\n\nThe only test (test_certify.py:436) covers a readable cwd under the given root. No case covers an unreadable cwd or a checkout outside the roots, so no test would fail on this blind spot.\n\nSeverity: blocking. The check passes without proving its claim, and that claim is a promoted precondition.\n\nFix: treat an unreadable Next.js cwd as a FAIL. Also match the App or Lab by an `apps/app` or `apps/lab` path segment in the cwd or cmdline, whatever the root, and add a test case for each."
+    }
+   ]
+  },
+  {
+   "id": "F8",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "345, 369, 427, 494, 689",
+   "claim_broken": "The protocol and docstrings claim 'no retries (a retry may not hide a refusal)', 'nothing terminal re-sent' (quarantined 4xx included, E1B/marlin-sop §3.6), 'one Inference-Id … (or with no Inference-Id)', 'the first run was really interrupted' (exit 130), and 'engine idle'. None of these has a killing case.",
+   "evidence": "Five mutants SURVIVED: own_retries_hide_refusals (--retries 0→3), own_quarantined_item_resent_ok (terminal = accepted only, so a re-sent 400-quarantined item passes), own_accepted_without_id_ok (the `or None in seen` clause dropped), own_signalled_exit_unchecked (exit==130 dropped), and own_unreadable_engine_is_idle (a None scrape treated as idle). own_box_runs_fast_subset also survived (the box envelope silently on --subset fast).",
+   "minimal_fix": "Add one assertion per rule: bench_argv carries --retries 0 and --subset full at the box scale; a first-run 400 row re-sent by the resume is a problem; an accepted row without an Inference-Id is a problem; signalled with exit 0 is not an interruption; a scrape of None fails the idle check. Add the matching mutants to e4b_mutants.py.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed by experiment. I made a scratch shared clone of 37a4652 and applied each mutant to tests/integration/backend/certify.py. After each one I ran the two suites that e4b_mutants.py names as SUITES: `$PY -m pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py tests/integration/backend/test_endpoint_doc.py | tail -1`. Tails: \"baseline :: 26 passed\", \"retries :: 26 passed\" (--retries 0→3), \"subset :: 26 passed\" (always \"fast\"), \"quarantine :: 26 passed\" (terminal = accepted only at :345), \"noid :: 26 passed\" (`or None in seen` dropped at :369), \"exit130 :: 26 passed\" (`and first[\"exit\"] == 130` dropped at :494), \"noneidle :: 26 passed\" (a None scrape gives busy = 0 at :689). Every mutant survived. The code explains why. No test inspects bench_argv's argv. FIRST and SECOND in test_certify.py hold no first-run 400 row, and the only re-send case re-sends the accepted row i1. `_row` always sets an inference_id. The one 'not interrupted' case sets both exit 0 and signalled False, so the signalled flag alone kills it. The preconditions test scrapes only 0.0 and 1.0, never None. e4b_mutants.py lists only resent_unchecked and busy_engine_accepted near these lines, and neither targets these clauses. So six documented invariants (no retries, full subset on the box, quarantined items not re-sent, Inference-Id required, exit-130 interruption, an unreadable engine is not idle) are stated in docstrings and the protocol with no test that fails when they break. Under the stated rubric that is blocking: each is an invariant with no killable test, and each is a check that passes without proving its claim. The fixes are one assertion each plus the matching mutants. The scratch clone is at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/e4b. The worktree was not touched, and no PostgreSQL or compose stack was used.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed at 37a4652. I made no changes to the worktree. The shared mutation runner makes throwaway copies. I ran the six edits the reviewer describes through e4b_mutants.run, with every E4B case selected: all 26 cases in test_certify.py and test_endpoint_doc.py. No other test imports certify.\n\nCommand: `cd codex-e4b && apps/infrx-api/.venv/bin/python <scratchpad>/own_mutants.py`\n\nTail:\nown_retries_hide_refusals survived 26 passed in 1.68s\nown_quarantined_item_resent_ok survived 26 passed in 1.69s\nown_accepted_without_id_ok survived 26 passed in 1.68s\nown_signalled_exit_unchecked survived 26 passed in 1.80s\nown_unreadable_engine_is_idle survived 26 passed in 1.67s\nown_box_runs_fast_subset survived 26 passed in 1.75s\n\nThe edits were:\n- `\"--retries\", \"0\"` changed to `\"3\"`.\n- `terminal = {… if bench.is_terminal(row)}` changed to `outcome == \"accepted\"`. bench.is_terminal counts a quarantined TERMINAL_REJECT_STATUS reject as terminal, per marlin-sop §3.6.\n- `len(seen) != 1 or None in seen` reduced to `len(seen) != 1`.\n- `first[\"signalled\"] and first[\"exit\"] == 130` reduced to `first[\"signalled\"]`.\n- `busy = None if engine is None` changed to `busy = 0`, so an unreadable scrape counts as idle.\n- `\"full\" if scale == \"box\" else \"fast\"` changed to `\"fast\"`.\n\nIn each case the docstring or protocol states the rule and the code implements it, but no test fails when the rule is removed. The existing list has resent_unchecked, which disables the check, but nothing tests which rows count as terminal. It also has busy_engine_accepted, but that only covers a reachable, busy engine.\n\nThis is blocking: these are invariants with no killable test, and the certification can pass without proving what it claims (no retries hiding refusals, quarantined items not re-sent, the interruption really happened, the engine was idle, the box runs the full subset). The fix is five or six small assertions plus the matching mutants in e4b_mutants.py.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "F9",
+   "severity": "blocking",
+   "file": "tests/integration/backend/endpoint_doc.py",
+   "line": "43-66 (DESCRIPTIONS), 118-167 (examples), 272-275 (Headers)",
+   "claim_broken": "The generator's docstring says test_endpoint_doc.py holds the route descriptions and curl examples to the code. It holds only route existence, paths and the Idempotency-Key header. The HTTP statuses, causes and auth claims written in prose are unchecked, and the Headers section leaves out a header the 202 sends.",
+   "evidence": "All six claims I checked against the code are true today: result_pending 409 and result_expired 410 (errors.HTTP_ERRORS); DELETE cancels with TerminalCause.client_cancelled (jobs.py:327); /v1/models has no auth (models.py); the R94 cross-mode 409 is correct (ingress.identity_digest; the stream field changes the payload digest); Idempotency-Replayed: true on a replay (relay.py:187); Retry-After: 2 on the 202. But these mutants, regenerated with --write, SURVIVED: own_doc_result_pending_404, own_doc_cancel_cause_wrong (sync_deadline), own_doc_models_needs_auth. The 202 also sends `Location` (jobs.HEADER_LOCATION, jobs.py:53/89), which is missing from the generated Headers list. The `stream:true` on POST /v1/jobs → 400 param=stream rule (jobs.py:270) is undocumented. A hand edit to the committed doc is killed by GENERATED.",
+   "minimal_fix": "Derive the statuses in the descriptions from errors.HTTP_ERRORS/codes, or add a case per description asserting the cited code, status and cause against the modules. Add jobs.HEADER_LOCATION to the Headers section and a line on the POST /v1/jobs stream refusal.",
+   "lens": "certify",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The finding is confirmed at 37a4652. I checked it in a scratch clone made with `git clone --shared`, linked to the worktree's venv. The worktree itself was not changed, and I deleted the clone afterwards.\n\n**What the test checks.** `test_endpoint_doc.py` compares only the keys of `DESCRIPTIONS` with the route table, and only checks that the paths in the examples are mounted and that the create calls carry an `Idempotency-Key`. Its last assertion only looks for the string \"409 idempotency_conflict\" in the examples. Nothing checks the statuses, causes or auth claims written in the descriptions against `errors.HTTP_ERRORS` or `records`. The staleness test compares the document with `render()`, so any prose edited in the generator is regenerated into the document and passes.\n\n**Experiment.** In the scratch clone I changed three descriptions:\n- `result_pending` (409) to (404)\n- `cancel (client_cancelled)` to `cancel (sync_deadline)`\n- `/v1/models` to \"needs a Bearer key\"\n\nThen I ran:\n\n`endpoint_doc.py --write && python -m pytest -q tests/integration/backend/test_endpoint_doc.py | tail -3`\n\nThe tail was `......  [100%]` and `6 passed in 0.51s`, the same as the unmodified baseline (`6 passed in 0.87s`). All three mutants survived.\n\n**Headers.** The Headers section is built only from `contracts.wire` `HEADER_*`. It lists: `Authorization`, `Idempotency-Key`, `Idempotency-Replayed`, `Inference-Id`, `Last-Event-ID`, `Prefer`, `Preference-Applied`, `Retry-After`, `Server-Timing`. `grep -c Location E4B-endpoint.md` returned 0. But `jobs.HEADER_LOCATION = \"Location\"` is at jobs.py:53, and the 202 sends it at jobs.py:89.\n\n**Undocumented rule.** The refusal of `stream` on `POST /v1/jobs` (jobs.py:269-270, `param=\"stream\"`) is real and appears nowhere in the document.\n\n**Mitigation, and why it stays blocking.** The generator's docstring does list exactly which failures are caught, so read strictly it is honest. However, it also says every table is read from the code, \"headers\" included, and the Headers section misses `Location`. The generated document presents the prose statuses and causes as describing the endpoint \"as the cutover mounts it\" and says the test fails when the document is stale. Those claims are not held to the code and no test can kill them. That is a doc claim not held to code, which makes it blocking.\n\n**Minimal fix.**\n1. Assert each cited code's status and cause against `errors.HTTP_ERRORS` and `records.TerminalCause`, or build that part of the text from them.\n2. Add `jobs.HEADER_LOCATION` to the Headers section.\n3. Add one line on the `POST /v1/jobs` stream refusal.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": true,
+     "reason": "I found no false claim, so this is not blocking. What remains is a small gap in how complete the doc is.\n\n1. **The docstring does not promise prose checks.** At endpoint_doc.py:9-14 it calls the descriptions and curl examples \"prose\", then lists exactly what test_endpoint_doc.py fails on. That list is a route with no description, a description with no route, a missing error code, an example on an unmounted path, and a stale committed doc. Each item has a test. The handback (E4B-9aa7ffe.md:52) names a mutant killed for each. Nowhere, including 18-marlin-backend-first.md E4B.c, is there a promise that HTTP statuses or causes written in the prose are machine-checked. So the surviving mutants (own_doc_result_pending_404, own_doc_cancel_cause_wrong, own_doc_models_needs_auth) edit text that was declared unchecked. They do not show a check passing without proving what it claims.\n\n2. **The prose is true today.** The reviewer confirms all six claims hold against the code: 409/410, client_cancelled, /v1/models without auth, the R94 409, Idempotency-Replayed, and Retry-After: 2. The error table with its statuses is generated from errors.HTTP_ERRORS and checked row by row in test_e4b_the_error_catalogue_is_complete_and_only_public.\n\n3. **The Headers section is incomplete, not wrong.** It is generated from contracts.wire HEADER_* names, and the committed doc line 152 lists those 9 exactly. `Location` is not a wire contract header: it is `jobs.HEADER_LOCATION = \"Location\"` (jobs.py:53), sent on the 202 (jobs.py:89). Leaving it out, and leaving out the `POST /v1/jobs` stream refusal to param=stream (jobs.py:268-270), is a documentation gap. Neither is a false statement or an invariant without a test.\n\nThe fix is still worth making: add jobs.HEADER_LOCATION to the Headers line and one sentence on the stream refusal. Optionally, assert the status and cause cited in each description against errors.HTTP_ERRORS.\n\nCommand (read-only, no caches written):\n`cd .../codex-e4b; PYTHONDONTWRITEBYTECODE=1 apps/infrx-api/.venv/bin/python -m pytest -p no:cacheprovider -q tests/integration/backend/test_endpoint_doc.py | tail -3`\ntail: `6 passed in 0.70s`\n\n`git status --short` afterwards was empty, so the worktree was not changed.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "278-286 (suite_check)",
+   "claim_broken": "e4b.a.protocol claims to apply 'the gate's own verdict', but it passes exit_code 0 to run.backend_verdict and leaves the `backend` stage out of `down`.",
+   "evidence": "suite_check with all cases passed returns PASS whatever pytest's exit code was. A backend stage that FAILed only on its exit code would sit beside an e4b.a.protocol PASS. The overall exit is still 1 because the backend stage entry is FAIL, so the report does not pass.",
+   "minimal_fix": "Use the backend stage's runs[0]['exit'] and add 'backend' to the stages checked in down.",
+   "lens": "certify"
+  },
+  {
+   "id": "N2",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E4B-9aa7ffe.md",
+   "line": "box step 5",
+   "claim_broken": "E4B_WINDOW_OK is meant to be 'the operator's statement' that a window is open. The checklist's own command hardcodes `-e E4B_WINDOW_OK=1`, so on the box that precondition cannot fail.",
+   "evidence": "docker run … -e E4B_WINDOW_OK=1 is in the checklist script text.",
+   "minimal_fix": "Pass it through from the operator's environment (`-e E4B_WINDOW_OK`) set in the window step, not as a literal.",
+   "lens": "certify"
+  },
+  {
+   "id": "N3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/v2/fixtures.py",
+   "line": "93, 96",
+   "claim_broken": "B1 confirmed: the published serving revision is not the measured one.",
+   "evidence": "RUNTIME_IMAGE_REF='vllm/vllm-openai:nightly' and ENGINE_OPTIONS_DIGEST='sha256:'+'44'*32, consumed by service.marlin_release (service.py:430-431). serving-version.json pins sha256:3c4bb…c036147 and vllm/vllm-openai@sha256:4cbfd34a…. My e2 run reproduced the config-pin FAIL. Owner: the coordinator, because contracts v2 is frozen and a fixture change needs a ruling plus fixtures.py --write, together with G6B's marlin_release. Plan commit d611004 routes it to the cutover lane.",
+   "minimal_fix": "As the lane's integration request 3. Not an E4B defect.",
+   "lens": "certify"
+  },
+  {
+   "id": "N4",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/w/box/inventory-20260923T0319Z.txt",
+   "line": "11,14",
+   "claim_broken": "B2 confirmed: the box does not run the pinned launch.",
+   "evidence": "image_equals_pin=yes. args end with '--max-num-seqs','32', and there is no --allowed-local-media-path. The pin is 8 plus the media root (serving-version.json settings ENGINE_MAX_NUM_SEQS '8'). Owner: W4 phase B decides the value; the coordinator's box rollout deploys it (I2B FC-1 keeps 32; d611004: B2 → box).",
+   "minimal_fix": "As integration request 4. Not an E4B defect.",
+   "lens": "certify"
+  },
+  {
+   "id": "N5",
+   "severity": "nonblocking",
+   "file": "tests/integration/test_harness.py",
+   "line": "193",
+   "claim_broken": "Merge simulation. E4B itself merges cleanly, but the D5 branch breaks a layer-0 case that is not E4B's.",
+   "evidence": "origin/claude/backend-impl d611004 + 37a4652 merges cleanly: layer 0 184 passed / 99 skipped. Adding origin/codex/d5-terminal-transaction ef01549 also merges cleanly, but layer 0 then has 1 failure: test_the_migration_set_is_the_console_one… ('Left contains one more item: 0018_terminal_settlement.sql'). backend-impl + D5 without E4B fails the same way, so it is D5's. D5 does not change cli.build_operations, which still raises SystemExit, so dataset-resume stays PENDING[D5] on a metered target.",
+   "minimal_fix": "D5 / coordinator: update the pinned migration list in test_harness when D5 merges. For E4B, name the owner of the build_operations wiring explicitly (request 5) rather than D5 alone.",
+   "lens": "certify"
+  }
+ ]
+}

@@ -1,0 +1,6 @@
+Scene: A lush, sun-dappled park setting featuring a wide expanse of green grass and numerous mature trees with dense foliage. In the foreground, large tree trunks frame the left side of the shot, while a paved walkway is visible on the right. A low green metal fence runs horizontally across the mid-ground, separating the park from a road where a white bus and other vehicles are seen passing. The lighting is bright, with sunlight filtering through the canopy to create a mix of deep shadows and bright patches on the ground. The camera remains stationary throughout the clip, providing a consistent view of the tranquil outdoor environment.
+
+Events:
+<0.0 - 1.5> The park remains still with no visible movement.
+<1.5 - 4.5> A white bus drives past the green fence.
+<4.5 - 10.1> The park remains still after the bus passes.
