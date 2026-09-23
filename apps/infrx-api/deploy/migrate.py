@@ -22,9 +22,12 @@ applied. Rules, each a refusal with nothing changed:
 * Every pending file and its history row are applied in **one** transaction. A failure
   anywhere rolls all of them back: the database is either at the old state or the new
   one, never between (infra/README.md §7: additive, forward-compatible, all or nothing).
+  A file that ends that transaction itself (its own COMMIT or ROLLBACK) breaks the
+  promise, so the plan stops at it and says so.
 
 Exit codes: 0 done (or nothing pending), 2 refused (nothing changed), 3 a migration
-failed and was rolled back (nothing changed).
+failed and was rolled back (nothing changed), 4 a migration ended the transaction itself:
+what ran before that point may be committed without its history rows - resolve with D.
 """
 from __future__ import annotations
 
@@ -35,7 +38,7 @@ import pathlib
 import re
 import sys
 
-REFUSED, FAILED = 2, 3
+REFUSED, FAILED, PARTIAL = 2, 3, 4
 DSN_ENV = "MIGRATE_DATABASE_URL"
 HISTORY = "supabase_migrations.schema_migrations"
 FILENAME = re.compile(r"(\d{4})_([a-z0-9_]+)\.sql")
@@ -120,6 +123,8 @@ def plan_command(directory: pathlib.Path) -> int:
 
 
 def apply_command(directory: pathlib.Path, expect: str) -> int:
+    from psycopg.pq import TransactionStatus
+
     local = local_migrations(directory)
     with connect() as conn:
         # One transaction for the lock, the re-read, every file and every history row.
@@ -142,6 +147,12 @@ def apply_command(directory: pathlib.Path, expect: str) -> int:
                 print(f"{version}_{name}.sql failed ({type(failure).__name__}); every "
                       f"pending migration was rolled back", file=sys.stderr)
                 return FAILED
+            if conn.info.transaction_status != TransactionStatus.INTRANS:
+                conn.rollback()
+                print(f"{version}_{name}.sql ended the transaction (a COMMIT or ROLLBACK "
+                      f"inside a migration): what ran before it may be committed without "
+                      f"its history rows; nothing after it ran", file=sys.stderr)
+                return PARTIAL
             values = {"version": version, "name": name, "statements": [body.decode()]}
             conn.execute(f"insert into {HISTORY} ({', '.join(insert)}) values "
                          f"({', '.join(['%s'] * len(insert))})",

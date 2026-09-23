@@ -16,6 +16,7 @@ import pathlib
 import sys
 
 import pytest
+from psycopg.pq import TransactionStatus
 
 from . import support
 
@@ -33,8 +34,11 @@ FILES = {"0001_init.sql": "create table a (x int);",
 class Conn:
     """Records every statement; answers the two history reads; fails on demand."""
 
-    def __init__(self, applied=(), columns=("version", "name", "statements"), fail_on=None):
+    def __init__(self, applied=(), columns=("version", "name", "statements"), fail_on=None,
+                 ends_on=None):
         self.applied, self.columns, self.fail_on = list(applied), columns, fail_on
+        self.ends_on = ends_on      # a body that ends the transaction itself (its COMMIT)
+        self.info = type("Info", (), {"transaction_status": TransactionStatus.IDLE})()
         self.log: list[str] = []
         self.inserted: list[list] = []
         self.commits = 0
@@ -48,6 +52,8 @@ class Conn:
 
     def execute(self, sql, params=None):
         self.log.append(sql)
+        self.info.transaction_status = (TransactionStatus.IDLE if sql == self.ends_on
+                                        else TransactionStatus.INTRANS)
         if "information_schema.columns" in sql:
             return [(c,) for c in self.columns]
         if sql.startswith("select version from"):
@@ -137,6 +143,21 @@ def test_deploy_failclosed__a_failed_migration_rolls_back_the_whole_plan(tmp_pat
     digest = planned_digest(directory, ["0001"])
     assert run(monkeypatch, conn, "apply", "--dir", str(directory), "--expect", digest) == 3
     assert conn.rollbacks == 1 and conn.commits == 0 and conn.inserted == []
+
+
+def test_deploy_failclosed__a_migration_that_ends_the_transaction_stops_the_plan(
+        tmp_path, monkeypatch, capsys):
+    """A file with its own COMMIT ends the one transaction mid-plan, so "all or nothing"
+    no longer holds: the plan stops right there - no history row for it, no later file,
+    no commit of its own - and says what may already be committed (exit 4, not 3's
+    "nothing changed")."""
+    directory = migrations(tmp_path)
+    conn = Conn(applied=["0001"], ends_on=FILES["0002_seed.sql"])
+    digest = planned_digest(directory, ["0001"])
+    assert run(monkeypatch, conn, "apply", "--dir", str(directory), "--expect", digest) == 4
+    assert FILES["0003_more.sql"] not in conn.log
+    assert conn.inserted == [] and conn.commits == 0
+    assert "0002_seed.sql ended the transaction" in capsys.readouterr().err
 
 
 def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path,
