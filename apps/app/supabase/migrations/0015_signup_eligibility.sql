@@ -145,6 +145,9 @@ begin
     raise exception 'invalid_request: campaign_version is at most 100 characters'
       using errcode = '22023';
   end if;
+  -- Waits for a concurrent `retire_individual` (its FOR UPDATE on this row), so a claim
+  -- racing a retirement answers `retired` below instead of failing on the frozen wallet.
+  perform 1 from public.profiles p where p.id = p_user_id for key share;
   if exists (select 1 from infrx.retired_individuals r where r.user_id = p_user_id) then
     perform infrx.record_signup_denial(p_user_id, 'retired');
     return query select 'retired'::text, p_user_id, null::uuid, null::uuid, null::text,

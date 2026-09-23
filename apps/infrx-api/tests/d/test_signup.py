@@ -300,6 +300,13 @@ def test_race__retries_backfill_and_shared_addresses() -> None:
 
 
 @needs_pg
+def test_retirement_race__a_racing_claim_waits_and_answers() -> None:
+    """A claim racing an uncommitted retirement waits for it and answers `retired`."""
+    _db()
+    print(checks_signup.check_retirement_race(pgharness.connect, SIGNUP_DB))
+
+
+@needs_pg
 def test_backfill__hosted_accounts_upgraded_from_0002() -> None:
     """The I1B hosted shape written on the 0001-0002 schema, upgraded through 0015, then
     backfilled twice: 3 grants + 1 unverified, then nothing; USD unchanged."""

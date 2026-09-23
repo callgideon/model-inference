@@ -12,6 +12,7 @@ A claim that RAISES where the operation promises an answer is reported as an ass
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 
 import psycopg
@@ -511,6 +512,60 @@ def check_retirement(conn) -> str:
     return ("retirement: anonymised, keys revoked, org suspended (a shared one kept), wallet "
             "frozen (pre-retirement hold settles, adjustment lands), money kept, "
             "idempotent, hard delete refused, re-created address refused")
+
+
+def _behind(connect, database: str, first, second) -> dict:
+    """`first(A)` runs in a transaction A holds open; `second(B)` starts on another
+    connection, and A commits only once B waits on a lock (or has finished), so B always
+    runs INTO A's uncommitted work. Returns B's answer (`got`) or error, and `waited`."""
+    out: dict = {}
+    ready = threading.Event()
+
+    def call() -> None:
+        try:
+            with connect(database) as b:
+                out["pid"] = b.info.backend_pid
+                ready.set()
+                out["got"] = second(b)
+        except Exception as failed:                   # reported, never swallowed
+            out["error"] = f"{type(failed).__name__}: {str(failed)[:200]}"
+        finally:
+            ready.set()
+
+    thread = threading.Thread(target=call)
+    with connect(database) as a, connect(database) as watch:
+        with a.transaction():
+            first(a)
+            thread.start()
+            ready.wait(30)
+            deadline = time.monotonic() + 60
+            while thread.is_alive():
+                row = watch.execute("select wait_event_type from pg_stat_activity "
+                                    "where pid = %s", (out.get("pid"),)).fetchone()
+                if row and row[0] == "Lock":
+                    out["waited"] = True
+                    break
+                assert time.monotonic() < deadline, "B neither waited nor finished"
+                time.sleep(0.05)
+    thread.join(60)
+    return out
+
+
+def check_retirement_race(connect, database: str) -> str:
+    """A claim racing a retirement of the same individual: A retires x and holds its
+    transaction open, B claims x. B waits for A, then answers `retired`; nothing is
+    minted (a claim that raises 23514 frozen instead is the defect)."""
+    x = uid(0xb, 1)
+    with connect(database) as c:
+        gotrue_columns(c)
+        individual(c, x, "rx11@example.com")
+    out = _behind(connect, database, lambda a: retire(a, x), lambda b: claim(b, x))
+    assert "error" not in out and out["got"][0] == "retired", \
+        f"a claim racing a retirement: {out}"
+    with connect(database) as c:
+        assert (wallet_of(c, x), ledger_rows(c, x), entitlements(c, x)) == (None, 0, 0), \
+            "a claim racing a retirement minted"
+    return f"retirement race: a racing claim waited={out.get('waited', False)}, answered retired"
 
 
 # =============================================================================

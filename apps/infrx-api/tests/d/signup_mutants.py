@@ -102,6 +102,11 @@ MIGRATION_MUTANTS = (
        "      values (v_digest, p_user_id) on conflict do nothing;",
        "      values (v_digest, p_user_id);",
        "signup_race", "concurrent callback retries fail instead of answering the grant"),
+    _m("a1_claim_races_retirement",
+       "  perform 1 from public.profiles p where p.id = p_user_id for key share;\n",
+       "",
+       "signup_retirement_race", "a claim racing an account deletion raises 23514 instead of "
+       "answering `retired`"),
     _m("a1_retired_wallet_spends",
        "create or replace trigger credit_wallet_holds_frozen before insert",
        "create or replace trigger credit_wallet_holds_frozen before update",
@@ -158,6 +163,8 @@ _d._CHECKS.update({
     "signup_privileges": checks_signup.check_signup_privileges,
     "signup_race": lambda conn: checks_signup.check_claim_race(pgharness.connect, _d.MUT_DB),
     "signup_retirement": checks_signup.check_retirement,
+    "signup_retirement_race": lambda conn: checks_signup.check_retirement_race(
+        pgharness.connect, _d.MUT_DB),
     "signup_backfill": lambda conn: (checks_signup.seed_hosted(conn),
                                      checks_signup.check_backfill(conn))[1],
 })
