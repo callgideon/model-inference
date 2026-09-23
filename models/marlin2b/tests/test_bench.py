@@ -410,6 +410,8 @@ def test_ttft_comes_from_first_content_delta_and_tokens_from_usage():
             assert r["inference_id"] and len(r["inference_id"]) == 32
         assert not any(s["has_mm_processor_kwargs"] for s in gw.seen), \
             "gateway target must not send mm_processor_kwargs"
+        assert not any(s["has_stream_options"] for s in gw.seen), \
+            "gateway target must not send stream_options (the ingress's set is closed)"
 
         missing = FakeGateway(usage=False)
         summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1), missing,

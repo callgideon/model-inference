@@ -61,7 +61,11 @@ if importlib.util.find_spec("infrx") is None:
 # The text is I3B's `recoverykit.OWNERS["G2-R1"]`, verbatim (test_stage holds them equal).
 OWNERS = {"G2-R1": "the cutover that mounts the metered ingress in gateway.app.ROUTERS: G2 "
                    "integration request 1 (G2-e5e7d3a.md), owned by the coordinator and HELD "
-                   "until the adapters exist (tasks.json, G2's disposition); G2 is merged"}
+                   "until the adapters exist (tasks.json, G2's disposition); G2 is merged",
+          # E3B phase 3, the coordinator's ruling: the M lane `codex/m-pilot-media` fixes it.
+          "M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
+                   "finalized infrx-upload:upl_… refs from the object store as the contract "
+                   "fake does; today it accepts only http(s)/data: sources"}
 # E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
 # no id here; the cases that pended on it (dr07c, dr07[postgres], every journey) run.
 PENDING = {**OWNERS}
@@ -422,7 +426,7 @@ def provision_two_tenants() -> Provisioned:
 GATEWAY_PORT = harness.PORT_RANGE.start + 40        # e3b2: 56740, loopback only
 
 
-def pilot_env(database: str, workdir: Path, **extra: str) -> dict[str, str]:
+def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) -> dict[str, str]:
     """The pilot box's environment on this stack, by the 08 §5 names: `pilot` mode, the
     clone as `DATABASE_URL`, this namespace's Valkey, the CREDIT regime at the PROVISIONAL
     Marlin card (P-01: a label, never a price), a processing cache and usage log of its own.
@@ -434,7 +438,7 @@ def pilot_env(database: str, workdir: Path, **extra: str) -> dict[str, str]:
             "ACTIVE_RATE_CARD_VERSION": SEED_CARD, "MODEL_ID": CREDIT_ALIAS,
             "PROCESSING_CACHE_DIR": str(workdir / "cache"),
             "USAGE_LOG": str(workdir / "usage.jsonl"),
-            "SUPABASE_URL": postgrest_url(),
+            "SUPABASE_URL": rest_url or postgrest_url(),
             "SUPABASE_SERVICE_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}
 
 
@@ -447,34 +451,40 @@ COMPOSE_FILE = HERE / "compose.yaml"
 PROJECT = "infrx-e3b" if harness.NAMESPACE == "e2" else f"{harness.PROJECT}rest"
 POSTGREST = f"{PROJECT}-postgrest"
 POSTGREST_PORT = harness.PORT_RANGE.start + 30      # E2: 55530 (08 §8), loopback only
+# E3B phase 3: a second PostgREST over the journey clone - PostgREST serves ONE database, and
+# the stage's serves E2's - from the same compose file, in a project and on a port of its own.
+JOURNEY_PROJECT = f"{PROJECT}j"
+JOURNEY_POSTGREST = f"{JOURNEY_PROJECT}-postgrest"
+JOURNEY_POSTGREST_PORT = POSTGREST_PORT + 1
 CHECKOUT_LABEL = "ai.infrx.e3b.checkout"
 # A local literal that exists in no other file and signs only tokens this suite mints.
 JWT_SECRET = "infrx-e3b-local-jwt-secret-not-a-real-one-0001"
 
 
-def postgrest_url() -> str:
-    return f"http://127.0.0.1:{POSTGREST_PORT}"
+def postgrest_url(port: int = POSTGREST_PORT) -> str:
+    return f"http://127.0.0.1:{port}"
 
 
 def _checkout() -> str:
     return os.environ.get("INFRX_E3B_CHECKOUT") or str(HERE)
 
 
-def _compose(*args: str, check: bool = True):
-    return harness.run(["docker", "compose", "-p", PROJECT, "-f", str(COMPOSE_FILE), *args],
+def _compose(*args: str, check: bool = True, project: str = PROJECT,
+             port: int = POSTGREST_PORT, database: str = harness.PG_DATABASE):
+    return harness.run(["docker", "compose", "-p", project, "-f", str(COMPOSE_FILE), *args],
                        check=check, timeout=300.0,
-                       env={"INFRX_E3B_CHECKOUT": _checkout(), "INFRX_E3B_PROJECT": PROJECT,
-                            "INFRX_E3B_POSTGREST_PORT": str(POSTGREST_PORT),
+                       env={"INFRX_E3B_CHECKOUT": _checkout(), "INFRX_E3B_PROJECT": project,
+                            "INFRX_E3B_POSTGREST_PORT": str(port),
                             "INFRX_E2_PROJECT": harness.PROJECT,
-                            "INFRX_E2_DATABASE": harness.PG_DATABASE})
+                            "INFRX_E2_DATABASE": database})
 
 
-def postgrest_owner() -> str | None:
+def postgrest_owner(container: str = POSTGREST) -> str | None:
     """`None` if absent, "ours" if this checkout created it, else the foreign label."""
     import shutil
     if shutil.which("docker") is None:
         return None
-    probe = harness.run(["docker", "inspect", POSTGREST, "--format",
+    probe = harness.run(["docker", "inspect", container, "--format",
                          "{{json .Config.Labels}}"], check=False, timeout=60)
     if probe.returncode != 0:
         return None
@@ -483,40 +493,59 @@ def postgrest_owner() -> str | None:
         f"foreign ({labels.get(CHECKOUT_LABEL)!r})"
 
 
-def postgrest_up() -> str:
+def postgrest_up(project: str = PROJECT, port: int = POSTGREST_PORT,
+                 database: str = harness.PG_DATABASE) -> str:
     """Start PostgREST on E2's network and wait for it. Refuses a container it did not
     create. PostgREST reads its schema cache at start, so this runs AFTER `migrate`."""
-    owner = postgrest_owner()
+    container = f"{project}-postgrest"
+    owner = postgrest_owner(container)
     if owner not in (None, "ours"):
-        raise harness.HarnessError(f"refusing to touch {POSTGREST}: {owner}")
-    _compose("up", "-d", "--no-build", "--force-recreate")
+        raise harness.HarnessError(f"refusing to touch {container}: {owner}")
+    _compose("up", "-d", "--no-build", "--force-recreate", project=project, port=port,
+             database=database)
     import time
 
     import httpx
     last = ""
     for _ in range(60):
         try:
-            answer = httpx.get(postgrest_url() + "/", timeout=2.0)
+            answer = httpx.get(postgrest_url(port) + "/", timeout=2.0)
             if answer.status_code < 500:
                 return answer.headers.get("server", "postgrest")
             last = f"{answer.status_code} {answer.text[:120]}"
         except httpx.HTTPError as exc:
             last = type(exc).__name__
         time.sleep(1.0)
-    raise harness.HarnessError(f"{POSTGREST} not ready: {last}")
+    raise harness.HarnessError(f"{container} not ready: {last}")
 
 
-def postgrest_down() -> list[str]:
-    """Remove exactly our container (it must go before E2's network can)."""
-    owner = postgrest_owner()
-    if owner is None:
-        return []
-    if owner != "ours":
-        raise harness.HarnessError(f"refusing to remove {POSTGREST}: {owner}")
-    _compose("down", "--remove-orphans", check=False)
-    if postgrest_owner() is not None:
-        raise harness.HarnessError(f"{POSTGREST} survived its teardown")
-    return [POSTGREST]
+def postgrest_down(projects: tuple[str, ...] = (JOURNEY_PROJECT, PROJECT)) -> list[str]:
+    """Remove exactly our containers (they must go before E2's network can): the stage's,
+    and a journey's that a killed run left behind."""
+    removed = []
+    for project in projects:
+        container = f"{project}-postgrest"
+        owner = postgrest_owner(container)
+        if owner is None:
+            continue
+        if owner != "ours":
+            raise harness.HarnessError(f"refusing to remove {container}: {owner}")
+        _compose("down", "--remove-orphans", check=False, project=project)
+        if postgrest_owner(container) is not None:
+            raise harness.HarnessError(f"{container} survived its teardown")
+        removed.append(container)
+    return removed
+
+
+@contextlib.contextmanager
+def journey_postgrest(database: str):
+    """PostgREST over a journey clone - the gateway's key lookups (`Auth`) read the clone's
+    `api_keys` through it, as the pilot's read hosted Supabase's - removed afterwards."""
+    postgrest_up(JOURNEY_PROJECT, JOURNEY_POSTGREST_PORT, database)
+    try:
+        yield postgrest_url(JOURNEY_POSTGREST_PORT)
+    finally:
+        postgrest_down((JOURNEY_PROJECT,))
 
 
 def jwt(role: str, sub: str | None = None, *, ttl_s: int = 600) -> str:

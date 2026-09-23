@@ -100,6 +100,7 @@ class FakeGateway:
         auth = request.headers.get("authorization", "")
         self.seen.append({"index": index, "authorization_present": bool(auth),
                           "has_mm_processor_kwargs": "mm_processor_kwargs" in body,
+                          "has_stream_options": "stream_options" in body,
                           "content": body.get("messages", [{}])[0].get("content"),
                           "idempotency_key": request.headers.get("idempotency-key"),
                           "authorization": auth,
