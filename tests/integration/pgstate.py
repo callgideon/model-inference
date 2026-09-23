@@ -842,9 +842,8 @@ def settlement_rows() -> list[Check]:
               "'infrx.jobs'::regclass and conname = 'jobs_settled_usage_is_one_fact'",
               ("value", SETTLED_USAGE_CHECK), "settled usage is one authoritative fact (0018)"),
         Check("E3B-RLS-0018-settlement-guard", "postgres", None,
-              "select pg_get_triggerdef(oid) from pg_trigger where tgrelid = "
-              "'infrx.jobs'::regclass and tgname = 'jobs_settlement_record_guard' "
-              "and tgenabled = 'O'",
+              "select pg_get_triggerdef(oid) from pg_trigger where tgenabled = 'O' and "
+              "tgrelid = 'infrx.jobs'::regclass and tgname = 'jobs_settlement_record_guard'",
               ("value", SETTLEMENT_GUARD), "the settled usage and proposal are frozen (0018)")]
     for role in API_ROLES:
         sql = ("select proposal, usage_prompt_tokens, usage_completion_tokens "
