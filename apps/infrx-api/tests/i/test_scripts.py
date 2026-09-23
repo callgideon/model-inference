@@ -468,7 +468,13 @@ def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp
     R2 has rollback.sh restart the engine onto its restored unit and wait for it, then the
     gateway, then the edge. An engine that does not come up stops the revert there - exit
     4, the gateway untouched, the edge in maintenance, and the message says what next; a
-    gateway that does not come up after the engine did stops it the same way."""
+    gateway that does not come up after the engine did stops it the same way. Both engine
+    waits (R2's and install.sh's) default to the engine unit's own load budget."""
+    budget = re.search(r"^TimeoutStartSec=(\d+)$",
+                       (DEPLOY / "marlin2b-vllm.service").read_text(), re.M).group(1)
+    for script in ("rollback.sh", "install.sh"):
+        wait = f'wait_http http://127.0.0.1:8000/health "${{ENGINE_READY_S:-{budget}}}"'
+        assert wait in (DEPLOY / script).read_text(), script
     pause, revert = _runbook()
     host = Host(tmp_path, monkeypatch)
     host.monolith()
