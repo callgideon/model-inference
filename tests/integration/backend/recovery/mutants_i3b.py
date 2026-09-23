@@ -219,6 +219,8 @@ MUTANTS += (
            'kit.pending("M1-L2", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
     Mutant("i3bm101", "DR-4: rc03 fails the day the ingress is mounted", DRILLS,
            "    if stack.ingress_is_mounted():\n", "    if False:\n", DRILLS, "rc00"),
+    Mutant("i3bm105", "DRL-2: rc03 pends on the held cutover (G2-R1), not on G2, which merged",
+           DRILLS, 'kit.pending("G2-R1", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),

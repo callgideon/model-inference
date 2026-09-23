@@ -13,7 +13,7 @@ What is real in each drill, and what stands in for a component that is missing:
 |---|---|---|
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
-| rc03 gateway restart | - | PENDING G2 (the relay, and the cutover that mounts it); the store half is E3B dr01 |
+| rc03 gateway restart | - | PENDING G2-R1 (G2's cutover that mounts the relay, held); the store half is E3B dr01 |
 | rc04 database loss | - | PENDING on the owner of whichever of admit/claim/terminalize is still a stub (D5 today); the PostgreSQL half is `test_restore.py` bk03 |
 | rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
@@ -238,11 +238,12 @@ def test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route():
     """OPS-RECOVER (gateway restart): a restart between durable acceptance and the answer
     must replay the same accepted identity, and a restart mid-stream must leave the job to
     the worker. The store half is E3B's dr01 (crash after commit, idempotent retry); the
-    route half waits on G2's relay and the cutover that mounts it, and fails the day the
-    ingress is mounted."""
+    route half waits on the cutover that mounts G2's (merged) relay - G2 integration request
+    1, held by the coordinator - and fails the day the ingress is mounted."""
     if stack.ingress_is_mounted():
         pytest.fail("the pilot ingress is mounted: write the gateway restart drill body now")
-    kit.pending("G2", why="no metered route is mounted to restart under load")
+    kit.pending("G2-R1", why="no metered route is mounted to restart under load (G2's cutover "
+                             "is held)")
 
 
 def test_i3b_rc04_a_database_loss_under_the_job_store_is_pending_on_its_adapter():
@@ -599,7 +600,7 @@ def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is
     `stack.stubbed`)."""
     assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
     assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
-    pinned = {test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route: "G2",
+    pinned = {test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route: "G2-R1",
               test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter:
                   "M1-L2",
               test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
