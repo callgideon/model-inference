@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T06:26:07Z",
+  "updated": "2026-09-23T06:50:14Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -25,7 +25,7 @@
       "lane": "codex-g2 / codex/g2-chat-relay",
       "phase": "implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges)",
       "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md"
+      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param=\"cause\")"
     },
     "G4U": {
       "lane": "codex-g4u / codex/g4u-upload-adapter",
@@ -38,12 +38,6 @@
       "phase": "phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement",
       "since": "2026-09-23T05:40:38Z",
       "note": "base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window"
-    },
-    "F-cancel-cause": {
-      "lane": "codex-fcancel / codex/f-cancel-cause",
-      "phase": "review (Opus) at b691add; merge with the PENDING partition line",
-      "since": "2026-09-23T05:40:38Z",
-      "note": "base a237d6f; merged before G2 and D5"
     }
   },
   "reviews": {},
@@ -281,6 +275,11 @@
       "merged": "F2P additive 9faaa57 + wire-in 6a49af5 merged --no-ff (1baf0b8); IR-C1 applied by the coordinator",
       "at": "2026-09-23T05:19:56Z",
       "note": "wire-in reviewed (e307084), confirmed (ced6751), round 2 folded; 395 Python mutants / 415 items; console lists 199/40/64/104; IR-DTO (console DTO swap) stays open for C0/C1/U1R; Q Valkey runners to pass env=('INFRX_Q2_VALKEY_PORT',) \u2014 follow-up"
+    },
+    "F-cancel-cause": {
+      "merged": "F cancel-cause @ 0fe8fdd merged --no-ff (6803d2f) + PENDING line 0024da2",
+      "at": "2026-09-23T06:50:14Z",
+      "note": "review pass at b691add (wf_fc480c08-828); M1 folded (second cancel keeps the first cause; 2 mutants killed); Pg refuses non-default causes until D5's 0018; G2 falls back to the default cancel on UnsupportedParameter"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
