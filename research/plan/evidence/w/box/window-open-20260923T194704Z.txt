@@ -1,0 +1,36 @@
+utc=2026-09-23T19:47:05Z
+ff47f706baaaba94ca43c42469f010d730b94da72d5ddc2ca1bcec3385e19706  /opt/dlami/nvme/w4-logs/Caddyfile.live-20260923T194704Z
+047dd753bc4a26fe782451a8fb24966fd08f918cedd8edcabf669f4f1bdc09b4  /opt/dlami/nvme/w4-logs/Caddyfile.maintenance-20260923T194704Z
+validated maintenance (1003 bytes adapted)
+before: gateway={"ok":true,"inflight":0} engine_running_waiting=0
+before edge /health 200
+container_sees=047dd753bc4a26fe782451a8fb24966fd08f918cedd8edcabf669f4f1bdc09b4  /etc/caddy/Caddyfile
+window_start_utc=2026-09-23T19:47:06Z
+s-w-------    1 root     root             0 Sep 23 19:47 /config/admin.sock
+admin_2019_http=000
+after edge /health 503
+HTTP/2 503 
+alt-svc: h3=":443"; ma=2592000
+content-type: application/json
+retry-after: 120
+server: Caddy
+content-length: 223
+date: Wed, 23 Sep 2026 19:47:08 GMT
+
+{"error":{"message":"A required dependency is unavailable; retry later.","type":"server_error","code":"dependency_unavailable","param":null,"request_id":"a7b1d803-a38d-48db-acaf-2dcbc34015f9","infrx":{"retry_after_s":120}}}
+after: engine_health=200 gateway={"ok":true,"inflight":0}
+engine_args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"] engine_image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+
+--- stderr (caddy reload)
+{"level":"info","ts":1790192826.0312183,"logger":"http.auto_https","msg":"server is listening only on the HTTPS port but has no TLS connection policies; adding one to enable TLS","server_name":"srv0","https_port":443}
+{"level":"info","ts":1790192826.0312402,"logger":"http.auto_https","msg":"enabling automatic HTTP->HTTPS redirects","server_name":"srv0"}
+{"level":"info","ts":1790192826.0313394,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x165e8149ed80"}
+{"level":"info","ts":1790192826.0315142,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1790192826.0315669,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x165e8149ed80"}
+{"level":"info","ts":1790192826.212866,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+{"level":"info","ts":1790192826.2136774,"msg":"adapted config to JSON","adapter":"caddyfile"}
+
+### public route from the coordinator host, 2026-09-23T19:47:15Z
+curl -D - https://marlin2b.callbill.ai/health -> HTTP/2 503, retry-after: 120, server: Caddy, body {"ok":false}
+curl https://marlin2b.callbill.ai/v1/models -> 503
+### before (19:45:33Z): HTTP/2 200, via: 1.1 Caddy, server: uvicorn, body {"ok":true,"inflight":0}

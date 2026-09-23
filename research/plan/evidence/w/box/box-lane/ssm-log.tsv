@@ -5,3 +5,5 @@
 2026-09-23T19:43:25Z	bfead862-8db8-408f-8724-99fa4ff72593	step3 launch synth.py build + verify (nohup, log w4-logs/synth-build.log)
 2026-09-23T19:43:52Z	8fc62e42-12b3-4703-962e-800c2c3acf27	step3 poll synth-build.log
 2026-09-23T19:44:33Z	588864fb-33b1-423f-b9da-ee0ce9200240	step6-prep read-only: modeling_marlin.py caption()/find() source (vendor file) + synth poll
+2026-09-23T19:47:05Z	c997b7c2-a474-4566-aaa6-fec91edf6b56	step4 open maintenance window: save live Caddyfile, validate + write maintenance in place, reload via localhost:2019
+2026-09-23T19:47:48Z	2c299ba4-0014-4955-8764-bb7c3dfb5e5a	step5 launch E0: candidate.sh CANDIDATE=e0 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e0.log) - W4 command block verbatim
