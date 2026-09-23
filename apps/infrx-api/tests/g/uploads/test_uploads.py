@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import json
 import pathlib
+import re
 
 import httpx
 import pytest
@@ -359,16 +360,25 @@ def test_media_sec__a_slow_control_body_is_cut_at_the_deadline():
 
 
 def test_media_sec__no_store_value_outside_the_frozen_ticket_leaves():
-    """R61(1)/R47: the values are checked too. A store whose destination is an object key
-    carrying the org, or whose handle is not `upl_` + 22..64, is an `internal_error`, and
-    neither value is rendered."""
+    """R61(1)/R47: the values are checked too, exactly. A destination that is an object key
+    carrying the org, or keeps the scheme but not the value, and a handle that is not
+    `upl_` + 22..64 in full (short, or a valid handle with a suffix) are each an
+    `internal_error` that closes the connection, and neither value is rendered."""
     app, _, store, _ = mounted()
     issued = store.create_upload
+
+    def suffixed(ticket, org):
+        handle = f"{ticket['upload_handle']}/{org}"
+        return {**ticket, "upload_handle": handle, "destination_ref": "infrx-upload:" + handle}
+
     rewrites = (
         lambda ticket, org: {**ticket, "destination_ref":
                              f"s3://bucket/uploads/{org}/{ticket['upload_handle']}"},
+        lambda ticket, org: {**ticket, "destination_ref":
+                             f"infrx-upload:{org}/{ticket['upload_handle']}"},
         lambda ticket, org: {**ticket, "upload_handle": "upl_x",
-                             "destination_ref": "infrx-upload:upl_x"})
+                             "destination_ref": "infrx-upload:upl_x"},
+        suffixed)
 
     for rewrite in rewrites:
         async def leaky(org_id, constraints, rewrite=rewrite):
@@ -379,29 +389,46 @@ def test_media_sec__no_store_value_outside_the_frozen_ticket_leaves():
         assert response.status_code == 500 and code_of(response) == "internal_error", \
             response.text
         assert ORG_A not in response.text and "upl_x" not in response.text
+        assert response.headers.get("connection") == "close"
 
 
 def test_media_sec__every_refusal_closes_the_connection():
     """The intake's rule for refusals made while a body may still be arriving: the socket
     closes. An operator key (403), a malformed or unknown handle (404) and a type the
-    destination does not store (400) are all refused before the read, on every route."""
+    destination does not store (400) are all refused before the read, on every route. An
+    answer that succeeded keeps the connection."""
     app, _, store, _ = mounted()
 
     async def script(client):
-        handle = created_handle(await create(client))
-        return [await create(client, TOKEN_OPERATOR),
-                await put(client, handle, token=TOKEN_OPERATOR),
-                await complete(client, handle, token=TOKEN_OPERATOR),
-                await put(client, "upl_short"), await complete(client, "upl_short"),
-                await put(client, UNKNOWN_HANDLE, mime="application/json"),
-                await client.put(put_path(UNKNOWN_HANDLE), content=b"x" * 64,
-                                 headers=bearer(**{"content-type": "video/mp4"}))]
+        made = await create(client)
+        handle = created_handle(made)
+        refused = [await create(client, TOKEN_OPERATOR),
+                   await put(client, handle, token=TOKEN_OPERATOR),
+                   await complete(client, handle, token=TOKEN_OPERATOR),
+                   await put(client, "upl_short"), await complete(client, "upl_short"),
+                   await put(client, UNKNOWN_HANDLE, mime="application/json"),
+                   await client.put(put_path(UNKNOWN_HANDLE), content=b"x" * 64,
+                                    headers=bearer(**{"content-type": "video/mp4"}))]
+        return refused, [made, await put(client, handle), await complete(client, handle)]
 
-    answers = run(app, script)
-    assert [response.status_code for response in answers] == [403, 403, 403, 404, 404, 400,
+    refused, succeeded = run(app, script)
+    assert [response.status_code for response in refused] == [403, 403, 403, 404, 404, 400,
                                                               404]
-    for response in answers:
+    for response in refused:
         assert response.headers.get("connection") == "close", response.request.url
+    assert [response.status_code for response in succeeded] == [201, 204, 200]
+    for response in succeeded:
+        assert response.headers.get("connection") != "close", response.request.url
+
+
+def test_dur_rls__the_router_reads_no_org_from_the_query_or_headers():
+    """R66, structurally: whatever name a caller uses, the router reads nothing from the
+    query string or cookies, and from the request only the handle path parameter and the
+    content type - so no header or query name can become an org."""
+    source = pathlib.Path(uploads.__file__).read_text()
+    reads = re.findall(r"request\.(?:query_params|headers|cookies|path_params)\S*", source)
+    assert sorted(set(reads)) == ['request.headers.get("content-type")',
+                                  'request.path_params["handle"]'], reads
 
 # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
 def created_handle(client_answer) -> str:

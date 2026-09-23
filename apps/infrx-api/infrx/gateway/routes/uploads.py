@@ -133,8 +133,8 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
             data = await intake.read_body(request, max_bytes=limits.max_media_bytes,
                                           timeout_s=limits.intake_timeout_s, clock=rt.clock,
                                           large=slot)
-            # The store gets the same deadline: a hung object store must not pin a slot
-            # this process shares with chat.
+            # The store call gets a further intake_timeout_s (so a slot is held for at most
+            # two): a hung object store must not pin a slot this process shares with chat.
             await asyncio.wait_for(store.put_upload(context.org_id, handle, data, mime),
                                    limits.intake_timeout_s)
         except TimeoutError:
