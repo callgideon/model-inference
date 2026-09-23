@@ -184,7 +184,9 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
     # and whatever lock or container they hold - down with it, not only the direct child.
     process = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True, start_new_session=True,
-                               env={**os.environ, **(env or {})})
+                               # pytest cuts its summary lines at the terminal width - 80
+                               # columns without a tty - and drops the failure's message first.
+                               env={**os.environ, "COLUMNS": "400", **(env or {})})
     try:
         stdout, stderr = process.communicate(timeout=timeout)
         code = process.returncode
