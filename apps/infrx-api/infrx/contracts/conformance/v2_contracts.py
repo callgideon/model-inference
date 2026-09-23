@@ -981,12 +981,16 @@ async def credit_admit__lookup_answers_the_pinned_admission(factory):
     request = _credit_request(harness)
     admission = await harness.port.admit_credit(request, b_idem(request))
     held = harness.extra["credit_balance"](IDS.consumer_wallet)
+    harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_2026_10",
+                                             input_rate_per_million="4000.00000000",
+                                             output_rate_per_million="12000.00000000"))
     found = await harness.port.lookup(IDS.consumer_org, b_idem(request))
     assert found is not None, "a mapped CREDIT scope answered nothing"
     mapped, outcome = found
     assert isinstance(mapped, v2.AdmissionV2) and mapped.replayed is True and outcome is None
-    assert (mapped.request_id, mapped.pins, mapped.maximum_hold) == (
-        admission.request_id, admission.pins, admission.maximum_hold)
+    assert (mapped.request_id, mapped.pins, mapped.maximum_hold, mapped.rate_card) == (
+        admission.request_id, admission.pins, admission.maximum_hold, admission.rate_card)
+    assert mapped.pins.rate_card_version != "rc_marlin2b_2026_10"
     assert harness.extra["credit_balance"](IDS.consumer_wallet) == held
 
 

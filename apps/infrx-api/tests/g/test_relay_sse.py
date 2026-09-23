@@ -194,6 +194,28 @@ def test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels():
     assert world.only_job().state is JobState.cancelled
 
 
+def test_api_stream__a_replay_past_the_journal_ttl_answers_journal_expired_not_the_result():
+    """Review r2 stream-C2-4, documented: a stream-mode replay re-reads the job's journal,
+    so once the journal passed its TTL a key-recovered stream of a succeeded job answers
+    `journal_expired` and `[DONE]`, not the committed result (sync, or G3's result route,
+    recovers that). The relay's cancel of the terminal job answers the committed outcome:
+    the job stays succeeded and its settlement is untouched."""
+    world = rs.World(limits=rs.DEFAULTS.replace(journal_chunk_ttl_s=5.0))
+    world.during.append(world.work)
+    first = stream(world, key="k-ttl")
+    assert first.text() and first.data()[-1] == "[DONE]"
+    job = world.only_job()
+    wallet = world.jobs.wallet(world.org)
+    settled = (job.outcome, wallet.ledger_total, wallet.reserved_total)
+    world.clock.advance(6)
+    assert rs.run(world.stream.expire()) > 0
+    again = stream(world, key="k-ttl")
+    codes = [item["error"]["code"] for item in again.data() if isinstance(item, dict)
+             and "error" in item]
+    assert codes == ["journal_expired"] and again.data()[-1] == "[DONE]", again.data()
+    assert world.only_job() is job and job.outcome.state is JobState.succeeded
+    assert (job.outcome, wallet.ledger_total, wallet.reserved_total) == settled
+
 def test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_stream():
     """D3's terminalizations write no terminal journal event until D4's trigger: the relay
     ends on the outcome `get_owned` answers once the journal holds nothing more. A job
@@ -272,17 +294,24 @@ def test_api_stream__a_read_that_fails_after_the_outcome_is_known_still_drains()
     assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
 
 
-def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job():
-    """Review stream-S2 / honesty-H-B3. The process stops while the headers are still
-    being sent: no identity reached the client, so nobody can resume the job - it is
-    cancelled (an orphan otherwise) and its hold released."""
+@pytest.mark.parametrize("blocked", ["headers", "identity_frame"])
+def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job(blocked):
+    """Review stream-S2 / honesty-H-B3, r2 stream-C2-2. The process stops while the headers,
+    or the identity frame itself, are still being sent: no identity reached the client, so
+    nobody can resume the job - it is cancelled (an orphan otherwise), its hold released
+    and nothing left reserved."""
     world = rs.World()
+
+    def holds_the_send(message) -> bool:
+        if blocked == "headers":
+            return message["type"] == "http.response.start"
+        return b"job_handle" in message.get("body", b"")
 
     async def body():
         started = asyncio.Event()
 
         def on_send(message):
-            if message["type"] == "http.response.start":
+            if holds_the_send(message):
                 started.set()
                 return asyncio.Event().wait()   # a peer that never reads
 
@@ -300,6 +329,7 @@ def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_jo
     assert job.state is JobState.cancelled, job.state
     assert job.outcome.cause is TerminalCause.client_cancelled
     assert world.jobs.wallet(world.org).reserved_total == 0
+    assert not any(r.active for r in job.reservations.values())
 
 
 def test_api_stream__a_process_stop_after_the_client_left_cancels_as_disconnected():

@@ -291,9 +291,16 @@ def test_f_base__the_refresh_loop_replaces_a_cached_answer_when_a_check_hangs(mo
 
 def test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last():
     """Review C5: the pool is opened before the lifetime tasks start and closed after they
-    have finished (and after the relay's cancels drained)."""
+    have finished - and after the relay's cancels drained (review r2 stream-C2-1)."""
     rt, deps = composed()
     order = []
+    drain = rt.relay.drain
+
+    async def drained(timeout_s):
+        order.append(("drain",))
+        await drain(timeout_s)
+
+    rt.relay.drain = drained
 
     class Pool:
         async def open(self):
@@ -310,41 +317,60 @@ def test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last():
             order.append(("serving", len(rt.lifetime.tasks)))
 
     rs.run(body())
-    assert order == [("open", 0), ("serving", 2), ("close", True)]
+    assert order == [("open", 0), ("serving", 2), ("drain",), ("close", True)]
 
 
 def test_f_base__shutdown_drains_the_relays_durable_cancels():
-    """Review stream-S1. The process stops while a sync wait's durable cancel is still in
-    flight (a slow store), and the handler is not waited for. The lifespan's shutdown
-    drains the relay's cancels before the pool closes and the loop ends, so the job is
-    cancelled rather than left to its stored deadline."""
+    """Review stream-S1, r2 stream-C2-1/C2-3. The process stops while two sync waits'
+    durable cancels are still in flight (a slow store), and the handlers are not waited
+    for. The lifespan's shutdown drains every one of them before the pool closes - a
+    cancel sent after the close would fail - so both jobs are cancelled rather than left
+    to their stored deadline."""
     rt, deps = composed()
     jobs = rt.relay.jobs
     jobs.grant(rs.CONSUMER_ROW["org_id"], "100")
-    cancel, waiting, in_flight = jobs.cancel, asyncio.Event(), asyncio.Event()
+    cancel, waiting, in_flight, closed = jobs.cancel, [], [], []
+    delays = [0.1, 0.3]
+
+    class Pool:
+        async def open(self):
+            pass
+
+        async def close(self):
+            closed.append(True)
 
     async def slow_cancel(org_id, handle, **cause):
-        in_flight.set()
-        await asyncio.sleep(0.2)              # a store round trip still in flight
+        in_flight.append(handle)
+        await asyncio.sleep(delays.pop(0))    # a store round trip still in flight
+        if closed:
+            raise ConnectionError("the connection pool is closed")
         return await cancel(org_id, handle, **cause)
 
     async def nap(_seconds):
-        waiting.set()
-        await asyncio.Event().wait()          # the job runs on; the wait is still waiting
+        waiting.append(True)
+        await asyncio.Event().wait()          # the jobs run on; the waits are still waiting
 
-    jobs.cancel, rt.relay.sleep = slow_cancel, nap
+    async def until(done):
+        for _ in range(500):                  # bounded: a step that never happens fails
+            if done():
+                return
+            await asyncio.sleep(0)
+        pytest.fail("the handlers never reached that step")
+
+    jobs.cancel, rt.relay.sleep, rt.lifetime.pool = slow_cancel, nap, Pool()
     app = served(rt, deps)
 
     async def body():
         async with pilot.lifespan(app):
-            handler = asyncio.ensure_future(rs.call(app, rs.body()))
-            await waiting.wait()
-            handler.cancel()                  # the process stops ...
-            await in_flight.wait()
-            handler.cancel()                  # ... and does not wait for the handler
-            with contextlib.suppress(asyncio.CancelledError):
-                await handler
+            handlers = [asyncio.ensure_future(rs.call(app, rs.body())) for _ in range(2)]
+            await until(lambda: len(waiting) == 2)
+            for handler in handlers:
+                handler.cancel()              # the process stops ...
+            await until(lambda: len(in_flight) == 2)
+            for handler in handlers:
+                handler.cancel()              # ... and does not wait for the handlers
+            await asyncio.gather(*handlers, return_exceptions=True)
 
     rs.run(body())
-    (job,) = jobs.jobs.values()
-    assert job.state is JobState.cancelled, job.state
+    states = [job.state for job in jobs.jobs.values()]
+    assert states == [JobState.cancelled, JobState.cancelled], states

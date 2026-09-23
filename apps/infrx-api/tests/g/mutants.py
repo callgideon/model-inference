@@ -937,12 +937,22 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        found = await self._lookup(auth.org_id, idem)", "        found = None",
        "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired"),
     _m("terminal_replay_prepares", "a terminal replay fetches and stages nothing again",
-       R, "        if found is None or found[1] is None:\n            # M2 request 5",
-       "        if True:\n            # M2 request 5",
+       R, "        if found is None:\n            # Media is fetched and staged only",
+       "        if True:\n            # Media is fetched and staged only",
        "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired"),
+    # --- review r2 money-B1 (R91): a mapped job in flight prepares nothing either --------
+    _m("inflight_replay_prepares", "an in-flight replay fetches and stages nothing (R91)",
+       R, "        if found is None:\n            # Media is fetched and staged only",
+       "        if found is None or found[1] is None:\n            # Media is fetched and staged only",
+       "test_dur_output__an_in_flight_replay_prepares_nothing_and_answers_when_the_host_fails"),
+    _m("resume_attaches_other_refs", "the retry binds the refs the first acceptance staged",
+       R, "        await self._admitted(job, admission, staged, staged.media)",
+       "        await self._admitted(job, admission, staged, ())",
+       "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",
+       "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry"),
     _m("terminal_replay_rechecked", "a terminal replay (lookup) re-runs no recheck",
-       R, "        if found is None or found[1] is None:\n            # A fresh admission",
-       "        if True:\n            # A fresh admission",
+       R, "        if found is None:\n            # A fresh admission",
+       "        if found is None or found[1] is not None:\n            # A fresh admission",
        "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"),
     _m("lookup_refusal_escapes", "until D5 a store that cannot look up is admission's to answer",
        R, '            if refused.param != "lookup":', "            if True:",
@@ -952,6 +962,12 @@ MUTANTS: tuple[Mutant, ...] = (
           "!= self.regime:",
        "        if False:",
        "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict"),
+    _m("regime_default_is_the_relays", "a legacy job's key is a conflict for a CREDIT relay",
+       R, '        if found is not None and getattr(found[0], "accounting_regime", LEGACY) '
+          "!= self.regime:",
+       '        if found is not None and getattr(found[0], "accounting_regime", self.regime) '
+       "!= self.regime:",
+       "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict"),
     # --- money-B2: an acceptance cut short is completed by the same-key retry ---------------
     _m("post_admission_outage_cancels", "a post-admission outage leaves the job for the retry",
        R, "        except errors.DependencyUnavailable:\n            raise\n"
@@ -959,11 +975,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except BaseException as refused:",
        "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",
        "test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable"),
+    _m("inflight_replay_rechecked_after_attach", "a replay never rechecks or cancels a job "
+       "that may be running (review r2 money-B2)",
+       R, "        if job.request_id in self.media.by_job:", "        if False:",
+       "test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running"),
+    _m("replay_of_another_process_refused", "a job staged by another process is answered "
+       "as it stands",
+       R, "            return                              # staged by another process: as it stands",
+       "            raise                              # staged by another process: as it stands",
+       "test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running"),
     _m("inflight_replay_skips_completion", "an in-flight replay completes the acceptance",
-       R, "        if found is None or found[1] is None:\n            # A fresh admission",
-       "        if found is None:\n            # A fresh admission",
+       R, "        elif found[1] is None:", "        elif False:",
        "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",
-       "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry"),
+       "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry",
+       "test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable"),
     # --- money-N1, N5; honesty-H-N3, H-N4(a) ----------------------------------------------
     _m("refusal_final_before_its_cancel", "a refusal whose cancel is unconfirmed is a 503",
        R, "            if ended is None and isinstance(refused, errors.DomainError):",
@@ -1096,14 +1121,16 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            error = failure if isinstance(failure, errors.DomainError) \\\n"
           '                else errors.StatusUnknown("the stream could not continue")',
        '            error = errors.StatusUnknown("the stream could not continue")',
-       "test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels"),
+       "test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels",
+       "test_api_stream__a_replay_past_the_journal_ttl_answers_journal_expired_not_the_result"),
     _m("journal_outage_ends_the_stream", "a failed journal read is retried, not an end",
        R, "            except Exception:\n                # The database, not the job",
        "            except ZeroDivisionError:\n                # The database, not the job",
        "test_api_stream__a_journal_read_that_fails_is_retried_not_the_end"),
     _m("no_done_after_an_ended_job", "[DONE] follows an error once the job it ended is terminal",
        R, "                if ended is not None:", "                if False:",
-       "test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels"),
+       "test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels",
+       "test_api_stream__a_replay_past_the_journal_ttl_answers_journal_expired_not_the_result"),
     _m("outcome_fallback_ignored", "without a terminal event the committed outcome ends it",
        R, "                ending = await self._outcome(job)", "                ending = None",
        "test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_stream"),
@@ -1116,6 +1143,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"),
     _m("named_before_identity", "a stream is named only once its identity frame was sent",
        R, "        named = False\n", "        named = True\n",
+       "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"),
+    _m("named_before_identity_send_completes", "a stream is named only once its identity "
+       "frame's send completed (r2 stream-C2-2)",
+       R, "            await emit(wire.SseFrame(event=PROGRESS_EVENT,\n"
+          "                                     data=_identity(job, \"accepted\")).render())\n"
+          "            named = True\n",
+       "            named = True\n"
+       "            await emit(wire.SseFrame(event=PROGRESS_EVENT,\n"
+       "                                     data=_identity(job, \"accepted\")).render())\n",
        "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"),
     _m("left_client_on_restart", "a process stop after the client left still cancels",
        R, "            if not named or gone.done():", "            if not named:",
@@ -1243,6 +1279,22 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("drain_skipped", "shutdown drains the relay's durable cancels (review S1)",
        P, "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed",
        "            pass",
+       "test_f_base__shutdown_drains_the_relays_durable_cancels"),
+    _m("drain_after_pool_close", "the relay's cancels drain before the pool closes (r2 C2-1)",
+       P, "        if lifetime.relay is not None:\n"
+          "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed\n"
+          "        if lifetime.pool is not None:\n"
+          "            await lifetime.pool.close()",
+       "        if lifetime.pool is not None:\n"
+       "            await lifetime.pool.close()\n"
+       "        if lifetime.relay is not None:\n"
+       "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed",
+       "test_f_base__shutdown_drains_the_relays_durable_cancels",
+       "test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last"),
+    _m("drain_waits_one", "shutdown waits for every cancel in flight (r2 C2-3)",
+       R, "            await asyncio.wait(set(self._cancels), timeout=timeout_s)",
+       "            await asyncio.wait(set(self._cancels), timeout=timeout_s,\n"
+       "                               return_when=asyncio.FIRST_COMPLETED)",
        "test_f_base__shutdown_drains_the_relays_durable_cancels"),
     _m("pool_configure_dropped", "the built pool carries the configure hook (review C1)",
        P, "        configure=configure_connection(deployment.database_pool_statement_timeout_ms))",

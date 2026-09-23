@@ -1575,12 +1575,12 @@ These replace or extend the numbered Limits above:
 - **The swallowed-crash scan (H-N1's suggestion)** is for the shared runner in
   `tests/contracts/mutants.py`, owner F2R. Not done here. The two crash-killed G mutants
   were instead removed or replaced, as listed.
-- **G3 Limit 8, recorded.**
-  - Chat and `POST /v1/jobs` share one idempotency scope (the ingress's `chat.completions`
-    operation), and `Prefer` is not in the payload digest.
-  - So a sync retry that reuses an async job's key and body attaches a sync wait to that job.
-    That wait's disconnect cancels the job.
-  - This is the design as is, not changed here.
+- **R94: a mode switch under one key is a 409 (G3 implements the digest change).** Corrected
+  in round 3. R94 (08 §10, added at the G3 review) puts the execution mode in the idempotency
+  identity, so a key reused with another mode is `idempotency_conflict` before any store
+  write, and a replay always answers in the job's own mode. Round 2 recorded G3 Limit 8 (a
+  sync retry reusing an async job's key attaches a cancelling wait to it) as the design;
+  R94 supersedes that.
 
 ### Integration requests (round 2)
 
@@ -1609,6 +1609,215 @@ These replace or extend the numbered Limits above:
 - **R2-4 (M).** The collector's stray-payload sweep (N3). Alternatively, persist the attach
   with the admission, which lifts the B2 retry-window limit.
 
+## Round 3 — confirmation fix_required at `a786af7` (2026-09-23)
+
+The round-2 confirmation (`research/plan/evidence/g/G2-confirm-a786af7.json`) returned FIX
+REQUIRED: 5 confirmed blocking findings, 4 distinct (money-B1, money-B2, stream-C2-1 =
+COMP-R2-B1, stream-C2-2), and 9 nonblocking. None was refuted. This section is the fix round. Where it
+differs from the sections above, this section is current.
+
+### Source (round 3)
+
+| | SHA |
+|---|---|
+| Round-2 head (confirmed) | `a786af7` |
+| Round-3 implementation SHA (last code/test commit) | `66effa6` |
+| Head | the evidence commit that adds this section, on top of `66effa6` |
+
+Round-3 commits (`git log --oneline a786af7..66effa6`), one per finding group:
+
+| Commit | Findings |
+|---|---|
+| `2dc2813` | money-B1 (R91), money-N1, money-N5 |
+| `5dc5385` | money-B2 |
+| `7177241` | stream-C2-1 = COMP-R2-B1, stream-C2-3 |
+| `f0d9308` | stream-C2-2 |
+| `4445145` | money-N2 |
+| `90895af` | money-N3 |
+| `35ac886` | money-N4 |
+| `dd8cc96` | stream-C2-4 |
+| `529554d` | a 142-character docstring line from `2dc2813` reflowed (no code change) |
+| `443a451` | COMP-N1 |
+| `66effa6` | money-N5 (one more case named by `inflight_replay_skips_completion`) |
+| this commit | COMP-N2 (R2-2 note), the R94 line in "Limits (round 2)" |
+
+### Per finding
+
+Every blocking finding is closed by a case and a declared mutant, in the R83 shape. The kill
+text is the first assertion line of the named case under that mutant, taken by applying the
+mutant to a scratch copy of the tree by hand (same edit as the runner), and every mutant
+below is also `killed` through the runner (see "Runs (round 3)").
+
+| Finding | Commit | Case(s) | Mutant → kill text |
+|---|---|---|---|
+| money-B1 (R91: a mapped job in flight prepares nothing) | `2dc2813` | `test_dur_output__an_in_flight_replay_prepares_nothing_and_answers_when_the_host_fails` (a video job accepted and attached, its handler dead before the wait; the retry arrives with the host answering 403: 200, `Idempotency-Replayed`, no new payload object, the bound refs unchanged, the job succeeded) | `inflight_replay_prepares` (the round-2 guard `found is None or found[1] is None` restored) → `assert 400 == 200` with body `media_fetch_failed`, the reviewer's definitive 400 for a live job. Re-anchored on the split guards: `terminal_replay_prepares` → `assert 400 == 200` (`media_fetch_failed`); `terminal_replay_rechecked` → `assert None == 'true'` (no `Idempotency-Replayed`); `inflight_replay_skips_completion` → `assert 404 == 200` |
+| money-B2 (a replay never rechecks or cancels a job that may be running) | `5dc5385` | `test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running[False\|True]` (CREDIT: accepted, answer lost, leased with two committed deltas, the approved card rotated, `[True]` after a gateway restart; the retry finds the job still `running`, answers its 200 "Two people", and the hold is released on settlement) | `inflight_replay_rechecked_after_attach` (the bound-job gate removed) → `[False]`: `assert 400 == 200` with body `invalid_request` (the recheck refused and cancelled the running job); `replay_of_another_process_refused` (`return` → `raise` for a job staged by another process) → `[True]`: `assert 404 == 200` |
+| stream-C2-1 = COMP-R2-B1 (drain before `pool.close`) | `7177241` | `test_f_base__shutdown_drains_the_relays_durable_cancels` (a pool whose `close()` makes a later store cancel fail; two cancels still in flight when the lifespan exits); `test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last` (records `("drain",)`) | `drain_after_pool_close` (the two `finally` blocks swapped) → order case: `At index 2 diff: ('close', True) != ('drain',)`; drain case: `[preparing, preparing] == [cancelled, cancelled]` |
+| stream-C2-2 (the identity-send half of "named") | `f0d9308` | `test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job[headers\|identity_frame]` (the held send is the headers, or the body carrying `job_handle`; also asserts no active reservation) | `named_before_identity_send_completes` (`named = True` moved above the identity emit) → `[identity_frame]`: `AssertionError: preparing` (`preparing is cancelled`); `named_before_identity` kills both ids |
+| stream-C2-3 (every cancel in flight is drained) | `7177241` | the drain case above (cancels of 0.1 s and 0.3 s in flight) | `drain_waits_one` (`return_when=FIRST_COMPLETED`) → `[cancelled, preparing] == [cancelled, cancelled]` |
+| stream-C2-4 (a stream replay after the journal TTL) | `dd8cc96` | documented, not changed: `Relay.admit`'s replay comment says a stream replay reads the journal, so past its TTL it answers `journal_expired` then `[DONE]`; sync recovers the committed result. Pinned by `test_api_stream__a_replay_past_the_journal_ttl_answers_journal_expired_not_the_result` (the job stays succeeded, its outcome, ledger and reservations unchanged) | case lists extended: `gap_reported_as_unknown` → `['status_unknown'] == ['journal_expired']`; `no_done_after_an_ended_job` → `{…'journal_expired'…} == '[DONE]'` |
+| money-N1 (the retry binds the first acceptance's refs) | `2dc2813` | the outage-retry case (now a video request) and `…a_crash_after_the_admission_commit_is_completed_by_the_retry[*]` assert `ids(by_job[job]) == ids(staged[0]) != []` | `resume_attaches_other_refs` (`staged.media` → `()`) → `[] == [('med_2664eb…', …)]`, 5 cases fail |
+| money-N2 (one key, one regime, both directions) | `4445145` | `test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict[credit-legacy_usd\|legacy_usd-credit]` | `regime_default_is_the_relays` (the missing-attribute default read as the relay's own regime) → `[legacy_usd-credit]`: `(404, 'not_found') == (409, 'idempotency_conflict')` |
+| money-N3 (lookup after a rate change) | `90895af` | contracts `credit_admit__lookup_answers_the_pinned_admission` publishes a new approved card between `admit_credit` and `lookup` and asserts the admitted pins, hold and card | no new mutant: the fake's `lookup` returns the stored `AdmissionV2`, so a re-pin is not one edit. `lookup_crosses_regimes` names the case (killed, 4/4 below) |
+| money-N4 (docstring vs R94) | `35ac886` | docstring only: `admit` says a replay arrives in the job's own mode (R94) | none; R94's digest mutant is G3's `mode_left_out_of_the_digest` |
+| money-N5 (a CREDIT 200 is reached) | `2dc2813`, `66effa6` | `…crash_after_the_admission_commit…[served-credit\|refused_until_d5-credit]` and `test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable` end in a settled CREDIT 200 with the hold released (hand-driven lease + `complete_credit`, since W's runner cannot run a CREDIT job before WorkV2) | `inflight_replay_skips_completion` now also names the catalog-outage case → `assert 404 == 200`; `resume_attaches_other_refs` kills the two CREDIT crash ids |
+| COMP-N1 (the Probe bound) | `443a451` | comment only, in `Probe.__call__`; see "Limits (round 3)" | none (documentation) |
+| COMP-N2 (`lookup`'s record type) | this commit | a note on R2-2, see "Integration requests (round 3)" | none (documentation) |
+| the stale G3 Limit 8 line | this commit | "Limits (round 2)" now reads: R94, a mode switch under one key is a 409 (G3 implements the digest change) | — |
+
+What changed in the code (`Relay.admit`):
+
+- A request that maps no job is prepared, staged, admitted, rechecked and attached, as before.
+- A **terminal** mapped job is answered from its committed outcome (unchanged).
+- A mapped job **in flight** is never prepared or staged (R91). `_resume` completes its
+  acceptance only when this process provably left it unfinished: M staged its payload here
+  and never bound its refs. M binds and prepares in this process (Limit 8), so that job
+  cannot have been prepared, let alone run. It is completed from the first acceptance's
+  staged payload (the prepared request and its refs), and its rechecks may still refuse and
+  cancel it. Any other job in flight (bound, or staged by another process) is answered as it
+  stands: no recheck, no attach, never a cancel.
+
+### Runs (round 3)
+
+All commands were run from `apps/infrx-api`. Only fakes were used: no Docker, no Valkey, no
+network. The counts are copied from the output.
+
+At `66effa6`:
+```
+uv run --frozen pytest -q -p no:cacheprovider tests/g
+493 passed, 2 warnings in 97.62s (0:01:37)
+EXIT=0
+uv run --frozen pytest -q -p no:cacheprovider tests/g/test_relay_sync.py tests/g/test_relay_sse.py tests/g/test_relay_matrix.py tests/g/test_relay_recovery.py
+72 passed in 1.07s
+EXIT=0
+uv run --frozen python -m tests.g.mutants --list
+299 mutants over 220 named cases
+uv run --frozen pytest -q -p no:cacheprovider tests/g/test_mutants.py -k "well_formed or every_case"
+2 passed, 21 deselected in 0.10s
+EXIT=0
+uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/test_mutants.py --ignore=tests/contracts/v2/test_v1_projection_pg.py
+1011 passed in 18.44s
+EXIT=0
+```
+`grep -rn RecordKeysDropped tests/ infrx/` counts 0.
+
+The whole G list (`INFRX_MUTANTS=all`, detached, polled until its exit line), at `443a451`:
+```
+INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/test_mutants.py
+306 passed in 825.11s (0:13:45)
+EXIT=0
+```
+306 is the 299 mutants (each `test_mutant_is_killed[...]`) plus the list's well-formedness,
+coverage and 5 runner self-tests, as in round 2 (291 + 7 = 298). So every declared mutant is
+killed. This round adds 8 mutants (`inflight_replay_prepares`, `resume_attaches_other_refs`,
+`inflight_replay_rechecked_after_attach`, `replay_of_another_process_refused`,
+`drain_after_pool_close`, `drain_waits_one`, `named_before_identity_send_completes`,
+`regime_default_is_the_relays`) and drops none: 291 + 8 = 299. It re-anchors 3
+(`terminal_replay_prepares`, `terminal_replay_rechecked`, `inflight_replay_skips_completion`)
+and extends the case lists of 3 (`gap_reported_as_unknown`, `no_done_after_an_ended_job`,
+`inflight_replay_skips_completion`). The only change from `443a451` to `66effa6` is that
+last case list (`tests/g/mutants.py`, one line), so that mutant was run again by name at
+`66effa6`:
+```
+uv run --frozen python -m tests.g.mutants inflight_replay_skips_completion
+[killed       ] inflight_replay_skips_completion: 6 failed, 15 deselected in 1.17s
+1/1 killed
+EXIT=0
+```
+
+The contracts list checks and the lookup mutants, at `443a451` (`infrx/contracts` and
+`tests/contracts` are the same at `66effa6`). `lookup_crosses_regimes` names the money-N3
+case as changed in `90895af`:
+```
+uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py -k "well_formed or every_case"
+2 passed, 37 deselected in 0.23s
+EXIT=0
+uv run --frozen python -m tests.contracts.mutants lookup_reads_another_orgs_scope lookup_raises_on_an_expired_mapping lookup_crosses_regimes credit_replay_crosses_regimes
+[killed       ] credit_replay_crosses_regimes: 1 failed, 765 deselected in 0.82s
+[killed       ] lookup_reads_another_orgs_scope: 1 failed, 765 deselected in 1.22s
+[killed       ] lookup_raises_on_an_expired_mapping: 1 failed, 765 deselected in 1.22s
+[killed       ] lookup_crosses_regimes: 1 failed, 765 deselected in 0.91s
+4/4 killed
+EXIT=0
+```
+
+The round-3 mutants by name through the runner (at `35ac886`, before `dd8cc96`), and by hand
+for the kill texts in the table:
+```
+uv run --frozen python -m tests.g.mutants inflight_replay_prepares resume_attaches_other_refs terminal_replay_prepares terminal_replay_rechecked inflight_replay_skips_completion inflight_replay_rechecked_after_attach replay_of_another_process_refused drain_after_pool_close drain_waits_one named_before_identity_send_completes named_before_identity regime_default_is_the_relays replay_crosses_regimes drain_skipped
+14/14 killed
+EXIT=0
+```
+
+G3 trial merge (R3-1). `git merge-tree --write-tree HEAD codex/g3-jobs` (at `66effa6` and
+G3's `cb096fb`) merges with no conflict, as tree `a52331e`. That tree was exported to a scratch
+directory (no ref written, the worktree untouched) and run with this lane's `.venv`:
+```
+pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/jobs/test_jobs_mutants.py
+516 passed, 2 warnings in 49.10s
+EXIT=0
+python -m tests.g.jobs.jobs_mutants inflight_replay_not_completed
+[misdeclared  ] inflight_replay_not_completed: anchor appears 0 times in infrx/gateway/routes/relay.py, expected 1: ...
+EXIT=1
+```
+Every other one of G3's 68 anchors still matches once. With the anchor from R3-1
+(`elif found[1] is None:` → `elif False:`), the same run is `[killed] 1 failed, 45
+deselected`, `1/1 killed`, `EXIT=0`.
+
+`tests/d` was not run (Docker is forbidden in the fix round); no `tests/d` or `infrx/stores`
+file changed this round.
+
+### Limits (round 3)
+
+These replace or extend "Limits (round 2)":
+
+- **"A replay of a job in flight re-prepares by design" is withdrawn** (money-B1). On the
+  fakes, a mapped job in flight prepares, fetches and stages nothing.
+- **Until D5, on PostgreSQL, a replay still re-prepares before admission can say "replay".**
+  `PgJobStore.lookup` refuses (`param="lookup"`), so the relay learns of the mapping only from
+  `admit`, after `prepare_request`/`stage`. If the customer's media URL has expired, the
+  retry of a job **in flight** answers `400 media_fetch_failed` while the job runs on and is
+  billed. That is the same D5 interim as the terminal case in round 2, now stated for the
+  in-flight case too. D5's `lookup` (R2-2) lifts both.
+- **`_resume`'s witness is M's in-process state** (`MediaUploads.by_job`, `.payloads`). After
+  a gateway restart, a job that was admitted but never attached cannot be completed by the
+  same-key retry: this process staged nothing for it. The retry waits on the job, which M's
+  bounded preparation retries or its stored deadline end unbilled. Persisting the attach
+  (R2-4, M/D) makes the gate read that instead. The relay reads these two attributes of M's
+  concrete adapter, not the `MediaStore` port; the pilot and every G world compose M's real
+  `MediaUploads`.
+- **A stream replay after the journal TTL** (stream-C2-4) answers `journal_expired` then
+  `[DONE]`, not the committed result. Sync, or G3's result route, recovers the result. The
+  relay's cancel of the terminal job is answered with the committed outcome and changes
+  nothing.
+- **Probes** (COMP-N1). `Probe.__call__`'s first answer has no outer timeout; its bound is
+  `asyncio.wait_for`'s. That holds only for a check that awaits and lets its cancellation
+  through. A check that blocks its thread, or that suppresses or delays `CancelledError`
+  (Python 3.12's `wait_for` waits for the cancelled task), holds the first answer, and with
+  it the registration, for as long as it does. Today's checks (`catalog.resolve`,
+  `active_rate_card`, `stream.usage()`) are cooperative.
+
+### Integration requests (round 3)
+
+R2-1 and R2-3 are unchanged. R2-2 and R2-4 gain a note, and R3-1 is new:
+
+- **R2-2 (D5), note (COMP-N2).** `PgJobStore.lookup` must answer the job's own regime
+  record: `AdmissionV2` for a CREDIT job, `Admission` for a legacy one, through the one shared
+  method, as the fake does (`_replay(credit=None)`). The relay's one-key-one-regime check
+  reads `accounting_regime` from that record (absent means legacy). `ports.py` types the
+  method as returning `Admission`, which understates this; R91 gives `CreditJobStore.lookup`
+  `AdmissionV2`, so this is no contract change.
+- **R2-4 (M), note.** Persisting the attach (or the staged payload's binding) with the
+  admission also replaces `_resume`'s in-process witness.
+- **R3-1 (G3, merge note).** G3's `inflight_replay_not_completed` (in
+  `tests/g/jobs/jobs_mutants.py`) is anchored on round 2's
+  `if found is None or found[1] is None:\n            # A fresh admission`, which no longer
+  exists. Re-anchor it on `        elif found[1] is None:` → `        elif False:`, as G2's
+  `inflight_replay_skips_completion` is. G3's async crash-after-commit case goes through
+  `_resume` and needs no change. In round 3, `relay.py` changes only its import line,
+  `admit`, `_resume` and the `_admitted` docstring, and none of G3's hunks (`on_async`,
+  `_accept`, `pump`). The trial merge under "Runs (round 3)" shows this.
+
 ## Verification log
 
 - 2026-09-23: Written at implementation SHA `e5e7d3a` from the runs quoted above. Every count is
@@ -1619,3 +1828,10 @@ These replace or extend the numbered Limits above:
   list checks and lookup mutants, which were run at `4cee7a8` (the contracts tree is the
   same). Only fakes were used, with no Docker; `tests/d` was not run. Status is still
   "implemented (fakes)". Nothing is integrated or live-verified.
+- 2026-09-23: Round 3 (confirmation fix_required at `a786af7`) appended at implementation SHA
+  `66effa6`. The whole G list ran at `443a451`, and the one mutant whose case list changed
+  after that was run again by name at `66effa6`. The contracts list checks and the lookup
+  mutants ran at `443a451`, where the contracts tree is the same. Every other count is
+  copied from command output at `66effa6`. In "Limits (round 2)", the G3 Limit 8 line was
+  replaced by R94's. Only fakes were used, with no Docker; `tests/d` was not run. Status is
+  still "implemented (fakes)". Nothing is integrated or live-verified.
