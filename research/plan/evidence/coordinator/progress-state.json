@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:05:53Z",
+  "updated": "2026-09-23T11:07:20Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,9 +17,9 @@
     },
     "D4": {
       "lane": "codex-d4 / codex/d4-stream-journal",
-      "phase": "implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10)",
+      "phase": "HANDED BACK a4598b0 (impl ce7659b); Opus review running (3 lenses + refuters); D5 dispatch at the CONFIRMED head",
       "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md"
+      "note": "0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook"
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
