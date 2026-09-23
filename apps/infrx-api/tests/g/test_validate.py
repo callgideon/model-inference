@@ -189,12 +189,13 @@ def test_media_sec__a_megabyte_model_name_never_reaches_the_store():
 
 
 def test_f_base__an_unserved_model_is_refused_without_naming_what_is_served():
-    """The public id is mapped to a revision; an unknown one is refused with the
-    table's model code, and the message says nothing about which ids exist."""
+    """G1R/R70: a name the catalog does not publish for this credential is `not_found`,
+    and the fixed message says nothing about which names exist."""
     response, calls = post(message(model="someone/else"))
     error = support.error_of(response)
-    assert (response.status_code, error["code"]) == (403, "model_not_entitled")
-    assert error["message"] == "The organization is not entitled to this model."
+    assert (response.status_code, error["code"]) == (404, "not_found")
+    assert error["message"] == "The requested resource was not found."
+    assert "someone" not in response.text
     assert calls == []
 
 
@@ -259,9 +260,11 @@ def test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor():
     auth, request, idem = calls[0]
     assert (auth.org_id, auth.key_id, auth.principal) == (support.ORG, support.KEY, support.KEY)
     assert (request.org_id, request.key_id) == (support.ORG, support.KEY)
-    assert (request.max_output_tokens, request.max_input_tokens) == (512, 32_768 - 512)
-    assert request.model_revision == support.MODEL_REVISION == b.MODEL
-    assert request.model_revision != support.PUBLIC_MODEL
+    # The input ceiling is the context minus the output, bounded by the deployment's
+    # own validated limit (the seeded prod deployment accepts 30,720).
+    assert (request.max_output_tokens, request.max_input_tokens) == (512, 30_720)
+    # G1R: the name the caller asked for, untouched - admission resolves and pins it.
+    assert request.model_revision == support.PUBLIC_MODEL
     assert request.execution_mode is ExecutionMode.sync
     assert request.payload_digest.startswith("sha256:")
     assert (idem.org_id, idem.operation, idem.key) == (support.ORG, "chat.completions", "idem-1")
@@ -294,7 +297,7 @@ def admitted(body=None, **pilot):
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client(**pilot)
     response = tc.post(support.CHAT_PATH, headers=support.AUTH,
-                       json=body or message(model=support.PUBLIC_MODEL))
+                       json=body or message(model=support.MODEL_REVISION))
     assert response.status_code == 202, response.text
     _auth, request, idem = calls[0]
     # The gateway validated at its own instant; the store decides at the database
@@ -326,13 +329,13 @@ def test_dur_admit__the_ingress_deadline_is_one_the_store_can_keep():
 
 def test_dur_admit__an_async_request_gets_the_async_queue_budget():
     _harness, admission = admitted({"messages": [{"role": "user", "content": "hi"}],
-                                    "model": support.PUBLIC_MODEL, "stream": False})
+                                    "model": support.MODEL_REVISION, "stream": False})
     assert admission.budgets.queue_wait_s == 10.0
     harness = FACTORIES["jobstore"]()
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client()
     tc.post(support.CHAT_PATH, headers={**support.AUTH, "Prefer": "respond-async"},
-            json=message(model=support.PUBLIC_MODEL))
+            json=message(model=support.MODEL_REVISION))
     _auth, request, idem = calls[0]
     harness.clock.advance((request.created_at - harness.clock.now()).total_seconds())
     admission = asyncio.run(harness.port.admit(request, idem))
@@ -412,7 +415,7 @@ def test_dur_admit__the_deadline_survives_clock_skew(behind_s):
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client()
     assert tc.post(support.CHAT_PATH, headers=support.AUTH,
-                   json=message(model=support.PUBLIC_MODEL)).status_code == 202
+                   json=message(model=support.MODEL_REVISION)).status_code == 202
     request = calls[0][1]
     harness.clock.advance((request.created_at - harness.clock.now()).total_seconds() - behind_s)
     admission = asyncio.run(harness.port.admit(request, calls[0][2]))
@@ -461,7 +464,7 @@ def test_f_base__max_completion_tokens_alone_is_the_output_ceiling():
     assert tc.post(support.CHAT_PATH, headers=support.AUTH,
                    json=message(max_completion_tokens=512)).status_code == 202
     request = calls[0][1]
-    assert (request.max_output_tokens, request.max_input_tokens) == (512, 32_768 - 512)
+    assert (request.max_output_tokens, request.max_input_tokens) == (512, 30_720)
     for bad in (0, 2_049, -1):
         response = tc.post(support.CHAT_PATH, headers=support.AUTH,
                            json=message(max_completion_tokens=bad))
@@ -470,12 +473,15 @@ def test_f_base__max_completion_tokens_alone_is_the_output_ceiling():
 
 
 def test_f_base__an_omitted_model_goes_through_the_served_map():
-    """The default is mapped like any other public id, not copied through."""
+    """The default is the served `MODEL_ID`, resolved through the catalog like any other
+    name: a default the catalog does not publish is refused, not copied through."""
     tc, calls = client()
-    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
-                   json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 202
-    assert calls[0][1].model_revision == support.MODEL_REVISION
-    assert calls[0][1].model_revision != support.settings().model_id
+    body = {"messages": [{"role": "user", "content": "hi"}]}
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
+    assert calls[0][1].model_revision == support.settings().model_id == support.PUBLIC_MODEL
+    tc, calls = client(model_id="someone/else")
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 404
+    assert calls == []
 
 
 def test_media_sec__an_idempotency_key_is_storable_text():

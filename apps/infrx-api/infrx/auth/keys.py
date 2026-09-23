@@ -27,9 +27,11 @@ class Auth:
         self.misses = OrderedDict()     # key_hash -> (expires_at, None); keys it does not
         self.last_used = OrderedDict()  # key_hash -> ts of the last last_used_at PATCH
 
-    async def authenticate(self, req):
+    async def authenticate(self, req, select="id,org_id,revoked_at"):
         """Returns (api_keys row, error status). The row is None both for the legacy
-        key and when nothing is configured; the status is None when the call is allowed."""
+        key and when nothing is configured; the status is None when the call is allowed.
+        `select` is the columns read: the legacy route keeps F1's three, which every
+        deployed schema has; the pilot ingress adds 0009's audience and scope."""
         s, now = self.rt.settings, self.rt.clock
         token = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
         if s.legacy_key and hmac.compare_digest(token.encode(), s.legacy_key.encode()):
@@ -40,9 +42,13 @@ class Auth:
             return None, 401
         h = hashlib.sha256(token.encode()).hexdigest()
         hit = self.keys.get(h) or self.misses.get(h)
+        if hit is not None and hit[1] is not None and not set(select.split(",")) <= hit[1].keys():
+            # Cached by a narrower `select` (the legacy route's three columns): a miss for
+            # this caller, not an identity without an audience until KEY_TTL.
+            hit = None
         if hit is None or hit[0] < now():
             try:
-                r = await self.rt.sb.get("/api_keys", params={"key_hash": f"eq.{h}", "select": "id,org_id,revoked_at"})
+                r = await self.rt.sb.get("/api_keys", params={"key_hash": f"eq.{h}", "select": select})
                 r.raise_for_status()
                 rows = r.json()
                 hit = (now() + (s.key_ttl if rows else s.miss_ttl), rows[0] if rows else None)

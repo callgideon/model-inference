@@ -116,7 +116,15 @@ def test_api_ops__failures_are_explicit_and_never_retried_blindly(key, tmp_path)
         httpx.Response(429, headers={"retry-after": "7"}),
         completion(),
     ])
-    code, rows, state = sweep(tmp_path, lambda r: next(replies), "--concurrency", "1", n=6)
+    sent = []
+
+    def handler(request):
+        # Exhausted replies answer a status nobody retries, so an extra request shows up as
+        # a count, not as a spent-iterator crash inside the transport.
+        sent.append(request)
+        return next(replies, httpx.Response(599))
+    code, rows, state = sweep(tmp_path, handler, "--concurrency", "1", n=6)
+    assert len(sent) == 7                                     # 6 items + one 429 retry
     assert [(r["status"], r["error_code"]) for r in rows] == [
         ("quarantined", "unsupported_media"), ("quarantined", "idempotency_conflict"),
         ("rerun_required", "idempotency_expired"), ("failed", None), ("failed", None),

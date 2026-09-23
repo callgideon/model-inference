@@ -188,7 +188,8 @@ def test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass():
     calls, accept = support.recorder()
     app, mounted = support.cutover_app(ingress_deps=support.deps(accept=accept))
     tc = TestClient(app)
-    body = {"model": support.PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
+    # The R62 pin: the v1 fake prices it, so admission reaches the key recheck (review H3).
+    body = {"model": support.MODEL_REVISION, "messages": [{"role": "user", "content": "hi"}]}
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
     # the ingress still holds a valid cache entry ...
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
@@ -250,9 +251,9 @@ def test_dur_rls__a_revocation_takes_effect_when_the_cache_expires():
         context(resolved)
 
 
-ORGLESS = (("no org_id", {"id": support.KEY, "revoked_at": None}),
-           ("a null org_id", {"id": support.KEY, "org_id": None, "revoked_at": None}),
-           ("no key id", {"org_id": support.ORG, "revoked_at": None}))
+ORGLESS = (("no org_id", {k: v for k, v in support.ROW.items() if k != "org_id"}),
+           ("a null org_id", {**support.ROW, "org_id": None}),
+           ("no key id", {k: v for k, v in support.ROW.items() if k != "id"}))
 
 
 @pytest.mark.parametrize("name,row", ORGLESS, ids=[r[0] for r in ORGLESS])
@@ -267,8 +268,7 @@ def test_dur_rls__a_malformed_identity_row_fails_closed_without_a_trace():
     typed internal error, and no pydantic validation text reaches anyone."""
     from infrx.contracts import errors as contract_errors
 
-    resolved, _rt = resolver(rows=({"id": support.KEY, "org_id": "NOT-A-UUID",
-                                    "revoked_at": None},))
+    resolved, _rt = resolver(rows=({**support.ROW, "org_id": "NOT-A-UUID"},))
     with pytest.raises(contract_errors.InternalError) as raised:
         context(resolved)
     assert raised.value.code == "internal_error"

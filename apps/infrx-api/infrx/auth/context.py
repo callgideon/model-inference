@@ -1,4 +1,4 @@
-"""`AuthContext` from a bearer API key, on top of F1's bounded caches.
+"""`AuthContextV2` from a bearer API key, on top of F1's bounded caches.
 
 Two rules this module exists to enforce:
 
@@ -21,20 +21,65 @@ Two rules this module exists to enforce:
 Everything else is F1's: the three bounded, insertion-ordered caches, their TTLs
 and the constant-time legacy-key comparison all live in `keys.Auth` and are used
 from here rather than reimplemented, so the cache bounds cannot drift apart.
+
+G1R: the context is contracts-v2's `AuthContextV2`, built by `auth_context` from the
+key row alone - its audience, the individual behind a consumer key, the provider and
+private endpoint a provider dev key is scoped to (D1R 0009's `api_keys` columns). No
+header or body field reaches it, and it carries no wallet: the wallet is resolved from
+this identity by admission (R66). `auth_context` is the one derivation; the headless
+operations surface (G6B) builds its sessions with it too.
 """
 from __future__ import annotations
 
 from ..config import PILOT_AUTH_SETTINGS, PILOT_FORBIDDEN_SETTINGS, RuntimeMisconfigured
 from ..contracts import errors
-from ..contracts.records import AuthContext, Role
+from ..contracts.records import Role
+from ..contracts.v2.records import AuthContextV2, CredentialAudience
 
 # An API key is a machine credential for one organization: it is never a person and
 # never a platform operator, so `by_operator` (r1 R50) can never be true for one.
 API_KEY_ROLE = Role.service
+# What the ingress reads of an `api_keys` row. `created_by` is the individual behind a
+# consumer key that predates 0009's `user_id` column (D1R: legacy keys are not
+# rewritten; D2's admission reads `coalesce(user_id, created_by)` the same way).
+KEY_COLUMNS = "id,org_id,revoked_at,audience,user_id,created_by,provider_org_id,endpoint_id"
+
+
+def auth_context(*, audience, org_id, key_id, user_id=None, provider_org_id=None,
+                 endpoint_id=None, role=API_KEY_ROLE, entitlement_version=0) -> AuthContextV2:
+    """The one derivation of `AuthContextV2` from a trusted key row. Typed refusals only.
+
+    The audience is the row's, and each audience keeps only its own identity: the
+    individual for a consumer key (the wallet owner, R66), the provider and endpoint
+    for a provider dev key (R70), nothing for an operator key. An unknown audience or a
+    consumer key naming no individual is not a credential (`invalid_api_key`); a row
+    the record refuses otherwise is our data, so it is `internal_error` and its values
+    never reach the message.
+    """
+    try:
+        audience = CredentialAudience(audience)
+    except ValueError:
+        raise errors.InvalidApiKey("the credential has no recognised audience") from None
+    if not org_id or not key_id:
+        raise errors.InvalidApiKey("the api_keys row names no organization")
+    consumer = audience is CredentialAudience.consumer
+    if consumer and not user_id:
+        raise errors.InvalidApiKey("a consumer credential names no individual")
+    if audience is CredentialAudience.provider_dev and provider_org_id != org_id:
+        # Its organization scopes idempotency and payloads while its provider's dev wallet
+        # pays: the two must be one workspace (0009 has no CHECK for it yet - D1R).
+        raise errors.InternalError("a provider dev key belongs to its provider's organization")
+    try:
+        return AuthContextV2(audience=audience, org_id=org_id, key_id=key_id, principal=key_id,
+                             role=role, entitlement_version=entitlement_version,
+                             user_id=user_id if consumer else None,
+                             provider_org_id=provider_org_id, endpoint_id=endpoint_id)
+    except ValueError:
+        raise errors.InternalError("the api_keys row is not a valid identity") from None
 
 
 class AuthResolver:
-    """Bearer API key -> `AuthContext`. One per app, like `keys.Auth`."""
+    """Bearer API key -> `AuthContextV2`. One per app, like `keys.Auth`."""
 
     def __init__(self, rt, *, entitlement_version=None) -> None:
         self.rt = rt
@@ -63,9 +108,9 @@ class AuthResolver:
         if missing or forbidden:
             raise RuntimeMisconfigured(self.rt.mode, missing, forbidden=forbidden)
 
-    async def context(self, request) -> AuthContext:
-        """The authenticated tenant, or a typed error. Never a partial identity."""
-        row, status = await self.rt.auth.authenticate(request)
+    async def context(self, request) -> AuthContextV2:
+        """The authenticated credential, or a typed error. Never a partial identity."""
+        row, status = await self.rt.auth.authenticate(request, select=KEY_COLUMNS)
         if status == 401:
             raise errors.InvalidApiKey("the bearer token is missing, unknown or revoked")
         if status is not None:
@@ -76,14 +121,9 @@ class AuthResolver:
             # The shared legacy key, or nothing configured at all: allowed by F1,
             # anonymous, and therefore unmeterable. Not an identity.
             raise errors.InvalidApiKey("the request carries no per-organization identity")
-        org_id, key_id = row.get("org_id"), row.get("id")
-        if not org_id or not key_id:
-            raise errors.InvalidApiKey("the api_keys row names no organization")
-        try:
-            return AuthContext(org_id=org_id, key_id=key_id, principal=key_id, role=API_KEY_ROLE,
-                               entitlement_version=self.entitlement_version(org_id))
-        except ValueError:
-            # A row that is not a valid identity (a non-UUID or uppercase organization)
-            # is our bug, not the caller's, and a pydantic message would quote the row.
-            # Fail closed, typed, and without the row in the text.
-            raise errors.InternalError("the api_keys row is not a valid identity") from None
+        org_id = row.get("org_id")
+        return auth_context(
+            audience=row.get("audience"), org_id=org_id, key_id=row.get("id"),
+            user_id=row.get("user_id") or row.get("created_by"),
+            provider_org_id=row.get("provider_org_id"), endpoint_id=row.get("endpoint_id"),
+            entitlement_version=self.entitlement_version(org_id) if org_id else 0)
