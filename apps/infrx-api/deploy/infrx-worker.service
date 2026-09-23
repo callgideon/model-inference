@@ -27,6 +27,10 @@ ExecStart=/usr/bin/docker run --rm --init --name infrx-worker --network host \
 # margin; systemd waits longer than docker, or it would kill only the client.
 ExecStop=/usr/bin/docker stop -t 330 infrx-worker
 TimeoutStopSec=360
+# W3's semantics for what follows a stop that outlived that budget: SIGTERM to the client
+# first, SIGKILL to the rest of the unit only after it.
+KillSignal=SIGTERM
+KillMode=mixed
 Restart=always
 RestartSec=5
 

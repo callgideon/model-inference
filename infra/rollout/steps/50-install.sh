@@ -13,5 +13,10 @@ set -euo pipefail
 echo "cutover $RELEASE after hosted migrations: $MIGRATION_DIGEST"
 cd /home/ubuntu/model-inference
 [ "$(git -c safe.directory="$PWD" rev-parse HEAD)" = "$RELEASE" ] || { echo "run 40-checkout first" >&2; exit 2; }
+# The engine serves 32 sequences today (the installed unit passes --max-num-seqs 32); the
+# release's serve.sh reads ENGINE_MAX_NUM_SEQS from the env file instead and defaults to 8,
+# so the cutover keeps 32 until W3's sweep decides the value (pass ENGINE_MAX_NUM_SEQS=<n>
+# through ssm.sh to change it). PROCESSING_CACHE_DIR is written by preflight's default.
 INFRX_MODE=pilot RELEASE="$RELEASE" ENGINE=restart ENV_OWNER=ubuntu \
+  INFRX_SET="ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32} ${INFRX_SET:-}" \
   ./apps/infrx-api/deploy/install.sh
