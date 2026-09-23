@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T18:25:08Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T18:41:37Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 2 in progress · 1 remaining (of 30).**
 
@@ -41,6 +41,7 @@ Generated 2026-09-23T18:25:08Z from `tasks.json` (manifest v4) and `progress-sta
 
 - **BACKEND-LOCAL** (requires E3B): not started
 - **BACKEND-READY** (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)
+- **interim-602b1e0** (requires []): not started
 
 ## Inputs that block specific gates (not the coding)
 
@@ -73,7 +74,7 @@ Generated 2026-09-23T18:25:08Z from `tasks.json` (manifest v4) and `progress-sta
 - review E3B2: MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B's two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2 since 2026-09-23T18:16:49Z
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z
-- review I3B-followup: MERGED 90b81c7 (+ 08725c0 IR2-2) after the round-5 verifier pass at a693c6e; merged-tree checks running (i3bf-merged-08725c0.log) since 2026-09-23T18:25:08Z
+- review I3B-followup: MERGED 90b81c7 (+ 08725c0 IR2-2); merged-tree checks green: layer 0 exit 0, recovery 62/9, I3B list 109/107, tests/i 143 since 2026-09-23T18:25:08Z
 - review F-fakes-followup: MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z
 
 ## Checkpoints

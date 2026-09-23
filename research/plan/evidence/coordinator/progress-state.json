@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:41:22Z",
+  "updated": "2026-09-23T18:41:37Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -64,8 +64,11 @@
       ]
     },
     "interim-602b1e0": {
+      "requires": [],
+      "state": "not started",
+      "blocked_by": [],
       "phase": "whole-tree gate running on 602b1e0 (api-test, layer 0, bench, console \u00d74, api-mutants) on d4/Q 55489",
-      "since": "2026-09-23T18:41:22Z"
+      "since": "2026-09-23T18:41:37Z"
     }
   },
   "inputs": [
