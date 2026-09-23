@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T10:13:38Z",
+  "updated": "2026-09-23T10:20:48Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) \u2192 fix round running; then confirmation workflow",
+      "phase": "phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     },
@@ -54,8 +54,8 @@
   },
   "reviews": {
     "W4": {
-      "phase": "fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) \u2192 fix round on the lane; confirmation next",
-      "since": "2026-09-23T09:08:35Z"
+      "phase": "confirmation at b0a44a0 running (round 1 fix_required at db12a5a)",
+      "since": "2026-09-23T10:20:48Z"
     },
     "G4U": {
       "phase": "confirmation at 962b2b1 running (round 1 fix_required at f3c8055)",

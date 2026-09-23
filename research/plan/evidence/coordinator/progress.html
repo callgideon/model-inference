@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:13:38Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:20:48Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>21</b><span>done</span></div>
 <div class="tile prog"><b>7</b><span>in progress</span></div>
@@ -99,10 +99,10 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>D4</code> — codex-d4 / codex/d4-stream-journal — implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10) since 2026-09-23T05:12:27Z — base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md</li>
 <li><code>G2</code> — codex-g2 / codex/g2-chat-relay — HANDED BACK 2d742aa (impl e5e7d3a; fakes, not integrated); Opus review running; cutover diff HELD until D4/D5/M adapters + W-new since 2026-09-23T05:12:27Z — relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters</li>
 <li><code>G4U</code> — codex-g4u / codex/g4u-upload-adapter — fix round HANDED BACK 962b2b1 (impl 6ad81ba; all 13 review items: 2 blocking closed, T1 T3 T4 R2 R3 R4 H2 folded; T2/R5 = M request check_open); confirmation workflow running since 2026-09-23T05:12:27Z — routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)</li>
-<li><code>W4</code> — codex-w4 / codex/w4-measured-tuning — phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) → fix round running; then confirmation workflow since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge</li>
+<li><code>W4</code> — codex-w4 / codex/w4-measured-tuning — phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge</li>
 <li><code>W-new</code> — codex-wnew / codex/w-consumed-parameters — implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2 since 2026-09-23T10:02:48Z — blocks the pilot&#x27;s validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md</li>
 <li><code>G3</code> — codex-g3 / codex/g3-jobs — implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only) since 2026-09-23T10:09:50Z — POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/</li>
-<li>review <code>W4</code> — fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) → fix round on the lane; confirmation next since 2026-09-23T09:08:35Z</li>
+<li>review <code>W4</code> — confirmation at b0a44a0 running (round 1 fix_required at db12a5a) since 2026-09-23T10:20:48Z</li>
 <li>review <code>G4U</code> — confirmation at 962b2b1 running (round 1 fix_required at f3c8055) since 2026-09-23T10:13:38Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
