@@ -15,6 +15,8 @@ What a hook does to the database, and why some of them step around a guard:
 
 * `grant`, `balance`, `active_jobs`, `outbox`, `outbox_kinds`, `journal_bytes`,
   `suspend_org`, `revoke_key`, `unentitle`/`entitle`, `retune` are ordinary writes/reads.
+* `publish` (D3) is the fence plus the publication marker in one transaction, standing for
+  D4's first committed chunk until the journal exists.
 * `unrevoke_key` and `set_price` UNDO things production can never undo (0009 makes a
   revocation one-way; `price_versions` is immutable). They disable exactly that one
   trigger for one statement, as the table owner, in the test database only - they model
@@ -38,7 +40,7 @@ from ..contracts.fakes.support import (DEFAULT_START, CrashAfterCommit, FailureP
                                        SequentialIds)
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import NormalizedRequest, OutboxEvent, OutboxKind, PriceSnapshot
-from .jobstore import PgJobStore, connector
+from .jobstore import PgJobStore, connector, domain_error
 
 USERS = {b.ORG_A: "1a1a1a1a-0000-4000-8000-0000000000a1",
          b.ORG_B: "2b2b2b2b-0000-4000-8000-0000000000b2"}
@@ -239,6 +241,26 @@ def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
             conn.execute("alter table infrx.price_versions enable trigger "
                          "price_versions_immutable")
 
+    async def publish(lease) -> None:
+        """D3's stand-in for D4's first committed chunk (the `publish` hook), until D4's
+        `append` exists: `infrx.fence_lease` and then the publication marker, in ONE
+        transaction - the protocol D4's append must follow. It proves nothing about the
+        journal; it lets the reaper's and cancellation's after-publication paths run."""
+        import psycopg
+        from psycopg.types.json import Jsonb
+        try:
+            with conn.transaction():
+                refusal, = conn.execute(
+                    "select infrx.fence_lease(%s, array['inference'], %s)",
+                    (Jsonb(lease.model_dump(mode="json")),
+                     store.limits.unknown_usage_reconcile_s)).fetchone()
+                if refusal is None:
+                    conn.execute("update infrx.jobs set published = true "
+                                 "where request_id = %s", (lease.job_id,))
+        except psycopg.Error as failed:
+            raise domain_error(failed) from None
+        PgJobStore._answer({"refusal": refusal})
+
     def retune(**changes) -> PilotSettings:
         store.limits = store.limits.replace(**changes)
         return store.limits
@@ -247,7 +269,8 @@ def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
             "outbox_kinds": outbox_kinds, "journal_bytes": journal_bytes,
             "revoke_key": revoke_key, "unrevoke_key": unrevoke_key, "suspend_org": suspend_org,
             "unentitle": unentitle, "entitle": entitle, "set_price": set_price,
-            "retune": retune}
+            "retune": retune, "publish": publish,
+            "unsettleable": lambda: dict(store.unsettleable)}
 
 
 def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],

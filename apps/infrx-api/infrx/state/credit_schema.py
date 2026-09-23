@@ -60,6 +60,20 @@ SEAMS.update({
     # also M3: infrx.delete_media_object_if_idle(text, timestamptz) -> boolean, service_role
 })
 
+# --- D3 (0016): fenced leases, recovery and cancellation. Same conventions as D2's. Each
+# takes one job row FOR UPDATE, then (when it terminalizes) that job's hold, then its
+# wallet - never a wallet before a job row; `recover` takes job rows SKIP LOCKED, one at a
+# time, so it never waits on one while holding a wallet. `terminalize` is D3's fenced
+# prefix only: past the fence it is D5's stub (0A000).
+SEAMS.update({
+    "infrx.claim(jsonb)": (_SERVICE, ()),                 # 06 boundary, body D3
+    "infrx.heartbeat(jsonb)": (_SERVICE, ()),             # 06 boundary, body D3
+    "infrx.cancel(jsonb)": (_SERVICE, ()),                # 06 boundary, body D3
+    "infrx.terminalize(jsonb)": (_SERVICE, ()),           # 06 boundary, fence D3, rest D5
+    "infrx.load_work(jsonb)": (_SERVICE, ()),
+    "infrx.recover(jsonb)": (_SERVICE, ()),
+})
+
 #: The admission lock order (0011). Every D writer takes these in this order; a grant
 #: takes only the last; settlement (D5) takes the wallet without the scope lock.
 LOCK_ORDER = ("pg_advisory_xact_lock(infrx.admission_lock_key())  -- capacity scope",

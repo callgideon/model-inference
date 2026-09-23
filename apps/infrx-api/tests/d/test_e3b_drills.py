@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""E3B's pending drills dr01/dr02 (`tests/integration/backend/test_drills.py` on the E3B
-branch), run here against the real PostgreSQL store with their assertions VERBATIM, so
-they can turn green there by swapping `rig("postgres", …)` for this rig
-(`infrx.state.pgtesting.make_jobstore_factory` on E2's PostgreSQL - integration request).
+"""E3B's pending drills dr01/dr02 (D2) and dr03/dr04/dr09 (D3)
+(`tests/integration/backend/test_drills.py` on the E3B branch), run here against the real
+PostgreSQL store with their assertions VERBATIM, so they can turn green there by swapping
+`rig("postgres", …)` for this rig (`infrx.state.pgtesting.make_jobstore_factory` on E2's
+PostgreSQL - integration request). dr05 (stale append) also needs D4's StreamStore
+(`append`/`read_owned`), so it is not here: its D3 half - a stale generation refused by the
+fence every append must call first - is `tests/d/test_lease_races.py`.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import CrashAfterCommit
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import OutboxKind, SettlementState
+from infrx.contracts.records import IndexEvent, JobState, OutboxKind, SettlementState
 
 from . import pgharness, pgstore
 
@@ -94,4 +97,73 @@ def test_e3b_dr02_a_refused_admission_leaves_nothing_behind() -> None:
             DEFAULTS.journal_job_reserve_bytes            # the one kept job's reservation
         await assert_conserved(h, b.ORG_A, [kept.job_handle])
         await assert_conserved(h, b.ORG_B, [])
+    asyncio.run(body())
+
+
+async def running(h, admission, worker="w1"):
+    lease = await h.port.claim_preparation(admission.request_id, worker)
+    await h.port.prepared(lease, ())
+    return await h.port.claim(admission.request_id, worker)
+
+
+def usage_projections(h, job_id):
+    return h.extra["outbox_kinds"](job_id).count(OutboxKind.usage_projection)
+
+
+# --- D3: the drills E3B names D3 for (verbatim bodies) --------------------------------
+def test_e3b_dr03_a_lost_preparation_worker_is_redispatched_and_fenced() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        dead = await h.port.claim_preparation(admission.request_id, "w1")
+        h.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+        await h.port.recover()
+        kinds = h.extra["outbox_kinds"](admission.request_id)
+        assert kinds == [OutboxKind.prepare_dispatch] * 2, kinds
+        live = await h.port.claim_preparation(admission.request_id, "w2")
+        with pytest.raises(errors.StaleLease):
+            await h.port.prepared(dead, ())
+        queued = await h.port.prepared(live, ())
+        assert queued.state is JobState.queued
+        assert h.extra["outbox_kinds"](admission.request_id).count(
+            OutboxKind.inference_dispatch) == 1
+        await assert_conserved(h, b.ORG_A, [admission.job_handle])
+    asyncio.run(body())
+
+
+def test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await h.port.claim_preparation(admission.request_id, "w1")
+        await h.port.prepared(lease, ())
+        h.failures.crash_after_commit("claim")
+        with pytest.raises(CrashAfterCommit):
+            await h.port.claim(admission.request_id, "w1")
+        h.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        produced = await h.port.recover()
+        events = [item for item in produced if isinstance(item, IndexEvent)]
+        assert [(e.job_id, e.attempt) for e in events] == [(admission.request_id, 1)]
+        second = await h.port.claim(admission.request_id, "w2")
+        assert second.generation == 2
+        assert h.extra["outbox_kinds"](admission.request_id).count(
+            OutboxKind.inference_dispatch) == 2
+        await assert_conserved(h, b.ORG_A, [admission.job_handle])
+    asyncio.run(body())
+
+
+def test_e3b_dr09_cancellation_beats_a_late_completion() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await running(h, admission)
+        cancelled = await h.port.cancel(b.ORG_A, admission.job_handle)
+        assert cancelled.state is JobState.cancelled and cancelled.debit == 0
+        with pytest.raises((errors.AlreadyTerminal, errors.StaleLease)):
+            await h.port.complete(lease, b.outcome(admission.request_id, h))
+        assert usage_projections(h, admission.request_id) == 1
+        await assert_conserved(h, b.ORG_A, [admission.job_handle])
     asyncio.run(body())

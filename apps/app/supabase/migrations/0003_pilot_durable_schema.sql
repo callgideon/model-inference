@@ -21,6 +21,9 @@
 -- (`infrx_test.clock.frozen_at`), behind the same two barriers as the offset. The
 -- conformance cases compare instants exactly (R29's clamp is `min(caller, db_now +
 -- budgets)`), which a clock that keeps moving between two statements cannot satisfy.
+--
+-- D3 amendment 2026-09-23 (R84, in place; unapplied anywhere hosted): jobs_guard permits
+-- exactly held_unknown -> released_platform_absorbed (the 24 h window exit, 02/R21).
 
 create schema if not exists infrx;
 
@@ -336,7 +339,11 @@ begin
     -- rewritable `debit` or `result_ref` on a terminal row is a second settlement
     -- wearing the first one's clothes (02 §7: one usage identity, one settlement).
     if new.outcome_cause is distinct from old.outcome_cause
-       or new.settlement_state is distinct from old.settlement_state
+       -- D3 amendment (in place, see 0016's header): the one exit of the 24 h unknown-usage
+       -- window (02, R21) - released platform-absorbed, never debited.
+       or (new.settlement_state is distinct from old.settlement_state
+           and not (old.settlement_state = 'held_unknown'
+                    and new.settlement_state = 'released_platform_absorbed'))
        or new.usage_certainty is distinct from old.usage_certainty
        or new.debit is distinct from old.debit
        or new.result_ref is distinct from old.result_ref
