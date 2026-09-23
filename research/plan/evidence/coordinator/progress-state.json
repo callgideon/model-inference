@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:25:01Z",
+  "updated": "2026-09-23T03:30:57Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "confirmation PASS; fold-in running; box inventory + capability done (image equals pin); concurrency sweep held (P-04); merge with I2B",
+      "phase": "fold-in done at 4fc1081; writing measured box values (inventory/capability); merge with I2B after its confirmation",
       "since": "2026-09-22T22:37:58Z",
       "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
     },
