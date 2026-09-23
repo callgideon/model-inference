@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T14:47:34Z",
+  "updated": "2026-09-23T14:52:04Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "round 2 cb096fb; confirmation RERUN wf_e024f4f2-8dc running; merges G2's round-3 head when it lands",
+      "phase": "confirmation at cb096fb fix_required (4 blocking: the inherited G2 B1/B2 on the 202 path, 409-before-write unpinned, stream half of the digest rule unpinned, now()/result-object outage unpinned; 6 nonblocking) \u2192 new agent: merge G2 r3 76ba3bb + round 3",
       "since": "2026-09-23T10:09:50Z",
       "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
     },
@@ -68,8 +68,8 @@
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "confirmation rerun at cb096fb running",
-      "since": "2026-09-23T14:18:55Z"
+      "phase": "confirmation fix_required at cb096fb (wf_e024f4f2-8dc; 10 agents; JSON evidence/g/G3-confirm-cb096fb.json) \u2192 round 3 on the G2 r3 merge",
+      "since": "2026-09-23T14:52:04Z"
     },
     "I3B-followup": {
       "phase": "fix_required at d99da09 (wf_cb972a2c-da6 restore lens + wf_28258566-66d drill lens; JSON evidence/i/I3B-followup-review-d99da09.json) \u2192 fix round",

@@ -1,0 +1,521 @@
+{
+  "verdict": "fix_required",
+  "lenses_returned": 2,
+  "head": "cb096fb",
+  "reviews": [
+    {
+      "lens": "admission",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "These claimed counts reproduced at cb096fb in a scratch archive: tests/g/jobs 46 (with the mutants file ignored), tests/g 486 (with the four mutant files ignored), the G3 list 74 passed under INFRX_MUTANTS=all (68 declared + 6), and --list '68 mutants over 42 named cases'. I did not re-run the CLI '68/68 killed' (same runner as the pytest route) or contracts 1011; neither is in this lens.\n\nThe code matches the commit claims. 5c157a2 identity_digest folds only async, and Ingress.validated uses it; POST /v1/jobs goes through _as_async, so chat+Prefer and POST /v1/jobs share one digest. My probes confirm the R94 behaviour on fakes. POST /v1/jobs k, then chat with no Prefer under k: 409 with lookup +1, admit unchanged, no staged/held/outbox write, and the async job completes (legacy; CREDIT is 409 with no write). Chat sync k, then POST /v1/jobs or chat+Prefer under k: 409 with no admit. Chat+Prefer k, then POST /v1/jobs k: 202 replayed, same handle. Stream vs sync under one key: 409 both ways, by payload. Same-mode sync and stream replays: 200 replayed with no admit. Terminal replay via chat+Prefer with a refusing host (legacy): 202 succeeded, 0 fetches, no writes. CREDIT replay deadline_at: one value over 6 retries.\n\nThe PostgreSQL 0011_admission.sql compares the stored mapping hash to p_idem payload_hash only. It never compares it to request.payload_digest, so 'PostgreSQL needs no change' holds for the conflict itself.\n\nTwo places where the evidence departs from what I observed. (1) The merge section's in-flight re-prepare text ('content-addressed and idempotent') omits that a failed re-prepare or recheck answers 400 for, or cancels, a live billable job. This is the known G2-confirm B1/B2, reproduced on the 202 path. (2) The R94 'before any store write' holds on fakes, but no test pins it, and it does not hold on PgJobStore until D5. These are omissions, not invented results.",
+      "cleanup": "Removed both scratch trees I created (/tmp/claude-1000/confirm-g3-admission-1104307 and /tmp/claude-1000/confirm-g3-admission-mut-1174687). Every hand mutant was restored before the next ran; the one I interrupted, the sync-wait mutant, had its relay.py restored from cb096fb and diff-checked. The codex-g3 worktree was never written: git status is clean and HEAD is cb096fb. /tmp/claude-1000/confirm-g3-admission-119336 and its .env.log were not created by this run (different pid), so I left them in place. No Docker, no network, no secrets.",
+      "mutants": [
+        {
+          "name": "mode_left_out_of_the_digest (named)",
+          "edit": "ingress.identity_digest: `if request.execution_mode is not ExecutionMode.async_:` -> `if True:`",
+          "result": "killed",
+          "killed_by": "test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on (plus my probes: sync->async both routes, async->sync legacy and CREDIT, crash-after-commit sync retry)"
+        },
+        {
+          "name": "credit_replay_deadline_from_the_retry (named)",
+          "edit": "jobs.deadline_of: `if replayed: return ceiling` -> `if False:`",
+          "result": "killed",
+          "killed_by": "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
+        },
+        {
+          "name": "replay_readmits (named)",
+          "edit": "fakes/state.py _admit: `replay = self._replay(idem, now, credit=credit)` -> `replay = None`",
+          "result": "killed",
+          "killed_by": "test_dur_admit__two_concurrent_submissions_with_one_key_admit_once (also expired_mapping case)"
+        },
+        {
+          "name": "expired_mapping_readmits (named)",
+          "edit": "fakes/state.py _replay: `raise errors.IdempotencyExpired(...)` -> `return None`",
+          "result": "killed",
+          "killed_by": "test_dur_admit__an_expired_mapping_is_410_and_never_a_new_billable_job"
+        },
+        {
+          "name": "own_mode_folded_for_sync_too",
+          "edit": "identity_digest: `if request.execution_mode is not ExecutionMode.async_:` -> `if False:` (all modes folded)",
+          "result": "killed",
+          "killed_by": "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor (test_validate.py:271 idem.payload_hash == request.payload_digest)"
+        },
+        {
+          "name": "own_mode_folded_for_stream_too",
+          "edit": "identity_digest: `is not ExecutionMode.async_` -> `if request.execution_mode is ExecutionMode.sync:`",
+          "result": "SURVIVED tests/g (486)",
+          "killed_by": "only my probe test_probe_digest_bytes_unchanged_for_sync_and_stream -> ADM-R2-B3"
+        },
+        {
+          "name": "own_mode_read_from_prefer_substring",
+          "edit": "Ingress.validated: fold async when 'respond-async' in raw Prefer header, else plain payload_digest",
+          "result": "SURVIVED tests/g and my probes (near-equivalent)",
+          "killed_by": "none -> ADM-R2-N1"
+        },
+        {
+          "name": "own_post_jobs_digest_as_sync",
+          "edit": "jobs.create_job: relay.accept(auth, normalized, idem.model_copy(update={'payload_hash': normalized.payload_digest}))",
+          "result": "killed",
+          "killed_by": "test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on (plus 7 probes)"
+        },
+        {
+          "name": "own_fold_drops_payload",
+          "edit": "identity_digest: folded = mode value only (payload dropped)",
+          "result": "killed",
+          "killed_by": "test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing"
+        },
+        {
+          "name": "own_fold_not_hashed",
+          "edit": "identity_digest: return payload_digest[:-6]+'a5y0c0' (malformed hash)",
+          "result": "killed",
+          "killed_by": "test_api_modes__respond_async_on_chat_answers_202_only_after_the_commit and ~45 other cases"
+        },
+        {
+          "name": "own_mapped_async_answered_by_sync_wait",
+          "edit": "relay._accept async branch: if admission.replayed: return _Answer(self, job, headers)",
+          "result": "killed (assertion in one case; the other replay cases hang in a sync wait: 60 s timeout rc=124)",
+          "killed_by": "test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetching (assert 200 == 202)"
+        },
+        {
+          "name": "own_lookup_conflict_swallowed",
+          "edit": "relay._lookup: wrap jobs.lookup in `except errors.IdempotencyConflict: return None` (409 only after prepare/stage/admit)",
+          "result": "SURVIVED tests/g (486)",
+          "killed_by": "only my counting probes (async->sync legacy and CREDIT, sync->async both routes, stream vs sync) -> ADM-R2-B2"
+        },
+        {
+          "name": "own_replay_deadline_from_retry_bound",
+          "edit": "deadline_of: replayed returns job.bound - grace_s",
+          "result": "killed",
+          "killed_by": "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
+        },
+        {
+          "name": "own_lookup_skipped_for_async",
+          "edit": "relay.admit: found = None if async else await self._lookup(...)",
+          "result": "killed",
+          "killed_by": "test_dur_admit__a_lost_202_retried_with_its_key_answers_the_same_job, ...terminal_async_replay..., ...two_concurrent..."
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g3 archive cb096fb | tar -x -C /tmp/claude-1000/confirm-g3-admission-1104307 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants --list | tail -1",
+          "exit": 0,
+          "tail": "68 mutants over 42 named cases"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs --ignore=tests/g/jobs/test_jobs_mutants.py",
+          "exit": 0,
+          "tail": "46 passed in 0.89s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py --ignore=tests/g/jobs/test_jobs_mutants.py --ignore=tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "486 passed, 2 warnings in 6.25s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs/test_jobs_mutants.py",
+          "exit": 0,
+          "tail": "74 passed in 198.53s (0:03:18)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g (no ignores)",
+          "exit": 0,
+          "tail": "545 passed, 2 warnings in 159.37s"
+        },
+        {
+          "cmd": "pytest tests/zprobe (own R94/replay probes, first cut)",
+          "exit": 1,
+          "tail": "2 failed, 7 passed: both CREDIT legs hit the in-flight re-prepare (world.work does not complete CREDIT jobs, so the 'terminal' job was in flight) -> 400 media_fetch_failed; led to ADM-R2-B1"
+        },
+        {
+          "cmd": "pytest tests/zprobe/test_probe_inflight.py -s (legacy lost 202, job running, host 403)",
+          "exit": 1,
+          "tail": "legacy 400 media_fetch_failed fetched 1 job running False holds held"
+        },
+        {
+          "cmd": "pytest tests/zprobe/test_probe_more.py -s (CREDIT rotation in flight; PG-interim mode switch)",
+          "exit": 1,
+          "tail": "rotation: 400 invalid_request, outcome cancelled/client_cancelled held_unknown; pg-interim: (409, idempotency_conflict) staged 1 -> 2 admit calls 1 -> 2"
+        },
+        {
+          "cmd": "baseline: pytest tests/g/jobs(no mutants file) tests/g/test_validate.py tests/zprobe/test_probe_admission.py tests/zprobe/test_probe_admission2.py (2 CREDIT-completion probes deselected)",
+          "exit": 0,
+          "tail": "161 passed, 2 deselected, 2 warnings in 2.89s"
+        },
+        {
+          "cmd": "python mut.py (14 hand mutants, R83 shape: anchor count 1, apply, run cases+probes, restore)",
+          "exit": 0,
+          "tail": "13 killed or run; own_mode_folded_for_stream_too killed only by a probe; own_mode_read_from_prefer_substring survived; own_mapped_async_answered_by_sync_wait hung (killed the process)"
+        },
+        {
+          "cmd": "python mut_full.py own_mode_folded_for_stream_too own_mode_read_from_prefer_substring own_lookup_conflict_swallowed (against all of tests/g, 486 set)",
+          "exit": 0,
+          "tail": "stream fold: only the probe fails; prefer substring: rc=0 survived; lookup conflict swallowed: only probes fail"
+        },
+        {
+          "cmd": "timeout 60 per case under own_mapped_async_answered_by_sync_wait",
+          "exit": 1,
+          "tail": "terminal_async_replay: assert 200 == 202 (killed); lost_202/crash/twice/credit/modes/outage: rc=124 (hang)"
+        },
+        {
+          "cmd": "git diff --stat a100aee..cb096fb -- validate.py records.py; grep a100aee ingress idempotency call",
+          "exit": 0,
+          "tail": "no changes; a100aee: idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/confirm-g3-admission-1104307 /tmp/claude-1000/confirm-g3-admission-mut-1174687; git -C codex-g3 status --short",
+          "exit": 0,
+          "tail": "removed; worktree clean at cb096fb"
+        }
+      ]
+    },
+    {
+      "lens": "stream",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "These claims reproduced exactly at cb096fb, with fakes only and no Docker or network: tests/g/jobs 46; tests/g 486 (with the claimed ignores); the G3 list 68/68 killed and --list 68; the four relay files 64, with no gateway-shim import; the G list route-table mutants 5/5. I applied the eight named mutants by hand, and each died on its declared case. mounted_without_relay's declared AttributeError is the router's own reason: jobs.py:327 `relay.on_async` on None, raised inside register with rt.ingress set. 23 reviewer probes pass unmutated: observer send failure at start, identity or first delta (legacy and CREDIT); mid-stream ReplayGap, JournalExpired, ConnectionError and RuntimeError; a disconnect or outside cancel during the pre-header probe; DELETE outage 503 then a retry cancels (legacy and CREDIT); already_terminal re-read outage 503; db_now and read_result outages 503; provider_dev's handle answering byte-identical 404s to another org's consumer key and to an operator key, matching an unknown handle; catch-all/Mount before the router refused, after tolerated; ROUTERS=(health, models, ingress) with and without jobs passes, and the chat check still bites. In every detach probe the job stayed non-terminal with zero store cancel calls, and it later completed. The one overclaim is in the stream-S4 evidence row: 'Jobs.now' and 'the result read' are listed as fixed, but no case pins them (stream-C1). I did not run contracts 1011, and I did not run the G list 298 in full.",
+      "cleanup": "I removed /tmp/claude-1000/confirm-g3-stream-1104580 (the scratch tree, venv, probes and hand harness). Copies of the probe file and the harness are kept in the session scratchpad. The mutant runner left no g3-mutant-* directories in /tmp. The codex-g3 worktree was never modified, and its git status is clean. /tmp/claude-1000/confirm-g3-stream-120147 is not mine (it was created at 13:01 by another run), so I left it in place.",
+      "mutants": [
+        {
+          "name": "events_error_cancels",
+          "edit": "jobs.py _Events.__call__: `await self.relay.cancel(self.job.org_id, self.job.handle, quiet=True)` at top of `except Exception as failure:`",
+          "result": "killed",
+          "killed_by": "suite OBSERVER_FAILS; probes test_probe_observer_send_fails_never_cancels, test_probe_midstream_journal_failure_never_cancels"
+        },
+        {
+          "name": "events_outside_cancel_cancels",
+          "edit": "jobs.py _Events.__call__: `except BaseException: await self.relay.cancel(...quiet=True); raise` before finally",
+          "result": "killed",
+          "killed_by": "suite test_api_modes__an_observer_stopped_from_outside_never_cancels_the_job"
+        },
+        {
+          "name": "delete_quiet",
+          "edit": "jobs.py cancel_job: relay.cancel(..., quiet=True)",
+          "result": "killed",
+          "killed_by": "suite DELETE_OUTAGE; probes test_probe_delete_outage_is_503_untouched_then_retry_cancels (legacy+CREDIT), test_probe_delete_after_completion_with_outcome_read_outage_is_503_then_succeeded"
+        },
+        {
+          "name": "owned_read_outage_is_a_500",
+          "edit": "jobs.py Jobs.owned: drop _dependency",
+          "result": "killed",
+          "killed_by": "suite READ_OUTAGE"
+        },
+        {
+          "name": "probe_outage_is_a_500",
+          "edit": "jobs.py job_events: drop _dependency on the read_owned probe",
+          "result": "killed",
+          "killed_by": "suite READ_OUTAGE"
+        },
+        {
+          "name": "provider_dev_owns_none",
+          "edit": "jobs.py OWNERS = frozenset({consumer})",
+          "result": "killed",
+          "killed_by": "suite test_dur_rls__a_provider_dev_key_owns_its_own_jobs"
+        },
+        {
+          "name": "jobs_route_shadow_tolerated",
+          "edit": "ingress.py: `or any(module != JOBS_MODULE for module in picked)` -> `or False`",
+          "result": "killed",
+          "killed_by": "suite TABLE; probes test_probe_jobs_catch_all_before_the_router_is_refused (3 variants), test_probe_mount_before_the_router_is_refused"
+        },
+        {
+          "name": "mounted_without_relay",
+          "edit": "jobs.py register: `if relay is None:` -> `if False:`",
+          "result": "killed (declared AttributeError confirmed as the router's own reason: jobs.py:327 `relay.on_async = jobs.accepted` on None, raised inside `jobs_router.register(app, rt)` at test_jobs.py:1083 with rt.ingress set)",
+          "killed_by": "suite COMPOSE"
+        },
+        {
+          "name": "R_now_outage_is_a_500",
+          "edit": "jobs.py Jobs.now: `return await self.relay.jobs.db_now()` (no _dependency)",
+          "result": "SURVIVED suite (46 passed); killed only by reviewer probe",
+          "killed_by": "probe test_probe_store_clock_and_result_object_outage_is_503"
+        },
+        {
+          "name": "R_result_object_outage_is_a_500",
+          "edit": "jobs.py job_result: drop _dependency around relay.results.read_result",
+          "result": "SURVIVED suite; killed only by reviewer probe",
+          "killed_by": "probe test_probe_store_clock_and_result_object_outage_is_503"
+        },
+        {
+          "name": "R_pump_domain_error_cancels",
+          "edit": "relay.py pump: cancel(quiet=True) before re-raising a DomainError from read_owned",
+          "result": "killed",
+          "killed_by": "suite OBSERVER_FAILS; probe test_probe_midstream_journal_failure_never_cancels"
+        },
+        {
+          "name": "R_start_failure_cancels",
+          "edit": "jobs.py _Events: try/except around http.response.start that cancels then re-raises",
+          "result": "SURVIVED suite; killed by reviewer probe",
+          "killed_by": "probe test_probe_observer_send_fails_never_cancels[start-legacy]"
+        },
+        {
+          "name": "R_probe_gone_cancels",
+          "edit": "jobs.py job_events: `if await request.is_disconnected(): await relay.cancel(...)` before returning _Events",
+          "result": "survived suite and probe (not exercised: the harness's first receive is http.request, so is_disconnected never sees the disconnect; the code has no pre-header watcher). Probe confirms the unmutated behavior: a disconnect during the probe leaves the job running and it completes",
+          "killed_by": ""
+        },
+        {
+          "name": "R_delete_answers_pre_cancel_row",
+          "edit": "jobs.py cancel_job: status_of(admission, None, ...)",
+          "result": "killed",
+          "killed_by": "suite DELETE, RACE, BODY, DELETE_OUTAGE, PROVIDER_DEV, CREDIT_EVENTS; probe delete_outage"
+        },
+        {
+          "name": "R_picked_skips_delete_and_children",
+          "edit": "ingress.py: picked over JOBS_ROUTES[:2] only",
+          "result": "SURVIVED suite; killed by reviewer probe",
+          "killed_by": "probe test_probe_jobs_catch_all_before_the_router_is_refused[DELETE]"
+        },
+        {
+          "name": "R_already_terminal_read_unwrapped",
+          "edit": "relay.py _cancel already_terminal branch: swallow the re-read failure, return None",
+          "result": "SURVIVED suite; killed by reviewer probe",
+          "killed_by": "probe test_probe_delete_after_completion_with_outcome_read_outage_is_503_then_succeeded"
+        },
+        {
+          "name": "R_observer_bound_finite",
+          "edit": "jobs.py job_of: bound=admission.admitted_at (observer gets a deadline)",
+          "result": "killed",
+          "killed_by": "suite OBSERVER, OBSERVER_STOPPED, UNSTARTED, MATRIX; probes pre-header disconnect, midstream failure"
+        },
+        {
+          "name": "R_observer_bound_day",
+          "edit": "jobs.py job_of: bound=admission.admitted_at + 1 day",
+          "result": "survived (near-equivalent: the store's async deadline ends the job first on fakes)",
+          "killed_by": ""
+        },
+        {
+          "name": "R_operator_404_differs",
+          "edit": "jobs.py owner(): operator gets a different NotFound message",
+          "result": "survived (the operator case pins status and code only, and code and case agree on 404 not_found. The different body reveals no job existence, because handle and unknown still match)",
+          "killed_by": ""
+        },
+        {
+          "name": "G list route-table mutants",
+          "edit": "tests.g.mutants: pilot_serves_the_legacy_route, legacy_route_beside_the_ingress, second_chat_route_tolerated, pattern_route_shadows_the_ingress, chat_route_names_intake",
+          "result": "5/5 killed",
+          "killed_by": "G list named cases"
+        },
+        {
+          "name": "G3 list (CLI)",
+          "edit": "python -m tests.g.jobs.jobs_mutants (all 68)",
+          "result": "68/68 killed",
+          "killed_by": "declared cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-g3 archive cb096fb | tar -x -C /tmp/claude-1000/confirm-g3-stream-1104580; make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs --ignore=tests/g/jobs/test_jobs_mutants.py",
+          "exit": 0,
+          "tail": "46 passed in 0.90s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs",
+          "exit": 0,
+          "tail": "60 passed in 30.63s (46 + 14 mutant self-tests/subset)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py --ignore=tests/g/jobs/test_jobs_mutants.py --ignore=tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "486 passed, 2 warnings in 5.68s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants",
+          "exit": 0,
+          "tail": "68/68 killed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants --list | grep -c",
+          "exit": 0,
+          "tail": "68"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/test_relay_matrix.py tests/g/test_relay_recovery.py tests/g/test_relay_sse.py tests/g/test_relay_sync.py (no gateway-shim import: grep exit 1)",
+          "exit": 0,
+          "tail": "64 passed in 1.30s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.mutants pilot_serves_the_legacy_route legacy_route_beside_the_ingress second_chat_route_tolerated pattern_route_shadows_the_ingress chat_route_names_intake",
+          "exit": 0,
+          "tail": "5/5 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/jobs/test_probe_stream.py (23 reviewer probes, unmutated)",
+          "exit": 0,
+          "tail": "23 passed in 0.61s"
+        },
+        {
+          "cmd": "uv run python hand.py (20 hand mutants over test_jobs.py + test_probe_stream.py)",
+          "exit": 0,
+          "tail": "see mutant table; R_now_outage_is_a_500 / R_result_object_outage_is_a_500 / R_picked_skips_delete_and_children / R_already_terminal_read_unwrapped / R_start_failure_cancels suite=[]"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g (probe file present)",
+          "exit": 1,
+          "tail": "1 failed (test_every_case_is_covered_by_a_mutant: an artefact of my scratch probe file being collected by case_names), 544 passed"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "ADM-R2-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "152-160, 186-189 (Relay.admit: prepare/stage and _admitted run whenever found is None or found[1] is None)",
+      "claim_broken": "Merge f4e697d and the G3 evidence say a lost 202 is answered by R91's lookup. The merge section's 'Scope of never re-fetches media' calls the in-flight re-prepare 'content-addressed and idempotent'. On POST /v1/jobs, a same-key retry of a mapped in-flight job re-fetches and re-checks, and a failure there becomes the answer for a live, billable job.",
+      "evidence": "This is the inherited G2 confirmation B1/B2 (G2-confirm-a786af7.json, fix_required, G2 round 3 dispatched), reproduced on G3's 202 path at cb096fb with fakes. (1) Legacy: POST /v1/jobs key=v with a video, then world.lease() so the job is running. The media host now answers 403 (expired URL). The same-key POST /v1/jobs gets 400 media_fetch_failed, a definitive invalid_request_error: 1 fetch, job state running, hold held, the job runs on and bills. (2) CREDIT: POST /v1/jobs key=c, lease, commit 2 deltas, then relay.active_rate_card_version='rc_rotated_since'. The same-key POST /v1/jobs gets 400 invalid_request, and the RUNNING job ends cancelled/client_cancelled with settlement held_unknown and reconcile_after set. The existing lost-202 case uses a healthy host. The crash-after-commit case covers only an unattached job. No G3 case covers an in-flight replay whose re-prepare or recheck fails. The G3 evidence does not disclose that the failure becomes the answer.",
+      "minimal_fix": "Owned by G2 round 3: a mapped in-flight job is not re-prepared or re-checked, and a replay never cancels it. G3 re-merges that head. Add two POST /v1/jobs cases: in-flight + 403 \u2192 202 replayed with 0 fetches and no new payload; CREDIT running + rotated card \u2192 202 replayed with the job still running. Add a mutant restoring each path. Correct the evidence's 'content-addressed and idempotent' scope line.",
+      "lens": "admission",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I reproduced both scenarios at cb096fb, so the finding stands and is blocking. In relay.py, Relay.admit runs prepare_request and stage whenever `found is None or found[1] is None`, and it runs `_admitted` (the card recheck, the capability check and attach) on that same condition. A job that is mapped and still in flight therefore gets fetched again and checked again on every same-key replay. `_admitted` handles a DomainError by calling `self.cancel(...)`, and a cancelled job is still a live job whose lease may be running.\n\nTo test it I added a temporary test file under tests/g/jobs that used the existing JobsWorld and test_jobs helpers. I deleted it after the run and `git status` is clean. Results:\n(1) Legacy: POST /v1/jobs with a video and key=v returned 202. After `world.lease()` the fetcher answered 403. The same-key POST returned (400, 'media_fetch_failed'), with job.outcome None and the hold still held. The client gets a definitive invalid_request for a job that goes on running and billing.\n(2) CREDIT: POST key=c, lease, commit 'Two' ' people', then set `relay.active_rate_card_version='rc_rotated_since'`. The same-key POST returned (400, 'invalid_request'), and the running job ended cancelled/client_cancelled with settlement_state held_unknown and reconcile_after set.\n\nNo G3 case covers this. The lost-202 test uses a healthy host and a healthy card. The terminal-replay test covers only a settled job, and the crash-after-commit test covers only an unattached job. The G3 evidence (G3-9e3bc71.md, the scope section) calls the in-flight re-prepare 'content-addressed and idempotent'. It does not disclose that a failed fetch or recheck becomes the answer, or that it cancels the running job.\n\nThis is a money and detach hole on the 202 path G3 introduces: a replay can cancel a billable running job and leave its settlement held_unknown, and a live job can be reported to the client as a 400. That makes it blocking. The fix belongs to G2 round 3 (the inherited G2-confirm B1/B2). G3 has to re-merge that head, add the two POST /v1/jobs cases and the mutants, and correct the evidence line.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I could not refute it; both scenarios reproduce at cb096fb. In Relay.admit (relay.py:152-160), prepare_request and stage run whenever found is None or found[1] is None. So a mapped job that is still in flight gets its media re-fetched. _admitted (186-189) also re-runs the CREDIT card and capability rechecks, and any DomainError makes it call self.cancel(..., client_cancelled).\n\nI ran a scratch copy of the codex-g3 apps/infrx-api (the worktree was not modified) against its .venv, using the tests/g/jobs JobsWorld fakes.\n\n(1) Legacy: POST /v1/jobs key=v with rs.VIDEO gives 202. world.lease() starts the job. The fetcher then answers 403. The same-key POST /v1/jobs returns 400 invalid_request_error media_fetch_failed after 1 fetch, while the job is running with its hold held. After world.complete the job is succeeded and settled, so it bills even though the client was told the request was invalid.\n\n(2) CREDIT: POST key=c, then lease, then commit(\"a\",\"b\"), then active_rate_card_version='rc_rotated_since'. The same-key POST returns 400 invalid_request, and the running job is now cancelled/client_cancelled with settlement_state held_unknown and reconcile_after set.\n\nNo G3 case covers an in-flight replay whose re-prepare or recheck fails. The existing cases cover a lost 202 with a healthy host, a terminal replay with a 403, and a crash after commit with no refs attached. The evidence G3-9e3bc71.md:556 calls the re-fetch 'content-addressed and idempotent' and does not say a failure there becomes the answer. This is the same defect as G2-confirm-a786af7 B1/B2 (fix_required), now reachable through G3's 202 path. A retry can cancel a running billed CREDIT job, and a legacy retry gets a definitive 400 for a job that goes on to bill. That is a money hole, so G3 cannot close until it re-merges G2 round 3's fix and adds the two POST /v1/jobs cases.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "ADM-R2-B2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/g/jobs/test_jobs.py",
+      "line": "364-396 (test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on)",
+      "claim_broken": "R94 and 5c157a2 say a key reused across modes is idempotency_conflict at lookup/admit before any store write. No test can kill a 409 that arrives only after prepare, fetch and stage.",
+      "evidence": "Own mutant own_lookup_conflict_swallowed (relay._lookup: except errors.IdempotencyConflict: return None) SURVIVES all of tests/g (486 passed). Under it, the sync retry under an async key fetches the media, stages a new payload object and calls admit, and only admit's replay check answers 409. MODES_409 asserts only the status, one job and one hold. It counts no lookup/admit calls and no staged objects. My probes counting lookup +1, admit unchanged, and staged payloads, by_job and outbox unchanged kill it, in both legacy and CREDIT. The claim is also false on the PostgreSQL path until D5: with lookup refused (param='lookup'), probe: 409, staged payload objects 1\u21922, admit calls 1\u21922. That is R91's interim, and the R94 text does not disclose it.",
+      "minimal_fix": "In MODES_409 (both directions), assert world.failures.count('lookup') == before+1, world.failures.count('admit') unchanged, and staged payloads and media.by_job unchanged across the 409. Add a mutant lookup_conflict_swallowed naming MODES_409. State in Limits/R94 evidence that on PgJobStore the conflict follows prepare/stage until D5's lookup lands.",
+      "lens": "admission",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "nonblocking",
+          "reason": "The mechanism is real, but the finding is not blocking.\n\nI tested it on a scratch copy of cb096fb. I added `except errors.IdempotencyConflict: return None` to `relay._lookup` (apps/infrx-api/infrx/gateway/routes/relay.py:193-208). All of tests/g outside the mutant runner still passed: 531 passed, 14 deselected. So the mutant does survive. The mode-conflict 409 now comes from admit's `_replay`, after prepare and stage. MODES_409 checks only the status, one job and one hold.\n\nIt is not an R94 hole. R94 (08-contracts-v1-encoding.md:254) says the mode goes into the digest \"so `lookup`/`admit` see the conflict before any store write; the fakes and PostgreSQL need no change\". Under the mutant, admit still refuses before any JobStore write: no job, no hold, no attached wait, and the async job runs on. `mode_left_out_of_the_digest` kills a break of that invariant.\n\nThe property that goes untested is R91's: a conflicting key is refused before preparation, so no media is fetched and nothing is staged. R91 comes from G2, not G3:\n- `_lookup` was written in G2 commits 21e7b03 and 367acc3, and G3 round 2 did not change it.\n- The same gap already exists for a changed payload. `test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing` does not count prepare or stage either.\n- The PostgreSQL ordering (prepare and stage before the 409 until D5) is R91's recorded interim, a PENDING line naming D5. The `_lookup` docstring also records it (\"ponytail: interim, D5 lifts it\").\n\nWhat a 409 costs under the mutant is one extra media fetch and one orphan staged payload. No money moves, no tenant is exposed and no job is detached. It also closes no round-1 item and causes no regression.\n\nWorth doing as a follow-up: assert the lookup/admit call counts and the staged count across both 409s (payload and mode), add a `lookup_conflict_swallowed` mutant, and add a line in the G3 Limits noting that on PgJobStore the conflict comes after prepare/stage until D5."
+        },
+        {
+          "refuted": false,
+          "reason": "The gap is real, but it doesn't block. Test: I copied cb096fb to a scratch directory and added `except errors.IdempotencyConflict: return None` to `Relay._lookup` in apps/infrx-api/infrx/gateway/routes/relay.py. All of tests/g still passed (545 passed). No test kills a 409 that arrives only after prepare and stage.\n\nWhy it doesn't block:\n(1) R94's substance is tested, and the mode_left_out_of_the_digest mutant kills it. R94 puts the mode into the idempotency identity. A sync retry is 409 with no wait attached. The async job keeps running with one job and one hold, and the reverse direction is also 409. Under the swallowed-lookup mutant, what the client sees and the store holds is the same: 409, one job, one hold, and the job completes.\n(2) The only extra effect is a wasted media fetch plus an orphaned staged payload object. No money, tenant or detach state is involved, because admit's replay check still refuses before any JobStore write.\n(3) \"The conflict is answered at lookup, before preparation\" comes from R91 (08-contracts-v1-encoding.md: \"a changed payload digest is the same conflict admit raises\"), not from round 2. The same gap was already in the G2/R91 test test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing, which also checks only the status, the job and the hold. The new MODES_409 test follows that existing pattern, so this is not a round-1 item left open and not a regression.\n(4) On PostgreSQL, conflicts arriving after prepare and stage is R91's interim, which R91 already records as PENDING until D5, and the `_lookup` docstring says so.\n\nWhat is actually wrong:\n- The evidence row claims \"before any store write\" (G3-9e3bc71.md:592), which overstates things. It is only true on the fakes and unpinned even there. Staging is a media-store write, and on PgJobStore the conflict follows prepare and stage until D5.\n- Neither the lookup-before-prepare conflict nor the mode conflict has a killing test.\n\nSuggested follow-up, not blocking: in MODES_409 and the changed-payload test, assert that the lookup count rises by 1, the admit count is unchanged, and staged payloads and by_job are unchanged. Add a lookup_conflict_swallowed mutant, and reword the R94 evidence line to say \"before any JobStore write; on PostgreSQL after prepare/stage until D5 (R91 interim)\".",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    },
+    {
+      "id": "ADM-R2-B3",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/ingress.py",
+      "line": "175-185 (identity_digest)",
+      "claim_broken": "5c157a2's docstring and the evidence say 'Sync and stream keep the payload digest itself (their identity is unchanged)', and that G1R's idem.payload_hash == request.payload_digest still holds for them. The sync half is pinned. The stream half is not.",
+      "evidence": "Own mutant own_mode_folded_for_stream_too (`if request.execution_mode is ExecutionMode.sync:` in place of `is not ExecutionMode.async_`) SURVIVES all of tests/g (486). Only my probe test_probe_digest_bytes_unchanged_for_sync_and_stream kills it. own_mode_folded_for_sync_too IS killed by the existing test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor (test_validate.py:271). If the stream digest changed, every stream mapping stored before a deploy would 409 against its own retry after it. validate.py and records.py are unchanged a100aee..cb096fb, and a100aee passed normalized.payload_digest, so today the bytes are identical by construction. They are just not pinned.",
+      "minimal_fix": "Add a stream request to the test_validate acceptor case (or a sibling) asserting idem.payload_hash == request.payload_digest with execution_mode stream. Add mutant mode_folded_for_stream naming it.",
+      "lens": "admission",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The finding holds at cb096fb. The code is correct today, but the stream half of the invariant has no test that fails if it breaks.\n\n**What I did:** exported cb096fb with git archive into the scratchpad (the worktree was not touched) and applied the reviewer's mutant to `apps/infrx-api/infrx/gateway/routes/ingress.py:182`. It changes `if request.execution_mode is not ExecutionMode.async_:` to `if request.execution_mode is ExecutionMode.sync:`. I then ran the full `tests/g` suite with the worktree's venv: 545 passed, 0 failed. The mutant survives. (The reviewer counted 486, probably because parametrized cases are counted differently. Either way the whole suite passed.)\n\n**Why nothing catches it:** in tests/g the only assertion on `idem.payload_hash == request.payload_digest` is at `test_validate.py:271`, and that request is sync. Line 266 asserts `ExecutionMode.sync`.\n- The existing mutant `jobs_mutants.py:150` (`if True:`) and `mutants.py:902` (`async_admitted`) exercise the async side only.\n- `tests/d/checks_admission.py:181` compares against the builder's `b.idem(...)`, not the gateway's `identity_digest`, and needs Docker.\n- A folded stream digest is still self-consistent within one deploy: a retry with the same key gets the same hash, so no replay or 409 test notices.\n\n**Why it matters:** the docstring and the round-2 evidence both claim that sync and stream keep the raw payload digest. If stream were folded, every stream idempotency mapping stored before that deploy would return 409 against its own retry afterwards. That is an invariant with no killable test, which the review rubric counts as blocking.\n\n**Fix is test-only:** add a stream case asserting `idem.payload_hash == request.payload_digest`, next to or inside `test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor`, and register the mutant (e.g. `mode_folded_for_stream`) naming that test.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at cb096fb. ingress.py:175-185 identity_digest returns request.payload_digest when execution_mode is not async_, and its docstring says \"Sync and stream keep the payload digest itself (their identity is unchanged)\". The only test that pins digest identity is test_validate.py:268-271, which asserts execution_mode is sync and then idem.payload_hash == request.payload_digest. Nothing in tests/g compares payload_hash with payload_digest for a stream request: grep for payload_hash finds only that line, credit.py (which compares stored hash against idem hash, so it is self-consistent under any digest) and jobs_mutants.py. Experiment: I ran `git archive HEAD` of apps/infrx-api and models into scratch. Unmutated, tests/g gave 545 passed. I then applied the reviewer's mutant (`if request.execution_mode is ExecutionMode.sync:` in place of `is not ExecutionMode.async_`), so stream now gets a folded sha256. tests/g still gave 545 passed. The mutant survives. The code is correct today: the bytes are identical by construction. What is missing is a test: the docstring states an invariant that no test can catch breaking. If it regressed, stream idempotency mappings stored before a deploy would come back as idempotency_conflict (409) on the client's own retry after the deploy. That fits the rubric's \"an invariant with no killable test\", so it is blocking under the stated gate. In practice it is small: no money or tenant hole, and R94's sync/async separation is pinned. The fix is small too: add a stream case asserting idem.payload_hash == request.payload_digest, plus a named mutant mode_folded_for_stream.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "stream-C1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/g/jobs/test_jobs.py",
+      "line": "521-538 (test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503); code jobs.py:97-99, 288",
+      "claim_broken": "Commit 54f6f75 claims S4 is closed on every handle-route store read, naming the owned row, the store clock and the result object. The G3-9e3bc71.md stream-S4 row says `Jobs.owned`/`Jobs.now` (`_dependency`), plus `_dependency` on the result read ... An outage on any handle route's read is a retryable 503. Only the owned-row read (get_owned) and the events journal probe (read_owned) have a killable test. The store-clock read (Jobs.now -> db_now) and the result-object read (relay.results.read_result) are each a claimed new invariant with no case that fails when the invariant breaks.",
+      "evidence": "I applied two reviewer mutants by hand at cb096fb (scratch copy, fakes). R_now_outage_is_a_500 changes `return await _dependency(self.relay.jobs.db_now())` to `return await self.relay.jobs.db_now()`. R_result_object_outage_is_a_500 removes `_dependency` around `relay.results.read_result(...)` in job_result. Both SURVIVED tests/g/jobs/test_jobs.py: 0 suite failures and 46 passed. Only my probe test_probe_store_clock_and_result_object_outage_is_503 killed them. That probe fails db_now for status, result and DELETE, then read_result for result. Unmutated, it passes: each case is 503 dependency_unavailable. The evidence line 'the store-clock and result mutants were re-anchored' refers to result_ttl_on_gateway_clock, status_ttl_on_gateway_clock and result_not_read. None of those three removes the `_dependency` wrap. The code is correct today, so the gap is in the tests, not in behavior.",
+      "minimal_fix": "Extend READ_OUTAGE (or add one case): make world.jobs.db_now raise ConnectionError, and assert status, result and DELETE each answer 503 dependency_unavailable with Retry-After and without the DSN. Make world.read_result raise OSError on a succeeded job and assert result answers 503. Add the mutants now_outage_is_a_500 and result_object_outage_is_a_500 to jobs_mutants.py, both naming that case.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at cb096fb in scratch copies (git archive of apps/infrx-api and models, fakes only, no Docker). The code is correct: jobs.py:99 wraps db_now in _dependency and jobs.py:288 wraps relay.results.read_result. But commit 54f6f75 and the stream-S4 row in G3-9e3bc71.md (line 597) claim that a store-clock or result-object outage is a retryable 503, and no test kills either unwrapping.\n\n(1) Mutant now_outage: `return await self.relay.jobs.db_now()`. The whole tests/g suite passes against it (545 passed), not just test_jobs.py.\n(2) Mutant result_outage: read_result called without the _dependency wrap. Also 545 passed on the whole tests/g.\n\nThese are not equivalent mutants. I added a probe that makes db_now raise ConnectionError on status and result, then makes read_result raise OSError on a succeeded job. Unmutated, it passes: every case is 503 dependency_unavailable. Under now_outage it fails with (500, internal_error) on GET status. Under result_outage it fails with 500 on GET /result.\n\nThe only S4 test, test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503, fails just get_owned and read_owned. jobs_mutants.py has only owned_read_outage_is_a_500 and probe_outage_is_a_500. The re-anchored mutants (result_ttl_on_gateway_clock, status_ttl_on_gateway_clock, result_not_read) never remove the _dependency wrap.\n\nSo a round-2 closure claims two invariants that have no killable test. Behavior is correct today; the gap is in the tests. The fix the reviewer proposes is right: extend READ_OUTAGE with db_now failing on status, result and DELETE, and read_result failing on /result, then add the two named mutants to jobs_mutants.py.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at cb096fb, in a scratch copy of codex-g3/apps/infrx-api run with the worktree's .venv. The code is correct: jobs.py:99 wraps db_now in _dependency, and so does the read_result call at line 288. Tests do not protect either wrap.\n\n1. I applied both reviewer mutants together. Mutant 1 unwraps `return await self.relay.jobs.db_now()`. Mutant 2 unwraps `text = await relay.results.read_result(...)`.\n2. tests/g/jobs/test_jobs.py passed 46/46 with both mutants in place.\n3. I ran all of tests/g except the two mutant-runner modules (tests/g/test_mutants.py, tests/g/jobs/test_jobs_mutants.py). Every non-mutant test passed. The 8 failures were all runner self-checks in tests/g/ops/test_mutants.py, which do not test route behaviour.\n4. The mutants do change behaviour. I wrote a probe that makes world.jobs.db_now raise ConnectionError and calls GET status. With the mutant it answers 500 internal_error, because intake.guard turns an untyped exception into InternalError. On the unmutated code it answers 503 dependency_unavailable.\n\nWhy the tests miss it:\n- READ_OUTAGE (test_jobs.py:521-538) fails only get_owned and read_owned.\n- jobs_mutants.py covers only the owned-row wrap (owned_read_outage_is_a_500) and the journal-probe wrap (probe_outage_is_a_500).\n- result_not_read (jobs_mutants.py:198) replaces the whole read_result line with `text = \"\"`, so it does not test the outage path.\n- Nothing in tests/g makes db_now or read_result raise.\n\nCommit 54f6f75 says S4 covers the store clock and the result object. Those are two claimed invariants that no test can kill. By this review's rubric that is blocking. The fix is test-only: extend READ_OUTAGE, or add one case, and add mutants now_outage_is_a_500 and result_object_outage_is_a_500.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "ADM-R2-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/ingress.py",
+      "line": "160 (Ingress.validated)",
+      "claim_broken": "The digest follows the validated execution_mode, not the raw Prefer header. This is implied, not pinned.",
+      "evidence": "Own mutant own_mode_read_from_prefer_substring folds the mode when 'respond-async' is a substring of Prefer, instead of using normalized.execution_mode. It SURVIVES tests/g. It differs only for Prefer values like 'x-no-respond-async' or 'wait=respond-async', where the request is sync but would get a folded digest. It is near-equivalent (same-header retries still replay), so the risk is low.",
+      "minimal_fix": "Optional: one case where a sync chat with Prefer 'x-no-respond-async' under key k is replayed by a sync chat without Prefer (200 replayed), with a mutant.",
+      "lens": "admission"
+    },
+    {
+      "id": "ADM-R2-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/jobs.py",
+      "line": "122-140 (Jobs.deadline_of, replayed branch)",
+      "claim_broken": "ADM-2 wanted a replay to answer the original acceptance's deadline.",
+      "evidence": "The fix answers the budget ceiling, the same on every retry. My probe ran 6 retries across 3 clock steps with skew changing between them: one distinct deadline_at. When the gateway clock is behind the store's, the first 202 carried the earlier caller bound, so the first 202 and every replay differ. The docstring discloses this, and CREDIT_202 pins it (replay >= stored). It is acceptable as the round-1 minimal fix until F/D exposes the stored CREDIT deadline.",
+      "minimal_fix": "None now. Read the stored deadline once F/D's get_owned_credit carries it (existing integration request).",
+      "lens": "admission"
+    },
+    {
+      "id": "ADM-R2-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/jobs.py",
+      "line": "200-205 (_as_async) with validate.execution_mode",
+      "claim_broken": "The refusal names what the client sent.",
+      "evidence": "POST /v1/jobs with body stream:true is refused 400 'stream and respond-async are mutually exclusive', param='Prefer', but this client sent no Prefer. _as_async injected it. POST_JOBS pins the 400 but not the param.",
+      "minimal_fix": "On the jobs route, refuse stream:true as param='stream' ('POST /v1/jobs is always async'), or document it.",
+      "lens": "admission"
+    },
+    {
+      "id": "stream-C2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/jobs/test_jobs.py",
+      "line": "1097-1140 (test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers)",
+      "claim_broken": "N2 claims 'the route table resolves EACH jobs route as Starlette does'. The shadow case uses only a GET `/v1/{rest:path}` catch-all, and that shadows only GET /v1/jobs/{handle}, /result and /events. A partial check that resolves only the first two JOBS_ROUTES entries (POST /v1/jobs and GET /v1/jobs/{handle}) is not killed by the suite.",
+      "evidence": "Reviewer mutant R_picked_skips_delete_and_children changes `for method, path in JOBS_ROUTES]` to `JOBS_ROUTES[:2]]` in the `picked` list. It SURVIVED the suite (46 passed). My probe test_probe_jobs_catch_all_before_the_router_is_refused[DELETE] killed it: that probe registers a DELETE-only `/v1/jobs/{rest:path}` catch-all before the jobs router. Unmutated, all my route-table probes pass. A GET+POST+DELETE, DELETE-only or GET-only `/v1/jobs/{rest:path}` catch-all registered first is refused, and so is a Mount('/v1/jobs') registered first. A catch-all registered after the router is tolerated, correctly. The whole-check mutant jobs_route_shadow_tolerated is killed by the suite case and by my probes. Latent: no router in ROUTERS registers such a pattern.",
+      "minimal_fix": "In the TABLE case, also register a DELETE-only `/v1/jobs/{rest:path}` catch-all before the jobs router and assert RuntimeMisconfigured. Optionally add the mutant jobs_route_shadow_checked_partially.",
+      "lens": "stream"
+    },
+    {
+      "id": "stream-C3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "296-298 (Relay._cancel, already_terminal branch)",
+      "claim_broken": "S2 says 'never a 200 with the pre-cancel row'. PgJobStore answers a DELETE on a terminal job with already_terminal, and the relay then re-reads the outcome. That branch is never exercised on fakes, because FakeJobStore.cancel returns the outcome directly, so a regression that swallows the re-read failure goes unnoticed.",
+      "evidence": "Reviewer mutant R_already_terminal_read_unwrapped wraps `return (await self._owned(org_id, handle))[1]` in `try/except Exception: return None`. Under it, DELETE answers 200 with the pre-cancel (non-terminal) row for a job that already completed. It SURVIVED the suite (46 passed). My probe test_probe_delete_after_completion_with_outcome_read_outage_is_503_then_succeeded killed it. The probe stubs a cancel that raises AlreadyTerminal and fails the second get_owned. Unmutated, the probe passes: 503 dependency_unavailable, then a retried DELETE answers 200 succeeded/completed. This is G2-owned code and behaves correctly today, so the finding is test coverage only.",
+      "minimal_fix": "Add one DUR-FENCE case: complete the job, then stub world.jobs.cancel to raise errors.AlreadyTerminal (Pg's answer). Fail the re-read get_owned once and assert 503, then assert the retried DELETE answers the committed succeeded outcome. Name the mutant already_terminal_read_swallowed.",
+      "lens": "stream"
+    },
+    {
+      "id": "stream-C4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/jobs/test_jobs.py",
+      "line": "767-797 (test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job)",
+      "claim_broken": "The send-failure detach case pins a failure on the second body message (the first delta) only. A failure on http.response.start, or on the identity frame itself, is a separate send path, and a regression confined to it is not pinned.",
+      "evidence": "Reviewer mutant R_start_failure_cancels wraps the http.response.start send in `try/except Exception: await self.relay.cancel(..., quiet=True); raise`. It SURVIVED the suite (46 passed). My probe test_probe_observer_send_fails_never_cancels[start-legacy] killed it. Unmutated, every variant passes, legacy and CREDIT: start, identity and first_delta each leave the job non-terminal with zero store cancel calls, and legacy then completes as `completed`. The generic events_error_cancels mutant is killed by the suite, so the broad invariant is pinned.",
+      "minimal_fix": "Optional: parametrize the peer_gone case over the failing message (start / identity / first delta).",
+      "lens": "stream"
+    }
+  ]
+}
