@@ -16,6 +16,12 @@ plus its requeues, and none more than one preparation; after every reconcile pas
 job PostgreSQL wants dispatched is in the index. Losing the index is a fresh adapter on
 the memory side and deleting the namespace's keys on the Valkey side.
 
+Not in the stream (review HON-2; each has its own cases in `test_reconcile.py`, on both
+adapters): `switch`, the `run` loop, capacity deferrals (both worlds keep the default
+caps), a mid-batch index outage and a row whose `available_at` is still ahead. The
+outcome counters count operations that reported a key (`reconcile:missing` is passes
+that found something missing), not summed quantities.
+
     uv run --frozen python -m tests.q.q3differential               # 20 seeds x 1000 ops
     uv run --frozen python -m tests.q.q3differential 3 --steps 200
 """
