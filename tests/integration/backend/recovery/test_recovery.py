@@ -945,10 +945,11 @@ def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_
     head = ROLLBACK_COMMANDS[:3 + (probe == "8002")]      # stop, reload, restart (, 8001 ok)
     assert issued[:len(head)] == head, issued
     retries = issued[len(head):]
-    # DRL-1: retried, not tried once; DRL-R3-1: for the whole READY_S budget, not a fixed one
+    # DRL-1: retried, not tried once
     assert len(retries) > 1 and set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, \
         issued
-    assert waited >= 2, f"gave up after {waited:.2f} s of a 3 s READY_S ({len(retries)} probes)"
+    # DRL-R3-1/R4-1: for READY_S (between 2 and 4 s here), not a fixed budget of 1 s or 5 s+
+    assert 2 <= waited < 4, f"gave up after {waited:.2f} s of a 3 s READY_S ({len(retries)} probes)"
     assert on_host(root) == release(IMAGE["previous"])
 
 

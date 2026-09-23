@@ -250,6 +250,10 @@ MUTANTS += (
            'until curl -fsS -o /dev/null --max-time 5 "$1"; do',
            'until curl -fsS -o /dev/null --max-time 5 "$1" '
            '|| curl -fsS -o /dev/null --max-time 5 "$1" || return 1; do', DRILLS, "rc10b"),
+    Mutant("i3bm112", "rc10b (DRL-R4-1): wait_http's budget is READY_S, not a fixed 5 s (an "
+                      "upper bound too)", "apps/infrx-api/deploy/lib.sh",
+           "  local deadline=$((SECONDS + $2))", "  local deadline=$((SECONDS + 5))",
+           DRILLS, "rc10b"),
     Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
                      "snapshot of queued jobs, so the drained job and the queue come back once",
            KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",
