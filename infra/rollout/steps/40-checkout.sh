@@ -4,6 +4,7 @@
 # From here until 50-install replaces the unit, do NOT restart marlin2b-vllm: the unit still
 # installed passes `--max-num-seqs 32`, which the checked-out serve.sh refuses (exit 2), so
 # a restart in this window leaves the engine down until 50-install (or 90-revert) runs.
+# Procedural only: nothing here masks the unit (Restart=always would loop until step 8).
 set -euo pipefail
 : "${RELEASE:?the release commit}"
 repo=/home/ubuntu/model-inference
