@@ -158,8 +158,8 @@ def test_api_stream__a_client_gone_before_the_first_byte_still_cancels():
 
     reply = stream(world, leave=leave, on_send=on_send)
     job = world.only_job()
-    assert (job.state, job.outcome.settlement_state) == (JobState.cancelled,
-                                                          SettlementState.released_free)
+    assert job.state is JobState.cancelled
+    assert job.outcome.settlement_state is SettlementState.released_free
     assert world.jobs.wallet(world.org).reserved_total == 0
     assert len(reply.messages) == 1                              # the failed start only
 
@@ -206,5 +206,19 @@ def test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_str
     reply = stream(world)
     assert reply.text() == "Two people"
     error = [item["error"] for item in reply.data() if isinstance(item, dict) and "error" in item]
-    assert [(e["code"], e["infrx"]["state"]) for e in error] == [("state_conflict", "cancelled")]
+    assert [(e["code"], rs.state_of(e)) for e in error] == [("state_conflict", "cancelled")]
     assert reply.frames[-1] == "data: [DONE]"
+
+
+def test_api_stream__a_journal_read_that_fails_is_retried_not_the_end():
+    """A journal read that fails for want of the database is retried at the next poll: it
+    is neither an empty journal (which could end the stream) nor the end of the job."""
+    world = rs.World()
+    world.failures.fail("read_owned", on_call=2,
+                        error=ConnectionError("postgresql://infrx:secret@db/infrx reset"))
+    world.during.append(world.work)
+    reply = stream(world)
+    job = world.only_job()
+    assert job.state is JobState.succeeded
+    assert reply.text() == world.results[job.id] and reply.data()[-1] == "[DONE]"
+    assert "secret" not in reply.body.decode()

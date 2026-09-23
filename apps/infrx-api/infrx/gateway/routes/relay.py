@@ -295,9 +295,18 @@ class Relay:
             if gone.done():
                 await self.cancel(job.org_id, job.handle, quiet=True)
                 return
-            chunks, cursor = await self.stream.read_owned(job.org_id, job.handle, cursor,
-                                                          self.page)
-            for chunk in chunks:
+            try:
+                chunks, cursor = await self.stream.read_owned(job.org_id, job.handle, cursor,
+                                                              self.page)
+            except errors.DomainError:
+                raise
+            except Exception:
+                # The database, not the job: retried at the next poll, never taken for an
+                # empty journal (which could end the stream) nor for the end of the job.
+                log.warning("journal read of job %s failed; retrying", job.handle,
+                            exc_info=True)
+                chunks = None
+            for chunk in chunks or ():
                 if chunk.event_type is ChunkEventType.terminal:
                     # R30: written by the settling transaction from the stored outcome.
                     outcome = (await self._owned(job.org_id, job.handle))[1]
@@ -310,14 +319,15 @@ class Relay:
             if chunks:
                 delay = self.poll_s
                 continue
-            if ending is not None:
+            if chunks is not None and ending is not None:
                 # D3's terminalizations write no terminal event until D4's trigger lands;
                 # the committed outcome ends the stream once the journal holds nothing more.
                 return await self._finish(job, emit, ending, None)
-            ending = await self._outcome(job)
+            if ending is None:
+                ending = await self._outcome(job)
             if ending is None and self._now() >= job.bound:
                 ending = await self._at_bound(job)
-            if ending is not None:
+            if ending is not None and chunks is not None:
                 continue                    # drain what was committed before it, then end
             if (self._now() - quiet_since).total_seconds() >= self.limits.sse_keepalive_s:
                 await emit(KEEPALIVE)
