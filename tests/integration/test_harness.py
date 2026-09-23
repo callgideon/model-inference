@@ -257,12 +257,14 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
         "permission denied for table credit_ledger",
         "permission denied for table models"}, causes
     # E3B phase 2 item 7: every relation and SECURITY DEFINER function has a row per API role
-    # (`test_services.py` holds the list itself to the migrated catalog).
+    # (`test_services.py` holds the list itself to the migrated catalog); D4's 0017 adds the
+    # invoker `chunk_doc`, the watermark columns per role, their CHECK and the trigger.
     generated = {check.case for check in checks if check.case.startswith("E3B-RLS-")}
-    assert generated == {f"E3B-RLS-{name}-{role}" for name in (*pgstate.RELATIONS,
-                                                               *pgstate.FUNCTIONS)
-                         for role in pgstate.API_ROLES} | {
-        f"E3B-RLS-W-{name}-{role}" for name in pgstate.RELATIONS for role in pgstate.API_ROLES}
+    assert generated == {f"E3B-RLS-{name}-{role}" for name in (
+        *pgstate.RELATIONS, *pgstate.FUNCTIONS, *pgstate.INVOKER_FUNCTIONS,
+        "0017-watermark-columns") for role in pgstate.API_ROLES} | {
+        f"E3B-RLS-W-{name}-{role}" for name in pgstate.RELATIONS for role in pgstate.API_ROLES
+    } | {"E3B-RLS-0017-watermark-check", "E3B-RLS-0017-terminal-trigger"}
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)
