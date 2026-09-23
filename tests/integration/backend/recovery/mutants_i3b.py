@@ -219,6 +219,14 @@ MUTANTS += (
            ROLLBACK, 'tar -C "${ROOT:-/}" -xpf "$backup/files.tar"',
            'tar -C "${ROOT:-/}" -xpf "$backup/files.tar" --exclude=etc/caddy',
            DRILLS, "rc10", layer=2),
+    Mutant("i3bm97", "rc10b (DR-3): a restored runtime that is not ready is exit 4 and the "
+                     "edge is never reloaded", ROLLBACK,
+           'wait_ready "${restored:-legacy}" \\\n', 'wait_ready "${restored:-legacy}" || true \\\n',
+           DRILLS, "rc10b"),
+    Mutant("i3bm98", "rc10b (DR-3): the worker's /readyz is probed only after the gateway's "
+                     "answered, and a gateway that never answers fails the wait",
+           "apps/infrx-api/deploy/lib.sh", '"${READY_S:-120}" && wait_http "$WORKER_READY"',
+           '"${READY_S:-120}"; wait_http "$WORKER_READY"', DRILLS, "rc10b and 8001"),
     Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
                      "snapshot of queued jobs, so the drained job and the queue come back once",
            KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",

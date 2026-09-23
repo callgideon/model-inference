@@ -636,8 +636,10 @@ UNITS = ("marlin2b-vllm.service", "marlin2b-gateway.service", "infrx-worker.serv
 # What install.sh step 3 backs up (and rollback.sh restores): the env file, the edge, the units.
 BACKED_UP = (ENV_FILE, "etc/caddy/Caddyfile", "etc/caddy/infrx/Caddyfile",
              "etc/caddy/infrx/Caddyfile.maintenance", *(f"etc/systemd/system/{u}" for u in UNITS))
-# The host's binaries rollback.sh calls, stubbed: each records its argv and succeeds.
-STUB = '#!/usr/bin/env bash\necho "$(basename "$0") $*" >> "$INFRX_I3B_EVENTS"\n'
+# The host's binaries rollback.sh calls, stubbed: each records its argv and succeeds, except
+# a call naming $INFRX_I3B_FAIL (rc10b: a readiness probe that never answers).
+STUB = ('#!/usr/bin/env bash\necho "$(basename "$0") $*" >> "$INFRX_I3B_EVENTS"\n'
+        'case "$*" in *"${INFRX_I3B_FAIL:-<none>}"*) exit 1 ;; esac\n')
 IMAGE = {"previous": "sha256:" + "a" * 64, "current": "sha256:" + "b" * 64}
 
 
@@ -676,10 +678,11 @@ def on_host(root: Path) -> dict[str, str]:
     return {path: (root / path).read_text() for path in BACKED_UP if (root / path).exists()}
 
 
-def rollback_sh(tmp_path: Path, root: Path, target: Path) -> tuple[subprocess.CompletedProcess,
-                                                                    list[str]]:
+def rollback_sh(tmp_path: Path, root: Path, target: Path,
+                fail: str = "") -> tuple[subprocess.CompletedProcess, list[str]]:
     """I2B's `deploy/rollback.sh <backup>`, unmodified, against the sandbox root, with the
-    stubs first on PATH. Returns its result and the commands it issued, in order."""
+    stubs first on PATH (a call naming `fail` exits 1). Returns its result and the commands
+    it issued, in order."""
     stubs, events = tmp_path / "stub-bin", tmp_path / "events.log"
     if not stubs.exists():
         stubs.mkdir()
@@ -691,7 +694,8 @@ def rollback_sh(tmp_path: Path, root: Path, target: Path) -> tuple[subprocess.Co
                           capture_output=True, text=True, timeout=60,
                           env={**os.environ, "INFRX_ROOT": str(root),
                                "PATH": f"{stubs}:{os.environ['PATH']}",
-                               "INFRX_I3B_EVENTS": str(events), "POLL_S": "0.01",
+                               "INFRX_I3B_EVENTS": str(events), "INFRX_I3B_FAIL": fail,
+                               "POLL_S": "0.01",
                                "READY_S": "1"})
     return done, (events.read_text().splitlines() if events.exists() else [])
 
@@ -792,3 +796,27 @@ def test_i3b_rc10_a_rollout_rollback_loses_no_job_and_restores_the_previous_runt
         bk.apply(database, bk.migrations(1, 9999))
         with bk.connect(database) as conn:
             kit.run(lambda: body(conn))
+
+
+@pytest.mark.parametrize("probe", ("8001", "8002"))
+def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_the_edge(
+        tmp_path, probe):
+    """rollback.md step 4, exit 4 (DR-3): the restored runtime restarts but one readiness
+    probe never answers - the gateway's (8001) or the worker's (8002). rollback.sh gives up
+    after READY_S with exit 4 and never touches the edge (no `docker` call, so the running
+    Caddy keeps serving what it served and the operator stays in maintenance); the probe
+    after a failed one is never reached. The files are already the previous release's: the
+    restore precedes the probe. Stubs and sandbox as rc10; no database."""
+    root = tmp_path / "root"
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))
+    ready = f"http://127.0.0.1:{probe}/readyz"
+    done, issued = rollback_sh(tmp_path, root, previous, fail=ready)
+    assert done.returncode == 4 and "the restored runtime is not ready" in done.stderr, \
+        (done.returncode, done.stderr)
+    head = ROLLBACK_COMMANDS[:3 + (probe == "8002")]      # stop, reload, restart (, 8001 ok)
+    assert issued[:len(head)] == head, issued
+    retries = issued[len(head):]
+    assert retries and set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, issued
+    assert on_host(root) == release(IMAGE["previous"])
