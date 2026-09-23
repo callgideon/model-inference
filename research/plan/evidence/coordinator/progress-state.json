@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T20:58:35Z",
+  "updated": "2026-09-23T21:02:05Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "dispatched (Opus) 2026-09-23T19:2xZ from 7c52627: software half (certify runner, envelope/soak/overload/recovery protocol, release decision, headless examples, capability docs); box-measured half needs the maintenance window",
+      "phase": "software half HANDED BACK 37a4652 (certify runner, protocol, endpoint doc, release decision PENDING; 77 mutants; local certify run green except the two findings B1/B2); one-round review running \u2192 merge; box half after the rollout",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },
@@ -96,6 +96,10 @@
     "M1-L2": {
       "phase": "review at e1bb54f running (Opus adapter/honesty lens + refuters)",
       "since": "2026-09-23T20:58:35Z"
+    },
+    "E4B": {
+      "phase": "review at 37a4652 running (Opus runner/honesty lens + refuters)",
+      "since": "2026-09-23T21:02:05Z"
     }
   },
   "gates": {
