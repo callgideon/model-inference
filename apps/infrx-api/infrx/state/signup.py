@@ -78,11 +78,17 @@ class PgSignup:
 
     async def grant_initial(self, identity: VerifiedIdentity, operation_id: str,
                             at) -> tuple[SignupGrant, bool]:
-        """`at` is the caller's clock; the ledger row takes the database's (`infrx.now()`)."""
-        async with self.pool.connection() as conn, conn.transaction():
-            status, = await (await conn.execute(
-                CLAIM, (identity.user_id, "", operation_id))).fetchone()
-            row = await (await conn.execute(GRANT_ROW, (identity.user_id,))).fetchone()
+        """`at` is the caller's clock; the ledger row takes the database's (`infrx.now()`).
+
+        A grant is answered INSIDE the transaction, so one bound to another org rolls
+        back; a denial is answered after it commits, so its recorded reason survives."""
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                status, = await (await conn.execute(
+                    CLAIM, (identity.user_id, "", operation_id))).fetchone()
+                row = await (await conn.execute(GRANT_ROW, (identity.user_id,))).fetchone()
+                if status in (GRANTED, REPLAYED):
+                    return answer(status, row, identity)
             return answer(status, row, identity)
 
 

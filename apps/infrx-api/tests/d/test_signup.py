@@ -130,6 +130,15 @@ def test_grant_initial__one_transaction_rolled_back_on_refusal() -> None:
         f"a refused answer left the grant committed: {conn.log}"
 
 
+def test_grant_initial__a_denial_commits_its_recorded_reason() -> None:
+    for status, error in (("unverified", errors.NotFound), ("rollout_hold", errors.Forbidden)):
+        conn = _AsyncConn(status, None)
+        with pytest.raises(error):
+            asyncio.run(signup.PgSignup(_Pool(conn)).grant_initial(IDENTITY, OP, AT))
+        assert conn.log[0] == "begin" and conn.log[-1] == "commit", \
+            f"{status}: the denial row was rolled back with the answer: {conn.log}"
+
+
 class FakeRefusal(Exception):
     def __init__(self, sqlstate: str, message: str = "refused"):
         super().__init__(message)
@@ -320,6 +329,8 @@ def test_port__the_g6b_grant_over_postgres() -> None:
                 service.stable_id("signup_grant", "a1-g-1")
             with pytest.raises(errors.NotFound):
                 await session.grant_initial(y, idempotency_key="a1-g-3", reason="login")
+            with pytest.raises(errors.NotFound):
+                await port.grant_initial(VerifiedIdentity(y, z_other, "e"), OP, AT)
             with pytest.raises(errors.Forbidden):
                 await port.grant_initial(VerifiedIdentity(x, z_other, "e"), OP, AT)
             with pytest.raises(errors.Forbidden):
@@ -327,5 +338,7 @@ def test_port__the_g6b_grant_over_postgres() -> None:
 
     asyncio.run(run())
     assert checks_signup.ledger_rows(conn, x) == 1
+    assert checks_signup.denial(conn, y, "unverified") == 1, \
+        "the G6B path rolled back the denial it answered"
     assert checks_credit.wallet_of(conn, z) is None and checks_signup.entitlements(conn, z) == 0, \
         "a refused port answer left z's grant committed"
