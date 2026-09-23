@@ -64,6 +64,8 @@ JOBS_ROUTES = (("POST", "/v1/jobs"), ("GET", "/v1/jobs/{handle}"),
                ("DELETE", "/v1/jobs/{handle}"), ("GET", "/v1/jobs/{handle}/result"),
                ("GET", "/v1/jobs/{handle}/events"))
 JOBS_MODULE = __name__.rpartition(".")[0] + ".jobs"
+# A well-formed handle the route table resolves the jobs paths with (review N2).
+SAMPLE_JOB_HANDLE = ids.JOB_PREFIX + "A" * 43
 OK = "ok"
 UNAVAILABLE = "unavailable"
 
@@ -229,15 +231,29 @@ def assert_route_table(app) -> None:
         mode = getattr(getattr(app.state, "runtime", None), "mode", "")
         raise RuntimeMisconfigured(mode, detail=f"{CHAT_PATH} must have exactly one handler, "
                                                 f"the metered ingress")
-    # G3: the jobs routes, all or none, each with exactly one handler - the jobs router's.
-    jobs = [[route.endpoint.__module__ for route in app.routes
-             if getattr(route, "path", None) == path
-             and method in (getattr(route, "methods", None) or ())]
-            for method, path in JOBS_ROUTES]
-    if any(jobs) and any(found != [JOBS_MODULE] for found in jobs):
+    # G3: the jobs routes, all or none. Each has exactly one declared handler, the jobs
+    # router's, and it is also the route Starlette picks for a concrete handle (review N2, as
+    # for the chat path: a pattern route registered earlier serves without being "at" it).
+    declared = [[route.endpoint.__module__ for route in app.routes
+                 if getattr(route, "path", None) == path
+                 and method in (getattr(route, "methods", None) or ())]
+                for method, path in JOBS_ROUTES]
+    picked = [_picked(app, method, path.replace("{handle}", SAMPLE_JOB_HANDLE))
+              for method, path in JOBS_ROUTES]
+    if any(declared) and (any(found != [JOBS_MODULE] for found in declared)
+                          or any(module != JOBS_MODULE for module in picked)):
         mode = getattr(getattr(app.state, "runtime", None), "mode", "")
         raise RuntimeMisconfigured(mode, detail="each /v1/jobs route must have exactly one "
                                                 "handler, the jobs router's")
+
+
+def _picked(app, method: str, path: str) -> str | None:
+    """The module of the handler Starlette would serve `method path` with: the first route
+    that matches fully."""
+    scope = {"type": "http", "path": path, "root_path": "", "method": method}
+    first = next((route for route in app.routes if route.matches(scope)[0] is Match.FULL),
+                 None)
+    return getattr(getattr(first, "endpoint", None), "__module__", None)
 
 
 def register(app, rt, deps: IngressDeps | None = None):
