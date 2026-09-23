@@ -2505,7 +2505,7 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  from infrx.rate_card_versions c where c.deployment_revision_id = (select\n"
        "    x.deployment_revision_id from infrx.rate_card_versions x where x.rate_card_version\n"
        "    = p_card) order by c.effective_at desc, c.created_at desc limit 1;",
-       "admission", "credit_rate", "a job is charged a card published while it ran (R68)"),
+       "admission", "credit_admitted_card", "a job is charged a card published while it ran (R68)"),
     _m("d5_credit_debits_the_usd_wallet", SETTLE, _S_CREDIT_DEBIT,
        "    insert into public.credit_ledger (org_id, delta_usd, kind, request_id, created_at)\n"
        "    values (j.org_id, -p_charged, 'usage', p_id, j.settled_at);\n",
@@ -2538,12 +2538,12 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "      (select to_jsonb(c) from infrx.rate_card_versions c\n"
        "        where c.deployment_revision_id = j.deployment_revision_id\n"
        "        order by c.effective_at desc, c.created_at desc limit 1)),\n    'policy',",
-       "admission", "credit_rate", "the worker is handed the card published now (R68/R78)"),
+       "admission", "credit_admitted_card", "the worker is handed the card published now (R68/R78)"),
     _m("d5_load_work_credit_current_policy", SETTLE,
        "                 from infrx.data_access_policies p where p.policy_version = "
        "j.policy_version));",
        "                 from infrx.data_access_policies p order by p.effective_at desc "
-       "limit 1));", "admission", "credit_rate",
+       "limit 1));", "admission", "credit_admitted_card",
        "a later policy widens what an accepted request allowed"),
     _m("d5_claim_refuses_credit_again", SETTLE,
        "  if j.state <> 'queued' then\n",
@@ -2802,7 +2802,7 @@ _CHECKS = {
     "credit_grid": checks_settle.check_credit_grid,
     "credit_usd_untouched": checks_settle.check_credit_usd_untouched,
     "credit_regimes": checks_settle.check_credit_regimes,
-    "credit_rate": checks_settle.check_credit_rate,
+    "credit_admitted_card": checks_settle.check_credit_rate,
     "credit_retired": checks_settle.check_credit_retired,
     "adjust": checks_operations.check_adjust,
     "allocation": checks_operations.check_allocation,
