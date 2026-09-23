@@ -521,3 +521,32 @@ def check_dispatch_details(conn) -> str:
         return "limit, order, availability, release, fail, dispatch-only ack, latest event, " \
                "phase attempt, either lease kind"
     return ca._in_rollback(conn, body)
+
+
+def check_preparation_claim_race(connect, database: str, rounds: int = 10) -> str:
+    """Review OB-6b: two workers claim the same preparing job at the same instant from two
+    connections - exactly one lease and one `not_claimable`, every round (the job row lock
+    in `claim_preparation` is what serializes them)."""
+    import threading
+    for n in range(rounds):
+        with connect(database) as setup:
+            request = _admitted(setup, ca.World(setup))
+        results: list = []
+        barrier = threading.Barrier(2)
+
+        def attempt(worker: str) -> None:
+            with connect(database) as conn:
+                barrier.wait()
+                results.append(claim(conn, request.request_id, worker)[0])
+
+        workers = [threading.Thread(target=attempt, args=(f"prep-{w}",)) for w in "ab"]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        with connect(database) as cleanup:
+            cleanup.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
+                            (request.request_id,))
+        assert sorted(results, key=str) == sorted([None, "not_claimable"], key=str), \
+            f"round {n}: two concurrent preparation claims answered {results}"
+    return f"{rounds} rounds of two concurrent claims: one lease, one not_claimable each"

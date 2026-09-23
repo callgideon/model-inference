@@ -1375,6 +1375,11 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "admission", "admission_concurrency",
        "concurrent admissions count capacity from stale snapshots and oversubscribe"),
     # --- 0012: preparation and the relay --------------------------------------------
+    _m("d2_claim_preparation_unlocked", DISPATCH,
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid for update;",
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid;",
+       "admission", "preparation_claim_race",
+       "two workers race one preparing job to a duplicate-key error (OB-6b)"),
     _m("d2_prepare_any_generation", DISPATCH,
        "  if a.generation is distinct from (l->>'generation')::int then", "  if false then",
        "admission", "prepare_transition", "a superseded preparation worker queues the job"),
@@ -1696,6 +1701,8 @@ _CHECKS = {
     "credit_terminalization": checks_dispatch.check_credit_job_terminalization_releases_credit,
     "dispatch_relay": checks_dispatch.check_dispatch_relay,
     "dispatch_details": checks_dispatch.check_dispatch_details,
+    "preparation_claim_race": lambda conn: checks_dispatch.check_preparation_claim_race(
+        pgharness.connect, MUT_DB),
     "d2_function_privileges": checks_admission.check_d2_function_privileges,
     "outbox_gc": checks_dispatch.check_outbox_gc,
     "results_and_prompt_tokens": checks_dispatch.check_results_and_prompt_tokens,

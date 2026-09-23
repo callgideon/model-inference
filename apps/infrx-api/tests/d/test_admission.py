@@ -112,3 +112,10 @@ def test_outbox__the_relays_small_print() -> None:
 def test_privileges__d2_helpers_by_nobody_operations_by_service_role_only() -> None:
     """Review SEC-3: the privilege boundary of every D2 function, as one named invariant."""
     print(checks_admission.check_d2_function_privileges(_db()))
+
+
+def test_prepare__two_concurrent_claims_make_one_lease() -> None:
+    """Review OB-6b: the job row lock serializes concurrent preparation claims."""
+    from . import checks_dispatch
+    _db()
+    print(checks_dispatch.check_preparation_claim_race(pgharness.connect, DB))
