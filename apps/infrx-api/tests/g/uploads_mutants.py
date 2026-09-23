@@ -45,7 +45,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("tenant_is_the_key_id", "the upload's org is the key row's org",
        U, "        created = await store.create_upload(context.org_id, body)",
        "        created = await store.create_upload(context.key_id, body)",
-       "test_dur_rls__each_audience_creates_in_its_own_org"),
+       "test_dur_rls__each_audience_creates_in_its_own_org",
+       "test_dur_rls__a_completed_upload_is_usable_only_by_its_org"),
     _m("operator_owns_uploads", "an operator credential creates, writes and completes nothing",
        U, "        if context.audience not in CALLABLE:", "        if False:",
        "test_dur_rls__an_operator_key_owns_no_upload"),
@@ -127,7 +128,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("completion_under_another_id", "completion is scoped by the key's org",
        U, "        ref = await store.finalize_upload(context.org_id, handle)",
        "        ref = await store.finalize_upload(context.key_id, handle)",
-       "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
+       "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404",
+       "test_dur_rls__a_completed_upload_is_usable_only_by_its_org"),
 )
 
 

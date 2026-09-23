@@ -17,6 +17,7 @@ import json
 import pathlib
 
 import httpx
+import pytest
 from fastapi import FastAPI
 
 from infrx.contracts import errors
@@ -531,3 +532,30 @@ def test_media_sec__completion_refusals_leave_in_the_envelope():
     # Refused stays refused: the retry is not a second chance at the digest (M3 aborts).
     assert again.status_code == 409 and code_of(again) == "state_conflict", again.text
     assert oversize.status_code == 413 and code_of(oversize) == "request_too_large"
+
+
+# --- item 5: the M3/G2 seam ----------------------------------------------------------
+def test_dur_rls__a_completed_upload_is_usable_only_by_its_org():
+    """R82 / R61(1): an upload completed over HTTP with org A's key is named in the frozen
+    form the ingress accepts, resolves for org A to the finalized ref, is `not_found` for
+    org B, and an upload not yet completed resolves for nobody."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        ticket = await create(client)
+        handle = created_handle(ticket)
+        assert (await put(client, handle)).status_code == 204
+        assert (await complete(client, handle)).status_code == 200
+        pending = created_handle(await create(client))
+        assert (await put(client, pending)).status_code == 204
+        return ticket.json()["destination_ref"], handle, pending
+
+    ref, handle, pending = run(app, script)
+    assert validate.check_video_ref({"url": ref}) == (ref, False)
+    owned = asyncio.run(store.resolve_owned(ORG_A, handle))
+    assert (owned.org_id, owned.handle, owned.digest, owned.kind) == (ORG_A, handle, DIGEST,
+                                                                      "upload")
+    for org, unusable in ((ORG_B, handle), (ORG_A, pending)):
+        with pytest.raises(errors.NotFound):
+            asyncio.run(store.resolve_owned(org, unusable))
+
