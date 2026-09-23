@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T00:16:27Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T00:19:30Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
@@ -105,4 +105,5 @@ Generated 2026-09-23T00:16:27Z from `tasks.json` (manifest v4) and `progress-sta
 
 - authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)
 - authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step
+- authorized: 2026-09-23: finish in-flight lanes only; no new task dispatch (user instruction, session limits)
 - NOT authorized: nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover

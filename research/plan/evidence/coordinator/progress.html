@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T00:16:27Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T00:19:30Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>11</b><span>done</span></div>
 <div class="tile prog"><b>12</b><span>in progress</span></div>
@@ -131,5 +131,6 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
+<li>authorized: 2026-09-23: finish in-flight lanes only; no new task dispatch (user instruction, session limits)</li>
 <li>not authorized: nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover</li>
 </ul></section></div>
