@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T19:57:28Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T20:11:55Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>27</b><span>done</span></div>
 <div class="tile prog"><b>3</b><span>in progress</span></div>
@@ -99,9 +99,10 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>D5</code> — codex-d5 / codex/d5-terminal-transaction — review running on the committed head c67e4f5 (impl 4bcac3b) while the lane finishes its lists → ONE fix round (+ merge the integration head) → single verifier → MERGE since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items</li>
 <li><code>E4B</code> — codex-e4b / codex/e4b-certify — dispatched (Opus) 2026-09-23T19:2xZ from 7c52627: software half (certify runner, envelope/soak/overload/recovery protocol, release decision, headless examples, capability docs); box-measured half needs the maintenance window since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
 <li><code>CUTOVER</code> — codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3</li>
-<li><code>E3B-phase3</code> — codex-e3b3 / codex/e3b-phase3-bodies — dispatched (Opus) from a0711ac: dr07c/dr07[postgres] now; journeys ×9, dataset resume, dr11 after merging the cutover mount; retire G2-R1; full gate on namespace e3b2 since 2026-09-23T19:29:02Z — namespace e3b2 / 56732</li>
+<li><code>E3B-phase3</code> — codex-e3b3 / codex/e3b-phase3-bodies — cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands since 2026-09-23T19:29:02Z — namespace e3b2 / 56732</li>
 <li><code>BOX</code> — codex-box / codex/box-measure — dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab — W4 phase B (candidate.sh E0/E1[/E3] → decide.py → P-20), E1B L0/L1/L8 in the same maintenance window; L2–L7 + E4B real runs after the rollout (phase 2) since 2026-09-23T19:35:52Z — SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh</li>
 <li><code>M1-L2</code> — codex-objstore / codex/m1l2-object-store — dispatched (Opus) from 43fe900: S3ObjectStore + settings + preflight probe + conformance + adapters_from_env wiring; needed for the box rollout since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub</li>
+<li><code>M-pilot-media</code> — codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
 <li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
