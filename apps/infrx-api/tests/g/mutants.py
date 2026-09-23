@@ -969,6 +969,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except BaseException as refused:",
        "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",
        "test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable"),
+    _m("inflight_replay_rechecked_after_attach", "a replay never rechecks or cancels a job "
+       "that may be running (review r2 money-B2)",
+       R, "        if job.request_id in self.media.by_job:", "        if False:",
+       "test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running"),
+    _m("replay_of_another_process_refused", "a job staged by another process is answered "
+       "as it stands",
+       R, "            return                              # staged by another process: as it stands",
+       "            raise                              # staged by another process: as it stands",
+       "test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running"),
     _m("inflight_replay_skips_completion", "an in-flight replay completes the acceptance",
        R, "        elif found[1] is None:", "        elif False:",
        "test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry",

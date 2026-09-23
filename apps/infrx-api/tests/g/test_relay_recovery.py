@@ -211,6 +211,42 @@ def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry
         assert world.jobs.jobs[job.id].settlement is not None and world.released(job)
 
 
+@pytest.mark.parametrize("restarted", [False, True])
+def test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running(restarted):
+    """Review r2 money-B2. A CREDIT job was accepted (admitted, rechecked, attached) and its
+    answer lost; a worker leased it and committed output; then the deployment's approved
+    card rotated (a redeploy - also after a gateway restart, when this process holds none
+    of the job's media state). The same-key retry is answered from the job: not rechecked
+    against the new card, not re-attached, never cancelled - it gets the job's result."""
+    world = rs.World(regime=CREDIT)
+    dies_before_the_wait(world)
+    first = rs.run(rs.call(world.app, rs.body(), key="k-8"))
+    assert first.status == 500, first.body
+    job, box = world.only_job(), {}
+
+    async def runs():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two ", "people")
+
+    rs.run(runs())
+    if restarted:
+        world.restart()
+    world.relay.active_rate_card_version = "rc_rotated_since"
+
+    async def settles():
+        assert job.state is JobState.running, job.state          # untouched by the replay
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(box["lease"], b.outcome(
+            job.id, world, tokens=Usage.of(1200, 5), result_ref=ref))
+
+    world.during.append(settles)
+    again = rs.run(rs.call(world.app, rs.body(), key="k-8"))
+    assert again.status == 200, again.body
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    assert again.json()["choices"][0]["message"]["content"] == "Two people"
+    assert job.outcome.state is JobState.succeeded and world.released(job)
+
+
 def test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable():
     """CREDIT: the catalog read behind the pinned-revision recheck fails after
     `admit_credit` committed. That is a 503 with the job left, and the same-key retry

@@ -208,10 +208,17 @@ class Relay:
         return found
 
     async def _resume(self, job: _Job, admission) -> None:
-        """The replay of a job in flight (R91; review r2 money-B1). Nothing is prepared or
-        staged: an acceptance this process left unfinished is completed from the record its
-        first acceptance staged (M's staged payload: the prepared request and its refs),
-        never from a fresh preparation."""
+        """The replay of a job in flight (R91; review r2 money-B1/B2). Nothing is prepared or
+        staged. Only an acceptance this process provably left unfinished is completed, from
+        the record its first acceptance staged (M's staged payload: the prepared request
+        and its refs): a job whose payload this process staged and whose refs it never
+        bound. M binds and prepares in this process (Limit 8), so that job cannot have been
+        prepared, let alone run - its rechecks may still refuse, and cancel, it. Any other
+        job in flight (bound, or staged by another process) may be running: it is answered
+        as it stands - no recheck, no attach, never a cancel. (ponytail: the witness is M's
+        in-process binding; when M persists the attach, the gate reads that instead.)"""
+        if job.request_id in self.media.by_job:
+            return                              # bound: it may be preparing or running
         try:
             payload = self.media.staged_payload(job.request_id)
         except errors.NotFound:
