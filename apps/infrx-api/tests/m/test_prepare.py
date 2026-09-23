@@ -313,7 +313,12 @@ def test_preparation_runs_at_most_the_pool_width_at_once(tmp_path):
     async def slow(data):
         live[0] += 1
         peak[0] = max(peak[0], live[0])
-        await asyncio.sleep(0)
+        # M4 fold-in: data: URLs decode in worker threads now, so under load the parts can
+        # reach the probe one at a time; wait up to ~0.2 s for a third one to show up.
+        for _ in range(100):
+            if live[0] > 2:
+                break
+            await asyncio.sleep(0.002)
         live[0] -= 1
         return probe.probe(data)
 
