@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T19:35:52Z",
+  "updated": "2026-09-23T19:57:28Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "CUTOVER": {
       "lane": "codex-cutover / codex/cutover-mount",
-      "phase": "dispatched (Opus) from a0711ac (7c52627 + D5 c67e4f5): mount ingress/uploads/jobs, adapters from settings, retire gateway.py, Caddy proxying, preflight",
+      "phase": "milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3\u20135 (edge proxying, preflight, evidence) in progress at 6cb8ebe+",
       "since": "2026-09-23T19:29:02Z",
       "note": "d3 ports, Q 55492; merges together with E3B phase 3"
     },
@@ -38,6 +38,12 @@
       "phase": "dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab \u2014 W4 phase B (candidate.sh E0/E1[/E3] \u2192 decide.py \u2192 P-20), E1B L0/L1/L8 in the same maintenance window; L2\u2013L7 + E4B real runs after the rollout (phase 2)",
       "since": "2026-09-23T19:35:52Z",
       "note": "SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh"
+    },
+    "M1-L2": {
+      "lane": "codex-objstore / codex/m1l2-object-store",
+      "phase": "dispatched (Opus) from 43fe900: S3ObjectStore + settings + preflight probe + conformance + adapters_from_env wiring; needed for the box rollout",
+      "since": "2026-09-23T19:57:28Z",
+      "note": "compose S3 in namespace e2 if free; else stub"
     }
   },
   "reviews": {
