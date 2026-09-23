@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T01:19:43Z",
+  "updated": "2026-09-23T01:33:07Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "D2": {
       "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "confirmation review of fix round at 0ce4ce6; clean sweep running",
+      "phase": "fix round 2 (MC-1, OB-1b confirmed blocking) after confirmation review of 0ce4ce6",
       "since": "2026-09-22T20:55:35Z",
       "note": "real JobStore over PostgreSQL"
     },
