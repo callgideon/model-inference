@@ -298,6 +298,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "                 ]",
        "test_q3_drain__an_acknowledgment_behind_another_relays_rebuild_fence_is_refused",
        file=OUTBOX_FAKE),
+    # FID-3: the two `dispatch_pending` rules only the SIGKILL drill used to reach.
+    _m("the_store_leaves_a_superseded_row_pending",
+       "a row whose job moved on is acknowledged by the store as superseded",
+       "                self.acknowledged[row.event_id] = now\n"
+       "                self.last_error[row.event_id] = \"superseded\"",
+       "                pass",
+       "test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_slot",
+       file=OUTBOX_FAKE),
+    _m("the_store_filters_before_the_limit",
+       "as in SQL, the limit is applied before the row filter: a superseded row uses a slot",
+       "        for row in rows[:max(1, min(limit, 1000))]:",
+       "        for row in [r for r in rows if wanted(r.kind, self.jobs.jobs[r.aggregate_id]"
+       ".state)][:max(1, min(limit, 1000))]:",
+       "test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_slot",
+       file=OUTBOX_FAKE),
 )
 
 

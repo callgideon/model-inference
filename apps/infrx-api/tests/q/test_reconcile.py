@@ -170,6 +170,29 @@ def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
     run(body)
 
 
+def test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_slot(
+        adapter):
+    """A job prepared before its `prepare_dispatch` row was drained: the row names work
+    the job no longer wants, so the store acknowledges it as `superseded` and hands out
+    nothing - and, as in SQL, it used up the read's `limit` (review FID-3)."""
+    w = rig.world(adapter)
+    w.rec.batch = 1
+
+    async def body():
+        job = await rig.admit(w)
+        (prep_row,) = w.outbox.unacknowledged()
+        w.h.clock.advance(1e-6)                    # the inference row sorts after it
+        await w.jobs.prepared(await w.jobs.claim_preparation(job, "prep"), ())
+        assert await w.rec.drain() == {}
+        assert w.outbox.last_error.get(prep_row) == "superseded"
+        assert await rig.members(w) == {}
+        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+        assert list((await rig.members(w)).values()) == [job]
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
 class AfterEnqueue:
     """An index that runs `action` once, right after the first `enqueue` lands."""
 
