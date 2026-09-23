@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T16:25:21Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T16:27:29Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 26 done · 3 in progress · 1 remaining (of 30).**
 
@@ -69,15 +69,14 @@ Generated 2026-09-23T16:25:21Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — fix round 2 HANDED BACK b0a64e1 (gate red only on I3B ids; 39 e3bm + all e2m killed); confirmation dispatched → MERGE (IR2-1 one commit; IR2-3 R93 dr04 pin; then I3B follow-up with IR2-2) since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges
 - I3B-followup: codex-i3bf / codex/i3b-followup — round-2 confirmation at 662c07c fix_required (DRL-1 readiness retry unpinned; restore lens pass; 8 nonblocking) → round 3 dispatched → single verifier → merge after E3B2 since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)
 - D5: codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- F-fakes-followup: codex-ffakes / codex/f-fakes-followup — round-2 verifier PASS at 0cf5cd6 → MERGE next (after the G3 merged-tree lists) since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
 - review E3B2: round-2 confirmation at b0a64e1 dispatched (gate + honesty lenses) since 2026-09-23T16:05:55Z
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
-- review G3: MERGED b560b51 (+ Makefile 31bfd05) after the round-3 confirmation pass at 9133efe; merged-tree checks running (g3-merged-31bfd05.log) since 2026-09-23T16:04:40Z
+- review G3: MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z
 - review I3B-followup: fix_required at 662c07c (wf_f6e063df-a4a; JSON evidence/i/I3B-followup-confirm-662c07c.json) → round 3 since 2026-09-23T16:04:40Z
-- review F-fakes-followup: verifier pass at 0cf5cd6 (wf_4a397730-fd1; JSON evidence/f/F-fakes-followup-verify-0cf5cd6.json) → merge since 2026-09-23T16:25:21Z
+- review F-fakes-followup: MERGED a2779d1 after the verifier pass at 0cf5cd6; merged-tree checks running (ffakes-merged-a2779d1.log) since 2026-09-23T16:27:29Z
 
 ## Checkpoints
 
