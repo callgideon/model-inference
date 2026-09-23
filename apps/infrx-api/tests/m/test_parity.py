@@ -78,6 +78,8 @@ CLIPS = {
     "mp4-10s": (support.mp4(seconds=10.0), "video/mp4", 20),
     # 10.5 s is 21 frames at 2 fps, rounded up to 22: one temporal patch is two frames.
     "mp4-10.5s-odd-frames": (support.mp4(seconds=10.5), "video/mp4", 22),
+    # Review P1: 5.3 s is 10.6 frames, rounded to 11 then up to 12; truncating gives 10.
+    "mp4-5.3s-rounds-up": (support.mp4(seconds=5.3), "video/mp4", 12),
     "mp4-at-the-cap": (support.mp4(seconds=DEFAULTS.max_video_seconds, width=1920,
                                    height=480), "video/mp4", 240),
     "mov-1s-min-frames": (support.mp4(seconds=1.0, brand=b"qt  "), "video/quicktime", 4),

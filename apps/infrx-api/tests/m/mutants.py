@@ -1187,6 +1187,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "the engine's frame budget for the measured duration is whole temporal patches (10.5 s -> 22)",
        V, "        frames += frames % 2\n", "        pass\n",
        "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
+    _m("budget_frames_truncated",
+       "P1: the engine's frame budget rounds the measured duration (5.3 s -> 12), not truncates",
+       V, "max(s.min_frames, round(seconds * s.fps))", "max(s.min_frames, int(seconds * s.fps))",
+       "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
     # === M3: the object-store port additions (media/store.py) =============================
     _m("keys_ignore_the_prefix", "a listing returns only the prefix it was asked for",
        S, "return sorted(key for key in self.objects if key.startswith(prefix))",
