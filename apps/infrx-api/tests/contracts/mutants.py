@@ -92,9 +92,9 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **five**
-# mutants declare one; the first two and the last are guards whose entire purpose is to
-# stop an untyped error escaping:
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **seven**
+# mutants declare one; all but `DEPLOY-04` and `drop_reason_falls_back_on_truthiness` are
+# guards whose entire purpose is to stop an untyped error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
 #   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
@@ -115,6 +115,10 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # * `load_work_credit_serves_a_legacy_job` - the mirror: a legacy job has no CREDIT terms,
 #   so without the guard `load_work_credit` raises `AttributeError` (on `job.credit.pins`)
 #   out of the port instead of the typed `not_found` (F2P confirmation MONEY-C1).
+# * `surrogates_are_journalable` - without the surrogate clause the fake's own byte measure
+#   (`compact_bytes`) raises `UnicodeEncodeError` out of `append` instead of the typed
+#   `journal_write_failed`, as jsonb's untyped 22P02 would on PostgreSQL: that escape is
+#   the defect (F fakes follow-up review H1).
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -364,7 +368,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("surrogates_are_journalable", "a lone surrogate is refused (D4 A2)",
        S, '        return "\\x00" not in value and not any("\\ud800" <= char <= "\\udfff" for char in value)',
        '        return "\\x00" not in value',
-       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch",
+       dies_by=("UnicodeEncodeError",)),
     _m("keys_are_not_checked", "a NUL in a key is refused (D4 M1)",
        S, "_journalable(key) and _journalable(item)", "_journalable(item)",
        "dur_output__an_unjournalable_event_refuses_the_whole_batch"),

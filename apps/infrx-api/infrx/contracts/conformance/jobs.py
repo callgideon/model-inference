@@ -3167,9 +3167,6 @@ async def dur_output__an_unjournalable_event_refuses_the_whole_batch(factory):
                 await harness.port.append(lease, batch)
             except errors.JournalWriteFailed:
                 pass
-            except Exception as untyped:          # noqa: BLE001 - jsonb's raw 22P05/22P02
-                raise AssertionError(f"{payload!r} was answered {type(untyped).__name__}, "
-                                     f"not journal_write_failed") from untyped
             else:
                 raise AssertionError(f"the journal stored an unjournalable payload {payload!r}")
     page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
