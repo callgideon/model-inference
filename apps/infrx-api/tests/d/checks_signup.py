@@ -485,6 +485,13 @@ def check_retirement(conn) -> str:
                      "('team', 'a1-retire-team', %s) returning id", (t,))
     conn.execute("insert into public.org_members (org_id, user_id, role) values "
                  "(%s, %s, 'owner'), (%s, %s, 'member')", (team, t, team, o))
+    # The scope is created AND alone owned: t's solo side org goes; one t solely owns but
+    # o created stays.
+    solo, kept = (one(conn, "insert into public.organizations (name, slug, created_by) "
+                            "values (%s, %s, %s) returning id", (name, f"a1-retire-{name}", by))
+                  for name, by in (("solo", t), ("kept", o)))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values "
+                 "(%s, %s, 'owner'), (%s, %s, 'owner')", (solo, t, kept, t))
 
     first = retire(conn, t)
     assert retire(conn, t, "retire-2") == first, "a second retirement changed the record"
@@ -499,9 +506,13 @@ def check_retirement(conn) -> str:
         "retired", "the personal organization still carries the individual's name"
     assert one(conn, "select count(*) from infrx.audit_entries where target_org_id = %s and "
                      "action = 'admin_set_suspension'", (ot,)) == 1, "suspension not audited"
-    assert conn.execute("select name, suspended from public.organizations where id = %s",
-                        (team,)).fetchone() == ("team", False), \
+    org_state = "select name, suspended from public.organizations where id = %s"
+    assert conn.execute(org_state, (team,)).fetchone() == ("team", False), \
         "a shared organization the individual created was retired with them"
+    assert conn.execute(org_state, (solo,)).fetchone() == ("retired", True), \
+        "a side organization the individual created and alone owns stays active"
+    assert conn.execute(org_state, (kept,)).fetchone() == ("kept", False), \
+        "an organization the individual owns but did not create was retired"
     refused(conn, "a retired wallet reserves", spend, "23514", "frozen")
     assert attempt(conn, checks_credit.credit_job(uid(6, 91), "job_a1_other", oo, wo) + ";\n"
                    + checks_credit.hold(uid(6, 91), oo, wo)) is None, \
@@ -538,7 +549,8 @@ def check_retirement(conn) -> str:
         f"a re-created account with a granted address: {again}"
     refused(conn, "retiring nobody", f"select infrx.retire_individual('{uuid.uuid4()}', 'o', "
                                      "'r', 'k')", "P0002")
-    return ("retirement: anonymised, keys revoked, org suspended (a shared one kept), wallet "
+    return ("retirement: anonymised, keys revoked, created+alone-owned orgs suspended (shared and "
+            "not-created kept), wallet "
             "frozen (pre-retirement hold settles, adjustment lands), money kept, "
             "idempotent, hard delete refused, re-created address refused")
 

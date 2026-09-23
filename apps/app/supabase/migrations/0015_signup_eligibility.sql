@@ -19,8 +19,8 @@
 --     (its owner, alone): nobody is added to or removed from a bound personal org.
 --   * `infrx.retire_individual` - the deletion policy. A wallet owner is never hard-
 --     deleted (money history is `on delete restrict`); they are retired: profile
---     anonymised, keys revoked, personal org suspended, wallet frozen (no new hold, no
---     signup grant), ledger and entitlement kept.
+--     anonymised, keys revoked, the organizations they created and alone own suspended,
+--     wallet frozen (no new hold, no signup grant), ledger and entitlement kept.
 --
 -- Service role only. No browser role gains anything (R59-4); PostgREST must keep
 -- exposing `public` only, and `claim_signup_grant` is not executable by anon or
@@ -257,8 +257,10 @@ begin
   -- Legacy keys predate `api_keys.user_id`; their individual is `created_by`.
   update public.api_keys set revoked_at = infrx.now()
    where coalesce(user_id, created_by) = p_user and revoked_at is null;
-  -- The personal organizations this individual alone owns: renamed (0001 names one after
-  -- the address's local part), suspended, audited.
+  -- Every organization this individual created and alone owns (the personal one and any
+  -- side org): renamed (0001 names the personal one after the address's local part),
+  -- suspended, audited. One shared with another member, or solely owned but created by
+  -- someone else, is left as is.
   for v_org in
     select o.id from public.organizations o
       join public.org_members m on m.org_id = o.id and m.user_id = p_user and m.role = 'owner'

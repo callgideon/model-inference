@@ -167,6 +167,11 @@ MIGRATION_MUTANTS = (
        "  perform 1 from public.profiles p where p.id = p_user;",
        "signup_retirement_race", "two concurrent deletion requests for one individual: one "
        "fails with 23505"),
+    _m("a1_retirement_ignores_created_by",
+       "     where o.created_by = p_user\n       and not exists",
+       "     where true\n       and not exists",
+       "signup_retirement", "retiring an individual suspends an organization someone else "
+       "created that they happen to own alone"),
     _m("a1_retirement_not_idempotent",
        "  if v_at is not null then\n    return v_at;\n  end if;\n  insert into "
        "infrx.retired_individuals",
