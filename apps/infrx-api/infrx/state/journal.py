@@ -19,6 +19,9 @@ from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import Chunk, Cursor, EngineEvent, Lease, TerminalOutcome
 from .jobstore import Connect, PgJobStore, _outcome
 
+#: Jobs one `expire` pass prunes (0017 clamps it to 1..10000); the next tick takes the rest.
+#: ponytail: a constant; a `PilotSettings` field when an operator needs to tune it.
+EXPIRE_JOBS_PER_PASS = 1000
 #: `records.Chunk`'s fields, in the order `finalize_in_transaction` selects them.
 _CHUNK_FIELDS = ("job_id", "generation", "sequence", "event_type", "payload", "bytes",
                  "persisted_at", "expires_at")
@@ -113,9 +116,9 @@ class PgStreamStore:
 
     async def expire(self, now: datetime | None = None) -> int:
         """Prune chunks past their TTL on the database clock; `now` is a bound at most (R7).
-        Returns how many chunks were removed."""
+        At most `EXPIRE_JOBS_PER_PASS` jobs per call. Returns how many chunks were removed."""
         return int(await self._db._call("expire_journal", {
-            "now": None if now is None else now.isoformat()}))
+            "now": None if now is None else now.isoformat(), "limit": EXPIRE_JOBS_PER_PASS}))
 
     async def usage(self) -> dict[str, int]:
         """`{reserved_bytes, stored_bytes, charged_bytes, chunks}` - the journal readiness

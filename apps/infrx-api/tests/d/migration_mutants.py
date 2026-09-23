@@ -2248,6 +2248,9 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "    'charged_bytes', infrx.journal_bytes_charged(),", "    'charged_bytes', 0,",
        "admission", "usage", "the readiness probe reports a free journal that is full"),
     # --- item 6 ---------------------------------------------------------------------------
+    _m("d4_expire_unbounded_per_pass", JOURNAL,
+       "order by min(c.expires_at), c.job_id limit v_limit", "order by min(c.expires_at), c.job_id",
+       "admission", "expire_clock", "one pruning transaction locks every expired job (H1)"),
     _m("d4_expire_empty_inner_resets_watermark", JOURNAL,
        "    if not found then\n      continue;\n    end if;\n    -- A prefix",
        "    -- A prefix",

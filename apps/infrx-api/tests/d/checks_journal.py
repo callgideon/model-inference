@@ -743,7 +743,17 @@ def check_expire_clock(conn) -> str:
         advance(conn, 1)
         assert expire(conn) == (None, 1), "a chunk outlived its expires_at"
         assert journal(conn, request.request_id) == []
-        return "pruning follows the database clock only"
+        # review H1: a pass prunes at most `limit` jobs; the next pass takes the rest
+        jobs = [running(conn, world, worker=f"w-bound-{n}") for n in range(2)]
+        for _, live in jobs:
+            assert append(conn, live, b.events("x", "y"))[0] is None
+        advance(conn, CHUNK_TTL)
+        for n in (1, 2):
+            assert outcome(conn, "expire_journal", {"now": None, "limit": 1}) == (None, 2), \
+                f"pass {n} with limit 1 did not prune exactly one job's two chunks"
+            assert sorted(len(journal(conn, job.request_id)) for job, _ in jobs) == \
+                [0] * n + [2] * (2 - n), "a pass pruned past its job bound"
+        return "pruning follows the database clock only, a bounded number of jobs per pass"
     return ca._in_rollback(conn, body)
 
 

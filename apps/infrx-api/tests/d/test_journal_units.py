@@ -93,11 +93,12 @@ def test_finalize__the_outcome_is_a_lookup_key_not_content() -> None:
 
 
 def test_expire__passes_the_callers_bound_and_counts() -> None:
-    """A caller's `now` travels as a bound (the SQL never goes past its own clock, R7)."""
+    """A caller's `now` travels as a bound (the SQL never goes past its own clock, R7), and
+    so does the per-pass job bound (review H1)."""
     store, conn = _stream(3, 0)
     assert asyncio.run(store.expire(WHEN)) == 3
-    assert _sent(conn) == {"now": WHEN.isoformat()}, _sent(conn)
-    assert asyncio.run(store.expire()) == 0 and _sent(conn, 1) == {"now": None}
+    assert _sent(conn) == {"now": WHEN.isoformat(), "limit": 1000}, _sent(conn)
+    assert asyncio.run(store.expire()) == 0 and _sent(conn, 1) == {"now": None, "limit": 1000}
 
 
 UNJOURNALABLE = ({"content": "a\x00b"}, {"a\x00b": "key"}, {"logprob": float("nan")},

@@ -69,8 +69,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_nul_inside_a_list_is_sent", "a NUL at any depth is refused",
        "        return all(_journalable(item) for item in value)", "        return True", JSONB),
     _m("expire_drops_the_callers_bound", "a caller's tighter bound is kept (R7)",
-       '            "now": None if now is None else now.isoformat()}))',
-       '            "now": None}))', EXPIRE),
+       '            "now": None if now is None else now.isoformat(), "limit":',
+       '            "now": None, "limit":', EXPIRE),
+    _m("the_pruning_bound_is_not_sent", "one pass prunes at most EXPIRE_JOBS_PER_PASS jobs",
+       '"limit": EXPIRE_JOBS_PER_PASS}))', "}))", EXPIRE),
 )
 
 
