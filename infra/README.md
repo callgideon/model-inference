@@ -736,6 +736,15 @@ runbook that turns these rules into a drilled procedure is matrix row
 5. Every rollback appends to the lock record: trigger, actions, durable state
    before and after, and whether any accepted job changed state.
 
+How I2B's `rollback.sh` applies rule 3: it refuses to put a `pilot` host back on a runtime
+without a pilot mode unless `ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` is given
+(runbook R2, a failed first cutover). That is an **operator attestation, not a check**: the
+script reads only the two env files' modes, and nothing on the host proves that no pilot
+request was accepted (the usage spill is not an admission record). The coordinator
+corroborates it before stating it - a read-only count of the hosted pilot job and ledger
+rows written since the cutover step, which must be zero - and records the statement and
+the count in the lock record (rule 5).
+
 ## 9. Deferred to I4 (not pilot scope)
 
 ALB across ≥ 2 AZs, ACM certificate and WAF (Caddy with Let's Encrypt stays for
@@ -1053,3 +1062,6 @@ target group.
 - 2026-09-23 (I2B review fix S1, local only): §5.2 records the edge admin API moved from
   loopback :2019 to a unix socket in the `caddy_config` volume, and the residual risk (Caddy
   as in-container root with the certificate volume; `docker exec` reaches the socket).
+- 2026-09-23 (I2B review fix M5): §8 states that `rollback.sh`'s unmetered-rollback
+  statement is operator-attested and how the coordinator corroborates it (read-only hosted
+  counts), rather than implying the script verifies it.
