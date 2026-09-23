@@ -1,0 +1,19 @@
+utc=2026-09-23T21:54:51Z
+engine: healthy, args and image = step 1; started=2026-09-23T21:46:44.993193062Z
+restored_file=ff47f706baaaba94ca43c42469f010d730b94da72d5ddc2ca1bcec3385e19706 container_sees=ff47f706baaaba94ca43c42469f010d730b94da72d5ddc2ca1bcec3385e19706
+window_end_utc=2026-09-23T21:54:51Z
+admin_2019_http=200
+edge /health 200
+{"ok":true,"inflight":0}
+gateway={"ok":true,"inflight":0} gateway_unit=active
+engine_args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"]
+engine_image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+42407 MiB, 46068 MiB, 0 %
+
+--- stderr (caddy reload)
+{"level":"info","ts":1790200491.766435,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+{"level":"info","ts":1790200491.767836,"msg":"adapted config to JSON","adapter":"caddyfile"}
+{"level":"warn","ts":1790200491.767849,"msg":"Caddyfile input is not formatted; run 'caddy fmt --overwrite' to fix inconsistencies","adapter":"caddyfile","file":"/etc/caddy/Caddyfile","line":4}
+
+### public route from the coordinator host, 2026-09-23T21:54:59Z
+curl -D - https://marlin2b.callbill.ai/health -> HTTP/2 200, server: uvicorn, via: 1.1 Caddy, body {"ok":true,"inflight":0}

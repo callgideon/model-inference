@@ -1,0 +1,9 @@
+utc=2026-09-23T19:50:42Z engine=http://127.0.0.1:8000 model=marlin2b
+probe=stop_token_ids_accepted result=pass status=200 finish_reason="stop" stop_reason=null completion_tokens=232
+probe=stop_token_ids_honoured result=pass status=200 greedy_ids=[9723, 25, 561, 5918, 369, 716, 303, 264] stop_on=561 finish_reason="stop" stop_reason=561 completion_tokens=3
+probe=cache_salt result=known status=200 wrong_type_status=400 ignored_log=[] wrong_type_error="Parameter 'cache_salt' must be a non-empty string if provided. (parameter=cache_salt)"
+probe=mm_uuids_top_level result=not_run reason="CLIP unset or not a file"
+probe=mm_uuids_per_part result=not_run reason="CLIP unset or not a file"
+probe=file_url_under_allowed_path result=not_run reason="CLIP unset or not a file"
+probe=file_url_outside_refused result=not_run reason="CLIP unset or not a file"
+probe=cancellation result=pass chunks_read=5 running_during=1.0 running_after=0.0 seconds_to_zero=0.11 abort_log=[]

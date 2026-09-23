@@ -1,0 +1,47 @@
+{
+  "caption": "Scene: The video presents a minimalist digital animation sequence set against a dark, uniform background. The primary visual elements are simple geometric shapes, specifically squares, which appear and disappear in various colors including red, blue, green, and yellow. These shapes are positioned in the center of the frame, often accompanied by a small white rectangular icon at the bottom left that resembles a pause or play button. The animation is characterized by smooth transitions and clean lines, suggesting a modern, perhaps educational or instructional, context. The camera remains fixed throughout the entire duration, providing a steady view of the digital display. The sequence is composed of short intervals where shapes are displayed, followed by intervals where the screen is blank or transitions between colors. There are no human subjects or physical objects present, only the digital graphics and the static interface elements. The overall aesthetic is clean and focused, emphasizing the simple interactions between the shapes and the empty space.\n\nEvents:\n<0.5 - 1.5> A red square appears in the center.\n<15.0 - 16.0> The red square disappears from the screen.\n<30.5 - 31.5> A blue square appears in the center.\n<35.5 - 36.5> The blue square disappears from the screen.\n<60.5 - 61.5> A green square appears in the center.\n<75.0 - 76.0> The green square disappears from the screen.\n<90.5 - 91.5> A yellow square appears in the center.\n<104.5 - 105.5> The yellow square disappears from the screen.",
+  "scene": "The video presents a minimalist digital animation sequence set against a dark, uniform background. The primary visual elements are simple geometric shapes, specifically squares, which appear and disappear in various colors including red, blue, green, and yellow. These shapes are positioned in the center of the frame, often accompanied by a small white rectangular icon at the bottom left that resembles a pause or play button. The animation is characterized by smooth transitions and clean lines, suggesting a modern, perhaps educational or instructional, context. The camera remains fixed throughout the entire duration, providing a steady view of the digital display. The sequence is composed of short intervals where shapes are displayed, followed by intervals where the screen is blank or transitions between colors. There are no human subjects or physical objects present, only the digital graphics and the static interface elements. The overall aesthetic is clean and focused, emphasizing the simple interactions between the shapes and the empty space.",
+  "events": [
+    {
+      "start": 0.5,
+      "end": 1.5,
+      "description": "A red square appears in the center."
+    },
+    {
+      "start": 15.0,
+      "end": 16.0,
+      "description": "The red square disappears from the screen."
+    },
+    {
+      "start": 30.5,
+      "end": 31.5,
+      "description": "A blue square appears in the center."
+    },
+    {
+      "start": 35.5,
+      "end": 36.5,
+      "description": "The blue square disappears from the screen."
+    },
+    {
+      "start": 60.5,
+      "end": 61.5,
+      "description": "A green square appears in the center."
+    },
+    {
+      "start": 75.0,
+      "end": 76.0,
+      "description": "The green square disappears from the screen."
+    },
+    {
+      "start": 90.5,
+      "end": 91.5,
+      "description": "A yellow square appears in the center."
+    },
+    {
+      "start": 104.5,
+      "end": 105.5,
+      "description": "The yellow square disappears from the screen."
+    }
+  ],
+  "raw": "Scene: The video presents a minimalist digital animation sequence set against a dark, uniform background. The primary visual elements are simple geometric shapes, specifically squares, which appear and disappear in various colors including red, blue, green, and yellow. These shapes are positioned in the center of the frame, often accompanied by a small white rectangular icon at the bottom left that resembles a pause or play button. The animation is characterized by smooth transitions and clean lines, suggesting a modern, perhaps educational or instructional, context. The camera remains fixed throughout the entire duration, providing a steady view of the digital display. The sequence is composed of short intervals where shapes are displayed, followed by intervals where the screen is blank or transitions between colors. There are no human subjects or physical objects present, only the digital graphics and the static interface elements. The overall aesthetic is clean and focused, emphasizing the simple interactions between the shapes and the empty space.\n\nEvents:\n<0.5 - 1.5> A red square appears in the center.\n<15.0 - 16.0> The red square disappears from the screen.\n<30.5 - 31.5> A blue square appears in the center.\n<35.5 - 36.5> The blue square disappears from the screen.\n<60.5 - 61.5> A green square appears in the center.\n<75.0 - 76.0> The green square disappears from the screen.\n<90.5 - 91.5> A yellow square appears in the center.\n<104.5 - 105.5> The yellow square disappears from the screen."
+}

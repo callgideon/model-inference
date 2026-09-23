@@ -1,0 +1,20 @@
+c95a6d500431aecf69b460ed876e71bfacb6f6890ce421838b33cb9cb676d9b3  /opt/dlami/nvme/w4-logs/backend-impl-37a0d8a.bundle
+The bundle uses this hash algorithm: sha1
+before=517e09da2ac45819c163eb636ce3263a2c085f34 branch=claude/backend-impl
+after=37a0d8ae3671eb9f40db04669b9d0a3fa0320fe8
+W4-protocol.md
+candidate.sh
+capability.sh
+concurrency.sh
+decide.py
+inventory.sh
+parity.py
+1
+6f842bcc71a272495d6329f9cb052a84d680674dbbd3dd666b69f92e353c7bd1  measure/candidate.sh
+54e35478051c961a68cfe800f06f0cd3dc352efa2fcc8bdcec26de7a57c39083  measure/parity.py
+b68ec54345dee9aae07fd09a83ffe9aa82ce523f9125f689efd1b64d23e1d1c9  measure/decide.py
+1c3745e8c73de1882d49647edf10151ae40a4c742f1a4353f5887ff599f81723  measure/concurrency.sh
+9e1f473bd7d8d7ac593468e2e4c4049b0bbff1c78f93cdbf72577b894fb6dd11  serve.sh
+7ecda3c1988d3782249356fe933fc873c896f9cdcdb9bc76da92b7c354cf9c7b  bench.py
+5986371c8116d9839757b46c6decd73af3cc41e02e44935b943a3aa9d46cea20  reference.py
+

@@ -1,0 +1,42 @@
+{
+  "caption": "Scene: The video presents a minimalist loading animation sequence set against a dark, uniform background. A small, square graphic element, which changes color from red to blue, green, and finally pink, serves as the primary visual focus. This square is positioned in the upper-middle section of the frame. Below it, a horizontal bar at the bottom of the screen displays a series of small, white, rectangular icons that function as loading indicators. The animation is characterized by smooth transitions and clean lines, with the square appearing and disappearing in a series of short intervals. The background remains a consistent, dark grey or black throughout, providing a high-contrast backdrop for the vibrant colors of the squares. The camera is fixed, with no movement, ensuring the focus remains entirely on the graphic elements and the loading progress. The overall aesthetic is modern and functional, typical of a web or mobile application's loading phase.\n\nEvents:\n<0.5 - 8.5> A red square appears and remains on screen.\n<17.5 - 25.5> A blue square appears and remains on screen.\n<34.5 - 43.0> A green square appears and remains on screen.\n<51.5 - 61.5> A yellow square appears and remains on screen.\n<68.5 - 77.0> A purple square appears and remains on screen.\n<85.5 - 94.0> A teal square appears and remains on screen.\n<102.5 - 111.5> A pink square appears and remains on screen.",
+  "scene": "The video presents a minimalist loading animation sequence set against a dark, uniform background. A small, square graphic element, which changes color from red to blue, green, and finally pink, serves as the primary visual focus. This square is positioned in the upper-middle section of the frame. Below it, a horizontal bar at the bottom of the screen displays a series of small, white, rectangular icons that function as loading indicators. The animation is characterized by smooth transitions and clean lines, with the square appearing and disappearing in a series of short intervals. The background remains a consistent, dark grey or black throughout, providing a high-contrast backdrop for the vibrant colors of the squares. The camera is fixed, with no movement, ensuring the focus remains entirely on the graphic elements and the loading progress. The overall aesthetic is modern and functional, typical of a web or mobile application's loading phase.",
+  "events": [
+    {
+      "start": 0.5,
+      "end": 8.5,
+      "description": "A red square appears and remains on screen."
+    },
+    {
+      "start": 17.5,
+      "end": 25.5,
+      "description": "A blue square appears and remains on screen."
+    },
+    {
+      "start": 34.5,
+      "end": 43.0,
+      "description": "A green square appears and remains on screen."
+    },
+    {
+      "start": 51.5,
+      "end": 61.5,
+      "description": "A yellow square appears and remains on screen."
+    },
+    {
+      "start": 68.5,
+      "end": 77.0,
+      "description": "A purple square appears and remains on screen."
+    },
+    {
+      "start": 85.5,
+      "end": 94.0,
+      "description": "A teal square appears and remains on screen."
+    },
+    {
+      "start": 102.5,
+      "end": 111.5,
+      "description": "A pink square appears and remains on screen."
+    }
+  ],
+  "raw": "Scene: The video presents a minimalist loading animation sequence set against a dark, uniform background. A small, square graphic element, which changes color from red to blue, green, and finally pink, serves as the primary visual focus. This square is positioned in the upper-middle section of the frame. Below it, a horizontal bar at the bottom of the screen displays a series of small, white, rectangular icons that function as loading indicators. The animation is characterized by smooth transitions and clean lines, with the square appearing and disappearing in a series of short intervals. The background remains a consistent, dark grey or black throughout, providing a high-contrast backdrop for the vibrant colors of the squares. The camera is fixed, with no movement, ensuring the focus remains entirely on the graphic elements and the loading progress. The overall aesthetic is modern and functional, typical of a web or mobile application's loading phase.\n\nEvents:\n<0.5 - 8.5> A red square appears and remains on screen.\n<17.5 - 25.5> A blue square appears and remains on screen.\n<34.5 - 43.0> A green square appears and remains on screen.\n<51.5 - 61.5> A yellow square appears and remains on screen.\n<68.5 - 77.0> A purple square appears and remains on screen.\n<85.5 - 94.0> A teal square appears and remains on screen.\n<102.5 - 111.5> A pink square appears and remains on screen."
+}

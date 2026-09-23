@@ -1,0 +1,219 @@
+suppressed (sample count too small): request_latency_s p99 needs >= 300 samples, have 64; tpot_s p99 needs >= 300 samples, have 64; ttft_s p99 needs >= 300 samples, have 64
+{
+  "label": "w3-l1-20260923t211802z-c2",
+  "target": "direct",
+  "model": "marlin2b",
+  "mode": "closed-loop",
+  "mm_kwargs": "per-clip auto",
+  "video": "corpus:full",
+  "corpus": "e1-2026-09-20",
+  "subset": "full",
+  "forms": [
+    "video_b64"
+  ],
+  "seed": 20260922,
+  "rate_per_s": null,
+  "concurrency": 2,
+  "requests": 64,
+  "attempts": 64,
+  "max_tokens": 128,
+  "profile": {
+    "dataset_version": "e1b-2026-09-22",
+    "profile_version": "v1",
+    "seed": 20260922,
+    "forms": [
+      "video_b64"
+    ],
+    "tenants": 1,
+    "engine_state": "restarted",
+    "max_tokens_mix": [
+      128,
+      512,
+      1024
+    ],
+    "arrival": {
+      "mode": "closed-loop",
+      "rate_per_s": null,
+      "burst": 1,
+      "concurrency": 2
+    },
+    "clips_scheduled": 64,
+    "clip_duration_s": {
+      "distinct": 13,
+      "min": 2.0,
+      "max": 112.0
+    },
+    "clip_frames_profile_v1": {
+      "distinct": 13,
+      "min": 4,
+      "max": 224
+    },
+    "clip_resolutions": [
+      "1024x768",
+      "1080x1080",
+      "1080x1920",
+      "1280x720",
+      "1920x1080",
+      "1920x480",
+      "1920x800",
+      "2560x1080",
+      "426x240",
+      "480x1920",
+      "480x854",
+      "512x512",
+      "640x360",
+      "640x480",
+      "720x1280",
+      "854x480"
+    ],
+    "clip_codecs": [
+      "h264"
+    ],
+    "clip_source_fps": {
+      "distinct": 5,
+      "min": 10.0,
+      "max": 60.0
+    },
+    "cancellation": {
+      "fraction": 0.0,
+      "after_s": null
+    }
+  },
+  "accepted": 64,
+  "rejected": 0,
+  "failed": 0,
+  "cancelled": 0,
+  "accepted_without_usage": 0,
+  "denominators": {
+    "latency_samples": 64,
+    "rejected_excluded": 0,
+    "failed_excluded": 0,
+    "cancelled_excluded": 0,
+    "scheduled": 64,
+    "skipped_terminal_on_resume": 0,
+    "attempts": 64,
+    "rejected_attempts": 0,
+    "failed_attempts": 0,
+    "platform_failed_attempts": 0,
+    "unattributed_failed_attempts": 0,
+    "cancelled_attempts": 0,
+    "retried_requests": 0
+  },
+  "idempotency": {
+    "distinct_item_keys": 64,
+    "accepted_distinct_keys": 64,
+    "replayed": 0,
+    "conflicts": 0,
+    "resumed_from": null
+  },
+  "status_counts": {
+    "200": 64
+  },
+  "error_classes": {},
+  "error_codes": {},
+  "attempt_status_counts": {
+    "200": 64
+  },
+  "attempt_outcomes": {
+    "accepted": 64
+  },
+  "distinct_clips": 64,
+  "distinct_clips_scheduled": 64,
+  "cold_requests": 64,
+  "warm_requests": 0,
+  "cold_ttft_s": {
+    "samples": 64,
+    "p50": 0.9393,
+    "p90": 4.3707,
+    "p95": 10.6512,
+    "p99": null
+  },
+  "warm_ttft_s": {
+    "samples": 0,
+    "p50": null,
+    "p90": null,
+    "p95": null,
+    "p99": null
+  },
+  "prompt_tokens": 2955,
+  "prompt_tokens_median": 2854.0,
+  "interrupted": false,
+  "wall_s": 135.21,
+  "req_per_s": 0.473,
+  "out_tok_per_s": 118.3,
+  "video_seconds_accepted": 1713.0,
+  "video_s_per_s": 12.669,
+  "phases": {
+    "unit": "ms",
+    "source": "Server-Timing response header",
+    "observed": {},
+    "declared_missing": [
+      "retrieval",
+      "decode",
+      "prepare",
+      "queue",
+      "prefill",
+      "generate",
+      "journal",
+      "persist",
+      "settle"
+    ],
+    "undeclared_observed": []
+  },
+  "resources": {
+    "samples": 0,
+    "series": {}
+  },
+  "percentiles": {
+    "ttft_s": {
+      "samples": 64,
+      "p50": 0.9393,
+      "p90": 4.3707,
+      "p95": 10.6512,
+      "p99": null
+    },
+    "latency_s": {
+      "samples": 64,
+      "p50": 2.7171,
+      "p90": 8.4921,
+      "p95": 12.9269,
+      "p99": null
+    },
+    "tpot_ms": {
+      "samples": 64,
+      "p50": 7.11,
+      "p90": 7.9733,
+      "p95": 8.286,
+      "p99": null
+    },
+    "latency_from_scheduled_s": {
+      "samples": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    }
+  },
+  "schedule_lag_s": {
+    "samples": 0,
+    "p50": null,
+    "p90": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "suppressed_percentiles": [
+    "request_latency_s p99 needs >= 300 samples, have 64",
+    "tpot_s p99 needs >= 300 samples, have 64",
+    "ttft_s p99 needs >= 300 samples, have 64"
+  ],
+  "percentile_rule": "a reported pN needs >= 3 accepted samples beyond it (p50>=6, p95>=60, p99>=300)",
+  "ts": "2026-09-23T21:20:20Z",
+  "ttft_p50": 0.9393,
+  "ttft_p95": 10.6512,
+  "latency_p50": 2.7171,
+  "latency_p95": 12.9269,
+  "tpot_p50_ms": 7.11,
+  "tpot_p95_ms": 8.286,
+  "raw": "raw/c2.jsonl"
+}

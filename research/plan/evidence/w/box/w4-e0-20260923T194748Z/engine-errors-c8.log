@@ -1,0 +1,68 @@
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907] Error in chat completion stream generator.
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907] Traceback (most recent call last):
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 517, in chat_completion_stream_generator
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     async for res in result_generator:
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 701, in generate
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     q = await self.add_request(
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]         ^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 442, in add_request
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     request = self.input_processor.process_inputs(
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 339, in process_inputs
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     self._validate_model_inputs(encoder_input, decoder_input)
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 558, in _validate_model_inputs
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     self._validate_model_input(decoder_input, prompt_type="decoder")
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 512, in _validate_model_input
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907]     raise VLLMValidationError(
+(APIServer pid=1) ERROR 09-23 20:10:11 [serving.py:907] vllm.exceptions.VLLMValidationError: The decoder prompt contains a(n) video item with 20160 embedding tokens, which exceeds the pre-allocated encoder cache size 16384. Please reduce the input size or increase the encoder cache size by setting --limit-mm-per-prompt at startup.
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907] Error in chat completion stream generator.
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907] Traceback (most recent call last):
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 517, in chat_completion_stream_generator
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     async for res in result_generator:
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 701, in generate
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     q = await self.add_request(
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]         ^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 442, in add_request
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     request = self.input_processor.process_inputs(
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 339, in process_inputs
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     self._validate_model_inputs(encoder_input, decoder_input)
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 558, in _validate_model_inputs
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     self._validate_model_input(decoder_input, prompt_type="decoder")
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 512, in _validate_model_input
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907]     raise VLLMValidationError(
+(APIServer pid=1) ERROR 09-23 20:10:16 [serving.py:907] vllm.exceptions.VLLMValidationError: The decoder prompt contains a(n) video item with 21168 embedding tokens, which exceeds the pre-allocated encoder cache size 16384. Please reduce the input size or increase the encoder cache size by setting --limit-mm-per-prompt at startup.
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907] Error in chat completion stream generator.
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907] Traceback (most recent call last):
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 517, in chat_completion_stream_generator
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     async for res in result_generator:
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 701, in generate
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     q = await self.add_request(
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]         ^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 442, in add_request
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     request = self.input_processor.process_inputs(
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 339, in process_inputs
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     self._validate_model_inputs(encoder_input, decoder_input)
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 558, in _validate_model_inputs
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     self._validate_model_input(decoder_input, prompt_type="decoder")
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 512, in _validate_model_input
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907]     raise VLLMValidationError(
+(APIServer pid=1) ERROR 09-23 20:10:28 [serving.py:907] vllm.exceptions.VLLMValidationError: The decoder prompt contains a(n) video item with 21504 embedding tokens, which exceeds the pre-allocated encoder cache size 16384. Please reduce the input size or increase the encoder cache size by setting --limit-mm-per-prompt at startup.
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907] Error in chat completion stream generator.
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907] Traceback (most recent call last):
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/chat_completion/serving.py", line 517, in chat_completion_stream_generator
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     async for res in result_generator:
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 701, in generate
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     q = await self.add_request(
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]         ^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 442, in add_request
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     request = self.input_processor.process_inputs(
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 339, in process_inputs
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     self._validate_model_inputs(encoder_input, decoder_input)
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 558, in _validate_model_inputs
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     self._validate_model_input(decoder_input, prompt_type="decoder")
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py", line 512, in _validate_model_input
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907]     raise VLLMValidationError(
+(APIServer pid=1) ERROR 09-23 20:10:43 [serving.py:907] vllm.exceptions.VLLMValidationError: The decoder prompt contains a(n) video item with 20160 embedding tokens, which exceeds the pre-allocated encoder cache size 16384. Please reduce the input size or increase the encoder cache size by setting --limit-mm-per-prompt at startup.
