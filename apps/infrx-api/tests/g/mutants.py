@@ -38,6 +38,7 @@ R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and th
 P = "gateway/pilot.py"                  # G2: the pilot composition
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
+BUILD_CASE = "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -869,22 +870,47 @@ MUTANTS: tuple[Mutant, ...] = (
     # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
     # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
     _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs)",
-       "from .routes import chat as _chat\nROUTERS = (health, models, _chat, ingress, uploads, jobs)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "from .routes import chat as _chat\n"
+       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
     _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs)",
-       "ROUTERS = (health, models, ingress, jobs)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, jobs, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs)",
-       "ROUTERS = (health, models, ingress, uploads)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
     _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
-       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs)",
-       "ROUTERS = (health, models, jobs, ingress, uploads)",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, jobs, ingress, uploads, metrics)",
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
+    _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs)", BUILD_CASE,
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    _m("build_info_not_set_at_startup", "create_app sets the build gauge at startup",
+       "gateway/app.py", "    pilot.build_info(rt)\n", "", BUILD_CASE),
+    _m("build_info_gauge_omitted", "the build gauge is set from the settings",
+       P, '    rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,\n'
+          "                   image=deployment.infrx_image)\n", "", BUILD_CASE),
+    _m("build_info_revision_from_git", "the revision is the installed setting, never git's",
+       P, "    rt.metrics.set(\"infrx_build_info\", 1, revision=deployment.infrx_release_sha,",
+       "    rt.metrics.set(\"infrx_build_info\", 1, revision=__import__(\"subprocess\").run(\n"
+       "        [\"git\", \"rev-parse\", \"HEAD\"], capture_output=True, text=True).stdout.strip(),",
+       BUILD_CASE),
+    _m("build_info_not_required_in_pilot", "a pilot does not start without its build",
+       P, '        if rt.mode == "pilot":\n            raise RuntimeMisconfigured(rt.mode, missing)',
+       '        if False:\n            raise RuntimeMisconfigured(rt.mode, missing)', BUILD_CASE),
+    _m("release_sha_shape_unchecked", "INFRX_RELEASE_SHA is a 40-hex commit id",
+       "config.py", "    if deployment.infrx_release_sha and not RELEASE_SHA_RE.fullmatch(",
+       "    if False and not RELEASE_SHA_RE.fullmatch(", BUILD_CASE),
+    _m("build_image_shape_unchecked", "INFRX_IMAGE is sha256:<64 hex>",
+       "config.py", "    if deployment.infrx_image and not IMAGE_ID_RE.fullmatch(",
+       "    if False and not IMAGE_ID_RE.fullmatch(", BUILD_CASE),
     _m("composition_root_route_table_unchecked", "create_app asserts the route table it built",
        "gateway/app.py", "    ingress.assert_route_table(app)\n", "",
        "test_f_base__the_route_table_is_asserted_after_every_router_mounted"),
@@ -896,9 +922,9 @@ MUTANTS: tuple[Mutant, ...] = (
        # the defect IS the refusal: nothing is built, so the composition refuses to start
        dies_by=("RuntimeMisconfigured",)),
     _m("objects_from_settings_in_memory", "no object store from settings is process memory",
-       P, '    raise RuntimeMisconfigured(mode, detail="S3_MEDIA_BUCKET is set, but no S3 object store "\n'
-          '                                            "adapter exists yet (M1 limit 2)")',
-       "    from ..media.store import InMemoryObjectStore\n    return InMemoryObjectStore()",
+       P, "    try:\n        objects = S3ObjectStore.connect(",
+       "    from ..media.store import InMemoryObjectStore\n    return InMemoryObjectStore()\n"
+       "    try:\n        objects = S3ObjectStore.connect(",
        "test_f_base__create_app_never_stages_into_process_memory"),
     _m("objects_unset_in_memory", "an unset S3_MEDIA_BUCKET refuses, naming it",
        P, '        raise RuntimeMisconfigured(mode, ("S3_MEDIA_BUCKET",))',
@@ -914,6 +940,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool}",
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store dropped, then refused
+    _m("stores_on_an_unnamed_database", "a store is built only on a named DATABASE_URL",
+       P, "        if not settings.pilot.database_url.strip():", "        if False:",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool"),
     _m("stores_on_two_pools", "the three stores share one pool",
        P, "        adapters = {\"catalog\": PgCatalogDirectory(connect),",
        "        adapters = {\"catalog\": PgCatalogDirectory(connection_pool(settings)[1]),",

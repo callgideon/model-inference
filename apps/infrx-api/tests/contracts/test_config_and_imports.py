@@ -175,8 +175,12 @@ def test_bounds_a_zero_would_disable_are_refused(name):
 # app is the pilot composition, so its adapters are injected too (`_adapters`).
 def _app(env, **clients):
     from infrx.gateway.app import create_app
-    return create_app(config.from_env(env), client=object(), sb=object(), **_adapters(),
-                      **clients)
+    return create_app(config.from_env({**BUILD, **env}), client=object(), sb=object(),
+                      **_adapters(), **clients)
+
+
+# What install.sh/preflight write for E4B's served-build check (a pilot needs both).
+BUILD = {"INFRX_RELEASE_SHA": "c0ffee" + "0" * 34, "INFRX_IMAGE": "sha256:" + "b" * 64}
 
 
 def _adapters():
@@ -330,7 +334,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "ingress", "uploads", "jobs"]
+        ["health", "models", "ingress", "uploads", "jobs", "route"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -470,6 +474,10 @@ DEPLOYMENT_EXPECTED = {
     "MAX_MESSAGES": 64, "MAX_PARTS": 16, "MAX_TEXT_CODEPOINTS": 131072,
     "MAX_URL_CHARS": 8192, "MAX_NUMBER_DIGITS": 20,
     "LARGE_BODY_LIMIT": 2, "LARGE_BODY_THRESHOLD_BYTES": 1048576,
+    # M1-L2: the media object store's place in S3_MEDIA_BUCKET, and an S3-compatible endpoint
+    "S3_MEDIA_PREFIX": "infrx/", "S3_ENDPOINT_URL": "",
+    # E4B: the deployed commit and image, `infrx_build_info` (required in pilot at startup)
+    "INFRX_RELEASE_SHA": "", "INFRX_IMAGE": "",
 }
 
 # Everything except the text values (the secret, the accounting regime).

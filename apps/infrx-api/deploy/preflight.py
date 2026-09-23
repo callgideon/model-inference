@@ -133,6 +133,11 @@ MANIFEST: tuple[Key, ...] = (
     # never runs on a host interpreter.
     Key("INFRX_IMAGE", "runtime image pin (built image id)", "image_id",
         required_in=("pilot",)),
+    # E4B's served-build check: the commit install.sh deployed ("the checkout is exactly a
+    # commit"); with INFRX_IMAGE it is `infrx_build_info` on /metrics, and a pilot gateway
+    # refuses to start without either (`pilot.build_info`).
+    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",
+        required_in=("pilot",)),
     # The engine is never public (I2B.b): whatever the flags say, the gateway only ever
     # dials it on loopback, and so does the scheduling index.
     Key("UPSTREAM", "engine address, loopback only", "loopback_url"),
@@ -191,6 +196,8 @@ TUNABLE = (
     "DATABASE_POOL_STATEMENT_TIMEOUT_MS", "MAX_MESSAGES", "MAX_PARTS",
     "MAX_TEXT_CODEPOINTS", "MAX_URL_CHARS", "MAX_NUMBER_DIGITS", "LARGE_BODY_LIMIT",
     "LARGE_BODY_THRESHOLD_BYTES",
+    # M1-L2: the media store's prefix in S3_MEDIA_BUCKET; an S3-compatible endpoint
+    "S3_MEDIA_PREFIX", "S3_ENDPOINT_URL",
     # F2P wire-in: the admission regime, legacy_usd or credit (validate_deployment)
     "ACCOUNTING_REGIME",
     # the F1 names that keep theirs until G/W retire them (08 §5)
@@ -240,6 +247,7 @@ SHAPES = {
     "pg_dsn": _matches(r"postgres(?:ql)?://[^\s]+"),
     # `docker image inspect --format {{.Id}}`: a content address, never a tag.
     "image_id": _matches(r"sha256:[0-9a-f]{64}"),
+    "git_sha": _matches(r"[0-9a-f]{40}"),
     "loopback_url": _matches(r"http://(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}/?"),
     "loopback_valkey_url": _matches(r"(?:valkey|redis)://(?:127\.0\.0\.1|localhost):\d{1,5}(?:/\d{1,2})?"),
     # A shared secret shorter than this is a typo, a placeholder or a truncated read.
@@ -328,6 +336,7 @@ class Config:
     # Row M-SCRATCH: the usage spill survives a stop only on the root EBS volume.
     usage_log: str = "/var/lib/infrx/usage/usage.jsonl"
     image: str = ""                   # INFRX_IMAGE; set, the probe runs inside it
+    release: str = ""                 # INFRX_RELEASE_SHA: the commit install.sh deploys
     upstream: str = "http://127.0.0.1:8000"
     valkey_url: str = "valkey://127.0.0.1:6379/0"
     media_root: str = "/opt/dlami/nvme/processing"
@@ -343,7 +352,8 @@ def local_values(cfg: Config) -> dict[str, str]:
     """The keys the installer supplies rather than reading from SSM."""
     return {"INFRX_MODE": cfg.mode, "MODEL_ID": cfg.model_id,
             "MAX_INFLIGHT": cfg.max_inflight, "USAGE_LOG": cfg.usage_log,
-            "INFRX_IMAGE": cfg.image, "UPSTREAM": cfg.upstream,
+            "INFRX_IMAGE": cfg.image, "INFRX_RELEASE_SHA": cfg.release,
+            "UPSTREAM": cfg.upstream,
             "VALKEY_URL": cfg.valkey_url, "PROCESSING_CACHE_DIR": cfg.media_root}
 
 
@@ -478,6 +488,30 @@ def engine_problems(script: pathlib.Path | None, mode: str) -> list[str]:
     return problems
 
 
+def bucket_problems(cfg: Config, values: dict[str, str]) -> list[str]:
+    """M1-L2: a pilot stages media in `S3_MEDIA_BUCKET`, and the gateway refuses to start
+    unless it answers HeadBucket. Asked here, from the host, with the credentials the units
+    will use (the instance role; `--network host`): the runtime probe runs with no network,
+    so this is the one place an install can find a missing bucket or permission before the
+    file is replaced. The bucket is a name, not a secret; the refusal still names only the
+    setting and the S3 error code."""
+    bucket = values.get("S3_MEDIA_BUCKET")
+    if not bucket:
+        return ["S3_MEDIA_BUCKET: not set (--set S3_MEDIA_BUCKET=<bucket>); a pilot stages "
+                "media there and refuses to start without it"]
+    endpoint = values.get("S3_ENDPOINT_URL")
+    done = subprocess.run([*cfg.aws, "s3api", "head-bucket", "--bucket", bucket,
+                           "--region", cfg.region,
+                           *(["--endpoint-url", endpoint] if endpoint else [])],
+                          capture_output=True, text=True)
+    if done.returncode == 0:
+        return []
+    code = re.search(r"\(([A-Za-z0-9]+)\)", done.stderr or "")
+    return [f"S3_MEDIA_BUCKET: HeadBucket failed "
+            f"({code.group(1) if code else f'exit {done.returncode}'}); the gateway would "
+            f"refuse to start"]
+
+
 def disk_problems(budget) -> list[str]:
     """Free bytes below a declared budget refuse a pilot install: a full disk is lost
     usage spill and failed preparations, discovered on the first busy hour."""
@@ -584,6 +618,9 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
             if not _importable(entry):
                 problems.append(f"PENDING(W3): {entry} is not in the runtime; the worker "
                                 f"unit starts it")
+        if not _importable("botocore"):
+            problems.append("botocore is not in the runtime: the image must install the "
+                            "traces extra, or the S3 media store cannot start (M1-L2)")
     problems += transport_logger_problems()
     return {"ok": not problems, "python": version, "mode": mode,
             "validated_mode": validated, "problems": problems, "warnings": warnings}
@@ -712,6 +749,7 @@ def apply(cfg: Config) -> int:
     problems += engine_problems(cfg.serve_script, cfg.mode)
     if cfg.mode == "pilot":
         problems += disk_problems(cfg.disk)
+        problems += bucket_problems(cfg, values)
     if problems:
         report(problems)
         return REFUSED
@@ -754,7 +792,8 @@ def build(args) -> Config:
                   serve_script=pathlib.Path(args.serve_script) if args.serve_script else None,
                   units=tuple(args.restart), model_id=args.model_id,
                   max_inflight=args.max_inflight, usage_log=args.usage_log,
-                  image=args.image, upstream=args.upstream, valkey_url=args.valkey_url,
+                  image=args.image, release=args.release, upstream=args.upstream,
+                  valkey_url=args.valkey_url,
                   media_root=args.media_root, settings=tuple(args.set),
                   disk=DISK_BUDGET)
 
@@ -779,6 +818,8 @@ def main(argv=None) -> int:
     apply_parser.add_argument("--usage-log", default="/var/lib/infrx/usage/usage.jsonl")
     apply_parser.add_argument("--image", default="",
                               help="runtime image id (sha256:...); the probe runs in it")
+    apply_parser.add_argument("--release", default="",
+                              help="the deployed commit (40 hex); install.sh passes its HEAD")
     apply_parser.add_argument("--upstream", default="http://127.0.0.1:8000")
     apply_parser.add_argument("--valkey-url", default="valkey://127.0.0.1:6379/0")
     apply_parser.add_argument("--media-root", default="/opt/dlami/nvme/processing")

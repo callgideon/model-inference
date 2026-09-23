@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 from datetime import timedelta
 
 import pytest
@@ -19,6 +20,7 @@ from infrx.contracts.v2 import records as v2
 from infrx.contracts.v2.money_units import Credit
 from infrx.operations import cli, service
 from infrx.operations.ports import HoldView
+from infrx.state import migrations
 
 from . import fakes
 from .fakes import NOW, ORG_A, ORG_B, USER_A, USER_B
@@ -73,6 +75,27 @@ def test_api_ops__the_pinned_marlin_release_is_published_and_quoted():
         again = await op.publish(serving, deployment, card, model, idempotency_key="p1", reason=R)
         assert again == result and len(w.audit.entries) == count
     run(go())
+
+
+#: W3's measured serving version, under the repository root (a mutant copy links `models`).
+SERVING_VERSION = pathlib.Path(__file__).resolve().parents[5] / "models" / "marlin2b" / \
+    "serving-version.json"
+
+
+def test_api_ops__the_published_release_pins_the_measured_image_and_engine_options():
+    """E4B certification: the serving revision `marlin_release` publishes - pinned by every
+    admission - names W3's digest-pinned runtime image and the digest of the engine options
+    W3 launches, as `models/marlin2b/serving-version.json` records them. Read from the file,
+    never a literal: a new serving version changes the file, and this case follows it. The
+    generated fixture base and the operator seed carry the same pins."""
+    measured = json.loads(SERVING_VERSION.read_text())
+    image, options = measured["runtime_image"]["ref"], measured["engine_options_digest"]
+    serving, _deployment, _card, _model = release()
+    assert (serving.runtime_image_ref, serving.engine_options_digest) == (image, options)
+    fixture = v2fix.load("serving_revision.json")
+    assert (fixture["runtime_image_ref"], fixture["engine_options_digest"]) == (image, options)
+    seed = (pathlib.Path(migrations.__file__).parent / "seed_marlin_provisional.sql").read_text()
+    assert f"'{image}'" in seed and f"'{options}'" in seed
 
 
 def test_api_auth__a_private_deployment_is_never_published_and_is_not_found():
