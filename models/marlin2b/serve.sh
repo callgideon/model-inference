@@ -71,13 +71,16 @@ media=() flags=()
 if [ -n "${PROCESSING_CACHE_DIR:-}" ]; then
   # The engine may open any file under it by file://: absolute and canonical (no `..`,
   # `//` or trailing `/` to walk out of the checks below; realpath of a relative path is
-  # absolute, so it never compares equal), never a system directory or the weights mount.
+  # absolute, so it never compares equal), never a system directory or the weights mount -
+  # as spelled, nor where its symlinks lead (docker mounts the resolved source).
   [ "$(realpath -m -s -- "$PROCESSING_CACHE_DIR")" = "$PROCESSING_CACHE_DIR" ] || {
     echo "serve.sh: PROCESSING_CACHE_DIR must be an absolute, canonical path" >&2; exit 2; }
-  case "$PROCESSING_CACHE_DIR" in
-    /|/etc|/etc/*|/home|/home/*|/model|/model/*)
-      echo "serve.sh: PROCESSING_CACHE_DIR may not be $PROCESSING_CACHE_DIR" >&2; exit 2 ;;
-  esac
+  for path in "$PROCESSING_CACHE_DIR" "$(realpath -m -- "$PROCESSING_CACHE_DIR")"; do
+    case "$path" in
+      /|/etc|/etc/*|/home|/home/*|/model|/model/*)
+        echo "serve.sh: PROCESSING_CACHE_DIR may not be $path" >&2; exit 2 ;;
+    esac
+  done
   test -d "$PROCESSING_CACHE_DIR" || { echo "serve.sh: no directory at PROCESSING_CACHE_DIR" >&2; exit 1; }
   media=(-v "$PROCESSING_CACHE_DIR:$PROCESSING_CACHE_DIR:ro")
   flags=(--allowed-local-media-path "$PROCESSING_CACHE_DIR")

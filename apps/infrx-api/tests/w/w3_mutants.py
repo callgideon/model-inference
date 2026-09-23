@@ -82,6 +82,9 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        S, "[[ $ENGINE_MAX_NUM_SEQS =~ ^[1-9][0-9]*$ ]] || {", "true || {", ONE_SOURCE),
     _m("system_root_accepted", "the media root is never a system directory or the weights",
        S, "    /|/etc|/etc/*|/home|/home/*|/model|/model/*)", "    /never-a-root)", ONE_SOURCE),
+    _m("symlinked_system_root_accepted", "a symlink to a system directory is refused too",
+       S, '  for path in "$PROCESSING_CACHE_DIR" "$(realpath -m -- "$PROCESSING_CACHE_DIR")"; do',
+       '  for path in "$PROCESSING_CACHE_DIR"; do', ONE_SOURCE),
     _m("non_canonical_root_accepted", "the root is absolute, and no `..`, `//` or trailing "
        "`/` walks past the checks",
        S, '  [ "$(realpath -m -s -- "$PROCESSING_CACHE_DIR")" = "$PROCESSING_CACHE_DIR" ] || {',

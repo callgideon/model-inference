@@ -150,6 +150,18 @@ def check_one_source_per_setting(models: pathlib.Path, tmp: pathlib.Path) -> Non
     for walked in (f"{tmp}/cache/../cache", f"{tmp}/cache/", f"{tmp}//cache"):
         status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=walked)
         assert status == 2 and argv is None, (walked, status)
+    # canonical as spelled, but a symlink to a refused directory (confirmation PINC-2);
+    # a symlink to an allowed one is fine
+    link = tmp / "link-etc"
+    link.unlink(missing_ok=True)
+    link.symlink_to("/etc")
+    status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=str(link))
+    assert status == 2 and argv is None, (str(link), status)
+    fine = tmp / "link-cache"
+    fine.unlink(missing_ok=True)
+    fine.symlink_to(tmp / "cache")
+    status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=str(fine))
+    assert status == 0 and values_of(argv, "--allowed-local-media-path") == [str(fine)]
 
 
 def check_record_matches_the_code(models: pathlib.Path, tmp: pathlib.Path) -> None:
