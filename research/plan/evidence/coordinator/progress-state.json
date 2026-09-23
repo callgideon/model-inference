@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:07:20Z",
+  "updated": "2026-09-23T11:09:23Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement",
+      "phase": "phase A confirmation at b0a44a0: box-safety PASS, decision fix_required on 2 test-coverage gaps (D2 reconciliation clauses; bench retries clauses) + 8 nonblocking \u2192 round 3 running; re-confirmation next",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     },
@@ -42,8 +42,8 @@
   },
   "reviews": {
     "W4": {
-      "phase": "confirmation at b0a44a0 running (round 1 fix_required at db12a5a)",
-      "since": "2026-09-23T10:20:48Z"
+      "phase": "confirmation fix_required at b0a44a0 (wf_6fb50020-bf6; JSON evidence/w/W4-confirm-b0a44a0.json) \u2192 round 3",
+      "since": "2026-09-23T11:09:23Z"
     },
     "G4U": {
       "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
