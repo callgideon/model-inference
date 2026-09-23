@@ -74,8 +74,13 @@ def test_complete_credit__a_settlement_exactly_when_settled_at_the_recorded_char
     """CREDIT: the regime is `credit`; a settled outcome carries the `SettlementV2` built
     from the store's rows - the pins, the wallet and the charge the inference debit
     recorded - and anything else carries none."""
+    unsettled = [{**OUTCOME, "state": "failed", "cause": "client_disconnected",
+                  "settlement_state": state, "debit": "0.00000000", "reconcile_after": after}
+                 for state, after in (("held_unknown", "2026-09-21T12:00:00Z"),
+                                      ("released_platform_absorbed", None))]
     store, conn = _store(_doc(SETTLED, charged_credits="0.88800000"),
-                         _doc({**OUTCOME, "state": "failed", "cause": "invalid_media"}))
+                         _doc({**OUTCOME, "state": "failed", "cause": "invalid_media"}),
+                         *[_doc(o) for o in unsettled])
     outcome, settlement = _ok(store.complete_credit(LEASE, TerminalOutcome(**SETTLED)))
     assert _args(conn)["regime"] == "credit"
     want = SettlementV2.model_validate({
@@ -88,6 +93,11 @@ def test_complete_credit__a_settlement_exactly_when_settled_at_the_recorded_char
     assert settlement == want, (settlement, want)
     free, none = _ok(store.complete_credit(LEASE, TerminalOutcome(**OUTCOME)))
     assert none is None and free.settlement_state.value == "released_free", (free, none)
+    # review N6: held back or platform-absorbed is no settlement either
+    for want in unsettled:
+        got, none = _ok(store.complete_credit(LEASE, TerminalOutcome(**OUTCOME)))
+        assert none is None and got.settlement_state.value == want["settlement_state"], \
+            (got, none)
 
 
 def test_cancel__sends_the_cause_and_defaults_to_the_clients_own() -> None:
@@ -158,7 +168,10 @@ def test_lookup__answers_the_jobs_own_regime_and_sends_the_stores_ttl() -> None:
         (request.org_id, idem.model_dump(mode="json"), {"idempotency_ttl_s": 99.0}), sent
     mapped, outcome = _ok(store.lookup(request.org_id, idem))
     assert type(mapped) is AdmissionV2 and mapped.replayed and outcome is None, mapped
-    assert _ok(store.lookup(request.org_id, idem)) is None
+    # review N6: the CALLER's organization is sent, never the scope's own (the store
+    # refuses a scope naming another org as `forbidden`, R10)
+    assert _ok(store.lookup(b.ORG_B, idem)) is None
+    assert _args(conn, 2)["org_id"] == b.ORG_B != idem.org_id, _args(conn, 2)
 
 
 if __name__ == "__main__":                              # pragma: no cover

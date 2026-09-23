@@ -79,6 +79,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_settlement_for_every_outcome", "a SettlementV2 exists exactly when settled",
        "    if outcome.settlement_state is not SettlementState.settled:\n        return None",
        "    if False:\n        return None", SETTLEMENT),
+    _m("a_settlement_for_an_unsettled_outcome", "review N6: held back or platform-absorbed "
+       "is no settlement",
+       "    if outcome.settlement_state is not SettlementState.settled:",
+       "    if outcome.settlement_state is SettlementState.released_free:", SETTLEMENT),
     _m("the_charge_is_the_v1_debit", "the charge is the one the inference debit recorded",
        '"charged": doc["charged_credits"],', '"charged": str(outcome.debit),', SETTLEMENT),
     _m("the_cause_is_not_sent", "R21: the cancel cause reaches the store",
@@ -108,6 +112,11 @@ MUTANTS: tuple[Mutant, ...] = (
        '        if doc is None:',
        '            "limits": {"idempotency_ttl_s": DEFAULTS.idempotency_ttl_s}})\n'
        '        if doc is None:', LOOKUP),
+    _m("lookup_sends_the_scopes_org", "review N6: the caller's organization is sent (R10)",
+       '        doc = await self._call("idempotency_lookup", {\n'
+       '            "org_id": org_id, "idem": idem.model_dump(mode="json"),',
+       '        doc = await self._call("idempotency_lookup", {\n'
+       '            "org_id": idem.org_id, "idem": idem.model_dump(mode="json"),', LOOKUP),
     _m("lookup_drops_the_outcome", "a terminal mapping answers its committed outcome",
        '        return admission, _outcome(doc["outcome"])', '        return admission, None',
        LOOKUP),
