@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T08:39:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T09:08:35Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
 
@@ -69,7 +69,8 @@ Generated 2026-09-23T08:39:54Z from `tasks.json` (manifest v4) and `progress-sta
 - D4: codex-d4 / codex/d4-stream-journal — implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10) since 2026-09-23T05:12:27Z — base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md
 - G2: codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param="cause")
 - G4U: codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3's MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md
-- W4: codex-w4 / codex/w4-measured-tuning — phase A HANDED BACK db12a5a (impl ecacd50); Opus review running; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window) since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
+- W4: codex-w4 / codex/w4-measured-tuning — phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) → fix round running; then confirmation workflow since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
+- review W4: fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) → fix round on the lane; confirmation next since 2026-09-23T09:08:35Z
 
 ## Checkpoints
 
