@@ -234,6 +234,9 @@ PY_MUTANTS: tuple[Mutant, ...] = (
           f"{_GUARD}",
        f"{_GUARD}        events = [item for item in produced if isinstance(item, IndexEvent)]\n",
        REAPER_DEAD),
+    _m("runners_dead_counts_the_reaper", "runners_dead counts runners, not the reaper",
+       V, '                "runners_dead": sum(task is not self._reaper for task in died),',
+       '                "runners_dead": len(died),', REAPER_DEAD),
     _m("reaper_death_unreported", "a dead reaper is reported and is not live",
        V, "        return [task for task in (*self.loop._tasks, self._reaper)",
        "        return [task for task in (*self.loop._tasks,)", REAPER_DEAD),
@@ -329,6 +332,17 @@ PY_MUTANTS: tuple[Mutant, ...] = (
     _m("start_trusts_the_constructed_host", "the bind address is re-checked at start",
        V, "        self._check_loopback()                    # again",
        "        pass                    # again", PUBLIC),
+    _m("loopback_checked_after_bind", "the host is refused before anything is bound",
+       V, "        self._check_loopback()                    # again: the field is mutable after "
+          "init\n        if self.health_port is not None:          # first: a busy port must "
+          "claim nothing\n            self._server = await asyncio.start_server(self._probe, "
+          "self.health_host,\n                                                      "
+          "self.health_port)\n",
+       "        if self.health_port is not None:          # first: a busy port must claim "
+       "nothing\n            self._server = await asyncio.start_server(self._probe, "
+       "self.health_host,\n                                                      "
+       "self.health_port)\n        self._check_loopback()                    # again: the "
+       "field is mutable after init\n", PUBLIC),
     _m("listener_binds_every_interface", "the listener binds the loopback address given",
        V, "start_server(self._probe, self.health_host,", 'start_server(self._probe, "0.0.0.0",',
        PUBLIC),

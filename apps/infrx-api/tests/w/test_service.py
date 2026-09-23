@@ -542,6 +542,7 @@ def test_ops_recover__a_garbage_recover_does_not_kill_the_reaper_and_a_dead_one_
         assert await eventually(lambda: service._reaper.done())
         state = await service.readiness()
         assert (state["reaper"], state["live"], state["ready"]) == ("dead", False, False), state
+        assert state["runners_dead"] == 0, state          # a dead reaper is not a dead runner
         await service.stop()
 
         again = World()
@@ -574,12 +575,13 @@ def test_ops_recover__readiness_is_never_public_and_leaks_nothing():
     async def case():
         request, _ = await queued(world)
         await world.scheduler.enqueue(candidate(world, request))
-        # changed after construction: start refuses before it reaps, claims or binds
-        moved = service_for(world, Blocking(), reap_interval_s=3600)
+        # changed after construction: start refuses before it binds, reaps or claims
+        moved = service_for(world, Blocking(), reap_interval_s=3600, health_port=0)
         moved.health_host = "0.0.0.0"
         with pytest.raises(ValueError):
             await moved.start()
         await asyncio.sleep(0.05)
+        assert moved._server is None, "bound the public address before refusing it"
         assert moved.loop.claimed == 0 and moved._pool is None
 
         # a readiness port already taken: start fails before the pool claims anything, so
