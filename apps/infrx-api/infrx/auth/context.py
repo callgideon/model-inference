@@ -65,6 +65,10 @@ def auth_context(*, audience, org_id, key_id, user_id=None, provider_org_id=None
     consumer = audience is CredentialAudience.consumer
     if consumer and not user_id:
         raise errors.InvalidApiKey("a consumer credential names no individual")
+    if audience is CredentialAudience.provider_dev and provider_org_id != org_id:
+        # Its organization scopes idempotency and payloads while its provider's dev wallet
+        # pays: the two must be one workspace (0009 has no CHECK for it yet - D1R).
+        raise errors.InternalError("a provider dev key belongs to its provider's organization")
     try:
         return AuthContextV2(audience=audience, org_id=org_id, key_id=key_id, principal=key_id,
                              role=role, entitlement_version=entitlement_version,

@@ -724,6 +724,10 @@ MUTANTS: tuple[Mutant, ...] = (
        A, "                             user_id=user_id if consumer else None,",
        "                             user_id=user_id,",
        "test_api_auth__each_audience_carries_only_its_own_identity"),
+    _m("provider_key_under_another_org", "a provider dev key's org is its provider's (review S4)",
+       A, "    if audience is CredentialAudience.provider_dev and provider_org_id != org_id:",
+       "    if False:",
+       "test_api_auth__a_row_without_a_usable_audience_is_not_a_credential"),
     _m("consumer_scope_scrubbed", "a consumer row carrying provider scope is refused, not "
        "silently scrubbed (review S3)",
        A, "                             provider_org_id=provider_org_id, endpoint_id=endpoint_id)",
