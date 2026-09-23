@@ -879,3 +879,69 @@ def check_credit_retired(conn) -> str:
         assert_no_drift(conn, "a frozen wallet")
         return "a frozen wallet refuses new holds and still settles and releases the old ones"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 6 (SQL half)
+def service(connect, database):
+    """A `service_role` connection whose statements cannot wait for ever: a race that
+    deadlocks the harness fails with 57014 instead of hanging the suite."""
+    conn = connect(database)
+    conn.execute("set role service_role")
+    conn.execute("set statement_timeout = '30s'")
+    return conn
+
+
+def terminalize_args(lease: Lease, proposal: dict, regime: str = "legacy_usd") -> dict:
+    return {"lease": lease.model_dump(mode="json"), "outcome": proposal, "regime": regime,
+            "limits": LIMITS}
+
+
+def check_settle_races(connect, database: str) -> str:
+    """DUR-SETTLE / DUR-FENCE under real transactions (the migration mutants' concurrency
+    check; the full set is tests/d/test_settle_races.py): a duplicate completion waits on
+    the job row and REPLAYS the committed outcome (one debit); a cancel behind a settlement
+    waits and answers it; a settlement never waits on the admission scope lock (an
+    admission holding it cannot stall a terminalization); a stale generation's completion
+    behind a requeue waits and is `stale_lease`."""
+    owner = connect(database)
+    world = ca.World(owner)
+    first_job, lease = cl.running(owner, world)
+    ref = stored(owner, lease.job_id)
+    proposal = propose(lease.job_id, usage=(1200, 340), ref=ref)
+    one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
+        c, "terminalize", terminalize_args(lease, proposal))),
+        (service(connect, database), lambda c: cl.rpc(
+            c, "terminalize", terminalize_args(lease, proposal))))
+    assert one[0] is None and two[0] is None, f"a duplicate completion was refused: {two[0]}"
+    assert two[1]["outcome"] == one[1]["outcome"], "the duplicate did not replay the outcome"
+    assert len(ledger(owner, first_job.request_id)) == 1, "a duplicate completion debited twice"
+    other, other_lease = cl.running(owner, world)
+    handle = cl.row(owner, other.request_id)["job_handle"]
+    one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
+        c, "terminalize", terminalize_args(other_lease, propose(
+            other.request_id, usage=(10, 1), ref=stored(owner, other.request_id))))),
+        (service(connect, database), lambda c: cl.rpc(c, "cancel", {
+            "org_id": other.org_id, "job_handle": handle, "cause": "client_disconnected",
+            "limits": LIMITS})))
+    assert one[0] is None and two[0] is None and two[1]["cause"] == "completed", (one, two)
+    # the admission scope lock held by an open admission: a settlement does not wait on it
+    third, third_lease = cl.running(owner, world)
+    holder = connect(database)                   # the owner: admission_lock_key is internal
+    holder.execute("begin")
+    holder.execute("select pg_advisory_xact_lock(infrx.admission_lock_key())")
+    settler = service(connect, database)
+    settler.execute("set statement_timeout = '3s'")
+    code, _ = cl.rpc(settler, "terminalize", terminalize_args(third_lease, propose(
+        third.request_id, usage=(10, 1), ref=stored(owner, third.request_id))))
+    holder.execute("rollback")
+    assert code is None, f"a settlement waited on the admission scope lock: {code}"
+    # a stale generation behind the reaper's requeue: waits, then stale_lease
+    lost, lost_lease = cl.running(owner, world, worker="w-same")
+    advance(owner, DEFAULTS.lease_ttl_s)
+    one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
+        c, "recover", {"limits": LIMITS})), (service(connect, database), lambda c: cl.rpc(
+            c, "terminalize", terminalize_args(lost_lease, propose(
+                lost.request_id, "engine_error", "failed")))))
+    assert two[0] == "stale_lease", f"a superseded generation settled: {two}"
+    assert_no_drift(owner, "races")
+    return "duplicates replay, cancel answers the settlement, no scope lock, stale refused"

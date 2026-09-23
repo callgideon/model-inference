@@ -2551,6 +2551,19 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "    perform infrx.refuse('not_claimable', 'no v2 work loader');\n  end if;\n"
        "  if j.state <> 'queued' then\n",
        "admission", "credit_settle", "the lift's control: a CREDIT job is never leased (MY-3)"),
+    # --- item 6: races -------------------------------------------------------------------
+    _m("d5_settle_without_the_row_lock", SETTLE,
+       "  select * into j from infrx.jobs where request_id = (o->>'job_id')::uuid for update;",
+       "  select * into j from infrx.jobs where request_id = (o->>'job_id')::uuid;",
+       "admission", "settle_races",
+       "a duplicate completion behind the winner is refused instead of replayed: a worker "
+       "that lost the answer cannot resolve its own settlement"),
+    _m("d5_takes_the_scope_lock", SETTLE,
+       "  v_proposal := jsonb_build_object('cause', v_cause, 'usage',",
+       "  perform pg_advisory_xact_lock(infrx.admission_lock_key());\n"
+       "  v_proposal := jsonb_build_object('cause', v_cause, 'usage',",
+       "admission", "settle_races",
+       "every settlement queues behind admission's global lock (0011's order inverted)"),
     # --- item 4: operator money ----------------------------------------------------------
     _m("d5_adjust_replay_appends", SETTLE,
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if found then",
@@ -2796,6 +2809,7 @@ _CHECKS = {
     "reconcile_clock": checks_operations.check_reconcile_clock,
     "reconcile_tenant": checks_operations.check_reconcile_tenant,
     "d5_privileges": checks_operations.check_d5_privileges,
+    "settle_races": lambda conn: checks_settle.check_settle_races(pgharness.connect, MUT_DB),
 }
 
 
