@@ -920,8 +920,7 @@ def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
 
 # Anchors known stale on THIS tree, each with its owner. Strict: an entry that is no longer
 # stale fails the guard too, so it is removed the day its owner's fix merges.
-KNOWN_STALE = {"i3bm57": "I3B's (W3 moved its anchor); re-anchored on codex/i3b-followup "
-                         "(585238b) - remove this entry at the I3B merge (IR2-2)"}
+KNOWN_STALE: dict[str, str] = {}
 
 
 def test_every_mutant_anchor_occurs_as_declared_on_the_checkout():

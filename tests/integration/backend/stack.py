@@ -67,31 +67,10 @@ PENDING = {
     "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
           "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
           "Registry/AccountView and G1R's CatalogDirectory",
-    # RESIDUAL (merged; I3B's cases only - see RESIDUAL)
-    "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
-          "mounts the metered ingress in gateway.app.ROUTERS",
-    "G1R": "pilot ingress mounted in gateway.app.ROUTERS (cutover from the legacy chat "
-           "route) with consumer/provider audiences",
-    "D2": "atomic admission RPC: job + hold + reservations + outbox in one transaction",
-    "D3": "fenced leases, recovery and cancellation RPCs in PostgreSQL",
-    "M3": "owned uploads, expiry and orphan collection",
-    "W3": "worker wiring: drain, engine pin, media root, measured concurrency",
 }
 # Merged tasks still in the vocabulary, and why. Integration request #2 asks I3B to rename
 # its blockers; E3B's own cases may not name these (`pending()` refuses them).
-RESIDUAL = {
-    "G1R": "I3B rc03 (recovery/test_recovery.py) still names it; the mount is G2's cutover",
-    "G2": "I3B rc03 still names it (with G1R); the I3B follow-up renames it G2-R1, the held "
-          "cutover E3B's own cases pend on",
-    "D2": "I3B rc04 names it through stack.unimplemented_rpcs(), which counts D6's permanent "
-          "stubs too; the adapter exists (dr01-dr04/dr09 [postgres] run on it)",
-    "D3": "I3B rc04, as D2",
-    "M3": "I3B rc05b names it for an S3-backed ObjectStore, which no task owns yet",
-    "W3": "I3B rc08b names it for a worker process entry point (with I2B)",
-    # Review H2: I3B's own vocabulary adds I2B (recoverykit.PENDING); rc08b still names it.
-    "I2B": "I3B rc08b names it for the worker's systemd unit (with W3); rc10's rollback "
-           "drill body is I3B's (the coordinator's ruling e)",
-}
+RESIDUAL: dict[str, str] = {}
 
 
 def pending(*ids: str, why: str):
