@@ -235,6 +235,10 @@ MUTANTS += (
                      "answered, and a gateway that never answers fails the wait",
            "apps/infrx-api/deploy/lib.sh", '"${READY_S:-120}" && wait_http "$WORKER_READY"',
            '"${READY_S:-120}"; wait_http "$WORKER_READY"', DRILLS, "rc10b and 8001"),
+    Mutant("i3bm104", "rc10c (DRL-1): wait_http polls a probe until READY_S, not once (the "
+                      "confirmation's H1)", "apps/infrx-api/deploy/lib.sh",
+           'until curl -fsS -o /dev/null --max-time 5 "$1"; do',
+           'until curl -fsS -o /dev/null --max-time 5 "$1" || return 1; do', DRILLS, "rc10c"),
     Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
                      "snapshot of queued jobs, so the drained job and the queue come back once",
            KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",

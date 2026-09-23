@@ -20,7 +20,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
 | rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
-| rc10/rc10b rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
+| rc10/rc10b/rc10c rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
 The emulated glue (dispatcher, preparation worker, reaper tick) is `recoverykit.World`.
 A drill that passes on a stand-in is *implemented*, never *integrated*.
@@ -670,9 +670,12 @@ UNITS = ("marlin2b-vllm.service", "marlin2b-gateway.service", "infrx-worker.serv
 BACKED_UP = (ENV_FILE, "etc/caddy/Caddyfile", "etc/caddy/infrx/Caddyfile",
              "etc/caddy/infrx/Caddyfile.maintenance", *(f"etc/systemd/system/{u}" for u in UNITS))
 # The host's binaries rollback.sh calls, stubbed: each records its argv and succeeds, except
-# a call naming $INFRX_I3B_FAIL (rc10b: a readiness probe that never answers).
+# a call naming $INFRX_I3B_FAIL, which fails - always (rc10b: a readiness probe that never
+# answers), or only its first $INFRX_I3B_FAILS times (rc10c: one that answers late).
 STUB = ('#!/usr/bin/env bash\necho "$(basename "$0") $*" >> "$INFRX_I3B_EVENTS"\n'
-        'case "$*" in *"${INFRX_I3B_FAIL:-<none>}"*) exit 1 ;; esac\n')
+        'case "$*" in *"${INFRX_I3B_FAIL:-<none>}"*)\n'
+        '  [ "$(grep -cF -- "$*" "$INFRX_I3B_EVENTS")" -gt "${INFRX_I3B_FAILS:-999999}" ] '
+        '|| exit 1 ;;\nesac\n')
 IMAGE = {"previous": "sha256:" + "a" * 64, "current": "sha256:" + "b" * 64}
 
 
@@ -711,11 +714,11 @@ def on_host(root: Path) -> dict[str, str]:
     return {path: (root / path).read_text() for path in BACKED_UP if (root / path).exists()}
 
 
-def rollback_sh(tmp_path: Path, root: Path, target: Path,
-                fail: str = "") -> tuple[subprocess.CompletedProcess, list[str]]:
+def rollback_sh(tmp_path: Path, root: Path, target: Path, fail: str = "",
+                fails: int | None = None) -> tuple[subprocess.CompletedProcess, list[str]]:
     """I2B's `deploy/rollback.sh <backup>`, unmodified, against the sandbox root, with the
-    stubs first on PATH (a call naming `fail` exits 1). Returns its result and the commands
-    it issued, in order."""
+    stubs first on PATH (a call naming `fail` exits 1: always, or its first `fails` times).
+    Returns its result and the commands it issued, in order."""
     stubs, events = tmp_path / "stub-bin", tmp_path / "events.log"
     if not stubs.exists():
         stubs.mkdir()
@@ -728,6 +731,7 @@ def rollback_sh(tmp_path: Path, root: Path, target: Path,
                           env={**os.environ, "INFRX_ROOT": str(root),
                                "PATH": f"{stubs}:{os.environ['PATH']}",
                                "INFRX_I3B_EVENTS": str(events), "INFRX_I3B_FAIL": fail,
+                               "INFRX_I3B_FAILS": "" if fails is None else str(fails),
                                "POLL_S": "0.01",
                                "READY_S": "1"})
     return done, (events.read_text().splitlines() if events.exists() else [])
@@ -851,5 +855,23 @@ def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_
     head = ROLLBACK_COMMANDS[:3 + (probe == "8002")]      # stop, reload, restart (, 8001 ok)
     assert issued[:len(head)] == head, issued
     retries = issued[len(head):]
-    assert retries and set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, issued
+    # DRL-1: polled until READY_S, not tried once (~100 calls at POLL_S=0.01, READY_S=1)
+    assert len(retries) > 1 and set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, \
+        issued
+    assert on_host(root) == release(IMAGE["previous"])
+
+
+def test_i3b_rc10c_a_gateway_that_answers_late_is_waited_for_and_the_edge_reloaded(tmp_path):
+    """rollback.md step 4 (DRL-1): the restored gateway's /readyz fails once and then
+    answers - a real gateway is rarely ready at its first probe. rollback.sh probes it again,
+    then the worker's, then reloads the edge: exit 0 and exactly rc10's commands with the
+    8001 probe issued twice. Stubs and sandbox as rc10; no database."""
+    root = tmp_path / "root"
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))
+    done, issued = rollback_sh(tmp_path, root, previous,
+                               fail="http://127.0.0.1:8001/readyz", fails=1)
+    assert done.returncode == 0, (done.returncode, done.stderr)
+    assert issued == ROLLBACK_COMMANDS[:4] + ROLLBACK_COMMANDS[3:], issued
     assert on_host(root) == release(IMAGE["previous"])
