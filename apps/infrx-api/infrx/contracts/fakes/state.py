@@ -970,6 +970,10 @@ class FakeJobStore:
     async def complete(self, lease: Lease, outcome: TerminalOutcome) -> TerminalOutcome:
         """Settlement is the store's authority: the caller's `settlement_state`
         and `debit` are recomputed, never trusted."""
+        return await self._complete(lease, outcome, credit=False)
+
+    async def _complete(self, lease: Lease, outcome: TerminalOutcome, *,
+                        credit: bool) -> TerminalOutcome:
         self.failures.before("complete")
         if outcome.state is JobState.succeeded and not outcome.result_ref:
             # r1 R30: a success the customer cannot fetch is not a success, and it
@@ -983,6 +987,10 @@ class FakeJobStore:
             job = self.jobs.get(lease.job_id)
             if job is None:
                 raise errors.NotFound(f"no job {lease.job_id}")
+            if job.credit is not None and not credit:
+                # A v1 caller would read `settled` with a zero USD debit and never see
+                # the CREDIT charge: the unit-ambiguous reading R64 exists to prevent.
+                raise errors.NotFound(f"job {job.id} is a CREDIT job: use complete_credit")
             if job.terminal:
                 proposal = (outcome.cause, outcome.usage, outcome.result_ref)
                 if proposal in (job.proposal,
@@ -1011,7 +1019,7 @@ class FakeJobStore:
         job = self.jobs.get(lease.job_id)
         if job is not None and job.credit is None:
             raise errors.NotFound(f"job {lease.job_id} is not a CREDIT job")
-        settled = await self.complete(lease, outcome)
+        settled = await self._complete(lease, outcome, credit=True)
         return settled, self.jobs[lease.job_id].settlement
 
     def _terminalize(self, job: _Job, cause: TerminalCause, usage: Usage | None,

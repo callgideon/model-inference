@@ -995,7 +995,8 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
     ran does not reach it; the charge is the admitted card's half-up debit, taken from
     the CREDIT wallet with the hold released in the same transaction; the v1 debit
     field stays zero and the USD wallet does not move. The worker's view carries the
-    admitted card and the resolved wallet. A legacy job's lease is `not_found` here."""
+    admitted card and the resolved wallet. v1 `complete` of the CREDIT lease and
+    `complete_credit` of a legacy lease are `not_found`."""
     from . import builders as b
     harness = factory()
     request = _credit_request(harness)
@@ -1009,6 +1010,8 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
     assert work.rate_card == admission.rate_card and work.request.pins == admission.pins
     assert work.request.wallet_id == admission.wallet_id and work.request.request == request
     await _refused(harness.port.load_work(lease), errors.NotFound)
+    await _refused(harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))), errors.NotFound)
     outcome, settlement = await harness.port.complete_credit(
         lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340)))
     expected = admission.rate_card.debit(1200, 340)

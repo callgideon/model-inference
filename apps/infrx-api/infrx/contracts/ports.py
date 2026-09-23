@@ -165,8 +165,8 @@ class CreditJobStore(Protocol):
     * settlement is `v2.records.settle` at the **admitted** card (R68); the v1
       `TerminalOutcome.debit` of a CREDIT job is always zero, because that field is USD.
 
-    A v1 read of a CREDIT job (`get_owned`, `load_work`) and a CREDIT read of a legacy job
-    are `not_found`, and one idempotency key never replays across regimes
+    A v1 read or settlement of a CREDIT job (`get_owned`, `load_work`, `complete`) and a
+    CREDIT read or settlement of a legacy job are `not_found`, and one idempotency key never replays across regimes
     (`IdempotencyConflict`). `prepared` answers a CREDIT job with its `AdmissionV2`.
     """
 
