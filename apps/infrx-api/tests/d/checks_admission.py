@@ -377,6 +377,11 @@ def check_admission_refusals(conn) -> str:
         ("a hold past the available USD but within the ledger",
          lambda: req(org_id=b.ORG_B, key_id=b.KEY_B), None, "legacy_usd", "one hold in org b",
          "insufficient_credit"),
+        # Review MC-3b: the other side of the boundary - one unit (0.00000001 USD) short
+        # of the hold is refused (the equal side is admitted in check_admission_accepts).
+        ("a USD hold one unit past the available balance",
+         lambda: req(org_id=b.ORG_B, key_id=b.KEY_B), None, "legacy_usd",
+         "org b one unit short", "insufficient_credit"),
         # Review M3: never a zero hold in the USD regime either.
         ("a zero USD hold", lambda: req(model_revision="free/model@1"), None, "legacy_usd",
          "zero price", "invalid_request"),
@@ -441,6 +446,14 @@ def check_admission_refusals(conn) -> str:
                                         "where org_id = %s", (b.ORG_B,)).fetchone()
                     assert left[1] < b.hold_for(first) <= left[0], \
                         f"the case needs a hold between available and the ledger: {left}"
+                elif setup == "org b one unit short":
+                    short = req(org_id=b.ORG_B, key_id=b.KEY_B)
+                    available, = conn.execute("select available from infrx.wallets where "
+                                              "org_id = %s", (b.ORG_B,)).fetchone()
+                    conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
+                                 "reason) values (%s, %s, 'adjustment', 'mc3b')",
+                                 (b.ORG_B, b.hold_for(short) - available
+                                  - Decimal("0.00000001")))
                 elif setup:
                     conn.execute(staged[setup])
                 request = make()
