@@ -188,7 +188,8 @@ def test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass():
     calls, accept = support.recorder()
     app, mounted = support.cutover_app(ingress_deps=support.deps(accept=accept))
     tc = TestClient(app)
-    body = {"model": support.PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
+    # The R62 pin: the v1 fake prices it, so admission reaches the key recheck (review H3).
+    body = {"model": support.MODEL_REVISION, "messages": [{"role": "user", "content": "hi"}]}
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
     # the ingress still holds a valid cache entry ...
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
