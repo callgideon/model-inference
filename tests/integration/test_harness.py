@@ -260,7 +260,8 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     generated = {check.case for check in checks if check.case.startswith("E3B-RLS-")}
     assert generated == {f"E3B-RLS-{name}-{role}" for name in (*pgstate.RELATIONS,
                                                                *pgstate.FUNCTIONS)
-                         for role in pgstate.API_ROLES}
+                         for role in pgstate.API_ROLES} | {
+        f"E3B-RLS-W-{name}-{role}" for name in pgstate.RELATIONS for role in pgstate.API_ROLES}
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)

@@ -575,7 +575,7 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", beta_keys),
               "auth.uid() is read from request.jwt.claim.sub, so whoever sets that claim IS "
               "the tenant: it must only ever be set from a verified JWT, never from input"),
-    ] + access_rows()
+    ] + access_rows() + write_rows()
 
 
 # --------------------------------------------------------------------- access completeness
@@ -765,6 +765,45 @@ FUNCTIONS = {
     "public.is_org_member(uuid)": BROWSER,
     "public.is_org_owner(uuid)": BROWSER,
 }
+
+
+# Review F2 (refuted as a gate hole - D's check_privileges enforces write grants verb by
+# verb - and folded in): the TABLE-level write verbs each API role holds, measured at 0016.
+# anon and authenticated hold none on any relation (authenticated's api_keys/organizations/
+# profiles writes are COLUMN grants, which `has_table_privilege` does not count); service_role
+# holds its schema's default except the immutable registry rows (insert only) and the money
+# and signup relations only SECURITY DEFINER functions write.
+WRITE_VERBS = ("INSERT", "UPDATE", "DELETE", "TRUNCATE")
+SERVICE_WRITES = {
+    "infrx": "INSERT,UPDATE,DELETE", "public": "INSERT,UPDATE,DELETE,TRUNCATE",
+    **dict.fromkeys(("infrx.catalog_listings", "infrx.data_access_policies",
+                     "infrx.deployment_revisions", "infrx.endpoints", "infrx.model_versions",
+                     "infrx.provider_memberships", "infrx.provider_orgs",
+                     "infrx.rate_card_versions", "infrx.serving_versions"), "INSERT"),
+    **dict.fromkeys(("infrx.credit_ledger", "infrx.credit_wallet_holds",
+                     "infrx.credit_wallet_reconciliation", "infrx.credit_wallets",
+                     "infrx.feature_flags", "infrx.job_results", "infrx.retired_individuals",
+                     "infrx.signup_denials", "infrx.signup_entitlements",
+                     "infrx.signup_identity_claims", "infrx.wallets"), ""),
+}
+
+
+def write_rows() -> list[Check]:
+    """Per relation and API role, the table-level write verbs it holds, read as `postgres`
+    (the three-argument form needs no schema usage). A grant that widens or narrows fails."""
+    rows = []
+    for relation in RELATIONS:
+        for role in API_ROLES:
+            expected = (SERVICE_WRITES.get(relation, SERVICE_WRITES[relation.split(".")[0]])
+                        if role == "service_role" else "")
+            verbs = ", ".join(f"'{verb}'" for verb in WRITE_VERBS)
+            rows.append(Check(
+                f"E3B-RLS-W-{relation}-{role}", "postgres", None,
+                f"select array_to_string(array(select v from unnest(array[{verbs}]) v "
+                f"where has_table_privilege('{role}', '{relation}', v)), ',')",
+                ("value", expected),
+                f"{role} holds exactly {expected or 'no'} table-level write on {relation}"))
+    return rows
 
 
 def access_rows() -> list[Check]:

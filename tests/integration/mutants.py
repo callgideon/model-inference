@@ -816,6 +816,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "    report.add(\"suites\", FAIL if (failed or silent) else PASS,\n",
            "tests/integration/test_run.py", "unexpected_skip",
            cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm36", "E3B2 review F2: a relation's table-level write grants are pinned",
+           "tests/integration/pgstate.py",
+           '                     "infrx.provider_memberships", "infrx.provider_orgs",\n',
+           '                     "infrx.provider_orgs",\n',
+           "tests/integration/test_services.py", "role_matrix_holds", layer=2,
+           cases=("test_the_role_matrix_holds_for_every_role",)),
 )
 
 
