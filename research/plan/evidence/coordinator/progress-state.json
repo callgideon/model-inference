@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:59:16Z",
+  "updated": "2026-09-23T17:01:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -58,7 +58,7 @@
       "since": "2026-09-23T16:59:16Z"
     },
     "F-fakes-followup": {
-      "phase": "MERGED a2779d1 after the verifier pass at 0cf5cd6; merged-tree checks running (ffakes-merged-a2779d1.log)",
+      "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
       "since": "2026-09-23T16:27:29Z"
     }
   },

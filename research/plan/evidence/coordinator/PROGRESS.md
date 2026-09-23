@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T16:59:16Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T17:01:53Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 26 done · 3 in progress · 1 remaining (of 30).**
 
@@ -76,7 +76,7 @@ Generated 2026-09-23T16:59:16Z from `tasks.json` (manifest v4) and `progress-sta
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z
 - review I3B-followup: verifier fix_required at 1a7a256 (wf_9570bfe1-b82; JSON evidence/i/I3B-followup-verify-1a7a256.json) → round 4 since 2026-09-23T16:59:16Z
-- review F-fakes-followup: MERGED a2779d1 after the verifier pass at 0cf5cd6; merged-tree checks running (ffakes-merged-a2779d1.log) since 2026-09-23T16:27:29Z
+- review F-fakes-followup: MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z
 
 ## Checkpoints
 
