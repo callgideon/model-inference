@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T21:20:58Z",
+  "updated": "2026-09-23T21:49:26Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "M1-L2": {
       "lane": "codex-objstore / codex/m1l2-object-store",
-      "phase": "review fix_required at e1bb54f (A1 fixture credentials; A2 error-vs-absent cases) \u2192 ONE fix round running \u2192 single verifier \u2192 merge after D5 + cutover",
+      "phase": "fix round HANDED BACK 0b9fc50 (A1\u2013A7 closed; 42 mutants); single verifier running \u2192 merge after D5 + cutover",
       "since": "2026-09-23T19:57:28Z",
       "note": "compose S3 in namespace e2 if free; else stub"
     },
@@ -94,8 +94,8 @@
       "since": "2026-09-23T20:43:27Z"
     },
     "M1-L2": {
-      "phase": "fix_required at e1bb54f (wf_078bac65-4dd; JSON evidence/m/M1L2-review-e1bb54f.json) \u2192 fix round",
-      "since": "2026-09-23T21:20:58Z"
+      "phase": "verifier at 0b9fc50 running",
+      "since": "2026-09-23T21:49:26Z"
     },
     "E4B": {
       "phase": "fix_required at 37a4652 (wf_be41f24a-b97; JSON evidence/e/E4B-review-37a4652.json) \u2192 fix round",

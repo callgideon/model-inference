@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T21:20:58Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T21:49:26Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -71,7 +71,7 @@ Generated 2026-09-23T21:20:58Z from `tasks.json` (manifest v4) and `progress-sta
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - BOX: codex-box / codex/box-measure — dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab — W4 phase B (candidate.sh E0/E1[/E3] → decide.py → P-20), E1B L0/L1/L8 in the same maintenance window; L2–L7 + E4B real runs after the rollout (phase 2) since 2026-09-23T19:35:52Z — SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh
-- M1-L2: codex-objstore / codex/m1l2-object-store — review fix_required at e1bb54f (A1 fixture credentials; A2 error-vs-absent cases) → ONE fix round running → single verifier → merge after D5 + cutover since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
+- M1-L2: codex-objstore / codex/m1l2-object-store — fix round HANDED BACK 0b9fc50 (A1–A7 closed; 42 mutants); single verifier running → merge after D5 + cutover since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
 - M-pilot-media: codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
@@ -83,7 +83,7 @@ Generated 2026-09-23T21:20:58Z from `tasks.json` (manifest v4) and `progress-sta
 - review F-fakes-followup: MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z
 - review checkpoint-2-interim: whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z
 - review D5: fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) → fix round since 2026-09-23T20:43:27Z
-- review M1-L2: fix_required at e1bb54f (wf_078bac65-4dd; JSON evidence/m/M1L2-review-e1bb54f.json) → fix round since 2026-09-23T21:20:58Z
+- review M1-L2: verifier at 0b9fc50 running since 2026-09-23T21:49:26Z
 - review E4B: fix_required at 37a4652 (wf_be41f24a-b97; JSON evidence/e/E4B-review-37a4652.json) → fix round since 2026-09-23T21:19:52Z
 
 ## Checkpoints
