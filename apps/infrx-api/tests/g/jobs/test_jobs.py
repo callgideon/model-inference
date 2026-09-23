@@ -329,6 +329,13 @@ def test_api_modes__a_credit_async_job_is_admitted_on_its_wallet():
     assert accepted.deadline_at < job.credit.admitted_at + timedelta(
         seconds=budgets.preparation_s + budgets.queue_wait_s + budgets.generation_s)
     assert all(wallet.reserved_total == 0 for wallet in world.jobs.wallets.values())
+    replays = []
+    for _ in range(2):                       # retries at two later instants: one answer
+        world.clock.advance(30)
+        replays.append(wire.JobAccepted.model_validate(post(world, key="credit-1").json()))
+    assert replays[0].deadline_at == replays[1].deadline_at == job.credit.admitted_at \
+        + timedelta(seconds=budgets.preparation_s + budgets.queue_wait_s + budgets.generation_s)
+    assert replays[0].deadline_at >= job.admission.deadline_at     # the ceiling, never earlier
     assert rs.run(send(world.app, "DELETE", job_path(world.handle()))).status == 200
     again = post(world, key="credit-1")
     assert again.status == 202 and again.json()["idempotency_replayed"] is True

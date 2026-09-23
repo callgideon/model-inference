@@ -82,7 +82,7 @@ class Jobs:
                                 state=self.state_of(admission, outcome),
                                 execution_mode=ExecutionMode.async_,
                                 created_at=admission.admitted_at,
-                                deadline_at=self.deadline_of(job, admission),
+                                deadline_at=self.deadline_of(job, admission, replayed),
                                 idempotency_replayed=replayed)
         return JSONResponse(body.model_dump(mode="json"), status_code=202, headers={
             **headers, wire.HEADER_PREFERENCE_APPLIED: wire.PREFER_RESPOND_ASYNC,
@@ -119,18 +119,22 @@ class Jobs:
             return JobState.preparing
         return admission.state
 
-    def deadline_of(self, job: _Job, admission) -> datetime:
+    def deadline_of(self, job: _Job, admission, replayed: bool = False) -> datetime:
         """The stored deadline. For CREDIT, `AdmissionV2` carries none (01a §1 keeps it on the
         v1 row), so it is the store's own rule (R-3): the earlier of the caller's bound
-        (G2's `request.deadline_at`, inside `job.bound`) and `admitted_at` plus the budgets."""
+        (G2's `request.deadline_at`, inside `job.bound`) and `admitted_at` plus the budgets.
+        A replay's `job.bound` is the retry's own bound, which says nothing about the stored
+        deadline (review ADM-2): a replay answers the ceiling, the same on every retry - exact
+        unless the first request's bound was earlier (a gateway clock behind the store's)."""
         if self.relay.regime != CREDIT:
             return admission.deadline_at
         # ponytail: recomputed until the CREDIT read answers the stored deadline (F/D).
         budgets = Budgets.of(self.relay.limits, ExecutionMode.async_)
-        return min(job.bound - timedelta(seconds=self.relay.grace_s),
-                   admission.admitted_at + timedelta(seconds=budgets.preparation_s
-                                                     + budgets.queue_wait_s
-                                                     + budgets.generation_s))
+        ceiling = admission.admitted_at + timedelta(
+            seconds=budgets.preparation_s + budgets.queue_wait_s + budgets.generation_s)
+        if replayed:
+            return ceiling
+        return min(job.bound - timedelta(seconds=self.relay.grace_s), ceiling)
 
     def model_of(self, admission) -> str:
         """The model name the caller asked for, as admission recorded it (R86)."""
