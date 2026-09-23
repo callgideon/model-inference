@@ -9,8 +9,9 @@ Refusals raised in SQL arrive as SQLSTATE P0001 with the message `<error_code>: 
 and become the `DomainError` of that code. D1R's seams keep their own SQLSTATEs.
 
 D3 (0016) adds the fenced leases: `claim`, `heartbeat`, `load_work`, `cancel`, `recover`
-and the fence of `complete`, whose settlement (D5) still raises `NotImplementedError`: a
-fail-closed boundary, never a silent success.
+and the fence of `complete`. D5 (0018) fills the settlement behind it: `complete` (legacy
+USD) and `complete_credit` (CREDIT) are one `infrx.terminalize` transaction each; `cancel`
+records its R21 cause; `recover` reports a 24 h release in `released`.
 """
 from __future__ import annotations
 
@@ -19,9 +20,9 @@ from typing import Any, Awaitable, Callable
 from ..contracts import errors, ids
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
-                                 MediaRef, NormalizedRequest, ReservationKind, TerminalCause,
-                                 TerminalOutcome, Work)
-from ..contracts.v2.records import AdmissionV2
+                                 MediaRef, NormalizedRequest, ReservationKind,
+                                 SettlementState, TerminalCause, TerminalOutcome, Work)
+from ..contracts.v2.records import AdmissionV2, SettlementV2
 
 #: `async () -> psycopg.AsyncConnection` in autocommit, acting as `service_role`.
 Connect = Callable[[], Awaitable[Any]]
@@ -32,8 +33,8 @@ _ADMISSION_FIELDS = tuple(name for name in Admission.model_fields if name != "sc
 #: ponytail: a constant (7 days, the processing-cache horizon); a `PilotSettings` field when
 #: an operator needs to tune it.
 OUTBOX_RETENTION_S = 7 * 86_400.0
-_OUTCOME_FIELDS = ("job_id", "state", "cause", "result_ref", "settlement_state", "debit",
-                   "settled_at", "reconcile_after")
+_OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", "settlement_state",
+                   "debit", "settled_at", "reconcile_after")
 
 
 def connector(dsn: str) -> Connect:
@@ -104,6 +105,21 @@ def _outcome(doc: dict | None) -> TerminalOutcome | None:
     return TerminalOutcome.model_validate({k: doc[k] for k in _OUTCOME_FIELDS})
 
 
+def _settlement(doc: dict, outcome: TerminalOutcome) -> SettlementV2 | None:
+    """`SettlementV2` of a settled CREDIT job, from the store's own rows: the pins it was
+    admitted at and the charge its inference debit recorded."""
+    if outcome.settlement_state is not SettlementState.settled:
+        return None
+    pins = doc["pins"]
+    return SettlementV2.model_validate({
+        "request_id": doc["request_id"], "wallet_id": doc["wallet_id"],
+        "usage": outcome.usage.model_dump(mode="json"), "charged": doc["charged_credits"],
+        "rate_card_version": pins["rate_card_version"],
+        "serving_version_id": pins["serving_version_id"],
+        "deployment_revision_id": pins["deployment_revision_id"],
+        "settled_at": outcome.settled_at})
+
+
 def admission_of(doc: dict) -> Admission:
     return Admission.model_validate({k: doc[k] for k in _ADMISSION_FIELDS if k in doc})
 
@@ -134,6 +150,9 @@ class PgJobStore:
         self.limits = limits
         #: The last `recover` sweep's jobs it could not reap: job id -> "sqlstate: detail".
         self.unsettleable: dict[str, str] = {}
+        #: The last sweep's 24 h unknown-usage releases (job ids): a settlement changing
+        #: held_unknown -> released_platform_absorbed, never a new terminalization (I3B 5).
+        self.released: tuple[str, ...] = ()
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
         from psycopg import Error
@@ -336,14 +355,13 @@ class PgJobStore:
 
     async def load_work(self, lease: Lease) -> PreparedWork:
         """R46: fenced like a mutation. A CREDIT job's work is a `WorkV2` this v1 port cannot
-        carry (no price snapshot), so it is refused rather than invented. Interim until
-        WorkV2: SQL `claim` never leases a CREDIT job (MY-3), so only a preparation lease
-        reaches this refusal."""
+        carry (no price snapshot), so it is `not_found` here, as the fake answers: its door
+        is `load_work_credit`."""
         doc = await self._fenced("load_work", lease)
         admission = doc["admission"]
         if admission["accounting_regime"] != "legacy_usd":
-            raise errors.InvalidRequest(f"job {lease.job_id} is a CREDIT job: its work is "
-                                        f"WorkV2, which the v1 load_work cannot carry")
+            raise errors.NotFound(f"job {lease.job_id} is a CREDIT job: its work is WorkV2, "
+                                  f"use load_work_credit")
         request = NormalizedRequest.model_validate(doc["request"])
         return PreparedWork(request=request, media_refs=request.media,
                             prepared_refs=tuple(MediaRef.model_validate(r)
@@ -354,41 +372,56 @@ class PgJobStore:
 
     async def cancel(self, org_id: str, job_handle: str, *,
                      cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:
-        """Terminalizes and releases the hold and capacity in one transaction; a job that is
-        already terminal answers its committed outcome (completion won).
+        """Terminalizes and releases the hold and capacity in one transaction, recording
+        `cause` (R21: client_cancelled, client_disconnected or sync_deadline - any other is
+        `invalid_request` from the store, nothing changed); a job that is already terminal
+        answers its committed outcome, first cause and all (completion won)."""
+        return _outcome(await self._call("cancel", {
+            "org_id": org_id, "job_handle": job_handle, "cause": str(cause),
+            "limits": self._lease_limits()}))
 
-        Until D5's 0018, `infrx.cancel` (0016) records `client_cancelled` whatever it is
-        sent, so every other cause is refused HERE, before any SQL, with
-        `UnsupportedParameter` (an `InvalidRequest`, `param="cause"`): nothing is written and
-        nothing records the wrong cause. D5 removes the refusal and sends `cause`."""
-        if cause != TerminalCause.client_cancelled:
-            raise errors.UnsupportedParameter(f"cause {cause!r} needs migration 0018 (D5)",
-                                              param="cause")
-        return _outcome(await self._call("cancel", {"org_id": org_id, "job_handle": job_handle,
-                                                    "limits": self._lease_limits()}))
+    async def _terminalize(self, lease: Lease, outcome: TerminalOutcome, regime: str) -> dict:
+        """One `infrx.terminalize` transaction: the replay, the fence, the validation and
+        the settlement. The proposal's settlement and debit are recomputed by the store."""
+        return await self._fenced("terminalize", lease, regime=regime,
+                                  outcome=outcome.model_dump(mode="json"),
+                                  limits={**self._lease_limits(),
+                                          "result_ttl_s": self.limits.result_ttl_s,
+                                          "idempotency_ttl_s": self.limits.idempotency_ttl_s})
 
     async def complete(self, lease: Lease, outcome: TerminalOutcome) -> TerminalOutcome:
-        """D3 runs the fence (stale/foreign/expired/wrong-kind refused, R29 terminalizes);
-        the settlement after it is D5's, so a lease that holds still fails closed."""
-        from psycopg.errors import FeatureNotSupported
-        try:
-            await self._fenced("terminalize", lease, outcome=outcome.model_dump(mode="json"))
-        except FeatureNotSupported:
-            pass
-        raise NotImplementedError("JobStore.complete: the fence held; the settlement is D5's")
+        """The settling transaction of a legacy USD job (a CREDIT job is `not_found`). The
+        identical retry answers the committed outcome; any other proposal after terminal is
+        `already_terminal` and moves nothing; a refusal after an R29 terminalization is
+        raised as its type (R39)."""
+        return _outcome((await self._terminalize(lease, outcome, "legacy_usd"))["outcome"])
+
+    async def complete_credit(self, lease: Lease,
+                              outcome: TerminalOutcome) -> tuple[TerminalOutcome,
+                                                                 SettlementV2 | None]:
+        """The CREDIT settlement (a legacy job is `not_found`): the outcome, whose v1 debit
+        is 0, and the `SettlementV2` at the ADMITTED card exactly when it is `settled`."""
+        doc = await self._terminalize(lease, outcome, "credit")
+        settled = _outcome(doc["outcome"])
+        return settled, _settlement(doc, settled)
 
     async def recover(self) -> tuple[TerminalOutcome | IndexEvent, ...]:
         """The reaper, on the database clock (R7). Requeues become outbox dispatch rows (the
         relay delivers them) and are also returned as `IndexEvent`s with the same ids. A job
         the sweep could not reap is reported in `self.unsettleable`, never returned."""
         produced: list[TerminalOutcome | IndexEvent] = []
+        released: list[str] = []
         self.unsettleable = {}
         for item in await self._call("recover", {"limits": self._lease_limits()}):
-            if "outcome" in item:
+            if "released" in item:
+                produced.append(_outcome(item["released"]))
+                released.append(produced[-1].job_id)
+            elif "outcome" in item:
                 produced.append(_outcome(item["outcome"]))
             elif "index_event" in item:
                 produced.append(IndexEvent.model_validate(item["index_event"]))
             else:
                 failed = item["unsettleable"]
                 self.unsettleable[failed["job_id"]] = f"{failed['code']}: {failed['detail']}"
+        self.released = tuple(released)
         return tuple(produced)

@@ -119,6 +119,21 @@ class FailingJobStore:
         return call
 
 
+class WorkerResults(PgJobStore):
+    """TEST RIG (R30): the conformance builders name a result as an opaque text
+    (`results/test/result.json`); the real worker stores its result first (`put_result`) and
+    completes with the `infrx-result:<job_id>` reference it gets back, which is all the store
+    accepts. This does the same with the builder's text, for the lease's job, so a case's
+    proposal reaches the settlement the way a worker's does. Replays stay identical (the same
+    text is the same stored result); a proposal without a reference is sent unchanged."""
+
+    async def _terminalize(self, lease, outcome, regime: str) -> dict:
+        if outcome.result_ref is not None and not outcome.result_ref.startswith("infrx-result:"):
+            ref = await self.put_result(lease.job_id, outcome.result_ref)
+            outcome = outcome.model_copy(update={"result_ref": ref})
+        return await super()._terminalize(lease, outcome, regime)
+
+
 def assert_test_database(conn) -> None:
     """The same gate as the movable clock (0003): only a task-local `infrx_<task>`
     database may have a production guard stepped around (review SEC-1)."""
@@ -277,7 +292,7 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
         while len(opened) > keep:
             opened.popleft().close()
         clock = PgClock(conn)
-        store = PgJobStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
+        store = WorkerResults(connector(dsn_for(name)), limits=limits or DEFAULTS)
         stream = PgStreamStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
         plan = FailurePlan()
         extra = hooks(conn, store, stream)
@@ -303,5 +318,5 @@ def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callabl
     return factory
 
 
-__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "hooks", "make_jobstore_factory",
-           "make_streamstore_factory", "seed"]
+__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "WorkerResults", "hooks",
+           "make_jobstore_factory", "make_streamstore_factory", "seed"]
