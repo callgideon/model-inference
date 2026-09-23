@@ -978,6 +978,33 @@ def test_a_header_still_arriving_is_not_probed(monkeypatch):
     assert probed == [len(FTYP + moov)]                                  # non-vacuous
 
 
+def test_a_moov_too_large_for_a_look_is_left_to_the_whole_object(monkeypatch):
+    """Review S1: a complete `moov` ending past HEADER_PROBE_MAX is not copied and probed
+    at a look (a 60 MiB one held the loop 43.8 ms per look); the whole object decides."""
+    probed = []
+    monkeypatch.setattr(probe, "probe", lambda data: probed.append(len(data)))
+    probe.probe_header(FTYP + _moov(121.0))
+    assert probed == [len(FTYP + _moov(121.0))]                         # non-vacuous
+    probed.clear()
+    assert probe.probe_header(FTYP + _moov(121.0, pad=probe.HEADER_PROBE_MAX)) is None
+    assert probed == []
+
+
+def test_a_settled_header_is_not_looked_at_again(tmp_path):
+    """Review S1: the first complete `moov` is the only one the walk reads, so once it
+    passed the profile the download is not looked at again (an 8 MiB body: one look, not
+    four)."""
+    body = FTYP + _moov(60.0) + support.box(b"mdat", bytes(8 << 20))
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    answers = []
+    real = adapter.refuse_early
+    adapter.refuse_early = lambda head: answers.append(real(head)) or answers[-1]
+    ref = run(adapter.materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+    assert answers == [True]
+
+
 def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():
     """At most seven looks up to the 64 MiB cap: an 8 MiB body in 64 KiB chunks is looked
     at four times, at 1, 2, 4 and 8 MiB."""

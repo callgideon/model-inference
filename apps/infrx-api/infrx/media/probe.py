@@ -70,6 +70,10 @@ MAX_DEPTH = 8                  # moov/trak/mdia/minf/stbl/stsd is six; eight is 
 MAX_ELEMENTS = 4_096           # headers walked per probe, whatever the file declares
 MAX_DIMENSION = 8_192          # 8K is 7680 wide; 0 and 65535 are declarations, not frames
 BOX_HEADER = 8
+# M4: the most of a download's head `probe_header` copies and probes. A `moov` ending past it
+# is left to the whole-object probe: copied and walked at every look, a complete 60 MiB one
+# held the event loop 43.8 ms per look (M4 review S1, meas.); 8 MiB is ~3 ms.
+HEADER_PROBE_MAX = 8 << 20
 # Matroska stores a duration in timecode-scale units; the default scale is 1 ms.
 DEFAULT_TIMECODE_SCALE = 1_000_000
 NANOSECONDS = 1_000_000_000
@@ -359,6 +363,8 @@ def probe_header(data) -> Probed | None:
             if kind == b"moov":
                 # Still arriving is "nothing yet", found without copying the prefix: a moov
                 # declared tens of MiB long would otherwise be copied and walked every look.
+                if at + size > HEADER_PROBE_MAX:
+                    return None
                 return probe(data[:at + size]) if at + size <= len(data) else None
             if size < BOX_HEADER:          # "to the end of the file": no header after it
                 return None

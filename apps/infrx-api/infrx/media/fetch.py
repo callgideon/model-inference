@@ -226,7 +226,8 @@ class MediaFetcher:
 
         `early(head)` (M4), when given, is shown the body received so far once it reaches
         `EARLY_LOOK_BYTES` and each time it has doubled since; it refuses by raising, and
-        the rest of the body is then never read."""
+        the rest of the body is then never read. A true answer says the head has settled
+        everything it can, and it is not shown again."""
         try:
             # The backstop on the real clock: the injected `monotonic` bounds the phases
             # this module can see, and this bounds the ones it cannot (a resolver or a
@@ -329,7 +330,8 @@ class MediaFetcher:
                         hasher.update(chunk)
                         if early is not None and len(body) >= look:
                             look = 2 * len(body)
-                            early(body)
+                            if early(body):
+                                early = None      # settled: no later look can change it
                         if self.monotonic() >= expires_at:
                             raise refused("timeout", host=host)
                     if not body:
