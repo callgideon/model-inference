@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:16:49Z",
+  "updated": "2026-09-23T18:19:43Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -36,7 +36,7 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3) after the round-4 verifier pass at d0d523f; merged-tree checks running (e3b2-merged log; I3B's two layer-0 reds expected until the I3B merge)",
+      "phase": "MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B's two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2",
       "since": "2026-09-23T18:16:49Z"
     },
     "D4": {

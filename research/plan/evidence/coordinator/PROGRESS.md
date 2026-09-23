@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T18:16:49Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T18:19:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 2 in progress · 1 remaining (of 30).**
 
@@ -71,7 +71,7 @@ Generated 2026-09-23T18:16:49Z from `tasks.json` (manifest v4) and `progress-sta
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
-- review E3B2: MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3) after the round-4 verifier pass at d0d523f; merged-tree checks running (e3b2-merged log; I3B's two layer-0 reds expected until the I3B merge) since 2026-09-23T18:16:49Z
+- review E3B2: MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B's two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2 since 2026-09-23T18:16:49Z
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z
 - review I3B-followup: round-5 verifier at a693c6e running since 2026-09-23T18:14:32Z
