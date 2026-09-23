@@ -59,7 +59,7 @@ from the box report.
 | `e4b.b.config-pin` | ENGINE-OPT, MEDIA-OPT | ⚠️ see the local run (B1) | ⚠️ TO BE MEASURED against `inventory.sh` (B2) |
 | `e4b.b.envelope` | PERF-ENVELOPE | ⚠️ see the local run (12 samples: p95 unknown by design) | ⚠️ TO BE MEASURED: ladder 0.5/1/2 req/s × 120 |
 | `e4b.b.soak` | PERF-ENVELOPE, BACKEND-OBSERVE | ⚠️ see the local run | ⚠️ TO BE MEASURED: ½ supported rate × 4 h |
-| `e4b.b.overload` | PERF-ENVELOPE | PENDING[G2-R1] by construction (an engine has no admission) | ⚠️ TO BE MEASURED: 32-request burst from one key |
+| `e4b.b.overload` | PERF-ENVELOPE | PENDING[BOX] by construction (an engine has no admission) | ⚠️ TO BE MEASURED: 32-request burst from one key |
 | `e4b.b.recovery` / `e4b.b.recovery-box` | OPS-RECOVER | ⚠️ see the local run (I3B's `rc*`/`bk*` on the E2 stack) | ⚠️ TO BE MEASURED: the runbook drills of §6, run by the coordinator |
 
 ## 4. Measured limits, SLOs, cost and quality — coverage

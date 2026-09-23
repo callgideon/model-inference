@@ -40,14 +40,14 @@ def test_e4b_the_report_carries_both_heads_the_target_the_hashes_and_the_exit_ru
     assert report.exit_code == 0
     report.check("e4b.y", certify.SKIP, "box only", owners=("BOX",))
     assert report.exit_code == 3
-    report.check("e4b.z", certify.PENDING, "cutover", owners=("G2-R1", "D5"))
+    report.check("e4b.z", certify.PENDING, "dev host", owners=("STACK", "BOX"))
     assert report.exit_code == 3
     doc = json.loads(report.as_json())
     assert {"git_head", "git_head_end", "target", "hashes", "stages", "backend_ready"} <= set(doc)
     assert doc["target"] == TARGET and doc["hashes"] == report.hashes
     assert "not decided" in doc["backend_ready"]
     assert [(s["stage"], s["owners"], s["label"]) for s in doc["stages"]] == [
-        ("e4b.x", None, certify.FAKE), ("e4b.y", ["BOX"], None), ("e4b.z", ["D5", "G2-R1"], None)]
+        ("e4b.x", None, certify.FAKE), ("e4b.y", ["BOX"], None), ("e4b.z", ["BOX", "STACK"], None)]
     report.check("e4b.w", certify.FAIL, "broken")
     assert report.exit_code == json.loads(report.as_json())["exit_code"] == 1
 
@@ -63,7 +63,7 @@ def test_e4b_a_skip_or_pending_without_a_known_owner_is_a_failure():
         assert entry["detail"]["untyped"] == status
     assert report.check("e4b.typed", certify.PENDING, "why", owners=("BOX",))["status"] \
         == certify.PENDING
-    assert {"BOX", "STACK", "D5", "G2-R1", "I2B-R4", "M1-L2"} <= set(certify.OWNERS)
+    assert {"BOX", "STACK"} | set(certify.recoverykit.PENDING) == set(certify.OWNERS)
 
 
 # ------------------------------------------------------------------------------ hashes
@@ -104,8 +104,8 @@ def _cases():
     drills = "tests.integration.backend.test_drills"
     return {"passed": [f"{drills}::test_e3b_dr01", f"{rec}::test_i3b_rc01"],
             "failed": [], "skipped": [],
-            "pending": {"G2-R1": [f"{drills}::test_backend_journey", f"{rec}::test_i3b_rc03"],
-                        "I2B-R4": [f"{rec}::test_i3b_rc08b"]}}
+            "pending": {"BOX": [f"{drills}::test_backend_journey", f"{rec}::test_i3b_rc03"],
+                        "STACK": [f"{rec}::test_i3b_rc08b"]}}
 
 
 def test_e4b_the_backend_suite_splits_into_protocol_and_recovery_by_the_gates_rule():
@@ -114,14 +114,14 @@ def test_e4b_the_backend_suite_splits_into_protocol_and_recovery_by_the_gates_ru
     halves = certify.split_backend(_cases())
     assert halves["protocol"]["passed"] == ["tests.integration.backend.test_drills::test_e3b_dr01"]
     assert halves["recovery"]["pending"] == {
-        "G2-R1": ["tests.integration.backend.recovery.test_recovery::test_i3b_rc03"],
-        "I2B-R4": ["tests.integration.backend.recovery.test_recovery::test_i3b_rc08b"]}
+        "BOX": ["tests.integration.backend.recovery.test_recovery::test_i3b_rc03"],
+        "STACK": ["tests.integration.backend.recovery.test_recovery::test_i3b_rc08b"]}
     gate = [{"stage": stage, "status": certify.PASS} for stage in certify.GATE_STAGES]
     report = certify.Report(TARGET)
     certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate)
     certify.suite_check(report, "e4b.b.recovery", halves["recovery"], gate)
     assert [(s["status"], s["owners"]) for s in report.stages] == [
-        (certify.PENDING, ["G2-R1"]), (certify.PENDING, ["G2-R1", "I2B-R4"])]
+        (certify.PENDING, ["BOX"]), (certify.PENDING, ["BOX", "STACK"])]
     broken = {**halves["recovery"], "failed": ["x.recovery.test_restore::test_i3b_bk01"]}
     certify.suite_check(report, "e4b.b.recovery", broken, gate)
     assert report.stages[-1]["status"] == certify.FAIL
@@ -299,7 +299,7 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     report = certify.Report(local)
     certify.dataset_check(report, local, tmp_path)
     entry = report.stages[-1]
-    assert (entry["status"], entry["owners"], entry["label"]) == (certify.PENDING, ["G2-R1"],
+    assert (entry["status"], entry["owners"], entry["label"]) == (certify.PENDING, ["BOX"],
                                                                   certify.FAKE)
     assert entry["measured"]["first_run"]["accepted"] == 2 and runs == [("first", 2), ("resume",)]
     metered = {**local, "metered": True, "label": certify.MEAS, "bench_target": "gateway"}
@@ -508,7 +508,7 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert {row[1] for row in certify.rung_verdicts(band, clips, gateway=True)} == {"pass"}
     assert _verdict(certify.rung_verdicts(ok, clips, gateway=True), "duration_cap") == "unknown"
     assert certify.rung_verdicts(capped, clips, gateway=False)[0] == (
-        "duration_cap", "unknown", "an engine target has no admission", "G2-R1")
+        "duration_cap", "unknown", "an engine target has no admission", "BOX")
     failing = [*ok[2:], *[_attempt("short", "failed", status=502, error="http_502")] * 2]
     assert _verdict(certify.rung_verdicts(failing, clips, gateway=True), "failure_rate") == "fail"
     busy = [*ok, _attempt("short", "rejected", status=429, code="capacity_exhausted", retry=2)]
@@ -631,9 +631,9 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
                     ("soak-raw.jsonl", tiny["soak"]["rate"],
                      round(tiny["soak"]["rate"] * tiny["soak"]["seconds"]))]
     assert [(e["stage"], e["status"], e["owners"]) for e in report.stages] == [
-        ("e4b.b.envelope", certify.PENDING, ["BOX", "G2-R1"]),
+        ("e4b.b.envelope", certify.PENDING, ["BOX"]),
         ("e4b.b.soak", certify.PENDING, ["BOX"]),
-        ("e4b.b.overload", certify.PENDING, ["G2-R1"])]
+        ("e4b.b.overload", certify.PENDING, ["BOX"])]
     gateway = {**engine, "bench_target": "gateway", "scale": "box", "label": certify.MEAS}
     seen.clear()
     certify.load_cells(report, gateway, tmp_path, None)

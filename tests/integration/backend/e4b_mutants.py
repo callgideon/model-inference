@@ -187,7 +187,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if False:\n        report.check(\"e4b.a.dataset-resume\", FAIL", DATASET),
     _m("resume_exit_ignored", "a resumed run that failed fails the drill",
        '    if resumed["exit"] != 0:\n', "    if False:\n", DATASET),
-    _m("engine_target_skips_to_ledger", "the engine target pends on the held cutover",
+    _m("engine_target_skips_to_ledger", "the engine target stops at the client half, pending on the box",
        '    if not target["metered"]:\n', "    if False:\n", DATASET),
     _m("missing_ledger_passes", "no ledger adapter is PENDING on D5, never PASS",
        'report.check("e4b.a.dataset-resume", PENDING,\n                     '
@@ -280,7 +280,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("gpu_total_read_as_used", "the soak judges the GPU's used memory",
        'total("infrx_gpu_memory_bytes", state="used")', 'total("infrx_gpu_memory_bytes")',
        SCRAPE),
-    _m("engine_target_overload_run", "overload against an engine target pends on the cutover",
+    _m("engine_target_overload_run", "overload against an engine target is not run: it pends on the box",
        "    if not gateway:\n        report.check(\"e4b.b.overload\"",
        "    if False:\n        report.check(\"e4b.b.overload\"", CELLS),
     _m("soak_at_the_full_rate", "the box soak runs at the declared fraction of the envelope",

@@ -76,7 +76,9 @@ PROTOCOL = MARLIN / "results" / "E4B-protocol.md"
 SEED = 20260922
 
 # The only owners a PENDING or SKIP may name: the backend suite's own vocabulary (E3B's
-# `stack.PENDING`, I3B's `recoverykit.OWNERS`), plus the two this runner adds.
+# `stack.PENDING`, I3B's `recoverykit.OWNERS`), plus the two this runner adds. A check the
+# local target (an engine: no admission, no ledger) can never judge names BOX, not a task:
+# the task's id leaves the vocabulary the day it merges, and the check still needs the box.
 OWNERS = {**recoverykit.PENDING,
           "BOX": "the coordinator's maintenance window on the pilot box (P-04 target): this "
                  "runner with --target/--engine-url/--inventory --box, the real engine, "
@@ -503,7 +505,7 @@ def dataset_check(report: Report, target: dict, workdir: Path, ledger=None) -> N
         report.check("e4b.a.dataset-resume", PENDING,
                      "client invariants hold; the ledger half needs a metered endpoint (the "
                      "local target is the engine: no admission, no idempotency, no ledger)",
-                     owners=("G2-R1",), measured=measured, label=target["label"])
+                     owners=("BOX",), measured=measured, label=target["label"])
         return
     if ledger is None:
         report.check("e4b.a.dataset-resume", PENDING,
@@ -722,7 +724,7 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool) -> list[tuple
     over = [r for r in rows if r not in counted]
     out = []
     if not gateway:
-        out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "G2-R1"))
+        out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "BOX"))
     else:
         admitted = sorted({r["clip_id"] for r in over if not (
             r.get("outcome") == "rejected" and 400 <= (r.get("http_status") or 0) < 500)})
@@ -897,7 +899,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
     if not gateway:
         report.check("e4b.b.overload", PENDING, "overload is admission's answer, and the local "
                      "target is the engine: it has no admission to refuse with",
-                     owners=("G2-R1",), label=target["label"])
+                     owners=("BOX",), label=target["label"])
         return
     burst = shape["overload"]["burst"]
     client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
