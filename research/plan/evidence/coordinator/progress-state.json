@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T10:02:48Z",
+  "updated": "2026-09-23T10:09:50Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -44,6 +44,12 @@
       "phase": "implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2",
       "since": "2026-09-23T10:02:48Z",
       "note": "blocks the pilot's validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md"
+    },
+    "G3": {
+      "lane": "codex-g3 / codex/g3-jobs",
+      "phase": "implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only)",
+      "since": "2026-09-23T10:09:50Z",
+      "note": "POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/"
     }
   },
   "reviews": {

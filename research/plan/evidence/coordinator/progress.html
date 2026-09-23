@@ -27,17 +27,17 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:02:48Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:09:50Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>21</b><span>done</span></div>
-<div class="tile prog"><b>6</b><span>in progress</span></div>
-<div class="tile rem"><b>3</b><span>remaining</span></div>
+<div class="tile prog"><b>7</b><span>in progress</span></div>
+<div class="tile rem"><b>2</b><span>remaining</span></div>
 <div class="tile blk"><b>3</b><span>GPU-gated</span></div>
 <div class="tile"><b>70%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">6 done · 0 in progress · 0 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:70.6%"></i><i class="p" style="width:17.6%"></i><i class="r" style="width:11.8%"></i></div><div class="c">12 done · 3 in progress · 2 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:70.6%"></i><i class="p" style="width:23.5%"></i><i class="r" style="width:5.9%"></i></div><div class="c">12 done · 4 in progress · 1 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">2 done · 2 in progress · 0 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">1 done · 1 in progress · 0 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
@@ -63,7 +63,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill prog">in-progress</span></td><td class="note">relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters</td></tr>
-<tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill prog">in-progress</span></td><td class="note">POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/</td></tr>
 <tr><td>B1</td><td><code>G4U</code></td><td>Owned upload HTTP adapter</td><td><span class="pill prog">in-progress</span></td><td class="note">routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)</td></tr>
 <tr><td>B1</td><td><code>G6B</code></td><td>Headless endpoint provisioning and operations</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B2</td><td><code>E3B</code></td><td>Backend-only durability, security and protocol integration gate</td><td><span class="pill prog">in-progress</span></td><td class="note">phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)</td></tr>
@@ -101,6 +101,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>G4U</code> — codex-g4u / codex/g4u-upload-adapter — review fix_required at f3c8055 (2 blocking R1 control-body deadline untested, H1 malformed mutant; 11 nonblocking, tenant lens PASS) → fix round; confirmation next since 2026-09-23T05:12:27Z — routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)</li>
 <li><code>W4</code> — codex-w4 / codex/w4-measured-tuning — phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) → fix round running; then confirmation workflow since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge</li>
 <li><code>W-new</code> — codex-wnew / codex/w-consumed-parameters — implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2 since 2026-09-23T10:02:48Z — blocks the pilot&#x27;s validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md</li>
+<li><code>G3</code> — codex-g3 / codex/g3-jobs — implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only) since 2026-09-23T10:09:50Z — POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/</li>
 <li>review <code>W4</code> — fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) → fix round on the lane; confirmation next since 2026-09-23T09:08:35Z</li>
 <li>review <code>G4U</code> — fix_required at f3c8055 (wf_4b637ba3-390; JSON evidence/g/G4U-review-f3c8055.json) → fix round on the lane since 2026-09-23T09:40:51Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>

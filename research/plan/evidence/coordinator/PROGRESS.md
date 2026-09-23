@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T10:02:48Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T10:09:50Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
+**Backend packages: 21 done · 7 in progress · 2 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -26,7 +26,7 @@ Generated 2026-09-23T10:02:48Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **done** | implemented |  |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **done** | implemented |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **in-progress** | planned | relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters |
-| B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
+| B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **in-progress** | planned | POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/ |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **in-progress** | planned | routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q) |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md) |
@@ -71,6 +71,7 @@ Generated 2026-09-23T10:02:48Z from `tasks.json` (manifest v4) and `progress-sta
 - G4U: codex-g4u / codex/g4u-upload-adapter — review fix_required at f3c8055 (2 blocking R1 control-body deadline untested, H1 malformed mutant; 11 nonblocking, tenant lens PASS) → fix round; confirmation next since 2026-09-23T05:12:27Z — routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)
 - W4: codex-w4 / codex/w4-measured-tuning — phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) → fix round running; then confirmation workflow since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
 - W-new: codex-wnew / codex/w-consumed-parameters — implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2 since 2026-09-23T10:02:48Z — blocks the pilot's validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md
+- G3: codex-g3 / codex/g3-jobs — implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only) since 2026-09-23T10:09:50Z — POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/
 - review W4: fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) → fix round on the lane; confirmation next since 2026-09-23T09:08:35Z
 - review G4U: fix_required at f3c8055 (wf_4b637ba3-390; JSON evidence/g/G4U-review-f3c8055.json) → fix round on the lane since 2026-09-23T09:40:51Z
 
