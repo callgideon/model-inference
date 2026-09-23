@@ -2569,6 +2569,17 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if found then",
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if false then",
        "admission", "adjust", "an operator retry moves the money twice"),
+    # review B1: each part of "another movement" is its own defect
+    _m("d5_grant_replay_ignores_wallet", SETTLE,
+       "    if l.wallet_id <> w.wallet_id or l.kind <> v_kind or", "    if l.kind <> v_kind or",
+       "admission", "adjust",
+       "an operation id reused on ANOTHER wallet answers `replayed` and moves nothing there "
+       "(the reviewer's rv_replay_ignores_wallet)"),
+    _m("d5_grant_replay_ignores_kind", SETTLE,
+       "l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount",
+       "l.wallet_id <> w.wallet_id or l.amount", "admission", "adjust",
+       "an operation id reused for another KIND of movement answers `replayed` "
+       "(the reviewer's rv_replay_ignores_kind)"),
     _m("d5_adjust_without_audit", SETTLE, "         'grant_credit:' || v_op;",
        "         'grant_credit:' || v_op where false;", "admission", "adjust",
        "an operator moved credit and nothing records who or why (R34)"),

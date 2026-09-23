@@ -89,7 +89,19 @@ def check_adjust(conn) -> str:
         assert (again["replayed"], again["entry"]) == (True, entry), again
         assert (rows(conn, "infrx.credit_ledger"), rows(conn, "infrx.audit_entries")) == \
             (ledger, audit), "a replay appended"
-        assert grant(conn, wid, "13.00000000", op=op)[0] == "idempotency_conflict"
+        # the same operation id for ANOTHER movement - amount, wallet or kind - is a
+        # conflict, and nothing moves anywhere (review B1: each part is its own mutant)
+        other_wallet = cc.wallet_of(conn, cc.CONSUMER_2)
+        other_before = wallet(conn, other_wallet)
+        for label, answer in (
+                ("another amount", grant(conn, wid, "13.00000000", op=op)),
+                ("another wallet", grant(conn, other_wallet, "12.50000000", op=op)),
+                ("another kind", grant(conn, wid, "12.50000000", kind="operator_allocation",
+                                       op=op))):
+            assert answer[0] == "idempotency_conflict", \
+                f"the operation id reused for {label} answered {answer}"
+        assert (rows(conn, "infrx.credit_ledger"), wallet(conn, other_wallet)) == \
+            (ledger, other_before), "a conflicting reuse moved money"
         # below the reserved total: typed, nothing written
         total, reserved = wallet(conn, wid)
         below = f"{-(total - reserved) - Decimal('0.00000001'):f}"
