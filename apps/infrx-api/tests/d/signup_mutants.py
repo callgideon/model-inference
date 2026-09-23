@@ -130,6 +130,12 @@ MIGRATION_MUTANTS = (
        "    update public.organizations set name = 'retired' where id = v_org;",
        "    update public.organizations set name = name where id = v_org;",
        "signup_retirement", "the personal org keeps the deleted individual's name"),
+    _m("a1_retirement_suspends_shared_orgs",
+       "       and not exists (select 1 from public.org_members x\n"
+       "                       where x.org_id = o.id and x.user_id <> p_user)\n",
+       "",
+       "signup_retirement", "retiring one member suspends a shared organization they created, "
+       "refusing admission for everyone else in it"),
     _m("a1_retirement_not_idempotent",
        "  if v_at is not null then\n    return v_at;\n  end if;\n  insert into "
        "infrx.retired_individuals",

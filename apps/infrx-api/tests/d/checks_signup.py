@@ -450,6 +450,11 @@ def check_retirement(conn) -> str:
     pre = uid(6, 92)
     conn.execute(checks_credit.credit_job(pre, "job_a1_pre", ot, wt) + ";\n"
                  + checks_credit.hold(pre, ot, wt))
+    # An organization t created and owns but SHARES with o is not t's alone: it stays.
+    team = one(conn, "insert into public.organizations (name, slug, created_by) values "
+                     "('team', 'a1-retire-team', %s) returning id", (t,))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values "
+                 "(%s, %s, 'owner'), (%s, %s, 'member')", (team, t, team, o))
 
     first = retire(conn, t)
     assert retire(conn, t, "retire-2") == first, "a second retirement changed the record"
@@ -464,6 +469,9 @@ def check_retirement(conn) -> str:
         "retired", "the personal organization still carries the individual's name"
     assert one(conn, "select count(*) from infrx.audit_entries where target_org_id = %s and "
                      "action = 'admin_set_suspension'", (ot,)) == 1, "suspension not audited"
+    assert conn.execute("select name, suspended from public.organizations where id = %s",
+                        (team,)).fetchone() == ("team", False), \
+        "a shared organization the individual created was retired with them"
     refused(conn, "a retired wallet reserves", spend, "23514", "frozen")
     assert attempt(conn, checks_credit.credit_job(uid(6, 91), "job_a1_other", oo, wo) + ";\n"
                    + checks_credit.hold(uid(6, 91), oo, wo)) is None, \
@@ -500,8 +508,8 @@ def check_retirement(conn) -> str:
         f"a re-created account with a granted address: {again}"
     refused(conn, "retiring nobody", f"select infrx.retire_individual('{uuid.uuid4()}', 'o', "
                                      "'r', 'k')", "P0002")
-    return ("retirement: anonymised, keys revoked, org suspended, wallet frozen (pre-retirement "
-            "hold settles, adjustment lands), money kept, "
+    return ("retirement: anonymised, keys revoked, org suspended (a shared one kept), wallet "
+            "frozen (pre-retirement hold settles, adjustment lands), money kept, "
             "idempotent, hard delete refused, re-created address refused")
 
 
