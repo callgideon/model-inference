@@ -6,6 +6,7 @@ single edit to that decision fails here (tests/integration/backend/e4b_mutants.p
 """
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import sys
@@ -20,6 +21,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import certify                                          # noqa: E402
 
 TARGET = {"kind": "local", "scale": "tiny", "label": certify.FAKE}
+CLEAN = {"sha": "c" * 40, "dirty": False}
+
+
+@pytest.fixture
+def clean_tree(monkeypatch):
+    """Both git samples a clean, known tree - whatever the checkout running the case is."""
+    monkeypatch.setattr(certify.run, "git_head", lambda: dict(CLEAN))
 
 
 def first(problems: list[str]) -> str:
@@ -30,7 +38,7 @@ def first(problems: list[str]) -> str:
 
 # ------------------------------------------------------------------------------ report
 
-def test_e4b_the_report_carries_both_heads_the_target_the_hashes_and_the_exit_rule():
+def test_e4b_the_report_carries_both_heads_the_target_the_hashes_and_the_exit_rule(clean_tree):
     """A report is evidence for one tree and one target: both `git_head` samples, the
     target, the hashes, every check's owners and label. Exit 0 only when every entry is
     PASS: a typed PENDING or SKIP is 3 (never a pass), any FAIL is 1."""
@@ -47,9 +55,39 @@ def test_e4b_the_report_carries_both_heads_the_target_the_hashes_and_the_exit_ru
     assert doc["target"] == TARGET and doc["hashes"] == report.hashes
     assert "not decided" in doc["backend_ready"]
     assert [(s["stage"], s["owners"], s["label"]) for s in doc["stages"]] == [
-        ("e4b.x", None, certify.FAKE), ("e4b.y", ["BOX"], None), ("e4b.z", ["BOX", "STACK"], None)]
+        ("e4b.x", None, certify.FAKE), ("e4b.y", ["BOX"], None), ("e4b.z", ["BOX", "STACK"], None),
+        ("release-identity", None, None)]
+    assert doc["git_head"] == doc["git_head_end"] == CLEAN and doc["exit_code"] == 3
     report.check("e4b.w", certify.FAIL, "broken")
     assert report.exit_code == json.loads(report.as_json())["exit_code"] == 1
+
+
+def test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails(monkeypatch, tmp_path):
+    """Review F1, protocol §6.3 as code: a SHA at both ends, both clean (an unknown state is
+    not clean) and the same - otherwise a report whose every check passed still exits 1."""
+    dirty, unknown = {**CLEAN, "dirty": True}, {"sha": None, "dirty": None}
+    moved = {**CLEAN, "sha": "d" * 40}
+    assert certify.identity_problems(CLEAN, CLEAN) == []
+    assert certify.identity_problems(dirty, CLEAN) == ["the tree at the start is dirty"]
+    assert certify.identity_problems(CLEAN, {**CLEAN, "dirty": None}) == [
+        "the tree at the end is of unknown state"]
+    assert certify.identity_problems(CLEAN, unknown) == [
+        "no git SHA at the end of the run", "the tree at the end is of unknown state"]
+    assert certify.identity_problems(CLEAN, moved) == [
+        f"the tree moved during the run: {'c' * 40} -> {'d' * 40}"]
+    heads = itertools.chain([dirty], itertools.repeat(CLEAN))
+    monkeypatch.setattr(certify.run, "git_head", lambda: dict(next(heads)))
+    report = certify.Report(TARGET)
+    report.check("e4b.x", certify.PASS, "fine")
+    doc = json.loads(report.as_json())
+    assert (doc["stages"][-1]["stage"], doc["stages"][-1]["status"]) == ("release-identity",
+                                                                         certify.FAIL)
+    assert doc["exit_code"] == report.exit_code == 1
+    assert doc["git_head"] == dirty and doc["git_head_end"] == CLEAN
+    # git that cannot answer (not a tree) is an unknown state, never a clean one
+    monkeypatch.undo()
+    monkeypatch.setattr(certify.harness, "REPO_ROOT", tmp_path)
+    assert certify.run.git_head() == {"sha": None, "dirty": None}
 
 
 def test_e4b_a_skip_or_pending_without_a_known_owner_is_a_failure():
@@ -661,8 +699,8 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     assert report.stages[-1]["status"] == certify.PASS
 
 
-def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(tmp_path,
-                                                                                   monkeypatch):
+def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(
+        tmp_path, monkeypatch, clean_tree):
     """A run that dies before writing its JSON is no evidence (E3B phase 2's lost report):
     an unexpected error becomes a FAIL entry, the report is written, the exit is 1."""
     def broken():
@@ -676,7 +714,8 @@ def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_writte
     assert code == 1
     doc = json.loads(out.read_text())
     assert doc["exit_code"] == 1
-    assert [(s["stage"], s["status"]) for s in doc["stages"]] == [("runner-error", certify.FAIL)]
+    assert [(s["stage"], s["status"]) for s in doc["stages"]] == [
+        ("runner-error", certify.FAIL), ("release-identity", certify.PASS)]
     assert "unreadable" in doc["stages"][0]["detail"]
 
 if __name__ == "__main__":

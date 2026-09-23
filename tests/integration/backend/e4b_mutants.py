@@ -109,6 +109,8 @@ OVERLOAD = "test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx
 SCRAPE = "test_e4b_scrape_reads_the_series_the_soak_judges"
 CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge"
 CRASH = "test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written"
+IDENTITY = "test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails"
+RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
 ROUTES = "test_e4b_every_mounted_route_has_one_description_and_every_description_a_route"
@@ -295,6 +297,22 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("runner_error_escapes", "an unexpected error is recorded and the report still written",
        "        except Exception as crashed:", "        except KeyboardInterrupt as crashed:",
        CRASH),
+    # --- review F1: one clean, known tree ----------------------------------------------
+    _m("missing_sha_accepted", "a report with no SHA is evidence for no release",
+       '        if not head.get("sha"):\n', "        if False:\n", IDENTITY),
+    _m("dirty_tree_accepted", "a dirty tree at either end fails the release identity",
+       'if head.get("dirty") is not False:', "if False:", IDENTITY),
+    _m("unknown_state_accepted", "an unknown tree state is not a clean one",
+       'if head.get("dirty") is not False:', 'if head.get("dirty"):', IDENTITY),
+    _m("moved_tree_accepted", "the tree at the end is the tree at the start",
+       'if start.get("sha") and end.get("sha") and start["sha"] != end["sha"]:', "if False:",
+       IDENTITY),
+    _m("identity_never_fails", "the identity check reaches the exit code",
+       'self.check("release-identity", FAIL if problems else PASS,',
+       'self.check("release-identity", PASS,', IDENTITY),
+    _m("unknown_tree_recorded_clean", "git that cannot answer records an unknown tree, not a clean one",
+       '            "dirty": None if status is None else bool(status)}\n',
+       '            "dirty": bool(status)}\n', IDENTITY, file=RUN),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

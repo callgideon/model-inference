@@ -122,7 +122,7 @@ class Report(run.Report):
 
     def __init__(self, target: dict) -> None:
         super().__init__()
-        self.target, self.hashes = target, {}
+        self.target, self.hashes, self.head_end = target, {}, None
 
     def check(self, check_id: str, status: str, detail, *, owners=(), measured=None,
               label: str | None = None) -> dict:
@@ -141,13 +141,36 @@ class Report(run.Report):
         return 3 if statuses - {PASS} else 0
 
     def as_json(self) -> str:
+        # Review F1: a certification counts for one clean, known tree - judged once, from the
+        # same end sample the report records, so the exit code carries it.
+        if self.head_end is None:
+            self.head_end = run.git_head()
+            problems = identity_problems(self.head, self.head_end)
+            self.check("release-identity", FAIL if problems else PASS,
+                       problems or f"one clean tree: {self.head['sha']}")
         doc = json.loads(super().as_json())
+        doc["git_head_end"] = self.head_end
         return json.dumps({"runner": "e4b-certify", "protocol": rel(PROTOCOL),
                            "target": self.target, "hashes": self.hashes,
                            "backend_ready": "not decided by this runner: BACKEND-READY needs "
                                             "the box half and the coordinator's recorded "
                                             "decision (E4B-release-decision.md)",
                            **doc}, indent=2, default=str, ensure_ascii=False)
+
+
+def identity_problems(start: dict, end: dict) -> list[str]:
+    """Protocol §6.3 as code: a SHA at both ends, a clean tree at both ends (an unknown state
+    is not clean), and the same SHA - or the report is evidence for no release."""
+    problems = []
+    for when, head in (("start", start), ("end", end)):
+        if not head.get("sha"):
+            problems.append(f"no git SHA at the {when} of the run")
+        if head.get("dirty") is not False:
+            problems.append(f"the tree at the {when} is "
+                            f"{'dirty' if head.get('dirty') else 'of unknown state'}")
+    if start.get("sha") and end.get("sha") and start["sha"] != end["sha"]:
+        problems.append(f"the tree moved during the run: {start['sha']} -> {end['sha']}")
+    return problems
 
 
 def rel(path: Path) -> str:

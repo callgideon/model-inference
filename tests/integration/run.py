@@ -136,13 +136,16 @@ class Report:
 
 
 def git_head() -> dict:
-    """The checkout's commit and whether its tree differs from it (untracked files count)."""
-    def git(*args: str) -> str:
+    """The checkout's commit and whether its tree differs from it (untracked files count).
+    Either is None when git cannot answer (not a tree): an unknown tree is never recorded
+    as a clean one (E4B review F1)."""
+    def git(*args: str) -> str | None:
         done = subprocess.run(["git", "-C", str(harness.REPO_ROOT), *args], capture_output=True,
                               text=True, timeout=60)
-        return done.stdout.strip() if done.returncode == 0 else ""
+        return done.stdout.strip() if done.returncode == 0 else None
+    status = git("status", "--porcelain")
     return {"sha": git("rev-parse", "HEAD") or None,
-            "dirty": bool(git("status", "--porcelain"))}
+            "dirty": None if status is None else bool(status)}
 
 
 def _short(detail: object, limit: int = 220) -> str:
