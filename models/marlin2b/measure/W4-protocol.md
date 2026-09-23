@@ -221,3 +221,11 @@ before anything else, and the run's numbers are still read by these rules.
   and unrecorded retries `unknown`; `floor(X) < 1` adopts nothing; the baseline must be the
   predeclared one (E1 against E0, E3 against E1, from each run's `candidate=` line) and never
   the candidate's own run.
+- 2026-09-23, amendment 2 (confirmation `W4-confirm-b0a44a0.json`, before any W4 cell; no
+  criterion value changed). Amendment 1's decision-rule sentence overstated the missing-level
+  case (DEC-R2-3). As `decide.py` applies it: a level not labelled `restarted` makes W3's
+  rule, the tail and the paired criteria `unknown`; a level missing from the candidate makes
+  W3's rule `unknown` (so nothing is adopted); and the paired criteria are `unknown` unless
+  both the candidate and the baseline have all six levels (DEC-R2-4). The tail is taken
+  over the levels present at or below `c*`. Overload masking also requires the bench row's
+  own `denominators.retried_requests` to be recorded and zero.

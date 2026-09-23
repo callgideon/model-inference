@@ -171,7 +171,8 @@ def check_set_aside(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     with redirect_stdout(printed):
         decide.main([str(repo / SWEEP), "--set-aside", ",".join(FOUR)])
     assert "set_aside=c012,c025,c038,c051" in printed.getvalue()
-    assert "setting=16" in printed.getvalue()
+    # the warm W3 sweep: the value is computed, but the rule was not taken
+    assert "setting=16 (not taken)" in printed.getvalue(), printed.getvalue()[-900:]
     # never the default: unnamed, nothing is set aside and nothing qualifies
     assert decide.c_star(decide.load(repo / SWEEP).levels)[0] is None
     printed = io.StringIO()
@@ -369,6 +370,38 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
                                              failed=row["failed"] + 6)
                    if row["concurrency"] == 32 else None)
     blocks("error_rate", six_failures_at_32)
+
+    # DEC-R2-1: each reconciliation clause on its own (raw rows against the bench row)
+    def at32(c, change):
+        edit_bench(c, lambda row: change(row) if row["concurrency"] == 32 else None)
+
+    def failures_hidden_as_cancellations(c, b):     # bench says failed, raw says cancelled
+        count = [0]
+
+        def change(row):
+            if row["outcome"] == "accepted" and count[0] < 6:
+                count[0] += 1
+                row["outcome"] = "cancelled"
+        edit_raw(c, 32, change)
+        at32(c, lambda row: row.update(accepted=row["accepted"] - 6, failed=row["failed"] + 6))
+    for name, damage in (
+            ("failed_miscounted", failures_hidden_as_cancellations),
+            ("accepted_miscounted", lambda c, b: at32(c, lambda row: row.update(
+                accepted=row["accepted"] - 1, cancelled=row["cancelled"] + 1))),
+            ("requests_miscounted", lambda c, b: at32(c, lambda row: row.update(rejected=1)))):
+        rep = blocks(name, damage, criterion="overload_masking")
+        assert rep["criteria"]["error_rate"]["state"] == "unknown", (name, rep["criteria"])
+    # DEC-R2-2: the bench row's own retry count
+    at2 = lambda change: lambda c, b: edit_bench(          # noqa: E731
+        c, lambda row: change(row["denominators"]) if row["concurrency"] == 2 else None)
+    blocks("bench_retried", at2(lambda d: d.update(retried_requests=1)),
+           criterion="overload_masking")
+    blocks("bench_retries_unrecorded", at2(lambda d: d.pop("retried_requests")), "unknown",
+           "overload_masking")
+    # DEC-R2-4: a baseline without all six levels is not a baseline
+    blocks("baseline_level_missing", lambda c, b: edit_bench(
+        b, lambda row: row.update(concurrency=3) if row["concurrency"] == 32 else None),
+        "unknown", "usage_drift")
     # D7: the rule is taken over the six predeclared levels
     blocks("level_missing", lambda c, b: edit_bench(c, lambda row: row.update(concurrency=3)
                                                     if row["concurrency"] == 1 else None),
@@ -626,9 +659,11 @@ if a[0] == "inspect":
     if not running.exists():
         print("Error: No such object", file=sys.stderr); sys.exit(1)
     fmt = a[a.index("--format") + 1] if "--format" in a else ""
-    print((st / "args").read_text() if ".Args" in fmt else (st / "image").read_text()
-          if ".Image" in fmt else "true" if ".State.Running" in fmt else "[{}]")
+    print({"{{json .Args}}": (st / "args").read_text(), "{{.Image}}": (st / "image").read_text(),
+           "{{.Config.Image}}": "vllm/vllm-openai:nightly",
+           "{{.State.Running}}": "true"}.get(fmt, "[{}]"))
 elif a[0] == "run":
+    open(st / "run-fds", "a").write(" ".join(sorted(os.listdir("/proc/self/fd"))) + "\n")
     if running.exists():
         print("docker: Error response from daemon: Conflict. The container name is already "
               "in use", file=sys.stderr); sys.exit(125)
@@ -684,6 +719,8 @@ elif a[0] == "start":
 '''
 CURL = PY_HEAD + r'''
 url = next(x for x in a if x.startswith("http"))
+if not url.startswith("http://127.0.0.1:8000/"):
+    sys.exit(7)                                # nothing else listens here
 if not (st / "running").exists() or (url.endswith("/metrics") and os.environ.get("METRICS_DOWN")):
     sys.exit(7)
 if url.endswith("/health") and (st / "unhealthy").exists():
@@ -764,9 +801,11 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     elsewhere.mkdir(parents=True)
     done, state, nvme, calls = candidate_box(
         repo, tmp / "ok", PORT="8001", GPU="1", WEIGHTS=str(tmp / "other-weights"),
-        VLLM_LOGGING_LEVEL="DEBUG", PROCESSING_CACHE_DIR=str(elsewhere))
+        VLLM_LOGGING_LEVEL="DEBUG", PROCESSING_CACHE_DIR=str(elsewhere), ENGINE_MAX_NUM_SEQS="8")
     assert done.returncode == 0, (done.returncode, done.stdout[-800:], done.stderr[-400:])
     assert "restored=yes" in done.stdout, done.stdout[-800:]
+    inherited = [fds for fds in (state / "run-fds").read_text().splitlines() if "9" in fds.split()]
+    assert not inherited, f"the candidate engine inherited the lock's fd 9: {inherited}"
     stop = calls.index("systemctl stop marlin2b-vllm")
     attempts = [i for i, call in enumerate(calls) if call.startswith("docker run")]
     assert min(attempts) > stop
@@ -776,7 +815,7 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert (state / "args").read_text() == UNIT_ARGS and (state / "active-infrx-worker.service").exists()
     for argv in runs:
         after = argv[argv.index(next(x for x in argv if x.startswith("vllm/vllm-openai@"))) + 1:]
-        assert after[after.index("--max-num-seqs") + 1] == "32"
+        assert after[after.index("--max-num-seqs") + 1] == "32", after
         assert after[-2:] == ["--max-num-batched-tokens", "32768"], after
         assert argv[argv.index("-p") + 1] == "127.0.0.1:8000:8000", argv
         assert argv[argv.index("--gpus") + 1] == '"device=0"', argv
@@ -784,6 +823,10 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
         assert "--allowed-local-media-path" not in argv, argv
     sweeps = (state / "sweeps").read_text().splitlines()
     assert sweeps == [f"levels={c} state=restarted" for c in (1, 2, 4, 8, 16, 32)], sweeps
+    # the lock is released at exit: a second run on the same box goes through
+    done, state, nvme, calls = candidate_box(repo, tmp / "ok")
+    assert done.returncode == 0 and "restored=yes" in done.stdout, (done.stdout[-600:],
+                                                                    done.stderr[-300:])
     # a failing sweep still restores the engine it found, and says the run failed
     done, state, nvme, calls = candidate_box(repo, tmp / "failing", SWEEP_EXIT="1")
     assert done.returncode == 3 and "level=1 sweep_exit=1" in done.stdout, done.stdout[-800:]
@@ -826,6 +869,7 @@ def check_candidate_refuses(repo: pathlib.Path, tmp: pathlib.Path) -> None:
         "not-canonical": ((), {"OUT": str(tmp / "not-canonical" / "nvme" / "w4-x" / ".." / ".."
                                          / "escape")}, None),
         "ready-s": ((), {"READY_S": "15m"}, None),
+        "ready-s-zero": ((), {"READY_S": "0"}, None),
         "second-run": ((), {}, hold_the_lock),
         "unit-inactive": ((), {}, unlink("state", "active-marlin2b-vllm")),
         "no-container": ((), {}, unlink("state", "running")),

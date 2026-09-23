@@ -436,6 +436,9 @@ def criteria(run: Run, base: Run | None):
     elif not common or comparable != common:
         why = (f"cells at different states or profiles, not compared: "
                f"c={[c for c in common if c not in comparable]}")
+    elif missing or set(base.levels) != set(LEVELS):
+        why = (f"not all six levels on both sides: candidate {sorted(run.levels)}, "
+               f"baseline {sorted(base.levels)}")
     elif stale:                       # equal profiles, so the baseline's are stale too
         why = f"cells not on a freshly started engine: c={stale}"
     if why:
@@ -486,7 +489,9 @@ def print_report(run: Run, rep: dict) -> None:
               f"peak_kv={level.peak_kv} peak_gpu_mib={max((g for g in level.gpu if g is not None), default=None)} "
               f"util_median={level.util_median} ttft_p95={level.ttft_p95} "
               f"latency_p95={level.latency_p95} repeats={level.repeats}")
-    print(f"w3_rule c*={rep['c_star']} threshold={rep['threshold']} setting={rep['setting']}")
+    taken = "" if rep["criteria"]["w3_rule"]["state"] == PASS else " (not taken)"
+    print(f"w3_rule c*={rep['c_star']} threshold={rep['threshold']} "
+          f"setting={rep['setting']}{taken}")
     for name, item in rep["criteria"].items():
         print(f"criterion {name}={item['state']} ({item['detail']})")
     print(f"e3_trigger={'yes c=' + str(rep['e3_trigger']) if rep['e3_trigger'] else 'no'}")
