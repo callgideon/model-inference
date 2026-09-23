@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T02:52:21Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T02:54:22Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 12 done · 11 in progress · 7 remaining (of 30).**
 
@@ -71,7 +71,7 @@ Generated 2026-09-23T02:52:21Z from `tasks.json` (manifest v4) and `progress-sta
 - I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
-- I3B: codex-i3b / codex/i3b-recovery-observe — confirmation review (2-lens workflow) of fix round at 58d5b4f since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
+- I3B: codex-i3b / codex/i3b-recovery-observe — confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
 - M4: codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
 
 ## Checkpoints

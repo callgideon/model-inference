@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T02:52:21Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T02:54:22Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>12</b><span>done</span></div>
 <div class="tile prog"><b>11</b><span>in progress</span></div>
@@ -101,7 +101,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>I2B</code> — codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
 <li><code>Q3</code> — codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery</li>
 <li><code>D3</code> — codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2&#x27;s head; leases, reaper, cancellation</li>
-<li><code>I3B</code> — codex-i3b / codex/i3b-recovery-observe — confirmation review (2-lens workflow) of fix round at 58d5b4f since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start</li>
+<li><code>I3B</code> — codex-i3b / codex/i3b-recovery-observe — confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start</li>
 <li><code>M4</code> — codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
