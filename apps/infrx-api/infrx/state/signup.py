@@ -12,6 +12,7 @@ request path never loads it.
 """
 from __future__ import annotations
 
+import uuid
 from collections import Counter
 
 from ..contracts import errors
@@ -33,7 +34,7 @@ VERIFIED = ("select user_id, personal_org_id, verification_evidence_ref "
             "from infrx.verified_user(%s)")
 #: Keyset over individuals (every profile is one auth user), in id order.
 PAGE = "select id from public.profiles where id > %s order by id limit %s"
-_BEFORE_ALL = "00000000-0000-0000-0000-000000000000"
+_BEFORE_ALL = uuid.UUID(int=0)
 
 
 def identity_from(row) -> VerifiedIdentity | None:
@@ -103,6 +104,8 @@ def backfill(conn, campaign: str = "backfill", page: int = 500) -> Counter:
     counts: Counter = Counter()
     after = _BEFORE_ALL
     while rows := conn.execute(PAGE, (after, page)).fetchall():
+        if rows[-1][0] <= after:
+            raise RuntimeError(f"backfill keyset did not advance past {after}")
         for (user_id,) in rows:
             try:
                 with conn.transaction():

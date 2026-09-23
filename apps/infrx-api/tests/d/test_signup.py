@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import operator
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -156,19 +158,33 @@ class _Result:
         return self.rows[0]
 
 
+#: The keyset comparison `signup.PAGE` states, applied by the fake as the database would.
+_KEYSET = re.compile(r"where id (>=|>) %s order by id limit %s$")
+_OPS = {">": operator.gt, ">=": operator.ge}
+
+
 class _SyncConn:
     """psycopg's sync Connection as `backfill` uses it: keyset pages and one claim per
-    individual, recording whether each claim ran inside its own transaction."""
+    individual, recording whether each claim ran inside its own transaction. The page
+    query is read from `signup.PAGE` itself, so an edit to its comparison reaches here;
+    `stuck` answers the first page forever (a keyset that never advances)."""
 
-    def __init__(self, users, refuse=(), maintenance=False):
-        self.users, self.refuse, self.maintenance = sorted(users), set(refuse), maintenance
-        self.depth, self.claims = 0, []
+    def __init__(self, users, refuse=(), maintenance=False, stuck=False):
+        self.users = sorted(uuid.UUID(u) for u in users)
+        self.refuse, self.maintenance, self.stuck = set(refuse), maintenance, stuck
+        self.depth, self.claims, self.pages = 0, [], 0
 
     def execute(self, sql, params):
         if sql == signup.PAGE:
+            match = _KEYSET.search(sql)
+            assert match, f"the page query is no longer a keyset: {sql!r}"
             after, limit = params
-            return _Result([(u,) for u in self.users if u > str(after)][:limit])
-        user = params[0]
+            self.pages += 1
+            assert self.pages <= 2 * len(self.users) + 2, "the backfill loops on one page"
+            keep = _OPS[match.group(1)]
+            rows = [(u,) for u in self.users if self.stuck or keep(u, after)][:limit]
+            return _Result(rows)
+        user = str(params[0])
         self.claims.append((user, self.depth))
         if self.maintenance:
             raise FakeRefusal("55000", "maintenance: signup_grant is not enabled")
@@ -187,11 +203,19 @@ class _SyncConn:
 
 def test_backfill__pages_per_user_transactions_and_errors() -> None:
     users = [f"a100000a-0000-4000-8000-{n:012d}" for n in range(1, 6)]
-    conn = _SyncConn(users, refuse={users[2]})
-    counts = signup.backfill(conn, page=2)
-    assert counts == {"granted": 4, "error:P0002": 1}, counts
-    assert [u for u, _ in conn.claims] == users, f"pages skipped or repeated: {conn.claims}"
-    assert {depth for _, depth in conn.claims} == {1}, "a claim ran outside its own transaction"
+    for page in (1, 2, 500):
+        conn = _SyncConn(users, refuse={users[2]})
+        counts = signup.backfill(conn, page=page)
+        assert counts == {"granted": 4, "error:P0002": 1}, (page, counts)
+        assert [u for u, _ in conn.claims] == users, \
+            f"page {page}: skipped or repeated: {conn.claims}"
+        assert {depth for _, depth in conn.claims} == {1}, \
+            "a claim ran outside its own transaction"
+
+
+def test_backfill__a_keyset_that_does_not_advance_stops_loudly() -> None:
+    with pytest.raises(RuntimeError, match="did not advance"):
+        signup.backfill(_SyncConn(["a100000a-0000-4000-8000-000000000001"], stuck=True))
 
 
 def test_backfill__maintenance_stops_the_run() -> None:
