@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from infrx.contracts.tasklocal import TASK_PORTS, all_host_ports, local_services
+
 HARNESS_PATH = Path(__file__).resolve().parent / "pgharness.py"
 API_ROOT = HARNESS_PATH.parents[2]
 
@@ -47,10 +49,18 @@ _reason = pgh.unavailable()
 needs_docker = pytest.mark.skipif(_reason is not None,
                                   reason=f"task-local PostgreSQL unavailable: {_reason}")
 
-# A decoy name in this task's own `infrx-e2r-*` namespace, and a port inside E's 55500-55599
-# block (08 §8) that the E2 stack does not publish. The real name and port are never used.
-DECOY = "infrx-e2r-dharness-postgres"
-DECOY_PORT = 55598
+# A decoy name and port the real harness never uses. D3 request 6 / D2 round 3: they are the
+# TASK's (`INFRX_D_TASK`), because every lane's sweep sharing one literal pair collided on it
+# twice. D1 keeps the original pair byte-identical (E2R's namespace, a port inside E's
+# 55500-55599 block that E2 does not publish); any other task gets its own namespace and a
+# port 40 above its PostgreSQL port (d4: 55475), clear of every reserved port and E's block.
+def decoy(task: str) -> tuple[str, int]:
+    if task == "d1":
+        return "infrx-e2r-dharness-postgres", 55598
+    return f"infrx-{task}-dharness-postgres", local_services(task)["postgres"].host_port + 40
+
+
+DECOY, DECOY_PORT = decoy(os.environ.get("INFRX_D_TASK", "d1").lower())
 
 # Runs `pgharness.ensure()` against the decoy under a chosen checkout identity, then reports.
 # `hold` keeps the lock and the container so a second run has something to collide with.
@@ -178,6 +188,21 @@ def test_remove_only_ever_removes_what_this_run_created(monkeypatch):
     pgh.remove()
     assert ("rm", "-f", "-v", pgh.CONTAINER) in calls, \
         f"and a run that DID create it must remove exactly that: {calls}"
+
+
+def test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged():
+    """D3 request 6: no two D tasks share a decoy, none sits on a reserved port or in E2's
+    published 55500-55599 block, and D1's pair is byte-identical to the one it always had."""
+    assert decoy("d1") == ("infrx-e2r-dharness-postgres", 55598)
+    tasks = [task for task, ports in TASK_PORTS.items()
+             if task.startswith("d") and "postgres" in ports and task != "d1"]
+    assert "d4" in tasks
+    pairs = {task: decoy(task) for task in tasks}
+    reserved = all_host_ports()
+    for task, (name, port) in pairs.items():
+        assert name.startswith(f"infrx-{task}-"), (task, name)
+        assert port not in reserved and not 55500 <= port <= 55599, (task, port)
+    assert len({port for _, port in pairs.values()} | {55598}) == len(pairs) + 1, pairs
 
 
 def test_the_port_lock_is_shared_by_both_image_variants():
