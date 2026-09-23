@@ -70,3 +70,20 @@ def test_append__never_moves_the_global_charge() -> None:
 # --- item 3: one terminal event for every terminalization ----------------------------------
 def test_terminal__every_path_writes_exactly_one_event_last() -> None:
     print(checks_journal.check_terminal_every_path(_db()))
+
+
+# --- item 4: replay ---------------------------------------------------------------------------
+def test_read__replay_equals_committed_rows() -> None:
+    print(checks_journal.check_read_replay(_db()))
+
+
+def test_read__tenant_bound() -> None:
+    print(checks_journal.check_read_tenant(_db()))
+
+
+def test_read__bounded_and_paged() -> None:
+    print(checks_journal.check_read_bounded(_db()))
+
+
+def test_read__gap_expired_and_past_head_are_typed() -> None:
+    print(checks_journal.check_read_typed(_db()))

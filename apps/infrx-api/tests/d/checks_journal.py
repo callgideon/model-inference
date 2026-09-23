@@ -577,3 +577,120 @@ def check_terminal_every_path(conn) -> str:
                           settlement="held_unknown")
     ca._in_rollback(conn, released)
     return f"{len(paths)} terminalization paths, one terminal event each; 24 h release none"
+
+
+# --------------------------------------------------------------------- item 4: replay
+def pages(conn, request, limit: int, cursor=None) -> list[dict]:
+    """Every chunk after `cursor`, read `limit` at a time until an empty page."""
+    got = []
+    while True:
+        code, answer = read(conn, request, cursor, limit)
+        assert code is None, f"a replay page was refused: {code}"
+        if not answer["chunks"]:
+            return got
+        got += answer["chunks"]
+        cursor = at(got[-1]["generation"], got[-1]["sequence"])
+
+
+def check_read_replay(conn) -> str:
+    """DUR-OUTPUT / API-STREAM: replay equals the committed rows - event type, payload,
+    cursor, bytes, persisted_at, expires_at - whatever the page size, in (generation,
+    sequence) order. A journal holding two generations (a fixture: the protocol publishes on
+    the first chunk and never requeues after it) is still never spliced."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        committed = []
+        for batch in (("a", "b", "c"), ("d",), ("e", "f")):
+            code, answer = append(conn, lease, b.events(*batch))
+            assert code is None, code
+            committed += answer["chunks"]
+        rows = journal(conn, request.request_id)
+        assert chunks(committed) == chunks(rows)
+        for limit in (1, 2, 4, 100):
+            assert chunks(pages(conn, request, limit)) == chunks(rows), \
+                f"a replay in pages of {limit} is not the committed rows"
+        conn.execute("insert into infrx.stream_chunks (job_id, generation, sequence, event_type, "
+                     "payload, bytes, committed_at, expires_at) select %s, 2, s, 'delta', "
+                     "'{}'::jsonb, 2, infrx.now(), infrx.now() + interval '1 hour' "
+                     "from generate_series(1, 2) s", (request.request_id,))
+        rows = journal(conn, request.request_id)
+        for limit in (1, 2, 4, 100):
+            got = pages(conn, request, limit)
+            assert cursors(got) == cursors(rows) == \
+                [(1, n, "delta") for n in range(1, 7)] + [(2, 1, "delta"), (2, 2, "delta")], \
+                f"pages of {limit} spliced the generations: {cursors(got)}"
+        return "replay = committed rows, in (generation, sequence) order, any page size"
+    return ca._in_rollback(conn, body)
+
+
+def check_read_tenant(conn) -> str:
+    """R10 (dr08): the journal is read by (org, handle). Another organization's read of this
+    handle and anyone's read of an unknown handle are the same `not_found`."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("private"))[0] is None
+        assert read(conn, request, org=b.ORG_B)[0] == "not_found", "another org replayed it"
+        assert read(conn, request, handle="job_nope")[0] == "not_found"
+        code, answer = read(conn, request)
+        assert code is None and [c["payload"] for c in answer["chunks"]] == \
+            [{"content": "private"}], (code, answer)
+        return "another tenant's handle reads as not_found, like an unknown one"
+    return ca._in_rollback(conn, body)
+
+
+def check_read_bounded(conn) -> str:
+    """API-STREAM: a limit below 1 is `invalid_request`; a page is at most 1000 chunks
+    (MAX_READ_LIMIT) whatever the caller asks; the rest follows from its cursor."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        assert append(conn, lease, tuple(event({}) for _ in range(1001)))[0] is None
+        for bad in (0, -1):
+            assert read(conn, request, limit=bad)[0] == "invalid_request", f"limit {bad}"
+        code, answer = read(conn, request, limit=5000)
+        assert code is None and len(answer["chunks"]) == 1000, \
+            f"a page of {len(answer['chunks'])} chunks"
+        code, answer = read(conn, request, at(1, 1000), 5000)
+        assert code is None and cursors(answer["chunks"]) == [(1, 1001, "delta")], answer
+        code, answer = read(conn, request, None, 2)
+        assert code is None and cursors(answer["chunks"]) == [(1, 1, "delta"), (1, 2, "delta")]
+        return "limits below 1 refused; pages capped at 1000"
+    return ca._in_rollback(conn, body)
+
+
+def check_read_typed(conn) -> str:
+    """API-STREAM / DUR-OUTPUT: nothing is silent. At the head: an empty page. Past it (a
+    cursor the journal never issued): `invalid_cursor`. Below the prune watermark:
+    `replay_gap`, never the rows after it. Nothing left: `journal_expired`, never an empty
+    page."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = running(conn, world)
+        code, answer = read(conn, request)
+        assert code is None and answer["chunks"] == [], "an empty journal is an empty page"
+        assert read(conn, request, at(1, 1))[0] == "invalid_cursor"
+        assert append(conn, lease, b.events("a", "b"), limits=SHORT)[0] is None
+        code, answer = read(conn, request, at(1, 2))
+        assert code is None and answer["chunks"] == [], "the head is simply nothing new"
+        for beyond in (at(1, 3), at(2, 1), at(9, 9)):
+            assert read(conn, request, beyond)[0] == "invalid_cursor", beyond
+        advance(conn, SHORT.journal_chunk_ttl_s + 1)
+        assert append(conn, lease, b.events("c"), limits=SHORT)[0] is None
+        assert expire(conn) == (None, 2)
+        for below in (None, at(1, 0), at(1, 1)):
+            assert read(conn, request, below)[0] == "replay_gap", f"{below}: a silent gap"
+        code, answer = read(conn, request, at(1, 2))
+        assert code is None and [c["payload"] for c in answer["chunks"]] == [{"content": "c"}]
+        advance(conn, SHORT.journal_chunk_ttl_s + 1)
+        assert expire(conn) == (None, 1)
+        for cursor in (None, at(1, 3)):
+            assert read(conn, request, cursor)[0] == "journal_expired", \
+                f"{cursor}: an expired journal read as something else"
+        return "head empty, past it invalid_cursor, below the watermark replay_gap, gone expired"
+    return ca._in_rollback(conn, body)

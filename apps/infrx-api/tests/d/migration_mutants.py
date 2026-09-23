@@ -2162,6 +2162,33 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "                    and new.journal_reserved_bytes > 0 and new.state <> 'cancelled')",
        "admission", "terminal_every_path", "a cancelled stream never ends for its client"),
     # --- item 4: replay -------------------------------------------------------------------
+    _m("d4_read_any_tenant", JOURNAL,
+       "   where org_id = (p_args->>'org_id')::uuid and job_handle = p_args->>'job_handle';",
+       "   where job_handle = p_args->>'job_handle';",
+       "admission", "read_tenant", "another organization replays this job's output (R10)"),
+    _m("d4_read_unbounded", JOURNAL, "           limit least(v_limit, 1000)) p;",
+       "           limit v_limit) p;",
+       "admission", "read_bounded", "one replay page reads a whole 16 MiB journal"),
+    _m("d4_read_zero_limit_is_an_empty_page", JOURNAL,
+       "  if v_limit is null or v_limit <= 0 then", "  if v_limit is null or v_limit < 0 then",
+       "admission", "read_bounded", "a zero limit polls an empty page for ever"),
+    _m("d4_order_by_sequence_only", JOURNAL,
+       "           order by c.generation, c.sequence\n           limit",
+       "           order by c.sequence\n           limit",
+       "admission", "read_replay", "a replay splices two generations"),
+    _m("d4_gap_is_an_empty_page", JOURNAL,
+       "  if (v_position_generation, v_position_sequence)\n"
+       "       < (j.journal_pruned_generation, j.journal_pruned_sequence) then",
+       "  if false then",
+       "admission", "read_typed", "a pruned prefix is skipped silently"),
+    _m("d4_past_head_is_an_empty_page", JOURNAL,
+       "  if (v_position_generation, v_position_sequence)\n"
+       "       > (coalesce(v_head_generation, 0), coalesce(v_head_sequence, 0)) then",
+       "  if false then",
+       "admission", "read_typed", "a client polls a cursor the journal never issued"),
+    _m("d4_expired_journal_reads_empty", JOURNAL,
+       "  if not found and j.journal_pruned_generation is not null then", "  if false then",
+       "admission", "read_typed", "an expired journal reads as something other than 410"),
     # --- item 5: pruning and usage --------------------------------------------------------
     # --- item 6 ---------------------------------------------------------------------------
     # --- item 9b: privileges --------------------------------------------------------------
@@ -2287,6 +2314,10 @@ _CHECKS = {
     "append_past_the_instant": checks_journal.check_append_past_the_instant,
     "global_charge": checks_journal.check_global_charge,
     "terminal_every_path": checks_journal.check_terminal_every_path,
+    "read_replay": checks_journal.check_read_replay,
+    "read_tenant": checks_journal.check_read_tenant,
+    "read_bounded": checks_journal.check_read_bounded,
+    "read_typed": checks_journal.check_read_typed,
 }
 
 
