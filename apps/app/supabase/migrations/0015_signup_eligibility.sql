@@ -130,7 +130,6 @@ returns table (status text, user_id uuid, wallet_id uuid, ledger_operation_id uu
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 #variable_conflict use_column
 declare
-  v_org uuid;
   v_evidence text;
   v_email text;
   v_digest text;
@@ -158,8 +157,7 @@ begin
     return;
   end if;
 
-  select v.personal_org_id, v.verification_evidence_ref into v_org, v_evidence
-    from infrx.verified_user(p_user_id) v;
+  select v.verification_evidence_ref into v_evidence from infrx.verified_user(p_user_id) v;
   select to_jsonb(u)->>'email' into v_email from auth.users u
    where u.id = p_user_id and to_jsonb(u)->>'deleted_at' is null;
   if v_evidence is null or v_email is null or length(btrim(v_email)) = 0 then
@@ -170,7 +168,11 @@ begin
   end if;
 
   -- R72: a nonzero legacy USD balance is a rollout hold - never converted, never dropped.
-  if v_org is not null and infrx.legacy_usd_rollout_hold(v_org) then
+  -- Scope: EVERY organization this individual created (the personal one and any later
+  -- one), not only the one the wallet would bind; a shared org's billing owner is 02's
+  -- transition. Fail closed: the account waits for the P-02 runbook either way.
+  if exists (select 1 from public.organizations o
+             where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then
     v_status := 'rollout_hold';
   else
     v_digest := encode(sha256(convert_to(lower(btrim(v_email)), 'UTF8')), 'hex');

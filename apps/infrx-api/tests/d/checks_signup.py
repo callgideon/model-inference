@@ -123,6 +123,10 @@ def check_eligibility(conn) -> str:
     individual(conn, z, "z1@example.com")
     neg = uid(1, 7)                                   # a single negative legacy USD row
     individual(conn, neg, "neg1@example.com")
+    two = uid(1, 8)                                   # USD in a second org they created
+    individual(conn, two, "two1@example.com")
+    second = one(conn, "insert into public.organizations (name, slug, created_by) values "
+                       "('side', 'a1-two-side', %s) returning id", (two,))
 
     first = claim(conn, v)
     assert first[0] == "granted" and first[4] == GRANT and str(first[1]) == v, \
@@ -182,6 +186,7 @@ def check_eligibility(conn) -> str:
     conn.execute(usd, (personal_org(conn, z), "5.000000", "grant"))
     conn.execute(usd, (personal_org(conn, z), "-5.000000", "usage"))
     conn.execute(usd, (personal_org(conn, neg), "-0.000001", "usage"))
+    conn.execute(usd, (second, "1.000000", "grant"))
     before = conn.execute("select org_id, delta_usd::text from public.credit_ledger "
                           "order by id").fetchall()
     hold = claim(conn, h)
@@ -191,6 +196,9 @@ def check_eligibility(conn) -> str:
     owed = claim(conn, neg)
     assert owed[0] == "rollout_hold" and wallet_of(conn, neg) is None, \
         f"a negative legacy USD balance is nonzero too (R72): {owed}"
+    side = claim(conn, two)
+    assert side[0] == "rollout_hold" and wallet_of(conn, two) is None, \
+        f"USD in another organization the individual created (R72 scope): {side}"
     settled = claim(conn, z)
     assert settled[0] == "granted", f"a zero legacy USD balance is no hold: {settled}"
     after = conn.execute("select org_id, delta_usd::text from public.credit_ledger "
@@ -204,7 +212,7 @@ def check_eligibility(conn) -> str:
     assert why is not None and why.startswith("55000"), f"flag off: {why!r}"
     refused(conn, "no user", "select * from public.claim_signup_grant(null)", "22023")
     return ("eligibility: 1 grant per individual, 3 replays, unverified/soft-deleted/unknown "
-            "alike, identity reuse, 3 rollout holds (+, -), USD untouched, flag and null "
+            "alike, identity reuse, 4 rollout holds (+, -, 2nd org), USD untouched, flag and null "
             "refused")
 
 

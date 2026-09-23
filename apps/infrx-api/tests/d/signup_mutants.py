@@ -51,6 +51,11 @@ MIGRATION_MUTANTS = (
        "  select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l",
        "  select coalesce(sum(l.delta_usd), 0) > 0 from public.credit_ledger l",
        "signup_eligibility", "R72: an account that owes legacy USD is granted anyway"),
+    _m("a1_usd_hold_personal_org_only",
+       "             where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then",
+       "             where o.created_by = p_user_id and o.id = (select v.personal_org_id from "
+       "infrx.verified_user(p_user_id) v) and infrx.legacy_usd_rollout_hold(o.id)) then",
+       "signup_eligibility", "R72: USD owed through a second organization is ignored"),
     _m("a1_denial_not_recorded",
        "    perform infrx.record_signup_denial(p_user_id, 'unverified');",
        "    null;",
