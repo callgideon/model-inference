@@ -96,10 +96,15 @@ class Report:
     def __init__(self) -> None:
         self.stages: list[dict] = []
         self.started = datetime.now(timezone.utc)
+        self._last = time.monotonic()
 
     def add(self, stage: str, status: str, detail: object = None, **extra) -> dict:
+        # Review H7: how long each stage took (since the previous stage ended).
+        now = time.monotonic()
+        seconds, self._last = round(now - self._last, 1), now
         entry = {"stage": stage, "status": status, "detail": detail,
-                 "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **extra}
+                 "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 "seconds": seconds, **extra}
         self.stages.append(entry)
         mark = {PASS: "ok  ", FAIL: "FAIL", PENDING: "PEND", SKIP: "skip"}[status]
         print(f"[{mark}] {stage}: {_short(detail)}", flush=True)
@@ -114,11 +119,23 @@ class Report:
         return 0
 
     def as_json(self) -> str:
-        return json.dumps({"started": self.started.isoformat(timespec="seconds"),
+        # Review H7: which tree and which namespace a report is evidence for.
+        return json.dumps({"git_head": git_head(), "namespace": harness.NAMESPACE,
+                           "started": self.started.isoformat(timespec="seconds"),
                            "seconds": round((datetime.now(timezone.utc)
                                              - self.started).total_seconds(), 1),
                            "exit_code": self.exit_code, "stages": self.stages},
                           indent=2, default=str)
+
+
+def git_head() -> dict:
+    """The checkout's commit and whether its tree differs from it (untracked files count)."""
+    def git(*args: str) -> str:
+        done = subprocess.run(["git", "-C", str(harness.REPO_ROOT), *args], capture_output=True,
+                              text=True, timeout=60)
+        return done.stdout.strip() if done.returncode == 0 else ""
+    return {"sha": git("rev-parse", "HEAD") or None,
+            "dirty": bool(git("status", "--porcelain"))}
 
 
 def _short(detail: object, limit: int = 220) -> str:

@@ -804,6 +804,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '    failed = [run["argv"] for run in runs if run["exit"] not in (0, 124)]\n',
            "tests/integration/test_run.py", "timed_out_fails_the_suites",
            cases=("test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run",)),
+    Mutant("e3bm34", "E3B2 review H7: a report names the commit it is evidence for",
+           "tests/integration/run.py",
+           '    return {"sha": git("rev-parse", "HEAD") or None,\n',
+           '    return {"sha": None,\n',
+           "tests/integration/test_run.py", "names_its_tree",
+           cases=("test_the_report_names_its_tree_its_namespace_and_each_stages_duration",)),
 )
 
 

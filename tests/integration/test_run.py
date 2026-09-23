@@ -994,3 +994,18 @@ def test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run(monkeypatch):
     stage = report.stages[-1]
     assert (stage["status"], report.exit_code) == (runner.FAIL, 1), stage
     assert stage["detail"]["nonzero_exit"] == ["make api-test"], stage["detail"]
+
+
+def test_the_report_names_its_tree_its_namespace_and_each_stages_duration():
+    """Review H7: a report is evidence for one commit in one namespace; it says which, and
+    how long every stage took."""
+    import json as _json
+    import subprocess
+    report = runner.Report()
+    report.add("preflight", runner.PASS, "x")
+    payload = _json.loads(report.as_json())
+    head = subprocess.run(["git", "-C", str(harness.REPO_ROOT), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    assert payload["git_head"]["sha"] == head and isinstance(payload["git_head"]["dirty"], bool)
+    assert payload["namespace"] == harness.NAMESPACE
+    assert isinstance(payload["stages"][0]["seconds"], float)
