@@ -35,11 +35,15 @@ PORT=${PORT:-8000}
 GPU=${GPU:-0}
 # vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b, resolved 2026-09-22
 # (Qwen3.5 needs vLLM main; the 2026-09-19 rows were measured on this build).
+# The environment cannot replace the image: `unset` first, so this `${IMAGE:-…}` default
+# (the form I0's preflight reads) is the only value.
+unset IMAGE
 IMAGE=${IMAGE:-vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42}
 # 240 frames x 196 tokens per 2-frame temporal patch at 448x448 = ~23.5K video
 # tokens, so 32K covers the longest input the model was trained on and keeps the
 # KV budget for batching instead of an idle 262K window.
-MAX_MODEL_LEN=${MAX_MODEL_LEN:-32768}
+# Recorded in serving-version.json, so not an environment knob either.
+MAX_MODEL_LEN=32768
 ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-8}
 
 test -f "$WEIGHTS/config.json" || { echo "no weights at $WEIGHTS — run ./marlin2b/download.sh" >&2; exit 1; }
@@ -73,7 +77,7 @@ exec docker run --rm --name "marlin2b-$PORT" --gpus "\"device=$GPU\"" --ipc=host
   --hf-overrides '{"architectures":["Qwen3_5ForConditionalGeneration"]}' \
   --max-model-len "$MAX_MODEL_LEN" \
   --max-num-seqs "$ENGINE_MAX_NUM_SEQS" \
-  --gpu-memory-utilization "${GPU_MEM:-0.90}" \
+  --gpu-memory-utilization 0.90 \
   --limit-mm-per-prompt '{"video":1,"image":4}' \
   --dtype bfloat16 \
   "${flags[@]}" "$@"

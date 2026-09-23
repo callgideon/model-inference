@@ -82,11 +82,14 @@ def values_of(argv: list[str], option: str) -> list[str]:
 def check_pinned_launch(models: pathlib.Path, tmp: pathlib.Path) -> None:
     """The engine starts from the recorded image digest, on loopback, with exactly the
     recorded flags, the media root mounted read-only at the path it is allowed under, and
-    the I0 pilot gate satisfied."""
+    the I0 pilot gate satisfied - whatever `IMAGE`, `MAX_MODEL_LEN` or `GPU_MEM` the
+    environment carries (review PIN-2: they used to replace the recorded values)."""
     record = record_of(models)
     root = tmp / "processing"
     root.mkdir(exist_ok=True)
-    status, argv, stderr = launch(models, tmp, PROCESSING_CACHE_DIR=str(root))
+    status, argv, stderr = launch(models, tmp, PROCESSING_CACHE_DIR=str(root),
+                                  IMAGE="vllm/vllm-openai:nightly", MAX_MODEL_LEN="99",
+                                  GPU_MEM="0.5")
     assert status == 0 and argv, stderr
     image = record["runtime_image"]
     assert image["ref"] == f"vllm/vllm-openai@{image['digest']}", image
