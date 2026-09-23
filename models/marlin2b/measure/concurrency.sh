@@ -39,8 +39,13 @@ esac
 test -f "$bench" && test -f "$manifest" || { echo "refused: no bench.py/corpus under REPO=$REPO" >&2; exit 2; }
 test -d "${CORPUS_CACHE:?export CORPUS_CACHE (the built corpus)}" || { echo "refused: no CORPUS_CACHE directory" >&2; exit 2; }
 export CORPUS_CACHE
+# A directory proves nothing: the clips must be the manifest's, byte for byte.
+verified=$("$PY" "$REPO/models/marlin2b/corpus/build.py" verify 2>&1) || {
+  printf '%s\n' "$verified" | tail -5 >&2
+  echo "refused: the corpus does not verify (corpus/build.py verify)" >&2; exit 2; }
 mkdir -p "$out"
 echo "run=$run_id utc=$(date -u +%Y-%m-%dT%H:%M:%SZ) repo_sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+echo "corpus=$(printf '%s\n' "$verified" | tail -1)"
 echo "image=$(docker inspect --format '{{.Image}}' "$CONTAINER") args=$args"
 
 sample() {   # level -> one tab-separated line per 2 s until killed

@@ -40,13 +40,15 @@ LABELLED = ("test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refu
             "container")
 INVENTORY = "test_perf_pilot__the_inventory_refuses_a_missing_container"
 METRICS = "test_perf_pilot__the_concurrency_sweep_counts_its_metrics_exactly"
+CORPUS = "test_perf_pilot__the_concurrency_sweep_refuses_an_unverified_corpus"
 PIN_CHECKS = {LAUNCH: serving.check_pinned_launch,
               ONE_SOURCE: serving.check_one_source_per_setting,
               RECORD: serving.check_record_matches_the_code,
               SWEEP: serving.check_the_sweep_survives_a_failed_scrape,
               LABELLED: serving.check_the_sweep_labels_a_failed_run,
               INVENTORY: serving.check_inventory_refuses_a_missing_container,
-              METRICS: serving.check_the_sweep_counts_its_metrics_exactly}
+              METRICS: serving.check_the_sweep_counts_its_metrics_exactly,
+              CORPUS: serving.check_the_sweep_refuses_an_unverified_corpus}
 DIGEST = "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
 
 PIN_MUTANTS: tuple[Mutant, ...] = (
@@ -106,6 +108,9 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        METRICS),
     _m("zero_peak_prints_empty", "a zero peak prints 0, not an empty field",
        C, "c, r+0, w+0, k, m }", "c, r, w, k, m }", METRICS),
+    _m("corpus_not_verified", "the corpus precondition is build.py verify, not a directory",
+       C, 'verified=$("$PY" "$REPO/models/marlin2b/corpus/build.py" verify 2>&1) || {',
+       'verified=$(true) || {', CORPUS),
     _m("inventory_without_its_container", "no container is a failed precondition, exit 2",
        I, '  *) echo "precondition=failed: no container $CONTAINER to inventory (see '
           'container_image)"; exit 2 ;;', "  *) ;;", INVENTORY),
