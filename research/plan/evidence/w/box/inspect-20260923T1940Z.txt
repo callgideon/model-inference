@@ -1,0 +1,83 @@
+utc=2026-09-23T19:40:31Z
+### units
+marlin2b-vllm active=active enabled=enabled
+marlin2b-gateway active=active enabled=enabled
+infrx-worker active=inactive enabled=not-found
+infrx-valkey active=inactive enabled=not-found
+vllm_execstart={ path=/home/ubuntu/model-inference/models/marlin2b/serve.sh ; argv[]=/home/ubuntu/model-inference/models/marlin2b/serve.sh --max-num-seqs 32 ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+vllm_consistsof=
+vllm_fragment=/etc/systemd/system/marlin2b-vllm.service
+vllm_execstartpre={ path=/usr/bin/docker ; argv[]=/usr/bin/docker rm -f marlin2b-8000 ; ignore_errors=yes ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+### engine container
+image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 config_image=vllm/vllm-openai:nightly started=2026-09-20T01:14:43.43577381Z restart=no status=running
+### caddy container
+image=sha256:14a9c00d4e833ebc2b65d36515b37bde3b73f0b323a2663aaafc88953d8c4e3f config_image=caddy:2 network=host readonly=false restart=unless-stopped started=2026-09-20T03:25:07.631954941Z status=running
+caddy_cmd=["caddy","run","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"] entrypoint=null
+caddy_ports={}
+caddy_mounts=bind:/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:false volume:/var/lib/docker/volumes/caddy_data/_data:/data:true volume:/var/lib/docker/volumes/caddy_config/_data:/config:true 
+caddy_env_names=PATH CADDY_VERSION XDG_CONFIG_HOME XDG_DATA_HOME  
+caddy_version=v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=
+### live Caddyfile
+total 4
+2139668 -rw-r--r-- 1 root root 312 Sep 20 03:25 Caddyfile
+sha256=ff47f706baaaba94ca43c42469f010d730b94da72d5ddc2ca1bcec3385e19706  /etc/caddy/Caddyfile
+# TLS termination for the marlin2b gateway. Caddy fetches and renews the
+# certificate itself; ports 80 and 443 must be reachable and DNS must point here.
+marlin2b.callbill.ai {
+    reverse_proxy 127.0.0.1:8001 {
+        flush_interval -1
+        transport http {
+            read_timeout 600s
+        }
+    }
+}
+### admin endpoint
+admin_2019_http=200
+/config:
+total 12
+drwxr-xr-x    3 root     root          4096 Sep 20 01:14 .
+drwxr-xr-x    1 root     root          4096 Sep 20 03:25 ..
+drwxrwxrwt    2 root     root          4096 Sep 20 01:14 caddy
+
+/config/caddy:
+total 12
+drwxrwxrwt    2 root     root          4096 Sep 20 01:14 .
+drwxr-xr-x    3 root     root          4096 Sep 20 01:14 ..
+-rw-------    1 root     root           337 Sep 20 03:25 autosave.json
+### gateway + public route (loopback, via Caddy with SNI)
+gw_8001_health=200
+{"ok":true,"inflight":0}
+edge_health=200
+### checkout + disk + tools
+517e09d plan: wire-in confirmation saved (MONEY-C1); box concurrency sweep authorised and logged
+hf logs lost+found marlin2b samples venv w3-checkout w3-corpus w3-measure 
+2.4G	/opt/dlami/nvme/w3-corpus
+clips negatives sources tools 
+Big_Buck_Bunny_360_10s_1MB.mp4 sample-10s.mp4 
+/dev/mapper/vg.01-lv_ephemeral  412G  9.9G  381G   3% /opt/dlami/nvme
+               total        used        free      shared  buff/cache   available
+Mem:           63424       12438        4169         547       48031       50985
+8
+Model name:                              AMD EPYC 7R13 Processor
+BIOS Model name:                         AMD EPYC 7R13 Processor  CPU @ 2.6GHz
+/usr/local/bin/aws /usr/bin/git /usr/bin/ffmpeg 
+py 3.13.15 transformers 5.17.0 torch 2.12.1+cu130
+openai 3.16.2 av 18.1.0 httpx 0.28.1
+### in flight on the engine
+vllm:num_requests_running{engine="0",model_name="marlin2b"} 0.0
+vllm:num_requests_waiting{engine="0",model_name="marlin2b"} 0.0
+### gateway usage log tail timestamps (traffic check, no content)
+{'ts': 1789874765.7808893, 'status': 200, 'stream': False}
+{'ts': 1789890731.2810707, 'status': 200, 'stream': False}
+{'ts': 1789893130.1216614, 'status': 200, 'stream': False}
+usage_lines=19
+### s3 access (list only)
+                           PRE bootstrap/
+                           PRE w3/
+                           PRE weights/
+### marlin2b modeling caption signature
+317:# qwen-vl-utils reads these from the environment when ``apply_chat_template``
+421:        inputs = self.processor.apply_chat_template(
+481:    def caption(
+532:    def find(
+
