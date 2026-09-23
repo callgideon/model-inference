@@ -149,9 +149,13 @@ class WorkerService:
             await asyncio.wait({waiting, self._pool, self._reaper, *self.loop._tasks},
                                return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
-            if not stop.is_set():
-                log.error("died unasked: %s; draining for a restart",
-                          [task.get_name() for task in self._died()])
+            # Each death with its cause: `_died()` retrieves the exception and `gather` in
+            # stop() swallows it, so nothing else would ever print it. The pool itself only
+            # raises before it has runners (a bad `concurrency`).
+            for task in (*self._died(), self._pool):
+                if task.done() and not task.cancelled() and task.exception() is not None:
+                    log.error("%s died; draining for a restart", task.get_name(),
+                              exc_info=task.exception())
             return await self.stop()
         finally:
             for sig in signals:

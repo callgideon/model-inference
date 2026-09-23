@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import logging
 import os
 import pathlib
 import signal
@@ -471,11 +472,18 @@ def one_claim_fails(world: World) -> list:
     return blinked
 
 
-def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve():
+def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve(caplog):
     """A pool one runner short is not healthy: `/livez` and `/readyz` are 503 and say how
     many runners died, and `serve()` drains what still runs and returns, so the service
     manager restarts the process at full concurrency (review S1: it used to read 200 /
-    200 / `failures` 0 for its whole life, and never exit)."""
+    200 / `failures` 0 for its whole life, and never exit). The death is logged with its
+    cause - the runner's exception, or the pool's own when it cannot start a runner."""
+    caplog.set_level(logging.ERROR, logger="infrx.worker")
+
+    def deaths():
+        return [(r.getMessage(), r.exc_info and r.exc_info[0]) for r in caplog.records
+                if r.levelno == logging.ERROR and "died" in r.getMessage()]
+
     async def case():
         world = World()
         service = service_for(world, Answering(), concurrency=2, reap_interval_s=3600,
@@ -499,6 +507,15 @@ def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve()
         # it drained the survivor on the way out rather than walking away from it
         assert serving.result() is service.last_drain and service.loop.draining
         assert len(service.loop.failures) == 1
+        assert [cause for _, cause in deaths()] == [ConnectionError], deaths()
+        assert deaths()[0][0].startswith("worker-w3-"), deaths()
+
+        # a pool that cannot start its runners at all dies with its own cause, logged
+        caplog.clear()
+        broken = service_for(World(), Answering(), concurrency=0, reap_interval_s=3600)
+        serving = asyncio.create_task(broken.serve())
+        done, _ = await asyncio.wait({serving}, timeout=5)
+        assert done and deaths() == [("pool died; draining for a restart", ValueError)], deaths()
     run(case())
 
 
