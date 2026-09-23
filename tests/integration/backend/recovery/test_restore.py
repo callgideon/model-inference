@@ -429,9 +429,13 @@ DAMAGE = {
     # RST-R3-1: the same grantee, another privilege - only the privilege tells them apart.
     "column_acls_privilege": "revoke update (full_name) on public.profiles from authenticated; "
                              "grant select (full_name) on public.profiles to authenticated",
+    # RST-R4-1: the same grant, now WITH GRANT OPTION (w -> w*): what it grants, fully.
+    "column_acls_grantopt": "grant update (full_name) on public.profiles to authenticated "
+                            "with grant option",
 }
 # A DAMAGE id that is not its family's name (a second witness of the same family).
-FAMILY = {"functions_config": "functions", "column_acls_privilege": "column_acls"}
+FAMILY = {"functions_config": "functions", "column_acls_privilege": "column_acls",
+          "column_acls_grantopt": "column_acls"}
 
 
 def _family(problem: str) -> str:

@@ -373,6 +373,11 @@ MUTANTS += (
            "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
            "array(select split_part(x::text, '=', 1) from unnest(a.attacl) x order by 1)::text "
            "from pg_attribute a", RESTORE, "bk01f and column_acls_privilege", layer=2),
+    Mutant("i3bm115", "RST-R4-1: a column grant's grant option is compared (w vs w*)",
+           PGRESTORE,
+           "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
+           "array(select replace(x::text, '*', '') from unnest(a.attacl) x order by 1)::text "
+           "from pg_attribute a", RESTORE, "bk01f and column_acls_grantopt", layer=2),
     Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
                      "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
            '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',
