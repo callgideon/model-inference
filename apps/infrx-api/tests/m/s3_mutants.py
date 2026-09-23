@@ -55,6 +55,7 @@ INSTALL_REFUSES = "test_a_pilot_install_without_a_bucket_is_refused"
 NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
 CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
 CLEANUP = "test_what_a_case_writes_is_removed_after_it"
+CLEANUP_GUARD = "test_the_cleanup_empties_only_one_cases_own_prefix"
 STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
 NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
 WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
@@ -152,6 +153,9 @@ MUTANTS: tuple[Mutant, ...] = (
        CLEANUP, s3=True),
     _m("own_v_cleanup_unregistered", "every store a case makes is registered for the teardown",
        H, "    if secret is None:\n        _WRITTEN.append(objects)\n", "", CLEANUP, s3=True),
+    _m("own_v_cleanup_guard_dropped", "a cleanup empties only one case's test/m1l2/<uuid>/",
+       H, "    if not CASE_PREFIX_RE.fullmatch(objects.prefix):\n        raise ValueError(",
+       "    if False:\n        raise ValueError(", CLEANUP_GUARD),
     # === review A2: every arm of the error-vs-absent rule ================================
     _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
        S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',

@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import re
 import sys
 import uuid
 
@@ -88,10 +89,16 @@ _READY: set[str] = set()
 _WRITTEN: list[S3ObjectStore] = []
 
 
+#: The only prefix a cleanup may empty: one case's own. On the box the bucket is the
+#: project's, so neither `infrx/` nor another run's `test/m1l2/` is ever in reach.
+CASE_PREFIX_RE = re.compile(r"test/m1l2/[0-9a-f]{32}/")
+
+
 def remove_prefix(objects: S3ObjectStore) -> None:
-    """Delete everything under a store's own test prefix, 1000 keys a call. Never anything
-    outside `test/m1l2/`: on the box the bucket is the project's."""
-    assert objects.prefix.startswith("test/m1l2/"), objects.prefix
+    """Delete everything under one case's `test/m1l2/<uuid>/` prefix, 1000 keys a call. A
+    `raise`, not an `assert`: the guard holds under `python -O` too (verifier V2)."""
+    if not CASE_PREFIX_RE.fullmatch(objects.prefix):
+        raise ValueError(f"refusing to empty {objects.prefix!r}: not one case's test prefix")
     pages = objects.client.get_paginator("list_objects_v2").paginate(
         Bucket=objects.bucket, Prefix=objects.prefix)
     for page in pages:
@@ -140,11 +147,11 @@ def objects(request, monkeypatch):
 
 @pytest.fixture(params=["memory", pytest.param("s3", marks=needs_s3)])
 def pair(request, monkeypatch):
-    """Two stores: two instances, or two sibling prefixes of ONE bucket."""
+    """Two stores: two instances, or two sibling prefixes (`test/m1l2/<uuid>/`) of ONE
+    bucket."""
     if request.param == "memory":
         return store.InMemoryObjectStore(), store.InMemoryObjectStore()
-    root = unique_prefix()
-    return s3_store(monkeypatch, root + "a/"), s3_store(monkeypatch, root + "b/")
+    return s3_store(monkeypatch), s3_store(monkeypatch)
 
 
 class Counting:
@@ -619,6 +626,22 @@ def test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local
     s3_env(monkeypatch)
     assert os.environ["AWS_ACCESS_KEY_ID"] == ACCESS_KEY
     assert os.environ["AWS_EC2_METADATA_DISABLED"] == "true"
+
+
+class Untouchable:
+    """A client no call may reach."""
+
+    def __getattr__(self, name):
+        raise AssertionError(f"the cleanup reached the bucket ({name}) for a refused prefix")
+
+
+def test_the_cleanup_empties_only_one_cases_own_prefix():
+    """Never the deployment's prefix, never the whole test area, never a nested path: the
+    refusal comes before any call reaches the bucket."""
+    for prefix in ("infrx/", "test/m1l2/", "test/m1l2/otherrun/",
+                   f"test/m1l2/{'0' * 32}/nested/", f"test/{'0' * 32}/"):
+        with pytest.raises(ValueError, match="refusing to empty"):
+            remove_prefix(S3ObjectStore(Untouchable(), "infrx-m1l2", prefix))
 
 
 @needs_s3
