@@ -1062,6 +1062,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "        pass\n",
            "tests/integration/test_run.py", "s3_cases_on_this_stacks_minio",
            cases=("test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio",)),
+    Mutant("e3bm73", "E3B3 review H-N1: the M3-U1 pending fails the day its blocker is gone",
+           "tests/integration/backend/test_journey.py",
+           "        if not stack.upload_refs_refused():\n",
+           "        if False:\n",
+           "tests/integration/backend/test_stage.py", "owner_reference",
+           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
 )
 
 

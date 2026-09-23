@@ -228,6 +228,10 @@ def test_backend_journey(trip, input_kind, mode):
     R94 cross-mode conflict that writes nothing, the other tenant's 404s, the settlement
     once at the admitted card, the USD books unmoved, both wallets conserved."""
     if input_kind == "video_upload" and "M3-U1" in stack.OWNERS:
+        # review H-N1: the pending fails the day its blocker is gone (a structural probe).
+        if not stack.upload_refs_refused():
+            pytest.fail("M3-U1 is fixed: M's real staging resolves an infrx-upload: reference - "
+                        "delete stack.OWNERS['M3-U1'] and run the video_upload cells")
         stack.pending("M3-U1", why="the real media staging refuses a chat naming a finalized "
                                    "infrx-upload: reference (MediaStaging.materialize)")
     alpha, beta = trip.world.alpha, trip.world.beta

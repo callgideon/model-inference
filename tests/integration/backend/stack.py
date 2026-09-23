@@ -76,6 +76,50 @@ PENDING = {**OWNERS}
 RESIDUAL: dict[str, str] = {}
 
 
+def upload_refs_refused() -> bool:
+    """M3-U1's structural probe (review H-N1), in process, no stack: M's REAL media store
+    (`MediaUploads` over the in-memory object store) finalizes an upload of M's synthetic clip,
+    then prepares a chat that names it. True while the staging still refuses the reference as
+    "a media source must be an http(s) or data: URL"; False the day it resolves it - and then
+    the video_upload cells must run, not pend. Anything else is raised."""
+    import hashlib
+
+    from infrx.contracts import errors
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
+    from infrx.media.store import InMemoryObjectStore
+    from infrx.media.uploads import MediaUploads
+    spec = importlib.util.spec_from_file_location(
+        "e3b3_probe_m_support", harness.API_ROOT / "tests" / "m" / "support.py")
+    support = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(support)
+    clip = support.mp4(seconds=10.0)
+
+    class Rig:
+        clock, ids = FakeClock(), SequentialIds()
+
+    async def probe() -> bool:
+        media = MediaUploads(InMemoryObjectStore())
+        ticket = await media.create_upload(b.ORG_A, {
+            "bytes": len(clip), "digest": "sha256:" + hashlib.sha256(clip).hexdigest(),
+            "accepted_mime": ["video/mp4"]})
+        handle = ticket["upload_handle"] if isinstance(ticket, dict) else ticket.upload_handle
+        await media.put_upload(b.ORG_A, handle, clip, "video/mp4")
+        await media.finalize_upload(b.ORG_A, handle)
+        request = b.request(Rig, org_id=b.ORG_A).model_copy(update={"messages": (
+            {"role": "user", "content": [
+                {"type": "text", "text": "What happens?"},
+                {"type": "video_url", "video_url": {"url": f"infrx-upload:{handle}"}}]},)})
+        try:
+            await media.prepare_request(b.ORG_A, request)
+        except errors.InvalidRequest as refused:
+            if "a media source must be an http(s) or data: URL" in str(refused):
+                return True
+            raise
+        return False
+    return asyncio.run(probe())
+
+
 def pending(*ids: str, why: str):
     """Skip as PENDING. Never a pass: `run.py --layer 3` counts it, and the stage exits 3."""
     import pytest
