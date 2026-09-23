@@ -36,7 +36,8 @@ SUBSET = ("denied_read_tolerated", "unknown_error_is_not_found", "validation_ski
           "revert_runtime_before_tree",
           # the cutover: the factory, the edge's routes and headers, the composition refusal
           "unit_runs_the_retired_shim", "edge_strips_a_contract_response_header",
-          "edge_buffers_events", "edge_hides_jobs", "credit_without_card_installs")
+          "edge_buffers_events", "edge_hides_jobs", "credit_without_card_installs",
+          "release_not_required_in_pilot")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

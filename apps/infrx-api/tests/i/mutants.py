@@ -63,6 +63,7 @@ def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
 
 
 REGIME = "test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve"
+RELEASE_CASE = "test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys"
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -217,6 +218,19 @@ MUTANTS: tuple[Mutant, ...] = (
        'return (f"{key.env}: {value} contains a newline, NUL, quote or backslash; "',
        "test_deploy_failclosed__a_value_cannot_write_a_second_variable"),
     # --- prerequisites (brief item 4) --------------------------------------------------
+    # E4B's served-build check (CUTOVER item 7): the release install.sh deploys
+    _m("release_not_required_in_pilot", "a pilot env carries the deployed commit",
+       P, '    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",\n'
+          '        required_in=("pilot",)),',
+       '    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",\n'
+       '        required_in=()),', RELEASE_CASE),
+    _m("release_shape_unchecked", "the deployed commit is a 40-hex id",
+       P, '    "git_sha": _matches(r"[0-9a-f]{40}"),', '    "git_sha": _matches(r"\\S+"),',
+       RELEASE_CASE),
+    _m("release_not_supplied", "the installer supplies the commit it deploys",
+       P, '"INFRX_RELEASE_SHA": cfg.release,', '"INFRX_RELEASE_SHA": "",', RELEASE_CASE),
+    _m("install_passes_no_release", "install.sh hands preflight its HEAD",
+       "deploy/install.sh", ' --release "$sha"', "", RELEASE_CASE),
     # the cutover (CUTOVER item 4): the regime and the card, the runtime's own check
     _m("credit_without_card_installs", "a CREDIT pilot needs an approved card",
        "infrx/config.py", "    if deployment.accounting_regime == CREDIT_REGIME \\\n",

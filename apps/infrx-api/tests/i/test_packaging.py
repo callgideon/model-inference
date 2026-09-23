@@ -274,7 +274,7 @@ def test_backend_deploy__the_config_schema_is_every_name_the_runtime_reads():
 
     recording = _Recording()
     from_env(recording)
-    manifest = {key.env for key in preflight.MANIFEST} - {"INFRX_IMAGE"}   # systemd's
+    manifest = {key.env for key in preflight.MANIFEST}      # INFRX_IMAGE: systemd's and E4B's
     tunable, never = set(preflight.TUNABLE), set(preflight.NOT_SETTABLE)
     assert len(tunable) == len(preflight.TUNABLE), "a tunable is listed twice"
     assert not (manifest & tunable) and not (manifest & never) and not (tunable & never)

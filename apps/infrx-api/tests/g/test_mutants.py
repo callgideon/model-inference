@@ -28,7 +28,8 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           "param_echoed_unfiltered", "admission_ignores_db_deadline", "cap_counts_one_chunk",
           "http_exceptions_unwrapped", "trace_default_is_full",
           # the cutover: the full mount and never process memory from settings
-          "composition_root_drops_jobs", "objects_from_settings_in_memory")
+          "composition_root_drops_jobs", "objects_from_settings_in_memory",
+          "build_info_not_required_in_pilot")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

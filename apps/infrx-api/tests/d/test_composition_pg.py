@@ -38,7 +38,9 @@ def _app(regime: str, card: str, database: str):
                         pilot=DEFAULTS.replace(infrx_mode="pilot",
                                                database_url=pgharness.dsn(database),
                                                active_rate_card_version=card))
-    settings.deployment = settings.deployment.replace(accounting_regime=regime)
+    settings.deployment = settings.deployment.replace(
+        accounting_regime=regime, infrx_release_sha="c0ffee" + "0" * 34,
+        infrx_image="sha256:" + "b" * 64)
     return create_app(settings, client=object(), sb=object(), objects=InMemoryObjectStore(),
                       index=MemoryScheduler(lambda: None))
 

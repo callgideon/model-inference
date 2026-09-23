@@ -17,6 +17,7 @@ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
 
 from . import relay_support
@@ -137,12 +138,13 @@ UPLOAD_ROUTES = {("POST", "/v1/uploads"), ("PUT", "/v1/uploads/{handle}"),
 
 
 def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only():
-    """The cutover (r1 R44): `ROUTERS` is (health, models, ingress, uploads, jobs) - `health`
-    stays, Caddy proxies the public `/health` to it; uploads and jobs after the ingress, over
-    the store and relay its composition made (G3/G4U request (a)) - the one chat handler is
-    the ingress's, every upload and jobs route is its own router's, and nothing FastAPI would
-    publish by itself (docs, schema, slash redirects) is served."""
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs)
+    """The cutover (r1 R44): `ROUTERS` is (health, models, ingress, uploads, jobs, metrics) -
+    `health` stays, Caddy proxies the public `/health` to it; uploads and jobs after the
+    ingress, over the store and relay its composition made (G3/G4U request (a)); I3B's
+    loopback-only /metrics last - the one chat handler is the ingress's, every upload and jobs
+    route is its own router's, and nothing FastAPI would publish by itself (docs, schema,
+    slash redirects) is served."""
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics)
     app = pilot_app()
     rt = app.state.runtime
     paths = {route.path for route in app.routes if hasattr(route, "path")}
@@ -158,6 +160,32 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     assert {served.get(key) for key in ingress.JOBS_ROUTES} == {jobs.__name__}
     assert rt.relay.on_async is not None            # jobs' 202 hook, on the pilot's relay
     ingress.assert_route_table(app)
+
+
+def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as():
+    """E4B's served-build check: /metrics (loopback only) carries
+    `infrx_build_info{revision, image} 1` from the settings the installer wrote
+    (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`), set at startup and never read from git at runtime.
+    A pilot without either refuses to start, naming it; a malformed one is refused as a
+    deployment value; dev without them starts with no gauge."""
+    import dataclasses
+
+    body = local(pilot_app()).get("/metrics").text
+    build = (f'infrx_build_info{{process="gateway",revision="{support.RELEASE}",'
+             f'image="{support.IMAGE}"}} 1')
+    assert build in body, body
+    assert TestClient(pilot_app()).get("/metrics").status_code == 404     # never public
+    for name in ("infrx_release_sha", "infrx_image"):
+        config = support.settings()
+        config.deployment = dataclasses.replace(config.deployment, **{name: ""})
+        with pytest.raises(RuntimeMisconfigured, match=f"requires {name.upper()}"):
+            pilot_app(config)
+        config.deployment = dataclasses.replace(support.BUILD, **{name: "c0ffee"})
+        with pytest.raises(RuntimeMisconfigured, match=f"{name.upper()} must be"):
+            pilot_app(config)
+    dev = support.settings("dev", deployment=support.BUILD.replace(infrx_release_sha="",
+                                                                   infrx_image=""))
+    assert "infrx_build_info{" not in local(pilot_app(dev)).get("/metrics").text
 
 
 def test_f_base__the_route_table_is_asserted_after_every_router_mounted():

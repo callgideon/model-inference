@@ -35,6 +35,7 @@ from typing import Any
 
 from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
+from ..contracts.limits import env_name
 from ..contracts.v2.records import CredentialAudience
 from ..media import fetch
 from ..media.prepare import ProcessingCache
@@ -229,6 +230,23 @@ class Lifetime:
     pool: Any = None
     relay: Any = None
     tasks: list = field(default_factory=list)
+
+
+def build_info(rt) -> None:
+    """E4B's served-build check: `infrx_build_info{revision, image} 1` on /metrics, from the
+    settings the installer wrote (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`). A pilot refuses to
+    start without them; dev/test set the gauge only when both are given."""
+    deployment = rt.settings.deployment
+    missing = [env_name(name) for name in ("infrx_release_sha", "infrx_image")
+               if not getattr(deployment, name)]
+    if missing:
+        if rt.mode == "pilot":
+            raise RuntimeMisconfigured(rt.mode, missing)
+        return
+    if getattr(rt, "metrics", None) is None:
+        rt.metrics = Registry("gateway")
+    rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,
+                   image=deployment.infrx_image)
 
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
