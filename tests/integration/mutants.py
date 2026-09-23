@@ -1035,6 +1035,25 @@ MUTANTS: tuple[Mutant, ...] = (
            '    stack.pending("M3-U2", why=', '    (lambda *a, **k: None)("M3-U2", why=',
            "tests/integration/backend/test_journey.py", "separate_worker", layer=2,
            cases=("test_backend_journey__video_url_on_a_separate_worker_process",)),
+    Mutant("e3bm70", "E3B3 review J1 (the reviewer's mutant A): a keyed replay is answered by "
+                     "the R91 lookup, preparing and staging nothing",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "        if idem.key is None:\n            return None\n",
+           "        if True:\n            return None\n",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
+    Mutant("e3bm71", "E3B3 review J1 (the reviewer's mutant M): a key conflict is 409 at the "
+                     "lookup, before anything is fetched, staged or admitted",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+           "        except errors.UnsupportedParameter as refused:",
+           "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+           "        except errors.IdempotencyConflict:\n            return None\n"
+           "        except errors.UnsupportedParameter as refused:",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
 )
 
 

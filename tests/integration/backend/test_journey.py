@@ -76,10 +76,12 @@ def run_sync(trip, tenant, messages, key):
     assert body["object"] == "chat.completion" and body["id"] == f"chatcmpl-{request_id}"
     assert body["choices"][0]["message"]["content"], body
     assert "idempotency-replayed" not in first.headers
+    before = trip.untouched()
     again = trip.send(tenant, "sync", messages, key)
     assert (again.status_code, again.headers["inference-id"],
             again.headers.get("idempotency-replayed")) == (200, request_id, "true"), again.text
-    assert again.json()["usage"] == body["usage"]
+    assert again.json() == body, (again.json(), body)            # review J12: the same answer
+    assert trip.untouched() == looked_up(before), "R91: the replay prepared or staged something"
     return request_id, trip.handle_of(request_id), body["usage"]
 
 
@@ -143,7 +145,9 @@ def run_sse(trip, tenant, messages, key):
     past = trip.http.get(f"/v1/jobs/{handle}/events", headers=trip.headers(
         tenant, **{"Last-Event-ID": f"{generation}-{10 ** 6}"}))
     assert (past.status_code, error_code(past)) == (400, "invalid_cursor"), past.text
+    before = trip.untouched()
     again = trip.send(tenant, "sse", messages, key)
+    assert trip.untouched() == looked_up(before), "R91: the replay prepared or staged something"
     assert (again.status_code, again.headers["inference-id"],
             again.headers.get("idempotency-replayed")) == (200, request_id, "true"), again.text
     assert pilotbox.frame_data(pilotbox.frames(again.text)[0])["job_handle"] == handle
@@ -170,7 +174,9 @@ def run_async(trip, tenant, messages, key):
     result = trip.http.get(f"/v1/jobs/{handle}/result", headers=trip.headers(tenant))
     assert result.status_code == 200, result.text
     assert result.json()["response"]["usage"] == status["usage"], result.text
+    before = trip.untouched()
     again = trip.send(tenant, "async", messages, key)
+    assert trip.untouched() == looked_up(before), "R91: the replay prepared or staged something"
     assert (again.status_code, again.json()["job_handle"], again.json()["idempotency_replayed"],
             again.headers.get("idempotency-replayed")) == (202, handle, True, "true"), again.text
     streamed = trip.send(tenant, "async", messages, None, stream=True)
@@ -180,6 +186,11 @@ def run_async(trip, tenant, messages, key):
 
 
 RUN = {"sync": run_sync, "sse": run_sse, "async": run_async}
+
+
+def looked_up(before: tuple) -> tuple:
+    """`Journey.untouched` after one lookup and nothing else."""
+    return before[0] + 1, before[1]
 
 
 def settled_once(trip, tenant, request_id: str, usage: dict, before: tuple) -> Decimal:
@@ -227,11 +238,12 @@ def test_backend_journey(trip, input_kind, mode):
     for other in MODES:
         if other == mode:
             continue
-        mark = trip.footprint()
+        mark = trip.untouched()
         crossed = trip.send(alpha, other, messages, key)
         assert (crossed.status_code, error_code(crossed)) == (409, "idempotency_conflict"), \
             f"R94: {mode} key reused in {other}: {crossed.status_code} {crossed.text}"
-        assert trip.footprint() == mark, f"R94: the {other} conflict wrote something"
+        assert trip.untouched() == looked_up(mark), \
+            f"R91/R94: the {other} conflict was not answered by the lookup alone"
     foreign = trip.headers(beta)
     for method, path in (("GET", f"/v1/jobs/{handle}"), ("GET", f"/v1/jobs/{handle}/result"),
                          ("GET", f"/v1/jobs/{handle}/events"), ("DELETE", f"/v1/jobs/{handle}")):

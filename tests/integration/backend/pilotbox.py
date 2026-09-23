@@ -18,6 +18,9 @@ compose yet is INJECTED, each named here and in the evidence:
   `harness.VALKEY_PREFIX` (removed afterwards, like every E2 key) instead of the pilot's.
 * the customer's media host (`video_url`): M's fetcher resolves `MEDIA_HOST` to a public
   address (so M's SSRF rules pass unchanged) and its transport serves M's synthetic clip.
+* test instrumentation (review J1): the relay's store is wrapped by `Counted`, and the media
+  host counts its fetches - one line per lookup, admission and fetch in `INFRX_E3B_CALLS`, so
+  a journey can prove a replay or a key conflict fetched, staged and admitted nothing.
 
 and, in the same process, **M's preparation worker, emulated**: no process claims a
 preparation lease in the product yet, and the staged refs it prepares are bound in THIS
@@ -61,9 +64,9 @@ import harness                                          # noqa: E402
 if importlib.util.find_spec("infrx") is None:
     harness.api_on_path()
 
-PORT_ENV, INDEX_ENV, ENGINE_ENV, EMBED_ENV = (
+PORT_ENV, INDEX_ENV, ENGINE_ENV, EMBED_ENV, CALLS_ENV = (
     "INFRX_E3B_GATEWAY_PORT", "INFRX_E3B_INDEX_NAMESPACE", "INFRX_E3B_ENGINE_URL",
-    "INFRX_E3B_EMBED_WORKER")
+    "INFRX_E3B_EMBED_WORKER", "INFRX_E3B_CALLS")
 MEDIA_HOST = "media.e3b3.example"
 PUBLIC_ADDRESS = "93.184.216.34"          # what MEDIA_HOST resolves to (G2's own choice)
 # The fake engine counts every prompt as this many tokens; the emulated preparation reports
@@ -103,6 +106,35 @@ def index(pilot):
 
 
 # ------------------------------------------------------------------ the gateway process
+
+def mark(kind: str) -> None:
+    """One line per counted call (O_APPEND: one write per line, whole)."""
+    with open(os.environ[CALLS_ENV], "a", encoding="utf-8") as calls:
+        calls.write(kind + "\n")
+
+
+class Counted:
+    """The relay's store with its R91 lookups and its admissions counted (test instrumentation,
+    review J1); every call is the store's own."""
+
+    def __init__(self, store) -> None:
+        self.store = store
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+    async def lookup(self, *args, **kw):
+        mark("lookup")
+        return await self.store.lookup(*args, **kw)
+
+    async def admit_credit(self, *args, **kw):
+        mark("admit")
+        return await self.store.admit_credit(*args, **kw)
+
+    async def admit(self, *args, **kw):
+        mark("admit")
+        return await self.store.admit(*args, **kw)
+
 
 class Prepare:
     """M's preparation worker, emulated (see the module docstring)."""
@@ -146,15 +178,20 @@ async def gateway() -> None:
     queue = index(settings.pilot)
     app = create_app(settings, sb=sb, index=queue)
     rt = app.state.runtime
+    rt.relay.jobs = Counted(rt.relay.jobs)
     body = clip()
+
+    def serve(request):
+        mark("fetch")
+        return httpx.Response(200, headers={"content-type": "video/mp4"},
+                              stream=httpx.ByteStream(body))
 
     async def resolve(host):
         return [PUBLIC_ADDRESS] if host == MEDIA_HOST else []
 
     rt.media_store.fetcher = fetch.MediaFetcher(
         settings.pilot, allowed_mime=settings.allowed_video_mime, resolve=resolve,
-        transport=httpx.MockTransport(lambda request: httpx.Response(
-            200, headers={"content-type": "video/mp4"}, stream=httpx.ByteStream(body))))
+        transport=httpx.MockTransport(serve))
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=int(os.environ[PORT_ENV]),
                                            log_level="warning"))
     serving = asyncio.create_task(server.serve())
@@ -254,7 +291,8 @@ class PilotBox:
         inherited = {name: value for name, value in os.environ.items()
                      if name not in stack.AWS_UNSET}
         self.env = {**inherited, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
-                    ENGINE_ENV: engine_url, "PYTHONUNBUFFERED": "1"}
+                    ENGINE_ENV: engine_url, CALLS_ENV: str(workdir / "calls.log"),
+                    "PYTHONUNBUFFERED": "1"}
         self.workdir, self.port, self.namespace = workdir, port, namespace
         self.processes: dict[str, subprocess.Popen] = {}
         self.starts = {"gateway": 0, "worker": 0}
@@ -392,12 +430,26 @@ class Journey:
                          tenant.org_id))
 
     def footprint(self) -> tuple:
-        """Everything an admission may write: jobs, holds of both units, outbox, mappings."""
-        return self.one("select (select count(*) from infrx.jobs), "
+        """Everything an acceptance may write or do: the rows (jobs, holds of both units,
+        outbox, mappings), the objects staged under the box's prefix, the media fetched and
+        the admissions tried (review J1: R91's "nothing prepared or staged")."""
+        rows = self.one("select (select count(*) from infrx.jobs), "
                         "(select count(*) from infrx.credit_wallet_holds), "
                         "(select count(*) from infrx.credit_holds), "
                         "(select count(*) from infrx.outbox), "
                         "(select count(*) from infrx.idempotency)")
+        staged = harness.s3_client().list_objects_v2(
+            Bucket=harness.S3_BUCKET, Prefix=self.box.env["S3_MEDIA_PREFIX"]).get("KeyCount", 0)
+        return (*rows, staged, self.calls("fetch"), self.calls("admit"))
+
+    def calls(self, kind: str) -> int:
+        path = Path(self.box.env[CALLS_ENV])
+        return path.read_text().splitlines().count(kind) if path.exists() else 0
+
+    def untouched(self) -> tuple:
+        """(lookups, footprint): a replay or a key conflict answered by ONE lookup and nothing
+        else leaves the second as it was and moves the first by one (G3's MODES_409 shape)."""
+        return self.calls("lookup"), self.footprint()
 
     def handle_of(self, request_id: str) -> str:
         return self.one("select job_handle from infrx.jobs where request_id = %s",
