@@ -628,7 +628,8 @@ def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepte
 
 # ------------------------------------------------------------------ rollout
 
-DEPLOY = harness.REPO_ROOT / "apps" / "infrx-api" / "deploy"
+# The copy's, under the mutation runner: i3bm94/i3bm97/i3bm98 mutate rollback.sh and lib.sh.
+DEPLOY = kit.ROOT / "apps" / "infrx-api" / "deploy"
 ENV_FILE = "etc/marlin2b-gateway.env"
 UNITS = ("marlin2b-vllm.service", "marlin2b-gateway.service", "infrx-worker.service",
          "infrx-valkey.service")
@@ -642,13 +643,14 @@ IMAGE = {"previous": "sha256:" + "a" * 64, "current": "sha256:" + "b" * 64}
 
 def release(image: str | None) -> dict[str, str]:
     """A host's backed-up files at one release: the pilot env file pinning `image` (None: the
-    pre-I2B monolith's, no mode) and I2B's units and edge, marked with the release."""
+    pre-I2B monolith's, no mode) and I2B's units and edge, EACH marked with the release, so a
+    rollback that leaves any one of them (the edge included: i3bm94) in place is caught."""
     files = {ENV_FILE: f"INFRX_MODE=pilot\nINFRX_IMAGE={image}\n" if image
              else "MODEL_ID=nemostation/marlin-2b\n"}
     for unit in UNITS:
         files[f"etc/systemd/system/{unit}"] = (DEPLOY / unit).read_text() + f"# {image}\n"
     for site in ("Caddyfile", "Caddyfile.maintenance"):
-        files[f"etc/caddy/infrx/{site}"] = (DEPLOY / site).read_text()
+        files[f"etc/caddy/infrx/{site}"] = (DEPLOY / site).read_text() + f"# {image}\n"
     files["etc/caddy/Caddyfile"] = files["etc/caddy/infrx/Caddyfile"]
     return files
 
@@ -735,6 +737,9 @@ def test_i3b_rc10_a_rollout_rollback_loses_no_job_and_restores_the_previous_runt
     monkeypatch.setenv("PGPASSWORD", bk.pg_password())
     world = kit.World()
     root = tmp_path / "root"
+    # the premise of "byte for byte": no backed-up file is the same in both releases (DR-1)
+    assert [path for path in BACKED_UP
+            if release(IMAGE["previous"])[path] == release(IMAGE["current"])[path]] == []
     install(root, release(IMAGE["previous"]))
     previous = backup(root, tmp_path / "backups" / "previous")
     install(root, release(IMAGE["current"]))              # the rollout being rolled back

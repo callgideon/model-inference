@@ -37,6 +37,8 @@ ALERTS = "apps/infrx-api/infrx/observe/alerts.py"
 RULES = "infra/alerts/alerts.json"
 DASHBOARD = "infra/alerts/dashboard.json"
 PGRESTORE = "infra/runbooks/pgrestore.py"
+# I2B's scripts, which rc10 runs unmodified (the runner must copy apps/infrx-api/deploy)
+ROLLBACK = "apps/infrx-api/deploy/rollback.sh"
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bc01", "CONTROL: a comment-only edit in the metrics module must SURVIVE",
@@ -212,6 +214,11 @@ MUTANTS += (
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
+    Mutant("i3bm94", "rc10 (DR-1): rollback.sh restores the edge (the active Caddyfile and "
+                     "both infrx sites) with the env file and the units, byte for byte",
+           ROLLBACK, 'tar -C "${ROOT:-/}" -xpf "$backup/files.tar"',
+           'tar -C "${ROOT:-/}" -xpf "$backup/files.tar" --exclude=etc/caddy',
+           DRILLS, "rc10", layer=2),
     Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
                      "snapshot of queued jobs, so the drained job and the queue come back once",
            KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",
