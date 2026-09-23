@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:42:37Z",
+  "updated": "2026-09-23T11:44:36Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,9 +35,9 @@
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only)",
+      "phase": "HANDED BACK a100aee (impl 9e3bc71; fakes, not integrated); Opus review running (4 lenses)",
       "since": "2026-09-23T10:09:50Z",
-      "note": "POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/"
+      "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
