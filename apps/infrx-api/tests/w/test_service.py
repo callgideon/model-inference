@@ -411,6 +411,7 @@ def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_drain
         assert await eventually(lambda: service._pool.done())
         state = await service.readiness()
         assert (state["live"], state["ready"], state["failures"]) == (False, False, 1)
+        assert state["runners_dead"] == 1
         await service.stop()
         # and `serve` returns by itself rather than waiting for a signal that never comes
         again = service_for(dead, Answering(), reap_interval_s=3600)
@@ -418,6 +419,51 @@ def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_drain
         done, _ = await asyncio.wait({serving}, timeout=5)
         serving.cancel()
         assert done and len(again.loop.failures) == 1
+    run(case())
+
+
+def one_claim_fails(world: World) -> list:
+    """The index blinks once: the first `claim_candidate` raises, every later one works.
+    Whichever runner asks first dies; the others live on."""
+    claim, blinked = world.scheduler.claim_candidate, []
+
+    async def blinks(*args, **kw):
+        if not blinked:
+            blinked.append(True)
+            raise ConnectionError("the index blinked")
+        return await claim(*args, **kw)
+    world.scheduler.claim_candidate = blinks
+    return blinked
+
+
+def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve():
+    """A pool one runner short is not healthy: `/livez` and `/readyz` are 503 and say how
+    many runners died, and `serve()` drains what still runs and returns, so the service
+    manager restarts the process at full concurrency (review S1: it used to read 200 /
+    200 / `failures` 0 for its whole life, and never exit)."""
+    async def case():
+        world = World()
+        service = service_for(world, Answering(), concurrency=2, reap_interval_s=3600,
+                              health_port=0)
+        blinked = one_claim_fails(world)
+        await service.start()
+        port = service._server.sockets[0].getsockname()[1]
+        assert await eventually(lambda: blinked)
+        status, body = await http_get(port, "/livez")
+        assert (status, body["live"], body["runners_dead"]) == (503, False, 1), body
+        status, body = await http_get(port, "/readyz")
+        assert (status, body["ready"], body["loop"]) == (503, False, "idle"), body
+        await service.stop()
+
+        again = World()
+        service = service_for(again, Answering(), concurrency=2, reap_interval_s=3600)
+        one_claim_fails(again)
+        serving = asyncio.create_task(service.serve())
+        done, _ = await asyncio.wait({serving}, timeout=5)
+        assert done, "serve() waited for a pool that runs one runner short"
+        # it drained the survivor on the way out rather than walking away from it
+        assert serving.result() is service.last_drain and service.loop.draining
+        assert len(service.loop.failures) == 1
     run(case())
 
 

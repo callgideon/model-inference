@@ -20,8 +20,11 @@ What it adds to the loop, each for a stated reason:
   gateway, and a non-loopback bind is refused). `GET /readyz` is 200 only when the engine
   answers ready and the pool is running and not draining; its body says which of
   `engine` (`up`/`down`) and `loop` (`idle`/`busy`/`draining`/`stopped`) is the reason.
-  `GET /livez` is 503 once the pool has stopped without being asked to. Counts only - no
-  job id, no content.
+  `GET /livez` is 503 once anything died unasked: the whole pool, or **one** runner of it
+  (`runners_dead`). Counts only - no job id, no content.
+* **Crash-only.** A runner ends only when drained or by dying, so `serve()` returns on the
+  first one that ends: it drains what still runs, and the service manager restarts the
+  process at full strength instead of it running short, live, for ever.
 """
 from __future__ import annotations
 
@@ -123,8 +126,9 @@ class WorkerService:
         return report
 
     async def serve(self, stop: asyncio.Event | None = None) -> DrainReport:
-        """Run until SIGTERM/SIGINT (or `stop`), or until every runner has died; then
-        drain. A process manager's stop timeout must exceed the drain bound."""
+        """Run until SIGTERM/SIGINT (or `stop`), or until a runner dies; then drain. A
+        process manager's stop timeout must exceed the drain bound, and it must restart
+        the process when this returns (`Restart=always`)."""
         stop = stop or asyncio.Event()
         running = asyncio.get_running_loop()
         signals = (signal.SIGTERM, signal.SIGINT)
@@ -133,8 +137,17 @@ class WorkerService:
         try:
             await self.start()
             waiting = asyncio.create_task(stop.wait())
-            await asyncio.wait({waiting, self._pool}, return_when=asyncio.FIRST_COMPLETED)
+            while not self.loop._tasks and not self._pool.done():
+                await asyncio.sleep(0)            # the pool's first step creates its runners
+            # ponytail: crash-only - a transient store error costs a drain and a restart; a
+            # runner that retries in place (backoff plus its own liveness signal) is the
+            # upgrade if measured blips make that matter.
+            await asyncio.wait({waiting, self._pool, *self.loop._tasks},
+                               return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
+            if not stop.is_set():
+                log.error("died unasked: %s; draining for a restart",
+                          [task.get_name() for task in self._died()])
             return await self.stop()
         finally:
             for sig in signals:
@@ -148,6 +161,12 @@ class WorkerService:
             return "draining"
         return "busy" if self.loop.in_flight else "idle"
 
+    def _died(self) -> list[asyncio.Task]:
+        """Runner tasks that ended by raising: the pool is that many short."""
+        return [task for task in (*self.loop._tasks,)
+                if task is not None and task.done() and not task.cancelled()
+                and task.exception() is not None]
+
     async def readiness(self) -> dict:
         try:
             async with asyncio.timeout(HEALTH_TIMEOUT_S):
@@ -155,9 +174,12 @@ class WorkerService:
         except Exception:                         # slow, refusing or broken: not up
             engine_up = False
         state = self._loop_state()
-        return {"ready": engine_up and state in ("idle", "busy"),
-                "live": state != "stopped" or self.loop.draining,
+        died = self._died()
+        live = (state != "stopped" or self.loop.draining) and not died
+        return {"ready": live and engine_up and state in ("idle", "busy"),
+                "live": live,
                 "engine": "up" if engine_up else "down", "loop": state,
+                "runners_dead": len(died),
                 "in_flight": len(self.loop.in_flight), "claimed": self.loop.claimed,
                 "failures": len(self.loop.failures), "reaped": self.reaped,
                 "reap_errors": self.reap_errors,

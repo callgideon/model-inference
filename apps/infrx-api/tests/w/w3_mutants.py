@@ -154,6 +154,7 @@ ENDED = "test_ops_recover__a_drain_records_what_finished_inside_its_bound"
 SIGTERM = "test_ops_recover__sigterm_drains_within_the_bound_and_exits_cleanly"
 READY = "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining"
 PUBLIC = "test_ops_recover__readiness_is_never_public_and_leaks_nothing"
+DEAD = "test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve"
 REAL_RELEASE = ("test_ops_recover__on_the_integration_engine_a_released_attempt_completes_"
                 "after_requeue")
 REAL_LOSS = "test_ops_recover__engine_process_loss_is_a_typed_failure_and_readiness_follows_it"
@@ -216,17 +217,34 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        V, "            running.add_signal_handler(sig, stop.set)",
        "            pass", SIGTERM),
     _m("serve_waits_only_for_a_signal", "a pool that died ends serve by itself",
-       V, "            await asyncio.wait({waiting, self._pool}, "
-          "return_when=asyncio.FIRST_COMPLETED)", "            await waiting", READY),
+       V, "            await asyncio.wait({waiting, self._pool, *self.loop._tasks},\n"
+          "                               return_when=asyncio.FIRST_COMPLETED)",
+       "            await waiting", READY, DEAD),
+    # --- review S1: a pool one runner short ---------------------------------------------
+    _m("serve_waits_for_the_whole_pool", "one dead runner ends serve (the unit restarts)",
+       V, "{waiting, self._pool, *self.loop._tasks}", "{waiting, self._pool}", DEAD),
+    _m("serve_skips_the_drain", "serve drains what still runs before it returns",
+       V, "            return await self.stop()", "            return DrainReport()",
+       SIGTERM, DEAD),
+    _m("dead_runner_uncounted", "readiness counts the runners that died",
+       V, "        return [task for task in (*self.loop._tasks,)",
+       "        return [task for task in ()", DEAD, READY),
+    _m("partly_dead_pool_stays_live", "a pool one runner short is not live",
+       V, '        live = (state != "stopped" or self.loop.draining) and not died',
+       '        live = state != "stopped" or self.loop.draining', DEAD),
+    _m("ready_with_a_dead_runner", "a pool one runner short is not ready",
+       V, '        return {"ready": live and engine_up and state in ("idle", "busy"),',
+       '        return {"ready": engine_up and state in ("idle", "busy"),', DEAD),
     # --- (4) readiness -----------------------------------------------------------------
     _m("ready_ignores_the_engine", "an engine that is not ready is not ready",
-       V, '        return {"ready": engine_up and state in ("idle", "busy"),',
-       '        return {"ready": state in ("idle", "busy"),', READY, REAL_LOSS),
+       V, '        return {"ready": live and engine_up and state in ("idle", "busy"),',
+       '        return {"ready": live and state in ("idle", "busy"),', READY, REAL_LOSS),
     _m("ready_while_draining", "a draining worker is not ready",
-       V, '        return {"ready": engine_up and state in ("idle", "busy"),',
-       '        return {"ready": engine_up,', READY),
+       V, '        return {"ready": live and engine_up and state in ("idle", "busy"),',
+       '        return {"ready": live and engine_up,', READY),
     _m("always_live", "a pool that died unasked is not live",
-       V, '"live": state != "stopped" or self.loop.draining,', '"live": True,', READY),
+       V, '        live = (state != "stopped" or self.loop.draining) and not died',
+       "        live = True", READY),
     _m("health_failure_escapes", "an engine client that raises is down, not an error",
        V, "        except Exception:                         # slow, refusing or broken",
        "        except TimeoutError:                         # slow, refusing or broken",
