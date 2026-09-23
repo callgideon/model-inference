@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T02:29:34Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T02:33:26Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
+**Backend packages: 12 done · 11 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -24,7 +24,7 @@ Generated 2026-09-23T02:29:34Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **in-progress** | planned | outbox drain/ack, PG reconciler, index-loss recovery |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **in-progress** | planned | engine pin by digest, drain, readiness; measurements coordinator-run |
-| B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **in-progress** | planned | audience ingress on accepted v2 contracts; rebase at wire-in merge |
+| B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **done** | implemented |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
@@ -56,7 +56,7 @@ Generated 2026-09-23T02:29:34Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (13 packages): ~19 h at observed cadence, ~1.5 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (12 packages): ~17 h at observed cadence, ~1.4 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -70,9 +70,8 @@ Generated 2026-09-23T02:29:34Z from `tasks.json` (manifest v4) and `progress-sta
 - W3: codex-w3 / codex/w3-drain-pin — fix round (S1 partly-dead pool liveness) after review of a0eeaf4 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
-- G1R: codex-g1r / codex/g1r-audience-ingress — review PASS + fold-in verified at 3552ce3; merging since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
-- I3B: codex-i3b / codex/i3b-recovery-observe — fix round re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
+- I3B: codex-i3b / codex/i3b-recovery-observe — confirmation review (2-lens workflow) of fix round at 58d5b4f since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
 - M4: codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
 
 ## Checkpoints

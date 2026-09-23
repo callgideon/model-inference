@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T02:29:34Z",
+  "updated": "2026-09-23T02:33:26Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -51,12 +51,6 @@
       "since": "2026-09-22T22:37:58Z",
       "note": "outbox drain/ack, PG reconciler, index-loss recovery"
     },
-    "G1R": {
-      "lane": "codex-g1r / codex/g1r-audience-ingress",
-      "phase": "review PASS + fold-in verified at 3552ce3; merging",
-      "since": "2026-09-22T22:40:37Z",
-      "note": "audience ingress on accepted v2 contracts; rebase at wire-in merge"
-    },
     "D3": {
       "lane": "codex-d3 / codex/d3-fenced-leases",
       "phase": "review rerun at b4b1ec7 (sofia run died)",
@@ -65,7 +59,7 @@
     },
     "I3B": {
       "lane": "codex-i3b / codex/i3b-recovery-observe",
-      "phase": "fix round re-dispatched (nothing landed before the switch)",
+      "phase": "confirmation review (2-lens workflow) of fix round at 58d5b4f",
       "since": "2026-09-22T22:40:37Z",
       "note": "metrics/alerts, local recovery drills, runbooks; early start"
     },
@@ -249,6 +243,11 @@
       "merged": "S2M @ 3aa3535 merged --no-ff",
       "at": "2026-09-22T16:30:52Z",
       "note": "profile v1 frozen; digests measured on box; registry oid \u26a0\ufe0f HF_TOKEN (W3)"
+    },
+    "G1R": {
+      "merged": "G1R @ 3552ce3 merged --no-ff (b609cc9) + follow-up 67e0320 (requests 3/4/5, C2)",
+      "at": "2026-09-23T02:33:26Z",
+      "note": "review pass at d50afa5 (wf_a62153d6-049), 17 nonblocking folded in and verified (tests/g 333, G list 199, ops 68); C1 hunk pending the wire-in; G2 owns C4/S5; D1R owns the S4 CHECK"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

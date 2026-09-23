@@ -27,17 +27,17 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T02:29:34Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T02:33:26Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
-<div class="tile done"><b>11</b><span>done</span></div>
-<div class="tile prog"><b>12</b><span>in progress</span></div>
+<div class="tile done"><b>12</b><span>done</span></div>
+<div class="tile prog"><b>11</b><span>in progress</span></div>
 <div class="tile rem"><b>7</b><span>remaining</span></div>
 <div class="tile blk"><b>6</b><span>GPU-gated</span></div>
-<div class="tile"><b>37%</b><span>of 30 backend packages</span></div>
+<div class="tile"><b>40%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:83.3%"></i><i class="p" style="width:16.7%"></i><i class="r" style="width:0.0%"></i></div><div class="c">5 done · 1 in progress · 0 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:35.3%"></i><i class="p" style="width:35.3%"></i><i class="r" style="width:29.4%"></i></div><div class="c">6 done · 6 in progress · 5 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:41.2%"></i><i class="p" style="width:29.4%"></i><i class="r" style="width:29.4%"></i></div><div class="c">7 done · 5 in progress · 5 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:100.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">0 done · 4 in progress · 0 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:50.0%"></i></div><div class="c">0 done · 1 in progress · 1 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
@@ -61,7 +61,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill prog">in-progress</span></td><td class="note">outbox drain/ack, PG reconciler, index-loss recovery</td></tr>
 <tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill prog">in-progress</span></td><td class="note">engine pin by digest, drain, readiness; measurements coordinator-run</td></tr>
-<tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill prog">in-progress</span></td><td class="note">audience ingress on accepted v2 contracts; rebase at wire-in merge</td></tr>
+<tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G4U</code></td><td>Owned upload HTTP adapter</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -75,7 +75,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 </tbody></table></div></section>
 <section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
-<p class="big">Local software (through E3B and the software half of the rest, 13 packages): ~19 h at the observed cadence, ~1.5 days at half of it.</p>
+<p class="big">Local software (through E3B and the software half of the rest, 12 packages): ~17 h at the observed cadence, ~1.4 days at half of it.</p>
 <p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
 <p><b>GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
@@ -100,9 +100,8 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>W3</code> — codex-w3 / codex/w3-drain-pin — fix round (S1 partly-dead pool liveness) after review of a0eeaf4 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run</li>
 <li><code>I2B</code> — codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
 <li><code>Q3</code> — codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery</li>
-<li><code>G1R</code> — codex-g1r / codex/g1r-audience-ingress — review PASS + fold-in verified at 3552ce3; merging since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge</li>
 <li><code>D3</code> — codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2&#x27;s head; leases, reaper, cancellation</li>
-<li><code>I3B</code> — codex-i3b / codex/i3b-recovery-observe — fix round re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start</li>
+<li><code>I3B</code> — codex-i3b / codex/i3b-recovery-observe — confirmation review (2-lens workflow) of fix round at 58d5b4f since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start</li>
 <li><code>M4</code> — codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>

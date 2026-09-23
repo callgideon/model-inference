@@ -2283,7 +2283,7 @@
       "title": "Revise ingress for consumer and provider endpoint audiences",
       "track": "G",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2P"
       ],
