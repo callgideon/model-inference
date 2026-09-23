@@ -237,17 +237,25 @@ def test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer_an_upload():
 def test_dur_rls__the_body_names_no_org_and_nothing_the_contract_lacks():
     """R17/R66: the body is the constraint object. An org, a purpose, a filename, a
     checksum or a content type is an unknown field - 400, never honoured - and nothing
-    is created."""
+    is created. An org named in the query or a header changes nothing either: the upload
+    is the key's org's."""
     app, _, store, _ = mounted()
     fields = {"org_id": ORG_B, "purpose": "video", "filename": "clip.mp4", "sha256": DIGEST,
               "content_type": "video/mp4"}
 
     async def script(client):
-        return [await create(client, **{name: value}) for name, value in fields.items()]
+        refused = [await create(client, **{name: value}) for name, value in fields.items()]
+        before = dict(store.uploads)
+        named = await client.post(CREATE, params={"org_id": ORG_B}, json={}, headers=bearer(
+            **{"x-org-id": ORG_B, "x-infrx-org": ORG_B}))
+        return refused, before, named
 
-    for response in run(app, script):
+    refused, before, named = run(app, script)
+    for response in refused:
         assert response.status_code == 400 and code_of(response) == "invalid_request"
-    assert store.uploads == {}
+    assert before == {}
+    assert named.status_code == 201, named.text
+    assert store.uploads[named.json()["upload_handle"]].org_id == ORG_A
 
 
 def test_media_sec__the_ticket_carries_exactly_the_frozen_fields():
@@ -528,13 +536,18 @@ def test_media_sec__the_destination_is_write_once_over_http():
 def test_dur_rls__another_orgs_upload_is_the_unknown_handles_404():
     """Tenant scope over HTTP: another org's key writing to or completing an upload gets
     the envelope an unknown handle gets (modulo request id) - never `forbidden`, which
-    would confirm the handle exists - and the owner's upload is untouched and usable."""
+    would confirm the handle exists - even naming the owner's org in the query and in
+    headers, and the owner's upload is untouched and usable."""
     app, _, store, _ = mounted()
+    claims = {"x-org-id": ORG_A, "x-infrx-org": ORG_A}
 
     async def script(client):
         handle = created_handle(await create(client))
-        foreign = [await put(client, handle, token=TOKEN_B),
-                   await complete(client, handle, token=TOKEN_B)]
+        foreign = [await client.put(put_path(handle), params={"org_id": ORG_A}, content=CLIP,
+                                    headers=bearer(TOKEN_B, **{"content-type": "video/mp4"},
+                                                   **claims)),
+                   await client.post(complete_path(handle), params={"org_id": ORG_A},
+                                     headers=bearer(TOKEN_B, **claims))]
         unknown = [await put(client, UNKNOWN_HANDLE, token=TOKEN_B),
                    await complete(client, UNKNOWN_HANDLE, token=TOKEN_B)]
         untouched = (store.uploads[handle].state,

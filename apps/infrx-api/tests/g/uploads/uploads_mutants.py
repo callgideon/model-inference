@@ -73,6 +73,21 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "        if not ids.UPLOAD_HANDLE_RE.fullmatch(handle) \\\n                or ticket",
        "        if False \\\n                or ticket",
        "test_media_sec__no_store_value_outside_the_frozen_ticket_leaves"),
+    # T4: an org read from anywhere but the key. Each adds a source the cases must refuse.
+    _m("create_org_from_query", "a query parameter never names the org",
+       U, "        created = await store.create_upload(context.org_id, body)",
+       '        created = await store.create_upload(request.query_params.get("org_id")'
+       " or context.org_id, body)",
+       "test_dur_rls__the_body_names_no_org_and_nothing_the_contract_lacks"),
+    _m("put_org_from_header", "a header never names the org of a write",
+       U, "store.put_upload(context.org_id, handle, data, mime)",
+       'store.put_upload(request.headers.get("x-org-id") or context.org_id, handle, data, mime)',
+       "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
+    _m("complete_org_from_header", "a header never names the org of a completion",
+       U, "        ref = await store.finalize_upload(context.org_id, handle)",
+       '        ref = await store.finalize_upload(request.headers.get("x-infrx-org")'
+       " or context.org_id, handle)",
+       "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
     _m("created_is_not_201", "a created upload is 201 (the section 7 default)",
        U, "status_code=201,", "status_code=200,",
        "test_media_sec__the_ticket_carries_exactly_the_frozen_fields"),
