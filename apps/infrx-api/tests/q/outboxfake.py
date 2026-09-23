@@ -145,7 +145,7 @@ class FakeDispatchOutbox:
     async def record_dispatch_error(self, event_id, error: str) -> int:
         failed = self._unacked([event_id])
         for event_id in failed:
-            self.last_error[event_id] = (error or "unknown")[:500]
+            self.last_error[event_id] = ("unknown" if error is None else error)[:500]
         return len(failed)
 
     async def db_now(self):
