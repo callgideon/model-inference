@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:05:54Z",
+  "updated": "2026-09-23T03:06:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -56,12 +56,6 @@
       "phase": "review rerun at b4b1ec7 (sofia run died)",
       "since": "2026-09-22T22:40:37Z",
       "note": "stacked on D2's head; leases, reaper, cancellation"
-    },
-    "I3B": {
-      "lane": "codex-i3b / codex/i3b-recovery-observe",
-      "phase": "confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B)",
-      "since": "2026-09-22T22:40:37Z",
-      "note": "metrics/alerts, local recovery drills, runbooks; early start"
     }
   },
   "reviews": {},
@@ -247,6 +241,11 @@
       "merged": "M4 @ f689753 merged --no-ff (4185f4d)",
       "at": "2026-09-23T03:03:16Z",
       "note": "review pass at 2e323be (wf_564484b4-b63); 13 nonblocking folded in (2176681); M list 242 on the lane, tests/m 343 on the merged tree; measured on the dev host only \u2014 pilot-box harness run (E1B/P-04) remains the gate"
+    },
+    "I3B": {
+      "merged": "I3B @ 9250eec merged --no-ff (8e01fe0)",
+      "at": "2026-09-23T03:06:53Z",
+      "note": "review fix_required at 48d3bb2 \u2192 fix round 5ec6f40 confirmed pass \u2192 residuals folded (10bfd90); mutants_i3b 78 = 77 + control; merged-tree layer-2 run detached; hosted backup rehearsal (restore.md A0\u2013A9) still a coordinator operation; five PENDING drills wait on G2/D3/M3/W3/I2B"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

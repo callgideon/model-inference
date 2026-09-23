@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:05:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:06:53Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 13 done · 10 in progress · 7 remaining (of 30).**
+**Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -31,7 +31,7 @@ Generated 2026-09-23T03:05:54Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | gate not passable until G/D/W/Q lanes merge |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **in-progress** | planned | packaging, scripts, local rehearsal; box rollout coordinator-run |
-| B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **in-progress** | planned | metrics/alerts, local recovery drills, runbooks; early start |
+| B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **remaining** | planned | needs allocated GPU/staging (P-04) |
@@ -57,7 +57,7 @@ Generated 2026-09-23T03:05:54Z from `tasks.json` (manifest v4) and `progress-sta
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
 - Local software to BACKEND-LOCAL/E3B and the software half of the rest (12 packages): ~17 h at observed cadence, ~1.4 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
-- GPU-gated packages (I2B, I3B, E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
+- GPU-gated packages (I2B, E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
@@ -71,7 +71,6 @@ Generated 2026-09-23T03:05:54Z from `tasks.json` (manifest v4) and `progress-sta
 - I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
-- I3B: codex-i3b / codex/i3b-recovery-observe — confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
 
 ## Checkpoints
 
