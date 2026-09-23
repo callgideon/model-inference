@@ -260,6 +260,31 @@ def check_admission_accepts(conn) -> str:
                               (named.request_id,)).fetchone()
         assert spent == cc.wallet_of(conn, cc.CONSUMER_1), \
             f"the key's creator's wallet was spent, not its individual's: {spent}"
+        # MC-3 (DUR-CAP boundary): a hold EXACTLY equal to what is available is admitted,
+        # in both bodies
+        with conn.transaction():
+            usd = b.request(world, org_id=b.ORG_B, key_id=b.KEY_B)
+            available, = conn.execute("select available from infrx.wallets where org_id = %s",
+                                      (b.ORG_B,)).fetchone()
+            conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
+                         "values (%s, %s, 'adjustment', 'mc3')",
+                         (b.ORG_B, b.hold_for(usd) - available))
+            got = refusal(conn, usd, b.idem(usd, "mc3-usd"))
+            assert got is None, f"a USD hold equal to the available balance was refused: {got}"
+            raise_rollback()
+        with conn.transaction():
+            c2_org = cc.personal_org(conn, cc.CONSUMER_2)
+            exact = credit_request(world, C2_KEY, c2_org)
+            w2 = cc.wallet_of(conn, cc.CONSUMER_2)
+            available, = conn.execute("select available from infrx.credit_wallets where "
+                                      "wallet_id = %s", (w2,)).fetchone()
+            conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+                         "operation_id, actor, reason) values (%s, 'consumer', "
+                         "'operator_adjustment', %s, gen_random_uuid(), 'ops', 'mc3')",
+                         (w2, pgtesting_hold(exact, "400", "1200") - available))
+            got = refusal(conn, exact, b.idem(exact, "mc3-credit"), regime="credit")
+            assert got is None, f"a CREDIT hold equal to the available balance was refused: {got}"
+            raise_rollback()
         return f"one USD admission owns job/hold/3 reservations/dispatch/mapping; one CREDIT " \
                f"admission owns the pins and a {want_hold} CREDIT hold"
     return _in_rollback(conn, body)
