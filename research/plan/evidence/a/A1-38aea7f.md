@@ -134,7 +134,7 @@ One behaviour change touches a 0001 table. `public.org_members` gains the trigge
 
 0015 is additive and re-runnable: D1R's `test_rerun__…` re-applies it and passes on both images. It creates no rows, and the upgrade from 0002 grants nothing.
 
-- **Before any claim or retirement row exists:** drop the triggers `org_members_personal_binding`, `credit_wallet_holds_frozen` and `credit_ledger_signup_frozen`. Drop the functions `public.claim_signup_grant`, `infrx.retire_individual`, `infrx.record_signup_denial`, `infrx.legacy_usd_rollout_hold`, `infrx.personal_org_binding_guard` and `infrx.retired_wallet_guard`. Then drop the tables `infrx.signup_denials`, `infrx.signup_identity_claims` and `infrx.retired_individuals`.
+- **Before any claim or retirement row exists:** drop the triggers `org_members_personal_binding`, `credit_wallet_holds_frozen` and `credit_ledger_signup_frozen`. Drop the functions `public.claim_signup_grant`, `infrx.retire_individual`, `infrx.record_signup_denial`, `infrx.individual_usd_hold` *(round 5)*, `infrx.legacy_usd_rollout_hold`, `infrx.personal_org_binding_guard` and `infrx.retired_wallet_guard`. Then drop the tables `infrx.signup_denials`, `infrx.signup_identity_claims` and `infrx.retired_individuals`.
 - **After rows exist:** roll back by setting the flag `signup_grant` off (the claim answers 55000). Never drop `retired_individuals`, because that would unfreeze retired wallets. Never drop `signup_identity_claims`, because that would re-open eligibility for re-created accounts. Grants themselves are 0006's and follow D1R's rollback.
 
 ## Ruling proposal: identity retention and deletion (for 08 §10)
@@ -390,6 +390,20 @@ Mutant lists, by import: `D total 228 A1 migration 35 A1 code 15`. New this roun
 
 Unchanged from round 3.
 
+## Round 5 (merged-tree unit scan), head after `7af541b`
+
+2026-09-23. On `claude/backend-impl` (`4be74ab`), D1R's `check_no_unit_conversion` failed with `public.claim_signup_grant: reads USD and CREDIT amounts together`. It reproduced on **both** images, not only Supabase: `test_credit_schema.py::test_credit_units__no_conversion_and_explicit_regimes` → `1 failed` on plain and on supabase. Cause: D2's D1R review follow-up (`a022250`) added `legacy_usd` to the scan's USD tokens. The claim's only USD token was that substring of `infrx.legacy_usd_rollout_hold`, the boolean helper it calls (no USD amount is read in the claim), next to `signup_entitlements` (the replay read). So it is a match on a name, not on an amount. `7af541b` fixes it in 0015 anyway: the whole R72 predicate for an individual (every created org, then the per-org boolean) moves into the USD-side boolean `infrx.individual_usd_hold(user)`, revoked like the per-org helper, and the claim calls only that. The mutants `a1_usd_hold_personal_org_only` and `a1_usd_hold_summed_across_orgs` now target the moved predicate. 0015 blob `e3b7717f8b172763e9d6a732099bbd1f81088a41`; header note extended. Scan-side proposal for D1R's owner (not applied): match the regime as the literal `'legacy_usd'` rather than the bare substring, so a called boolean's name is not read as an amount.
+
+| Command (logs `/tmp/claude-1000/a1-round5/`) | Plain | Supabase |
+|---|---|---|
+| merged tree at `4be74ab`, unit-scan test, 0015 before the fix | `1 failed` | `1 failed` |
+| merged tree with `7af541b`'s 0015 + `signup_mutants.py`, unit-scan test | `1 passed` | `1 passed` |
+| branch, unit-scan test | `1 passed` | `1 passed` |
+| branch, `INFRX_MUTANTS=all … tests/d/test_signup.py` | `33 passed in 41.16s` | `33 passed in 45.77s` |
+| branch, `INFRX_MUTANTS=all … test_migration_mutants.py -k 'a1_ or well_formed'` | `36 passed, 194 deselected` | `36 passed, 194 deselected` |
+| merged tree with the fix, same A1 mutant subset | `36 passed, 392 deselected` | — |
+| merged tree with the fix, `test_credit_schema.py test_signup.py` | `42 passed` | — |
+
 ## Verification log
 
 - 2026-09-22: Written by the A1 implementation session at `38aea7f`. Counts are quoted from the sweep logs.
@@ -397,3 +411,4 @@ Unchanged from round 3.
 - 2026-09-23: Review round 2 appended (RM-1 blocking; RM-2…RM-5, SEC-R1…SEC-R4). In place, marked: Limits item 3 (RM-2), integration requests 8 (SEC-R3) and 9 (R85), and R-A1's shared-org and created_by-scope lines (RM-1/RM-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round2/*.log` at `ef58367`/`8a26524`.
 - 2026-09-23: Review round 3 appended (RV2-1 blocking, RV2-2). In place, marked: R-A1's retirement-scope bullet and the shared/not-created line (RV2-2). Counts and tails are quoted from `/tmp/claude-1000/a1-round3/*.log` at `d653e7c`.
 - 2026-09-23: Review round 4 appended (RV3-1 blocking; RV3-2, RV3-3). In place, marked: Limits (round 3) bullet 2 (RV3-2), the A2 fixture 40P01 row (RV3-2), and two R-A1 lines (RV3-2, RV3-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round4/*.log` at `7a90b92`.
+- 2026-09-23: Round 5 appended (merged-tree unit scan: the R72 predicate moved into `infrx.individual_usd_hold`, `7af541b`). In place: the rollback drop list names the new function. Tails are quoted from `/tmp/claude-1000/a1-round5/*.log`.
