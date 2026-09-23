@@ -577,10 +577,10 @@ def check_retirement_race(connect, database: str) -> str:
     twice = _behind(connect, database, lambda a: at.setdefault("a", retire(a, y)),
                     lambda b: retire(b, y, "retire-b"))
     assert "error" not in twice and twice["got"] == at["a"], \
-        f"two retirements of one individual: A {at['a']}, B {twice}"
+        f"two retirements of one individual: {twice.get('error') or twice} (A {at['a']})"
     out = _behind(connect, database, lambda a: retire(a, x), lambda b: claim(b, x))
     assert "error" not in out and out["got"][0] == "retired", \
-        f"a claim racing a retirement: {out}"
+        f"a claim racing a retirement: {out.get('error') or out}"
     with connect(database) as c:
         assert (wallet_of(c, x), ledger_rows(c, x), entitlements(c, x)) == (None, 0, 0), \
             "a claim racing a retirement minted"
