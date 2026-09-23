@@ -1,0 +1,1197 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 3,
+ "confirmed_blocking": [
+  {
+   "id": "B1",
+   "severity": "blocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "673",
+   "claim_broken": "grant_credit: 'the same id for another movement is a conflict' (0018 header l.627-628; evidence item 4 and check_adjust docstring). Only the AMOUNT part of 'another movement' is tested. The wallet and kind parts can be deleted and nothing notices.",
+   "evidence": "Reviewer mutants rv_replay_ignores_wallet (drop `l.wallet_id <> w.wallet_id or`) and rv_replay_ignores_kind (drop `l.kind <> v_kind or`) SURVIVED every D5 check (settle_*, credit_*, adjust, allocation, reconcile_*, lookup, d5_privileges, settle_races), on both images: 'mutant rv_replay_ignores_wallet was SURVIVED ... In production: a reused operation id on ANOTHER wallet answers replayed; nothing moves there'. With rv_replay_ignores_wallet applied by hand, the pytest files still pass: tests/d/test_operations_pg.py + tests/d/test_settle.py gave '32 passed'. On pristine code a probe showed the conflict is raised ({'c1': None, 'c2 same op': 'idempotency_conflict'}), so the code is right and the test is missing.",
+   "minimal_fix": "In checks_operations.check_adjust, after the amount conflict: assert that grant(conn, <CONSUMER_2 wallet>, '12.50000000', op=op)[0] == 'idempotency_conflict', and that the same op with kind='operator_allocation' on the same wallet is also 'idempotency_conflict'. Register both as D5 mutants (adjust check).",
+   "lens": "money",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed by reading the code, so no database run was needed. At c67e4f5, 0018_terminal_settlement.sql:673 reads `if l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount <> v_amount then perform infrx.refuse('idempotency_conflict', ...)`, and the header at l.627-628 promises that 'the same id for another movement is a conflict'. The only conflict assertion in the whole D5 suite is apps/infrx-api/tests/d/checks_operations.py:92, `assert grant(conn, wid, \"13.00000000\", op=op)[0] == \"idempotency_conflict\"`. It uses the same wallet and the same kind with a different amount, so it can only kill the amount part.\n\nI looked for any other test that reuses an operation id:\n- check_allocation always passes a fresh uuid4 to grant().\n- test_operations_pg.py:240-262 (PgLedger.adjust) replays with the same wallet and amount.\n- test_operations_pg.py:332-334 (op.adjust with idempotency_key \"a1\") is also a same-wallet replay.\n- PgLedger.adjust hard-codes kind='operator_adjustment', so no Python-level test can send the same op with another kind.\n\nRunning `grep -rn \"l.wallet_id <> w.wallet_id\\|l.kind <> v_kind\" apps/infrx-api/tests/` returned nothing: migration_mutants.py registers no mutant on that condition.\n\nWith either disjunct deleted, every existing assertion still holds, so both mutants survive. That matches the reviewer's '32 passed'.\n\nUnder each mutant the behaviour is wrong:\n- Without the wallet check, the op id reused on CONSUMER_2 finds the CONSUMER_1 row, returns replayed=true with the other wallet's entry and moves nothing, which silently drops an operator's money movement.\n- Without the kind check, operator_allocation on a consumer wallet with a reused id returns replayed. The kind rules that would refuse it (l.681-687) come after the replay lookup, so they never run.\n\nThe code itself is currently correct; the problem is a stated money-path invariant with no test that can fail. That meets the blocking criterion ('an invariant with no killable test'). The reviewer's minimal fix works:\n- In check_adjust, assert that grant(conn, <CONSUMER_2 wallet>, '12.50000000', op=op) and grant(conn, wid, '12.50000000', kind='operator_allocation', op=op) both return 'idempotency_conflict'.\n- Register both deletions as D5 mutants on the adjust check.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. I checked by reading the code at c67e4f5 in the read-only worktree and ran no container. The reasoning is deterministic.\n\n1. At 0018_terminal_settlement.sql:673 the replay guard is `if l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount <> v_amount then refuse('idempotency_conflict')`. The header says \"the same id for another movement is a conflict\".\n\n2. I searched every `grant_credit` call in the tests: `grep -rn \"grant_credit\\|grant(conn\" apps/infrx-api`. The only call that reuses an op id is in checks_operations.check_adjust (l.77, l.87, l.92). All three use the same `wid`, and the kind is always the default `operator_adjustment`. Only the amount changes (12.5 vs 13.0), at l.92: `assert grant(conn, wid, \"13.00000000\", op=op)[0] == \"idempotency_conflict\"`. Every other call in check_adjust, and all of check_allocation (l.122-134), uses a fresh uuid, so none of them reaches the replay branch.\n\n3. The pytest paths don't cover it either. test_operations_pg.py l.249-253 (`ledger.adjust`) and l.332-334 (`op.adjust`, key \"a1\") only replay the same wallet, kind and amount.\n\n4. The database gives no backstop. The `credit_ledger_operation_key unique (operation_id)` constraint in 0006 is never reached, because the replay branch returns before the insert.\n\nSo deleting `l.wallet_id <> w.wallet_id or` or `l.kind <> v_kind or` changes no tested outcome, and both mutants must survive, as the reviewer reports. With the wallet clause gone, an operator adjustment with a reused op id on another wallet answers `replayed=true` with the first wallet's entry, and that wallet's money silently doesn't move. With the kind clause gone, an allocation or adjustment with a reused id is reported as done when it wasn't.\n\nThe current code is correct; the gap is in the tests. Under the stated criteria it is still blocking: it is a money invariant with no test that can kill a mutant. The fix is cheap. After l.92, add `assert grant(conn, cc.wallet_of(conn, cc.CONSUMER_2), \"12.50000000\", op=op)[0] == \"idempotency_conflict\"` and `assert grant(conn, wid, \"12.50000000\", kind=\"operator_allocation\", op=op)[0] == \"idempotency_conflict\"`. Then register rv_replay_ignores_wallet and rv_replay_ignores_kind as D5 mutants against the adjust check.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "B2",
+   "severity": "blocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "666-667",
+   "claim_broken": "grant_credit's wallet FOR UPDATE: 'a racing replay of the same operation waits here, then finds it' (0018 l.665; evidence item 4 'wallet FOR UPDATE only, replay by operation_id'). No race test covers it.",
+   "evidence": "rv_grant_without_wallet_lock (drop `for update` on the wallet select) SURVIVED all D5 checks on both images. Applied by hand, tests/d/test_settle_races.py + tests/d/test_operations_pg.py gave '22 passed'. Lock-step probe (two service_role transactions, same op, same wallet): pristine gives {'same wallet same op': (None, None, True)}, i.e. the second waits and replays. The mutant gives (None, 'untyped 23505', None): the retry dies on credit_ledger_operation_key instead of replaying. Money stays safe only through the unique and CHECK constraints, and the claimed typed behaviour is unguarded.",
+   "minimal_fix": "Add to checks_settle.check_settle_races (or test_settle_races) a lockstep of two grant_credit calls with one operation_id on one wallet. Assert the second answers replayed=True with the first entry and that exactly one ledger row exists. Register rv_grant_without_wallet_lock as a D5 mutant on settle_races.",
+   "lens": "money",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute it. Code and a real PostgreSQL run both confirm it.\n\nCode: 0018 grant_credit (l.665-667) relies on `select ... from infrx.credit_wallets ... for update` so that a second call with the same operation_id waits. Under READ COMMITTED, its next statement then takes a new snapshot and finds the committed ledger row, so it answers `replayed`. The existing tests do not exercise this:\n- checks_operations.check_adjust tests replay only one call after another on a single connection.\n- The only concurrent grant_credit test is test_settle_races.test_race__two_settlements_and_an_adjustment_on_one_credit_wallet. It uses a fresh operation_id each round.\n- checks_settle.check_settle_races (the mutant check) never calls grant_credit.\n- No registered mutant in migration_mutants.py removes this FOR UPDATE.\n\nExperiment: I copied c67e4f5 with git archive to scratch. I patched pgharness to use my own container `infrx-review-d5-verify-1-0-postgres`, port 55643, its own lock and databases `d5verify_*`, on the plain image. The probe `tests/d/probe_grant.py` ran the existing `cl.lockstep` on two `service_role` connections: both call grant_credit with the same operation_id on the same consumer wallet. I ran it once on the pristine migrations and once with only ` for update` removed from that wallet select (asserted to be a single hit).\n\nCommand: `$W/apps/infrx-api/.venv/bin/python -m tests.d.probe_grant 2>&1 | tail -15`, run from the scratch apps/infrx-api directory. Tail:\n```\npristine (None, None, True, True, 'rows', 1)\nmutant (None, 'untyped 23505', None, None, 'rows', 1)\n```\nPristine: the second call waits, then replays with the same entry, and there is 1 ledger row. Mutant: the second call fails with an untyped 23505 on the operation_id unique key instead of replaying. There is still 1 row, so no money moves twice.\n\nThe container was removed at exit (docker ps -a no longer lists it). I did not touch any other lane's container.\n\nSeverity: the money itself stays safe, because the unique key and the CHECK constraints backstop it. But the typed idempotent replay under a race is a stated invariant of the operator money path, and no test kills its removal. A concurrent operator retry gets an untyped error (a 500 at the port) instead of `replayed`. The rubric treats an invariant with no killable test as blocking. The fix is cheap, as the reviewer proposed: add a lockstep of two grant_credit calls with one operation_id to check_settle_races, asserting the second answers replayed=True with the same entry and exactly one ledger row, and register rv_grant_without_wallet_lock as a settle_races mutant.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed on real PostgreSQL. I ran it on plain postgres:16.14, in my own container infrx-review-d5-verify-1-1-postgres on port 55644, with its own lock and the scratch pgharness patched. The code was a scratch git archive of c67e4f5 at scratchpad/d5v-verify-1-1-grantlock. The harness removed the container on exit.\n\nWhy the lock matters, from the code: grant_credit (0018 l.665-677) takes the wallet row with `for update` and then looks up credit_ledger by operation_id. Without the lock, under READ COMMITTED, a second transaction does not wait on the wallet row. It cannot see the first transaction's uncommitted ledger row, so it goes on to insert. That insert blocks on the credit_ledger operation_id unique index, then fails with 23505 once the first commits. There is no exception handler in grant_credit. PgLedger.adjust calls it through `_store._call`, which does not map 23505 to a replay.\n\nProbe: two service_role lockstep calls (cl.lockstep) with the same operation_id on the same wallet. Command: `PYTHONPATH=$S/apps/infrx-api INFRX_D_TASK=d5 .venv/bin/python -m tests.d.probe_grant`.\n- Pristine tail: `FOR UPDATE present: True / FIRST None False / SECOND None {... 'replayed': True} / ROWS (1,)`\n- Mutant tail (only ` for update` removed from the wallet select): `FOR UPDATE present (mutant): False / FIRST None False / SECOND untyped 23505 None / ROWS (1,)`\n\nExisting tests against the mutant: `pytest -q tests/d/test_settle_races.py tests/d/test_operations_pg.py` gave `22 passed in 37.68s`. The one grant_credit race test, test_race__two_settlements_and_an_adjustment_on_one_credit_wallet, uses a distinct operation_id each round. check_adjust tests replay only sequentially.\n\nSeverity: no money is lost, because the unique key keeps it to one ledger row. But the concurrent replay promised in the l.665 comment and the port docstring (\"a replayed operation id answers the existing entry and True\") has no test that fails when the lock is removed. A concurrent operator retry would get an untyped 23505 instead of `replayed`. That makes it an invariant with no killable test, which counts as blocking.\n\nThe minimal fix is the one the reviewer proposed: a same-operation, same-wallet lockstep in check_settle_races that asserts replayed=True, the same entry and exactly one ledger row, with rv_grant_without_wallet_lock registered as a mutant on settle_races.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "CF-1",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/state/operations.py",
+   "line": "PgRegistry.move_alias (card subquery: order by c.effective_at desc, c.created_at desc limit 1)",
+   "claim_broken": "move_alias points the alias at the deployment's CURRENT card (docstring: 'at its current card'). The listing's rate_card_version is what resolve_admission_pins pins, so it decides the price of every new admission.",
+   "evidence": "Reviewer mutant R04: flipping the ordering to 'effective_at asc, created_at asc' (the OLDEST effective, superseded card) SURVIVED tests/d/test_operations_pg.py and tests/d/test_catalog_pg.py (49 passed, 1 xfailed). test_api_ops__registry_rows_are_immutable_and_the_alias_moves and the partial-publication case each publish only ONE card per deployment, so the choice of card is never exercised.",
+   "minimal_fix": "In test_api_ops__registry_rows_are_immutable_and_the_alias_moves, put a second, later-effective card on the same deployment before move_alias, then assert that resolve_admission_pins answers the newer card. Add the mutant to code_mutants_d5 with a unit (sent SQL) or PG kill.",
+   "lens": "conformance",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed. The code at c67e4f5 is correct, but no test checks which card move_alias picks. That leaves a pricing rule with no test that can catch a regression.\n\nThe price depends on the card. PgRegistry.move_alias in apps/infrx-api/infrx/state/operations.py:246-273 writes the card chosen by its subquery (`order by c.effective_at desc, c.created_at desc limit 1`) into catalog_listings.rate_card_version. resolve_admission_pins (0008) then reads `c` from exactly `l.rate_card_version`, so that choice sets the price of every new admission.\n\nA deployment can have several cards. 0007 has no unique key on deployment_revision_id, only an index on (deployment_revision_id, effective_at desc). The publish service in infrx/operations/service.py:340-370 supports re-pricing on purpose: it rejects a card \"no newer than the active card\", then calls registry.move_alias. So a re-price publishes a second card on the same deployment, and move_alias has to pick the newest one.\n\nThe existing tests never cover this:\n- test_api_ops__registry_rows_are_immutable_and_the_alias_moves (_release) puts one card per deployment.\n- test_credit_rate__alias_move_changes_resolve_not_an_admitted_job moves to a new deployment with one card.\n- checks_settle.publish_card writes catalog_listings directly and bypasses move_alias.\n\nExperiment: a scratch copy from `git archive c67e4f5` into scratchpad/verify-3-0-r04-113006, with pgharness patched to use container infrx-review-d5-verify-3-0-postgres, port 55647 and DB infrx_d5v3r04 on the plain image. I applied R04 (`effective_at asc, created_at asc`) and added a probe test: one deployment gets card rc_d5_d5-two (effective 2026-09-01) and card rc_d5_d5-two-newer (effective 2026-09-02), then move_alias runs and resolve_admission_pins is asserted.\n\nCommand: `.venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_operations_pg.py tests/d/test_catalog_pg.py`\n\nTail: `E AssertionError: ('rc_d5_d5-two',)` ... `FAILED tests/d/test_operations_pg.py::test_zz_verify_move_alias_picks_the_newest_card` / `1 failed, 49 passed, 1 xfailed in 35.36s`.\n\nSo the mutant survives all 49 existing tests, and only the probe kills it. With the original desc ordering restored, `-k \"zz_verify or registry_rows\"` gave `2 passed, 12 deselected in 18.93s`. The container was already gone after teardown: `docker rm` said \"No such container\", and a check for verify-3-0 containers returned 0.\n\nIf this regressed, a re-price would leave new admissions priced by the old, superseded card, while the publication audit records the new card. That is a money-path rule with no test that fails when it breaks, so it is blocking. The fix is the reviewer's: add a second, later card before move_alias in the registry test, assert that resolve_admission_pins answers the newer card, and register R04 in code_mutants_d5.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. The code at c67e4f5 is correct. The defect is that no test would catch it if it broke, and it sets a price.\n\nCode path:\n- The card subquery in `PgRegistry.move_alias` (`apps/infrx-api/infrx/state/operations.py:252-255`) orders `c.effective_at desc, c.created_at desc limit 1` and filters `effective_at <= infrx.now()`. That picks the current card, as the docstring says.\n- `infrx.resolve_admission_pins` (`apps/app/supabase/migrations/0008_credit_read_surface.sql:53-67`) selects the newest listing version, then loads `rc.rate_card_version = l.rate_card_version`. So the card written into the listing is the card every new CREDIT admission is priced at. The listing's card, not the deployment's newest card, decides the price.\n- A deployment can have several cards. The conformance suite publishes `rc_marlin2b_2026_10` onto the same deployment, so the choice is reachable.\n\nTests (analysis):\n- `test_operations_pg.py::test_api_ops__registry_rows_are_immutable_and_the_alias_moves` moves the alias to a new deployment that has exactly one card (`rc_d5_d5-reg`).\n- `test_catalog_pg.py::test_credit_rate__alias_move_changes_resolve_not_an_admitted_job` moves it to `moved`, which has exactly one card (`rc_d5_moved`).\n- Conformance `v2_contracts.py:575` moves the alias to the private dev deployment. `RigCatalog.move_alias` refuses that before it reaches `PgRegistry`.\n- `code_mutants_d5.py` has no mutant on this line (grep for `move_alias` and for the ordering: none).\n- So the subquery's ordering is never exercised.\n\nExperiment on real PostgreSQL:\n- Setup: a scratch copy via `git archive c67e4f5 apps Makefile`. The scratch `tests/d/pgharness.py` was patched to use its own container `infrx-review-d5-verify-3-1-postgres`, port 55648, database `infrx_d5v31` and lock `/tmp/infrx-review-d5-verify-3-1.lock`. `infrx.__file__` was confirmed to load from the scratch copy.\n- Mutant: `sed -i 's/order by c.effective_at desc, c.created_at desc limit 1) as card/order by c.effective_at asc, c.created_at asc limit 1) as card/' infrx/state/operations.py`\n- Command: `PYTHONPATH=$S INFRX_D1_CHECKOUT=$S/../.. .venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_operations_pg.py tests/d/test_catalog_pg.py`\n- Tail: `.......................................x..........  [100%]` then `49 passed, 1 xfailed in 22.65s`. The mutant survived, matching the reviewer's R04.\n- Cleanup: the harness removed its own container (`docker rm` afterwards answered \"No such container\"), and the lock file was deleted. No other lane's container was touched.\n\nWhy blocking: this is a money invariant with no test that fails when it breaks. With `asc`, or with the `effective_at <= now()` filter dropped, a promotion would silently pin a superseded (or future) card for every new admission, and the suite would stay green.\n\nFix (as the reviewer proposed): in the registry test, give the deployment a second, later-effective card before `move_alias`, and assert that `resolve_admission_pins` answers the newer card. Then register the ordering flip as a killed mutant in `code_mutants_d5.py`.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "CF-2",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/state/operations.py",
+   "line": "PgLedger.adjust / PgLedger.reconcile ('actor': actor)",
+   "claim_broken": "Design decision 7 and item 4 say grant_credit/reconcile write their OWN audit row (admin_adjust/admin_reconcile) with the operator as actor, atomically with the money. The brief asked for the adapter mutant 'audit row without actor' and a named kill.",
+   "evidence": "Reviewer mutants R02 (reconcile sends actor='system') and R03 (adjust sends actor='system') both SURVIVED test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1 plus test_api_ops__the_operations_service_runs_on_the_postgres_adapters (2 passed each). The adapter tests compare only kind/amount/operation_id/replayed, and the service test counts audit rows by the service's own keys; nothing reads credit_ledger.actor or the 'grant_credit:<op>'/'reconcile:<op>' audit row's actor_principal. The SQL checks (checks_operations) call the function directly, so they never exercise the adapter's argument.",
+   "minimal_fix": "In the ledger-port test (and/or the service test), assert that entry.actor == 'ops@test' and that the audit row keyed grant_credit:<op> / reconcile:<op> has actor_principal == the caller's actor (the service test: the operator principal). Or add a unit in test_operations_units asserting the sent args carry the actor, plus a code mutant.",
+   "lens": "conformance",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed as a test gap. The code at c67e4f5 is correct, but no test can catch a mutant that breaks it.\n\nThe code: apps/infrx-api/infrx/state/operations.py:390 (PgLedger.adjust) and :400 (PgLedger.reconcile) pass the caller's `actor` to infrx.grant_credit and infrx.reconcile. In 0018_terminal_settlement.sql, those functions write btrim(actor) into credit_ledger.actor and into the audit row's actor_principal. The admin_adjust row is keyed grant_credit:<op> and the admin_reconcile row is keyed reconcile:<op>. The SQL only checks that actor is 1-200 characters, so a constant 'system' is accepted.\n\nWhy no test catches it:\n- tests/d/test_operations_pg.py:242 (ledger-port test) checks only (kind, amount, operation_id, replayed). Its `again == entry` check compares the replay with the first result, and under the mutant both carry 'system'. It never reads entry.actor or any audit row.\n- tests/d/test_operations_pg.py:309 (service test) counts audit rows by the service's own keys (a1, rc2), never by grant_credit:<op> or reconcile:<op>, and never reads actor_principal. The service's own row still records the operator, which hides the wrong attribution on the money row.\n- tests/d/test_operations_units.py:94 (unit test) checks only the kind, amount and wallet_id it sent, and the org_id for reconcile. It does not check actor.\n- code_mutants_d5.py has no actor mutant.\n- checks_operations calls the SQL functions directly, so it never exercises the adapter.\n\nExperiment: I made a scratch copy with git archive c67e4f5. I pointed pgharness at port 55649, container infrx-review-d5-verify-4-0-postgres, database infrx_rv54 and its own lock file, on the plain image, since the claim does not depend on the Supabase image. I applied R02+R03 together (both adapter calls send \"actor\": \"system\"). Commands and output tails:\n1. `PYTHONPATH=$S .venv/bin/python -m pytest -q -p no:cacheprovider \"tests/d/test_operations_pg.py::test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1\" \"tests/d/test_operations_pg.py::test_api_ops__the_operations_service_runs_on_the_postgres_adapters\"` gave `..  [100%]  2 passed in 16.10s`.\n2. `... -m pytest -q -p no:cacheprovider tests/d/test_operations_pg.py tests/d/test_operations_units.py` gave `19 passed in 6.90s`.\n\nThe mutant survives every operations test. Afterwards I checked that the container was gone and removed the lock file and the scratch copy.\n\nSide note: my first attempt at run 2 also included tests/d/test_code_mutants_d5.py and tests/g. That run deleted files inside the scratch copy (it has no .git), so I rebuilt the copy and dropped those two targets. Only the scratch copy was touched, not the codex-d5 worktree.\n\nSeverity: blocking under this workflow's rubric (\"an invariant with no killable test\"). Design decision 7 and item 4 promise the operator as actor on the money and audit rows, and the reviewer says the brief asked for an 'audit row without actor' mutant with a named kill. I did not check that brief wording myself. At the current head this is not a money defect, only unverified attribution. The fix is small: in the ledger-port test, assert entry.actor == 'ops@test'. Also select actor_principal from infrx.audit_entries where idempotency_key = 'grant_credit:'||op (and 'reconcile:'||op for a successful reconcile in the service test, where the expected value is the operator principal), and/or assert sent['actor'] in test_operations_units. Then add the mutant to code_mutants_d5.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute the test gap, but the code itself is correct. PgLedger.adjust (operations.py:390) and PgLedger.reconcile (:400) both send the caller's `actor`, so nothing is broken today. What is missing is any test that would notice if they stopped.\n\nExperiment: I made a git archive scratch copy of c67e4f5 and patched pgharness SERVICE to container infrx-review-d5-verify-4-1-postgres, port 55650, DB infrx_rv41, on the plain image. I applied each single-edit mutant in turn and ran `.venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_operations_pg.py::test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1 tests/d/test_operations_pg.py::test_api_ops__the_operations_service_runs_on_the_postgres_adapters tests/d/test_operations_units.py`.\n- R03 (adjust sends `\"actor\": \"system\"`): `8 passed in 27.61s`.\n- R02 (reconcile sends `\"actor\": \"system\"`): `8 passed in 13.98s`.\n\nThe container was removed afterwards. Both mutants also survive the adapter unit test test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry, which checks only kind/amount/wallet_id and org_id in the sent args.\n\nOther paths I checked:\n- grep finds PgLedger reached only through test_operations_pg and test_operations_units.\n- tests/g runs on fakes.\n- checks_operations calls infrx.grant_credit/reconcile directly with its own actor, so it never exercises the adapter's argument.\n- code_mutants_d5 has no actor mutant.\n\nSo the reviewer's mechanism is right. Two parts of their framing are overstated:\n1. Design decision 7 in D5-4bcac3b.md says grant_credit/reconcile write their own audit rows keyed grant_credit:/reconcile:<op>, atomically. It does not say \"with the operator as actor\".\n2. The brief (.claude/handoff/wave3/D5.md, items 4 and 7) names no \"audit row without actor\" adapter mutant. Its adapter mutant examples are key_lookup_ignores_org, insert_key_duplicates and similar.\n\nAlso, the service's own audit row (idempotency key a1/rc2) still records the operator principal (service.py:201), so operator attribution is not lost entirely under the mutant. Only the ledger row's actor and D5's own grant_credit:/reconcile: audit row would be wrong.\n\nSeverity: a test-coverage gap on an attribution field in a money path. It is not a money, fence or privilege hole, not a merge breakage, and not an invariant the lane claimed. Fix: add one assertion in the ledger-port or service test that entry.actor and the grant_credit:<op> / reconcile:<op> audit row's actor_principal equal the caller's actor, or assert sent[\"actor\"] in the unit test and add the matching code mutant.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "CF-3",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/state/catalog.py",
+   "line": "_PUBLIC (d.state = 'active') and _PRIVATE (d.state <> 'retired')",
+   "claim_broken": "The module docstring claims resolve answers a public listing only when 'its deployment public and active', and a private deployment only when it is not retired.",
+   "evidence": "Reviewer mutants R05 (drop 'and d.state = 'active'' from _PUBLIC) and R06 (drop 'and d.state <> 'retired'' from _PRIVATE) both SURVIVED tests/d/test_catalog_pg.py (37 passed/1 xfailed and 36 passed/1 xfailed), including the 32 v2 cases and the partial-publication test. No case retires, pauses or drains a deployment.",
+   "minimal_fix": "In test_credit_rate__private_is_none_to_everyone_else (or a new case), set the listed public deployment to a non-active state and the private dev deployment to 'retired', then assert resolve answers None for each.",
+   "lens": "conformance",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed on real PostgreSQL. I used a git archive scratch copy of c67e4f5 with pgharness patched to container infrx-review-d5-verify-5-0-postgres on port 55651 and database infrx_v5verify. The container was removed afterwards; only other lanes' 6-0 and 6-1 containers remain.\n\nWhy the filters matter: 0007's deployment_revisions_guard allows active->draining, active->retired and ready_private->retired. catalog_listings' FK checks only (deployment_revision_id, visibility), so a listing can keep pointing at a draining or retired deployment. That means `d.state = 'active'` in _PUBLIC and `d.state <> 'retired'` in _PRIVATE are the only things stopping resolve from answering such a deployment. No test in tests/d/test_catalog_pg.py, test_operations_pg.py or test_operations_units.py ever changes a deployment's state (grep finds no 'retired' or 'draining' there). code_mutants_d5.py has no mutant for either filter.\n\nExperiment. I applied R05 (sed drop \" and d.state = 'active'\") and R06 (sed drop \" and d.state <> 'retired'\") in turn.\n\nCommand: `.venv/bin/python -m pytest -q tests/d/test_catalog_pg.py --deselect ...::test_verify__retired_or_draining_deployments_do_not_resolve`\n- R05 tail: `36 passed, 1 deselected, 1 xfailed in 19.41s`\n- R06 tail: `36 passed, 1 deselected, 1 xfailed in 25.02s`\n\nCommand: `pytest -q tests/d/test_operations_pg.py tests/d/test_operations_units.py`\n- R05 tail: `19 passed in 9.95s`\n- R06 tail: `19 passed in 7.41s`\n\nBoth mutants survive every existing suite.\n\nA 10-line kill test fixes it. It runs `update infrx.deployment_revisions set state='draining'` on IDS.prod_deployment and asserts resolve(REQUESTED_MODEL, consumer) is None. It then sets IDS.dev_deployment to 'retired' and asserts resolve(DEV_REQUESTED_MODEL, provider_dev, dev_endpoint) is None.\n- Unmutated code: `37 passed, 1 xfailed in 22.73s` (the kill test passes).\n- R05: `tests/d/test_catalog_pg.py:245: AssertionError / 1 failed`\n- R06: `tests/d/test_catalog_pg.py:249: AssertionError / 1 failed`\n\nSeverity is blocking because this is a routing invariant stated in the module docstring with no test that can kill it. For public CREDIT the damage is partly limited: 0006:306 and 0008:63 re-check d.state = 'active' when admitting in the database. Nothing re-checks a retired private dev deployment, so a provider_dev key would be routed to it.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed. The code at c67e4f5 is correct: _PUBLIC filters `d.state = 'active'` and _PRIVATE filters `d.state <> 'retired'`. The problem is that no test fails when either filter is removed.\n\nWhy the filters matter: 0007 lets a public revision move active -> draining -> retired, with the listing still in place, and lets a private revision move to 'retired'. So each filter is the only thing that stops a retired or draining deployment from resolving.\n\nWhat covers them today: nothing that exercises the Python adapter.\n- tests/d/test_catalog_pg.py never uses 'retired', 'draining', 'proposed_public' or 'ready_private'.\n- code_mutants_d5.py has three catalog mutants (private_visible_to_consumer, card_not_effective_checked, errors_become_none) and none on state.\n- test_credit_schema.py covers retired and draining only for the SQL-side rate function, not PgCatalogDirectory.resolve.\n\nExperiment: a git archive scratch copy of apps/infrx-api and apps/app/supabase at c67e4f5, with pgharness patched to its own port, database and lock (PORT=55652, DATABASE=infrx_v51, CONTAINER=infrx-review-d5-verify-5-1-postgres). Both filters were removed at once.\nCommand: `INFRX_D_TASK=d5 INFRX_D1_IMAGE=supabase PYTHONPATH=$S .venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_catalog_pg.py`\nTail: `..........................x..........  [100%]` / `36 passed, 1 xfailed in 30.91s`\nBoth mutants survived. The container, scratch copy and lock file were removed afterwards.\n\nSeverity: this is not a runtime defect today. It is an access fence (retired or draining deployments must not be reachable and billable) that no test can catch if it is removed, so it counts as blocking.\n\nFix: add a PG case that moves the listed public revision to draining or retired and the private dev revision to retired, then asserts resolve returns None for each. Also add R05/R06-style entries to code_mutants_d5.py.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "CF-4",
+   "severity": "blocking",
+   "file": "apps/infrx-api/tests/d/test_catalog_pg.py",
+   "line": "test_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered",
+   "claim_broken": "Item 8 / integration request 3: 'a fresh connection per call, so pilot.Probe's own thread and loop work', with this test named as the proof.",
+   "evidence": "Reviewer mutant R09 made _Db.connection cache ONE connection across calls and never close it. It SURVIVED test_catalog_pg.py + test_operations_pg.py (49 passed, 1 xfailed). The test's only call is its first call, made inside the thread, so a cached or loop-bound connection is never reused from another thread or loop.",
+   "minimal_fix": "Answer one lookup on the main thread first, then two concurrent lookups from two threads, each with its own loop. Or wrap the Connect in a counting spy and assert one connect() and one close() per lookup; kill R09 with it and add it to code_mutants_d5.",
+   "lens": "conformance",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed on real PostgreSQL. The production code is correct: `_Db.connection` in apps/infrx-api/infrx/state/operations.py:45-52 opens a new connection on every call and closes it in `finally`. The problem is the test. test_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered (test_catalog_pg.py:197) builds a new RigCatalog and makes one call, inside the thread. Nothing was opened before that call, so a cached connection would be created on the thread's own loop and never reused from another thread or loop. The test therefore cannot tell per-call connections from a single cached one.\n\nExperiment: a scratch copy made with git archive c67e4f5 (apps/infrx-api plus apps/app/supabase). The scratch pgharness was patched to its own container infrx-review-d5-verify-6-0-postgres on port 55653, database infrx_rv6. I applied R09 (`_Db.connection` caches one connection and never closes it) and added a probe test: one lookup on the main thread, then two concurrent lookups from two threads, each with its own asyncio.run loop.\n\nCommand: `INFRX_D_TASK=d5 PYTHONPATH=$S/apps/infrx-api timeout -s INT 150 $V -X faulthandler -m pytest -v tests/d/test_catalog_pg.py -k \"fresh_thread or zz_probe\"`\n\nTail with R09 applied:\n```\ntest_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered PASSED\ntest_zz_probe_main_then_two_threads FAILED ... AssertionError ... Right contains one more item: RateCardSnapshot(...)\n```\nOne of the two thread lookups never returned. The process then hung on that stuck thread until `timeout` stopped it (rc=124). So the mutant causes a real hang when two threads or loops share the connection, and the named test still passes.\n\nControl, with operations.py restored from c67e4f5, same command:\n```\n2 passed, 36 deselected in 4.13s\n```\nThe probe test passes on the real code and kills R09. The harness created the container and removed it itself; `docker ps -a` shows no verify-6-0 container left.\n\nSeverity: no production code is wrong. It is still blocking under the stated rubric, because the brief names this test as the proof of 'a fresh connection per call, so pilot.Probe's own thread and loop work', and that invariant has no test that kills its mutant. Fix: add the main-thread-then-two-threads test, or a counting spy on `Connect` that asserts one connect() and one close() per lookup, and add R09 to code_mutants_d5.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The claim holds; I could not refute it. The code at c67e4f5 is correct: `_Db.connection` in infrx/state/operations.py:46-52 opens a connection with `await self._connect()` and closes it in `finally`. The named proof does not test that behaviour. `test_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered` (test_catalog_pg.py:197) builds a new `RigCatalog(fresh())` and makes exactly one lookup, inside the new thread. A cached or loop-bound connection would be created in that thread's loop and never reused anywhere else. No unit test counts connect() or close() either: nothing in test_operations_units, test_adapter_units or code_mutants_d5 covers `_Db`.\n\nI reproduced this on a git-archive scratch copy (apps/infrx-api plus apps/app/supabase). The scratch pgharness was patched to port 55654, database infrx_v61 and container infrx-review-d5-verify-6-1-postgres, on the plain image because the claim does not depend on the image. I applied R09: `_Db.connection` caches one connection on self and never closes it.\n\nCommand: `timeout 300 .venv/bin/python -m pytest -q -p no:cacheprovider tests/d/test_catalog_pg.py tests/d/test_operations_pg.py --deselect ...zz_verifier...`\nTail: `..........................x....................... 49 passed, 1 deselected, 1 xfailed in 13.27s`. R09 survives, matching the reviewer's count.\n\nSequential `asyncio.run` calls on one cached psycopg AsyncConnection work (test_credit_rate__unpriced_answers_none already does two of them), so a sequential-reuse test would not catch it. What breaks is concurrent use from two threads, each with its own loop, which is how the probe runs beside the gateway. I added a check for that: one lookup on the main thread, then two threads, each with its own loop, doing 30 lookups each after a barrier.\n- With R09, the first run with non-daemon threads hung until the 600 s timeout. With daemon threads it failed: `E KeyError: 0` / `1 failed ... in 23.92s` (the threads never finished).\n- On the original operations.py it passes: `1 passed ... in 4.30s`.\n\nSo the invariant can be tested and the reviewer's minimal fix kills R09, but D5 as submitted has no test that kills it. Severity is blocking under the verifier rubric (\"an invariant with no killable test\"). The fix is test-only: add the concurrent case, or a counting spy on Connect, and add R09 to code_mutants_d5. No production code needs to change.\n\nCleanup: the container is gone (the harness removed it at exit; `docker ps -a` shows 0 matches) and the scratch copy is deleted. The codex-d5 worktree was not modified; its existing `M research/plan/evidence/d/D5-4bcac3b.md` was already there.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "CF-5",
+   "severity": "blocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "Integration request 1 ('make integration is not needed for this task')",
+   "claim_broken": "The requests must cover every merge-time breakage of the integration head. 0018 implements infrx.terminalize, and that flips E3B/I3B cases on origin/claude/backend-impl that are written to FAIL the moment terminalize stops being a stub.",
+   "evidence": "On origin/claude/backend-impl 7c52627, each of these breaks once 0018 is applied:\n- tests/integration/backend/test_drills.py::test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction runs rig('postgres', *RUN, 'terminalize') and then pytest.fail('terminalize is implemented: write the CREDIT settlement drill body now').\n- tests/integration/backend/recovery/test_recovery.py::test_i3b_rc04b_… fails with pytest.fail('terminalize is implemented: settle a job across rc04a's PostgreSQL kill now').\n- tests/integration/mutants.py e3bm15 names dr07c as its killer.\n- stack.PENDING still lists 'D5' and test_journey COMMON=('D5',). Once tasks.json marks D5 merged, test_stage's test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual refuses it.\n- test_harness.py:206 ends the migration list at 0017 (this one IS in request 1).\nNone of the other items is named in the evidence.",
+   "minimal_fix": "Add an integration request to E3B/I3B/the coordinator that lists these items to land with the D5 merge: the dr07c CREDIT settlement drill body, the rc04b body, removal of 'D5' from stack.PENDING and journey COMMON, re-targeting e3bm15, and the pgstate rows. Correct the 'make integration not needed' line. Optionally run layer 0-2 of make integration on the merged tree.",
+   "lens": "conformance",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed. Every file in the claim exists on origin/claude/backend-impl (currently bd8c3e2, which contains 7c52627). The claimed content is there: test_drills.py:644-649 has dr07c, which runs rig('postgres', *RUN, 'terminalize') and then pytest.fail('terminalize is implemented: write the CREDIT settlement drill body now'). test_recovery.py:344-352 has rc04b, which calls pytest.fail when stack.stubbed(('terminalize',)) is empty. mutants.py:695-702 has e3bm15, killed by dr07c. stack.py:67 has PENDING['D5']. test_journey.py:31 has COMMON=('D5',). test_harness.py:206 ends at 0017.\n\nD5's 0018_terminal_settlement.sql:297 replaces infrx.terminalize, and the only 'unimplemented' text left in 0018 is in comments (lines 43-44). So stack.stubbed / STUBS_SQL would find no stub, and both dr07c and rc04b would reach pytest.fail on a live stack (inferred from the code; the stack was not run).\n\nNone of these tests are in D5's tree. d486142 and c67e4f5 both have 0 matches for dr07c and rc04b, because they landed on origin after D5's base. That is why D5's 'no file under tests/integration was touched' is true but its 'make integration is not needed' is wrong. The D5 evidence file does not mention dr07c, rc04b, stack.PENDING, COMMON, e3bm15, test_stage or test_journey anywhere. Its handback only says 'E3B phase 2 re-run: dr06/dr07/dr09 bodies pass'.\n\nExperiment (no PostgreSQL needed): I built the merged tree with `git merge-tree --write-tree origin/claude/backend-impl c67e4f5` (tree 180607e) and git-archived it to scratch. There I set D5 in tasks.json from 'planned' to 'implemented', as the coordinator does at merge. Then I ran `.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_stage.py -k merged_task`. Tail: \"E Left contains one more item: 'D5' ... FAILED tests/integration/backend/test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual / FAILED tests/integration/backend/test_stage.py::test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task / 2 failed, 1 passed, 7 deselected in 0.99s\". I removed the scratch copy afterwards. No container was needed or created.\n\nThis is blocking because it is a merge-time breakage. The layer-0 stage tests go red as soon as D5 is recorded as merged. dr07c/rc04b fail by design on the first live layer-2/3 run, which also breaks e3bm15's killer. The fix is an integration request that lists these items and corrects the 'make integration not needed' line.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed from the code, plus one small experiment. No PostgreSQL run was needed because the stub probe is deterministic.\n\n(1) On origin/claude/backend-impl, tests/integration/backend/test_drills.py:644-649 dr07c runs rig('postgres', *RUN, 'terminalize'). rig only pends while stack.stubbed() finds `infrx.unimplemented(` in the function's pg_proc.prosrc (stack.py STUBS_SQL l.116-119); otherwise it hits pytest.fail('terminalize is implemented: write the CREDIT settlement drill body now'). recovery/test_recovery.py:344-352 rc04b fails in the same way when stubbed(('terminalize',)) is empty. In D5's 0018 (apps/app/supabase/migrations/0018_terminal_settlement.sql), `unimplemented` appears only at lines 43-44, which are SQL comments. The new infrx.terminalize body at l.297 has no stub call, so both cases turn from PENDING to FAIL on the merged tree. mutants.py:695-702 e3bm15 names dr07c as its only killer case. stack.PENDING still has 'D5' and RESIDUAL is {}. test_journey.py:31 has COMMON=('D5',). test_harness.py:206 ends at 0017.\n\nThe D5 worktree's own tests/integration is older (no dr07c; COMMON=('G1R','G6B','D2','D5','W3')). So none of this shows on the D5 branch; it appears only when D5 merges into the current integration head. The evidence's Integration request 1 names only the test_harness line and says '`make integration` is not needed for this task: no file under tests/integration was edited' (D5-4bcac3b.md l.386; also l.210). None of dr07c, rc04b, e3bm15, stack.PENDING or journey COMMON is named.\n\nExperiment: git archive of origin/claude/backend-impl (tests, tasks.json, infrx) into the scratchpad, with D5's tasks.json status changed from 'planned' to 'implemented' (what the merge does). Command: `.venv/bin/python -m pytest -q tests/integration/backend/test_stage.py -k merged_task -p no:cacheprovider`. Tail: `E Left contains one more item: 'D5' ... tests/integration/backend/test_stage.py:196: AssertionError ... FAILED tests/integration/backend/test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual  FAILED tests/integration/backend/test_stage.py::test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task  2 failed, 1 passed, 7 deselected in 0.91s`. Control with the unmodified tasks.json: `3 passed, 7 deselected in 0.69s`. The scratch copy was removed; no container was used.\n\nThis is a real merge-time breakage of make integration (layer-2 drills, the recovery case and the stage bookkeeping), and the handoff does not name it. The fix is what the reviewer proposes: an integration request covering the dr07c body, the rc04b body, removing D5 from stack.PENDING and journey COMMON, retargeting e3bm15, and correcting the 'make integration not needed' line.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "H-B1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/stack.py",
+   "line": "66-70 (stack.PENDING['D5']); tests/integration/backend/test_journey.py:31,57; test_drills.py:644-650 (dr07c); recovery/test_recovery.py:344-352 (rc04b)",
+   "claim_broken": "Merge readiness. The evidence says 'make integration was not run: no file under tests/integration was touched', and integration request 1 names only test_harness.py plus the Makefile. But the integration head's E3B/I3B vocabulary and tripwires name D5, and they turn red when D5 merges.",
+   "evidence": "On the merge scratch (7c52627 + c67e4f5, conflict resolved) with only research/plan/tasks.json D5 status set to 'implemented' (what the coordinator does at merge): `pytest tests/integration/backend/test_stage.py tests/integration/test_run.py` gives exit 1, `2 failed, 59 passed`: test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual `AssertionError: ({'D5'}, set())` and test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task `{'D5': ['b.test_journey::cutover0', ...]}`. With tasks.json unchanged, the same suites plus test_journey still show `PENDING[D5,G2-R1]` on 10 journey cases. Two more cases fail at layer 3 once 0018 is live: dr07c (`rig('postgres', ..., 'terminalize')` then `pytest.fail('terminalize is implemented: write the CREDIT settlement drill body now')`) and rc04b (`if not stubs: pytest.fail(...)`). They skip at layer 0 with no stack (INFRX_E2_NAMESPACE=e3b2: 'no infrx-e3b2 stack'). I did not run layer 3. The failure is inferred from the stub probe, and 0018 removes terminalize's `infrx.unimplemented(...,'D5')`.",
+   "minimal_fix": "Add an integration request (owner: coordinator/E3B, and I3B for rc04b), applied WITH the merge. Drop 'D5' from stack.PENDING. In test_journey, set COMMON=() and make pending('G2-R1','D5') pending('G2-R1'). Write the dr07c CREDIT settlement body (D5's own checks_settle credit_settle is the template) and rc04b's body, or re-pend them on a named owner reference. Correct the evidence line that says integration is untouched.",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute this. It is confirmed at layer 1 without a container.\n\n**What the integration head says.** At 7c52627, `tests/integration/backend/stack.py` has `PENDING[\"D5\"]` and an empty `RESIDUAL`. `test_journey.py` has `COMMON = (\"D5\",)` and `stack.pending(\"G2-R1\", \"D5\", ...)`. tasks.json marks D5 as `planned`.\n\n**What the tripwires check.** `test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual` asserts `merged <= set(stack.RESIDUAL)`. `test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task` asserts that `run.stale_pending(pended) == []`. Once the coordinator marks D5 implemented at merge, D5 counts as a merged id in both.\n\n**What D5 says about it.** The D5 evidence (`research/plan/evidence/d/D5-4bcac3b.md`) says at l.210 \"`make integration` was not run: no file under `tests/integration` was touched\". Integration request 1 says the same (\"`make integration` is not needed for this task\"). No integration request names stack.PENDING, test_journey, dr07c or rc04b. That is wrong: the D5 merge changes what the integration head's tests see.\n\n**Experiment.** I made a fresh `git archive 7c52627` into the unique scratch dir `scratchpad/d5-pendingclaim-149808` and ran it with the infrx-impl venv and `PYTHONPATH=<scratch>/apps/infrx-api`. The command was `pytest -q -p no:cacheprovider tests/integration/backend/test_stage.py tests/integration/test_run.py`.\n- With tasks.json unchanged it gave `1 failed, 60 passed`. That one failure is `test_run.py::test_the_report_names_its_tree_its_namespace_and_each_stages_duration`, an artefact of running from a scratch dir.\n- With only D5 set to `implemented` in tasks.json it gave `3 failed, 58 passed`. The two new failures:\n  - `FAILED ...test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual` (\"Left contains one more item: 'D5'\")\n  - `FAILED ...test_stage.py::test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task`\n- The reviewer's \"2 failed\" is therefore exactly D5's delta.\n\n**dr07c and rc04b.** I did not run layer 3. From the code, both are written to fail on the day terminalize stops being a stub. dr07c calls `rig(...,\"terminalize\")` and then `pytest.fail`; rc04b calls `pytest.fail` when `stubs` is empty. 0018 removes the stub, so the inference holds.\n\n**Severity: blocking, as a merge-time breakage.** `make check` does not include `make integration`, so check stays green. But `make integration` layer 1 turns red as soon as the coordinator marks D5 implemented, and D5's evidence tells the coordinator the opposite.\n\n**Fix.** No D5 code change is needed. Add one integration request to D5's evidence and correct l.210, and have the coordinator apply it with the merge:\n- drop `PENDING[\"D5\"]` from stack.py;\n- in test_journey, set `COMMON=()` and change `pending(\"G2-R1\",\"D5\")` to `pending(\"G2-R1\")`;\n- give the dr07c and rc04b bodies to E3B and I3B (or re-pend them on a named owner reference).",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it, and I reproduced it without a database.\n\n**Code at the integration head 7c52627:**\n- `tests/integration/backend/stack.py` l.66-67 still lists D5 in `PENDING`.\n- `test_journey.py` has `COMMON = (\"D5\",)` at l.31 and `stack.pending(\"G2-R1\", \"D5\", ...)` at l.57.\n- `test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual` fails when a vocabulary id is `implemented` or `integrated` in tasks.json but is not in `stack.RESIDUAL`.\n\n**What D5 touches:** `git diff --name-only d486142 c67e4f5` shows no file under `tests/integration`, and D5 does not change `research/plan/tasks.json`. Integration request 1 in D5-4bcac3b.md (l.383-386) names only `test_harness.py` and the Makefile. It says \"`make integration` is not needed for this task: no file under tests/integration was edited.\" No request drops D5 from `stack.PENDING` or `test_journey`.\n\n**Experiment (scratch copy, no container needed):**\n1. `git archive 7c52627 | tar -x` into a scratch directory.\n2. Applied D5's non-test diff (`git diff d486142 c67e4f5 -- . ':!apps/infrx-api/tests/d' ':!research/plan/evidence'`). It applied cleanly and added 0018.\n3. Set D5 to `implemented` in tasks.json, as the coordinator does at merge.\n\nCommand: `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_stage.py tests/integration/test_run.py`\n\nBefore the tasks.json edit: `1 failed, 60 passed`. The one failure is `test_run::test_the_report_names_its_tree...` (`assert (None == '')`); it fails only because the scratch copy is not a git tree.\n\nAfter the edit:\n- `AssertionError: {'D5': ['b.test_journey::cutover0', 'b.test_journey::cutover1', ...]}` at test_stage.py:196\n- `FAILED tests/integration/backend/test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual`\n- `FAILED tests/integration/backend/test_stage.py::test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task`\n- `3 failed, 58 passed` (the third is the same scratch-only test_run failure)\n\nSo the reviewer's two red cases reproduce exactly once D5 is marked merged.\n\n**dr07c and rc04b:** both are tripwires by design. dr07c calls `rig('postgres', ..., 'terminalize')` and then `pytest.fail(...)`; rc04b fails `if not stubs`. 0018's header says it replaces 0016's `terminalize` stub along with its `infrx.unimplemented` line, so at layer 3 the stub probe finds nothing and both fail. I did not run layer 3 either; that part is inferred from the code, as the reviewer's was.\n\n**Severity:** real and blocking as a merge-time breakage. The `tests/integration` suites turn red as soon as the coordinator marks D5 merged, and D5's evidence wrongly says integration is untouched. The fix is small and belongs to the coordinator/E3B (and I3B for rc04b), applied with the merge:\n- drop D5 from `stack.PENDING`\n- set `COMMON = ()` in test_journey and change `pending('G2-R1', 'D5')` to `pending('G2-R1')`\n- write the dr07c and rc04b bodies, or re-pend them on a named owner\n- correct the evidence line",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "downgraded_to_nonblocking": [
+  {
+   "id": "B3",
+   "severity": "blocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "740",
+   "claim_broken": "Replay by operation_id: an operation id reused for a different target must refuse, as grant_credit does. reconcile's replay test is the audit key alone, so a reused operation id on ANOTHER request is answered replayed and nothing happens.",
+   "evidence": "Probe, identical on plain and Supabase: two held_unknown CREDIT jobs A and B past the window; reconcile(A, op='op-X') -> {'replayed': False, 'settlement_state': 'released_platform_absorbed'}; reconcile(B, op='op-X') -> {'replayed': True, 'settlement_state': 'held_unknown'}; B's hold stays 'unknown' and no audit row names B. The inverse mutant rv_reconcile_replay_other_request (bind the replay to after->>'request_id') changes no check on either image: no test pins this. Reachable through PgLedger.reconcile. G6B's _once catches a reused operator key only after its own audit append, so a crash between write and append leaves this window open.",
+   "minimal_fix": "In infrx.reconcile: when an audit row with v_key exists and its after->>'request_id' is not j.request_id::text, refuse 'idempotency_conflict'; otherwise replay. Add the assertion (same op, other request -> idempotency_conflict, hold unchanged) to check_reconcile_clock, plus a mutant.",
+   "lens": "money",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed on real PostgreSQL, but it is nonblocking. At c67e4f5, infrx.reconcile (0018_terminal_settlement.sql ~line 740) checks only whether an audit row with idempotency_key 'reconcile:'||operation_id exists. It never compares that row's after->>'request_id' with the request it was given. grant_credit (lines 671-678) does compare wallet, kind and amount and refuses 'idempotency_conflict' on a mismatch. I ran a probe from a git-archive scratch copy, with pgharness patched to container infrx-review-d5-verify-2-0-postgres, port 55645, DB infrx_rv_d5v2 and its own lock. Command: `INFRX_D1_IMAGE={'',supabase} INFRX_D1_CHECKOUT=$S uv run --frozen pytest -q -s tests/d/test_zz_probe.py`. It printed the same tail on both images: \"A (None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'}) / B (None, {'replayed': True, 'settlement_state': 'held_unknown'}) / B hold unknown / audit rows naming B (0,) / 1 passed\". The container was removed at exit and I deleted the lock. check_reconcile_clock replays only the same request (rec-a), so no test pins this.\n\nWhy nonblocking: the only caller is Operations.reconcile, through _once. It derives operation_id = stable_id('reconcile', K) and refuses a reused K for a different request before it writes. The hole opens only if the DB transaction commits, the service's audit append then fails, and the operator reuses the same idempotency key K on a different request. That is two rare events, one of them operator misuse. Even then nothing moves. B's hold stays 'unknown', so there is no debit, no release, no fence or privilege effect. The answer truthfully reports held_unknown, and a retry with a fresh key reconciles B. The only damage is that the service audit row maps K to B while the DB audit maps it to A. No spec in research/plan states an operation-id conflict rule for reconcile. The suggested fix (refuse 'idempotency_conflict' when after->>'request_id' differs, plus an assertion and a mutant) is cheap and worth taking, but it should not gate the merge.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The defect is real, but it is nonblocking.\n\n**Code.** At c67e4f5, `0018_terminal_settlement.sql` lines 740-742 read `if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then return jsonb_build_object('settlement_state', j.settlement_state, 'replayed', true);` with `v_key := 'reconcile:' || operation_id`. The replay test never compares `after->>'request_id'` with the job it just locked. `grant_credit` does compare (lines 672-675: another wallet, kind or amount is `idempotency_conflict`). `idempotency_lookup` and G6B's `_once` also refuse a changed request.\n\n`check_reconcile_clock` replays only the same request (`rec-a` twice, lines 162-175). No check covers the same operation id on another request.\n\n**Experiment.** Run on plain postgres:16.14 in a `git archive` scratch copy. `pgharness` was patched to port 55646, container `infrx-review-d5-verify-2-1-postgres`, its own lock and database `infrx_d5v`. The probe test built two `held_unknown` CREDIT jobs, advanced the clock by `unknown_usage_reconcile_s`, then called reconcile(A, op-X) and reconcile(B, op-X).\n\nCommand: `INFRX_D_TASK=d5 uv run --frozen pytest -q -s -p no:cacheprovider tests/d/test_probe_xreq.py`\n\nTail:\n```\nA (None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'})\nB (None, {'replayed': True, 'settlement_state': 'held_unknown'})\nB hold unknown\naudits op-X [('admin_reconcile', 'ops@test', UUID('6ddb6f38-...'), 'unknown usage reconciled after the 24 h window')]\n1 passed in 24.57s\n```\nThis matches the claim: B is answered as replayed, its hold stays unknown, and only A's audit row exists. I did not run the Supabase image. The defect sits in plain plpgsql logic that does not depend on the image.\n\n**Why nonblocking.** It fails closed:\n- Nothing moves: no debit, no release and no audit row for B, so there is no money, fence or privilege hole.\n- The only caller, `PgLedger.reconcile` (`infrx/state/operations.py:394`), drops `replayed` and returns only `settlement_state`. The operator therefore sees B's true state (`held_unknown`), not a false success.\n- It is reachable only if an operator reuses one idempotency key for a different request after a crash between the port write and G6B's audit append. `_once` derives the operation id as `stable_id(operation, key)`.\n- Recovery is a retry with a fresh key.\n\nThe real costs:\n- A consistency gap with `grant_credit`, `idempotency_lookup` and `_once`.\n- The misleading `replayed: true`.\n- In that crash case, G6B's audit row files the key under request B while the database's `reconcile:` row names A.\n- No test pins this behaviour. The minimal fix and the check/mutant the reviewer proposes are appropriate as a follow-up.\n\n**Cleanup.** The harness removed the container at exit (`docker rm -f` then reported no such container). I deleted the lock file and the scratch copy.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "H-B2",
+   "severity": "blocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "~750 (infrx.reconcile: `if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then return ... 'replayed', true`)",
+   "claim_broken": "Replay by operation_id (design decision 8: 'a replayed operation id answers the state and writes nothing'). The replay is keyed on the operation id alone. It never checks that the recorded operation was THIS request, so reusing an id for another request is answered as a success. grant_credit refuses the equivalent with idempotency_conflict.",
+   "evidence": "My probe (hand_extra.probe_reconcile_reuse, plain image, lane tree c67e4f5) makes two held_unknown CREDIT jobs A and B, advances past the window, reconciles A with op 'dup-op', then reconciles B with 'dup-op'. Quoted: `PROBE first=(None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'}) second=(None, {'replayed': True, 'settlement_state': 'held_unknown'}) hold_b=unknown`. B's hold stays reserved and the operator is told 'replayed'. The composed G6B service derives op ids from (operation, idempotency_key), so the realistic path is mostly guarded above the SQL boundary. PgLedger.reconcile and the SQL boundary itself are not guarded, and no check or mutant covers this.",
+   "minimal_fix": "In the replay branch, read the audit row and refuse `idempotency_conflict` unless its after->>'request_id' = j.request_id (and target_org_id = j.org_id). Add that assertion to check_reconcile_clock, plus a mutant `d5_reconcile_replay_any_request` removing the comparison.",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The mechanism is real, but it is not blocking. I confirmed it from the code at c67e4f5 and did not start a container, because the code alone settles it.\n\nCommand: `sed -n 717,765p apps/app/supabase/migrations/0018_terminal_settlement.sql` in the codex-d5 worktree. Tail: `v_key text := 'reconcile:' || (p_args->>'operation_id'); ... select * into j from infrx.jobs where request_id = ... for update; ... if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then return jsonb_build_object('settlement_state', j.settlement_state, 'replayed', true); end if;`\n\nThe replay branch never compares the recorded audit row's `after->>'request_id'` or `target_org_id` with the current job. So an operation id first used for job A, when reused for job B, returns B's own state (`held_unknown`) with `replayed: true` and writes nothing. That matches the reviewer's PROBE output. The sibling `infrx.grant_credit` (lines 671-678) does refuse the equivalent reuse with `idempotency_conflict`, so the two functions are inconsistent, and no check or mutant covers this.\n\nWhy it is nonblocking:\n1. No money moves wrongly. B is neither debited nor released: its hold stays reserved, and the answer reports B's true state (`held_unknown`), so this is the safe direction.\n2. `infrx.reconcile(jsonb)` is service-role only (credit_schema.py:94). Its only in-repo caller is `OperatorService.reconcile` (service.py:389-398), through `PgLedger.reconcile` (state/operations.py:394-402).\n3. That caller goes through `_once` (service.py:186-205). `_once` refuses `IdempotencyConflict` when a prior audit row under the same key names a different request `{org_id, request_id}`. It derives `operation_id = stable_id('reconcile', idempotency_key)`, so a reused op id only reaches the SQL for the same key and therefore the same request.\n4. The port docstring (ports.py:130-133) promises no conflict semantics.\n\nThis is a hardening and consistency gap at the SQL/port boundary, not a fence, privilege or money hole, and it does not break the merge. The reviewer's fix is cheap and worth taking as a follow-up, not as a merge gate: compare `after->>'request_id'` and `target_org_id` in the replay branch, add that assertion to check_reconcile_clock, and add a `d5_reconcile_replay_any_request` mutant.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute this. The code confirms it, so I did not start a container. In c67e4f5, apps/app/supabase/migrations/0018_terminal_settlement.sql lines 733-743 do the following. `infrx.reconcile` locks the job row for (request_id, org_id) from the args, which is job B. It then runs `if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then return jsonb_build_object('settlement_state', j.settlement_state, 'replayed', true)`, where `v_key := 'reconcile:' || operation_id`. It never compares the recorded row's after->>'request_id' or target_org_id with j. When an operation id was used for job A and is reused for job B, the call returns `{settlement_state: 'held_unknown', replayed: true}` and writes nothing. That matches the reviewer's probe output. grant_credit (lines 671-676) refuses the equivalent mismatch with idempotency_conflict, and reconcile does not. PgLedger.reconcile (apps/infrx-api/infrx/state/operations.py:394) also drops the `replayed` flag and returns only the state string, so a caller at that level cannot even see that it was treated as a replay.\n\nWhy I rate it nonblocking: the composed G6B service guards it. OperatorService._once (apps/infrx-api/infrx/operations/service.py:192-197) looks up its own audit row by idempotency_key and raises IdempotencyConflict when `after.request` ({org_id, request_id}) differs. It derives `operation_id = stable_id('reconcile', key)`, so reusing a key for a different request is refused before the SQL runs. One path remains. The SQL commits, the process crashes before the service appends its audit row, and the operator then reuses the same key for a different request. That reaches this branch, and the service records B as 'held_unknown'. That window is narrow and needs operator error. In every case no money moves (no debit, no wrong release), and B's hold simply stays reserved. The answer does say 'held_unknown' instead of 'released_platform_absorbed', so the result is visible, and retrying with a fresh key fixes it. This is not a money, fence or privilege hole. The documented contract (\"a replayed operation id answers the state and writes nothing\") is literally honored; the missing part is the conflict parity with grant_credit.\n\nThe reviewer's fix is sound and small: in the replay branch, refuse idempotency_conflict unless audit.after->>'request_id' = j.request_id and target_org_id = j.org_id, add the assertion to check_reconcile_clock, and add a mutant `d5_reconcile_replay_any_request`. It is worth taking as a follow-up hardening item and should not gate merging.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "N1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_settle.py",
+   "line": "691-740",
+   "claim_broken": "CREDIT-SPEND 'SQL charge equals v2.settle, half up once, exact decimals': the grid cannot tell exact numeric arithmetic from binary floating point.",
+   "evidence": "rv_credit_debit_in_float (debit_credit computed in float8, then cast to numeric) SURVIVED credit_grid on both images. The grid's cards (0.20/0.60, 0.005/0.015) keep every product within 15 significant digits. A search found in-range inputs where float differs: 17318 in / 1176 out at 71665.96953467 / 27893.11916121 per M gives exact 1273.91356853 vs float 1273.91356854. The legacy USD grid (checks_settle l.170-177) has the same blind spot.",
+   "minimal_fix": "Add one high-rate card with that point (and the same for the legacy snapshot grid) to the grids.",
+   "lens": "money"
+  },
+  {
+   "id": "N2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_settle.py",
+   "line": "959-1000",
+   "claim_broken": "R91 lookup reads 'the scope's mapping (org + operation + key)'. The operation part is untested.",
+   "evidence": "rv_lookup_ignores_operation (drop `operation = v_idem->>'operation'`) SURVIVED lookup and every D5 check on both images. Without it, a key reused under another operation answers that operation's job or a false idempotency_conflict.",
+   "minimal_fix": "In check_lookup, assert that lookup of the same key under another operation answers (None, None).",
+   "lens": "money"
+  },
+  {
+   "id": "N3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_settle.py",
+   "line": "977",
+   "claim_broken": "The lookup 'writes nothing'. Only row counts (ca.footprint) and the STABLE marker defend it, and the marker is asserted nowhere.",
+   "evidence": "rv_lookup_writes (drop `stable` and clear idempotency.expires_at at entry) SURVIVED check_lookup on both images. The effect happens to be masked by the coalesce(expires_at, settled_at + ttl) fallback, but a value-changing write is invisible to a count footprint. The pgstate rows do not pin volatility.",
+   "minimal_fix": "Assert `select provolatile from pg_proc where oid = 'infrx.idempotency_lookup(jsonb)'::regprocedure` = 's' in check_d5_privileges (and/or a pgstate row).",
+   "lens": "money"
+  },
+  {
+   "id": "N4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_operations.py",
+   "line": "60-110",
+   "claim_broken": "grant_credit takes 'exact CREDIT text'. Only low-precision amounts (12.5, 1) are round-tripped.",
+   "evidence": "rv_grant_amount_via_float (`v_text::float8::numeric`) SURVIVED every D5 check on both images.",
+   "minimal_fix": "Allocate '123456789012.12345678' to the provider_dev wallet in check_allocation and assert the entry text and the ledger_total delta exactly.",
+   "lens": "money"
+  },
+  {
+   "id": "N5",
+   "severity": "nonblocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "666-695",
+   "claim_broken": "A replayed operation id on another movement is a typed idempotency_conflict.",
+   "evidence": "Pristine, both images: two concurrent grant_credit calls with one operation_id on two different wallets take different wallet locks, both miss the replay row, and the second fails 'untyped 23505' (credit_ledger_operation_key) instead of idempotency_conflict.",
+   "minimal_fix": "Catch unique_violation on the ledger insert and refuse idempotency_conflict, or take pg_advisory_xact_lock(hashtext(v_op::text)) before the replay lookup.",
+   "lens": "money"
+  },
+  {
+   "id": "N6",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/test_settle_units.py",
+   "line": "73-92",
+   "claim_broken": "The code mutant list claims 'a SettlementV2 exactly when settled'. The units cover only settled and released_free.",
+   "evidence": "Reviewer code mutant rv_code_settlement_on_any_state (`is not settled` -> `is released_free`) SURVIVED the D5 Runner targets ('1 passed'). On PostgreSQL it dies only inside the STRICT-XFAIL CREDIT case credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet, as `AttributeError: 'NoneType' object has no attribute 'model_dump'` (jobstore.py:117), which fails because it does not match the xfail's raises=NotFound pin. That is an accidental, fragile kill. Also rv_code_lookup_sends_the_scopes_org (send idem.org_id as the caller org) survives the units. PG conformance dur_admit__lookup_reads_the_mapped_job_and_writes_nothing does kill it.",
+   "minimal_fix": "Add held_unknown and released_platform_absorbed CREDIT docs to the SETTLEMENT unit (expect None). Add a unit asserting lookup sends the caller's org even when idem names another.",
+   "lens": "money"
+  },
+  {
+   "id": "N7",
+   "severity": "nonblocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "281-286",
+   "claim_broken": "Evidence 'Further deltas' says result_expires_at is STORED at settlement 'so G3 can drop its route-side TTL' (G3 request (c)).",
+   "evidence": "job_admission's outcome (and so get_owned / get_owned_credit) carries no result_expires_at, state-independent deadline_at for the CREDIT read, or max_output_tokens. G3 request (c) therefore cannot be lifted through the port as stated.",
+   "minimal_fix": "Either add 'result_expires_at' to job_admission's document (and the owned read), or reword the evidence to say G3 (c) stays open.",
+   "lens": "money"
+  },
+  {
+   "id": "CF-6",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/test_jobstore_conformance.py",
+   "line": "RAISES",
+   "claim_broken": "The evidence says the merge conflict in the partition was resolved once, in f2ee977. The integration head has since gained f52308a, which is not in D5's base d486142 and adds a RAISES entry for dur_admit__lookup_reads_the_mapped_job_and_writes_nothing.",
+   "evidence": "git merge-tree origin/claude/backend-impl c67e4f5 gives CONFLICT (content) in apps/infrx-api/tests/d/test_jobstore_conformance.py, on the RAISES dict only. The 75cd7bb cancel-cause entry is already dropped by the lane (f2ee977). The f52308a lookup entry must be dropped by the D5 merge. Resolved to the D5 side, the merged tree gives 129 passed, 4 xfailed (plain): test_jobstore/streamstore/credit_jobstore conformance + test_e3b_drills + test_settle. That includes the head's new cases dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row, dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark and dur_output__an_unjournalable_event_refuses_the_whole_batch, all passing on 0018.",
+   "minimal_fix": "State in integration request 1 that the conflict must be resolved by taking D5's whole partition file (RAISES = {F2 only}). test_the_pending_list's RAISES==PENDING guard catches a naive union.",
+   "lens": "conformance"
+  },
+  {
+   "id": "CF-7",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "Further deltas: 'result_expires_at is now STORED at settlement … so G3 can drop its route-side TTL'",
+   "claim_broken": "G3 request (c) asks for 'D5's jobs.result_expires_at on the owned read'.",
+   "evidence": "0018 sets jobs.result_expires_at (l.436), but infrx.job_admission (the owned read's document, 0018 l.238-296) does not return it. No Python reader exists either: grep finds result_expires_at only in contracts/wire.py and a fixture. G3 cannot drop its route-side TTL through the port.",
+   "minimal_fix": "Either add result_expires_at to job_admission's outcome (plus the port/record field via F), or reword the evidence to say it is stored but not yet on the owned read, and keep request (c) open.",
+   "lens": "conformance"
+  },
+  {
+   "id": "CF-8",
+   "severity": "nonblocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "infrx.reconcile replay check (exists audit_entries where idempotency_key = 'reconcile:'||operation_id)",
+   "claim_broken": "Replay by operation_id should answer the SAME operation. grant_credit refuses a reused operation id for another movement with idempotency_conflict; reconcile does not.",
+   "evidence": "The replay key is global and is not bound to request_id. An operation id already used for request A, sent with request B (same org), answers {settlement_state: B's current state, replayed: true} and releases nothing. The G6B service derives operation ids from its own idempotency key and checks the request first, so this is reachable only through direct callers. No money moves.",
+   "minimal_fix": "On replay, compare the stored audit row's after->>'request_id' with p_args->>'request_id' and refuse idempotency_conflict when they differ. Add one check line and one migration mutant.",
+   "lens": "conformance"
+  },
+  {
+   "id": "H-N1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_settle.py",
+   "line": "43-53 (assert_no_drift)",
+   "claim_broken": "Item 5a presents assert_no_drift ('both drift detectors empty') as a named, killed assertion. Nothing proves the detector call can fail. With it disabled, every drift mutant still dies by a direct assertion.",
+   "evidence": "Own mutant HAND_NOOP_DRIFT (assert_no_drift.__code__ replaced by a no-op) with d5_hold_not_moved_on_settle, d5_usage_debit_without_ledger_row and d5_wallet_total_written_directly. All 3 are still KILLED, at checks_settle.py:151 `hold == 'settled'`, :149 `not one usage debit: []` and :150 `usd(conn) == ...`. Without the no-op they die first at :52 assert_no_drift (reproduced, matching the evidence). No test injects drift and expects assert_no_drift to raise, for USD or CREDIT.",
+   "minimal_fix": "Add a positive control: in a rolled-back transaction, write drift for USD and for CREDIT as owner, and assert that assert_no_drift raises naming each detector.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/migration_mutants.py",
+   "line": "D5_MUTANTS (d5_adjust_replay_appends, d5_sync_deadline_billed, d5_debit_above_hold, d5_second_terminal_event, d5_settle_before_the_fence)",
+   "claim_broken": "R83: each mutant should die for its declared reason. Several mutants' `why` describes a production consequence that their death does not show.",
+   "evidence": "From hand application, plain image. d5_adjust_replay_appends ('an operator retry moves the money twice') dies of `untyped 23505`: unique(operation_id) makes a double move impossible, and the real effect is a refused replay. d5_sync_deadline_billed ('customer pays') and d5_debit_above_hold die of `untyped 23514`, a 0003 CHECK refusing the settlement. d5_second_terminal_event dies of `untyped 23505`. d5_settle_before_the_fence ('a superseded or foreign worker settles a live job') dies first on the terminal late-data branch (`other usage: untyped 23514` at checks_settle.py:203), not on a stale or foreign lease against a live job. All are killed by an AssertionError in the named check, so they are not misdeclared.",
+   "minimal_fix": "Rewrite each `why` to the consequence actually observed (a replay or settlement refused with a 500). For d5_settle_before_the_fence, put the stale/foreign-lease-on-a-live-job assertion before the late-data assertions in check_settle_late_data, so it dies for the fence.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "Further deltas, G3: 'result_expires_at is now STORED ... so G3 can drop its route-side TTL'",
+   "claim_broken": "G3 request (c) asks for 'D5's jobs.result_expires_at on the owned read'. 0018 stores the column, but no read returns it.",
+   "evidence": "`grep result_expires_at` finds it only in 0018 l.436, the settling UPDATE. infrx.job_admission's outcome, PgJobStore and the ports do not carry it. G3's `routes/jobs.py:151` ponytail ('the TTL is the route's ... until D5') cannot be dropped.",
+   "minimal_fix": "Either add result_expires_at to job_admission's outcome and the owned read (a contract delta: route it to F/coordinator), or reword the claim as 'stored, not yet readable'.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N4",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "Integration request 3 (G2)",
+   "claim_broken": "The request lists only the relay's dead cause fallback. The lookup-refusal fallback is dead on PostgreSQL too, once 0018's idempotency_lookup exists.",
+   "evidence": "On the merged tree: infrx/gateway/routes/relay.py:204 (`param=\"lookup\"` fallback), tests/g/test_relay_recovery.py:101-105 and :196-202 (stores raising UnsupportedParameter('JobStore.lookup is D5's (R91)', param='lookup')), and tests/g/mutants.py:931/957 `lookup_refusal_escapes` ('until D5 ...') still describe the interim. tests/g passes: `559 passed`.",
+   "minimal_fix": "Name the lookup-refusal fallback, its two test_relay_recovery cases and the g mutant in request 3 for G3/E4B, next to the cause fallback.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N5",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/test_migration_mutants.py",
+   "line": "28-117 (ALWAYS), 121 (SELECTED)",
+   "claim_broken": "Item 10d: 'the default mutant subset runs' the 27 D5 money-path names. Nothing checks that the ALWAYS names exist, so a typo silently drops a money-path mutant from `make api-test`.",
+   "evidence": "Own mutant OWN7 (misspell 'd5_lookup_any_org_scope' in ALWAYS) SURVIVED: `3 passed, 161 deselected` on the well-formed/supersession tests. I verified statically that all 27 D5 names exist in ALL today (missing: []). Own mutant OWN5 (jobstore partition xfail strict=True→False) also SURVIVED, because no meta-test pins the strictness.",
+   "minimal_fix": "In test_the_mutant_list_is_well_formed, `assert set(ALWAYS) <= {m.name for m in ALL}`. Optionally, assert in the partition tests that every mark is strict.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N6",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "Commands rows 20-25; code-mutant table item 8",
+   "claim_broken": "The evidence is WIP at c67e4f5. The per-mutant `-s` kills at 4bcac3b on both images, make -k check, the two orderings and the final Supabase sweep are still 'running'. Separately, errors_become_none is listed as a catalog (item 8) mutant but edits operations.py's shared `_Db.rows` (file=O).",
+   "evidence": "Rows 20-25 read 'running at this commit'. code_mutants_d5.py: `_m(\"errors_become_none\", ..., CATALOG, file=O)`. I reproduced the full list on plain only (see commands). The mutant is killed (42 passed).",
+   "minimal_fix": "Quote rows 20-25 in the final evidence commit. Label errors_become_none as 'operations._Db (used by the catalog)'.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N7",
+   "severity": "nonblocking",
+   "file": "Makefile / tests/integration/test_harness.py",
+   "line": "Makefile:19 api-mutants; test_harness.py:205-206",
+   "claim_broken": "Integration request 1 is required and correct, but on the current integration head it is still unapplied. It is listed here so the merge carries it.",
+   "evidence": "Merged tree: `FAILED tests/integration/test_harness.py::test_the_migration_set_is_the_console_one_and_is_read_in_filename_order - Left contains one more item: '0018_terminal_settlement.sql'`. The Makefile api-mutants line on 7c52627 lacks tests/d/test_code_mutants_d5.py; D5 did not edit the Makefile, since it is the coordinator's.",
+   "minimal_fix": "At merge, append \"0018_terminal_settlement.sql\" after 0017 in test_harness.py's expected list, and append tests/d/test_code_mutants_d5.py to the api-mutants line (tests/d/test_migration_mutants.py already carries D5_MUTANTS).",
+   "lens": "honesty"
+  }
+ ],
+ "reviews": [
+  {
+   "lens": "money",
+   "verdict_hint": "fix_required",
+   "mutants": [
+    {
+     "name": "rv_replay_matches_on_cause_only",
+     "edit": "0018 terminalize replay: `v_proposal = j.proposal` -> `v_proposal->'cause' = j.proposal->'cause'`",
+     "result": "killed both images",
+     "killed_by": "settle_late_data: AssertionError: other usage: None"
+    },
+    {
+     "name": "rv_replay_without_settled",
+     "edit": "replay test without `j.settled_at is not null and`",
+     "result": "survived both images - EQUIVALENT (a live job has proposal NULL and a NULL committed triple)",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_settling_update_split",
+     "edit": "the ONE settling UPDATE split: settled_at/state/cause/ref first, settlement_state/debit/usage/proposal in a second UPDATE",
+     "result": "killed both images",
+     "killed_by": "settle_terminal_event: AssertionError: untyped 23514 (jobs_settlement_record_guard refuses the second write)"
+    },
+    {
+     "name": "rv_validation_after_money",
+     "edit": "R30 result-ref check moved after the money (contiguous swap)",
+     "result": "survived both images - EQUIVALENT (refuse() raises; the single transaction rolls the money back)",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_credit_debit_in_float",
+     "edit": "debit_credit arithmetic in float8 then ::numeric",
+     "result": "SURVIVED credit_grid both images -> N1",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_credit_hold_any_state",
+     "edit": "settle_credit hold update without `and state = 'held'`",
+     "result": "survived - EQUIVALENT (only reached for a live job whose hold is held; other hold writers need the job row)",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_usd_hold_any_state",
+     "edit": "settle_legacy_usd hold update without `and state = 'held'`",
+     "result": "survived - EQUIVALENT (same reason)",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_adjustment_to_provider_dev",
+     "edit": "`if v_kind = 'operator_adjustment' and w.kind <> 'consumer'` -> `if false`",
+     "result": "killed both images",
+     "killed_by": "allocation: AssertionError: an adjustment to a provider_dev wallet: None"
+    },
+    {
+     "name": "rv_negative_allocation",
+     "edit": "allocation sign check dropped",
+     "result": "killed both images",
+     "killed_by": "allocation: AssertionError: a negative allocation: untyped 23514"
+    },
+    {
+     "name": "rv_replay_ignores_amount",
+     "edit": "replay conflict without `l.amount <> v_amount`",
+     "result": "killed both images",
+     "killed_by": "adjust: AssertionError"
+    },
+    {
+     "name": "rv_replay_ignores_wallet",
+     "edit": "replay conflict without `l.wallet_id <> w.wallet_id`",
+     "result": "SURVIVED every D5 check + test_operations_pg/test_settle (32 passed) -> B1",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_replay_ignores_kind",
+     "edit": "replay conflict without `l.kind <> v_kind`",
+     "result": "SURVIVED every D5 check both images -> B1",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_grant_without_wallet_lock",
+     "edit": "grant_credit wallet select without FOR UPDATE",
+     "result": "SURVIVED every D5 check + test_settle_races/test_operations_pg (22 passed); probe: racing same-op replay -> untyped 23505 -> B2",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_grant_amount_via_float",
+     "edit": "`v_amount := v_text::float8::numeric`",
+     "result": "SURVIVED every D5 check both images -> N4",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_release_recheck_dropped",
+     "edit": "release_aged_unknown without `and settlement_state = 'held_unknown'`",
+     "result": "survived the D5 aggregate, but is identical to D3's d3_unknown_released_twice, killed by recover_unknown_release on both images - covered",
+     "killed_by": "recover_unknown_release (D3 twin)"
+    },
+    {
+     "name": "rv_reconcile_replay_other_request",
+     "edit": "inverse probe: bind reconcile's replay to after->>'request_id'",
+     "result": "no check changes (survived) - confirms B3 is untested",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_lookup_scope_without_org",
+     "edit": "lookup select without `org_id =`",
+     "result": "killed both images",
+     "killed_by": "lookup: AssertionError"
+    },
+    {
+     "name": "rv_lookup_writes",
+     "edit": "lookup made VOLATILE plus `update infrx.idempotency set expires_at = null` at entry",
+     "result": "SURVIVED lookup both images -> N3",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_lookup_ignores_operation",
+     "edit": "lookup select without `operation =`",
+     "result": "SURVIVED every D5 check both images -> N2",
+     "killed_by": ""
+    },
+    {
+     "name": "rv_debit_credit_left_public",
+     "edit": "debit_credit dropped from the revoke loop",
+     "result": "killed both images",
+     "killed_by": "d5_privileges: AssertionError: service_role may execute the internal infrx.debit_credit(text,integer,integer)"
+    },
+    {
+     "name": "rv_lookup_granted_to_authenticated",
+     "edit": "grant execute on idempotency_lookup to authenticated",
+     "result": "killed both images",
+     "killed_by": "d5_privileges: AssertionError: authenticated may execute infrx.idempotency_lookup(jsonb)"
+    },
+    {
+     "name": "rv_cancel_disconnect_rewrites_terminal",
+     "edit": "cancel's committed-outcome return only for client_cancelled",
+     "result": "killed both images",
+     "killed_by": "cancel_cause"
+    },
+    {
+     "name": "rv_code_release_not_returned",
+     "edit": "jobstore.recover: released not appended to produced",
+     "result": "killed (units)",
+     "killed_by": "test_recover__a_24h_release_is_reported_in_released"
+    },
+    {
+     "name": "rv_code_adjust_amount_rounded",
+     "edit": "PgLedger.adjust sends f'{float:.2f}'",
+     "result": "killed (units)",
+     "killed_by": "test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry"
+    },
+    {
+     "name": "rv_code_settlement_on_any_state",
+     "edit": "_settlement: `is not settled` -> `is released_free`",
+     "result": "survived units; on PG dies only via a strict-xfail raises mismatch -> N6",
+     "killed_by": "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet (xfail pin, AttributeError)"
+    },
+    {
+     "name": "rv_code_lookup_sends_the_scopes_org",
+     "edit": "lookup sends idem.org_id as the caller org",
+     "result": "survived units, killed on PG",
+     "killed_by": "test_jobstore_conformance[dur_admit__lookup_reads_the_mapped_job_and_writes_nothing]"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C codex-d5 archive c67e4f5 | tar -x -C /tmp/claude-1000/review-d5-money-3078591; scratch patch: tasklocal TASK_PORTS['review-d5-money']={postgres:55631, valkey:55632} (db name '-'->'_'), pgharness.lock_path -> /tmp/infrx-review-d5-money.lock; make api-env",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0"
+    },
+    {
+     "cmd": "INFRX_D_TASK=review-d5-money INFRX_D2_VALKEY_PORT=55632 INFRX_D2_VALKEY_CONTAINER=infrx-review-d5-money-valkey INFRX_Q_VALKEY_PORT=55633 uv run --frozen pytest -q tests/d/test_code_mutants_d5.py tests/d/test_settle_units.py tests/d/test_operations_units.py",
+     "exit": 0,
+     "tail": "42 passed in 86.54s (0:01:26)"
+    },
+    {
+     "cmd": "(same env, plain) pytest -q -rsx tests/d/test_settle.py test_settle_races.py test_settle_units.py test_operations_pg.py test_operations_units.py test_credit_jobstore_conformance.py",
+     "exit": 0,
+     "tail": "60 passed, 3 xfailed in 43.37s"
+    },
+    {
+     "cmd": "(same, INFRX_D1_IMAGE=supabase) the same six files",
+     "exit": 0,
+     "tail": "60 passed, 3 xfailed in 40.52s"
+    },
+    {
+     "cmd": "(plain, detached) INFRX_MUTANTS=all pytest -q -s tests/d/test_migration_mutants.py -k 'd5_ or d3_cancel or d3_claim or d3_unknown or rv_ or well_formed or superseded or supersession'",
+     "exit": 1,
+     "tail": "13 failed, 96 passed, 455 deselected in 656.67s (0:10:56) - all 13 failures are reviewer rv_ survivors; d5_ killed 60/60, d3 re-anchored killed 22/22, list/supersession tests pass"
+    },
+    {
+     "cmd": "(Supabase, detached) the same",
+     "exit": 1,
+     "tail": "13 failed, 96 passed, 455 deselected in 237.13s (0:03:57) - the same 13 rv_ survivors; d5_ 60/60 and d3 22/22 killed; guard self-test: d3_cancel_any_tenant: anchored in infrx.cancel of 0016_fenced_leases.sql, redefined by ['0018_terminal_settlement.sql']"
+    },
+    {
+     "cmd": "uv run python -m tests.d.review_code_mutants (shared Runner over the D5 unit targets)",
+     "exit": 0,
+     "tail": "rv_code_release_not_returned killed | rv_code_lookup_sends_the_scopes_org survived | rv_code_adjust_amount_rounded killed | rv_code_settlement_on_any_state survived"
+    },
+    {
+     "cmd": "python handmut.py (plain): each edit applied by hand, pytest -x on the named files, reverted",
+     "exit": 0,
+     "tail": "rv_grant_without_wallet_lock: exit=0 22 passed | rv_replay_ignores_wallet: exit=0 32 passed | rv_code_settlement_on_any_state: exit=1 FAILED credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet (AttributeError jobstore.py:117) | rv_code_lookup_sends_the_scopes_org: exit=1 FAILED dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+    },
+    {
+     "cmd": "probe (plain): python -m tests.d.review_probe (drift x4, reconcile op reuse, grant op reuse, foreign replay, concurrent grants)",
+     "exit": 0,
+     "tail": "drift: all 4 NAMED (USD ledger/reserved, CREDIT ledger/reserved, each wallet id and delta 1.00000000); reconcile_op_reuse B(same op): {'replayed': True, 'settlement_state': 'held_unknown'}, B hold 'unknown'; concurrent_grants: same wallet same op (None, None, True), two wallets same op (None, 'untyped 23505')"
+    },
+    {
+     "cmd": "probe with rv_grant_without_wallet_lock applied (plain), RV_ONLY=grants",
+     "exit": 0,
+     "tail": "PROBE concurrent_grants: {'same wallet same op': (None, 'untyped 23505', None), 'two wallets same op': (None, 'untyped 23505')}; 0018 reverted (diff vs c67e4f5 clean)"
+    },
+    {
+     "cmd": "probe (INFRX_D1_IMAGE=supabase) full",
+     "exit": 0,
+     "tail": "identical to plain: drift NAMED x4; reconcile B(same op) replayed True / held_unknown; grant other wallet idempotency_conflict; concurrent same-op replays; two wallets untyped 23505"
+    },
+    {
+     "cmd": "git show e2a52b2 vs c67e4f5 migration_mutants names (comm -23)",
+     "exit": 0,
+     "tail": "444 -> 503 names; only removed: d3_claim_leases_a_credit_job (retired, as evidence says)"
+    }
+   ],
+   "fabrication_check": "Evidence claims checked against my own runs at c67e4f5, on both images.\n- **Confirmed:**\n  - 60 D5 migration mutants, all killed (60/60 plain and Supabase).\n  - The 20 D3 re-anchored plus the other d3_cancel/claim/unknown names, all killed (22/22).\n  - The supersession guard and its self-test pass.\n  - The only retired migration mutant is d3_claim_leases_a_credit_job (name diff 444 -> 503).\n  - 28 code mutants + list + 13 units = '42 passed'.\n  - The CREDIT partition is 5 pass / 3 strict-xfail.\n  - Both drift views name a constructed drift of each kind.\n  - The duplicate-completion, cancel-vs-complete and stale-generation races pass on both images.\n- **Consistent, not a contradiction:** evidence rows 20-22 (mutants, make check) were 'running' at c67e4f5; my mutant results agree with the claimed totals.\n- **Not verified by me:** the pgstate 0018 rows (not re-measured), make check, the E3B drills, test_catalog_pg, and the Q3 rig.\n- **Evidence wording that overstates:** 'result_expires_at is now STORED ... so G3 can drop its route-side TTL' is not reachable through the owned read (N7).\n- No fabricated numbers found.",
+   "cleanup": "- **Containers:** created only by my harness task, all removed by its atexit: infrx-review-d5-money-postgres and infrx-review-d5-money-postgres-supabase on 127.0.0.1:55631. No Valkey or decoy container was started. `docker ps -a | grep review-d5-money` returns 0.\n- **Files:** /tmp/infrx-review-d5-money.lock and the scratch copy /tmp/claude-1000/review-d5-money-3078591 are deleted. Logs are kept in the session scratchpad (mut-plain.log, mut-supabase.log, focused-*.log, codemut.log).\n- **Untouched:** the codex-d5 worktree was only read (git show/diff/archive); no infrx-d5-*, infrx-q3-*, 55432 or other lanes' containers; no hosted project, AWS or secrets.\n- **Every hand edit was reverted and diffed clean against c67e4f5 before the scratch was deleted:** 0018 and jobstore.py."
+  },
+  {
+   "lens": "conformance",
+   "verdict_hint": "fix_required",
+   "mutants": [
+    {
+     "name": "R01_revoke_ignores_org",
+     "edit": "operations.py PgTenantStore.revoke_key: 'where id = %s and org_id = %s' -> 'where id = %s and %s is not null' (wrong org scope)",
+     "result": "killed",
+     "killed_by": "test_operations_pg.py::test_api_ops__tenant_keys_are_tenant_scoped_one_row_and_revoked_once"
+    },
+    {
+     "name": "R02_reconcile_audit_actor_replaced",
+     "edit": "operations.py PgLedger.reconcile sends actor 'system' instead of the caller's actor (audit row without the real actor)",
+     "result": "SURVIVED (2 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R03_adjust_audit_actor_replaced",
+     "edit": "operations.py PgLedger.adjust sends actor 'system' instead of the caller's actor",
+     "result": "SURVIVED (2 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R04_move_alias_oldest_card",
+     "edit": "operations.py PgRegistry.move_alias card subquery 'effective_at desc, created_at desc' -> 'asc, asc' (the registry answers a superseded card)",
+     "result": "SURVIVED (49 passed, 1 xfailed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R05_public_resolve_ignores_state",
+     "edit": "catalog.py _PUBLIC: drop \"and d.state = 'active'\"",
+     "result": "SURVIVED (37 passed, 1 xfailed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R06_private_resolve_serves_retired",
+     "edit": "catalog.py _PRIVATE: drop \"and d.state <> 'retired'\"",
+     "result": "SURVIVED (36 passed, 1 xfailed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R07_wallet_directory_first_consumer",
+     "edit": "operations.py PgWalletDirectory.consumer_wallet_for_user answers the first consumer wallet regardless of user (account view reads the wrong wallet)",
+     "result": "killed",
+     "killed_by": "test_operations_pg.py::test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1"
+    },
+    {
+     "name": "R08_active_card_oldest",
+     "edit": "catalog.py _ACTIVE_CARD ordering desc -> asc",
+     "result": "killed",
+     "killed_by": "test_catalog_pg.py::test_v2_case_on_the_postgres_catalog[credit_rate__a_rate_published_after_acceptance_does_not_move_the_job]"
+    },
+    {
+     "name": "R09_connection_cached",
+     "edit": "operations.py _Db.connection caches one connection across calls and never closes it (not a fresh connection per call)",
+     "result": "SURVIVED (49 passed, 1 xfailed)",
+     "killed_by": ""
+    },
+    {
+     "name": "R10_job_admission_drops_usage",
+     "edit": "0018 job_admission: remove the outcome's 'usage' key (the tolerant _outcome would hide it)",
+     "result": "killed",
+     "killed_by": "test_jobstore_conformance.py[dur_settle__a_price_change_never_undersizes_the_hold]"
+    },
+    {
+     "name": "R11_lookup_expiry_boundary",
+     "edit": "0018 idempotency_lookup: 'infrx.now() >= v_expires' -> '>'",
+     "result": "killed",
+     "killed_by": "test_settle.py::test_dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+    },
+    {
+     "name": "R12_policy_for_any_deployment",
+     "edit": "catalog.py _POLICY: drop the deployment-exists guard",
+     "result": "killed",
+     "killed_by": "test_catalog_pg.py::test_credit_rate__unpriced_answers_none"
+    },
+    {
+     "name": "R13_reconcile_one_second_early",
+     "edit": "0018 reconcile: 'v_now < j.reconcile_after' -> 'v_now < j.reconcile_after - interval 1 second'",
+     "result": "killed",
+     "killed_by": "test_operations_pg.py::test_dur_settle__reconcile_waits_for_the_db_clock_and_never_debits"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git archive c67e4f5 | tar -x (scratch) && make api-env",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0 (uv sync --frozen ok)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=rvconf (private: infrx-review-d5-conformance-postgres 127.0.0.1:55634, valkey 55635, decoy 55674, lock /tmp/infrx-review-d5-conformance.lock) uv run --frozen pytest -q -rsx tests/d/test_jobstore_conformance.py test_streamstore_conformance.py test_credit_jobstore_conformance.py test_catalog_pg.py test_e3b_drills.py test_pgharness.py test_migration_mutants.py (plain postgres:16.14+shim)",
+     "exit": 1,
+     "tail": "1 failed, 314 passed, 5 xfailed in 896.21s (0:14:56). The one failure is test_pgharness::test_the_port_lock_is_shared_by_both_image_variants: assert 'infrx-review...formance.lock' == 'infrx-review...es-55634.lock', caused by the reviewer's own lock-path patch in scratch, not by D5. XFAIL = F2 case, 3 CREDIT pendings, the catalog alias case."
+    },
+    {
+     "cmd": "same with INFRX_D1_IMAGE=supabase (supabase/postgres 17.6.1.173, no shim)",
+     "exit": 1,
+     "tail": "1 failed, 314 passed, 5 xfailed in 1199.01s (0:19:59). The same single reviewer-patch lock-name assertion; the same 5 XFAILs."
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/contracts (D5 tree c67e4f5)",
+     "exit": 1,
+     "tail": "23 failed, 1030 passed in 62.90s. FAILED tests/contracts/test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record + 22 test_mutants broken_runner, exactly as Limits 1 states."
+    },
+    {
+     "cmd": "git merge-tree --write-tree origin/claude/backend-impl c67e4f5",
+     "exit": 1,
+     "tail": "CONFLICT (content): Merge conflict in apps/infrx-api/tests/d/test_jobstore_conformance.py (RAISES only)"
+    },
+    {
+     "cmd": "merged tree (conflict -> D5 side) + contracts-retire-0016-refusal.diff (sha256 a8e75c3f…, applied at offset 78): uv run --frozen pytest -q tests/contracts",
+     "exit": 0,
+     "tail": "1055 passed in 134.73s (0:02:14)"
+    },
+    {
+     "cmd": "merged tree, plain: pytest -q -rsx tests/d/test_jobstore_conformance.py test_streamstore_conformance.py test_credit_jobstore_conformance.py test_e3b_drills.py test_settle.py",
+     "exit": 0,
+     "tail": "129 passed, 4 xfailed in 95.51s (includes the head's new dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row and two new StreamStore cases)"
+    },
+    {
+     "cmd": "merged tree: pytest -q tests/d/test_journal_units.py test_settle_units.py test_operations_units.py test_lease_units.py",
+     "exit": 0,
+     "tail": "26 passed in 0.75s"
+    },
+    {
+     "cmd": "patch --dry-run d5-cli-build-operations.diff (sha256 d2a26348…) on merged tree",
+     "exit": 0,
+     "tail": "checking file apps/infrx-api/infrx/operations/cli.py"
+    },
+    {
+     "cmd": "reviewer mutants (13, plain, one edit each, restored): python mut/mutants.py",
+     "exit": 0,
+     "tail": "8 killed, 5 SURVIVED (R02, R03, R04, R05/R06, R09); see the mutant table"
+    },
+    {
+     "cmd": "q3rig.diff (sha256 4b69278e… matches the evidence) applied in scratch; INFRX_Q_VALKEY_PORT=55636 INFRX_Q3_STORE=postgres pytest -q tests/q/test_reconcile.py",
+     "exit": 1,
+     "tail": "4 failed, 69 passed in 50.50s. Same 4 as integration request 6: slowly_failing_pass[memory]/[valkey] (assert 24 >= (10 * 4)), valkey_sigkilled drill, differential. Diff reverted (grep INFRX_Q3_STORE q3rig.py -> 0)."
+    },
+    {
+     "cmd": "INFRX_Q_VALKEY_PORT=55636 pytest -q tests/q/test_reconcile.py (fake baseline)",
+     "exit": 0,
+     "tail": "73 passed in 6.53s"
+    },
+    {
+     "cmd": "measure.py: 0018 functions/definer/volatility/EXECUTE holders, CHECK, trigger, column privileges, on a fresh migrated DB, both images",
+     "exit": 0,
+     "tail": "Identical on both images and equal to the pgstate rows request, e.g. FN infrx.idempotency_lookup(jsonb) True s ['service_role']; FN infrx.debit_credit(text,integer,integer) True s []; trigger enabled 'O'; COL proposal ['service_role'] ['service_role']. No SECURITY DEFINER infrx function is left unrowed after the 7 requested rows (the one 'missing' printed was the reviewer regex splitting a tuple key)."
+    },
+    {
+     "cmd": "AST diff of dr06/dr07/dr09 bodies vs origin/claude/backend-impl:tests/integration/backend/test_drills.py",
+     "exit": 0,
+     "tail": "dr06, dr07, dr09 (and dr01/02/05/08/10) identical. dr03/dr04 diverge: upstream now uses reap(h) and asserts events[0].event_id == again != first (R93); D's copies are D3-era and outside D5's scope."
+    }
+   ],
+   "fabrication_check": "Checked against my own runs:\n- **Partitions.** PENDING is exactly the F2 case in the v1 file, raises=InvalidApiKey, and {} in the stream file.\n- **Former pendings.** Every case pending on D5 at the integration head now runs strict and PASSES on both images (0 FAILED in the conformance files):\n  - the 4 tombstone cases;\n  - dur_fence__a_stale_generation_is_rejected;\n  - the 18 _D5 settle/outbox cases;\n  - RACY dur_settle__cancel_and_complete_race_has_a_single_winner;\n  - cancel-cause dur_settle__cancel_records_its_cause_and_settles_by_r21 and dur_settle__cancel_refuses_any_other_cause_and_changes_nothing;\n  - lookup dur_admit__lookup_reads_the_mapped_job_and_writes_nothing;\n  - the 5 StreamStore _D5 cases;\n  - CREDIT: 5 must-pass, including credit_admit__lookup_answers_the_pinned_admission and credit_settle__cancel_records_its_cause_and_settles_by_r21.\n- **RAISES entries.** The 75cd7bb cancel entry was removed by the lane (merge f2ee977). The f52308a lookup entry must be removed by the D5 merge (conflict).\n- **CREDIT fixture.** seed_credit_world inserts users/profiles/organizations/org_members in one CTE statement. 0001's AFTER trigger fires at statement end: its profile insert is ON CONFLICT DO NOTHING, and it sees the membership, so no second org is created. The function asserts that single membership. auth.users stays consistent on both images (the CREDIT cases pass on Supabase).\n- **Quoted evidence reproduced.**\n  - Q3 on PostgreSQL: 4/69, same names.\n  - contracts: 23 failed on the branch; green with the retire diff (1055 on the merged tree vs the lane's 1052 on its own tree, the difference being the head's new cases).\n  - 60 D5 migration mutants, 27 of them in ALWAYS, superseded()==[].\n  - pgstate rows match the catalog.\n  - D4 N1/N2 wording is present, and test_journal_units passes merged.\n- **Not reproduced.** The lane's make check, mutant-list and final-sweep rows are still 'running' in the evidence. I did not run INFRX_MUTANTS=all.\n- **Reviewer artefact.** The 1 failure per image comes from my own scratch lock-path patch. make integration (the E2 stack) was not run; CF-5 is a static finding from the upstream source.",
+   "cleanup": "Harness atexit removed all reviewer containers: infrx-review-d5-conformance-postgres and its -supabase variant, infrx-review-d5-conformance-valkey, infrx-q3-valkey-55636 and the decoy on 55674. `docker ps -a` shows 0 matching. Removed the /tmp/infrx-review-d5-conformance.lock lock, the scratch tree /tmp/claude-1000/review-d5-conformance (including the merged tree) and its env log. Logs are kept in the session scratchpad (plain.log, supabase.log, contracts-*.log, merged-plain.log, mutants.log, q3-*.log, measure*.log). I never touched the codex-d5 worktree, infrx-d5-*, infrx-q3-valkey-55498, 55432 or any other lane's containers. No hosted project, no AWS."
+  },
+  {
+   "lens": "honesty",
+   "verdict_hint": "fix_required",
+   "mutants": [
+    {
+     "name": "hand: d5_replay_after_the_fence",
+     "edit": "0018 swap replay/fence blocks (anchor=1, one moved block)",
+     "result": "killed",
+     "killed_by": "settle_exact checks_settle.py:154 'the identical retry: already_terminal'"
+    },
+    {
+     "name": "hand: d5_settle_before_the_fence",
+     "edit": "fence_lease call -> null",
+     "result": "killed",
+     "killed_by": "settle_late_data :203 'other usage: untyped 23514' (late-data branch first, see H-N2)"
+    },
+    {
+     "name": "hand: d5_result_ref_unchecked",
+     "edit": "R30 check -> if false",
+     "result": "killed",
+     "killed_by": "settle_result_ref :263"
+    },
+    {
+     "name": "hand: d5_foreign_result_ref_accepted",
+     "edit": "drop this-job clause",
+     "result": "killed",
+     "killed_by": "settle_result_ref :268 'another job's reference'"
+    },
+    {
+     "name": "hand: d5_disconnected_not_billable",
+     "edit": "billable causes minus client_disconnected",
+     "result": "killed",
+     "killed_by": "settle_causes :302"
+    },
+    {
+     "name": "hand: d5_sync_deadline_billed",
+     "edit": "billable causes plus sync_deadline",
+     "result": "killed",
+     "killed_by": "settle_causes :298 'untyped 23514' (constraint, see H-N2)"
+    },
+    {
+     "name": "hand: d5_engine_incomplete_is_a_success",
+     "edit": "engine_incomplete rewrite -> if false",
+     "result": "killed",
+     "killed_by": "settle_causes :323"
+    },
+    {
+     "name": "hand: d5_debit_rounds_down",
+     "edit": "round -> trunc (debit_legacy_usd)",
+     "result": "killed",
+     "killed_by": "settle_exact :166 pv_d5_tie"
+    },
+    {
+     "name": "hand: d5_debit_rounded_twice",
+     "edit": "per-line rounding",
+     "result": "killed",
+     "killed_by": "settle_exact :177 3E-8 != 2E-8"
+    },
+    {
+     "name": "hand: d5_debit_above_hold",
+     "edit": "drop v_charge > maximum_hold",
+     "result": "killed",
+     "killed_by": "settle_envelope :364 untyped 23514"
+    },
+    {
+     "name": "hand: d5_over_envelope_charged",
+     "edit": "token ceiling -> if false",
+     "result": "killed",
+     "killed_by": "settle_envelope :346"
+    },
+    {
+     "name": "hand: d5_hold_not_moved_on_settle",
+     "edit": "state 'settled' -> 'held'",
+     "result": "killed",
+     "killed_by": "assert_no_drift :52 (first)"
+    },
+    {
+     "name": "hand: d5_usage_debit_without_ledger_row",
+     "edit": "ledger insert -> direct wallet update",
+     "result": "killed",
+     "killed_by": "assert_no_drift :52 (first)"
+    },
+    {
+     "name": "hand: d5_wallet_total_written_directly",
+     "edit": "extra ledger_total update",
+     "result": "killed",
+     "killed_by": "assert_no_drift :52 (first)"
+    },
+    {
+     "name": "hand: d5_tombstone_not_started",
+     "edit": "expires_at -> null",
+     "result": "killed",
+     "killed_by": "settle_releases :422"
+    },
+    {
+     "name": "hand: d5_window_from_the_callers_clock",
+     "edit": "reconcile_after from proposal's settled_at",
+     "result": "killed",
+     "killed_by": "settle_unknown :392"
+    },
+    {
+     "name": "hand: d5_second_terminal_event",
+     "edit": "insert a second terminal chunk",
+     "result": "killed",
+     "killed_by": "settle_terminal_event :482 untyped 23505"
+    },
+    {
+     "name": "hand: d5_settled_usage_rewritable",
+     "edit": "guard -> if false",
+     "result": "killed",
+     "killed_by": "settle_late_data :235 'usage_prompt_tokens was rewritten'"
+    },
+    {
+     "name": "hand: d5_cancel_cause_checked_after_the_lookup",
+     "edit": "swap cause check and lookup",
+     "result": "killed",
+     "killed_by": "cancel_refuses_a_cause :549 not_found"
+    },
+    {
+     "name": "hand: d5_sync_deadline_released_free (0016)",
+     "edit": "terminalize_no_usage free list plus sync_deadline",
+     "result": "killed",
+     "killed_by": "cancel_cause :520"
+    },
+    {
+     "name": "hand: d5_credit_debit_before_hold",
+     "edit": "swap hold/debit",
+     "result": "killed",
+     "killed_by": "credit_settle :684 insufficient_credit"
+    },
+    {
+     "name": "hand: d5_credit_settles_at_the_active_card",
+     "edit": "latest card",
+     "result": "killed",
+     "killed_by": "credit_admitted_card :837"
+    },
+    {
+     "name": "hand: d5_frozen_wallet_refuses_its_own_debit (0015)",
+     "edit": "trigger when plus inference_debit",
+     "result": "killed",
+     "killed_by": "credit_retired :872 untyped 23514"
+    },
+    {
+     "name": "hand: d5_regimes_cross",
+     "edit": "regime check -> if false",
+     "result": "killed",
+     "killed_by": "credit_regimes :800"
+    },
+    {
+     "name": "hand: d5_claim_refuses_credit_again (MY-3 control)",
+     "edit": "re-add CREDIT refusal in 0018 claim",
+     "result": "killed",
+     "killed_by": "credit_settle via checks_leases.py:94 credit_running 'not_claimable'"
+    },
+    {
+     "name": "hand: d5_settle_without_the_row_lock",
+     "edit": "drop for update",
+     "result": "killed",
+     "killed_by": "settle_races :915 'duplicate completion was refused: already_terminal'"
+    },
+    {
+     "name": "hand: d5_takes_the_scope_lock",
+     "edit": "advisory admission lock",
+     "result": "killed",
+     "killed_by": "settle_races :937 untyped 57014"
+    },
+    {
+     "name": "hand: d5_adjust_replay_appends",
+     "edit": "replay -> if false",
+     "result": "killed",
+     "killed_by": "adjust checks_operations.py:88 untyped 23505 (see H-N2)"
+    },
+    {
+     "name": "hand: d5_adjust_below_reserved",
+     "edit": "-> if false",
+     "result": "killed",
+     "killed_by": "adjust :97"
+    },
+    {
+     "name": "hand: d5_amount_not_bounded",
+     "edit": "regex -> false",
+     "result": "killed",
+     "killed_by": "adjust :103 '1.123456789'"
+    },
+    {
+     "name": "hand: d5_reconcile_on_callers_clock",
+     "edit": "v_now from 'at'",
+     "result": "killed",
+     "killed_by": "reconcile_clock :159"
+    },
+    {
+     "name": "hand: d5_reconcile_replay_audits_again",
+     "edit": "replay -> if false",
+     "result": "killed",
+     "killed_by": "reconcile_clock :172 untyped 23505"
+    },
+    {
+     "name": "hand: d5_settle_helper_callable_by_the_service",
+     "edit": "drop settle_credit from revoke list",
+     "result": "killed",
+     "killed_by": "d5_privileges :242"
+    },
+    {
+     "name": "hand: d5_lookup_active_mapping_expires",
+     "edit": "settled_at -> admitted_at",
+     "result": "killed",
+     "killed_by": "lookup :995"
+    },
+    {
+     "name": "hand: d5_lookup_any_org_scope",
+     "edit": "forbidden check -> if false",
+     "result": "killed",
+     "killed_by": "lookup :985"
+    },
+    {
+     "name": "hand: d5_release_reported_as_outcome",
+     "edit": "'released' -> 'outcome'",
+     "result": "killed",
+     "killed_by": "settle_released :573"
+    },
+    {
+     "name": "hand: d3_cancel_any_tenant (re-anchored 0018)",
+     "edit": "org predicate dropped",
+     "result": "killed",
+     "killed_by": "cancel checks_leases.py:488"
+    },
+    {
+     "name": "hand: d3_claim_any_state (0018)",
+     "edit": "state check -> if false",
+     "result": "killed",
+     "killed_by": "claim_generation :188"
+    },
+    {
+     "name": "hand: d3_unknown_released_twice (0018)",
+     "edit": "per list",
+     "result": "killed",
+     "killed_by": "recover_unknown_release :762"
+    },
+    {
+     "name": "hand: d3_claim_without_the_row_lock (0018)",
+     "edit": "drop for update",
+     "result": "killed",
+     "killed_by": "lease_races :881"
+    },
+    {
+     "name": "hand controls",
+     "edit": "pristine run of each of the 22 named checks",
+     "result": "all PASSED (no vacuous kills)"
+    },
+    {
+     "name": "retired d3_claim_leases_a_credit_job",
+     "edit": "static: its 0016 anchor lies in a claim body 0018 redefines",
+     "result": "retired correctly; the supersession guard (OWN2 below) would flag it; the control d5_claim_refuses_credit_again was killed (above)"
+    },
+    {
+     "name": "own OWN1_superseded_includes_same_file",
+     "edit": "migration_mutants.superseded: path.name > file -> >=",
+     "result": "killed",
+     "killed_by": "test_no_mutant_anchors_in_a_superseded_function_body"
+    },
+    {
+     "name": "own OWN2_superseded_never_inside_body",
+     "edit": "`if not start <= at < end` -> `if True`",
+     "result": "killed",
+     "killed_by": "test_the_supersession_guard_catches_a_mutant_left_behind"
+    },
+    {
+     "name": "own OWN3_d5_runner_loses_operations_target",
+     "edit": "code_mutants_d5 RUNNER targets minus test_operations_units.py",
+     "result": "killed",
+     "killed_by": "test_code_mutants_d5[adjust_allocates] broken_runner (pytest exit 5)"
+    },
+    {
+     "name": "own OWN4_d5_mutant_names_the_wrong_case",
+     "edit": "adjust_allocates case LEDGER -> TENANT",
+     "result": "killed",
+     "killed_by": "test_code_mutants_d5[adjust_allocates] 'survived'"
+    },
+    {
+     "name": "own OWN5_jobstore_partition_not_strict",
+     "edit": "xfail strict=True -> False",
+     "result": "survived (H-N5)"
+    },
+    {
+     "name": "own OWN6_credit_partition_raises_unpinned",
+     "edit": "drop set(RAISES)==set(PENDING)",
+     "result": "survived (it is the check itself; informational)"
+    },
+    {
+     "name": "own OWN7_always_name_misspelled",
+     "edit": "ALWAYS 'd5_lookup_any_org_scope' -> 'd5_lookup_any_org_scop'",
+     "result": "survived (H-N5)"
+    },
+    {
+     "name": "own OWN8_code_list_check_ignores_occurrences",
+     "edit": "well_formed count check -> >= 0",
+     "result": "survived (the runner's own misdeclared rule still guards at run time)"
+    },
+    {
+     "name": "own own_money_first",
+     "edit": "0018 terminalize: the money block before the ONE settling UPDATE",
+     "result": "killed",
+     "killed_by": "settle_exact checks_settle.py:140 untyped 23502"
+    },
+    {
+     "name": "own drift-oracle no-op",
+     "edit": "assert_no_drift -> no-op, run with the 3 drift mutants",
+     "result": "survived as an oracle mutant: all 3 still killed by direct asserts (H-N1)"
+    },
+    {
+     "name": "own probe_reconcile_reuse",
+     "edit": "no edit; reuse an op id for request B",
+     "result": "defect confirmed (H-B2): replayed:true, B's hold stays unknown"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C codex-d5 diff e2a52b2..c67e4f5 --stat; diff d486142 c67e4f5 --stat (D5-only 31 files); sha256sum 0018 / wc -l",
+     "exit": 0,
+     "tail": "850 lines, 1d1dc296846a38c9416b25febb76e10e505c568901731727a0ee378063257069 (matches evidence); migrations diff = 0018 only; no D5 edits under tests/contracts, tests/q, tests/g, tests/integration, infrx/contracts, infrx/operations or Makefile"
+    },
+    {
+     "cmd": "commit-message corrections: count distinct _m(\"d5_ at 9d0b24b / b1aa41d diff",
+     "exit": 0,
+     "tail": "9d0b24b: 31 (subject says 37; evidence correction true); b1aa41d adds 12 (9 item-4 + 3 privilege; true); 4bcac3b subject '2 service/partial-publication, 1 setup' is corrected to 3 test_api_ops in Limits 11"
+    },
+    {
+     "cmd": "python3 extract the 3 diffs from the evidence; sha256",
+     "exit": 0,
+     "tail": "contracts-retire a8e75c3f..., cli d2a26348..., q3rig 4b69278e...: all match the evidence"
+    },
+    {
+     "cmd": "git clone --shared infrx-impl; checkout origin/claude/backend-impl (7c52627); merge --no-ff c67e4f5",
+     "exit": 1,
+     "tail": "CONFLICT (content): Merge conflict in apps/infrx-api/tests/d/test_jobstore_conformance.py (the only one): HEAD RAISES still pins the cancel-cause and R91 lookup cases on D5 (f52308a); resolved with D5's side (only the F2 entry), committed"
+    },
+    {
+     "cmd": "git apply --check each diff on merged 7c52627+c67e4f5",
+     "exit": 0,
+     "tail": "contracts-retire: 'Hunk #1 succeeded at 2159 (offset 78 lines)' (owner coordinator/F, apply WITH the merge); d5-cli-build-operations.diff clean (owner coordinator/G6B); q3rig.diff clean (owner Q)"
+    },
+    {
+     "cmd": "merged + contracts-retire applied: uv run pytest -q tests/contracts",
+     "exit": 0,
+     "tail": "1055 passed in 129.82s"
+    },
+    {
+     "cmd": "lane c67e4f5: pytest -q tests/contracts/test_cancel_cause.py",
+     "exit": 1,
+     "tail": "FAILED ...test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record / 1 failed, 1 passed (Limits 1 reproduced; full lane contracts '23 failed, 1030 passed' NOT re-run)"
+    },
+    {
+     "cmd": "lane: pytest -q tests/d/test_code_mutants_d5.py tests/d/test_settle_units.py tests/d/test_operations_units.py",
+     "exit": 0,
+     "tail": "42 passed in 73.84s (28/28 code mutants + list + 7 + 6; matches row 9)"
+    },
+    {
+     "cmd": "lane plain, INFRX_D_TASK=review-d5-honesty (55637/55638): INFRX_MUTANTS=all pytest -q -rsx tests/d (detached)",
+     "exit": 1,
+     "tail": "1 failed, 1023 passed, 5 xfailed in 2089.75s. The 1 failure is test_pgharness::test_the_port_lock_is_shared_by_both_image_variants, caused by the reviewer's lock-path patch (/tmp/infrx-review-d5-honesty.lock), not D5. test_migration_mutants 542 items pass = all 537 mutants incl. the 60 D5 and 20 re-anchored D3; the same 5 XFAILs as the evidence (partitions 72+1 / 17+0 / 5+3 / catalog 36+1)"
+    },
+    {
+     "cmd": "merged tree, Supabase image (INFRX_D1_IMAGE=supabase), default mutant subset: pytest -q -rsx tests/d (detached)",
+     "exit": 1,
+     "tail": "1 failed, 637 passed, 5 xfailed in 1233.08s. Same harness-patch failure only. jobstore 74 pass (+ the head's new dur_outbox fresh-dispatch case) + 1 xfail; stream 20 pass (+2 new F cases); credit 6+3; catalog 36+1; settle 19; races 9; operations 13; e3b drills 10; code_mutants_d5 29"
+    },
+    {
+     "cmd": "merged: pytest -q -x tests/g ; pytest -q -x tests/w",
+     "exit": 0,
+     "tail": "559 passed, 2 warnings in 226.91s ; 180 passed in 604.90s"
+    },
+    {
+     "cmd": "merged, INFRX_E2_NAMESPACE=e3b2 no stack: pytest tests/integration/backend/test_drills.py -k 'dr06 or dr07 or dr09'",
+     "exit": 0,
+     "tail": "3 passed, 4 skipped: dr06/07/09[postgres] and dr07c SKIP 'no infrx-e3b2 stack: run tests/integration/run.py --layer 3'. They do not RUN at layer 0; at layer 3, dr07[postgres] runs (stubs gone) and dr07c/rc04b hit pytest.fail tripwires (H-B1)"
+    },
+    {
+     "cmd": "merged: pytest tests/integration/test_run.py tests/integration/backend/test_stage.py tests/integration/test_harness.py tests/integration/backend/test_journey.py",
+     "exit": 1,
+     "tail": "1 failed, 80 passed, 15 skipped: test_harness 'Left contains one more item: 0018_terminal_settlement.sql' (request 1); anchor guard test_every_mutant_anchor_occurs_as_declared_on_the_checkout passed; 10 journey cases PENDING[D5,G2-R1]"
+    },
+    {
+     "cmd": "merged with tasks.json D5=implemented (then restored): pytest backend/test_stage.py test_run.py",
+     "exit": 1,
+     "tail": "2 failed, 59 passed: AssertionError: ({'D5'}, set()) / {'D5': ['b.test_journey::cutover0', ...]}"
+    },
+    {
+     "cmd": "own copy + d5-cli-build-operations.diff: pytest tests/g/ops; build_operations with/without DATABASE_URL; reverted",
+     "exit": 0,
+     "tail": "52 passed; 'SystemExit: DATABASE_URL is not set...'; 'Operations PgLedger PgCatalogDirectory PgJobStore'"
+    },
+    {
+     "cmd": "hand.py (reviewer's independent driver, plain, MUT_DB): 40 listed mutants + controls + own_money_first + probe",
+     "exit": 0,
+     "tail": "every mutant: anchors=1, hunks 1 (2 for the three block-swap mutants), AssertionError inside the named checks_* function; all 22 pristine checks PASSED; probe shows the reconcile op-id reuse defect"
+    },
+    {
+     "cmd": "HAND_NOOP_DRIFT=1 hand.py (3 drift mutants)",
+     "exit": 0,
+     "tail": "all 3 still killed at checks_settle.py:149/150/151 (H-N1)"
+    },
+    {
+     "cmd": "own_mutants.py OWN1..OWN8 (static/runner, private task env)",
+     "exit": 0,
+     "tail": "OWN1/2/3/4 KILLED; OWN5/6/7/8 SURVIVED"
+    }
+   ],
+   "fabrication_check": "Every count, tail and SHA above comes from my own runs in /tmp/claude-1000/review-d5-honesty-3092165 (now removed) or from git objects. I did NOT reproduce the following, and they stay the lane's claims: the lane-tree Supabase whole sweep (I ran Supabase on the MERGED tree with the default mutant subset instead, so the full 537-mutant list is reproduced on plain only); the full-lane `tests/contracts` 23 failed / 1030 passed (only test_cancel_cause was run); the contracts retire-diff runs '40 passed' / '428 passed' (I ran the full contracts suite, 1055 passed, on the merged tree with the diff applied, but not INFRX_MUTANTS=all); the Q3 rig result 4 failed / 69 passed; the pgstate/0018 privilege measurement; make -k check; the orderings; rows 20-25 (still 'running' in the evidence). Layer-3 E3B/I3B behaviour (dr07c/rc04b tripwires) is inferred from code, not run. Integration head named: origin/claude/backend-impl = 7c52627. One procedural incident I must disclose: my first static own-mutant pass ran test_the_runner_reports_a_stale_anchor_as_misdeclared WITHOUT INFRX_D_TASK set. It briefly took /tmp/infrx-d1-postgres-55432.lock (the file read 'pid 3207405 checkout .../review-d5-honesty-3092165/own') and ran pgharness.ensure() for the default d1 task on 55432. No foreign container existed or was touched; the harness removed anything it created at exit (no infrx-d1-postgres remained). By cleanup time another reviewer's run held that lock file, so I left it alone. Every later run exported INFRX_D_TASK=review-d5-honesty.",
+   "cleanup": "Containers infrx-review-d5-honesty-postgres, -postgres-supabase and -valkey: none remain (`docker ps -a | grep -c honesty` = 0). Removed /tmp/infrx-review-d5-honesty.lock and the scratch /tmp/claude-1000/review-d5-honesty-3092165 (the lane and merge scratches, the own copy, logs and scripts). The codex-d5 worktree was never written; its ` M research/plan/evidence/d/D5-4bcac3b.md` is the lane's own work in progress. No containers of the infrx-d5-*, d2, d4, e3b2, confirm, verify or gideon lanes were touched. /tmp/infrx-d1-postgres-55432.lock now belongs to another reviewer's run and was left in place (see fabrication_check)."
+  }
+ ]
+}

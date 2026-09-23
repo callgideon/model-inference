@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T20:11:55Z",
+  "updated": "2026-09-23T20:43:27Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "review running on the committed head c67e4f5 (impl 4bcac3b) while the lane finishes its lists \u2192 ONE fix round (+ merge the integration head) \u2192 single verifier \u2192 MERGE",
+      "phase": "review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) \u2192 ONE fix round running \u2192 single verifier \u2192 MERGE together with E3B phase 3",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
@@ -88,6 +88,10 @@
     "checkpoint-2-interim": {
       "phase": "whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console \u00d74, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log)",
       "since": "2026-09-23T18:41:52Z"
+    },
+    "D5": {
+      "phase": "fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) \u2192 fix round",
+      "since": "2026-09-23T20:43:27Z"
     }
   },
   "gates": {
