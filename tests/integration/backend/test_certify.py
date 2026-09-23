@@ -925,7 +925,9 @@ def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path
     monkeypatch.setattr(certify, "release_hashes", lambda: {})
     monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
     monkeypatch.setattr(certify, "config_pin_check", lambda *a: None)
-    monkeypatch.setattr(certify, "served_build_check", lambda *a: None)
+    served_status = {"status": certify.PASS}
+    monkeypatch.setattr(certify, "served_build_check", lambda report, url: report.check(
+        "e4b.b.served-build", served_status["status"], "stub"))
     monkeypatch.setattr(certify, "engine_checks",
                         lambda report, target, workdir, args: seen.update(
                             label=target["label"], reported=report.target["label"]))
@@ -938,6 +940,12 @@ def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path
                                 "e4b.b.preconditions", ready, "stub"))
         certify.main(box)
         assert seen == {"label": label, "reported": label}, (ready, seen)
+    # review V4: preconditions met, but the served build is not the release - no `meas.`
+    served_status["status"] = certify.FAIL
+    monkeypatch.setattr(certify, "preconditions_check", lambda report, target, box_run: report.check(
+        "e4b.b.preconditions", certify.PASS, "stub"))
+    certify.main(box)
+    assert seen == {"label": certify.UNVERIFIED, "reported": certify.UNVERIFIED}, seen
 
 
 def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypatch):

@@ -774,12 +774,12 @@ def served_build_problems(scraped: dict | None, head_sha: str | None,
     return problems
 
 
-def served_build_check(report: Report, metrics_url: str) -> None:
+def served_build_check(report: Report, metrics_url: str) -> dict:
     problems = served_build_problems(scrape(metrics_url), report.head.get("sha"),
                                      os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE"),
                                      os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"))
-    report.check("e4b.b.served-build", FAIL if problems else PASS,
-                 problems or "the gateway serves the report's tree, from the release image")
+    return report.check("e4b.b.served-build", FAIL if problems else PASS,
+                        problems or "the gateway serves the report's tree, from the release image")
 
 
 def preconditions_check(report: Report, target: dict, box: bool) -> dict:
@@ -1144,10 +1144,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             report.hashes = release_hashes()
             ready = preconditions_check(report, target, args.box)["status"]
-            report.target["label"] = target["label"] = target_label(target, args.box, ready)
             config_pin_check(report, args.inventory)
             if args.box:
-                served_build_check(report, args.metrics_url)
+                # review V4: a box whose served build is not the release measures nothing
+                served = served_build_check(report, args.metrics_url)["status"]
+                ready = ready if served == PASS else FAIL
+            report.target["label"] = target["label"] = target_label(target, args.box, ready)
+            if args.box:
                 report.check("e4b.b.recovery-box", PENDING,
                              "I3B's runbook drills on the box (infra/runbooks: restart, "
                              "restore, rollback, index-loss, disk, reconcile) are the "

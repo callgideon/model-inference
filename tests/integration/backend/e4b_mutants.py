@@ -386,6 +386,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("label_never_decided", "the run labels its numbers after its preconditions",
        '            report.target["label"] = target["label"] = target_label(target, args.box, ready)\n',
        "", LABELS),
+    _m("unserved_build_measured", "a box whose served build is not the release measures nothing",
+       "                ready = ready if served == PASS else FAIL\n", "                ready = ready\n",
+       LABELS),
     # --- review F6: the declared settings are the record's -----------------------------
     _m("published_digest_declared_as_the_placeholder", "the published digest is the record's",
        '        "published_engine_options_digest": (digest, "R76/R78: the serving revision every "',
