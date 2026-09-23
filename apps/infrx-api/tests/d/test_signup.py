@@ -169,9 +169,10 @@ class _SyncConn:
     query is read from `signup.PAGE` itself, so an edit to its comparison reaches here;
     `stuck` answers the first page forever (a keyset that never advances)."""
 
-    def __init__(self, users, refuse=(), maintenance=False, stuck=False):
+    def __init__(self, users, refuse=(), maintenance=False, stuck=False, denied=False):
         self.users = sorted(uuid.UUID(u) for u in users)
         self.refuse, self.maintenance, self.stuck = set(refuse), maintenance, stuck
+        self.denied = denied
         self.depth, self.claims, self.pages = 0, [], 0
 
     def execute(self, sql, params):
@@ -188,6 +189,8 @@ class _SyncConn:
         self.claims.append((user, self.depth))
         if self.maintenance:
             raise FakeRefusal("55000", "maintenance: signup_grant is not enabled")
+        if self.denied:
+            raise FakeRefusal("42501", "permission denied for function claim_signup_grant")
         if user in self.refuse:
             raise FakeRefusal("P0002")
         return _Result([("granted",)])
@@ -221,6 +224,14 @@ def test_backfill__a_keyset_that_does_not_advance_stops_loudly() -> None:
 def test_backfill__maintenance_stops_the_run() -> None:
     with pytest.raises(FakeRefusal, match="maintenance"):
         signup.backfill(_SyncConn(["a100000a-0000-4000-8000-000000000001"], maintenance=True))
+
+
+def test_backfill__a_role_without_execute_stops_the_run() -> None:
+    conn = _SyncConn(["a100000a-0000-4000-8000-000000000001",
+                      "a100000a-0000-4000-8000-000000000002"], denied=True)
+    with pytest.raises(FakeRefusal, match="permission denied"):
+        signup.backfill(conn)
+    assert len(conn.claims) == 1, "the run kept going without the privilege to grant"
 
 
 # --- R32/R40: the code mutants, through the shared runner (R83) ----------------------

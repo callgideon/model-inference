@@ -99,7 +99,8 @@ def backfill(conn, campaign: str = "backfill", page: int = 500) -> Counter:
     it is a no-op (`replayed`). `conn` is a sync psycopg connection in autocommit mode.
 
     Returns the count per status; a raised refusal counts as `error:<SQLSTATE>` and the
-    run continues. Flag off (55000 maintenance) stops it: nothing can be granted then.
+    run continues. Flag off (55000 maintenance) and a missing EXECUTE privilege (42501)
+    stop it: nothing can be granted then.
     """
     counts: Counter = Counter()
     after = _BEFORE_ALL
@@ -112,7 +113,9 @@ def backfill(conn, campaign: str = "backfill", page: int = 500) -> Counter:
                     status, = conn.execute(CLAIM, (user_id, campaign, None)).fetchone()
             except Exception as failed:              # psycopg.Error; stays an import-free module
                 state = getattr(failed, "sqlstate", None)
-                if state is None or state == "55000" and "maintenance" in str(failed):
+                # Flag off (maintenance) or a role without EXECUTE: the run can grant
+                # nothing, so it stops loudly instead of counting every individual.
+                if state in (None, "42501") or state == "55000" and "maintenance" in str(failed):
                     raise
                 status = f"error:{state}"
             counts[status] += 1
