@@ -2159,10 +2159,6 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
        "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
        "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
-    # Item 3: the PostgreSQL adapter until D5's 0018 (D5 retires this with the refusal).
-    _m("pg_cancel_records_an_unsupported_cause", "before 0018 no cause but client_cancelled reaches 0016",
-       "state/jobstore.py", "        if cause != TerminalCause.client_cancelled:", "        if False:",
-       "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"),
 )
 
 
