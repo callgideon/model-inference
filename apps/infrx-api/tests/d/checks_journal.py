@@ -198,14 +198,25 @@ def check_append(conn) -> str:
 def check_append_oversize(conn) -> str:
     """R25 / DUR-OUTPUT (dr10): one event over `journal_event_max_bytes`, wherever it is in
     the batch, is `journal_write_failed` and NOTHING of the batch is stored or published.
-    Pinned on the stored measure at the default limit: exactly the limit is accepted, one
-    byte more refused - and that measure exceeds the fake's `compact_bytes` by jsonb's
-    separator (one byte for the `": "` of a one-key payload)."""
+    Pinned on the stored measure, `octet_length(payload::text)`, at the default limit:
+    exactly the limit is accepted, one byte more refused. That measure exceeds the fake's
+    `compact_bytes` by jsonb's separators (one byte for the `": "` of a one-key payload)
+    AND by its fixed-point numbers (review M2: `1e300` is 301 digits stored), so a float
+    event under the limit on the compact measure can be over it stored."""
     world = ca.World(conn)
     small = DEFAULTS.replace(journal_event_max_bytes=64)
 
     def body():
         request, lease = running(conn, world)
+        # review M2: jsonb re-renders numbers in fixed point, so the stored measure is not
+        # compact + separators for floats: an event far UNDER the limit on the fake's
+        # measure is over it stored, and is refused whole
+        for payload, measures in (({"logprob": 1e300}, (18, 314)),
+                                  ({"logprob": -3.2e-07}, (20, 24))):
+            assert (len(compact_bytes(payload)), size(conn, payload)) == measures, payload
+        code, _ = append(conn, lease, (event({"x": 1e300}),), limits=small)
+        assert code == "journal_write_failed", \
+            f"a float event of {size(conn, {'x': 1e300})} stored bytes, 64-byte limit: {code}"
         big = event({"content": "x" * 200})
         for batch in ((big,), (*b.events("a"), big), (big, *b.events("a")),
                       (*b.events("a"), big, *b.events("b"))):
