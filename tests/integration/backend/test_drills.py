@@ -645,14 +645,17 @@ def test_e3b_dr12_a_full_valkey_index_refuses_without_writing(valkey_index):
 
 
 def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
-    """DUR-OUTBOX / queue rebuild, on the real Valkey: four accepted jobs are queued, one runs
-    to completion; Valkey is SIGKILLed (it keeps no data by design) and comes back empty.
-    Rebuilt from the durable snapshot, every still-queued job is dispatchable exactly once
-    and the finished one is never re-dispatched.
-
-    The snapshot is read from the fake JobStore here; producing it from PostgreSQL is Q3's
-    reconciler (pending), so this proves the index half of DUR-OUTBOX only."""
-    port, h, client = valkey_index()
+    """DUR-OUTBOX / queue rebuild (Q3 req 4), real stores on both sides: four jobs accepted
+    and prepared through the PostgreSQL store, their dispatch rows drained into E2's Valkey by
+    Q3's `Reconciler` and acknowledged; one is claimed and cancelled (terminal). Valkey is
+    SIGKILLed (it keeps no data by design) and comes back empty. Its rows were acknowledged
+    before the loss, so the outbox never hands them out again - the acked-then-rebuilt hole
+    (Q3 Limit 3): only the rebuild from PostgreSQL's dispatch snapshot restores them. The
+    three still queued dispatch exactly once, the terminal one never."""
+    from infrx.scheduling.reconcile import Reconciler
+    port, h, client = valkey_index("postgres")
+    relay = Reconciler(store=h.extra["store"], index=port, now=h.clock.now,
+                       worker_id=f"e3b2-relay-{uuid.uuid4().hex[:8]}")
 
     async def body():
         admissions = []
@@ -661,12 +664,15 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
             lease = await h.port.claim_preparation(admission.request_id, "prep")
             await h.port.prepared(lease, ())
             admissions.append(admission)
-            assert await port.enqueue(_event(h, admission.request_id))
+        drained = await relay.drain()
+        assert (drained.get("indexed"), drained.get("acknowledged")) == (4, 4), drained
+        early = await h.extra["store"].dispatch_snapshot()     # before the terminal job
+        assert len(early) == 4, early
         first = await port.claim_candidate("w1")
-        lease = await h.port.claim(first.job_id, "w1")
+        await h.port.claim(first.job_id, "w1")
         await port.acknowledge(first)
-        await h.extra["stream"].append(lease, b.events("done"))
-        await h.port.complete(lease, b.outcome(first.job_id, h))
+        handle = next(a.job_handle for a in admissions if a.request_id == first.job_id)
+        assert (await h.port.cancel(b.ORG_A, handle)).state is JobState.cancelled
 
         with harness.Faults() as faults:
             faults.kill_container("valkey")
@@ -674,12 +680,8 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
         await client.connection_pool.disconnect()
         assert await port.depth() == 0, "the index survived a SIGKILL: not a loss drill"
 
-        snapshot = []
-        for admission in admissions:
-            state, _outcome = await h.port.get_owned(b.ORG_A, admission.job_handle)
-            if state.state is JobState.queued:
-                snapshot.append(_event(h, admission.request_id))
-        assert await port.rebuild(tuple(snapshot)) == 3
+        assert await relay.rebuild() == 3
+        assert (await relay.drain()).get("read", 0) == 0, "the acknowledged rows came back"
         dispatched = []
         for _ in range(len(admissions) + 1):         # bounded: a duplicate cannot loop
             candidate = await port.claim_candidate("w2")
@@ -715,8 +717,8 @@ def valkey_index():
     from infrx.scheduling.valkey import ValkeyScheduler
     namespace = f"{harness.VALKEY_PREFIX}{{e3b-{uuid.uuid4().hex}}}"
 
-    def make(**caps):
-        h = rig("fake")
+    def make(backend="fake", **caps):
+        h = rig(backend, *RUN, "cancel", "dispatch_pending", "acknowledge_dispatch")
         client = Valkey.from_url(harness.valkey_url())
         return ValkeyScheduler(client, h.clock.now, limits=DEFAULTS, namespace=namespace,
                                **caps), h, client

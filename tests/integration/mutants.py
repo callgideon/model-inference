@@ -705,6 +705,17 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py", "dr01 and postgres", layer=2,
            cases=("test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity"
                   "[postgres]",)),
+    Mutant("e3bm18", "E3B2 item 4: without the rebuild the acknowledged dispatches are lost",
+           "tests/integration/backend/test_drills.py",
+           "        assert await relay.rebuild() == 3\n", "\n",
+           "tests/integration/backend/test_drills.py", "dr13", layer=2,
+           cases=("test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job",)),
+    Mutant("e3bm19", "E3B2 item 4: a rebuild from the pre-ack snapshot re-dispatches the "
+                     "terminal job",
+           "tests/integration/backend/test_drills.py",
+           "        assert await relay.rebuild() == 3\n", "        await port.rebuild(early)\n",
+           "tests/integration/backend/test_drills.py", "dr13", layer=2,
+           cases=("test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job",)),
 )
 
 
