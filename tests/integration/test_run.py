@@ -971,6 +971,56 @@ def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
     assert mutants.run_one(mutant, stack_available=False)["status"] == "killed"
     assert calls == [mutant.occurrences, 0], "baseline unmutated, then the mutated run"
 
+    # Confirmation G-B1/HON-6: a CONTROL red on the unmutated copy is a problem too - neither
+    # a survivor nor silently dropped from both counts.
+    import dataclasses
+    control = dataclasses.replace(mutant, id="red-control", must_survive=True)
+    calls.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")] * 2))
+    red_control = mutants.run_one(control, stack_available=False)
+    assert red_control["status"] == "baseline-red", red_control
+    summary = mutants.summarise([red_control])
+    assert (summary["problems"], summary["controls_survived"]) == (["red-control"], 0), summary
+
+
+def test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind(monkeypatch):
+    """Confirmation G-B1/HON-2 (R83): the pristine baseline is cached per (suite, selector,
+    copy kind). Real pairs span both copy kinds today - (test_observe.py, ob11): i3bm21 with the
+    copied `infrx`, i3bm22 without; (test_recovery.py, rc01) likewise - so a baseline taken
+    without the copied package must never stand in for a mutant that runs against it (the
+    e2m64-66 vacuous-kill shape), nor one selector's baseline for another's."""
+    import dataclasses
+
+    import mutants
+    copied = next(m for m in mutants.MUTANTS if m.id == "e3bm01")   # edits apps/infrx-api/infrx
+    plain = dataclasses.replace(mutants.MUTANTS[2], id="plain", suite=copied.suite,
+                                select=copied.select, cases=())
+    baselines = []
+
+    def fake_pytest(red_unmutated):
+        def run(root, m, api_root, tmpdir):
+            kind = (m.select, api_root != harness.API_ROOT)
+            if (root / m.path).read_text().count(m.before) == m.occurrences:     # unmutated
+                baselines.append(kind)
+                return (1, "F\n1 failed in 0.1s\n") if kind in red_unmutated else \
+                    (0, ".\n1 passed in 0.1s\n")
+            return 1, "F\n1 failed in 0.1s\n"
+        return run
+
+    # The same (suite, selector), two copy kinds; only the copied kind is red unmutated.
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest({(copied.select, True)}))
+    statuses = [mutants.run_one(m, stack_available=False)["status"] for m in (plain, copied)]
+    assert (statuses, len(baselines)) == (["killed", "baseline-red"], 2), (statuses, baselines)
+    # The same suite and copy kind, two selectors; only the second is red unmutated.
+    other = dataclasses.replace(plain, id="other", select=f"{plain.select} or dr02")
+    baselines.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest({(other.select, False)}))
+    statuses = [mutants.run_one(m, stack_available=False)["status"] for m in (plain, other)]
+    assert (statuses, len(baselines)) == (["killed", "baseline-red"], 2), (statuses, baselines)
+
 
 def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_files(
         monkeypatch, tmp_path):
