@@ -1991,6 +1991,13 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "     where aggregate_id = p_id and kind = 'prepare_dispatch';",
        "admission", "recover_preparation",
        "a lost preparation is re-sent under an old event id a replay-safe index drops (OB-5b)"),
+    _m("d3_prep_reap_reads_a_released_attempt", LEASES,
+       "     where job_id = p_id and kind = 'preparation' and released_at is null;\n"
+       "    if not found or p_now < a.expires_at then",
+       "     where job_id = p_id and kind = 'preparation' order by generation desc limit 1;\n"
+       "    if not found or p_now < a.expires_at then",
+       "admission", "recover_preparation",
+       "two reaper ticks on one lapsed preparation lease write two fresh rows (confirmation FC-2)"),
     _m("d3_prep_reap_keeps_the_lease", LEASES,
        "     where job_id = p_id and kind = 'preparation' and generation = a.generation;",
        "     where false;",

@@ -659,6 +659,11 @@ def check_recover_preparation(conn) -> str:
             assert live_attempts(conn, request.request_id) == [], "the lost lease is live"
             assert kinds(conn, request.request_id).count("prepare_dispatch") == attempt + 1, \
                 "the reaped preparation was not redispatched"
+            # a late decision on the same lapsed lease (a tick whose scan saw it before the
+            # first tick committed) finds nothing live and writes nothing (confirmation FC-2)
+            assert _decide(conn, request.request_id) == [] and \
+                kinds(conn, request.request_id).count("prepare_dispatch") == attempt + 1, \
+                "a second reaper decision redispatched an already reaped preparation"
             # OB-5b: a FRESH row the relay delivers (new event id), never an old one reopened
             fresh = pump(conn)
             assert [(e["job_id"], e["kind"]) for e in fresh] == \
