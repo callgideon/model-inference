@@ -56,8 +56,10 @@ class Conn:
                                         else TransactionStatus.INTRANS)
         if "information_schema.columns" in sql:
             return [(c,) for c in self.columns]
-        if sql.startswith("select version from"):
-            return [(v,) for v in self.applied]
+        if sql.startswith("select version"):
+            names = {f[:4]: f[5:-4] for f in FILES}
+            return [(v, names.get(v, "renamed")) if ", name" in sql else (v,)
+                    for v in self.applied]
         if sql.startswith(f"insert into {migrate.HISTORY}"):
             self.inserted.append(params)
         if self.fail_on and sql == self.fail_on:
@@ -95,14 +97,14 @@ def planned_digest(directory, applied) -> str:
 def test_backend_deploy__migrate_plans_read_only_and_names_every_pending_file(
         tmp_path, monkeypatch, capsys):
     """The dry run sets the session read-only before it reads anything, lists what is
-    applied and each pending file with its sha256, prints the digest `apply` will demand,
-    and writes nothing."""
+    applied (version and recorded name, so a renamed file shows) and each pending file
+    with its sha256, prints the digest `apply` will demand, and writes nothing."""
     directory = migrations(tmp_path)
     conn = Conn(applied=["0001"])
     assert run(monkeypatch, conn, "plan", "--dir", str(directory)) == 0
     assert conn.log[0] == "set transaction_read_only = on"
     out = capsys.readouterr().out
-    assert "applied: 0001" in out
+    assert "applied: 0001 init\n" in out
     for name in ("0002_seed.sql", "0003_more.sql"):
         assert f"pending: {name} sha256={hashlib.sha256(FILES[name].encode()).hexdigest()}" in out
     assert f"plan digest: {planned_digest(directory, ['0001'])}" in out

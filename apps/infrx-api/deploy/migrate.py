@@ -93,23 +93,29 @@ def digest(plan) -> str:
     return hashlib.sha256(lines.encode()).hexdigest()
 
 
-def describe(plan, applied) -> str:
-    rows = [f"applied: {', '.join(sorted(applied)) or '(none)'}"]
+def describe(plan, applied: dict[str, str]) -> str:
+    # `version name`: history is matched on versions only (as the Supabase CLI does), so
+    # the names are printed for the reviewer to see a renamed file.
+    listed = ", ".join(f'{v} {applied[v]}'.strip() for v in sorted(applied))
+    rows = [f"applied: {listed or '(none)'}"]
     rows += [f"pending: {version}_{name}.sql sha256={hashlib.sha256(body).hexdigest()}"
              for version, name, body in plan]
     rows.append(f"plan digest: {digest(plan)}" if plan else "nothing pending")
     return "\n".join(rows)
 
 
-def history(conn) -> tuple[list[str], set[str]]:
-    """The applied versions and the history table's columns; no table is a refusal."""
+def history(conn) -> tuple[dict[str, str], set[str]]:
+    """The applied versions (-> their recorded names) and the history table's columns; no
+    table is a refusal."""
     columns = {row[0] for row in conn.execute(
         "select column_name from information_schema.columns "
         "where table_schema = 'supabase_migrations' and table_name = 'schema_migrations'")}
     if "version" not in columns:
         raise Refused(f"{HISTORY} does not exist: not a database migrated by the Supabase "
                       f"CLI, and no applied set can be assumed")
-    return [row[0] for row in conn.execute(f"select version from {HISTORY}")], columns
+    name = ", name" if "name" in columns else ""
+    rows = conn.execute(f"select version{name} from {HISTORY}")
+    return {row[0]: (row[1] or "" if name else "") for row in rows}, columns
 
 
 def connect():
