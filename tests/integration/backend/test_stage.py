@@ -227,8 +227,11 @@ def test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task(monkey
     # the day it reports the reference resolved the cells FAIL, asking for the owner to go.
     assert stack.upload_refs_refused() is True
     monkeypatch.setattr(stack, "upload_refs_refused", lambda: False)
-    with pytest.raises(pytest.fail.Exception, match="M3-U1 is fixed"):
-        test_journey.test_backend_journey(Unreachable(), "video_upload", "sync")
+    try:
+        with pytest.raises(pytest.fail.Exception, match="M3-U1 is fixed"):
+            test_journey.test_backend_journey(Unreachable(), "video_upload", "sync")
+    except pytest.skip.Exception as pended:          # a skip would hide the missing tripwire
+        raise AssertionError(f"M3-U1 pended with its blocker gone: {pended}") from None
     monkeypatch.undo()
     assert run.stale_pending({"pending": pended}) == [], pended
     # The rule itself, on an id merged on every tree (G1R), made RESIDUAL for the check.
