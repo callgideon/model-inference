@@ -13,6 +13,7 @@ Implemented on fakes: D2's `PgJobStore` and D4's `PgStreamStore` are the integra
 from __future__ import annotations
 
 import asyncio
+import logging
 from decimal import Decimal
 
 import pytest
@@ -209,7 +210,7 @@ def test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline():
 
 
 @pytest.mark.parametrize("ending", ["disconnect", "deadline"])
-def test_api_modes__a_store_that_cannot_record_the_cause_still_cancels(ending):
+def test_api_modes__a_store_that_cannot_record_the_cause_still_cancels(ending, caplog):
     """Interim until D5's 0018: the PostgreSQL store refuses `client_disconnected` and
     `sync_deadline` (`UnsupportedParameter`, `param="cause"`, before any SQL). The relay then
     cancels with the default cause - the job is never left running and the caller never
@@ -230,16 +231,42 @@ def test_api_modes__a_store_that_cannot_record_the_cause_still_cancels(ending):
 
     world.during += [publish, leave.set if ending == "disconnect"
                      else (lambda: world.clock.advance(3_600))]
-    reply = rs.run(rs.call(world.app, rs.body(), leave=leave))
+    with caplog.at_level(logging.WARNING, logger="infrx.gateway"):
+        reply = rs.run(rs.call(world.app, rs.body(), leave=leave))
     job = world.only_job()
     assert job.state is JobState.cancelled, job.state
     assert job.outcome.cause is TerminalCause.client_cancelled
+    wanted = "client_disconnected" if ending == "disconnect" else "sync_deadline"
+    assert [r.getMessage() for r in caplog.records if "not recordable yet" in r.getMessage()] \
+        == [f"cancel cause {wanted} is not recordable yet: cancelling job "
+            f"{job.admission.job_handle} as client_cancelled"]       # review S6: recorded
     if ending == "disconnect":
         assert reply.messages == []
     else:
         error = reply.json()["error"]
         assert (reply.status, error["code"], rs.state_of(error)) == (504, "deadline_exceeded",
                                                                      "cancelled")
+
+
+def test_api_modes__only_the_cause_refusal_falls_back_to_the_default_cancel():
+    """Review S6: the fallback is for the one refusal it names (`param="cause"`). A store
+    refusing the cancel for any other parameter is not cancelled again under another
+    label: the refusal stands, the job is not cancelled by the gateway, and the answer is
+    the deadline without a state it could not confirm."""
+    world = rs.World()
+    calls = []
+
+    async def refuses_other(org_id, handle, *, cause=TerminalCause.client_cancelled):
+        calls.append(cause)
+        raise errors.UnsupportedParameter("not this store", param="other")
+
+    world.jobs.cancel = refuses_other
+    world.during.append(lambda: world.clock.advance(3_600))
+    reply = rs.run(rs.call(world.app, rs.body()))
+    error = reply.json()["error"]
+    assert (reply.status, error["code"], rs.state_of(error)) == (504, "deadline_exceeded", None)
+    assert calls == [TerminalCause.sync_deadline]
+    assert world.only_job().outcome is None
 
 
 def test_api_modes__a_timeout_whose_cancel_fails_claims_no_state():

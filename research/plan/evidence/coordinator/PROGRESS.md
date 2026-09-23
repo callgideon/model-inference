@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T06:50:14Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T11:05:53Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
+**Backend packages: 22 done · 6 in progress · 2 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -25,16 +25,16 @@ Generated 2026-09-23T06:50:14Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **done** | implemented |  |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **done** | implemented |  |
-| B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **in-progress** | planned | base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param="cause") |
-| B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
-| B1 Durable endpoint | G4U | Owned upload HTTP adapter | **in-progress** | planned | base 9c1c6ed; fakes only; brief G4U.md |
+| B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **in-progress** | planned | relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters |
+| B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **in-progress** | planned | POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/ |
+| B1 Durable endpoint | G4U | Owned upload HTTP adapter | **done** | implemented |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
-| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md) |
+| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **done** | implemented | needs allocated GPU/staging (P-04) |
-| B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **in-progress** | planned | base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window |
+| B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **in-progress** | planned | protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge |
 | B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **remaining** | planned | needs allocated GPU/staging (P-04) |
 
 ## Gates
@@ -58,18 +58,21 @@ Generated 2026-09-23T06:50:14Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (6 packages): ~9 h at observed cadence, ~17 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (5 packages): ~7 h at observed cadence, ~14 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E3B: codex-e3b / codex/e3b-backend-gate — phase 2 implementing on codex-e3b2 / codex/e3b-phase2-gate (real-store gate; namespace e3b2 56700-56799) since 2026-09-22T18:46:49Z — phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)
+- E3B: codex-e3b / codex/e3b-backend-gate — phase 2 HANDED BACK 80cef22 (impl e57b820); Opus review running; gate exit 1 = I3B's recovery tree (rc10, i3bm57, bk01 restore ACL finding) + a D-port HarnessBusy run since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges
 - D4: codex-d4 / codex/d4-stream-journal — implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10) since 2026-09-23T05:12:27Z — base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md
-- G2: codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param="cause")
-- G4U: codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3's MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md
-- W4: codex-w4 / codex/w4-measured-tuning — phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement since 2026-09-23T05:40:38Z — base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window
+- G2: codex-g2 / codex/g2-chat-relay — review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) → fix round running since 2026-09-23T05:12:27Z — relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters
+- W4: codex-w4 / codex/w4-measured-tuning — phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
+- G3: codex-g3 / codex/g3-jobs — implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only) since 2026-09-23T10:09:50Z — POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/
+- review W4: confirmation at b0a44a0 running (round 1 fix_required at db12a5a) since 2026-09-23T10:20:48Z
+- review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
+- review G2: fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) → fix round; confirmation next since 2026-09-23T11:05:53Z
 
 ## Checkpoints
 
@@ -97,6 +100,7 @@ Generated 2026-09-23T06:50:14Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T21:18:49Z: E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009
 - 2026-09-22T22:14:13Z: F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark
 - 2026-09-23T00:46:03Z: Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)
+- 2026-09-23T10:43:20Z: Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc
 
 ## Authorizations
 

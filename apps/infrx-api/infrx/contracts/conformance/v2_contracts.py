@@ -974,6 +974,22 @@ async def credit_admit__refusals_leave_no_job_and_no_hold(factory):
         "a provider dev admission touched the consumer wallet"
 
 
+async def credit_admit__lookup_answers_the_pinned_admission(factory):
+    """R91 on a CREDIT job: `lookup` answers the pinned `AdmissionV2` (replayed) and its
+    outcome, after a rate change as before it, and holds nothing more."""
+    harness = factory()
+    request = _credit_request(harness)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    held = harness.extra["credit_balance"](IDS.consumer_wallet)
+    found = await harness.port.lookup(IDS.consumer_org, b_idem(request))
+    assert found is not None, "a mapped CREDIT scope answered nothing"
+    mapped, outcome = found
+    assert isinstance(mapped, v2.AdmissionV2) and mapped.replayed is True and outcome is None
+    assert (mapped.request_id, mapped.pins, mapped.maximum_hold) == (
+        admission.request_id, admission.pins, admission.maximum_hold)
+    assert harness.extra["credit_balance"](IDS.consumer_wallet) == held
+
+
 async def credit_admit__a_replay_is_pinned_and_never_crosses_regimes(factory):
     """CREDIT-RATE/DUR-ADMIT: a replay after a rate change answers the admitted card
     and hold, marked replayed; the same key through the legacy `admit` is an
@@ -1180,6 +1196,7 @@ def credit_jobstore_cases() -> list[Callable]:
         credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit,
         credit_admit__refusals_leave_no_job_and_no_hold,
         credit_admit__a_replay_is_pinned_and_never_crosses_regimes,
+        credit_admit__lookup_answers_the_pinned_admission,
         credit_settle__at_the_admitted_card_on_the_credit_wallet_only,
         credit_settle__a_free_outcome_moves_no_credit,
         credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet,

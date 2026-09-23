@@ -38,6 +38,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match
 
 from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
@@ -203,7 +204,13 @@ def assert_route_table(app) -> None:
     handler - the legacy one, say, which admits nothing and holds nothing - on the path.
     """
     served = [route for route in app.routes if getattr(route, "path", None) == CHAT_PATH]
-    if len(served) != 1 or served[0].endpoint.__module__ != __name__:
+    # And the route Starlette would actually pick (review C6): a pattern route registered
+    # earlier (`/v1/{rest:path}`, a Mount) serves the path without being "at" it.
+    scope = {"type": "http", "path": CHAT_PATH, "root_path": "", "method": "POST"}
+    first = next((route for route in app.routes if route.matches(scope)[0] is Match.FULL),
+                 None)
+    if len(served) != 1 or getattr(getattr(first, "endpoint", None), "__module__", None) \
+            != __name__:
         mode = getattr(getattr(app.state, "runtime", None), "mode", "")
         raise RuntimeMisconfigured(mode, detail=f"{CHAT_PATH} must have exactly one handler, "
                                                 f"the metered ingress")

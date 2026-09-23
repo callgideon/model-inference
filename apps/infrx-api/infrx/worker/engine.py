@@ -92,9 +92,15 @@ REFUSED_PARAMETERS = frozenset({
     "guided_grammar", "structured_outputs",                        # 01: structured output too
     "logprobs", "top_logprobs", "echo", "best_of", "logit_bias",
     "price_snapshot",                                              # r1 R45: prices are never a request field
-    "max_tokens", "max_completion_tokens",                         # the ceiling is the record's, not a parameter
-    "stream", "stream_options", "model",                           # the transport and the engine are ours
+    "stream_options", "model",                                     # the transport and the engine are ours
 })
+# In `parameters` because the ingress keeps them there (the frozen `normalized_request`
+# fixture), but already consumed by the record: `stream` became `execution_mode`, and
+# `max_tokens`/`max_completion_tokens` became `max_output_tokens`, which `upstream_body`
+# sends as the engine's `max_tokens`. Never forwarded - `**forwarded` would override the
+# record's ceiling and our `stream=True` - and never refused: refusing them settled every
+# validated streaming or capped request `platform_error` (G2 integration request W-new).
+CONSUMED_PARAMETERS = frozenset({"stream", "max_tokens", "max_completion_tokens"})
 # Consumed here and never forwarded: `prepared_request` puts the tenant in it.
 INTERNAL_PARAMETERS = frozenset({"tenant_salt"})
 
@@ -510,7 +516,7 @@ class VllmEngine:
         refused explicitly, and r1 R45 refuses a client-supplied price)."""
         forwarded: dict[str, Any] = {}
         for name, value in (parameters or {}).items():
-            if name in INTERNAL_PARAMETERS:
+            if name in INTERNAL_PARAMETERS or name in CONSUMED_PARAMETERS:
                 continue
             if name == "n":
                 if value != 1:

@@ -1,0 +1,517 @@
+{
+  "verdict": "pass",
+  "head": "962b2b1",
+  "reviews": [
+    {
+      "lens": "closure",
+      "verdict_hint": "pass",
+      "fabrication_check": "Every claimed count was reproduced at 962b2b1: focused 26 passed; INFRX_MUTANTS=all list 39 passed (36 mutants plus 3 list tests); CLI 36/36 killed; --list '36 mutants over 26 named cases'. For tests/g+m+contracts I got 1791 passed and 1 skipped, which is 1792 collected and matches the claimed 1792. The skip is tests/m/test_parity.py:113 (corpus cache absent in a /tmp scratch), the same environment-dependent skip round 1 saw, so it is not a discrepancy. Each round-2 row matches its commit. 176c76f (tests only), 0a87585, a4b0387 and 6d520f5 change only tests/mutants. 30a03d4, 5fc011d, ef2d08f and 5ec093c change uploads.py plus tests. 6ad81ba changes only the test. intake.py is untouched (the diff f3c8055..962b2b1 covers only uploads.py, the two test files and the evidence). Every declared mutant I hand-applied dies at its named case for the invariant's reason, with assertion text rather than a crash. H1 now dies at :508 'the slot was not held while the store took the bytes'. H2's refusals_not_translated dies by typed Conflict/InvalidRequest, not 422. Wording claims beyond the proof: T3 says 'every answer >= 400' but only 4xx is asserted (C2). T1's 'destination_ref == scheme + handle' survives a prefix-only weakening (C1). The 199 G-list run was not re-run under this lens (not verified, not disputed). No Docker, network, AWS or secrets were used.",
+      "cleanup": "Removed the /tmp/claude-1000/confirm-g4u-closure-1099473 scratch, the -m mutant copy and both .log files; ls confirms none remain. Harness scripts are only in the session scratchpad. The codex-g4u worktree was never edited: git status is empty and HEAD is 962b2b1. No containers were created.",
+      "mutants": [
+        {
+          "name": "DECL control_deadline_stretched (R1/H3)",
+          "edit": "control read timeout_s=limits.intake_timeout_s -> *100",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_slow_control_body_is_cut_at_the_deadline:355 assert (201 == 504) (the create half)"
+        },
+        {
+          "name": "REV R1a create_control_undeadlined",
+          "edit": "create only: body = inline read_body(max 4096, timeout_s=10**9, clock=lambda: 0.0)",
+          "result": "killed",
+          "killed_by": "a_slow_control_body_is_cut_at_the_deadline:355 assert (201 == 504)"
+        },
+        {
+          "name": "REV R1b complete_control_undeadlined",
+          "edit": "complete only: same undeadlined inline read, so the deadline stays on create but not on complete",
+          "result": "killed",
+          "killed_by": "a_slow_control_body_is_cut_at_the_deadline:355 assert (400 == 504) (the complete half; bounded case passes)"
+        },
+        {
+          "name": "REV R1c control_clock_frozen",
+          "edit": "control read clock=rt.clock -> lambda: 0.0",
+          "result": "killed",
+          "killed_by": "a_slow_control_body_is_cut_at_the_deadline:355 assert (201 == 504)"
+        },
+        {
+          "name": "DECL slot_released_before_the_store (H1)",
+          "edit": "insert slot.release() after read_body (large=slot)) and before the store call",
+          "result": "killed",
+          "killed_by": "large_uploads_hold_a_shared_slot_until_stored:508 'the slot was not held while the store took the bytes' assert [0] == [1] (the invariant's own assertion, no crash)"
+        },
+        {
+          "name": "REV H1r release_as_store_argument",
+          "edit": "put_upload(..., mime if slot.release() is None else mime)",
+          "result": "killed",
+          "killed_by": "large_uploads_hold_a_shared_slot_until_stored:508 assert [0] == [1]"
+        },
+        {
+          "name": "DECL ticket_destination_unchecked (T1)",
+          "edit": "or ticket[destination_ref] != UPLOAD_SCHEME + handle -> or False",
+          "result": "killed",
+          "killed_by": "no_store_value_outside_the_frozen_ticket_leaves:379 assert (201 == 500), s3 key rendered"
+        },
+        {
+          "name": "DECL ticket_handle_unchecked (T1)",
+          "edit": "if not UPLOAD_HANDLE_RE.fullmatch(handle) -> if False",
+          "result": "killed",
+          "killed_by": "no_store_value_outside_the_frozen_ticket_leaves:379 assert (201 == 500), upl_x rendered"
+        },
+        {
+          "name": "REV T1a destination_scheme_prefix_only",
+          "edit": "!= UPLOAD_SCHEME + handle -> not .startswith(UPLOAD_SCHEME)",
+          "result": "survived",
+          "killed_by": "none (finding C1)"
+        },
+        {
+          "name": "REV T1b destination_endswith_handle",
+          "edit": "-> not destination_ref.endswith(handle)",
+          "result": "killed",
+          "killed_by": "no_store_value_outside_the_frozen_ticket_leaves:379 assert (201 == 500)"
+        },
+        {
+          "name": "REV T1c wrong_scheme_constant",
+          "edit": "UPLOAD_SCHEME + handle -> 'infrx-upload://' + handle",
+          "result": "killed",
+          "killed_by": "the_ticket_carries_exactly_the_frozen_fields:290 assert 500 == 201"
+        },
+        {
+          "name": "REV T1d handle_prefix_only",
+          "edit": "UPLOAD_HANDLE_RE.fullmatch(handle) -> handle.startswith('upl_')",
+          "result": "killed",
+          "killed_by": "no_store_value_outside_the_frozen_ticket_leaves:379 assert (201 == 500)"
+        },
+        {
+          "name": "REV T1e handle_match_not_fullmatch",
+          "edit": "UPLOAD_HANDLE_RE.fullmatch -> .match (ticket check)",
+          "result": "survived",
+          "killed_by": "none (finding C1)"
+        },
+        {
+          "name": "DECL refusals_keep_the_connection (T3)",
+          "edit": "answer.headers['Connection']='close' -> pass",
+          "result": "killed",
+          "killed_by": "every_refusal_closes_the_connection:404 assert None == 'close' (403 on /v1/uploads)"
+        },
+        {
+          "name": "REV T3a close_on_4xx_only",
+          "edit": ">= 400 -> 400 <= status < 500",
+          "result": "survived",
+          "killed_by": "none, whole focused suite 26 passed (finding C2)"
+        },
+        {
+          "name": "REV T3b close_on_403_404_only",
+          "edit": ">= 400 -> in (403, 404)",
+          "result": "killed",
+          "killed_by": "every_refusal_closes_the_connection:404 (400 unsupported_media lacks close)"
+        },
+        {
+          "name": "REV T3c close_on_5xx_only",
+          "edit": ">= 400 -> >= 500",
+          "result": "killed",
+          "killed_by": "every_refusal_closes_the_connection:404 (403 lacks close)"
+        },
+        {
+          "name": "DECL refusals_not_translated (H2)",
+          "edit": "translated = guard(handler) -> lambda request: handler(request, ids.new_request_id())",
+          "result": "killed",
+          "killed_by": "typed DomainError deaths: Conflict state_conflict in the_destination_is_write_once_over_http, InvalidRequest in completion_refusals_leave_in_the_envelope (no 422)"
+        },
+        {
+          "name": "REV H2a put_untranslated",
+          "edit": "translation removed for put_upload only",
+          "result": "killed",
+          "killed_by": "the_destination_is_write_once_over_http: infrx.contracts.errors.Conflict escapes"
+        },
+        {
+          "name": "REV H2b complete_untranslated",
+          "edit": "translation removed for complete_upload only",
+          "result": "killed",
+          "killed_by": "completion_refusals_leave_in_the_envelope: InvalidRequest escapes"
+        },
+        {
+          "name": "DECL create_org_from_query (T4)",
+          "edit": "create_upload(request.query_params.get('org_id') or context.org_id, body)",
+          "result": "killed",
+          "killed_by": "the_body_names_no_org_and_nothing_the_contract_lacks:280 org ...0b != ...01"
+        },
+        {
+          "name": "DECL put_org_from_header (T4)",
+          "edit": "put_upload(request.headers.get('x-org-id') or context.org_id, ...)",
+          "result": "killed",
+          "killed_by": "another_orgs_upload_is_the_unknown_handles_404:613 assert (204 == 404)"
+        },
+        {
+          "name": "DECL complete_org_from_header (T4)",
+          "edit": "finalize_upload(request.headers.get('x-infrx-org') or context.org_id, handle)",
+          "result": "killed",
+          "killed_by": "another_orgs_upload_is_the_unknown_handles_404:613 assert (400 == 404)"
+        },
+        {
+          "name": "REV T4a put_org_from_x_organization_id",
+          "edit": "put_upload(request.headers.get('x-organization-id') or context.org_id, ...)",
+          "result": "survived",
+          "killed_by": "none, 26 passed (finding C3; header not sent)"
+        },
+        {
+          "name": "REV T4b create_org_from_query_org",
+          "edit": "create_upload(request.query_params.get('org') or context.org_id, body)",
+          "result": "survived",
+          "killed_by": "none, 26 passed (finding C3)"
+        },
+        {
+          "name": "REV T4c complete_org_from_x_org_id",
+          "edit": "finalize_upload(request.headers.get('x-org-id') or context.org_id, handle)",
+          "result": "killed",
+          "killed_by": "another_orgs_upload_is_the_unknown_handles_404:613 assert (400 == 404)"
+        },
+        {
+          "name": "DECL ingress_pool_ignored (R2)",
+          "edit": "delete the rt.ingress.large_bodies fallback line",
+          "result": "killed",
+          "killed_by": "without_a_runtime_pool_uploads_count_against_the_ingress_pool:196 assert (204 == 429)"
+        },
+        {
+          "name": "REV R2a fresh_pool_before_ingress",
+          "edit": "swap order: LargeBodies() before rt.ingress.large_bodies",
+          "result": "killed",
+          "killed_by": "without_a_runtime_pool_uploads_count_against_the_ingress_pool:196 assert (204 == 429)"
+        },
+        {
+          "name": "REV R2b wrong_ingress_attr",
+          "edit": "getattr(rt, 'ingress') -> getattr(rt, 'ingress_deps')",
+          "result": "killed",
+          "killed_by": "without_a_runtime_pool_uploads_count_against_the_ingress_pool:196 assert (204 == 429)"
+        },
+        {
+          "name": "DECL store_call_undeadlined (R3)",
+          "edit": "asyncio.wait_for(store.put_upload(...), intake_timeout_s) -> await store.put_upload(...)",
+          "result": "killed",
+          "killed_by": "a_hung_store_is_cut_at_the_deadline:469 assert (204 == 504)"
+        },
+        {
+          "name": "REV R3a release_only_on_success",
+          "edit": "finally: -> else: (the slot is not released on timeout or refusal)",
+          "result": "killed",
+          "killed_by": "a_hung_store_is_cut_at_the_deadline:472 assert 1 == 0 (in_flight)"
+        },
+        {
+          "name": "REV R3b store_timeout_stretched",
+          "edit": "wait_for timeout intake_timeout_s -> *100",
+          "result": "killed",
+          "killed_by": "a_hung_store_is_cut_at_the_deadline:469 assert (204 == 504)"
+        },
+        {
+          "name": "REV R3c timeout_not_mapped",
+          "edit": "except TimeoutError -> except asyncio.CancelledError",
+          "result": "killed",
+          "killed_by": "a_hung_store_is_cut_at_the_deadline:469 assert (500 == 504)"
+        },
+        {
+          "name": "REV R3d store_shielded",
+          "edit": "wait_for(asyncio.shield(store.put_upload(...)))",
+          "result": "survived",
+          "killed_by": "none. Informational: 504 and the slot release still hold; the 'nothing stored' assertion runs before the shielded 1 s write could land. R3 claims no cancellation of the write, so this is not a finding"
+        },
+        {
+          "name": "REV R4r chunked_claims_no_slot",
+          "edit": "large=slot -> large=slot if request.headers.get('content-length') else None",
+          "result": "killed",
+          "killed_by": "large_uploads_hold_a_shared_slot_until_stored:501 assert (204 == 429) (the chunked answer)"
+        },
+        {
+          "name": "G4U list (CLI)",
+          "edit": "uv run python -m tests.g.uploads.uploads_mutants",
+          "result": "36/36 killed",
+          "killed_by": "per the named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-g4u archive 962b2b1 | tar -x -C /tmp/claude-1000/confirm-g4u-closure-1099473 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads.py",
+          "exit": 0,
+          "tail": "26 passed in 2.17s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.uploads_mutants --list",
+          "exit": 0,
+          "tail": "36 mutants over 26 named cases"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.uploads_mutants",
+          "exit": 0,
+          "tail": "[killed] undeclared_path: 1 failed, 25 deselected in 1.74s; 36/36 killed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "39 passed in 158.89s (0:02:38)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:randomly tests/g tests/m tests/contracts",
+          "exit": 0,
+          "tail": "1791 passed, 1 skipped, 2 warnings in 372.54s (0:06:12)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -rs tests/m -k 'parity or corpus'",
+          "exit": 0,
+          "tail": "SKIPPED [1] tests/m/test_parity.py:113: corpus cache not found ($CORPUS_CACHE or <main>/.claude/corpus-cache); 7 passed, 1 skipped"
+        },
+        {
+          "cmd": "python scratchpad/mut.py declared.json (11 declared round-2 mutants hand-applied to a copy, named cases run, failure text read)",
+          "exit": 0,
+          "tail": "11/11 KILLED at the named assertions (see mutant table)"
+        },
+        {
+          "cmd": "python scratchpad/mut.py rev.json (24 reviewer single-edit re-attacks)",
+          "exit": 0,
+          "tail": "19 KILLED; SURVIVED: T1a startswith-scheme, T1e match-not-fullmatch, T3a close-on-4xx-only, T4a x-organization-id, T4b ?org=, R3d shield (informational)"
+        }
+      ]
+    },
+    {
+      "lens": "regression",
+      "verdict_hint": "pass",
+      "fabrication_check": "These implementer round-2 claims were reproduced: focused 26 passed; lane list under INFRX_MUTANTS=all 39 passed (36 mutants plus 3 list tests); CLI 36/36 killed; G list 199 passed. g+m+contracts collected 1792: 1791 passed and 1 skipped here, against 1792 passed claimed. That is the same environment-dependent skip round 1 recorded, not fabrication. The diff f3c8055..962b2b1 touches only uploads.py, tests/g/uploads/{test_uploads,uploads_mutants}.py and the evidence file; intake.py is unchanged. R1/H3 is closed: control_deadline_stretched and my control_clock_real are both killed by the slow-control-body case. H1 is closed: the mutant is the real edit on a unique anchor. T3's wrapper preserves round 1's translation exactly (status, code, message, param and headers equal for every refusal class 400/401/403/404/409/413/429/500), adds close only when status >= 400, and mints one id per request. Nothing in T1's failure path leaks the store's values in the body or the log. The T1 check is syntactic only: a valid-form handle of another org's upload renders 201, but it is unusable by the caller (404), so there is no tenant hole. R3 on timeout leaves no half-open upload: M3's write is put_if_absent, a retry with the same bytes is 204, and CancelledError stays distinct from the deadline. The real-time R3 case was 20/20 green, idle and loaded. Weaknesses found are G1 to G5, all nonblocking. No Docker, network or secrets were used.",
+      "cleanup": "Removed /tmp/claude-1000/confirm-g4u-regression-1099593 (the scratch copy with .venv, the reviewer probe modules attack_regr/attack_regr2, uploads_r1.py, mut.py/mut2.py and run logs). ls confirms it is gone. The CPU burner processes were killed (only pgrep's own match remained). The codex-g4u worktree was not edited: git status is empty and HEAD is 962b2b1. No containers were created.",
+      "mutants": [
+        {
+          "name": "close_threshold_gt400",
+          "edit": "answer.status_code >= 400 -> > 400",
+          "result": "killed",
+          "killed_by": "test_media_sec__every_refusal_closes_the_connection"
+        },
+        {
+          "name": "close_only_5xx",
+          "edit": ">= 400 -> >= 500",
+          "result": "killed",
+          "killed_by": "test_media_sec__every_refusal_closes_the_connection"
+        },
+        {
+          "name": "close_only_on_put",
+          "edit": "if status >= 400 and request.method == \"PUT\"",
+          "result": "killed",
+          "killed_by": "test_media_sec__every_refusal_closes_the_connection"
+        },
+        {
+          "name": "close_on_success_too",
+          "edit": ">= 400 -> >= 200",
+          "result": "survived (26 passed)",
+          "killed_by": "none (G4)"
+        },
+        {
+          "name": "wrapper_remints_header_id",
+          "edit": "refusal path also sets Inference-Id = ids.new_request_id()",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_malformed_handle_is_not_found_before_any_byte (envelope request_id != header)"
+        },
+        {
+          "name": "wrapper_mints_second_id (discarded)",
+          "edit": "extra ids.new_request_id() call in closing, value unused",
+          "result": "survived: equivalent (no observable effect). Direct probe: 19 requests minted 19 ids in both r1 and r2",
+          "killed_by": "n/a (equivalent)"
+        },
+        {
+          "name": "destref_prefix_only",
+          "edit": "!= UPLOAD_SCHEME + handle -> not startswith(UPLOAD_SCHEME)",
+          "result": "survived (26 passed)",
+          "killed_by": "none (G1)"
+        },
+        {
+          "name": "destref_suffix_only",
+          "edit": "!= UPLOAD_SCHEME + handle -> not endswith(handle)",
+          "result": "killed",
+          "killed_by": "test_media_sec__no_store_value_outside_the_frozen_ticket_leaves"
+        },
+        {
+          "name": "handle_match_not_fullmatch",
+          "edit": "UPLOAD_HANDLE_RE.fullmatch(handle) -> .match(handle) in create",
+          "result": "survived (26 passed)",
+          "killed_by": "none (G2)"
+        },
+        {
+          "name": "store_deadline_x10",
+          "edit": "wait_for(..., intake_timeout_s * 10)",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_hung_store_is_cut_at_the_deadline"
+        },
+        {
+          "name": "store_timeout_not_caught",
+          "edit": "except TimeoutError -> except ZeroDivisionError",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_hung_store_is_cut_at_the_deadline"
+        },
+        {
+          "name": "store_timeout_is_internal",
+          "edit": "DeadlineExceeded -> InternalError on the store timeout",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_hung_store_is_cut_at_the_deadline"
+        },
+        {
+          "name": "control_clock_real",
+          "edit": "control_body clock=rt.clock -> time.time",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_slow_control_body_is_cut_at_the_deadline"
+        },
+        {
+          "name": "ingress_before_runtime_pool",
+          "edit": "swap the rt.large_bodies and rt.ingress.large_bodies order in the fallback",
+          "result": "survived (26 passed); observable only when both are set to different pools",
+          "killed_by": "none (G3, near-equivalent)"
+        },
+        {
+          "name": "lane list (INFRX_MUTANTS=all)",
+          "edit": "tests/g/uploads/test_uploads_mutants.py incl. control_deadline_stretched, slot_released_before_the_store (real edit, anchor unique; LargeBody.release idempotent), ticket_*_unchecked, refusals_not_translated, refusals_keep_the_connection, ingress_pool_ignored, store_call_undeadlined, create/put/complete org mutants",
+          "result": "39 passed = 36 killed + 3 list tests; CLI 36/36 killed",
+          "killed_by": "per the lane's named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g4u diff --stat f3c8055..962b2b1",
+          "exit": 0,
+          "tail": "uploads.py | 47, tests/g/uploads/test_uploads.py | 173, tests/g/uploads/uploads_mutants.py | 64, research/plan/evidence/g/G4U-a3cb5c2.md | 60; 4 files, confirmed scope (intake.py untouched)"
+        },
+        {
+          "cmd": "git archive 962b2b1 | tar -x -C /tmp/claude-1000/confirm-g4u-regression-1099593 && UV_OFFLINE=1 make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0 (Python 3.12.3)"
+        },
+        {
+          "cmd": "uv run --frozen --offline pytest -q tests/g/uploads/test_uploads.py",
+          "exit": 0,
+          "tail": "26 passed in 2.07s"
+        },
+        {
+          "cmd": "python -m tests.g.uploads.attack_regr (reviewer probe: f3c8055's uploads.py loaded as uploads_r1 beside 962b2b1's; same 19 requests via ASGITransport; status, body and headers compared, request_id excluded)",
+          "exit": 0,
+          "tail": "400 create-field/400 create-ct/401/403/404 handle/404 unknown/400 mime/413/400 complete-before-put/429/409/400 complete-body/500: r1==r2 in status, code, message and all headers except Connection. r2 adds close on each; 401/413/429 already had it. 204/204/200/201 no Connection in either. Router-level 404/405 (/v1/uploads/h/extra, DELETE): no close in either (not a route refusal). Request ids minted r1 19, r2 19, for 19 requests"
+        },
+        {
+          "cmd": "python -m tests.g.uploads.attack_regr2 (T1 values, R3 timeout/cancel, R2 pools)",
+          "exit": 0,
+          "tail": "T1 leaky destref: 500 internal_error, org in body False, s3 in body False; log has org/s3: False False | T1 org-B handle issued to org A: 201, and org A PUT to it: 404, B's upload untouched (the check is syntactic; the store's (org,handle) scope holds) | R3 write-then-hang: 504 deadline_exceeded, retry same 204, retry other 409, complete 200, slots 0 | R3 cancel: slot 1 while hung, outcome cancelled (not 504), slots after 0 | R3 store's own TimeoutError: 504, no leak | R2 late rt.large_bodies after mount: 204 (fixed at mount) | R2 deps.large_bodies None: ingress pool is uploads pool False, limits 2 2"
+        },
+        {
+          "cmd": "10x pytest -k 'hung_store or slow_control' idle, then 10x with 16 busy-loop CPU burners (nproc=16)",
+          "exit": 0,
+          "tail": "idle: 10/10; loaded(16 busy loops): 10/10 (shell exit 144 came from the burner kill, not from pytest)"
+        },
+        {
+          "cmd": "python mut.py (13 reviewer single-edit mutants on uploads.py) + mut2.py (1)",
+          "exit": 0,
+          "tail": "KILLED 9, SURVIVED 5 (close_on_success_too, destref_prefix_only, handle_match_not_fullmatch, ingress_before_runtime_pool, wrapper_mints_second_id [equivalent]); pristine: 26 passed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen --offline pytest -q tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "39 passed in 168.87s (0:02:48)"
+        },
+        {
+          "cmd": "uv run --frozen --offline python -m tests.g.uploads.uploads_mutants",
+          "exit": 0,
+          "tail": "36/36 killed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen --offline pytest -q tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "199 passed in 751.10s (0:12:31); G's _definitions globs tests/g/test_*.py non-recursively, so tests/g/uploads/ stays excluded"
+        },
+        {
+          "cmd": "uv run --frozen --offline pytest -q tests/g tests/m tests/contracts",
+          "exit": 0,
+          "tail": "1791 passed, 1 skipped, 2 warnings in 395.34s (0:06:35)"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "C1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/test_uploads.py",
+      "line": "361-380 (test_media_sec__no_store_value_outside_the_frozen_ticket_leaves)",
+      "claim_broken": "T1 / the mutant invariant 'the destination is exactly the scheme + the handle' and 'the issued handle is upl_ + 22..64 url-safe characters'. The equality check and the fullmatch are only partly proved.",
+      "evidence": "Two reviewer single-edit mutants survived (1 passed). (a) `ticket[\"destination_ref\"] != UPLOAD_SCHEME + handle` -> `not ticket[\"destination_ref\"].startswith(UPLOAD_SCHEME)`: a store that issues `infrx-upload:<org>/<handle>` would render the org. (b) `UPLOAD_HANDLE_RE.fullmatch(handle)` -> `.match(handle)`: a valid handle with a suffix would render. The two rewrites in the case (an s3:// key and `upl_x`) cannot tell these apart. The declared mutants, endswith/`in`-style weakenings, a wrong scheme constant and a startswith('upl_') handle check all die. The code is correct as written, M3's real store is correct, and T1 was nonblocking in round 1.",
+      "minimal_fix": "Add two rewrites to the same case: destination_ref = f\"infrx-upload:{org}/{handle}\" (scheme kept, value wrong), and upload_handle = valid_handle + \"/x\" with destination_ref = \"infrx-upload:\" + that handle. Expect 500 and assert neither value appears in the body.",
+      "lens": "closure"
+    },
+    {
+      "id": "C2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "70-74 (guarded.closing); test 383-405",
+      "claim_broken": "The T3 claim in the evidence round-2 table: the wrapper sets `Connection: close` 'on every answer >= 400'. Only 4xx is proved.",
+      "evidence": "Reviewer mutant `if answer.status_code >= 400:` -> `if 400 <= answer.status_code < 500:` SURVIVED the whole focused suite (26 passed). The refusal case asserts only 403, 404 and 400. The 504s already get close from intake's CLOSE_CODES. A 500 (for example the T1 ticket refusal) or a pre-read 5xx such as an auth-backend failure in tenant() would lose the header unnoticed. The claimed pre-read 4xx refusals (the round-1 T3 scope) are fully proved: the declared mutant, `in (403, 404)` and `>= 500` all die at the close assertion.",
+      "minimal_fix": "Assert `response.headers.get('connection') == 'close'` on the 500 answers in test_media_sec__no_store_value_outside_the_frozen_ticket_leaves, or narrow the evidence wording to the pre-read 4xx refusals.",
+      "lens": "closure"
+    },
+    {
+      "id": "C3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/test_uploads.py",
+      "line": "259-280, 589-620",
+      "claim_broken": "T4 docstring: 'the tenant is the key's on every call; nothing in a path or body names an org'. The tests enumerate names (org_id query; x-org-id and x-infrx-org headers), so a new reader under any other name survives.",
+      "evidence": "Reviewer mutants that read the org from `x-organization-id` on PUT and from `?org=` on create both SURVIVED (26 passed). Reading from `x-org-id` on complete was killed (400 == 404 at :613). These add a feature, the same class round 1 rated nonblocking. The declared create_org_from_query, put_org_from_header and complete_org_from_header all die at their named assertions.",
+      "minimal_fix": "Optional: add a structural check that uploads.py reads no `request.query_params` and no header other than content-type, which kills every name at once. Otherwise leave it as is: the enumerated names now cover round 1's R12/R13.",
+      "lens": "closure"
+    },
+    {
+      "id": "G1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "114-116",
+      "claim_broken": "T1 (evidence round-2 table): create renders only if destination_ref == \"infrx-upload:\" + upload_handle. The code enforces exact equality, but the tests pin only removal of the check. A weaker check survives.",
+      "evidence": "Reviewer mutant destref_prefix_only (`!= UPLOAD_SCHEME + handle` changed to `not ...startswith(UPLOAD_SCHEME)`) SURVIVED: 26 passed. With that edit, a store answering destination_ref=\"infrx-upload:<org>/<handle>\" would be rendered with the org in it. The case's two rewrites are an s3:// key and upl_x, and a prefix check refuses both. destref_suffix_only (endswith(handle)) was KILLED. The shipped code is correct: equality, plus the lane's ticket_destination_unchecked, which is killed.",
+      "minimal_fix": "Add a third rewrite to test_media_sec__no_store_value_outside_the_frozen_ticket_leaves: destination_ref = \"infrx-upload:\" + org + \"/\" + handle. Expect 500, with the org absent from the body.",
+      "lens": "regression"
+    },
+    {
+      "id": "G2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "113",
+      "claim_broken": "T1: the issued handle must fullmatch UPLOAD_HANDLE_RE. Weakening fullmatch to match is not killed.",
+      "evidence": "Reviewer mutant handle_match_not_fullmatch SURVIVED: 26 passed. Concrete input: handle = \"upl_\" + 43*\"A\" + \"/1a1a1a1a-0000-4000-8000-000000000001\" gives match True and fullmatch False. A store issuing that handle, with a destination_ref that agrees with it, would be rendered with the org in both fields. The equality check does not catch it because both sides carry the same suffix. The test's only bad handle is `upl_x`, which neither match nor fullmatch accepts.",
+      "minimal_fix": "Add a rewrite whose handle is a valid handle plus a suffix (for example \"/\" + org), with destination_ref = \"infrx-upload:\" + that handle. Expect 500, with the org absent.",
+      "lens": "regression"
+    },
+    {
+      "id": "G3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "57-60",
+      "claim_broken": "The docstring says the upload pool 'must be the pool the chat ingress uses, so both share the bound'. The fallback chain meets this only when a composition root sets rt.large_bodies or IngressDeps.large_bodies. IngressDeps.large_bodies defaults to None, and in that case Ingress mints its own pool (ingress.py:119, `self.slots`), which is not reachable from rt, and uploads mints a second one.",
+      "evidence": "Probe: rt.ingress = support.deps() (large_bodies None), then ingress.register and uploads.register on one app. The ingress pool is not the uploads pool: `ing.slots is up_slots` is False, with limit 2 each, so one process allows 4 concurrent large bodies. This is residual from round 1, not a regression. The round-2 claim ('else a new pool') describes it honestly. The pool is also fixed at mount: setting rt.large_bodies after register is not consulted (PUT 204 with the late pool full), so two requests can never pick different pools. The reviewer mutant ingress_before_runtime_pool (swapping the order of rt.large_bodies and rt.ingress.large_bodies) survives, but it is observable only when both are set to different pools, which is itself a misconfiguration.",
+      "minimal_fix": "Coordinator composition: set one LargeBodies on both rt.large_bodies and IngressDeps.large_bodies when adding uploads to ROUTERS. Optionally, in pilot mode, have uploads.register raise RuntimeMisconfigured when neither is set, instead of minting.",
+      "lens": "regression"
+    },
+    {
+      "id": "G4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/test_uploads.py",
+      "line": "376-404",
+      "claim_broken": "Connection: close applies to refusals only. Nothing pins that a 201, 204 or 200 keeps the connection.",
+      "evidence": "Reviewer mutant close_on_success_too (`>= 400` changed to `>= 200`) SURVIVED: 26 passed. Measured on the real code: 201, 204 and 200 carry no Connection header (correct). Every refusal from 400 to 500 carries close. The cost of the mutant would be performance (no keep-alive on success), not correctness.",
+      "minimal_fix": "In test_media_sec__every_refusal_closes_the_connection, also assert that the create 201 it already makes has headers.get(\"connection\") != \"close\".",
+      "lens": "regression"
+    },
+    {
+      "id": "G5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "130-141",
+      "claim_broken": "R3: 'the store gets the same deadline'. It gets a second deadline of the same length, not what remains of the first. A large PUT can hold the shared slot for up to about 2 \u00d7 intake_timeout_s: a read just under the deadline, then a store call just under it.",
+      "evidence": "Code reading: read_body's deadline and asyncio.wait_for(..., limits.intake_timeout_s) run one after the other. The deadline is still bounded, and a hung store is cut (reviewer mutants store_deadline_x10, store_timeout_not_caught and store_timeout_is_internal were all KILLED). Behaviour on timeout is correct. If the store writes and then hangs, the answer is 504, a retry with the same bytes is 204, a retry with other bytes is 409 (correct write-once), and complete is 200. No upload is left stuck, and in_flight is 0. Client cancellation during the store call propagates as CancelledError (not a 504), and the slot is released. A TimeoutError raised by the store itself maps to 504 with no leak.",
+      "minimal_fix": "Either word the claim as 'a further intake_timeout_s', or pass the remaining budget (deadline minus elapsed on a monotonic clock) to wait_for.",
+      "lens": "regression"
+    }
+  ]
+}

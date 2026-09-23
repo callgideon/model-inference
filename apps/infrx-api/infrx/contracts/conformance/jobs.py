@@ -132,6 +132,49 @@ async def dur_admit__changed_payload_with_the_same_key_is_a_conflict(factory):
         raise AssertionError("a changed payload was admitted under the same key")
 
 
+async def dur_admit__lookup_reads_the_mapped_job_and_writes_nothing(factory):
+    """DUR-ADMIT / R91: `lookup(org, idem)` answers the job an idempotency scope maps to -
+    the admission, marked replayed, and its committed outcome - and admits, reserves and
+    writes nothing. No key, an unmapped key and the same key in another org's scope answer
+    None; a changed payload is the 409 `admit` gives; a scope naming another org than the
+    caller is refused (R10); a mapping expired after its terminal state answers None."""
+    harness = factory()
+    request, admission = await _admit(harness)
+
+    def state():
+        return (harness.extra["balance"](request.org_id)["reserved"],
+                len(harness.extra["active_jobs"]()), len(harness.extra["outbox"]()))
+
+    before = state()
+    found = await harness.port.lookup(request.org_id, b.idem(request, "idem-1"))
+    assert found is not None, "a mapped scope answered nothing"
+    mapped, outcome = found
+    assert (mapped.request_id, mapped.job_handle) == (admission.request_id, admission.job_handle)
+    assert mapped.replayed is True and outcome is None
+    assert state() == before, "lookup wrote something"
+    assert await harness.port.lookup(request.org_id, b.idem(request, None)) is None
+    assert await harness.port.lookup(request.org_id, b.idem(request, "never-used")) is None
+    try:
+        await harness.port.lookup(request.org_id, b.idem(request, "idem-1", payload="changed"))
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("lookup answered a changed payload under the same key")
+    other = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B)
+    assert await harness.port.lookup(b.ORG_B, b.idem(other, "idem-1")) is None
+    try:
+        await harness.port.lookup(b.ORG_B, b.idem(request, "idem-1"))
+    except (errors.Forbidden, errors.NotFound):
+        pass
+    else:
+        raise AssertionError("one organization read another's idempotency scope")
+    cancelled = await harness.port.cancel(request.org_id, admission.job_handle)
+    _mapped, outcome = await harness.port.lookup(request.org_id, b.idem(request, "idem-1"))
+    assert outcome == cancelled
+    harness.clock.advance(DEFAULTS.idempotency_ttl_s + 1)
+    assert await harness.port.lookup(request.org_id, b.idem(request, "idem-1")) is None
+
+
 async def dur_admit__crash_after_commit_then_retry_does_not_double_reserve(factory):
     """DUR-ADMIT: killed after commit, before the acknowledgment; the retry with
     the same key returns the committed acceptance and reserves nothing more."""
@@ -2678,6 +2721,7 @@ def jobstore_cases():
         dur_admit__idempotent_replay_returns_the_same_identity,
         dur_admit__a_request_uuid_is_admitted_once,
         dur_admit__changed_payload_with_the_same_key_is_a_conflict,
+        dur_admit__lookup_reads_the_mapped_job_and_writes_nothing,
         dur_admit__crash_after_commit_then_retry_does_not_double_reserve,
         dur_admit__expired_mapping_is_explicit_never_a_second_billable_job,
         dur_admit__an_active_jobs_mapping_never_expires,

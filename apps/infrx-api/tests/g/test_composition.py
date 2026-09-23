@@ -11,6 +11,8 @@ Valkey index are the defaults; they are constructed here only as far as needs no
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import threading
 
 import pytest
 from fastapi import FastAPI
@@ -166,6 +168,12 @@ def test_f_base__the_pool_sets_the_service_role_on_every_connection():
     deployment = support.settings().deployment
     assert (pool.min_size, pool.max_size) == (deployment.database_pool_min_size,
                                               deployment.database_pool_max_size)
+    # Review C1: the pool that is built carries that hook - driven as psycopg drives it.
+    executed.clear()
+    assert pool._configure is not None, "the built pool has no configure hook"
+    rs.run(pool._configure(Connection()))
+    assert executed == ["set role service_role", "set statement_timeout = "
+                        f"{deployment.database_pool_statement_timeout_ms}"]
 
 
 def test_f_base__the_lifespan_runs_the_dispatch_relay_until_shutdown():
@@ -212,6 +220,131 @@ def test_f_base__exactly_one_chat_route_and_it_is_the_ingress():
     async def shadow():
         return {}
 
-    for app in (legacy, second, FastAPI()):
+    # Review C6: a pattern route registered earlier serves the path without being "at"
+    # it; Starlette picks it first, so the table is refused.
+    shadowed = FastAPI()
+    shadowed.state.runtime = rt = support.runtime(support.settings("dev"))
+
+    @shadowed.post("/v1/{rest:path}")
+    async def pattern(rest: str):
+        return {"served_by": "shadow"}
+
+    ingress.register(shadowed, rt, support.deps())
+    for app in (legacy, second, shadowed, FastAPI()):
         with pytest.raises(RuntimeMisconfigured):
             ingress.assert_route_table(app)
+
+
+# === G2 review round 2 =====================================================================
+def test_f_base__the_credit_price_probe_requires_the_active_card():
+    """Review honesty-H-B4 / C4: in the CREDIT regime the served model's approved card must
+    be the one this deployment was approved to serve (`ACTIVE_RATE_CARD_VERSION`)."""
+    card = support.catalog().rate_cards[support.IDS.prod_deployment].rate_card_version
+    _, active = composed("credit", card=card)
+    _, other = composed("credit", card="rc_not_this_deployments")
+    assert active.checks["price_source"]() is True
+    assert other.checks["price_source"]() is False
+
+
+@pytest.mark.parametrize("fault", ["hangs", "raises"])
+def test_f_base__a_probe_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread(fault):
+    """Review H-B4 / C3 (M-FAILCLOSED): a first answer that hangs past the bound or raises
+    reads False, and the thread it was asked on has ended - a refusal to start can finish."""
+    async def check():
+        if fault == "raises":
+            raise ConnectionError("postgresql://infrx:secret@db/infrx is unreachable")
+        await asyncio.Event().wait()
+
+    before = set(threading.enumerate())
+    assert pilot.Probe(check, timeout_s=0.05)() is False
+    assert set(threading.enumerate()) <= before
+
+
+def test_f_base__the_refresh_loop_replaces_a_cached_answer_when_a_check_hangs(monkeypatch):
+    """Review C2: the lifetime task keeps asking. A check that answers, then hangs, reads
+    unavailable within its bound - a hung dependency never keeps a cached True."""
+    monkeypatch.setattr(pilot, "PROBE_EVERY_S", 0.01)
+    answers = []
+
+    async def check():
+        answers.append(True)
+        if len(answers) > 2:                  # healthy at registration and once more
+            await asyncio.Event().wait()
+        return True
+
+    probe = pilot.Probe(check, timeout_s=0.05)
+
+    async def body():
+        assert probe() is True
+        stop = asyncio.Event()
+        task = asyncio.create_task(pilot._refresh((probe,), stop))
+        for _ in range(300):                  # bounded: a loop that stops asking fails
+            if probe.value is False:
+                break
+            await asyncio.sleep(0.01)
+        stop.set()
+        await asyncio.wait_for(task, 1)
+        return probe.value
+
+    assert rs.run(body()) is False and len(answers) >= 3
+
+
+def test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last():
+    """Review C5: the pool is opened before the lifetime tasks start and closed after they
+    have finished (and after the relay's cancels drained)."""
+    rt, deps = composed()
+    order = []
+
+    class Pool:
+        async def open(self):
+            order.append(("open", len(rt.lifetime.tasks)))
+
+        async def close(self):
+            order.append(("close", all(task.done() for task in rt.lifetime.tasks)))
+
+    rt.lifetime.pool = Pool()
+    app = served(rt, deps)
+
+    async def body():
+        async with pilot.lifespan(app):
+            order.append(("serving", len(rt.lifetime.tasks)))
+
+    rs.run(body())
+    assert order == [("open", 0), ("serving", 2), ("close", True)]
+
+
+def test_f_base__shutdown_drains_the_relays_durable_cancels():
+    """Review stream-S1. The process stops while a sync wait's durable cancel is still in
+    flight (a slow store), and the handler is not waited for. The lifespan's shutdown
+    drains the relay's cancels before the pool closes and the loop ends, so the job is
+    cancelled rather than left to its stored deadline."""
+    rt, deps = composed()
+    jobs = rt.relay.jobs
+    jobs.grant(rs.CONSUMER_ROW["org_id"], "100")
+    cancel, waiting, in_flight = jobs.cancel, asyncio.Event(), asyncio.Event()
+
+    async def slow_cancel(org_id, handle, **cause):
+        in_flight.set()
+        await asyncio.sleep(0.2)              # a store round trip still in flight
+        return await cancel(org_id, handle, **cause)
+
+    async def nap(_seconds):
+        waiting.set()
+        await asyncio.Event().wait()          # the job runs on; the wait is still waiting
+
+    jobs.cancel, rt.relay.sleep = slow_cancel, nap
+    app = served(rt, deps)
+
+    async def body():
+        async with pilot.lifespan(app):
+            handler = asyncio.ensure_future(rs.call(app, rs.body()))
+            await waiting.wait()
+            handler.cancel()                  # the process stops ...
+            await in_flight.wait()
+            handler.cancel()                  # ... and does not wait for the handler
+            with contextlib.suppress(asyncio.CancelledError):
+                await handler
+
+    rs.run(body())
+    (job,) = jobs.jobs.values()
+    assert job.state is JobState.cancelled, job.state

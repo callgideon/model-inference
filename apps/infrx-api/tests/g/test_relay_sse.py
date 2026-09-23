@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from infrx.contracts.fakes.engine import SPLIT_REASONING_VISIBLE
 from infrx.contracts.records import (ChunkEventType, EngineEvent, HoldState, JobState,
                                      SettlementState, TerminalCause)
@@ -213,14 +215,201 @@ def test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_str
 
 
 def test_api_stream__a_journal_read_that_fails_is_retried_not_the_end():
-    """A journal read that fails for want of the database is retried at the next poll: it
-    is neither an empty journal (which could end the stream) nor the end of the job."""
+    """A journal read that fails for want of the database - here while the job is still
+    running - is retried at the next poll: it is neither an empty journal (which could end
+    the stream) nor the end of the job, so the job is not cancelled."""
     world = rs.World()
+    box = {}
+
+    async def publish():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two people")
+
+    async def settle():
+        assert world.only_job().state is JobState.running      # the read failed meanwhile
+        await world.complete(box["lease"])
+
     world.failures.fail("read_owned", on_call=2,
                         error=ConnectionError("postgresql://infrx:secret@db/infrx reset"))
-    world.during.append(world.work)
+    world.during += [publish, settle]
     reply = stream(world)
     job = world.only_job()
-    assert job.state is JobState.succeeded
-    assert reply.text() == world.results[job.id] and reply.data()[-1] == "[DONE]"
+    assert world.failures.count("read_owned") >= 3
+    assert (job.state, job.outcome.cause) == (JobState.succeeded, TerminalCause.completed)
+    assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
     assert "secret" not in reply.body.decode()
+
+
+# === G2 review round 2 =====================================================================
+def test_api_stream__a_read_that_fails_after_the_outcome_is_known_still_drains():
+    """Review stream-S5. Without a terminal event (D3 today) the committed outcome ends the
+    stream once the journal holds nothing more. A read that fails after that outcome is
+    known is not "nothing more": what was committed before the settlement still reaches
+    the client, then `[DONE]`."""
+    world = rs.World()
+    world.jobs.stream = None                  # terminalization writes no journal event
+    read = world.stream.read_owned
+    box = {}
+
+    async def publish():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two ")
+
+    async def settled_behind_the_read(org_id, handle, cursor, limit):
+        chunks, cursor = await read(org_id, handle, cursor, limit)
+        if not chunks and "lease" in box and "settled" not in box:
+            box["settled"] = True             # committed and settled after this read ...
+            await world.commit(box["lease"], "people")
+            await world.complete(box["lease"], "Two people")
+            world.failures.fail("read_owned", on_call=world.failures.count("read_owned") + 1,
+                                error=ConnectionError("journal read reset"))  # ... next fails
+        return chunks, cursor
+
+    world.stream.read_owned = settled_behind_the_read
+    world.during.append(publish)
+    reply = stream(world)
+    assert "settled" in box and world.only_job().state is JobState.succeeded
+    assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
+
+
+def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job():
+    """Review stream-S2 / honesty-H-B3. The process stops while the headers are still
+    being sent: no identity reached the client, so nobody can resume the job - it is
+    cancelled (an orphan otherwise) and its hold released."""
+    world = rs.World()
+
+    async def body():
+        started = asyncio.Event()
+
+        def on_send(message):
+            if message["type"] == "http.response.start":
+                started.set()
+                return asyncio.Event().wait()   # a peer that never reads
+
+        task = asyncio.ensure_future(rs.call(world.app, rs.body(stream=True), on_send=on_send))
+        await started.wait()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        await world.relay.drain(1.0)
+
+    rs.run(body())
+    job = world.only_job()
+    assert job.state is JobState.cancelled, job.state
+    assert job.outcome.cause is TerminalCause.client_cancelled
+    assert world.jobs.wallet(world.org).reserved_total == 0
+
+
+def test_api_stream__a_process_stop_after_the_client_left_cancels_as_disconnected():
+    """Review stream-S7. The client left, and the process stopped before the relay's next
+    look: the identity it holds is no reason to leave the job running for a client that is
+    gone. The job is cancelled, recorded `client_disconnected`."""
+    world = rs.World()
+    leave = asyncio.Event()
+
+    async def publish():
+        await world.commit(await world.lease(), "Two people")
+
+    async def leave_then_stop():
+        leave.set()
+        for _ in range(3):
+            await asyncio.sleep(0)            # the watcher sees the disconnect
+        asyncio.current_task().cancel()
+
+    world.during += [publish, leave_then_stop]
+
+    async def body():
+        try:
+            await rs.call(world.app, rs.body(stream=True), leave=leave)
+        except asyncio.CancelledError:
+            pass
+        await world.relay.drain(1.0)
+
+    rs.run(body())
+    job = world.only_job()
+    assert job.state is JobState.cancelled, job.state
+    assert job.outcome.cause is TerminalCause.client_disconnected
+
+
+def test_api_stream__nothing_but_visible_text_reaches_the_wire():
+    """Review stream-S3 (R58/R80). A delta with `raw` and its `content` alias but no
+    `visible` is relayed as nothing; a usage event and an engine error event carry nothing
+    of the customer's (the counts come with the settled outcome, the failure as the
+    terminal outcome). None of their bytes reach the wire."""
+    world = rs.World()
+
+    async def mixed():
+        lease = await world.lease()
+        await world.stream.append(lease, (
+            EngineEvent(type=ChunkEventType.delta,
+                        payload={"raw": "<think>RAW-REASONING", "content": "CONTENT-ALIAS"}),
+            EngineEvent(type=ChunkEventType.usage,
+                        payload={"prompt_tokens": 91919, "completion_tokens": 7}),
+            EngineEvent(type=ChunkEventType.error, payload={"message": "ENGINE-TEXT"}),
+            EngineEvent(type=ChunkEventType.delta,
+                        payload={"raw": "Two people.", "visible": "Two people."})))
+        await world.jobs.cancel(world.org, world.only_job().admission.job_handle)
+
+    world.during.append(mixed)
+    reply = stream(world)
+    assert reply.text() == "Two people."
+    wire_text = reply.body.decode()
+    for secret in ("RAW-REASONING", "CONTENT-ALIAS", "91919", "ENGINE-TEXT"):
+        assert secret not in wire_text, secret
+
+
+def test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline():
+    """Review stream-S4 / honesty-H-B2. The job is still running when the clock passes its
+    stored deadline plus the grace: the relay cancels it (`sync_deadline`, R21), and the
+    stream ends with `deadline_exceeded` naming the committed state, then `[DONE]`."""
+    world = rs.World()
+
+    async def publish():
+        await world.commit(await world.lease(), "Two people")
+
+    world.during += [publish, lambda: world.clock.advance(3_600)]
+
+    async def body():
+        try:
+            return await asyncio.wait_for(rs.call(world.app, rs.body(stream=True)), 5)
+        except asyncio.TimeoutError:
+            pytest.fail("the stream never ended: its bound was not checked")
+
+    reply = rs.run(body())
+    job = world.only_job()
+    assert (job.state, job.outcome.cause) == (JobState.cancelled, TerminalCause.sync_deadline)
+    error = [item["error"] for item in reply.data() if isinstance(item, dict) and "error" in item]
+    assert [(e["code"], rs.state_of(e)) for e in error] == [("deadline_exceeded", "cancelled")]
+    assert reply.text() == "Two people" and reply.frames[-1] == "data: [DONE]"
+
+
+def test_api_stream__a_gap_whose_cancel_is_unconfirmed_ends_without_done():
+    """Review honesty-H-B1. A replay gap ends the relay, but the cancel cannot be confirmed
+    (the store is unreachable): the last frame is the error, naming no state, and no
+    `[DONE]` follows - that is sent only once a terminal commit is known. The driver's
+    text is not echoed."""
+    world = rs.World(limits=rs.DEFAULTS.replace(journal_chunk_ttl_s=5.0))
+    box = {}
+
+    async def unreachable(org_id, handle, **cause):
+        raise ConnectionError("postgresql://infrx:secret@db/infrx is unreachable")
+
+    async def begin():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two ")
+
+    async def prune_behind_the_cursor():
+        await world.commit(box["lease"], "people ")
+        world.clock.advance(6)
+        await world.commit(box["lease"], "unload")
+        assert await world.stream.expire() == 2
+        world.jobs.cancel = unreachable
+
+    world.during += [begin, prune_behind_the_cursor]
+    reply = stream(world)
+    assert "[DONE]" not in reply.body.decode() and "secret" not in reply.body.decode()
+    last = reply.data()[-1]
+    assert last["error"]["code"] == "replay_gap" and rs.state_of(last["error"]) is None
+    assert world.only_job().state is JobState.running        # the cancel never committed

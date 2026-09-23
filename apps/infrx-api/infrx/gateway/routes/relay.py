@@ -140,20 +140,33 @@ class Relay:
         return _Answer(self, job, headers)
 
     async def admit(self, auth, request, idem):
-        """The durable half of acceptance, the same for every mode (G3): prepare, stage, one
-        admission by regime, then - for a fresh admission - the pin/card recheck and the
-        attach. Returns `(job, admission, headers)`: headers name the job (`Inference-Id`, the
-        admission's id, also on a replay) and say whether it was a replay."""
+        """The durable half of acceptance, the same for every mode (G3's async hook calls it
+        too): the R91 lookup, then prepare, stage and one admission by regime, then the
+        recheck and the attach. Returns `(job, admission, headers)`; the headers name the
+        job (`Inference-Id`, the admission's id, also on a replay) and say whether it is a
+        replay. A mapped job is answered in the mode of the request that asks for it."""
         began = self.clock()
-        # M2 request 5: preparation replaces the record G1 built, so the staged payload and
-        # the admission carry our media refs, never the customer's URL or inline bytes.
-        prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
-        refs = await _dependency(self.media.stage(auth.org_id, prepared))
+        # R91 (review money-B1): a keyed request that replays a known job is answered from
+        # that job before anything is prepared, so a lost answer is recovered by its key
+        # even once the customer's media URL has expired, and nothing is fetched again.
+        found = await self._lookup(auth.org_id, idem)
+        prepared = refs = None
+        if found is None or found[1] is None:
+            # M2 request 5: preparation replaces the record G1 built, so the staged payload
+            # and the admission carry our media refs, never the customer's URL or bytes.
+            prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
+            refs = await _dependency(self.media.stage(auth.org_id, prepared))
         timings = {"prepare": max(0.0, self.clock() - began)}
-        # The requested name and the idempotency scope exactly as handed (R66, R78).
-        admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
-            else self.jobs.admit(prepared, idem)
-        admission = await _dependency(admit)
+        if found is None:
+            # The requested name and the idempotency scope exactly as handed (R66, R78).
+            admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
+                else self.jobs.admit(prepared, idem)
+            admission = await _dependency(admit)
+            if admission.replayed:              # a replay the lookup could not see yet
+                found = (admission, (await _dependency(
+                    self._owned(admission.org_id, admission.job_handle)))[1])
+        else:
+            admission = found[0]
         deadline = request.deadline_at if self.regime == CREDIT else admission.deadline_at
         job = _Job(org_id=admission.org_id, handle=admission.job_handle,
                    request_id=admission.request_id, model=request.model_revision,
@@ -163,20 +176,44 @@ class Relay:
         headers = {wire.HEADER_INFERENCE_ID: job.request_id,
                    wire.HEADER_SERVER_TIMING: metrics.server_timing(timings)}
         if admission.replayed:
-            # Nothing is re-admitted, re-attached or regenerated: the answer attaches to the
-            # same job's wait or stream, and a terminal job answers its committed result.
+            # Nothing is re-admitted or regenerated: the answer attaches to the same job's
+            # wait or stream, and a terminal job answers its committed result.
             headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"
-        else:
+        if found is None or found[1] is None:
+            # A fresh admission, or the replay of a job still in flight whose first
+            # acceptance may have been cut short (money-B2): the same idempotent steps.
             await self._admitted(job, admission, prepared, refs)
+        if not admission.replayed:
             self._count("infrx_jobs_accepted_total", mode=request.execution_mode,
                         tenant=auth.org_id)
         if self.registry is not None:
             self.registry.observe_phases(timings)
         return job, admission, headers
 
+    async def _lookup(self, org_id: str, idem):
+        """R91: the job a keyed request replays, with its outcome, or None. Until D5 the
+        PostgreSQL store cannot look up (`param="lookup"`, refused before any SQL); then
+        admission's own replay answer decides, as before (ponytail: interim, D5 lifts it)."""
+        if idem.key is None:
+            return None
+        try:
+            found = await _dependency(self.jobs.lookup(org_id, idem))
+        except errors.UnsupportedParameter as refused:
+            if refused.param != "lookup":
+                raise
+            return None
+        if found is not None and getattr(found[0], "accounting_regime", LEGACY) != self.regime:
+            # One key, one regime (the store's own admit rule).
+            raise errors.IdempotencyConflict("the key names a job of another accounting regime")
+        return found
+
     async def _admitted(self, job: _Job, admission, prepared, refs) -> None:
-        """What a fresh admission still has to pass, then the staged refs bound to it. A
-        refusal here cancels the job it just admitted (nothing ran, nothing is billed)."""
+        """Complete an acceptance: the pinned card and capability rechecks (CREDIT), then the
+        staged refs bound to the job - before the refs, so a refused job can never run. Run
+        on a fresh admission and on the replay of a job still in flight; both steps are
+        idempotent. A definitive refusal cancels the job (nothing ran, nothing is billed)
+        and is answered; a dependency that failed leaves the job for the same-key retry its
+        503 invites (money-B2; the stored deadline ends it otherwise)."""
         try:
             if self.regime == CREDIT:
                 pins = admission.pins
@@ -196,8 +233,15 @@ class Relay:
                 await _dependency(self.media.attach(job.request_id, refs))
             finally:
                 self._attaching.pop(job.request_id, None)
-        except BaseException:
-            await self.cancel(job.org_id, job.handle, quiet=True)
+        except errors.DependencyUnavailable:
+            raise
+        except BaseException as refused:
+            ended = await self.cancel(job.org_id, job.handle, quiet=True)
+            if ended is None and isinstance(refused, errors.DomainError):
+                # money-N1: the job is not cancelled yet, so the refusal is not final; the
+                # retry this 503 invites cancels it and answers the refusal.
+                raise errors.DependencyUnavailable("the refused job is not cancelled yet") \
+                    from None
             raise
 
     def job_org(self, job_id: str) -> str:
@@ -229,6 +273,12 @@ class Relay:
                 raise
             log.exception("cancel of job %s failed; its stored deadline still ends it", handle)
             return None
+
+    async def drain(self, timeout_s: float) -> None:
+        """Wait, bounded, for the shielded cancels still in flight: a process must not exit
+        with a durable cancel half done (review stream-S1; `pilot.lifespan` on shutdown)."""
+        if self._cancels:
+            await asyncio.wait(set(self._cancels), timeout=timeout_s)
 
     async def _cancel(self, org_id: str, handle: str, cause: TerminalCause):
         try:
@@ -304,12 +354,16 @@ class Relay:
         if outcome.state is not JobState.succeeded:
             raise _refusal(outcome, stream=False)
         text = await self.results.read_result(job.org_id, outcome.result_ref)
-        body = wire.ChatCompletionResponse(
-            id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
-            choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(role="assistant",
-                                                                       content=text),
-                                     finish_reason=_finish_reason(job, outcome)),),
-            usage=wire.ChatUsage.of(outcome.usage))
+        fields = dict(id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
+                      choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(
+                          role="assistant", content=text),
+                          finish_reason=_finish_reason(job, outcome)),))
+        if outcome.usage is None:
+            # A committed success whose usage is unknown (held_unknown, money-N2): the
+            # result, no counts - `usage` is left out rather than invented.
+            body = wire.ChatCompletionResponse.model_construct(**fields, usage=None)
+        else:
+            body = wire.ChatCompletionResponse(**fields, usage=wire.ChatUsage.of(outcome.usage))
         return JSONResponse(body.model_dump(mode="json", exclude_none=True))
 
     # --- the SSE relay (item 3) -------------------------------------------------
@@ -415,6 +469,8 @@ def _refusal(outcome, *, stream: bool) -> errors.DomainError:
 
 
 def _finish_reason(job: _Job, outcome) -> str:
+    if outcome.usage is None:
+        return "stop"
     return "length" if outcome.usage.completion_tokens >= job.max_output_tokens else "stop"
 
 
@@ -526,8 +582,12 @@ class _Stream(_Owned):
             named = True
             await relay.pump(job, emit, gone)
         except asyncio.CancelledError:
-            if not named:                       # no identity reached the client: an orphan
-                await relay.cancel(job.org_id, job.handle, quiet=True)
+            # No identity reached the client (an orphan), or the client had already left
+            # (review stream-S7); otherwise the job is left to its worker.
+            if not named or gone.done():
+                await relay.cancel(job.org_id, job.handle, quiet=True, cause=(
+                    TerminalCause.client_disconnected if gone.done()
+                    else TerminalCause.client_cancelled))
             raise
         except Exception as failure:
             # A replay gap, an expired journal, the store gone, or the client gone (a send

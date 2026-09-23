@@ -9,8 +9,8 @@ scripted vLLM (`worker/fakes.FakeUpstream`, W1's `VllmEngine`) - one process, on
 Every drill asserts store state: job state, hold settled or released, journal, attempts.
 
 Matrix: text and video-by-URL, each sync and SSE. Video by upload is G4U's (pending G4U).
-The engine runs behind `relay_support.RecordKeysDropped`, the effect of integration
-request W-new (W1 refuses `stream`/`max_tokens` in the frozen record's `parameters`).
+The engine is W1's own, with W-new merged (a15fa4b): `stream`/`max_tokens` in the frozen
+record's `parameters` are consumed by the record, not refused.
 """
 from __future__ import annotations
 
@@ -152,6 +152,9 @@ def test_api_stream__an_upstream_error_is_an_honest_terminal_error(fault, mode):
     reply = rs.run(rs.call(world.app, rs.body(stream=mode == "stream")))
     job = world.only_job()
     assert (job.state, job.outcome.debit) == (JobState.failed, 0)
+    # Review stream-S8: nothing in flight is left behind, and the hold is off the wallet.
+    assert not any(r.active for r in job.reservations.values())
+    assert world.jobs.wallet(world.org).reserved_total == 0
     if mode == "sync":
         assert (reply.status, reply.json()["error"]["code"]) == (500, "internal_error")
     else:
@@ -170,10 +173,12 @@ def test_api_stream__an_upstream_error_is_an_honest_terminal_error(fault, mode):
 
 
 @pytest.mark.parametrize("outage", ["database", "object_store"])
-def test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_no_side_effects(outage):
+def test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_nothing_admitted(outage):
     """A durable dependency that fails at acceptance: a typed 503 with `Retry-After`, the
     driver's text in no answer, and no job, hold or journal reservation behind. (The index
-    is not touched at acceptance at all: dispatch is the outbox's, Q3's relay feeds it.)"""
+    is not touched at acceptance at all: dispatch is the outbox's, Q3's relay feeds it.)
+    Objects already staged are not claimed gone (review money-N3): a payload or source
+    object whose admission never committed is the collector's stray sweep (M, carried)."""
     world = rs.World()
     if outage == "database":
         world.failures.fail("admit", error=ConnectionError(

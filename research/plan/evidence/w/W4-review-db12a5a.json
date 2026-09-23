@@ -1,0 +1,1008 @@
+{
+  "verdict": "fix_required",
+  "head": "db12a5a",
+  "reviews": [
+    {
+      "lens": "boxsafety",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Claims I checked and found true. concurrency.sh changed exactly one line, and ENGINE_STATE reaches bench.py only as one quoted value that argparse restricts to a closed set, so it can only change the label. The candidate table is closed, and `$#` refuses any argument. UNIT, CONTAINER and ENGINE are assigned constants that the environment cannot override. The corpus verify runs before `systemctl stop`: M12 is killed and the implementer's candidate_corpus_not_verified is killed. The EXIT trap restores on a failing sweep, and on SIGTERM too (bash 5.2 probe). The PartOf worker is restarted. The unit's ExecStart path= is the installed serve.sh (marlin2b-vllm.service:17), so the unit-tree guard compares real paths. Nothing prints HF_TOKEN or any environment: pre_args is docker .Args; the SSM block uses `wrap`, not the HF variant; there is no set -x. The SIGKILL manual recovery is written in the evidence rollback table (W4-ecacd50.md:287). The implementer's 20 box-script mutants plus 2 structural cases all passed in my run (22 passed). test_w4 gave 14 passed. I did not rerun decide/parity/P-20 or tests/w at 178, which is outside this lens.\n\nClaims only partly true. 'Writes only under w4-*': parity.py writes decide.pyc into the checkout (BS-7). 'Verifies the corpus before anything': corpus-synth is not verified (BS-4). The evidence says 'restored=yes only for the same args and image, healthy', but the image and health conditions have no killing test (BS-2).\n\nNothing was run against the pilot box, AWS or Docker. candidate.sh ran only against the test_w4 stub box in the scratch copy.",
+      "cleanup": "Scratch /tmp/claude-1000/review-w4-boxsafety-3877054 is removed, including the probe test file, the mutant harness, the candidate.orig backup and the .venv. candidate.sh was restored and cmp-verified after each mutant, before deletion. The codex-w4 worktree is untouched: HEAD db12a5a, empty `git status --short`. Nothing was committed and no containers or remote calls were made.",
+      "mutants": [
+        {
+          "name": "M1 out_canonical_check_dropped",
+          "edit": "line 55 `[ \"$(realpath -m -s -- \"$OUT\")\" = \"$OUT\" ] || refuse` -> `true || refuse`",
+          "result": "survived named case",
+          "killed_by": "survives test_ops_recover__..._refuses_in_flight_work_and_unlisted_flags; killed by reviewer probe P1 (OUT=$NVME/w4-x/../../escape)"
+        },
+        {
+          "name": "M2 restore_image_compare_dropped",
+          "edit": "line 151 drop `&& [ \"$post_image\" = \"$pre_image\" ]`",
+          "result": "survived named case",
+          "killed_by": "survives test_ops_recover__the_candidate_run_restores_the_engine_it_found; killed by probe P2 (RESTORE_IMAGE differs)"
+        },
+        {
+          "name": "M3 restore_health_ignored",
+          "edit": "line 151 drop `[ \"$healthy\" = yes ] &&`",
+          "result": "survived named case",
+          "killed_by": "survives ..._restores_the_engine_it_found; killed by refined probe P3 (unit container up, same args, /health down)"
+        },
+        {
+          "name": "M4 restore_keeps_set_e",
+          "edit": "restore: delete `set +e`",
+          "result": "survived named case",
+          "killed_by": "survives ..._restores; killed by probe P3 (never-healthy restore aborts before the restored= line)"
+        },
+        {
+          "name": "M5 metrics_seen_guard_dropped",
+          "edit": "awk `END{if (seen) print n+0}` -> `END{print n+0}`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__..._refuses_in_flight_work_and_unlisted_flags (metrics-down)"
+        },
+        {
+          "name": "M6 waiting_not_counted",
+          "edit": "`num_requests_(running|waiting)[{ ]` -> `num_requests_running[{ ]`",
+          "result": "survived named case",
+          "killed_by": "survives ..._refuses; killed by probe P5 (waiting=3.0)"
+        },
+        {
+          "name": "M7 empty_execstart_accepted",
+          "edit": "line 61 `[ -n \"$unit_script\" ] || refuse` -> `true || refuse`",
+          "result": "survived named case",
+          "killed_by": "survives ..._refuses; killed by probe P4 (missing unit: empty ExecStart, stop/start exit 5)"
+        },
+        {
+          "name": "M8 seqs_not_32",
+          "edit": "`ENGINE_MAX_NUM_SEQS=32 nohup` -> `=8`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__the_candidate_run_restores_the_engine_it_found"
+        },
+        {
+          "name": "M9 no_stop_before_candidate_start",
+          "edit": "start_candidate: delete leading `stop_candidate`",
+          "result": "survived named case",
+          "killed_by": "survives ..._restores; killed by probe P7 (stub docker refuses a duplicate name)"
+        },
+        {
+          "name": "M10 restore_stop_candidate_dropped",
+          "edit": "restore: delete `stop_candidate`",
+          "result": "survived (not load-bearing on the box: the unit's ExecStartPre `docker rm -f marlin2b-8000` removes the candidate)",
+          "killed_by": "none"
+        },
+        {
+          "name": "M11 partof_filter_all",
+          "edit": "record every ConsistsOf unit, not only the active ones",
+          "result": "survived (low impact: it would start a PartOf unit that was inactive)",
+          "killed_by": "none"
+        },
+        {
+          "name": "M12 verify_moved_after_stop",
+          "edit": "corpus verify replaced by `$(echo deferred)`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__..._refuses_in_flight_work_and_unlisted_flags (unverified)"
+        },
+        {
+          "name": "M13 processing_cache_kept",
+          "edit": "`unset PROCESSING_CACHE_DIR` -> `: PROCESSING_CACHE_DIR`",
+          "result": "survived (the test env never sets it; SSM root env does not either)",
+          "killed_by": "none"
+        },
+        {
+          "name": "implementer box-script list (20 C/S mutants + 2 structural)",
+          "edit": "INFRX_MUTANTS=all, -k subset",
+          "result": "22 passed (all killed as claimed)",
+          "killed_by": "their named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-w4 archive db12a5a | tar -x -C /tmp/claude-1000/review-w4-boxsafety-3877054; git diff a237d6f..db12a5a --stat; git diff a237d6f..db12a5a -- models/marlin2b/measure/concurrency.sh",
+          "exit": 0,
+          "tail": "10 files changed, 2503 insertions(+), 1 deletion(-); concurrency.sh: 1 line, `--engine-state warm` -> `--engine-state \"${ENGINE_STATE:-warm}\"` (bench.py:428 choices restarted|warm|unknown; label only)"
+        },
+        {
+          "cmd": "make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "14 passed in 58.62s"
+        },
+        {
+          "cmd": "bash probe: EXIT trap on SIGTERM with and without `trap 'exit 130' INT TERM HUP` (bash 5.2.21)",
+          "exit": 0,
+          "tail": "rc=143 restore-ran / rc=130 restore-ran (EXIT trap runs either way)"
+        },
+        {
+          "cmd": "bash probe: exec > >(tee) with the tee reader closed (| head -1), then restore",
+          "exit": 0,
+          "tail": "mark created: restore reached its start step despite SIGPIPE; log lost the later lines"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/w/test_zz_boxsafety_probe.py (reviewer probes P1-P7, scratch only)",
+          "exit": 1,
+          "tail": "FAILED test_p6_unit_inactive_refused ... 1 failed, 6 passed in 70.41s (P6 failing = BS-1 reproduced: restore: ... starting marlin2b-vllm infrx-worker.service / restored=yes)"
+        },
+        {
+          "cmd": "uv run --frozen python probe/mut.py (13 single-edit mutants on candidate.sh vs named cases + probes; original restored and cmp-verified)",
+          "exit": 0,
+          "tail": "M1/M2/M4/M6/M7/M9 survive named cases, killed by probes; M5/M8/M12 killed by named cases; M3 survived both (probe P3 not isolating) ; M10/M11/M13 survive; restored-original"
+        },
+        {
+          "cmd": "refined P3 (unit container up, same args, /health down): pristine then M3",
+          "exit": 1,
+          "tail": "pristine: 1 passed; M3: 1 failed (killed); original restored"
+        },
+        {
+          "cmd": "READY_S=15m wait_ready reproduction",
+          "exit": 0,
+          "tail": "[: 15m: integer expression expected / wait_ready rc=1 after 0s"
+        },
+        {
+          "cmd": "rm -rf measure/__pycache__; python3 measure/parity.py --help; ls measure/__pycache__",
+          "exit": 0,
+          "tail": "decide.cpython-312.pyc"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w4_mutants.py -k '<box-script mutants + structural>'",
+          "exit": 0,
+          "tail": "22 passed, 32 deselected in 293.17s"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/review-w4-boxsafety-3877054; git -C codex-w4 status --short | wc -l; rev-parse",
+          "exit": 0,
+          "tail": "0 scratch dirs left; 0 changes in worktree; HEAD db12a5a"
+        }
+      ]
+    },
+    {
+      "lens": "decision",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "I recomputed every number in this report from the scratch archive of db12a5a. decide.py's printed verdicts on the golden sweep were reproduced in both modes: without the set-aside, no level qualifies and failures are 28/448; with the four clips set aside, c*=16, the threshold is 2.1384, X is 80.7, and six criteria are unknown. The overhead band 9.1806\u20139.8077 over 140 rows (20 distinct clips) was recomputed independently with transformers' own smart_resize. The refusal counts 20160, 21168 and 21504 come from the four failed rows' manifest geometry: 1024x768 gives 21504, 2560x1080 gives 21168, and 480x854 and 640x360 both give 20160. They match the engine's text only as a set; the raw rows hold no refusal text, which the coordinator record quotes. At 83 s, 704x288 gives 16,434 tokens when 165 frames are sampled (t_bar rounds to 164); 82 s gives at most 16,154. 120 s gives 23,520 against 32,768. The implementer's counts (14 tests, 54 mutants) match my runs. I did not run the tests/w, W1/W2/W3 list or bench counts. I ran nothing against the pilot box, used no AWS or Docker, and did not execute candidate.sh or concurrency.sh. The only network use was downloading the transformers wheel from PyPI to read smart_resize.",
+      "cleanup": "I removed /tmp/claude-1000/review-w4-decision-3877225, which held the scratch archive, the venv, the transformers wheel, the experiment runs and the mutant copies. Its count is now 0. The codex-w4 worktree shows 0 changes in `git status --short`. I made no commits or edits in any worktree.",
+      "mutants": [
+        {
+          "name": "M1 c_star >= -> >",
+          "edit": "decide.py c_star: level.T >= threshold -> level.T > threshold",
+          "result": "SURVIVED (11 passed)"
+        },
+        {
+          "name": "M2 error rate < -> <=",
+          "edit": "error_verdict: rate < MAX_FAILURE_RATE -> <=",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M3 floor(X) -> round(X)",
+          "edit": "setting: min(c, math.floor(x)) -> min(c, round(x))",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M4 tail skips c*",
+          "edit": "tail_verdict: level <= cstar -> level < cstar",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M5 OOM ignores engine-error lines",
+          "edit": "oom_verdict: if exited or oom -> if exited",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M6 GPU growth unchecked",
+          "edit": "memory_verdict: ok = gpu <= MAX_GPU_GROWTH_MIB and -> ok = True and",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M7 c* = largest qualifying",
+          "edit": "c_star: sorted(levels) -> sorted(levels, reverse=True)",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M8 parity pairs by clip only",
+          "edit": "parity_verdict: base lookup by (clip_id, sha256) -> first baseline row with the same clip_id",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M9 candidate refusal -> unknown",
+          "edit": "parity_verdict: problems.append('refused by the candidate') -> unknown.append",
+          "result": "KILLED",
+          "killed_by": "test_media_parity__token_or_content_drift_disqualifies"
+        },
+        {
+          "name": "M10 X = max over logs",
+          "edit": "Run: self.X = min(xs) -> max(xs)",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M11 set-aside prefix without dash",
+          "edit": "aside: startswith(name + '-') -> startswith(name)",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M12 parity accepted without usage",
+          "edit": "parity.py:108 drop `and out[\"prompt_tokens\"]`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M13 no break after stream error",
+          "edit": "parity.py: remove break after an error event",
+          "result": "SURVIVED (equivalent: error_message is set, so outcome stays failed)"
+        },
+        {
+          "name": "M14 ceiling ignores sampling edge",
+          "edit": "worst_tokens: range(max(MIN_FRAMES, budget-2), budget+1) -> range(budget, budget+1)",
+          "result": "KILLED",
+          "killed_by": "test_engine_opt__the_interim_ceiling_fits_every_geometry_and_e1_covers_120_s"
+        },
+        {
+          "name": "M15 starvation slack dropped",
+          "edit": "STARVATION_RATIO * theirs + STARVATION_SLACK_S -> STARVATION_RATIO * theirs",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "M16 usage drift reads only c=1",
+          "edit": "usage_verdict counts(): for c in levels -> for c in [min(levels)]",
+          "result": "KILLED",
+          "killed_by": "test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-w4 archive db12a5a | tar -x -C /tmp/claude-1000/review-w4-decision-3877225; git diff a237d6f..db12a5a --stat",
+          "exit": 0,
+          "tail": "10 files changed, 2503 insertions(+), 1 deletion(-)"
+        },
+        {
+          "cmd": "make api-env (scratch)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/sweep-20260923T050411Z",
+          "exit": 0,
+          "tail": "w3_rule c*=None threshold=2.1384 setting=None; error_rate=fail (28/448 = 0.0625); e3_trigger=yes c=[16, 32]; verdict: no setting adopted - failed: ['w3_rule', 'error_rate']; unknown: ['severe_tail','oom','memory_growth','cancellation','short_job_starvation','usage_drift','output_drift']"
+        },
+        {
+          "cmd": "python3 decide.py <sweep> --set-aside c012,c025,c038,c051",
+          "exit": 0,
+          "tail": "w3_rule c*=16 threshold=2.1384 setting=16 (X=80.7); error_rate pass 0/420; severe_tail pass; verdict: no setting adopted - failed: []; unknown: ['oom','memory_growth','cancellation','short_job_starvation','usage_drift','output_drift'] (six unknown)"
+        },
+        {
+          "cmd": "python3 decide.py --overheads <sweep>",
+          "exit": 0,
+          "tail": "clips=140 per_group_min=9.181 per_group_max=9.808"
+        },
+        {
+          "cmd": "python3 decide.py --ceiling 16384 ; --ceiling 32768",
+          "exit": 0,
+          "tail": "82: 16154, 83: 16434 -> ceiling_s=82; 120: 23520 -> ceiling_s=120"
+        },
+        {
+          "cmd": "python3 cmp.py (port vs transformers 5.17.0 smart_resize, source extracted from a pip-downloaded wheel, no import)",
+          "exit": 0,
+          "tail": "compared 756 mismatches 0; sub-32 px side 20x400: port (384,32) vs tf (640,32)"
+        },
+        {
+          "cmd": "python3 refusal recompute (manifest geometry of the 4 failed raw rows)",
+          "exit": 0,
+          "tail": "c012 1024x768 -> 21504; c025 2560x1080 -> 21168; c038 480x854 -> 20160; c051 640x360 -> 20160 (the rows: raw/c*.jsonl outcome=failed, error_class=stream_error_event, http_status=200, duration 112)"
+        },
+        {
+          "cmd": "python3 tf check 704x288 at 83 s / 82 s",
+          "exit": 0,
+          "tail": "83 s sampled 165 -> (288,704) 16434; sampled 164 -> 16236; sampled 166 -> 13944; 82 s max 16038"
+        },
+        {
+          "cmd": "python3 worst.py (brute force h<=259, aspect<=200, tf smart_resize)",
+          "exit": 0,
+          "tail": "82 bound 16154 found (16236, 199, 1, 163); 120 bound 23520 found (23760, 200, 1, 239)"
+        },
+        {
+          "cmd": "python3 overhead.py (independent recompute)",
+          "exit": 0,
+          "tail": "rows>=24 groups 140 min 9.1806 max 9.8077 distinct clips at c=1 20; prompt_tokens stable across levels"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "14 passed in 51.04s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all .venv/bin/python -m pytest -q tests/w/test_w4_mutants.py",
+          "exit": 0,
+          "tail": "54 passed in 467.62s"
+        },
+        {
+          "cmd": ".venv/bin/python attack.py / attack2.py (fixtures from test_w4.passing_pair)",
+          "exit": 0,
+          "tail": "A0/A0b/A1/A4/A5b/A6/A7/B3b adopt; A2b error_rate fail->pass; B8 1.8 -> c*=8, 1.799 -> none; threshold rounding mismatches 0"
+        },
+        {
+          "cmd": "python3 mut.py (16 own mutants, in-place edit + restore, pytest test_w4 -k 'not ops_recover')",
+          "exit": 0,
+          "tail": "KILLED: M9, M14, M16; SURVIVED: M1-M8, M10-M12, M15; M13 equivalent; decide.py/parity.py restored byte-equal to db12a5a"
+        }
+      ]
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Confirmed:\n- test_w4 14, tests/w 178 (base 156), W4 list 54 = 52 mutants + 2 structural, W1 162, W2 69, bench 67, --list 52 over 14 cases.\n- decide.py output on the golden sweep (no level qualifies; with the set-aside, c*=16 and 'no setting adopted' with six unknowns), ceiling 82/120, overheads 140 rows 9.181\u20139.808, the two 83 s token counts.\n- Both commit-message corrections: the list is byte-identical at 6b6465a and ecacd50, so 52 at both; '2 of 54' refers to the 6b6465a run.\n- Per-item commit table against git show: 4614392 is the protocol only; 58e2659 is decide+parity; 28af39c is fakes/test/candidate/concurrency, decide edits and a parity.py mode-only change; 6b6465a is the list plus a 2-line test edit; ecacd50 is test_w4 only; db12a5a is evidence only. a237d6f is an ancestor.\n- concurrency.sh changes exactly one line. fakes.py is purely additive.\n- The protocol case really parses the protocol: every protocol or decide edit I made was caught, except the flag substring gap in HON-1.\n\nNot reproduced:\n- W3 list 87: the run was cut at 82%.\n- The '42 failed / 6 errors pre-existing' orderings claim (HON-8).\n\nWrong or overstated:\n- 'predeclared before decide.py exists' (HON-4).\n- 'residual depends on frame count only' (HON-5).\n\nThe implementer made no fabricated test counts that I could check.",
+      "cleanup": "Removed /tmp/claude-1000/review-w4-honesty-3877387 (exports of base, head and the manual-mutation copy, plus logs). I killed all its background pytest processes and confirmed 0 remain. I made no edits or commits in any worktree. I made no box, AWS or SSM contact and started no Docker container: the full-suite runs used a failing docker shim. Every candidate.sh run was against the test stubs only.",
+      "mutants": [
+        {
+          "name": "threshold_edited_in_decide_only",
+          "edit": "MAX_TTFT_P95_S 30.0\u219245.0",
+          "result": "killed",
+          "killed_by": "protocol case test_w4.py:84 'decide.py has 45.0, the protocol states 30.0'"
+        },
+        {
+          "name": "failures_counted_over_accepted_only",
+          "edit": "self.rows\u2192self.accepted in failures",
+          "result": "killed",
+          "killed_by": "no_level test_w4.py:118 F 0 != 4"
+        },
+        {
+          "name": "blank_sample_read_as_zero",
+          "edit": "float(value or 0)",
+          "result": "killed",
+          "killed_by": "unknown case :175 0.0 is None"
+        },
+        {
+          "name": "t_fraction_lowered",
+          "edit": "T_FRACTION 0.8",
+          "result": "killed",
+          "killed_by": "set_aside :134 threshold 1.9008 != 2.1384"
+        },
+        {
+          "name": "floor_x_ignored",
+          "edit": "return c if",
+          "result": "killed",
+          "killed_by": "set_aside :155 16 != 10"
+        },
+        {
+          "name": "set_aside_by_default",
+          "edit": "load default set_aside FOUR",
+          "result": "killed",
+          "killed_by": "set_aside :145"
+        },
+        {
+          "name": "set_aside_by_default_on_the_command_line",
+          "edit": "--set-aside default FOUR",
+          "result": "killed",
+          "killed_by": "set_aside :149 set_aside=none missing"
+        },
+        {
+          "name": "pre_fix_waiting_trusted",
+          "edit": "self.W = max(waiting)",
+          "result": "killed",
+          "killed_by": "no_level :121 W(32) 2.0 is not None"
+        },
+        {
+          "name": "p95_without_sufficiency",
+          "edit": "if not values",
+          "result": "killed",
+          "killed_by": "unknown :164 p95([1.0]*59) not None"
+        },
+        {
+          "name": "warm_compared_with_restarted",
+          "edit": "comparable = list(common)",
+          "result": "killed",
+          "killed_by": "states :203 pass != unknown"
+        },
+        {
+          "name": "unknown_is_adopted",
+          "edit": "drop 'not unknown'",
+          "result": "killed",
+          "killed_by": "set_aside :138 'adopt ENGINE_MAX_NUM_SEQS=16'"
+        },
+        {
+          "name": "error_rate/oom/memory_growth/short_job_starvation/usage_drift/output_drift _not_applied (6)",
+          "edit": "v[name]=(PASS,'not checked')",
+          "result": "killed (each)",
+          "killed_by": "passing case :250 (name, pass) != fail"
+        },
+        {
+          "name": "hash_comparison_dropped",
+          "edit": "elif False and not (",
+          "result": "killed",
+          "killed_by": "parity :311"
+        },
+        {
+          "name": "prompt_token_equality_skipped",
+          "edit": "if False:",
+          "result": "killed",
+          "killed_by": "parity :314"
+        },
+        {
+          "name": "refusal_count_unchecked",
+          "edit": "elif False:",
+          "result": "killed",
+          "killed_by": "parity :322"
+        },
+        {
+          "name": "overhead_band_unchecked",
+          "edit": "elif False and not (...",
+          "result": "killed",
+          "killed_by": "parity :320"
+        },
+        {
+          "name": "missing_candidate_row_ignored",
+          "edit": "for clip in ():",
+          "result": "killed",
+          "killed_by": "parity :328 pass != unknown"
+        },
+        {
+          "name": "smart_resize_rounds",
+          "edit": "floor\u2192round",
+          "result": "killed",
+          "killed_by": "parity :336 {..21280..} != three refused counts"
+        },
+        {
+          "name": "frames_not_rounded_to_even",
+          "edit": "return count",
+          "result": "killed",
+          "killed_by": "client :378 budget_kwargs(2.3) differs from worker"
+        },
+        {
+          "name": "refusal_text_not_recorded",
+          "edit": "'refused' instead of message",
+          "result": "killed",
+          "killed_by": "client :403"
+        },
+        {
+          "name": "accepted_without_done",
+          "edit": "drop done",
+          "result": "killed",
+          "killed_by": "client :404 'no [DONE] is not accepted'"
+        },
+        {
+          "name": "parity_sends_no_eos",
+          "edit": "stop_token_ids []",
+          "result": "killed",
+          "killed_by": "client :408"
+        },
+        {
+          "name": "ceiling_ignores_the_sampling_edge",
+          "edit": "range(budget, budget+1)",
+          "result": "killed",
+          "killed_by": "ceiling helper :428 (83,288,704,165,16434)"
+        },
+        {
+          "name": "engine_refusal_untyped",
+          "edit": "worker/engine.py if False:",
+          "result": "killed",
+          "killed_by": "refusal case :690 engine_incomplete is not engine_error (AssertionError in test coroutine, not infrx)"
+        },
+        {
+          "name": "e1_flag_off_protocol",
+          "edit": "e1 32768\u219224576",
+          "result": "killed",
+          "killed_by": "protocol :98"
+        },
+        {
+          "name": "engine_state_ignored",
+          "edit": "--engine-state warm",
+          "result": "killed",
+          "killed_by": "label :456"
+        },
+        {
+          "name": "restore_trap_removed",
+          "edit": "drop trap restore EXIT",
+          "result": "killed",
+          "killed_by": "restores: 'restored=yes' not in stdout"
+        },
+        {
+          "name": "restore_skipped_on_failure",
+          "edit": "exit early on nonzero status",
+          "result": "killed",
+          "killed_by": "restores :604"
+        },
+        {
+          "name": "partof_units_left_stopped",
+          "edit": "systemctl start $UNIT only",
+          "result": "killed",
+          "killed_by": "restores :593"
+        },
+        {
+          "name": "levels_labelled_warm",
+          "edit": "ENGINE_STATE=warm",
+          "result": "killed",
+          "killed_by": "restores :600"
+        },
+        {
+          "name": "in_flight_check_dropped",
+          "edit": "true || refuse",
+          "result": "killed",
+          "killed_by": "refuses :631 ('in-flight', 0)"
+        },
+        {
+          "name": "unreadable_metrics_taken_as_idle",
+          "edit": "inflight default 0",
+          "result": "killed",
+          "killed_by": "refuses :631"
+        },
+        {
+          "name": "writes_outside_w4",
+          "edit": "case OUT in /*",
+          "result": "killed",
+          "killed_by": "refuses :631 ('outside', 0)"
+        },
+        {
+          "name": "no_container_not_refused",
+          "edit": "|| true",
+          "result": "killed",
+          "killed_by": "refuses :641 rc 1 != 2"
+        },
+        {
+          "name": "checkout_not_checked",
+          "edit": "true || refuse",
+          "result": "killed",
+          "killed_by": "refuses :641 ('no-checkout', 0)"
+        },
+        {
+          "name": "start_to_ready_unrecorded",
+          "edit": "echo start=$1",
+          "result": "killed",
+          "killed_by": "records :657"
+        },
+        {
+          "name": "OWN e3_flag_dropped",
+          "edit": "e3) flags=(--max-num-batched-tokens 32768)",
+          "result": "survived (14 passed)",
+          "killed_by": "none -> HON-1"
+        },
+        {
+          "name": "OWN e1_flag_prefix",
+          "edit": "e1 32768\u21923276",
+          "result": "survived protocol case; killed by restores :598",
+          "killed_by": "restores only"
+        },
+        {
+          "name": "OWN out_canonical_dropped",
+          "edit": "delete realpath -m -s line 55",
+          "result": "survived (4 passed)",
+          "killed_by": "none -> HON-2"
+        },
+        {
+          "name": "OWN unit_script_empty_guard_dropped",
+          "edit": "line 61 true || refuse",
+          "result": "survived (4 passed)",
+          "killed_by": "none -> HON-2"
+        },
+        {
+          "name": "OWN signal_trap_dropped",
+          "edit": "remove trap 'exit 130' INT TERM HUP",
+          "result": "survived; near-equivalent (bash still runs the EXIT trap on SIGTERM, rc 143 vs 130, verified)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "OWN protocol_value_edited",
+          "edit": "protocol MAX_TTFT_P95_S 30.0\u219245.0; parity clip c039\u2192c040; E1 flag 24576; drop STARVATION_SLACK_S row; max_tokens 256\u2192512; decide E3_MAX_GPU_UTIL 90\u219295",
+          "result": "all killed by the protocol case (it really parses the protocol)",
+          "killed_by": "protocol :84/:88/:92/:93/:98"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "make api-env (scratch head db12a5a and base a237d6f exports)",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "14 passed in 46.42s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/w",
+          "exit": 0,
+          "tail": "178 passed in 386.79s (0:06:26)"
+        },
+        {
+          "cmd": "pytest --collect-only tests/w (base a237d6f / head)",
+          "exit": 0,
+          "tail": "156 tests collected / 178 tests collected"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -rA tests/w/test_w4_mutants.py",
+          "exit": 0,
+          "tail": "54 passed in 579.62s (0:09:39)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.w.w4_mutants --list | tail -1",
+          "exit": 0,
+          "tail": "52 mutants over 14 named cases"
+        },
+        {
+          "cmd": "diff git show 6b6465a:tests/w/w4_mutants.py vs ecacd50",
+          "exit": 0,
+          "tail": "same-list (so 52 at 6b6465a too; '51' in the commit message is wrong, as the correction says)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py (W1)",
+          "exit": 0,
+          "tail": "162 passed in 510.35s (0:08:30)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_loop_mutants.py (W2)",
+          "exit": 0,
+          "tail": "69 passed in 196.45s (0:03:16)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_w3_mutants.py (W3)",
+          "exit": -1,
+          "tail": "stopped at 82% (all dots, no F) when output was forced; 87 not confirmed"
+        },
+        {
+          "cmd": "make bench-test",
+          "exit": 0,
+          "tail": "67 passed in 7.21s"
+        },
+        {
+          "cmd": "decide.py on sweep-20260923T050411Z; --set-aside c012,c025,c038,c051; --ceiling 16384; --ceiling 32768; --overheads; video_tokens(83,704,288,165)/(83,1080,1080)",
+          "exit": 0,
+          "tail": "identical to evidence except the omitted set-aside level lines; ceiling_s=82 / ceiling_s=120; clips=140 per_group_min=9.181 per_group_max=9.808; 16434 / 16268"
+        },
+        {
+          "cmd": "legacy-first full suite (docker shimmed) head then base",
+          "exit": -1,
+          "tail": "head at 45% when killed; base not started; failure-set diff not obtained (HON-8)"
+        },
+        {
+          "cmd": "hand mutants via own script (42 list mutants plus 6 own)",
+          "exit": 0,
+          "tail": "all 42 list mutants killed at tests/w/test_w4.py AssertionError for their invariant; 3 own real survivors (HON-1, HON-2), 1 near-equivalent survivor (signal trap)"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "BS-1",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "56-72 (state only echoed at 88; restore 146)",
+      "claim_broken": "'records the engine it found' and restores it: nothing refuses a unit that is not active or a second concurrent run (the lens asks about a second candidate started while one runs). No flock and no is-active check exist.",
+      "evidence": "Reviewer probe P6 on the stub box ran with state/active-marlin2b-vllm removed: a container at marlin2b-8000, the unit inactive, 0 requests in flight. On the original script it ran to the end, printed 'restore: stopping the candidate, starting marlin2b-vllm infrx-worker.service' and 'restored=yes', and exited 0. So an inactive unit is accepted, and the restore then starts it (inactive becomes active). During a run the unit is inactive and the candidate engine is idle between parity/capability requests. A second candidate.sh started then passes every guard. It records the first run's candidate args as pre_args, stop_candidate kills the first run's engine mid-gate, and its restore starts marlin2b-vllm under the still-running first run. The first run's next stop_candidate then stops the unit's container, and Restart=always (marlin2b-vllm.service:23) relaunches it every 5 s against the first run's candidate for the name, port 8000 and the GPU.",
+      "minimal_fix": "Before pre_args: `[ \"$(systemctl is-active \"$UNIT\" 2>/dev/null)\" = active ] || refuse \"$UNIT is not active: not the engine to restore (another candidate run?)\"`, and `exec 9>\"$NVME/w4-candidate.lock\"; flock -n 9 || refuse \"another candidate.sh holds the lock\"`. Add an inactive-unit case to check_candidate_refuses with a mutant.",
+      "lens": "boxsafety",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this from the code at db12a5a (codex-w4 worktree). No experiment was needed because the guard path is fully visible.\n\n**Why a second run passes every guard.** In models/marlin2b/measure/candidate.sh, the checks before the stop are at lines 46-76:\n- the arguments, CANDIDATE, the consent variable and OUT;\n- `docker inspect marlin2b-8000`, which only asks whether some container holds that name;\n- `systemctl show -p ExecStart`, which reads the unit whether or not it is active;\n- that REPO is not the unit's installed tree;\n- that the checkout files exist;\n- zero requests in flight, read from /metrics;\n- that the corpus verifies.\n\nThe unit state is only echoed at line 88. There is no `is-active` refusal and no flock anywhere in the script.\n\n**What a second run does.** While a first run is in its gate or between cells, its candidate container holds marlin2b-8000 and serves /metrics. Between requests it has 0 in flight and the unit is inactive, so a second `CANDIDATE=... W4_ENGINE_RESTART_OK=1 candidate.sh` passes. It then:\n1. records the first run's candidate args as `pre_args`;\n2. at line 165 runs `systemctl stop` on a unit that is already inactive;\n3. at line 166 its stop_candidate kills the first run's engine in the middle of the gate or a sweep.\n\n**Restore makes it worse than the reviewer said.** The second run's restore (line 146) starts marlin2b-vllm. That unit has `ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000` and `Restart=always` with `RestartSec=5` (apps/infrx-api/deploy/marlin2b-vllm.service:15, 23-24). Every unit start force-removes whatever holds the name. From then on:\n- each start_candidate in the first run stops the unit's `--rm` container;\n- systemd restarts the unit 5 s later, and its ExecStartPre removes the fresh candidate;\n- the docker names race, so the installed engine can win the name and port 8000;\n- the first run's `wait_ready` then passes on the installed engine, and its cells are recorded as the named candidate.\n\nThat feeds wrong data into decide.py's comparison. Only the second run's own restore prints `restored=no` (its pre_args were the candidate's). The first run's restore compares against the unit's args and can still print `restored=yes`, so its corrupted cells carry no flag.\n\n**The inactive-unit half.** An inactive unit is accepted, and restore changes it to active. That matches the reviewer's P6 probe and lines 144-146.\n\n**Why blocking.** Each run is long and detached (about 7 engine starts), so launching the next candidate before the previous one ends is a plausible mistake. The review lens asks about exactly that case. The result is a box-safety hole during the maintenance window: a restart fight on the GPU and port 8000. It is also a silent integrity failure in the data the decision rule uses, and there is no killable test for it.\n\n**Fix.** The reviewer's fix is right and small: add an `is-active` refusal and `flock -n` on a lock under $NVME before `pre_args`, plus an inactive-unit case in the refusal tests with a mutant.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect from the code at db12a5a (codex-w4, models/marlin2b/measure/candidate.sh). The script has no flock and never compares `systemctl is-active` with anything. Line 88 only prints the unit state, and restore (line 146) always runs `systemctl start \"$UNIT\"`.\n\nThe pre-run guards are: no arguments, a listed candidate, the restart consent, OUT under $NVME/w4-*, `docker inspect marlin2b-8000` succeeds, the unit has an ExecStart, REPO is not the unit's tree, the checkout files exist, /metrics is readable with 0 running or waiting requests, and the corpus verifies. While a first run is in its gate phase, its candidate engine holds the name marlin2b-8000 on port 8000 and sits idle between the sequential capability probes and parity requests at c=1. A second invocation in one of those idle gaps passes every guard and records the first run's candidate args as pre_args.\n\nThe second run then calls stop_candidate, which kills the first run's engine mid-gate. Its restore starts the unit. The unit file (apps/infrx-api/deploy/marlin2b-vllm.service) also has `ExecStartPre=-docker rm -f marlin2b-8000` and `Restart=always`/`RestartSec=5`. From then on, each stop_candidate in the first run is followed 5 s later by a unit relaunch that removes whatever holds the name. The first run's `serve.sh` (`docker run --rm --name marlin2b-8000`) and the unit fight over the name, the port and the GPU. Its wait_ready only polls port 8000's /health, so it can pass against the unit's engine, and the cells are then measured on the unit's engine but labelled as the candidate's.\n\nThe first run's final check does not catch this. Its pre_args are the unit's, so after its own restore it can still print `restored=yes`. decide.py fails closed on a blank \"Maximum concurrency\" line, which catches only part of the corruption. The parity and capability results for the gate are corrupted regardless.\n\nThe window is realistic. The script says it runs detached for about 7 engine starts, three candidates (e0, e1, e3) are run one after another over SSM, and it runs on the only live pilot engine. No test covers the concurrent case or the inactive-unit case.\n\nAccepting an inactive unit on its own is minor: restore is documented to start the unit. The concurrent-run hole is the real problem: a box-safety hole with a possible decision-data error. The fix is two lines: refuse unless the unit is active, and take `flock -n` on an $NVME lock file. Add a refusal case with a mutant.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "BS-2",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "55, 61, 70, 151",
+      "claim_broken": "The evidence (W4-ecacd50.md:124) says 'restored=yes only for the same args and image, healthy' and 'writes only under $NVME/w4-*'. Several load-bearing guards have no case that kills them: the canonical-OUT check (line 55), the image comparison and the health condition in restore (line 151), the empty-ExecStart refusal (line 61) and counting waiting requests (line 70).",
+      "evidence": "My single-edit mutants against the named cases. M1 ('realpath -m -s' check \u2192 true) survived refuses: OUT=$NVME/w4-x/../../escape passes the case pattern, and my probe P1 kills it. M2 (drop '&& [ \"$post_image\" = \"$pre_image\" ]') survived restores; probe P2 (RESTORE_IMAGE differs) kills it. M3 (drop '[ \"$healthy\" = yes ] &&') survived restores; a probe with the unit's container present, same args and /health down kills it. M7 ('[ -n \"$unit_script\" ] || refuse' \u2192 true) survived refuses; probe P4 kills it. It is load-bearing: `systemctl show` on a missing unit exits 0 with an empty value, so line 59's `|| refuse` never fires. Without line 61, `systemctl stop` fails, the trap's stop_candidate stops the running container and `systemctl start` fails, leaving the engine down. M6 (count running only) survived refuses; probe P5 (waiting=3, running=0) kills it.",
+      "minimal_fix": "Add cases: OUT with '..' under $NVME/w4-* refused; RESTORE_IMAGE differs gives restored=no, image_diff, exit 4; unit restarts with the same args but /health never comes up gives restored=no healthy=no; empty ExecStart refused with nothing stopped; waiting>0 refused. Add the five mutants (M1, M2, M3, M6, M7 above) to w4_mutants.py.",
+      "lens": "boxsafety",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at db12a5a. I exported models/ with git archive into a scratch dir and applied all five mutants to one copy of candidate.sh: line 55's realpath check replaced by true, line 61's check replaced by true, line 70's awk counting running only, and line 151 with the healthy condition and the image comparison both removed. The unchanged check_candidate_restores, check_candidate_refuses and check_candidate_records from apps/infrx-api/tests/w/test_w4.py all still passed against that copy. The stubs show why nothing kills these mutants. The DOCKER stub always returns Image \"sha256:4cbf\", and no case varies the image. The CURL stub always prints num_requests_waiting 0.0, and the INFLIGHT case sets only running. The SYSTEMCTL stub always prints an ExecStart with path=. After the unit starts, /health is up whenever the container is running. The only OUT case, \"outside\", is caught by line 54's pattern before line 55 is reached. Two of these guards protect the box. Line 61 stops the run when ExecStart is empty, which is what `systemctl show` gives for a missing unit, and it still exits 0, so line 59's `|| refuse` never fires. Counting waiting requests is part of \"nothing stopped with work in flight\". The OPS-RECOVER claim in W4-ecacd50.md says `restored=yes` needs the same args and image and a healthy engine. Only the args condition has a test that fails if it breaks, so the evidence claims invariants that no test checks. The fix is the five cases and five mutants the reviewer lists.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at db12a5a. I ran the unmodified candidate.sh in a scratch copy made with git archive db12a5a, using the test_w4.py check_candidate_refuses and check_candidate_restores, and it passes both. Each of the five single-edit mutants still passes the check it names:\n- M1: realpath -m -s canonical-OUT check (line 55) replaced with true.\n- M2: `&& [ \"$post_image\" = \"$pre_image\" ]` (line 151) dropped.\n- M3: `[ \"$healthy\" = yes ] &&` (line 151) dropped.\n- M6: the awk regex (line 70) counts running requests only.\n- M7: `[ -n \"$unit_script\" ] || refuse` (line 61) replaced with true.\n\nThe stubs explain why nothing kills them:\n- The docker stub always returns the same image, sha256:4cbf.\n- The curl stub answers /health whenever the container is running, so restore always sees a healthy engine.\n- The metrics stub always reports waiting=0.0.\n- UNIT_SCRIPT always gives a non-empty ExecStart path.\n- The only OUT case (\"outside\") is caught by the case pattern on line 54 before the realpath check runs.\n\nThe registered mutant restore_ignores_the_args removes all three conditions at once. The args diff kills it, so the image and health conditions have no killing test on their own. On this host, `systemctl show -p ExecStart --value no-such-unit` exits 0 with empty output. So line 59's `|| refuse` never fires for a missing unit, and line 61 is the only guard. Without it the run stops the engine and cannot restore it, which is a box-safety hole.\n\nThe evidence (W4-ecacd50.md OPS-RECOVER row) claims \"restored=yes only for the same args and image, healthy\" and says nothing is stopped when a precondition fails. candidate.sh's header says it writes only under $NVME/w4-*. None of these guarantees has a test that kills its mutant. Stated invariants with no killable test, plus a guard that keeps the engine from being left down, count as blocking.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "D1",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "230-240, 370-394 (engine_state is read only at :427 for printing)",
+      "claim_broken": "Protocol \u00a77 says a level whose engine was not freshly started (engine_state not `restarted`) is not compared, and \u00a74 says every compared cell is `restarted`. The implementer says cells at different cache states are never compared. In the code, the profile-equality check only compares the candidate with the baseline. Nothing checks that engine_state == 'restarted', and c_star compares T across levels inside one run with no state check.",
+      "evidence": "On the passing_pair fixture (the W3 sweep, every level engine_state=warm, on both sides) report() prints 'adopt ENGINE_MAX_NUM_SEQS=16 (WORKER_CONCURRENCY=16)'. The suite's own adoption test asserts this, so the test locks in the violation. Case A1: I set c=16 to engine_state=restarted and left c<=8 warm, on both sides. c* is still 16 and it still adopts 16, so the W3 rule compared T from a restarted cell against warm cells. The existing 'different states' test covers only the candidate-vs-baseline path.",
+      "minimal_fix": "In criteria(), make w3_rule, severe_tail and the three paired criteria `unknown` for any level whose profile.engine_state != 'restarted', or leave such levels out of c_star. Change passing_pair to label its cells restarted, and add a mutant that drops the check.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect at db12a5a. decide.py reads profile['engine_state'] in exactly one place, the print at line 427. c_star (lines 230-240) picks from all levels without looking at their state. criteria() (lines 370-394) compares only candidate profile against baseline profile, level by level, and applies w3_rule and severe_tail with no state gate. So a run whose cells are all warm, or a mix of restarted and warm levels, can still give 'adopt'. That breaks W4-protocol.md \u00a77: 'a level ... whose engine was not freshly started (engine_state not restarted) is not compared'. The committed W3 sweep bench.jsonl has engine_state=warm at every level from c=1 to c=32. passing_pair in apps/infrx-api/tests/w/test_w4.py copies that sweep unchanged to both sides, and test_engine_opt__a_passing_candidate_is_adopted... asserts 'adopt ENGINE_MAX_NUM_SEQS=16'. The test therefore locks in adoption from warm cells. The one existing state test, test_perf_envelope__cells_at_different_cache_states_are_not_compared, covers only the candidate-vs-baseline mismatch. The mutant warm_compared_with_restarted covers the same path. No mutant or case would die if a warm-only check were dropped, because no such check exists. One mitigation applies. On the box, candidate.sh always passes ENGINE_STATE=restarted, and its mutant levels_labelled_warm guards that, so a real E0/E1 run produced by candidate.sh would be labelled correctly. The decision rule itself is still wrong against the predeclared invariant, and the evidence doc claims 'cells at different cache states are never compared', which the code does not enforce. A level re-run by hand with concurrency.sh defaults to warm and would be accepted silently. It is blocking under the stated bar, because it is both a decision-rule error and an invariant with no killable test. The fix is small: return unknown for any level that is not restarted (or leave such levels out of c_star), relabel passing_pair as restarted, and add a mutant that drops the check.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I could not refute this; I confirmed it at db12a5a. W4-protocol.md \u00a77 says \"a level whose ... engine was not freshly started (`engine_state` not `restarted`) is not compared\", and \u00a74 says every compared cell is `restarted`. In decide.py, c_star() (:230-240) takes the smallest c with F=0, W=0 and T>=0.9\u00d7max T over every level, and never looks at the state. criteria() (:370-394) only checks that the candidate's profile equals the baseline's, level by level. Nothing in the file compares engine_state with 'restarted'; the state is read only in print_report (:427).\n\nI reproduced both cases with a scratch script that imports tests/w/test_w4.py's passing_pair and verdict_of:\n- passing_pair's bench rows are {1..32: 'warm'}, and report() returns \"adopt ENGINE_MAX_NUM_SEQS=16 (WORKER_CONCURRENCY=16)\". test_engine_opt__a_passing_candidate_is_adopted asserts exactly that verdict, so the test locks in the violation.\n- Case A1: I relabelled c=16 as 'restarted' on both sides and left the other levels warm. c*=16 and the verdict is still adopt 16, so T from a restarted cell was ranked against warm cells.\n\ntest_perf_envelope__cells_at_different_cache_states_are_not_compared covers only the candidate-vs-baseline mismatch, so no mutant or test would catch a missing restarted check.\n\nMitigation: candidate.sh always runs the sweep with ENGINE_STATE=restarted, so a real W4 run would carry correct labels. The gap therefore bites only when decide.py is fed warm or mixed cells, for example the W3 sweep or a hand-run concurrency.sh. Even so, decide.py is the declared single decision instrument, and it breaks a predeclared \u00a77 invalidator: it adopts a setting on data the protocol says must not be compared, and the suite asserts that behaviour. Under the rubric this is a decision-rule error plus an invariant with no killable test, so it is blocking.\n\nFix: in criteria(), leave any level whose profile.engine_state != 'restarted' out of c_star, or mark it unknown, and apply the same to the tail and paired criteria. Relabel passing_pair's rows as restarted, and add a test and mutant for a warm level.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "152-163, 355-367",
+      "claim_broken": "The overload-masking row in protocol \u00a75 requires accepted + rejected + failed + cancelled = scheduled. The docstring promises that missing data is unknown, never pass. In practice decide.py never reads bench.jsonl's attempts, scheduled or failed counts. `accounted` only checks that every row it has carries one of four outcomes, so rows that are missing make F and the error rate smaller. A missing `retries` key counts as 0.",
+      "evidence": "B3a: six c=32 accepted rows turned into failures gives error_rate fail 6/420 = 0.0143 and no adoption. B3b: I then deleted those six rows from raw/c32.jsonl, leaving 114 rows while bench.jsonl still says attempts=128 and failed=8. Result: error_rate pass 0/414 = 0.0, overload_masking pass, 'adopt ENGINE_MAX_NUM_SEQS=16'. A2b: with the whole raw/c32.jsonl deleted, error_rate also flips from fail to pass. Adoption was blocked only by chance, because short_job_starvation lost its samples. A5b: with the `retries` key removed at c=2, overload_masking passes and the run adopts 16. With retries=1 it fails (A5a).",
+      "minimal_fix": "In Level, compare the number of raw rows that have an outcome (before the set-aside) with row['attempts'] / denominators.scheduled, and compare the failed rows with row['failed']. Any mismatch makes overload_masking and error_rate `unknown` or `fail`. Treat a missing `retries` as unknown, not 0. Add a truncation case and a mutant.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at db12a5a. In models/marlin2b/measure/decide.py, Level (lines 152-163) builds rows, F, retried and accounted only from raw/c<c>.jsonl. It never reads bench.jsonl's scheduled, attempts, failed or retried_requests fields. `accounted` is all(outcome in four values) over the rows that exist. For an empty file that is all([]) == True. `retried` uses r.get('retries') or 0. error_verdict's denominator is len(level.rows), not the scheduled count. Protocol \u00a75 (W4-protocol.md:161) defines overload masking as \"every bench row has retried_requests = 0 and accepted + rejected + failed + cancelled = scheduled | the bench rows\". So the implemented check is not the protocol's check. It also contradicts decide.py's own docstring: \"a blank, missing or unparseable sample is unknown, never 0\".\n\nI reproduced this on scratch copies using the test suite's passing_pair fixture. Six c=32 accepted rows turned into failures gives error_rate fail at 6/420 and no adoption. Deleting those six failed rows gives error_rate pass at 0/414, overload_masking pass and \"adopt ENGINE_MAX_NUM_SEQS=16\". Removing the `retries` key at c=2 gives overload_masking pass and adopt 16.\n\ntest_w4.py covers only retries=1 and six failures. It has no case for truncated rows or missing rows, or for a mismatch between bench.jsonl and raw. So the protocol's scheduled-equality invariant is unimplemented and has no killable test. Losing raw lines in a partial copy or a crashed write is a realistic way to get there. When it happens, a failing candidate is adopted instead of being reported as unknown. That is a fail-open error in the decision rule.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The defect is real at db12a5a. Protocol \u00a75 (W4-protocol.md:161) defines overload masking on \"the bench rows\": retried_requests = 0 and accepted + rejected + failed + cancelled = scheduled. decide.py never reads bench.jsonl's attempts, scheduled or failed counts. It only uses row[\"req_per_s\"] and row[\"accepted\"] for T. In Level (decide.py:152-163), rows are filtered to those that have an \"outcome\" key. `accounted` then only checks that each outcome is one of four values. bench.py can only produce those four values (bench.py:882, 938, 951, 968, 996 all set accepted, rejected, failed or cancelled), so `accounted` is always True on real bench output. The conservation half of the invariant is therefore unimplemented. Missing raw rows lower both F and the error_verdict denominator (len(level.rows)), so error_rate can flip to pass. `r.get(\"retries\") or 0` also turns a missing key into 0, which breaks the docstring's \"missing is unknown, never 0\" rule.\n\nMutant check: I set `self.accounted = True or ...` in a scratch copy and ran apps/infrx-api/tests/w/test_w4.py. All 14 tests pass, so no test can kill this mutant. The only overload_masking break case is retries=1 at c=2.\n\nHow likely this is in practice: raw rows are flushed per attempt, but write_row returns silently when the file is closed (bench.py:1028-1029). A truncated or edited raw file can also go undetected. Either way the result can fail open to an adopt verdict.\n\nIt is blocking under the rubric on two counts: an invariant the protocol states is not enforced, with no killable test, and a fail-open path in the rule that decides adoption. Fix: in Level, compare the count of raw rows with an outcome, before the set-aside, against bench's attempts and denominators.scheduled, and compare failed rows against row[\"failed\"]. Also read retried_requests and treat a missing value as unknown. Then add a truncation break case.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "239-296 (decide.py:230-240, 331-334, 345)",
+      "claim_broken": "Three stated decision invariants have no test that can kill them: (a) the W3 rule picks the *smallest* qualifying c; (b) the OOM disqualifier fires on an 'out of memory' line in a cell's engine-errors file (protocol \u00a75, first disqualifier, second half); (c) the GPU half of memory growth (MAX_GPU_GROWTH_MIB 256). The implementer's nine disqualifier mutants damage only engine_running=no and host memory.",
+      "evidence": "My mutants, each run against test_w4.py (-k 'not ops_recover'; 11 passed each time): M7 `sorted(levels, reverse=True)` in c_star survived; the golden sweep has only one qualifying level, so no test tells smallest from largest. M5 `if exited or oom:` -> `if exited:` survived. M6 `ok = gpu <= MAX_GPU_GROWTH_MIB and` -> `ok = True and` survived.",
+      "minimal_fix": "In breaks(), add an engine-errors-c16.log case containing 'CUDA out of memory' (oom), and a samples.tsv case whose c=32 second-half gpu_mem_mib is +300 (memory_growth). Add a fixture with two qualifying levels, for example B8's T(8)=1.8 and T(32)=2.0 with W known at 32, and assert c*=8. Add all three mutants to w4_mutants.py.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at db12a5a using a git-archive scratch copy and the worktree's venv. The unmutated test_w4.py gives 11 passed, 3 deselected (-k 'not ops_recover'). Each of the three mutants also gives 11 passed. M7 changes c_star to `for c in sorted(levels, reverse=True):`. M5 changes oom_verdict to `if exited:`. M6 changes memory_verdict to `ok = True and ...`. The three deselected ops_recover tests only exercise candidate.sh, and no other test in the repo imports measure/decide.py, so no other test can kill these mutants.\n\nWhy each survives:\n- c_star (decide.py:230-240): every c_star assertion runs on the golden sweep. There, with the four clips set aside, only c=16 qualifies, and without the set-aside nothing qualifies. Nothing distinguishes the smallest qualifying c from the largest.\n- OOM disqualifier: the protocol \u00a75 row (W4-protocol.md:154) names \"out of memory\" in a cell's engine error lines. Yet passing_pair writes an empty engine-errors-c*.log for every cell, and breaks(\"oom\") damages only candidate.log with engine_running=no. The shell test at test_w4.py:662 checks candidate.sh's capture, not decide.py's verdict.\n- memory_growth: breaks(\"memory_growth\") changes only host-mem-c32.tsv, so the GPU half is untested. MAX_GPU_GROWTH_MIB 256 is protocol row 142.\n- w4_mutants.py drops each verdict call entirely (_dropped), but none of its mutants touches these three conditions.\n\nAll three are stated decision-rule invariants (W3's smallest-c rule, the OOM disqualifier, the GPU memory-growth bound) with no test that can kill a mutant, and one of them (OOM) gates engine adoption on the box. That fits the blocking category \"an invariant with no killable test\". The fix is small: an engine-errors OOM case, a +300 MiB GPU growth case in samples.tsv, and a fixture with two qualifying levels asserting the smaller c.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this at db12a5a. I extracted a scratch copy with git archive and ran each mutant against test_w4.py -k 'not ops_recover'. The unmutated copy gives 11 passed. Each of the three mutants also gives 11 passed.\n- M7: `for c in sorted(levels, reverse=True)` in c_star.\n- M5: `if exited or oom:` changed to `if exited:` in oom_verdict.\n- M6: `ok = gpu <= MAX_GPU_GROWTH_MIB and` changed to `ok = True and` in memory_verdict.\n\nWhy they survive:\n- Only one fixture reaches a c*, check_set_aside, and it has one qualifying level (c=16). W(32) is None and the lower levels are below the threshold, so no test can tell smallest from largest.\n- breaks(\"oom\") only appends `cell=c16 engine_running=no` to candidate.log. passing_pair writes every engine-errors-c*.log empty, so the 'out of memory' branch is never exercised.\n- breaks(\"memory_growth\") only edits host-mem-c32.tsv. No test raises c=32 GPU growth.\n\nThe three deselected ops_recover tests only exercise candidate.sh, not decide.py. w4_mutants.py has only a dropped-oom_verdict mutant (line 131), none of these three.\n\nW4-protocol.md states all three: the smallest-level rule at line 122, MAX_GPU_GROWTH_MIB 256 at line 142, and the 'out of memory in a cell's engine error lines' OOM disqualifier at line 154. So these are stated decision invariants with no killable test. That is a decision-rule and box-safety gap in the adopt/no-adopt gate, which counts as blocking under the task's criteria.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "HON-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "94-99",
+      "claim_broken": "The protocol case is said to check \u00a72's flags against candidate.sh's table (the invariant 'candidate.sh runs the flags the protocol predeclared'). It only checks that the script's flags are a substring of the protocol row, so for E3 the check proves nothing.",
+      "evidence": "Hand mutant in a scratch copy: `e3) flags=(--max-num-batched-tokens 32768) ;;`, which drops `--api-server-count 2`, so E3 silently becomes E1. The full test_w4.py gives 14 passed. A second hand mutant, `e1) flags=(--max-num-batched-tokens 3276)`, also passes the protocol case; only the restores case catches it (line 598, which asserts E1's argv). No case covers E3's flags, and the list's only flag mutant (e1_flag_off_protocol) is on E1.",
+      "minimal_fix": "Compare for equality, e.g. `assert (flags or 'none') == stated.replace('`','').replace(\" \u2014 today's pinned flags\",'').strip()`. Also add a mutant `e3_flag_dropped` on candidate.sh's e3 line.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect at db12a5a. In apps/infrx-api/tests/w/test_w4.py:94-99, check_protocol_matches only asserts `(flags or \"none\") in stated...`, which is a substring test. candidate.sh:50 has e3 as `--max-num-batched-tokens 32768 --api-server-count 2`. W4-protocol.md:40 states the same flags for E3. Dropping `--api-server-count 2` leaves `--max-num-batched-tokens 32768`, which is still a substring of the E3 row, so the check passes. A truncated E1 value such as 3276 is likewise a substring of 32768.\n\nI tested this on a scratch copy from `git archive db12a5a`. With the mutant `e3) flags=(--max-num-batched-tokens 32768) ;;`, test_w4.py passed 14 of 14 on two reruns. The first run had one failure, but it was in test_ops_recover__the_candidate_run_records_start_to_ready_and_engine_errors at line 669, the c16.concurrency.log check. That test runs CANDIDATE=e1, so the failure looks like timing flakiness, not the mutant being caught. The unmutated baseline passed 14 of 14. No test asserts E3's argv: the restores case checks E1's argv at line 598. The only flag mutant in w4_mutants.py:177, e1_flag_off_protocol, changes E1's value to 24576, which the substring test happens to catch.\n\nSo the invariant \"candidate.sh runs the flags the protocol predeclared\" has no test that would catch a change to E3's flags. The mutant turns E3 into E1, and the E3 evidence would then be recorded under the wrong setting. That is a real test-adequacy hole in the decision path, so I rate it blocking. The fix is small: compare for equality after normalizing the protocol cell, and add an e3_flag_dropped mutant.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect at db12a5a. check_protocol_matches (test_w4.py:94-99) only tests whether candidate.sh's flags are a substring of the protocol's \u00a72 row. It uses `(flags or \"none\") in stated...`, not equality. The E3 row reads `--max-num-batched-tokens 32768 --api-server-count 2`, so an e3 line that keeps only `--max-num-batched-tokens 32768` is still a substring and passes.\n\nThe experiment ran in a scratch copy made with git archive. I changed candidate.sh:50 to `e3) flags=(--max-num-batched-tokens 32768) ;;` and ran the full test_w4.py twice with the codex-w4 venv. Both runs gave 14 passed. An earlier run had one failure in the start_to_ready case, but that case exercises e1, and the two reruns passed, so I treat that failure as flaky and not as a kill.\n\nNothing else in tests/w/ mentions `--api-server-count`. The only flag mutant in w4_mutants.py is e1_flag_off_protocol (line 177), which targets e1. So the stated invariant \"candidate.sh runs the flags the protocol predeclared\" has no test that can kill a dropped E3 flag. The consequence: E3 would silently run E1's configuration while being recorded as E3, and the evidence and decision record for E3 would be wrong. That is an invariant with no killable test, which the rubric counts as blocking.\n\nThe fix is to compare the normalized row for equality and to add an `e3_flag_dropped` mutant on candidate.sh's e3 line.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "BS-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "DOCKER stub (run branch); candidate.sh:108",
+      "claim_broken": "'one fresh engine per level'. This depends on stop_candidate inside start_candidate, but the stub docker never refuses a second `run` on a name in use.",
+      "evidence": "M9 (drop stop_candidate at the top of start_candidate) survived restores, which counts `docker run` attempts and not successes. With a stub that returns exit 125 on a name conflict (probe P7) it is killed. On the box, the previous level's engine keeps marlin2b-8000 and wait_ready passes against it, so a warm engine is measured and labelled restarted.",
+      "minimal_fix": "Have the stub docker exit 125 when `running` exists on `run`, and assert that 7 runs succeeded (the `runs` file has 7 lines).",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BS-4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "65-76",
+      "claim_broken": "'verifies the corpus and checkout before anything': the parity set's three 120 s sop-synth-v1 clips come from corpus-synth/manifest.json. That file is neither in the file list nor verified. build.py verify checks corpus/manifest.json only.",
+      "evidence": "parity.py:39-47 reads both manifests (MANIFESTS). A checkout without corpus-synth/manifest.json raises FileNotFoundError in clips(). A manifest without the sop rows raises KeyError. Absent cache files give outcome=missing rows. All of these happen after `systemctl stop`. The run continues ('parity_exit=') and the restore still works, so the box is safe, but the window is spent on a gate with no parity result.",
+      "minimal_fix": "Add corpus-synth/manifest.json and corpus-synth/synth.py to the checkout loop. Run `\"$PY\" \"$REPO/models/marlin2b/corpus-synth/synth.py\" verify` alongside build.py verify before the stop.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BS-5",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "109",
+      "claim_broken": "'an unlisted flag or free-form value cannot reach the engine': serve.sh still takes PORT, GPU, WEIGHTS and VLLM_LOGGING_LEVEL from the operator's environment (serve.sh:40-42, 93), and the candidate container's own args are never recorded.",
+      "evidence": "candidate.sh passes only ENGINE_MAX_NUM_SEQS=32 and unsets PROCESSING_CACHE_DIR. It does not pin PORT/GPU and does not clear WEIGHTS. With PORT=8001 in the environment, docker binds 127.0.0.1:8001 (the gateway's port) and /health on 8000 never answers. With WEIGHTS elsewhere, a different model is served and measured, and no artifact would show it. The fixed variables UNIT, CONTAINER and ENGINE are safe: they are assigned, not defaulted.",
+      "minimal_fix": "Launch with `PORT=8000 GPU=0 ENGINE_MAX_NUM_SEQS=32 ... serve.sh`. Append `docker inspect --format '{{json .Args}}' \"$CONTAINER\"` to startup-<label>.log on every start.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BS-6",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "41, 95",
+      "claim_broken": "The restore waits for /health. READY_S is not checked before the engine is stopped.",
+      "evidence": "A reproduction of wait_ready with READY_S=15m printed '[: 15m: integer expression expected' and returned 1 after 0 s. On the box, the gate's first unhealthy poll would fail at once, the trap would run, and the restore would also stop waiting at once and report 'restored=no healthy=no' with exit 4. Meanwhile the unit comes up on its own, so the report is wrong, but the engine is not left down.",
+      "minimal_fix": "`[[ $READY_S =~ ^[1-9][0-9]*$ ]] || refuse \"READY_S must be a positive integer\"` alongside the other refusals.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BS-7",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "176",
+      "claim_broken": "'Writes only under $NVME/w4-*' (brief item 3)",
+      "evidence": "parity.py does `from decide import ...` from the checkout. A clean copy run with `python3 measure/parity.py --help` created measure/__pycache__/decide.cpython-312.pyc. On the box that is a root-owned directory inside $NVME/w3-checkout. It is not the unit's tree, so it is harmless to the engine.",
+      "minimal_fix": "`export PYTHONDONTWRITEBYTECODE=1` next to `export CORPUS_CACHE`.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BS-8",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "69-76 vs 165",
+      "claim_broken": "The requests-in-flight refusal is meant to describe the moment of the stop.",
+      "evidence": "The in-flight check runs before `corpus/build.py verify`, which hashes the whole corpus, and before the logging and ConsistsOf reads. The gateway (not PartOf) keeps routing to the worker throughout. The worker's `docker stop -t 330` drain on the PartOf stop reduces the harm.",
+      "minimal_fix": "Move lines 69-72 to just after the corpus verify, directly before `mkdir -p \"$OUT\"` (or directly before `systemctl stop`).",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "D4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "286-298; parity.py:108",
+      "claim_broken": "Fail closed: usage drift is decided without data. When prompt_tokens is None on both sides, the sets are {None} | {None}, which has length 1, so the clip passes. The parity client's rule that an accepted answer needs usage is not pinned by any test.",
+      "evidence": "A4: prompt_tokens set to None on every accepted row of both candidate and baseline gives usage_drift pass and 'adopt ENGINE_MAX_NUM_SEQS=16'. Mutant M12, which removes `and out[\"prompt_tokens\"]` from parity.py:108, survived.",
+      "minimal_fix": "In counts(), skip rows where prompt_tokens is None and return unknown when a common clip has no usage on either side. Add a parity-client case with a stream that has no usage event.",
+      "lens": "decision"
+    },
+    {
+      "id": "D5",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "243-244, 408",
+      "claim_broken": "The setting is min(c*, floor(X)), and adoption should require a usable engine setting. When X < 1, floor(X) = 0 and the verdict adopts 0.",
+      "evidence": "A6: with the log's '80.70x' edited to '0.70x', the verdict is 'adopt ENGINE_MAX_NUM_SEQS=0 (WORKER_CONCURRENCY=0)'. Mutant M3 (round(X) instead of floor(X)) survived because X=80.7 never binds.",
+      "minimal_fix": "If chosen < 1, report X as unknown/fail. Add a case with a non-integer X below c* (e.g. 12.6 gives 12).",
+      "lens": "decision"
+    },
+    {
+      "id": "D6",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "370-394, 481",
+      "claim_broken": "Each candidate has a paired baseline (protocol \u00a72: E1 against E0, E3 against E1), but nothing checks the pairing. --baseline can be the candidate itself, or a run that is not its predeclared baseline.",
+      "evidence": "A0b: report(load(cand), load(cand)) gives every criterion pass and 'adopt ENGINE_MAX_NUM_SEQS=16'. The adoption test's own baseline is a byte copy of the candidate.",
+      "minimal_fix": "Refuse when base.root resolves to run.root. Better: read `candidate=` from both candidate.log files and require (candidate, baseline) to be (E1, E0) or (E3, E1).",
+      "lens": "decision"
+    },
+    {
+      "id": "D7",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "194-206, 230-240, 318",
+      "claim_broken": "W3's rule is 'the smallest level' over the predeclared six. decide.py does not require the six levels to be present. Levels that are missing are neither flagged nor treated as unknown.",
+      "evidence": "A7: with the candidate's bench rows cut to c=8, 16 and 32 only, the verdict is 'adopt ENGINE_MAX_NUM_SEQS=16'. Levels 1, 2 and 4 are absent, and severe_tail checked only 8 and 16. This is mitigated in practice because candidate.sh exits 3 on the first failed level, so c=32 goes missing and memory_growth becomes unknown.",
+      "minimal_fix": "If set(run.levels) != {1,2,4,8,16,32}, make w3_rule unknown.",
+      "lens": "decision"
+    },
+    {
+      "id": "D8",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "61-74, 87-96; W4-protocol.md \u00a72 and \u00a76",
+      "claim_broken": "worst_tokens is described as an upper bound 'over every geometry', and smart_resize as transformers' function. Neither is exactly true, but both ceilings still hold.",
+      "evidence": "On 756 (geometry, duration, sampled) triples (21 geometries including 704x288, 1920x1080, 1080x1920, 333x777, 1001x97, 35x35, 3841x2161; 12 durations; sampled in {n-2, n-1, n}), the port matches transformers 5.17.0 video_processing_qwen3_vl.smart_resize (factor 32, min 4096, max n*200704) with 0 mismatches. Sides under 32 px differ because the port lacks the upscale branch: 20x400 gives (384,32) vs (640,32). A brute-force search over h<=259 px with aspect <=200 exceeds the bound: at 82 s, 16,236 tokens (199x1, sampled 163) vs 16,154; at 120 s, 23,760 (200x1, sampled 239) vs 23,520. Both stay under their budgets (16,384 and 32,768), and the clamp overshoot is at most about 1.01x against a 1.014x margin at 82 s, so ceiling_s=82 and ceiling_s=120 hold.",
+      "minimal_fix": "Change the wording to 'every geometry with both sides >= 32 px and no side clamped', or add the transformers upscale branch and take the bound over clamped aspects.",
+      "lens": "decision"
+    },
+    {
+      "id": "D9",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/W4-protocol.md",
+      "line": "\u00a76 (lines ~182-184); \u00a75 overhead row",
+      "claim_broken": "\u00a76 says the per-group overhead 'depends on the frame count only for all 60 accepted clips'. \u00a75 says the band comes from 'the W3 sweep's 20 accepted clips \u2026 at c = 1', but decide --overheads computes it over all levels.",
+      "evidence": "I recomputed with transformers' smart_resize. The overhead varies within a frame count: 4 frames gives {39,42,43,44,48}; 68 frames gives {319,323,324,325,328}, from the per-clip prompt text. The band itself is right: 140 accepted rows (20 distinct clips x 7 passes) of >=24 groups give 9.1806 to 9.8077 per group, and prompt_tokens is identical for each clip across levels (60 clips).",
+      "minimal_fix": "Rephrase to 'frame count plus the prompt text' and 'over 140 accepted rows, 20 distinct clips at every level'.",
+      "lens": "decision"
+    },
+    {
+      "id": "D10",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "239-345",
+      "claim_broken": "Boundary and pairing operators that the lens names are not pinned by tests, although the code is correct today.",
+      "evidence": "These mutants survived (11 passed each): M1 `T >= threshold` -> `>`; the code is correct, since B8 gives T(8)=1.8 with max T 2.0 -> c*=8 and 1.799 -> no c*, and the threshold rounding is exact for every T from 0.001 to 4.999. Also M2 `rate <` -> `<=`, M4 severe_tail skips c* itself, M10 X=max(xs), M11 set-aside prefix without '-', M15 starvation slack dropped, and M8 parity pairing ignores sha256.",
+      "minimal_fix": "Add one boundary case each: T equal to 0.9 x max, a 1 % failure rate, a tail violation at exactly c*, two X lines, the set-aside of 'c01', a short-class p95 at ratio x base + 0.5, and a baseline parity row with a different sha256.",
+      "lens": "decision"
+    },
+    {
+      "id": "HON-2",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "55, 61",
+      "claim_broken": "'writes only under /opt/dlami/nvme/w4-*' and 'verifies \u2026 before anything': two guards have no test that can kill them.",
+      "evidence": "I deleted line 55 (the check that OUT is canonical: `realpath -m -s`), and the ops_recover and protocol cases gave 4 passed. So an OUT of `$NVME/w4-x/../../elsewhere` would pass the case pattern if that line went, and no test notices. Replacing line 61 (`[ -n \"$unit_script\" ] || refuse`) with `true` also gives 4 passed. If that guard goes, an unreadable ExecStart turns the unit-tree guard into a no-op. The code is correct today; only the tests are missing.",
+      "minimal_fix": "Add a refusal case with OUT=\"$nvme/w4-x/../../elsewhere\", and one with a stub ExecStart that has no path=. Add a mutant for each.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "637-644",
+      "claim_broken": "Evidence and brief: '10 refusals, nothing stopped or written'.",
+      "evidence": "The no-container and no-checkout cases (2 of the 10) do not assert `not list(nvme.glob('w4-*'))`. For all 10 cases, 'nothing stopped' only looks for `systemctl stop` and `docker run` calls; a `docker stop` (stop_candidate) before a refusal would go unseen.",
+      "minimal_fix": "Add the nvme glob assertion to the damage loop. Add `docker stop` to the forbidden call prefixes.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/W4-protocol.md",
+      "line": "198-199 (also 145, 182-184)",
+      "claim_broken": "The log says the protocol was 'predeclared \u2026 before candidate.sh, parity.py and decide.py exist'.",
+      "evidence": "At its own commit 4614392, the protocol already quotes `decide.py --overheads` output (9.181\u20139.808) and says the decide.py arithmetic 'reproduces the three embedding counts'. So decide.py existed and had been run before the protocol commit. The protocol commit is at 06:05:35 and the 489-line decide.py commit (58e2659) is 5m41s later. Git order proves commit order, not authoring order. No W4 result exists, so the pre-registration still holds against W4 data, but the stated reason ('before \u2026 decide.py exist') is not accurate.",
+      "minimal_fix": "Append a log amendment: decide.py's calibration helpers were drafted and run on the W3 sweep before the protocol was committed; git order proves only that no W4 cell existed.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-5",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W4-ecacd50.md",
+      "line": "352-354 (also protocol 182-184)",
+      "claim_broken": "The processor arithmetic is said to leave '60 accepted clips' prompt tokens with a residual that depends on the frame count only'.",
+      "evidence": "I recomputed prompt_tokens \u2212 video_tokens on the W3 sweep for all 60 distinct accepted clips. At a fixed frame count the residual spreads up to 9 tokens: 4 frames gives {39,42,43,44,48}, 68 gives {319..328}, 96 gives {448..454}. The corpus has 16 distinct prompts, so the residual also depends on the prompt. No test asserts the 'frame count only' claim. The \u226524-group band check (8\u201312 per group) still holds.",
+      "minimal_fix": "Reword to 'depends on the frame count and the prompt'. Optionally assert it per (frames, prompt) pair.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-6",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "87-96",
+      "claim_broken": "P-20 says the 82 s interim ceiling 'fits every geometry'.",
+      "evidence": "worst_tokens only allows sampled \u2208 [F\u22122, F]. With no limit on how few frames are sampled, the same bound fails from 56 s (s=5 \u2192 16464). At 82 s a real geometry, 3800\u00d72137 with 5 sampled frames, gives 23919 tokens. Realistic 0.5\u20131.5 fps clips (1080p, 720p, 704\u00d7288, 2560\u00d71080, 4K) all fit at \u226482 s. So this matters only for clips with extremely few source frames, and the cost is a free engine_error. The evidence does disclose the sampling assumption (Limit 6).",
+      "minimal_fix": "State in the P-20 record that the ceiling holds only when the source has at least F\u22122 frames. Or have admission also bound the frame count.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-7",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W4-ecacd50.md",
+      "line": "213-228",
+      "claim_broken": "The decide.py output blocks are given as quoted output.",
+      "evidence": "I re-ran all five commands and diffed the output against the evidence. Everything matches except that the `--set-aside` block leaves out its six `level c=\u2026` lines (e.g. `level c=32 \u2026 F=0 \u2026 W=unknown \u2026 repeats=60`). The block is not marked as abridged.",
+      "minimal_fix": "Mark the block as abridged, or include the lines.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-8",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W4-ecacd50.md",
+      "line": "152-153",
+      "claim_broken": "'both orderings 42 failed / 6 errors, all pre-existing outside W': not reproduced by this review.",
+      "evidence": "I ran the same legacy-first command on scratch head and then base, with docker replaced by a failing shim, because the Q Valkey harness would otherwise `docker run` infrx-q3-valkey, which this dispatch forbids. The head run was at 45% after about 40 min when the orchestrator forced output, so I killed both runs and have no failure-set diff. The track-first ordering was not attempted. The failure set is unverified, not refuted.",
+      "minimal_fix": "The coordinator should re-run both orderings on base a237d6f and head db12a5a in one environment and diff the sorted FAILED/ERROR ids.",
+      "lens": "honesty"
+    },
+    {
+      "id": "HON-9",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "679-698",
+      "claim_broken": "The refusal case shows 'engine_error / debit 0 / released_platform_absorbed / one engine request / second pass runs nothing'.",
+      "evidence": "The case drives W1's real adapter (upstream.engine) and the real AttemptRunner against FakeUpstream and test_loop.World's in-memory jobs, stream and ledger. The Postgres/Valkey settlement path is not exercised. The on-wire shape (200, role chunk, SSE error) is inferred from the coordinator's quote plus the sweep's raw rows (http_status 200, stream_error_event, content_chars 0); whether a role chunk is sent is not in any raw artifact. The fakes.py change is purely additive: one new `if self.fault == ...` branch and a constant, and no existing fault branch changed.",
+      "minimal_fix": "Evidence wording only: say 'real adapter and runner, in-memory store/ledger fakes'. The production settlement path is covered by D/Q suites, not this case.",
+      "lens": "honesty"
+    }
+  ]
+}

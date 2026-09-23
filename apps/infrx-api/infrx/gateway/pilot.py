@@ -48,8 +48,11 @@ log = logging.getLogger("infrx.gateway")
 
 #: How often the lifetime task re-asks each readiness probe.
 PROBE_EVERY_S = 5.0
-#: The first answer of a probe, asked synchronously at registration, may take this long.
+#: One probe answer may take this long; past it the component reads unavailable.
 PROBE_TIMEOUT_S = 10.0
+#: How long shutdown waits for the relay's durable cancels still in flight (review S1). The
+#: unit's graceful window (110 s) is spent before the lifespan's shutdown; docker stops at 120.
+DRAIN_S = 5.0
 
 
 def _utc_now() -> datetime:
@@ -73,24 +76,23 @@ class Probe:
 
     def __call__(self) -> bool:
         if self.value is None:
-            pool = ThreadPoolExecutor(1)
-            try:
-                self.value = pool.submit(asyncio.run, self._answer()).result(self.timeout_s)
-            except Exception:
-                log.exception("readiness probe did not answer in %ss", self.timeout_s)
-                self.value = False
-            finally:
-                pool.shutdown(wait=False)
+            # `_answer` is bounded and never raises, so the thread always ends: a refusal
+            # to start can finish (review C3) and no worker is left behind.
+            with ThreadPoolExecutor(1) as pool:
+                self.value = pool.submit(asyncio.run, self._answer()).result()
         return self.value
 
     async def refresh(self) -> None:
         self.value = await self._answer()
 
     async def _answer(self) -> bool:
+        """The check's answer within `timeout_s`; a check that hangs or fails reads False
+        (review C2: a hung dependency never keeps a cached True)."""
         try:
-            return bool(await self.check())
+            return bool(await asyncio.wait_for(self.check(), self.timeout_s))
         except Exception:
-            log.warning("readiness probe failed", exc_info=True)
+            log.warning("readiness probe failed or did not answer in %ss", self.timeout_s,
+                        exc_info=True)
             return False
 
 
@@ -168,6 +170,7 @@ class Lifetime:
     probes: tuple[Probe, ...]
     reconciler: Any
     pool: Any = None
+    relay: Any = None
     tasks: list = field(default_factory=list)
 
 
@@ -210,7 +213,8 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
                                                 pilot.active_rate_card_version)),
               "journal": Probe(journal_check(stream))}
     rt.relay = relay
-    rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool)
+    rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,
+                           relay=relay)
     return IngressDeps(accept=relay.accept, checks=checks, consent_for=consent_for,
                        catalog=catalog, large_bodies=rt.large_bodies)
 
@@ -242,5 +246,7 @@ async def lifespan(app):
     finally:
         stop.set()
         await asyncio.gather(*lifetime.tasks, return_exceptions=True)
+        if lifetime.relay is not None:
+            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed
         if lifetime.pool is not None:
             await lifetime.pool.close()
