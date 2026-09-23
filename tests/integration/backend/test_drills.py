@@ -891,14 +891,85 @@ def test_e3b_db13_detects_a_credit_debit_at_the_active_card(monkeypatch):
         test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
 
 
-def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
-    """API-MODES / API-STREAM: a sync or SSE client that disconnects mid-generation must
-    cancel or detach per mode, with no orphan execution. It is a route behaviour, so it is
-    pending exactly as long as no metered route is mounted, and fails once one is."""
-    if stack.ingress_is_mounted():
-        pytest.fail("the pilot ingress is mounted: write the disconnect drill body now")
-    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect is G2's (merged), "
-                               "and the held cutover has mounted no metered route")
+def _raw_request(port: int, secret: str, body: dict, key: str):
+    """A chat request on a raw socket, so the test can leave mid-answer the way a client does:
+    by closing the connection."""
+    import json
+    import socket
+    payload = json.dumps(body).encode()
+    sock = socket.create_connection(("127.0.0.1", port), timeout=30)
+    sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                 + f"Authorization: Bearer {secret}\r\nIdempotency-Key: {key}\r\n".encode()
+                 + b"Content-Type: application/json\r\n"
+                 + f"Content-Length: {len(payload)}\r\n\r\n".encode() + payload)
+    return sock
+
+
+def _until(predicate, timeout: float = 60.0, what: str = ""):
+    import time
+    end = time.monotonic() + timeout
+    while True:
+        found = predicate()
+        if found or time.monotonic() > end:
+            assert found, f"not within {timeout}s: {what}"
+            return found
+        time.sleep(0.05)
+
+
+def test_e3b_dr11_a_client_that_disconnects_mid_generation_cancels_and_leaves_nothing_running(
+        tmp_path):
+    """API-MODES / API-STREAM / DUR-SETTLE on the mounted gateway process (G2's relay, D5's
+    0018): a client that disconnects while its answer is being generated - sync, and SSE
+    after the identity frame and the first chunk (G2's mode contract: a disconnect CANCELS,
+    never detaches) - cancels its job durably with `client_disconnected`. The output was
+    published and no usage was reported, so R21 holds the CREDIT hold `unknown` (never a
+    debit); the worker's next write is refused, it stops the engine - E2's fake vLLM sees the
+    connection close - and no attempt is left unreleased. Past the unknown-usage window the
+    reaper releases each hold: no debit, the wallet back to where it was, conserved."""
+    import pilotbox
+    if not stack.has_stack():
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
+    with pilotbox.journey(tmp_path) as trip:
+        alpha = trip.world.alpha
+        before = trip.wallet(alpha)
+        trip.engine.control(text="Two people unload boxes from a van onto a trolley. " * 8,
+                            delta_gap_s=0.25)
+        left = []
+        for mode in ("sync", "sse"):
+            body = {"model": stack.CREDIT_ALIAS, "stream": mode == "sse",
+                    "messages": [{"role": "user", "content": "Describe the van."}]}
+            seen = trip.engine.control()["disconnected"]
+            sock = _raw_request(trip.box.port, alpha.secret, body, f"dr11-{mode}")
+            request_id, = _until(lambda: trip.db(
+                "select request_id::text from infrx.jobs where idempotency_key = %s and "
+                "published", f"dr11-{mode}"), what=f"{mode}: a published chunk")[0]
+            if mode == "sse":
+                assert b"infrx.progress" in sock.recv(65536), "no identity frame before leaving"
+            sock.close()                                        # the client leaves
+            state = _until(lambda: trip.db(
+                "select state, outcome_cause, settlement_state from infrx.jobs where "
+                "request_id = %s and settled_at is not null", request_id), what="terminal")
+            assert state == [("cancelled", "client_disconnected", "held_unknown")], state
+            _until(lambda: trip.engine.control()["disconnected"] > seen,
+                   what=f"{mode}: the engine saw the generation stop")
+            _until(lambda: trip.db("select count(*) from infrx.attempts where job_id = %s "
+                                   "and released_at is null", request_id) == [(0,)],
+                   what=f"{mode}: every attempt released")
+            assert trip.db("select state from infrx.credit_wallet_holds where request_id = %s",
+                           request_id) == [("unknown",)]
+            assert trip.db("select count(*) from infrx.credit_ledger where request_id = %s",
+                           request_id) == [(0,)], "a disconnected job was debited"
+            trip.conserved(alpha)
+            left.append(request_id)
+        trip.db("select infrx_test.advance(%s)", DEFAULTS.unknown_usage_reconcile_s + 1)
+        for request_id in left:                       # the worker's reaper, every 10 s
+            _until(lambda: trip.db("select state from infrx.credit_wallet_holds where "
+                                   "request_id = %s", request_id) == [("released",)],
+                   what="the unknown hold released at the window")
+            assert trip.db("select settlement_state from infrx.jobs where request_id = %s",
+                           request_id) == [("released_platform_absorbed",)]
+        assert trip.wallet(alpha) == before, (before, trip.wallet(alpha))
+        trip.conserved(alpha)
 
 
 # ------------------------------------------------------------------ saturation and queue

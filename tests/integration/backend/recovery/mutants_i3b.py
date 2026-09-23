@@ -217,10 +217,8 @@ MUTANTS += (
            "    unknown = []\n", DRILLS, "rc00"),
     Mutant("i3bm100", "DR-4: rc05b pends on its owner (M1-L2), not on another known id", DRILLS,
            'kit.pending("M1-L2", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
-    Mutant("i3bm101", "DR-4: rc03 fails the day the ingress is mounted", DRILLS,
-           "    if stack.ingress_is_mounted():\n", "    if False:\n", DRILLS, "rc00"),
-    Mutant("i3bm105", "DRL-2: rc03 pends on the held cutover (G2-R1), not on G2, which merged",
-           DRILLS, 'kit.pending("G2-R1", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
+    # i3bm101 and i3bm105 (rc03's pending probe and its G2-R1 key) are retired: E3B phase 3
+    # gave rc03 its body once the cutover mounted the ingress (e3bm67 kills that body).
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),

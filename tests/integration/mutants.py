@@ -851,18 +851,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/test_run.py", "litter_private",
            cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
                   "files",)),
-    Mutant("e3bm40", "E3B2 R3-1: E3B's cutover pendings are keyed on G2-R1, never on merged G2",
-           "tests/integration/backend/test_journey.py",
-           'BY_MODE = {"sync": ("G2-R1",),', 'BY_MODE = {"sync": ("G2",),',
-           "tests/integration/backend/test_stage.py", "held_cutover",
-           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
     Mutant("e3bm41", "E3B2 R3-1: RESIDUAL excuses a merged id only in I3B's recovery cases",
            "tests/integration/run.py",
            "                  and not (task in residual and all(_is_recovery(name) for name in "
            "names)))\n",
            "                  and task not in residual)\n",
-           "tests/integration/backend/test_stage.py", "held_cutover",
-           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+           "tests/integration/backend/test_stage.py", "owner_reference",
+           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_"
+                  "merged_task",)),
     Mutant("e3bm42", "E3B2 (I3B R2-A): the copy carries I2B's deploy scripts rc10 runs",
            "tests/integration/mutants.py",
            # split so this definition is not a second occurrence of its own anchor
@@ -918,12 +914,6 @@ MUTANTS: tuple[Mutant, ...] = (
            "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
            "tests/integration/test_run.py", "unexpected_skip",
            cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
-    Mutant("e3bm51", "E3B2 round 3 (G-B4): dr11 pends on the held cutover, never passes empty",
-           "tests/integration/backend/test_drills.py",
-           '    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect',
-           '    (lambda *a, **k: None)("G2-R1", why="the sync/SSE relay that sees the disconnect',
-           "tests/integration/backend/test_stage.py", "held_cutover",
-           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
     Mutant("e3bm52", "E3B2 round 3 (HON-6): an INTEGRATED task is stale too, not only implemented",
            "tests/integration/run.py",
            '                  if tasks.get(task) in ("implemented", "integrated")\n',
@@ -960,8 +950,9 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/run.py",
            '    return "recovery" in case.split("::")[0].split(".")\n',
            '    return "recovery" in case\n',
-           "tests/integration/backend/test_stage.py", "held_cutover",
-           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+           "tests/integration/backend/test_stage.py", "owner_reference",
+           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_"
+                  "merged_task",)),
 
     # ---------------- E3B phase 3 (the bodies that pended on D5 and on the held cutover)
     Mutant("e3bm59", "E3B3 dr07c: the CREDIT settlement the port reports is the admitted "
@@ -990,6 +981,44 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py", "dr17", layer=2,
            cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
                   "routers",)),
+    Mutant("e3bm63", "E3B3: the video_upload cells pend on their owner reference (M3-U1), "
+                     "never on a merged task",
+           "tests/integration/backend/test_journey.py",
+           'stack.pending("M3-U1", why=', 'stack.pending("G4U", why=',
+           "tests/integration/backend/test_stage.py", "owner_reference",
+           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
+    Mutant("e3bm64", "E3B3 journeys: a same-key replay is answered as a replay "
+                     "(Idempotency-Replayed)",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           '            headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"\n',
+           "            pass\n",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
+    Mutant("e3bm65", "E3B3 dataset resume: a resumed client never re-sends an item that "
+                     "was accepted (no item accepted twice)",
+           "models/marlin2b/bench.py",
+           "        if row is not None and is_terminal(row):\n",
+           "        if False:\n",
+           "tests/integration/backend/test_journey.py", "dataset_client_resume", layer=2,
+           cases=("test_backend_journey__dataset_client_resume",)),
+    Mutant("e3bm66", "E3B3 dr11: a sync client that left cancels with client_disconnected",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "            await self.cancel(job.org_id, job.handle, "
+           "cause=TerminalCause.client_disconnected,\n",
+           "            await self.cancel(job.org_id, job.handle, "
+           "cause=TerminalCause.client_cancelled,\n",
+           "tests/integration/backend/test_drills.py", "dr11", layer=2,
+           cases=("test_e3b_dr11_a_client_that_disconnects_mid_generation_cancels_and_leaves_"
+                  "nothing_running",)),
+    Mutant("e3bm67", "E3B3 rc03: the same-key retry after a gateway restart answers the "
+                     "committed result",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "        text = await self.results.read_result(job.org_id, outcome.result_ref)\n",
+           '        text = ""\n',
+           "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
+           cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
+                  "its_identity",)),
 )
 
 

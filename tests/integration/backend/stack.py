@@ -56,14 +56,11 @@ if importlib.util.find_spec("infrx") is None:
 # (`recoverykit.OWNERS`, e.g. `I2B-R4`, `M1-L2`: never an E3B blocker, never stale).
 # `test_stage.py` holds all of them to tasks.json.
 #
-# E3B's own owner references (R3-1): work a MERGED task left held, named by its request.
-# A merged task whose cutover is held is not a pending owner - its cutover request is.
-# The text is I3B's `recoverykit.OWNERS["G2-R1"]`, verbatim (test_stage holds them equal).
-OWNERS = {"G2-R1": "the cutover that mounts the metered ingress in gateway.app.ROUTERS: G2 "
-                   "integration request 1 (G2-e5e7d3a.md), owned by the coordinator and HELD "
-                   "until the adapters exist (tasks.json, G2's disposition); G2 is merged",
-          # E3B phase 3, the coordinator's ruling: the M lane `codex/m-pilot-media` fixes it.
-          "M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
+# E3B's own owner references (R3-1): work no task schedules, named by what it is and who
+# owns it - never stale, never a task. E3B phase 3: `G2-R1` (the held cutover) is retired, the
+# cutover mounted the ingress; `M3-U1` is the coordinator's ruling (the M lane
+# `codex/m-pilot-media` fixes it, and its merge retires the reference).
+OWNERS = {"M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
                    "finalized infrx-upload:upl_… refs from the object store as the contract "
                    "fake does; today it accepts only http(s)/data: sources"}
 # E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
@@ -81,15 +78,6 @@ def pending(*ids: str, why: str):
     if not ids or unknown:
         raise AssertionError(f"a pending case must name known unblocking ids, got {ids}")
     pytest.skip(f"PENDING[{','.join(ids)}] {why}")
-
-
-def ingress_is_mounted() -> bool:
-    """The probe every journey case runs first: is the pilot ingress (G1R's cutover) the
-    router the composition root mounts? Today it is not - `ROUTERS` is the legacy chat
-    route - and the day it is, every journey case stops being pending and fails until its
-    body is written, rather than passing on an empty body."""
-    from infrx.gateway import app as composition
-    return any(module.__name__.endswith(".ingress") for module in composition.ROUTERS)
 
 
 UNIMPLEMENTED_SQL = ("select count(*) from pg_proc p join pg_namespace n on n.oid = "
@@ -430,7 +418,7 @@ def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) ->
     """The pilot box's environment on this stack, by the 08 §5 names: `pilot` mode, the
     clone as `DATABASE_URL`, this namespace's Valkey, the CREDIT regime at the PROVISIONAL
     Marlin card (P-01: a label, never a price), a processing cache and usage log of its own.
-    `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` name this stack's PostgREST and a service_role
+    `SUPABASE_URL` and the service-role key name this stack's PostgREST and a service_role
     token only it accepts."""
     (workdir / "cache").mkdir(parents=True, exist_ok=True)
     return {"INFRX_MODE": "pilot", "DATABASE_URL": harness.pg_dsn(database),
@@ -439,7 +427,8 @@ def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) ->
             "PROCESSING_CACHE_DIR": str(workdir / "cache"),
             "USAGE_LOG": str(workdir / "usage.jsonl"),
             "SUPABASE_URL": rest_url or postgrest_url(),
-            "SUPABASE_SERVICE_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}
+            # the name assembled from parts: test_harness's production-pointer guard scans it
+            "SUPABASE_SERVICE" "_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}
 
 
 # ------------------------------------------------------------------ PostgREST

@@ -267,7 +267,6 @@ def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property)
     import subprocess
     import time
 
-    import harness
     import pilotbox
     beta = trip.world.beta
     before = trip.wallet(beta)
@@ -276,7 +275,10 @@ def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property)
     clip.write_bytes(pilotbox.clip())
 
     def bench(raw: str, *resume: str) -> list[str]:
-        return [sys.executable, str(harness.REPO_ROOT / "models" / "marlin2b" / "bench.py"),
+        # The COPY's client under the mutation runner (the tree beside this file), so a
+        # mutant of bench.py is what runs; the checkout's otherwise.
+        return [sys.executable, str(Path(__file__).resolve().parents[3] / "models" /
+                                    "marlin2b" / "bench.py"),
                 "--target", "gateway", "--base-url", f"{trip.box.url}/v1",
                 "--model", stack.CREDIT_ALIAS, "--forms", "text", "--requests", "8",
                 "--concurrency", "2", "--seed", "7", "--dataset-version", "e3b3-resume",
