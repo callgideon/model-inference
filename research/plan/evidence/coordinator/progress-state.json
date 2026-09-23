@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T19:29:02Z",
+  "updated": "2026-09-23T19:35:52Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -32,6 +32,12 @@
       "phase": "dispatched (Opus) from a0711ac: dr07c/dr07[postgres] now; journeys \u00d79, dataset resume, dr11 after merging the cutover mount; retire G2-R1; full gate on namespace e3b2",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e3b2 / 56732"
+    },
+    "BOX": {
+      "lane": "codex-box / codex/box-measure",
+      "phase": "dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab \u2014 W4 phase B (candidate.sh E0/E1[/E3] \u2192 decide.py \u2192 P-20), E1B L0/L1/L8 in the same maintenance window; L2\u2013L7 + E4B real runs after the rollout (phase 2)",
+      "since": "2026-09-23T19:35:52Z",
+      "note": "SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh"
     }
   },
   "reviews": {
