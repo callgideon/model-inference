@@ -220,7 +220,7 @@ def test_f_base__the_ingress_refuses_to_start_without_a_catalog():
     """G1R: a model name means only what the trusted catalog says. With no catalog the
     ingress could only guess (the old served-map fallback copied the name through), so
     it refuses to register, in every mode."""
-    for mode in ("pilot", "dev"):
+    for mode in ("pilot", "dev", "test", ""):             # "" = unset, legacy
         with pytest.raises(RuntimeMisconfigured) as raised:
             support.cutover_app(support.settings(mode), ingress_deps=support.deps(catalog=None))
         assert "catalog" in str(raised.value)
