@@ -148,6 +148,8 @@ One behaviour change touches a 0001 table. `public.org_members` gains the trigge
 > - renames each personal org the user alone owns to `retired` and suspends it (audited `admin_set_suspension`, code `operator_request`);
 > - freezes the wallet: no new CREDIT hold and no signup grant. In-flight settlement and D5 compensating entries still land.
 >
+> An organization the user created but shares with another member is neither renamed nor suspended. *(Added in review round 2, RM-1/RM-3.)* The signup-time R72 scope is every organization the individual created (`organizations.created_by`). An organization with a NULL `created_by` is outside that scope, and no product path creates one: 0001's `handle_new_user` is the only insert and always sets it.
+>
 > The ledger, entitlement and identity claim are retained as money history. Eligibility is one grant per individual UUID **and** per verified address: sha256 of the lower-cased, trimmed email, stored as a digest only. The digest is retained after retirement, so delete + re-create with the same address is `identity_reused`, never a second grant.
 >
 > The digest is an unsalted, unkeyed sha256 of an email address, which a dictionary of addresses can reverse. It is therefore **pseudonymous personal data**, kept for abuse control (one grant per human), and its retention must be bounded by the legally approved period (**P-05**). Erasing it re-opens eligibility for that address, so erasure requires deleting the `infrx.signup_identity_claims` row. That is an UPDATE/DELETE the immutability trigger refuses today, so it has to be a new, audited D operation plus a ruling.
@@ -181,7 +183,7 @@ Migration compatibility: 0015 requires 0006 (grant seam, flags), 0009 (`verified
 
 1. Not applied to any hosted project. The hosted auth has `disable_signup` true and `mailer_autoconfirm` false (I1B). Public onboarding config is **P-05 pending**.
 2. The code mutants target pure cases with fakes, because the shared runner's nested pytest cannot hold the D harness's port lock while the parent suite does. The PostgreSQL paths of `PgSignup`/`backfill` are proven by the DB cases, not by code mutants.
-3. There is a small window between a claim's retired check and a concurrent retirement's commit, in which the claim can still grant. The wallet is frozen by the hold guard either way (documented, not closed).
+3. *(Corrected in review round 2, RM-2.)* A claim racing a retirement of the same individual waits for it: the claim takes a KEY SHARE lock on the profile row that `retire_individual` locks FOR UPDATE, so its retired check runs after the retirement commits, and it answers `retired` with nothing minted. At `47b0382` the same race made the claim raise `23514 … frozen` instead (the closure review's probe P4a); nothing was minted then either.
 4. The identity digest is an exact normalised-address match: no dot/`+tag` folding (P-05).
 5. `WalletDirectory` over PostgreSQL is not built here (D2/D5). The G6B test uses the contracts' `FakeWalletDirectory`.
 6. The R72 rollout-hold function sums the org's USD ledger on each claim (indexed by `credit_ledger_org_created_idx` on org). Hosted has 0 rows.
@@ -199,8 +201,8 @@ Next unblocked: **A2** (onboarding action above), **G6B** composition root, **D5
 5. **G6B** (`infrx/operations/cli.py` `build_operations`): `pool = AsyncConnectionPool(<service-role DSN>)`, then `signup = PgSignup(pool)`; `identities=signup`; `ledger` = an object with `grant_initial = signup.grant_initial` and D5's `adjust`/`reconcile`. Add CLI commands `backfill-signup-grants` (sync connection → `infrx.state.signup.backfill(conn, campaign)`, printing the per-status counts) and `retire-user` (`select infrx.retire_individual(user, principal, reason, idempotency_key)`).
 6. **A2**: use the fixture above. The flag `signup_grant` is enabled only by an operator (`infrx.feature_flags`); until then the RPC answers 55000.
 7. **D5**: a frozen (retired) wallet still accepts `operator_adjustment` and debits of pre-retirement holds; settlement needs nothing new.
-8. **D2**: a hold refused with `23514 … frozen` means the account was retired. *(Corrected in the review round, SEC-6.)* Refusing a suspended org before admission is **D2's** ordering and does not exist at this base. The legacy gateway (`infrx/auth/keys.py`) reads only `id, org_id, revoked_at`: it never reads suspension, and it honours a revocation only after `key_ttl` (60 s default), or later while Supabase is unreachable and a cached row is served.
-9. **Coordinator / 08 §10**: record R-A1 (above) or rule otherwise. Also record that the migration numbers 0010–0014 belong to D2 and 0015 to A1.
+8. **D2**: a hold refused with `23514 … frozen` means the account was retired. *(Corrected in the review round, SEC-6.)* Refusing a suspended org before admission is **D2's** ordering and does not exist at this base. The legacy gateway (`infrx/auth/keys.py`) reads only `id, org_id, revoked_at`: it never reads suspension, and it honours a revocation only after `key_ttl` (60 s default), or later while Supabase is unreachable and a cached row is served. *(Added in review round 2, SEC-R3.)* Revocation-lag budget for consumer keys: unstated in the brief; input needed (D2/P-05); legacy gateway = key_ttl 60 s + outage length.
+9. **Coordinator / 08 §10**: record R-A1 (above) as **R85** *(number assigned at the round-2 dispatch)* or rule otherwise. Also record that the migration numbers 0010–0014 belong to D2 and 0015 to A1.
 10. **Docs** (`apps/app/supabase/README.md`, not owned): add a 0015 paragraph.
 
 Nothing was applied to any hosted project.
@@ -257,7 +259,64 @@ supabase kill():   ('survived', '')
 
 Columns: `proacl` of `public.claim_signup_grant(uuid,text,uuid)`, then whether anon and authenticated may execute it. The ACL is byte-identical with and without 0015's revoke on both images, so the mutant is an equivalent mutant: D1's default privileges already produce this ACL, and its survival is not a missing test. The browser-EXECUTE invariant stays killed by `a1_claim_callable_by_browsers`.
 
+## Review round 2 (closure review fix_required at `47b0382`), head `8a26524`
+
+The closure review (`research/plan/evidence/a/A1-confirm-47b0382.json` on `claude/backend-impl`) confirmed 1 blocking item and 8 nonblocking ones. There is one commit per item. The last code commit is `8a26524`, a message-only change to the two race checks so a kill shows the SQLSTATE; the evidence commit follows it.
+
+| Item | Commit | Change | Killing test / mutant (kill detail from `kill()`, plain; the same on supabase) |
+|---|---|---|---|
+| **RM-1** (blocking) | `e77f917` | Before `retire(t)`, `check_retirement` creates the org `team` (`created_by` t, t owner, o member). Afterwards it asserts `(name, suspended) == ('team', false)`. | `test_retirement__…`. The mutant `a1_retirement_suspends_shared_orgs` drops the two `not exists` lines and is killed: `a shared organization the individual created was retired with them` |
+| RM-2 | `8539a77` | `claim_signup_grant` takes `for key share` on the profile row before the retired check, so it waits for `retire_individual`'s FOR UPDATE. The new check `check_retirement_race` shows this: A retires x in a transaction it holds open, and B claims x. A commits only once a third connection sees B's `wait_event_type = 'Lock'` in `pg_stat_activity`. B then answers `retired`: no wallet, no ledger row, no entitlement. Limits item 3 is corrected in place. | `test_retirement_race__…`. The mutant `a1_claim_races_retirement` drops the lock line and is killed: `claim for a100000b-…-000000000001 raised instead of answering: 23514 CREDIT wallet …` |
+| RM-3 | `a35cf4c` | Option (b), documented rather than widened. The migration comment says `created_by` is the boundary, that an org with a NULL `created_by` is outside the scope, and that no product path creates one (0001's `handle_new_user` is the only insert). R-A1 carries the same line. | — (the review's control `rv_hold_ignores_created_by` is an equivalent mutant) |
+| RM-4 | `0c1ab9b` | The 100-character campaign case is now `'é' × 100` (200 bytes) and is still granted. | `test_eligibility__…`. The mutant `a1_campaign_counts_octets` (`length(` → `octet_length(`) is killed: `raised instead of answering: 22023 invalid_request: campaign_version is at most 100 characters` |
+| RM-5 | `b454757` | New individual `pm`: +3.000000 USD on the personal org and −3.000000 on a second org they created. Result: `rollout_hold`, no wallet. | `test_eligibility__…`. The mutant `a1_usd_hold_summed_across_orgs` (the review's `rv_hold_summed_across_orgs`) is killed: `+3 and -3 USD in two organizations are two nonzero balances (R72): ('granted', …` |
+| SEC-R1 | `e1e00f4` | The first case of `check_retirement_race`: A retires y and holds its transaction open, then B retires y. B waits, then returns A's `retired_at`. The brief asked for a Barrier; this held transaction replaces it. A Barrier only makes the interleaving likely, while this makes B always run into A's uncommitted retirement. The race case runs first, so each race mutant is killed by its own case: without the FOR UPDATE, the claim case fails too. | `test_retirement_race__…`. The mutant `a1_retirement_not_serialised` (`for update;` → `;`) is killed: `retire a100000b-…-000000000002 raised: 23505 duplicate key value violates unique constraint "ret…` |
+| SEC-R2 | `7012e59` | 0015 line 1 now reads: `-- 0015 · A1 · 2026-09-22; amended 2026-09-23 in the A1 review rounds (M-4, M-6, SEC-3, RM-*); applied to no hosted or shared environment (R84).` | — |
+| SEC-R3 | this commit | Integration request 8 gains the revocation-lag line (unstated budget, input needed from D2/P-05; the legacy gateway lags by `key_ttl` 60 s plus the outage length). | — |
+| SEC-R4 | `ef58367` | The `backfill` docstring now states the partial-page outcome. When a run stops, the claims made before the stop stay committed, one transaction each. The refused individual wrote nothing and the later ones are untouched, so a rerun resumes and answers the earlier ones as replays. | — (the review's probe P4b measured it) |
+
+Version of 0015 tested (R84): `git rev-parse 8a26524:apps/app/supabase/migrations/0015_signup_eligibility.sql` → `178698bef10421fd98ec06b8b302ac87e837207f`. The file is unchanged since `7012e59`.
+
+### Results
+
+UTC, 2026-09-23, in `apps/infrx-api`. Logs are in `/tmp/claude-1000/a1-round2/`. Harness: the shared port 55432, whose lock was free at start (the recorded holder pid was dead); no HarnessBusy retries were needed (`steps.log`).
+
+| Command | At | Exit | Tail |
+|---|---|---|---|
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py` (plain) | `ef58367` | 0 | `33 passed in 46.24s` |
+| same, `INFRX_D1_IMAGE=supabase` | `ef58367` | 0 | `33 passed in 55.59s` |
+| `INFRX_MUTANTS=all … tests/d/test_migration_mutants.py -k 'a1_ or well_formed'` (plain) | `ef58367` | 0 | `32 passed, 194 deselected in 46.29s` |
+| same, `INFRX_D1_IMAGE=supabase` | `ef58367` | 0 | `32 passed, 194 deselected in 49.50s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d` (plain, full D suite with every mutant) | `ef58367` | 0 | `305 passed in 501.08s (0:08:21)` (02:55–03:04Z) |
+| `INFRX_MUTANTS=all … tests/d/test_signup.py` (plain / supabase) | `8a26524` | 0 / 0 | `33 passed in 68.31s (0:01:08)` / `33 passed in 53.41s` |
+| `INFRX_MUTANTS=all … tests/d/test_migration_mutants.py -k 'a1_ or well_formed'` (plain / supabase) | `8a26524` | 0 / 0 | `32 passed, 194 deselected in 58.47s` / `32 passed, 194 deselected in 65.26s (0:01:05)` |
+| `kill()` on the 5 new migration mutants (`kill_new_{plain,supabase}.log`, at `ef58367`), and the 2 race mutants again at `8a26524` (`kill_race_*.log`) | | 0 | all `killed`, details in the table above |
+
+The full `tests/d` sweep was not rerun on Supabase this round. The brief asked for plain only; the A1 slice ran on both images.
+
+Mutant lists, by import at `ef58367`: `D total 224 A1 migration 31 A1 code 15 checks 46`. The D list is 224 = 193 D + 31 A1. The 5 A1 mutants new this round are `a1_retirement_suspends_shared_orgs`, `a1_claim_races_retirement`, `a1_campaign_counts_octets`, `a1_usd_hold_summed_across_orgs` and `a1_retirement_not_serialised`. The one new check is `signup_retirement_race`. `test_signup.py` has 18 cases (one new: `test_retirement_race__a_racing_claim_or_retirement_waits_and_answers`) plus 15 code mutants; the code list is unchanged.
+
+Cleanup: the harness removed its containers at exit (`docker ps -a | grep -c infrx-d1-postgres` → `0`). No other lane's container, lock or run was touched.
+
+### Limits (round 2)
+
+- Item 3 is corrected in place (RM-2). The claim now serialises on the profile row. The fix depends on `retire_individual`'s FOR UPDATE: a claim's KEY SHARE does not conflict with the retirement's later non-key UPDATE of the profile alone. `a1_retirement_not_serialised` shows this, because without the FOR UPDATE the claim case fails as well.
+- RM-3 was documented, not widened. An owner of an org with a NULL `created_by`, or of an org another individual created, is not held at signup for that org's USD. That org's own statement still answers `rollout_hold`. Widening the predicate to ownership is a one-line change plus one case, if the coordinator prefers it.
+- The race checks observe B's wait through `pg_stat_activity` from a third connection. If B never waits and never finishes within 60 s, the check fails with `B neither waited nor finished`.
+- The earlier limits 1, 2, 4, 5 and 6 are unchanged.
+
+### integration_requests (current)
+
+Requests 1–10 above still stand. Changes in this round:
+
+- **1 (merge):** `"0015_signup_eligibility.sql"` must be appended to the expected list in `tests/integration/test_harness.py` after D2's 0010–0014 at merge.
+- **2 (optional):** add `a1_retirement_suspends_shared_orgs` and `a1_claim_races_retirement` to the default `ALWAYS` subset.
+- **3:** `tests/d/test_signup.py` runs 18 cases plus the 15 code mutants under `INFRX_MUTANTS=all`.
+- **8:** now carries the SEC-R3 revocation-lag line (input needed from D2/P-05).
+- **9:** R-A1 is to be recorded as **R85**.
+
 ## Verification log
 
 - 2026-09-22: Written by the A1 implementation session at `38aea7f`. Counts are quoted from the sweep logs.
 - 2026-09-23: Review round appended (M-1…M-6, SEC-3…SEC-6, H3, H5). In place, marked: the H5 fixture line, integration request 8 (SEC-6), and R-A1's rename and digest wording (SEC-3/SEC-4). Counts are quoted from the logs at `c4d7fa3`.
+- 2026-09-23: Review round 2 appended (RM-1 blocking; RM-2…RM-5, SEC-R1…SEC-R4). In place, marked: Limits item 3 (RM-2), integration requests 8 (SEC-R3) and 9 (R85), and R-A1's shared-org and created_by-scope lines (RM-1/RM-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round2/*.log` at `ef58367`/`8a26524`.
