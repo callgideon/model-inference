@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T09:18:41Z",
+  "updated": "2026-09-23T09:40:51Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "G4U": {
       "lane": "codex-g4u / codex/g4u-upload-adapter",
-      "phase": "HANDED BACK f3c8055 (impl a3cb5c2); Opus review running",
+      "phase": "review fix_required at f3c8055 (2 blocking R1 control-body deadline untested, H1 malformed mutant; 11 nonblocking, tenant lens PASS) \u2192 fix round; confirmation next",
       "since": "2026-09-23T05:12:27Z",
       "note": "routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)"
     },
@@ -44,6 +44,10 @@
     "W4": {
       "phase": "fix_required at db12a5a (wf_3f14adfb-37c: 6 blocking BS-1 BS-2 D1 D2 D3 HON-1, 21 nonblocking; JSON evidence/w/W4-review-db12a5a.json) \u2192 fix round on the lane; confirmation next",
       "since": "2026-09-23T09:08:35Z"
+    },
+    "G4U": {
+      "phase": "fix_required at f3c8055 (wf_4b637ba3-390; JSON evidence/g/G4U-review-f3c8055.json) \u2192 fix round on the lane",
+      "since": "2026-09-23T09:40:51Z"
     }
   },
   "gates": {

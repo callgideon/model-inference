@@ -1,0 +1,673 @@
+{
+  "verdict": "fix_required",
+  "head": "f3c8055",
+  "reviews": [
+    {
+      "lens": "tenant",
+      "verdict_hint": "pass",
+      "fabrication_check": "These implementer claims were reproduced: focused 21 passed; 28/28 lane mutants killed (31 passed under INFRX_MUTANTS=all); identity comes before any body byte on all three routes (0 bytes read for no/invalid/revoked keys and for the operator key, on 65 MiB bodies); operator is 403 on all three routes, including org A's real handle, and the upload is left untouched; a bad handle is 404 with 0 bytes read and the same envelope as an unknown handle; org B equals the unknown handle on PUT and complete (status, code, message, type, headers), including for a completed upload; the create body refuses org_id, wallet, user and 7 other fields; completion never carries storage_ref or the org; digest-refused retry is 409; slots end at 0. One count differs: the evidence reports tests/g+m+contracts as '1787 passed', while my run shows '1786 passed, 1 skipped' (same total, one environment-dependent skip here). That is not fabrication. The 199 G-list, 242 M-list, 304 contracts-list and 2631 legacy-first counts were not re-run under this lens (not verified, not disputed). Unconfirmed nuance: 'a leaky store cannot add fields' holds for keys but not for values (T1). No Docker, network, AWS or secrets were used. Probes ran through httpx ASGITransport rather than TestClient, because Starlette's TestClient buffers the request body up front and would hide the bytes-read measurement.",
+      "cleanup": "Removed /tmp/claude-1000/review-g4u-tenant-209453 (scratch, including the attack scripts), /tmp/claude-1000/review-g4u-tenant-209453-m (mutant copy), -mut.py, -orig.py and .env.log; ls confirms none remain. The codex-g4u worktree was not edited: git status is clean and HEAD is f3c8055. No containers were created.",
+      "mutants": [
+        {
+          "name": "R1 put_auth_after_read",
+          "edit": "PUT: remove tenant() at the top and call it after read_body",
+          "result": "killed",
+          "killed_by": "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer_an_upload (assert 8192 == 0 bytes read)"
+        },
+        {
+          "name": "R2 put_operator_allowed",
+          "edit": "PUT: tenant(request) -> auth.context(request)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__an_operator_key_owns_no_upload (204 == 403)"
+        },
+        {
+          "name": "R3 complete_operator_allowed",
+          "edit": "complete: tenant(request) -> auth.context(request)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__an_operator_key_owns_no_upload (400 == 403)"
+        },
+        {
+          "name": "R4 create_operator_allowed",
+          "edit": "create: tenant(request) -> auth.context(request)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__an_operator_key_owns_no_upload (201 == 403)"
+        },
+        {
+          "name": "R5 put_grammar_after_read",
+          "edit": "PUT: handle_of moved after read_body",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_malformed_handle_is_not_found_before_any_byte (2048 == 0)"
+        },
+        {
+          "name": "R6 complete_grammar_after_read",
+          "edit": "complete: handle_of moved after control_body",
+          "result": "killed",
+          "killed_by": "test_media_sec__a_malformed_handle_is_not_found_before_any_byte (2048 == 0)"
+        },
+        {
+          "name": "R7 put_handle_without_org",
+          "edit": "put_upload(store.uploads[handle].org_id if known else context.org_id, \u2026)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404 (204 == 404)"
+        },
+        {
+          "name": "R8 complete_handle_without_org",
+          "edit": "finalize_upload(store.uploads[handle].org_id if known else context.org_id, \u2026)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404 (400 == 404)"
+        },
+        {
+          "name": "R9 complete_adds_storage_ref",
+          "edit": "JSONResponse({**completed.model_dump(mode='json'), 'storage_ref': ref.storage_ref})",
+          "result": "killed",
+          "killed_by": "test_media_sec__completion_projects_the_ref (key set != fixture)"
+        },
+        {
+          "name": "R10 create_org_from_body_pop",
+          "edit": "create_upload(body.pop('org_id', None) or context.org_id, body)",
+          "result": "killed",
+          "killed_by": "test_dur_rls__the_body_names_no_org_and_nothing_the_contract_lacks (201 == 400)"
+        },
+        {
+          "name": "R11 create_extra_keys_through",
+          "edit": "render {**stringified store dict, **UploadCreated(frozen fields only)}",
+          "result": "killed",
+          "killed_by": "test_media_sec__no_store_field_outside_the_frozen_ticket_leaves (201 == 500)"
+        },
+        {
+          "name": "R12 create_org_from_query",
+          "edit": "create_upload(request.query_params.get('org_id') or context.org_id, body)",
+          "result": "survived",
+          "killed_by": "none (finding T4)"
+        },
+        {
+          "name": "R13 put_org_from_header",
+          "edit": "put_upload(request.headers.get('x-org-id') or context.org_id, \u2026)",
+          "result": "survived",
+          "killed_by": "none (finding T4)"
+        },
+        {
+          "name": "R14 complete_nonempty_allowed_dict",
+          "edit": "`!= {}` -> `not isinstance(\u2026, dict)`",
+          "result": "killed",
+          "killed_by": "test_media_sec__completion_takes_no_fields (200 == 400)"
+        },
+        {
+          "name": "lane list (28 + wellformed/baseline)",
+          "edit": "INFRX_MUTANTS=all tests/g/uploads/test_uploads_mutants.py",
+          "result": "31 passed (28 mutants killed; ticket_not_rendered_through_the_wire_model re-run individually: killed, 201 == 500)",
+          "killed_by": "per the lane's named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C \u2026/codex-g4u archive f3c8055 | tar -x -C /tmp/claude-1000/review-g4u-tenant-209453 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads.py",
+          "exit": 0,
+          "tail": "21 passed in 1.81s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.attack_tenant (reviewer script: ASGITransport + counting 65 MiB chunked bodies)",
+          "exit": 0,
+          "tail": "none/invalid/revoked x create/put/complete: 401 invalid_api_key, read=0, connection: close; operator x create/put/complete (incl. org A's real handle): 403 forbidden, read=0, no connection: close; badhandle/put (upl_short, infrx-upload:\u2026, UPL_\u2026, 65-char): 404, read=0; foreign/put == unknown/put: 413, read=68157440, identical error+headers; foreign/complete == unknown/complete: 404 identical; foreign-completed put/complete == unknown; A-state-after-attacks [created, false]; create->complete without PUT: 400, state created; second PUT other bytes: 409 state_conflict, read=8388608; createfield/{org_id,wallet_id,user_id,key_id,audience,state,upload_handle,expires_at,destination_ref,storage_ref}: all 400 invalid_request; create-ct: none 400, charset 201, 'application/json; text/plain' 201, APPLICATION/JSON 201, text/plain 400, json-patch 400; put-ct: 'video/mp4; codecs=avc1' 204, VIDEO/MP4 204, x-msvideo 400, 'video/mp4, text/html' 400, 'video/webm;x=y' 204; content-length short/long: 204, slots in_flight 0; complete bodies: empty 200, {} 200, {digest} 400, null 400, [] 400, ws 400, '{}' text/plain 200, dup keys 400; leak/create-extra 500 internal_error; leak/create-destref 201 (T1); completion body has no storage_ref and no org; slots_in_flight_end 0"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.attack_destref",
+          "exit": 0,
+          "tail": "201 {\u2026\"destination_ref\":\"s3://bucket/uploads/1a1a1a1a-0000-4000-8000-000000000001/upl_\u2026\"\u2026} org in body: True"
+        },
+        {
+          "cmd": "python review-mut.py (14 reviewer single-edit mutants on a copy of apps/infrx-api)",
+          "exit": 0,
+          "tail": "R1-R11, R14 KILLED; R12 SURVIVED 2 passed; R13 SURVIVED 1 passed; pristine: 21 passed in 0.77s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "31 passed in 123.58s (0:02:03)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.uploads_mutants ticket_not_rendered_through_the_wire_model",
+          "exit": 0,
+          "tail": "[killed] ticket_not_rendered_through_the_wire_model: 1 failed, 20 deselected; 1/1 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g tests/m tests/contracts",
+          "exit": 0,
+          "tail": "1786 passed, 1 skipped, 2 warnings in 344.89s (0:05:44)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py (default subset)",
+          "exit": 0,
+          "tail": "10 passed in 28.96s"
+        }
+      ]
+    },
+    {
+      "lens": "resource",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every number above comes from the command output in this session. Focused suite: 21 passed. G4U list: 31 passed. g+m+contracts: 1786 passed and 1 skipped, which is 1787 collected and matches the implementer's 1787. The single skip is M parity's corpus-cache check, which fails because the scratch copy lives in /tmp. Among the implementer's claims, I confirmed read-stops-at-cap (4097 bytes consumed, then 413 with Connection: close), the per-chunk and asyncio deadlines (both 504 in 0.30 s), slot release on success, 409, 500, 413, 504, 429, disconnect (400) and cancellation, the 4096/4097 control cap, and bounded parse cost for 4096-deep nesting (400 in 6 ms). I did not re-run G 199, M 242, contracts 304, legacy-first 2631, or make check; those counts are not verified by me. A9 reflects the composition the brief assigned to the coordinator (request (a)), not the mounted gateway, since app.ROUTERS does not include uploads yet.",
+      "cleanup": "I edited uploads.py only inside the scratch copy, for the mutants, and restored it; a diff against f3c8055 was empty. I deleted the attack and memory test files before running the wider suites. /tmp/claude-1000/review-g4u-resource-209803 was removed with rm -rf and `ls` confirms it is gone. I edited and committed nothing in any worktree: codex-g4u is clean at f3c8055. I used no Docker, network, AWS or secrets.",
+      "mutants": [
+        {
+          "name": "cap_dropped",
+          "edit": "PUT read_body max_bytes=limits.max_media_bytes -> 10**12",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_chunked_upload_over_the_cap_stops_reading"
+        },
+        {
+          "name": "cap_raised_to_request",
+          "edit": "PUT max_bytes=limits.max_media_bytes -> limits.max_request_bytes",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_chunked_upload_over_the_cap_stops_reading"
+        },
+        {
+          "name": "put_deadline_dropped",
+          "edit": "PUT timeout_s=limits.intake_timeout_s, clock=rt.clock -> timeout_s=10**9, clock=lambda: 0.0",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_slow_upload_is_cut_at_the_deadline"
+        },
+        {
+          "name": "put_clock_frozen",
+          "edit": "PUT clock=rt.clock -> clock=lambda: 0.0 (asyncio.timeout kept)",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_slow_upload_is_cut_at_the_deadline"
+        },
+        {
+          "name": "slot_not_claimed",
+          "edit": "large=slot) -> large=None)",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots"
+        },
+        {
+          "name": "slot_private",
+          "edit": "slot = slots.slot() -> slot = intake.LargeBodies().slot()",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots"
+        },
+        {
+          "name": "slots_ignore_runtime",
+          "edit": "slots = large_bodies or getattr(rt,'large_bodies',None) or LargeBodies() -> large_bodies or LargeBodies()",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots"
+        },
+        {
+          "name": "slot_released_before_store",
+          "edit": "insert slot.release() before await store.put_upload(...)",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__large_uploads_hold_a_shared_slot_until_stored"
+        },
+        {
+          "name": "released_only_on_success",
+          "edit": "finally: -> except BaseException: raise / else:",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_chunked_upload_over_the_cap_stops_reading"
+        },
+        {
+          "name": "cap_after_read",
+          "edit": "read with max_bytes=10**12, then `if len(data) > limits.max_media_bytes: raise RequestTooLarge` after the read",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_chunked_upload_over_the_cap_stops_reading"
+        },
+        {
+          "name": "control_cap_dropped",
+          "edit": "control_body read_body max_bytes=MAX_CONTROL_BYTES -> 10**9",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__a_control_body_is_bounded"
+        },
+        {
+          "name": "control_deadline_dropped",
+          "edit": "control_body timeout_s=limits.intake_timeout_s, clock=rt.clock) -> timeout_s=10**9, clock=lambda: 0.0)",
+          "result": "SURVIVED (finding R1)",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-g4u archive f3c8055 | tar -x -C /tmp/claude-1000/review-g4u-resource-209803 && git diff 9c1c6ed..f3c8055 --stat",
+          "exit": 0,
+          "tail": "7 files changed, 1567 insertions(+) (uploads.py 128, test_uploads.py 609, test_uploads_mutants.py 56, uploads_mutants.py 159, evidence 326, coordinator 3+286)"
+        },
+        {
+          "cmd": "make api-env (scratch)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads.py",
+          "exit": 0,
+          "tail": "21 passed in 1.54s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/g/uploads/test_zz_attack.py (reviewer attacks A1-A12, scratch only)",
+          "exit": 0,
+          "tail": "A1 over: 413 request_too_large read 4097 conn close | exact: 204 read 4096 slots 0; A2: 504 deadline_exceeded elapsed 0.30s read 500 slots 0 peak 1; A3 silent peer: 504 deadline_exceeded 0.30s slots 0 peak 1; A4 slow store: 204 1.01s (deadline 0.3s) slots 0; A5: 204 204 in_flight during 2 | third w/ CL: 429 capacity_exhausted retry-after 2 read 0 | fourth chunked: 429 capacity_exhausted read 90 | after 0 peak 2 refused 2; A6 ok 204/0, conflict 409/0, store-exc 500/0; A7 disconnect: 400 slots 0 peak 1; A8 cancel: in_flight mid 1 after 0; A9: ingress.slots is shared: True | upload PUT with the ingress bound full -> 204 None; A10 over 4097 413 | exact 4096 201 | nest4096 400 invalid_request 6.0ms; A11 CL=10 + chunked 16KiB: 413 read 5120 peak 1 after 0; A12 upload max_bytes=100, body 8192: 413 bytes read 8192; 12 passed in 3.19s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/g/uploads/test_zz_mem.py (tracemalloc, 64 MiB chunked PUT)",
+          "exit": 0,
+          "tail": "MEM: status 204 read 64 MiB traced peak 64.1 MiB retained 64.0 MiB slots 0; 1 passed in 0.75s"
+        },
+        {
+          "cmd": "uv run --frozen python ../../mut.py (12 reviewer mutants vs tests/g/uploads/test_uploads.py; file restored, diff vs f3c8055 empty)",
+          "exit": 0,
+          "tail": "11 KILLED, control_deadline_dropped: SURVIVED rc=0 []; pristine-restored"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "31 passed in 108.61s (0:01:48)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g tests/m tests/contracts",
+          "exit": 0,
+          "tail": "1786 passed, 1 skipped, 2 warnings in 342.04s (0:05:42)  [skip = tests/m/test_parity.py corpus cache absent in /tmp scratch; implementer reported 1787 passed]"
+        },
+        {
+          "cmd": "git -C .../codex-g4u status --short; rev-parse HEAD",
+          "exit": 0,
+          "tail": "(clean) f3c8055962f4eeade2ebc6edb4149764c6751885"
+        }
+      ]
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every count claimed in scope was reproduced from a fresh archive of f3c8055: focused 21, uploads list 31 with INFRX_MUTANTS=all, CLI 28/28, default subset 10, G 199, M 242, contracts 304, and g+m+contracts 1787 (1786 plus the corpus-dependent parity case, which passes with CORPUS_CACHE set). The per-item commit table matches `git show` of every commit. 'New files only' is true against the evidence's stated base 740bebf; against 9c1c6ed the diff also shows 740bebf's two coordinator plan files, which are not the lane's. I checked the six deviations. (1) No check_structure on control bodies is sound: 4 KiB of maximal nesting, commas or digits is answered 400 in about 6 ms or less. (2) Releasing the slot after the store is sound and arguably required, because the bytes stay resident until put_upload returns. With a future durable or S3 store, though, the slot would be held for the network write and could starve chat's large bodies (limit 2), which the coordinator should know. The evidence's claim that its mutant kills the brief's order is false (H1). (3) Refusing operators on every route is sound: OPERATOR_ROW shares ORG with ROW. (4) The 409 on a digest-refused retry is sound: M3's _abort then _still_open gives Conflict, and 'stays refused' holds. (5) Wire re-validation is sound and proven by the leaky-store case. (6) The default Runner copy is sound: the suite needs no repository layout. One claim is false (H1). Nothing else I checked was fabricated.",
+      "cleanup": "I removed /tmp/claude-1000/review-g4u-honesty-209960 (the scratch plus its .venv), /tmp/claude-1000/g4u-honesty-cov and /tmp/claude-1000/g4u-honesty-logs. The mutant copies were TemporaryDirectory instances and were auto-removed. No Docker, container, network or AWS was used. The codex-g4u worktree is untouched: `git status --short` shows 0 lines, and I made no commits in any worktree.",
+      "mutants": [
+        {
+          "name": "mounted_without_a_store",
+          "edit": "`if store is None:` -> `if False:`",
+          "result": "killed at test_uploads.py:155, assert 500 == 404. The route is mounted over None, AttributeError becomes a guard 500. Acceptable: any mounted answer breaks the 404 invariant, and the brief anticipated this"
+        },
+        {
+          "name": "error_handlers_not_installed",
+          "edit": "drop install_error_handlers",
+          "result": "killed at :156, code_of 404 is None (no envelope). Right reason"
+        },
+        {
+          "name": "runtime_store_ignored",
+          "edit": "getattr(rt,'media_store') -> None",
+          "result": "killed at :169, create 404 not_found (nothing mounted). Right reason"
+        },
+        {
+          "name": "runtime_slots_ignored",
+          "edit": "getattr(rt,'large_bodies') -> None",
+          "result": "killed at :174, assert (204 == 429) (a fresh LargeBodies was used). Right reason"
+        },
+        {
+          "name": "tenant_is_the_key_id",
+          "edit": "create_upload(context.key_id, ...)",
+          "result": "killed in both named cases: :191 org mismatch, and :565 PUT 404 under the key org. Right reason"
+        },
+        {
+          "name": "operator_owns_uploads",
+          "edit": "`if context.audience not in CALLABLE:` -> `if False:`",
+          "result": "killed at :209, 201 != 403. Right reason"
+        },
+        {
+          "name": "create_reads_before_identity",
+          "edit": "tenant() moved after the read",
+          "result": "killed at :232, POST read 5120 bytes. Right reason"
+        },
+        {
+          "name": "tenant_from_the_body",
+          "edit": "body.pop('org_id', ...)",
+          "result": "killed at :249, 201 != 400. Right reason"
+        },
+        {
+          "name": "ticket_not_rendered_through_the_wire_model",
+          "edit": "JSONResponse(created,",
+          "result": "killed at :283, 201 != 500 (leaky store). Right reason"
+        },
+        {
+          "name": "created_is_not_201",
+          "edit": "201 -> 200",
+          "result": "killed at :260. Right reason"
+        },
+        {
+          "name": "control_body_unbounded",
+          "edit": "MAX_CONTROL_BYTES -> max_request_bytes",
+          "result": "killed at :301, 16384 bytes read. Right reason"
+        },
+        {
+          "name": "destination_cap_is_the_request_cap",
+          "edit": "max_media_bytes -> max_request_bytes",
+          "result": "killed at :324, 16384 bytes read. Right reason"
+        },
+        {
+          "name": "destination_deadline_stretched",
+          "edit": "timeout * 100",
+          "result": "killed at :344, 204 != 504. Right reason"
+        },
+        {
+          "name": "destination_claims_no_slot",
+          "edit": "drop large=slot",
+          "result": "killed at :370, 204 != 429. Right reason"
+        },
+        {
+          "name": "slot_never_released",
+          "edit": "slot.release() -> pass",
+          "result": "killed in all three named cases (:327, :346, :377), in_flight 1 != 0. Right reason"
+        },
+        {
+          "name": "slot_released_before_the_store",
+          "edit": "put_upload moved into finally, still before release",
+          "result": "killed only by a crash: UnboundLocalError on the 429 path, masked as 500 at :370. The invariant is not removed (H1). The honest variant (release before put_upload) is killed at :376 [0] != [1]"
+        },
+        {
+          "name": "handle_grammar_unchecked",
+          "edit": "`if not UPLOAD_HANDLE_RE...` -> `if False:`",
+          "result": "killed at :402, upl_short read 2048 bytes. Right reason"
+        },
+        {
+          "name": "destination_type_unchecked",
+          "edit": "mime check -> if False",
+          "result": "killed at :426, 394 bytes read. Right reason"
+        },
+        {
+          "name": "destination_reads_before_identity",
+          "edit": "tenant line deleted on PUT",
+          "result": "killed at :232, PUT read 8192 bytes. Right reason (the edit deletes identity rather than moving it, but the observation is the read)"
+        },
+        {
+          "name": "destination_unguarded",
+          "edit": "drop @guarded on PUT",
+          "result": "killed at :448, (422, 422) != (204, 204): the request_id query-parameter signature, not the envelope (H2). The honest non-translating variant is killed by a typed Conflict"
+        },
+        {
+          "name": "stored_is_not_204",
+          "edit": "204 -> 200",
+          "result": "killed at :448. Right reason"
+        },
+        {
+          "name": "destination_under_another_id",
+          "edit": "put_upload(context.key_id...)",
+          "result": "killed at :478, owner [404, 400] != [204, 200]. Right reason"
+        },
+        {
+          "name": "completion_renders_the_ref",
+          "edit": "ref.model_dump",
+          "result": "killed at :499, extra keys (local_path, ...). Right reason"
+        },
+        {
+          "name": "completion_fields_ignored",
+          "edit": "`!= {}` -> `is None`",
+          "result": "killed at :522, 200 != 400. Right reason"
+        },
+        {
+          "name": "completion_unguarded",
+          "edit": "drop @guarded on complete",
+          "result": "killed at :547, 422 != 400: signature, not the envelope (H2). The honest variant is killed by a typed InvalidRequest"
+        },
+        {
+          "name": "completion_reads_before_identity",
+          "edit": "tenant line deleted on complete",
+          "result": "killed at :232, complete read 5120 bytes. Right reason"
+        },
+        {
+          "name": "completion_under_another_id",
+          "edit": "finalize_upload(context.key_id...)",
+          "result": "killed in both named cases (:478, :566), owner complete 404. Right reason"
+        },
+        {
+          "name": "undeclared_path",
+          "edit": "/v1/uploads -> /v1/upload",
+          "result": "killed at :593, literal path 404. Right reason"
+        },
+        {
+          "name": "reviewer: control_deadline_stretched",
+          "edit": "control_body timeout * 100",
+          "result": "SURVIVED, 21 passed (H3)"
+        },
+        {
+          "name": "reviewer: put_mime_not_lowered",
+          "edit": "drop .lower() on the PUT mime",
+          "result": "survived, 21 passed. Cosmetic: uppercase video/MP4 is refused as unsupported_media, which fails safe. Not a finding"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git archive f3c8055 | tar -x -C /tmp/claude-1000/review-g4u-honesty-209960 && make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads.py",
+          "exit": 0,
+          "tail": "21 passed in 1.13s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py",
+          "exit": 0,
+          "tail": "31 passed in 71.62s (0:01:11)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.uploads.uploads_mutants",
+          "exit": 0,
+          "tail": "28/28 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py (default subset)",
+          "exit": 0,
+          "tail": "10 passed in 31.74s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g tests/m tests/contracts",
+          "exit": 0,
+          "tail": "1786 passed, 1 skipped, 2 warnings in 400.35s (0:06:40). The skip is tests/m/test_parity.py:113 'corpus cache not found', which is scratch location only"
+        },
+        {
+          "cmd": "CORPUS_CACHE=<main>/.claude/corpus-cache uv run --frozen pytest -q tests/m/test_parity.py",
+          "exit": 0,
+          "tail": "7 passed in 11.92s (so 1786+1 = 1787, matching the claim)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "199 passed in 757.57s (0:12:37)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_mutants.py",
+          "exit": 0,
+          "tail": "242 passed in 903.06s (0:15:03)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py",
+          "exit": 0,
+          "tail": "304 passed in 871.88s (0:14:31)"
+        },
+        {
+          "cmd": "pytest tests/g/test_mutants.py::test_every_case_is_covered_by_a_mutant (head / uploads dir removed / suite copied to tests/g/test_uploads.py)",
+          "exit": 1,
+          "tail": "head: 1 passed; without tests/g/uploads: 1 passed; at the brief path: 1 failed 'cases no mutant can break: [test_dur_rls__a_completed_upload_is_usable_only_by_its_org, ...]' (confirms the relocation rationale; zero case-name overlap between tests/g/test_*.py and the uploads suite)"
+        },
+        {
+          "cmd": "hand-sample script: apply each of the 28 mutants in a temp copy, run the named cases with --tb=short",
+          "exit": 0,
+          "tail": "all 28 fail their named cases; per-mutant failure lines in the mutants table"
+        },
+        {
+          "cmd": "reviewer mutants (brief-order release, non-translating guard, control deadline x100, mime not lowered)",
+          "exit": 0,
+          "tail": "brief order killed at :376 [0]==[1]; non-translating guard killed by Conflict/InvalidRequest; control deadline survived 21 passed; mime-lower survived"
+        },
+        {
+          "cmd": "in-process probe: control bodies of 4000 '[', 800 '{\"a\":', 2047 commas, a 4000-digit int, 4097 spaces on create and complete",
+          "exit": 0,
+          "tail": "400 invalid_request x4 (1-6 ms each), 413 request_too_large for 4097 bytes, 0 uploads created"
+        },
+        {
+          "cmd": "git show --stat of each commit 740bebf..f3c8055; git diff 740bebf..f3c8055 --name-status",
+          "exit": 0,
+          "tail": "only A (added) files: uploads.py, 3 tests/g/uploads files, the evidence file. The mutants added per commit match the evidence table exactly (item1 4, item2 6, item3 11, item4 5, item6 1, item7 1; item 5 adds a case to 2 existing mutants)"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "R1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "76-77",
+      "claim_broken": "Brief item 2, and the evidence route table at G4U-a3cb5c2.md:45, say create and complete read `read_body(MAX_CONTROL_BYTES=4096, intake_timeout_s, rt.clock)`. The deadline on the control-body read is claimed, but no test can kill its removal. MEDIA-SEC 'bounded time' (evidence :59) cites only the PUT case.",
+      "evidence": "I ran a reviewer mutant `control_deadline_dropped`, replacing `timeout_s=limits.intake_timeout_s, clock=rt.clock)` with `timeout_s=10**9, clock=lambda: 0.0)` (the anchor occurs exactly once). It SURVIVED: `pytest tests/g/uploads/test_uploads.py` rc=0, 21 passed. No case sends a slow or silent body to POST /v1/uploads or /complete, and the G4U list has no mutant on this deadline (only `control_body_unbounded` for the byte cap). Without the deadline, an authenticated tenant can hold a create/complete connection and coroutine open indefinitely.",
+      "minimal_fix": "Add one case, `test_media_sec__a_slow_control_body_is_cut_at_the_deadline`, that sends Chunks with on_chunk advancing rt.clock by 20 s to POST /v1/uploads and to /complete. Assert 504 `deadline_exceeded` and that nothing is created. Add a `control_deadline_stretched` mutant to tests/g/uploads/uploads_mutants.py, anchored on `timeout_s=limits.intake_timeout_s, clock=rt.clock)`.",
+      "lens": "resource",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The finding holds at f3c8055. uploads.py:76-77 has the only `control_body` read, and create and complete both go through it. It calls `intake.read_body(max_bytes=4096, timeout_s=limits.intake_timeout_s, clock=rt.clock)`, and that anchor appears exactly once. I copied apps/infrx-api at f3c8055 to scratch and applied the reviewer's mutant (`timeout_s=10**9, clock=lambda: 0.0`). tests/g/uploads/test_uploads.py still passed: 21 passed, 0 failed, so the mutant survives. The only deadline test is `test_media_sec__a_slow_upload_is_cut_at_the_deadline`, and it sends a slow body only to PUT. Its mutants, `destination_deadline_stretched` at uploads_mutants.py:78 and the one at :89, change only the PUT call, which carries `large=slot`. No other suite reaches these routes: tests/m/test_uploads.py tests the store, not the route. The evidence route table (G4U-a3cb5c2.md:45) names the deadlined `read_body(MAX_CONTROL_BYTES=4096, intake_timeout_s, rt.clock)` for create, and the complete row says only \"bounded read (4096)\". The MEDIA-SEC bounded-time row cites only the PUT case. The code is correct today, but no test kills removing the deadline on the create and complete control reads. Without that deadline, an authenticated tenant can keep a create or complete request and its coroutine open for as long as it likes. The 4 KiB cap limits memory, not time. That is a resource bound with no killable test, which the rubric counts as blocking. The fix the reviewer proposes (a slow-body case on both POST routes, plus a `control_deadline_stretched` mutant on the unique anchor) is small and correct.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this at f3c8055. The production code is correct: `control_body` (uploads.py:75-77) passes `timeout_s=limits.intake_timeout_s, clock=rt.clock` to `intake.read_body`, and read_body enforces both the per-chunk clock check and `asyncio.timeout`. The defect is that no test checks it. I copied apps/infrx-api (without .venv) into the scratchpad. There the anchor `timeout_s=limits.intake_timeout_s, clock=rt.clock)` occurs exactly once in uploads.py. I replaced it with `timeout_s=10**9, clock=lambda: 0.0)` and ran `pytest tests/g/uploads/test_uploads.py` with the worktree's venv. The baseline was 21 passed, and with the mutant it was still 21 passed, so the mutant survives. The only deadline case, `test_media_sec__a_slow_upload_is_cut_at_the_deadline` (test_uploads.py:330), sends its body to PUT. The only control-body case, `\u2026a_control_body_is_bounded`, tests bytes, not time. uploads_mutants.py has `control_body_unbounded` and `destination_deadline_stretched`, but no mutant for the control-body deadline. No other test file reaches /v1/uploads. The evidence route table (G4U-a3cb5c2.md:45) claims `read_body(MAX_CONTROL_BYTES=4096, intake_timeout_s, rt.clock)` for create, and MEDIA-SEC 'bounded time' (:59) cites only the PUT case. That makes it a claimed security invariant (bounded time on authenticated create/complete, so a slow-loris cannot hold a coroutine) with no test that can fail when it breaks. Under the review's rubric, that is blocking. The reviewer's fix is right and small: one slow-Chunks case against POST /v1/uploads and /complete asserting 504 `deadline_exceeded` with nothing created, plus a `control_deadline_stretched` mutant on that anchor.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/g/uploads/uploads_mutants.py",
+      "line": "90-94",
+      "claim_broken": "Evidence deviation 2 says `slot_released_before_the_store` kills the brief's order (release before put_upload). R83 also requires a well-formed single edit that removes the invariant and dies for the invariant's reason.",
+      "evidence": "Applying the edit gives `try: data = await read_body(...)` / `finally: await store.put_upload(...); slot.release()`. put_upload still runs BEFORE release, so the invariant is intact on the success path. The mutant dies only because on the 429 refusal path `data` is unbound. The UnboundLocalError raised in `finally` replaces CapacityExhausted, and `intake.guard` turns it into a 500 internal_error. The failure text is `test_uploads.py:370 assert (500 == 429)`, not the invariant's assertion at :376 (`during == [1]`). So a crash kills it, and the guard hides that crash from the runner's undeclared-death rule. The actual brief order (`slot.release()` inserted before `await store.put_upload(`) is killed honestly by the same case: `test_uploads.py:376 AssertionError: the slot was not held while the store took the bytes / assert [0] == [1]`. The test is sound; the list entry and the evidence sentence are not.",
+      "minimal_fix": "Replace the mutant with old=`large=slot)\\n            await store.put_upload(` and new=`large=slot)\\n            slot.release()\\n            await store.put_upload(`. Keep the same named case, re-run the list, and correct deviation 2's parenthetical in the evidence.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this in scratch copies of f3c8055 (git archive into the scratchpad, run with the worktree's .venv). The defect is real, but it sits in the mutant list and the evidence, not in the product or the test.\n\n(1) I applied the listed `slot_released_before_the_store` edit, which moves put_upload into `finally`. `test_media_sec__large_uploads_hold_a_shared_slot_until_stored` fails at test_uploads.py:370 with `assert (500 == 429)`. The log shows the CapacityExhausted from read_body (intake.py:93/260) being replaced by `UnboundLocalError: cannot access local variable 'data'` at uploads.py:109. The `@guarded` wrapper (intake.py:360-365) turns that into a 500 internal_error. On the success path put_upload still runs before slot.release(), so the invariant is untouched there. The mutant dies from a crash, not from the invariant.\n\n(2) I applied the brief's actual order: `slot.release()` inserted before `await store.put_upload(`. The same test fails honestly at test_uploads.py:376: \"AssertionError: the slot was not held while the store took the bytes / assert [0] == [1]\".\n\n(3) Unmodified code: the uploads.py:101-112 try/finally is correct.\n\nSo the list entry and deviation 2's parenthetical (\"kills the brief's order\") are wrong, and the reviewer's minimal fix is right. It is nonblocking. There is no product defect and no tenant, auth or resource hole. The invariant has a sound test that honestly kills a well-formed single-edit mutant; only the listed mutant text needs replacing and the evidence sentence correcting.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at f3c8055, with the tests run in a scratch copy. The committed mutant `slot_released_before_the_store` (uploads_mutants.py:90-94) moves `await store.put_upload(...)` into `finally`, before `slot.release()`. The store therefore still gets the bytes while the slot is held, and the invariant it claims to remove is intact on the success path. Run against test_media_sec__large_uploads_hold_a_shared_slot_until_stored, it fails at test_uploads.py:370 with `assert (500 == 429)`. The log shows why: on the refusal path, CapacityExhausted from read_body is replaced in `finally` by `UnboundLocalError: cannot access local variable 'data'`, and `guarded` turns that into a 500. So a crash kills the mutant, not the invariant's assertion. Because the failure surfaces as a test AssertionError, R83's assertion-shaped rule counts it as `killed`. The reviewer's replacement (`slot.release()` inserted before `await store.put_upload(`) dies honestly at test_uploads.py:376: `AssertionError: the slot was not held while the store took the bytes / assert [0] == [1]`. The defect is real: the list entry is malformed under R83, and evidence deviation 2's parenthetical is wrong. It is not blocking. Production code is correct (put before release, release in finally), the test is sound, and the invariant has a killable test. This is not a tenant/auth or resource hole. The fix is a one-line change to the mutant plus an evidence correction.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "T1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "89",
+      "claim_broken": "R47/R61(1) at the port boundary: the lane's claim 'a leaky store cannot add fields' is true, but the route never checks the VALUE of destination_ref (or upload_handle). A store that puts an object key into destination_ref still gets it out.",
+      "evidence": "Fake store wrapping M3's create_upload and setting d['destination_ref'] = f's3://bucket/uploads/{org}/{handle}' -> 201 with body {\"destination_ref\":\"s3://bucket/uploads/1a1a1a1a-0000-4000-8000-000000000001/upl_...\"}, and the org id appears in the body (org in body: True). The key-set test (\u2026no_store_field_outside_the_frozen_ticket_leaves) only covers extra keys. M3's real store is correct, and \u2026the_ticket_carries_exactly_the_frozen_fields pins it, so no current path leaks.",
+      "minimal_fix": "Before rendering, compare the fields: `if ticket.destination_ref != media.UPLOAD_REF_SCHEME + ticket.upload_handle or not ids.UPLOAD_HANDLE_RE.fullmatch(ticket.upload_handle): raise errors.InternalError(...)`. Add a case that uses a store rewriting destination_ref and expects 500 with the value absent.",
+      "lens": "tenant"
+    },
+    {
+      "id": "T2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "101-108",
+      "claim_broken": "Write-once and tenant refusals on PUT are only decided after the whole body is read. The second PUT, a PUT on a finalized upload, and a PUT on another org's or an unknown handle each read up to MAX_MEDIA_BYTES (and hold a large-body slot) before the store refuses.",
+      "evidence": "Measured through ASGITransport with a counting chunked body: a second PUT with other bytes read 8388608 of 8388608 bytes, then 409 state_conflict. The owner's PUT on a completed upload, with 65 MiB chunked, read 68157440 bytes, then 413. Org B's PUT on org A's handle read 68157440 bytes, then 413, identical to an unknown handle (so there is no existence oracle). Every caller here is authenticated and the read is bounded by cap, deadline and slot, so this is a cost problem, not a hole. The brief (\u00a73 item 3) did not require a pre-check, and the store has no public open-state read.",
+      "minimal_fix": "M request: a public `MediaUploads.check_open(org_id, handle)` (runs _owned plus _still_open, and returns max_bytes) called before claiming the slot. That also closes the ponytail note, because the read can then be capped at the upload's own max_bytes.",
+      "lens": "tenant"
+    },
+    {
+      "id": "T3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/intake.py",
+      "line": "53-54 (CLOSE_CODES), used by uploads.py:65,72,99",
+      "claim_broken": "The intake rule is that refusals made while a body may still be arriving close the socket. G4U adds three new pre-read refusals (403 forbidden for an operator, 404 not_found for handle grammar, 400 unsupported_media for Content-Type), and none of them sends Connection: close.",
+      "evidence": "ASGI-measured headers: operator/put 403 {content-type only}, badhandle/put 404 {content-type only}, put-ct/video/x-msvideo 400 {content-type only}. By contrast 401/413 carry connection: close. The installed server is uvicorn h11 (httptools not installed). At h11_impl.py:262-264 it discards h11.Data after the response completes but keeps the connection, and data_received resets the keep-alive timer. So an authenticated caller refused before the read can keep streaming an arbitrarily long body into a discarded keep-alive connection past INTAKE_TIMEOUT_S. Inferred from reading uvicorn's code; not exercised over a socket (no network).",
+      "minimal_fix": "In the upload routes, set Connection: close on every refusal raised before read_body, or add forbidden, not_found and unsupported_media to CLOSE_CODES for requests that declare a body. Add an assertion on the header in the operator and malformed-handle cases.",
+      "lens": "tenant"
+    },
+    {
+      "id": "T4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/test_uploads.py",
+      "line": "234-248",
+      "claim_broken": "The docstring claims 'the tenant is the key's on every call (R66): nothing in a path or body names an org'. Only the body is attacked. No case sends an org in a query parameter or header, so an added org read from either place survives.",
+      "evidence": "Reviewer mutants R12 (create_upload(request.query_params.get('org_id') or context.org_id, body)) and R13 (put_upload(request.headers.get('x-org-id') or context.org_id, \u2026)) both SURVIVED their named cases (2 passed / 1 passed). These mutants add a feature rather than edit existing logic, hence nonblocking.",
+      "minimal_fix": "In test_dur_rls__the_body_names_no_org_and_nothing_the_contract_lacks and \u2026another_orgs_upload_is_the_unknown_handles_404, also send ?org_id=ORG_B and an x-org-id/x-infrx-org header, and assert the record's org is ORG_A (or 404 for B's handle).",
+      "lens": "tenant"
+    },
+    {
+      "id": "R2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "54",
+      "claim_broken": "'large_bodies ... must be the one the chat ingress uses, so both share the bound.' Under the ROUTERS convention register(app, rt), the ingress reads `rt.ingress.large_bodies` (ingress.py:119,197) and uploads reads `rt.large_bodies`. When the composition sets only IngressDeps.large_bodies, uploads silently builds a private LargeBodies(), which doubles the per-process large-body bound.",
+      "evidence": "Attack A9: I set rt.ingress = support.deps(large_bodies=shared) with shared = LargeBodies(limit=1) and rt.media_store, called ingress.register(app, rt) and uploads.register(app, rt), then held the one shared slot. `ing.slots is shared` = True, yet the upload PUT answered 204 instead of 429. The two routes enforce different bounds. This is the brief's specified default and is covered by integration request (a), so it is not a defect in G4U itself.",
+      "minimal_fix": "Fall back to the ingress's pool before minting a fresh one: `slots = large_bodies or getattr(rt, 'large_bodies', None) or getattr(getattr(rt, 'ingress', None), 'large_bodies', None) or intake.LargeBodies()`. Alternatively, raise RuntimeMisconfigured in pilot when no shared pool is found.",
+      "lens": "resource"
+    },
+    {
+      "id": "R3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "108",
+      "claim_broken": "'bounded bytes and time': the intake deadline covers only read_body. store.put_upload runs with no deadline while it holds the shared large-body slot.",
+      "evidence": "Attack A4: with intake_timeout_s=0.3, I made put_upload sleep 1.0 s before storing. The PUT answered 204 after 1.01 s, so no deadline applied, and the slot stayed held for the whole call (in_flight returned to 0 afterwards). The store is in-process today, so the impact is limited. A real object-store adapter that hangs would pin one of the 2 per-process slots shared with chat.",
+      "minimal_fix": "Wrap the store call as `async with asyncio.timeout(limits.intake_timeout_s): await store.put_upload(...)` and map TimeoutError to DeadlineExceeded. Alternatively, record in the evidence limits that the store call is unbounded and the slot is held across it.",
+      "lens": "resource"
+    },
+    {
+      "id": "R4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/test_uploads.py",
+      "line": "349-377",
+      "claim_broken": "The evidence (:60) and the case docstring say a large PUT with every slot taken is 429 'before its body is read'. That holds only when Content-Length is declared. A chunked body reads threshold+1 chunk before the 429.",
+      "evidence": "Attack A5 used LargeBodies(limit=2, threshold=64) with two slow PUTs holding both slots (in_flight=2). A third PUT with content-length 500 got 429 capacity_exhausted, Retry-After 2, and read 0 bytes. A fourth, chunked PUT with no length got 429 after reading 90 bytes (threshold 64 + one 30-byte chunk). After both, in_flight was 0, peak 2, refused 2. This is intake.read_body's documented design, and the claim wording is too broad.",
+      "minimal_fix": "Change the evidence and docstring to 'before its body is read when it declares its length; a chunked body is refused after at most threshold plus one chunk'. Optionally add the chunked variant as a case.",
+      "lens": "resource"
+    },
+    {
+      "id": "R5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "103-107",
+      "claim_broken": "M3 limit 10: 'the route must stop reading at max_bytes + 1'. The route instead reads up to MAX_MEDIA_BYTES whatever the upload's own max_bytes is. This is a documented ponytail simplification that the brief marks optional.",
+      "evidence": "Attack A12: an upload created with max_bytes=100 and max_media_bytes=8192 was sent an 8 KiB chunked body. The route read all 8192 bytes, then put_upload refused with 413. With default limits, a 100-byte upload buffers up to 64 MiB before the refusal, bounded by the slot.",
+      "minimal_fix": "None required for this lane. The upgrade is the M request for a public per-upload cap on MediaUploads, then `max_bytes=min(cap, limits.max_media_bytes)`.",
+      "lens": "resource"
+    },
+    {
+      "id": "H2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/uploads/uploads_mutants.py",
+      "line": "105-107,124-126",
+      "claim_broken": "`destination_unguarded` and `completion_unguarded` claim the invariant 'the store's refusals leave as the envelope'. R83 requires that the named case fails for the invariant's reason.",
+      "evidence": "Removing `@guarded` changes the handler signature, so FastAPI makes `request_id` a required query parameter and every call returns 422 `{\"detail\":[{\"loc\":[\"query\",\"request_id\"]...}]}`. The kill is on the first success assertion (`test_uploads.py:448 assert (422, 422) == (204, 204)`, and `:547 assert (422 == 400)`), before any store refusal is exercised. I tried an honest variant that keeps the request id but drops the translation (`guarded` rebuilt as a wrapper that calls `h(request, ids.new_request_id())` without catching). The same two cases kill it with typed DomainErrors: `infrx.contracts.errors.Conflict: state_conflict` from store.py:203 and `InvalidRequest` from uploads.py:180. So the invariant can be killed; only the listed edit is off-shape.",
+      "minimal_fix": "Change the anchor to the guard's translation rather than its presence, for example replace `    guarded = intake.guard(new_request_id)\\n` with a non-catching wrapper that still passes a minted request id, and keep the same cases. Alternatively declare in the list that these two edits die by the signature change.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/uploads.py",
+      "line": "76-77",
+      "claim_broken": "The brief's item 2 requires create and complete to be read under `limits.intake_timeout_s`. No case and no mutant covers the control-body deadline. The evidence's 'bounded time' row covers only the PUT.",
+      "evidence": "Mutant `timeout_s=limits.intake_timeout_s * 100, clock=rt.clock)\\n` on the control_body read, run against all 21 cases: `21 passed` (survived). The code enforces the deadline, and the 4 KiB cap plus asyncio.timeout still bounds it, so this is not a resource hole. It is simply not proved.",
+      "minimal_fix": "Add a slow control-body case (a Chunks body on create that advances rt.clock by 20 s per chunk, expecting a 504) and add a `control_deadline_stretched` mutant. Otherwise, state in the evidence that the control-body deadline is unproved.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H4",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G4U-a3cb5c2.md",
+      "line": "Commands table (legacy-first, track-first, tests/d, make check rows)",
+      "claim_broken": "The legacy-first run (2631), the track-first runs, the tests/d DUR-RLS DB-half runs and make check were not reproduced.",
+      "evidence": "This review's rules forbid Docker, and tests/q and tests/d need it. Every claim in scope was reproduced (see commands). These rows are unverified by this lens only, not contradicted.",
+      "minimal_fix": "None required of the lane. A Docker-enabled reviewer or the coordinator gate should confirm them.",
+      "lens": "honesty"
+    }
+  ]
+}
