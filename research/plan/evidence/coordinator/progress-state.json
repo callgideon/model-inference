@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:56:22Z",
+  "updated": "2026-09-23T12:58:13Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,9 +41,15 @@
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "dispatching (Opus) at the integration head with D4 merged",
+      "phase": "implementing (Opus) at e2a52b2 \u2014 the integration head with D4 merged",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
+    },
+    "F-fakes-followup": {
+      "lane": "codex-ffakes / codex/f-fakes-followup",
+      "phase": "implementing (Opus): R93 fake requeue event id; D4 request 10 (fake refuses NUL/surrogate/NaN/Inf like Pg; continues past pruned_to; optional jsonb-style measure)",
+      "since": "2026-09-23T12:58:13Z",
+      "note": "from the integration head \u2265 ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion"
     }
   },
   "reviews": {
