@@ -624,7 +624,8 @@ end $$;
 -- `public.credit_ledger` writer (R65/R72): this body names no USD relation. One
 -- transaction: the wallet row only (0011's lock 5), the ledger row (its trigger moves the
 -- total), one `admin_adjust` audit row. A replayed operation id answers the existing entry,
--- `replayed`, and appends nothing; the same id for another movement is a conflict. A
+-- `replayed`, and appends nothing; the same id for another movement (wallet, kind or
+-- amount) is `idempotency_conflict`, also when it commits concurrently on another wallet. A
 -- frozen (retired) wallet accepts an adjustment (0015 guards only holds and signup grants).
 -- Args `{wallet_id, kind, amount, operation_id, actor, reason, at}` (`at` is the caller's
 -- clock: audit data only, R7); answers `{entry, replayed}` (the entry's amount as text).
@@ -688,11 +689,18 @@ begin
     perform infrx.refuse('invalid_request', 'the movement would take the wallet below its '
                          || 'reserved total');
   end if;
-  insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, actor,
-                                   reason, created_at)
-  values (w.wallet_id, w.kind, v_kind, v_amount, v_op, btrim(p_args->>'actor'),
-          p_args->>'reason', infrx.now())
-  returning * into l;
+  begin
+    insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id,
+                                     actor, reason, created_at)
+    values (w.wallet_id, w.kind, v_kind, v_amount, v_op, btrim(p_args->>'actor'),
+            p_args->>'reason', infrx.now())
+    returning * into l;
+  exception when unique_violation then
+    -- The wallet lock serializes one wallet only: the same operation id committed on
+    -- ANOTHER wallet meanwhile is the same conflict the replay names (review N5), typed.
+    perform infrx.refuse('idempotency_conflict', 'operation ' || v_op
+                         || ' recorded another movement');
+  end;
   insert into infrx.audit_entries (id, at, actor_principal, action, target_org_id, reason,
                                    before, after, idempotency_key)
   select gen_random_uuid(), infrx.now(), btrim(p_args->>'actor'), 'admin_adjust',

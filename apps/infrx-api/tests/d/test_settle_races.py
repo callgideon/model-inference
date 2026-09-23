@@ -285,6 +285,32 @@ def test_race__a_stale_generation_after_a_requeue_cannot_settle() -> None:
     rig.drift("a stale generation")
 
 
+# --------------------------------------------------------------------- operator grants
+def test_race__one_operation_id_is_one_movement_under_a_barrier() -> None:
+    """CREDIT-SPEND / API-OPS (review B2/N5): CALLERS operator adjustments with ONE
+    operation id, released together, half on one consumer wallet and half on another:
+    exactly one ledger row; every caller on the winner's wallet answers that entry (one
+    `replayed: false`, the rest `replayed: true`), every caller on the other wallet is the
+    typed `idempotency_conflict` - never an untyped unique violation."""
+    import uuid
+    rig = Rig()
+    wallets = (cc.wallet_of(rig.owner, cc.CONSUMER_1), cc.wallet_of(rig.owner, cc.CONSUMER_2))
+    for _ in range(ROUNDS):
+        op = str(uuid.uuid4())
+        answers = together([(rig.service(), lambda c, w=wallets[i % 2]: rpc(
+            c, "grant_credit", cs.grant_args(w, op))) for i in range(CALLERS)])
+        assert cs.operation_rows(rig.owner, op) == 1, answers
+        won = [a for code, a in answers if code is None and a["replayed"] is False]
+        assert len(won) == 1, answers
+        winner = won[0]["entry"]["wallet_id"]
+        for i, (code, answer) in enumerate(answers):
+            if str(wallets[i % 2]) == str(winner):
+                assert code is None and answer["entry"] == won[0]["entry"], (code, answer)
+            else:
+                assert code == "idempotency_conflict", (code, answer)
+    rig.drift("operator grants")
+
+
 def test_races__the_mutants_concurrency_check() -> None:
     """The check the migration mutants run (`settle_races`), on this module's database."""
     Rig()

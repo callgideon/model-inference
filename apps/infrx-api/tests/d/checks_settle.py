@@ -9,6 +9,7 @@ immutable ledger and the active holds, in both units (the D5 acceptance, as one 
 """
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 
@@ -896,13 +897,27 @@ def terminalize_args(lease: Lease, proposal: dict, regime: str = "legacy_usd") -
             "limits": LIMITS}
 
 
+def grant_args(wallet, operation_id: str, amount: str = "1.00000000") -> dict:
+    """`grant_credit`'s arguments as `PgLedger.adjust` sends them."""
+    return {"wallet_id": str(wallet), "kind": "operator_adjustment", "amount": amount,
+            "operation_id": operation_id, "actor": "ops@test", "reason": "race",
+            "at": "2099-01-01T00:00:00+00:00"}
+
+
+def operation_rows(conn, operation_id: str) -> int:
+    return conn.execute("select count(*) from infrx.credit_ledger where operation_id = %s",
+                        (operation_id,)).fetchone()[0]
+
+
 def check_settle_races(connect, database: str) -> str:
     """DUR-SETTLE / DUR-FENCE under real transactions (the migration mutants' concurrency
     check; the full set is tests/d/test_settle_races.py): a duplicate completion waits on
     the job row and REPLAYS the committed outcome (one debit); a cancel behind a settlement
     waits and answers it; a settlement never waits on the admission scope lock (an
     admission holding it cannot stall a terminalization); a stale generation's completion
-    behind a requeue waits and is `stale_lease`."""
+    behind a requeue waits and is `stale_lease`. And `grant_credit` (review N5): the same
+    operation id on two wallets concurrently is the typed `idempotency_conflict`, never an
+    untyped unique violation."""
     owner = connect(database)
     world = ca.World(owner)
     first_job, lease = cl.running(owner, world)
@@ -943,8 +958,18 @@ def check_settle_races(connect, database: str) -> str:
             c, "terminalize", terminalize_args(lost_lease, propose(
                 lost.request_id, "engine_error", "failed")))))
     assert two[0] == "stale_lease", f"a superseded generation settled: {two}"
+    # grant_credit: one operation id on two wallets at once is the typed conflict
+    wallet = cc.wallet_of(owner, cc.CONSUMER_1)
+    op = str(uuid.uuid4())
+    one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
+        c, "grant_credit", grant_args(wallet, op))), (service(connect, database), lambda c:
+            cl.rpc(c, "grant_credit", grant_args(cc.wallet_of(owner, cc.CONSUMER_2), op))))
+    assert (one[0], two[0]) == (None, "idempotency_conflict"), \
+        f"one operation id on two wallets at once: {one[0]}, {two[0]}"
+    assert operation_rows(owner, op) == 1
     assert_no_drift(owner, "races")
-    return "duplicates replay, cancel answers the settlement, no scope lock, stale refused"
+    return ("duplicates replay, cancel answers the settlement, no scope lock, stale refused, "
+            "a racing reuse on another wallet conflicts")
 
 
 # --------------------------------------------------------------------- R91 lookup

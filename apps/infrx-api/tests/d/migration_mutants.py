@@ -2564,6 +2564,13 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  v_proposal := jsonb_build_object('cause', v_cause, 'usage',",
        "admission", "settle_races",
        "every settlement queues behind admission's global lock (0011's order inverted)"),
+    # review N5: grant_credit under real transactions
+    _m("d5_grant_concurrent_reuse_untyped", SETTLE,
+       "  exception when unique_violation then\n    -- The wallet lock serializes",
+       "  exception when division_by_zero then\n    -- The wallet lock serializes",
+       "admission", "settle_races",
+       "one operation id racing on two wallets surfaces as an untyped unique violation "
+       "(a 500) instead of idempotency_conflict"),
     # --- item 4: operator money ----------------------------------------------------------
     _m("d5_adjust_replay_appends", SETTLE,
        "  select * into l from infrx.credit_ledger where operation_id = v_op;\n  if found then",
