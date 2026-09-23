@@ -2511,6 +2511,25 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "    values (j.org_id, -p_charged, 'usage', p_id, j.settled_at);\n",
        "admission", "credit_usd_untouched",
        "a CREDIT charge lands on the organization's USD ledger (R64/R65)"),
+    _m("d5_credit_debit_in_float", SETTLE,
+       "  select round((p_prompt::numeric * c.input_rate_per_million\n"
+       "                + p_completion::numeric * c.output_rate_per_million)\n"
+       "               * 0.000001, 8)::numeric(20,8)",
+       "  select round(((p_prompt::float8 * c.input_rate_per_million::float8\n"
+       "                + p_completion::float8 * c.output_rate_per_million::float8)\n"
+       "               * 0.000001)::numeric, 8)::numeric(20,8)",
+       "admission", "credit_grid",
+       "a CREDIT charge computed in binary floating point is off in the 8th place "
+       "(review N1, the reviewer's rv_credit_debit_in_float)"),
+    _m("d5_legacy_debit_in_float", SETTLE,
+       "  select round((p_prompt::numeric * (p_snapshot->>'input_rate_per_million')::numeric\n"
+       "                + p_completion::numeric * (p_snapshot->>'output_rate_per_million')::numeric)\n"
+       "               * 0.000001, 8)::numeric(20,8);",
+       "  select round(((p_prompt::float8 * (p_snapshot->>'input_rate_per_million')::float8\n"
+       "                + p_completion::float8 * (p_snapshot->>'output_rate_per_million')::float8)\n"
+       "               * 0.000001)::numeric, 8)::numeric(20,8);",
+       "admission", "settle_exact",
+       "a USD debit computed in binary floating point is off in the 8th place (review N1)"),
     _m("d5_credit_debit_rounds_down", SETTLE,
        "  select round((p_prompt::numeric * c.input_rate_per_million",
        "  select trunc((p_prompt::numeric * c.input_rate_per_million",

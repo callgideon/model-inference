@@ -169,15 +169,20 @@ def check_settle_exact(conn) -> str:
             assert doc["outcome"]["settlement_state"] == \
                 ("released_free" if want == "0.00000000" else "settled"), doc["outcome"]
         grid = [(p, c) for p in (0, 1, 333, 1200, 30719, 30720) for c in (0, 1, 111, 2047, 2048)]
-        for rates in (("0.20", "0.60"), ("0.005", "0.015"), ("0.33333333", "0.77777777")):
+        # review N1: a high-rate point where binary floating point and exact numeric differ
+        # in the 8th place (exact 1273.91356853, float 1273.91356854)
+        for rates, extra in ((("0.20", "0.60"), ()), (("0.005", "0.015"), ()),
+                             (("0.33333333", "0.77777777"), ()),
+                             ((FLOAT_RATES), ((17318, 1176),))):
             snapshot = b.price(*rates)
-            for p, c in grid:
+            for p, c in grid + list(extra):
                 sql, = conn.execute("select infrx.debit_legacy_usd(%s, %s, %s)",
                                     (Jsonb(snapshot.model_dump(mode="json")),
                                      p, c)).fetchone()
                 assert sql == snapshot.debit(p, c), (rates, p, c, sql, snapshot.debit(p, c))
         assert_no_drift(conn, "the rounding grid")
-        return f"exact decimals, one debit, replayed; {3 * len(grid)} grid points = money.debit"
+        return (f"exact decimals, one debit, replayed; {4 * len(grid) + 1} grid points = "
+                "money.debit")
     return ca._in_rollback(conn, body)
 
 
@@ -689,6 +694,11 @@ def check_credit_settle(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
+#: Review N1: rates at which (17318, 1176) tokens cost exactly 1273.91356853, while binary
+#: floating point gives 1273.91356854 - one point that tells exact arithmetic from float.
+FLOAT_RATES = ("71665.96953467", "27893.11916121")
+
+
 def check_credit_grid(conn) -> str:
     """CREDIT-SPEND: the SQL charge equals Python `v2.records.settle` - on a grid of token
     counts (0, 1, each ceiling and ceiling +-1) for the seeded card and for a card whose
@@ -703,8 +713,12 @@ def check_credit_grid(conn) -> str:
 
     def body():
         tie = publish_card(conn, "rc_d5_tie", ("0.00500000", "0.01500000"), listing=False)
+        # review N1: a card whose charge differs between exact numeric and binary floating
+        # point in the 8th place at (17318, 1176)
+        wide = publish_card(conn, "rc_d5_float", FLOAT_RATES, listing=False)
         points = [(p, c) for p in (0, 1, 30719, 30720, 30721) for c in (0, 1, 2047, 2048, 2049)]
-        for version in (cc.CARD, tie):
+        points.append((17318, 1176))
+        for version in (cc.CARD, tie, wide):
             card = RateCardSnapshot.model_validate(conn.execute(
                 "select jsonb_build_object('rate_card_version', rate_card_version, "
                 "'model_id', model_id, 'deployment_revision_id', deployment_revision_id, "
@@ -736,7 +750,7 @@ def check_credit_grid(conn) -> str:
             assert mine == want, (tokens, mine, want)
             settled += 1
         assert_no_drift(conn, "the CREDIT grid")
-        return f"{2 * len(points)} grid points and {settled} settlements equal v2.settle"
+        return f"{3 * len(points)} grid points and {settled} settlements equal v2.settle"
     return ca._in_rollback(conn, body)
 
 
