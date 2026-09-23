@@ -265,4 +265,8 @@ class FakeMediaStore:
         upload = self.uploads.get(ref)
         if upload is not None and upload.state is not UploadState.finalized:
             raise errors.InvalidRequest(f"upload {ref} is {upload.state}, not finalized")
+        if upload is not None and upload.org_id == org_id \
+                and self.clock.now() >= upload.expires_at:
+            # MPILOT (proposed ruling): the upload window bounds use as well as completion.
+            raise errors.UploadExpired("the upload window has expired")
         return media

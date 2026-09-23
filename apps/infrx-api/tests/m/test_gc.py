@@ -72,7 +72,9 @@ def test_a_live_jobs_input_is_never_collected(tmp_path):
             assert [k for k in swept.deleted if k.startswith("media/")] == []
     assert ref.storage_ref in adapter.objects.objects
     assert prepared[0].storage_ref in adapter.objects.objects
-    assert run(adapter.resolve_owned(b.ORG_A, ref.handle)) == ref
+    # Still indexed as the job's input. (MPILOT: past the upload's window the handle is no
+    # longer usable for a NEW request - `upload_expired` - but what a live job runs on stays.)
+    assert adapter.refs[(b.ORG_A, ref.handle)] == ref
 
 
 def test_input_is_collected_after_the_job_ends_and_the_grace_passes():
