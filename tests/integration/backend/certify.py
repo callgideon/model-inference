@@ -1108,8 +1108,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="measure/inventory.sh's output from the box (the deployed engine)")
     parser.add_argument("--box", action="store_true",
                         help="the maintenance-window preconditions (E4B_WINDOW_OK=1 etc.)")
-    parser.add_argument("--release-sha", help="the release under test (required with --box): "
-                                               "the checkout's own SHA must be it")
+    parser.add_argument("--release-sha", help="the release under test, the FULL 40-character "
+                                               "commit id (required with --box): the checkout's "
+                                               "own SHA must be it; a prefix is not the release")
     parser.add_argument("--scale", choices=sorted(MATRIX), help="tiny (local) or box")
     parser.add_argument("--no-stack", action="store_true",
                         help="skip the E2-stack suite (a box run; the dev host runs it)")

@@ -447,6 +447,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "    budget = max([16384, *(int(m.group(1)) for m in literal if m)])", RECORD),
     _m("commented_budget_counted", "a comment naming the flag is not a budget",
        '               if not line.lstrip().startswith("#")\n', "", RECORD),
+    # --- verifier V5: one assertion each -----------------------------------------------
+    _m("release_sha_prefix_accepted", "the release is the full commit id, not a prefix",
+       '    if release_sha is not None and start.get("sha") != release_sha:\n',
+       '    if release_sha is not None and not str(start.get("sha")).startswith(release_sha):\n',
+       NOGIT),
+    _m("short_revision_accepted", "a served revision shorter than 7 characters identifies nothing",
+       "len(str(revision)) >= 7", "len(str(revision)) >= 1", SERVED),
+    _m("app_path_substring_matches", "only an apps/app or apps/lab path component is a package",
+       'APP_OR_LAB = re.compile(r"(?:^|/)apps/(?:app|lab)(?:/|$)")',
+       'APP_OR_LAB = re.compile(r"apps/(?:app|lab)")', APPS),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

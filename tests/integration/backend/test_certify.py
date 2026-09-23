@@ -567,6 +567,8 @@ def test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions(tmp_p
     _proc(proc, 16, ["next-server (v16.3.5)"], None)
     _proc(proc, 17, ["node", "/opt/checkout/apps/lab/node_modules/.bin/next", "start"], other)
     _proc(proc, 18, ["next-server (v16.3.5)"], clone / "apps/app")
+    (tmp_path / "myapps" / "app").mkdir(parents=True)
+    _proc(proc, 19, ["next-server (v16.3.5)"], tmp_path / "myapps" / "app")  # review V5
     found = certify.next_servers(proc)
     assert [server["pid"] for server in found] == [11, 12, 16, 17, 18]
     assert found[2]["cwd"] is None
@@ -864,6 +866,9 @@ def test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity(tmp_path
     assert certify.identity_problems(CLEAN, CLEAN, release_sha="e" * 40) == [
         f"the tree is {'c' * 40}, not the release {'e' * 40}"]
     assert certify.identity_problems(CLEAN, CLEAN, release_sha="c" * 40) == []
+    # review V5: the release is the full commit id - a prefix of it is not the release
+    assert certify.identity_problems(CLEAN, CLEAN, release_sha="c" * 7) == [
+        f"the tree is {'c' * 40}, not the release {'c' * 7}"]
 
 
 def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch):
@@ -875,6 +880,8 @@ def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch)
     assert certify.served_build_problems(served, sha, image, image) == []
     assert certify.served_build_problems({"revision": "9999999"}, sha, image, image) == [
         f"the gateway serves 9999999, the report's tree is {sha}"]
+    assert certify.served_build_problems({"revision": "0123ab"}, sha, image, image) == [
+        f"the gateway serves 0123ab, the report's tree is {sha}"]      # review V5: < 7 chars
     assert certify.served_build_problems(served, None, image, image) == [
         "the gateway serves 0123abc, the report's tree is None"]
     assert "publishes no infrx_build_info" in first(
