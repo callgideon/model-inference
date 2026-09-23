@@ -65,3 +65,8 @@ def test_append__past_the_generation_instant_append_terminalizes_and_refuses() -
 # --- item 2: the global journal budget without a global lock -------------------------------
 def test_append__never_moves_the_global_charge() -> None:
     print(checks_journal.check_global_charge(_db()))
+
+
+# --- item 3: one terminal event for every terminalization ----------------------------------
+def test_terminal__every_path_writes_exactly_one_event_last() -> None:
+    print(checks_journal.check_terminal_every_path(_db()))

@@ -456,3 +456,124 @@ def check_global_charge(conn) -> str:
         assert charged(conn) == 16384
         return "appends never move the global charge; stored bytes count until pruned, once"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 3: terminal
+def check_terminal_every_path(conn) -> str:
+    """R30 / DUR-OUTPUT: every terminalization writes exactly ONE terminal event, last in
+    cursor order, from the stored row, in its own transaction - 0012's preparation failure,
+    cancel before and after publication, R29 through heartbeat, load_work and append, the
+    reaper's retries_exhausted / lost_after_publication / queue_wait_expired /
+    preparation_failed, a second generation's journal; the 24 h release writes no second
+    event; a CREDIT job the same."""
+    world = ca.World(conn)
+
+    def admitted():
+        request = cl.gateway_request(world)
+        ca.admit(conn, request, b.idem(request, request.request_id))
+        return request
+
+    def preparation_claim():
+        request = admitted()
+        advance(conn, DEFAULTS.preparation_timeout_s)
+        assert claim(conn, request.request_id)[0] == "already_terminal"
+        return request, "preparation_failed"
+
+    def cancel_unpublished():
+        request, _ = running(conn, world)
+        assert cancel(conn, request)[0] is None
+        return request, "client_cancelled"
+
+    def cancel_published():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("a", "b"))[0] is None
+        assert cancel(conn, request)[0] is None
+        assert cl.row(conn, request.request_id)["settlement_state"] == "held_unknown"
+        return request, "client_cancelled"
+
+    def overdue(fn):
+        def path():
+            request, lease = running(conn, world)
+            assert append(conn, lease, b.events("a"))[0] is None
+            conn.execute("update infrx.attempts set expires_at = expires_at + "
+                         "interval '1 day' where job_id = %s", (request.request_id,))
+            advance(conn, DEFAULTS.generation_timeout_s)
+            if fn == "append":
+                code, _ = append(conn, lease, b.events("late"))
+            else:
+                code, _ = cl.d3(conn, fn, lease=lease.model_dump(mode="json"))
+            assert code == "already_terminal", f"{fn}: {code}"
+            return request, "deadline_exceeded"
+        return path
+
+    def retries_exhausted():
+        request = cl.queued(conn, world)
+        for _ in range(DEFAULTS.max_prepublication_retries + 1):
+            assert cl.d3(conn, "claim", job_id=request.request_id, worker_id="w1")[0] is None
+            advance(conn, TTL)
+            cl._recover(conn)
+        return request, "retries_exhausted"
+
+    def lost_after_publication():
+        request, lease = running(conn, world)
+        assert append(conn, lease, b.events("a"))[0] is None
+        advance(conn, TTL)
+        cl._recover(conn)
+        return request, "lost_after_publication"
+
+    def queue_wait_expired():
+        request = cl.queued(conn, world)
+        advance(conn, DEFAULTS.queue_wait_interactive_s)
+        cl._recover(conn)
+        return request, "queue_wait_expired"
+
+    def preparation_reaped():
+        request = admitted()
+        advance(conn, DEFAULTS.preparation_timeout_s)
+        cl._recover(conn)
+        return request, "preparation_failed"
+
+    def second_generation():
+        request, _ = running(conn, world)
+        advance(conn, TTL)
+        cl.reaped(cl._recover(conn), "index_event")
+        code, answer = cl.d3(conn, "claim", job_id=request.request_id, worker_id="w1")
+        assert code is None and answer["lease"]["generation"] == 2, (code, answer)
+        assert append(conn, cl.lease_of(answer), b.events("x", "y"))[0] is None
+        assert cancel(conn, request)[0] is None
+        assert cursors(journal(conn, request.request_id))[-1][:2] == (2, 3), \
+            f"not after the second generation: {cursors(journal(conn, request.request_id))}"
+        return request, "client_cancelled"
+
+    def credit():
+        request, lease = cl.credit_running(conn, world)
+        assert append(conn, lease, b.events("c"))[0] is None
+        assert cancel(conn, request)[0] is None
+        return request, "client_cancelled"
+
+    paths = {"0012 preparation failure": preparation_claim,
+             "cancel before publication": cancel_unpublished,
+             "cancel after publication": cancel_published,
+             "R29 via heartbeat": overdue("heartbeat"), "R29 via load_work": overdue("load_work"),
+             "R29 via append": overdue("append"), "recover retries_exhausted": retries_exhausted,
+             "recover lost_after_publication": lost_after_publication,
+             "recover queue_wait_expired": queue_wait_expired,
+             "recover preparation_failed": preparation_reaped,
+             "a second generation's journal": second_generation, "a CREDIT job": credit}
+    for what, path in paths.items():
+        def run(path=path, what=what):
+            request, cause = path()
+            terminal = one_terminal_last(conn, request.request_id, what)
+            assert terminal["payload"]["cause"] == cause, (what, terminal["payload"])
+        ca._in_rollback(conn, run)
+
+    def released():
+        request, cause = cancel_published()
+        advance(conn, DEFAULTS.unknown_usage_reconcile_s)
+        cl._recover(conn)
+        assert cl.row(conn, request.request_id)["settlement_state"] == \
+            "released_platform_absorbed", "the 24 h release did not run"
+        one_terminal_last(conn, request.request_id, "the 24 h release",
+                          settlement="held_unknown")
+    ca._in_rollback(conn, released)
+    return f"{len(paths)} terminalization paths, one terminal event each; 24 h release none"

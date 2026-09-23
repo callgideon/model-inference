@@ -2145,6 +2145,22 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "coalesce(r.amount, 0) + j.journal_stored_bytes",
        "admission", "global_charge", "reserved and stored bytes are counted twice (02)"),
     # --- item 3: the terminal event -------------------------------------------------------
+    _m("d4_terminal_trigger_on_any_update", JOURNAL,
+       "after update of settled_at on infrx.jobs\n"
+       "  for each row when (old.settled_at is null and new.settled_at is not null\n" + _J_WHEN,
+       "after update on infrx.jobs\n  for each row when (new.journal_reserved_bytes > 0)",
+       "admission", "terminal_every_path", "a running job's journal shows a terminal event"),
+    _m("d4_terminal_payload_from_the_old_row", JOURNAL,
+       "jsonb_build_object('state', new.state, 'cause', new.outcome_cause,",
+       "jsonb_build_object('state', old.state, 'cause', old.outcome_cause,",
+       "admission", "terminal_every_path", "the terminal event is not the stored outcome (R30)"),
+    _m("d4_terminal_event_in_generation_one_always", JOURNAL,
+       "  select c.generation, c.sequence + 1, c.expires_at - c.committed_at",
+       "  select 1, c.sequence + 1, c.expires_at - c.committed_at",
+       "admission", "terminal_every_path", "a replay ends before a second generation's output"),
+    _m("d4_no_terminal_event_on_cancel", JOURNAL, _J_WHEN,
+       "                    and new.journal_reserved_bytes > 0 and new.state <> 'cancelled')",
+       "admission", "terminal_every_path", "a cancelled stream never ends for its client"),
     # --- item 4: replay -------------------------------------------------------------------
     # --- item 5: pruning and usage --------------------------------------------------------
     # --- item 6 ---------------------------------------------------------------------------
@@ -2270,6 +2286,7 @@ _CHECKS = {
     "append_fenced": checks_journal.check_append_fenced,
     "append_past_the_instant": checks_journal.check_append_past_the_instant,
     "global_charge": checks_journal.check_global_charge,
+    "terminal_every_path": checks_journal.check_terminal_every_path,
 }
 
 
