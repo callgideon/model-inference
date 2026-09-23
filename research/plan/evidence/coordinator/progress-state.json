@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-23T02:54:22Z",
+  "updated": "2026-09-23T02:58:04Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in phase in flight (codex-f2p-wirein)",
+      "phase": "independent review (3-lens workflow) at e307084",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
