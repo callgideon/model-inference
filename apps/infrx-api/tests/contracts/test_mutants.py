@@ -227,6 +227,12 @@ def test_the_in_process_kill_rule_is_the_same_rule():
     assert mutation_list.assertion_kill(crashes).outcome is Outcome.broken_runner
     assert mutation_list.assertion_kill(crashes, dies_by=(KeyError,)).outcome is Outcome.killed
 
+    def asserts_silently():
+        raise AssertionError()
+
+    # D2 review H3 / F2P review HON-2: a message-less assertion is a kill, not a runner crash.
+    assert mutation_list.assertion_kill(asserts_silently).outcome is Outcome.killed
+
 
 # --- R83 amendment (coordinator ruling after the F2R-A review) --------------------------
 def test_an_assertion_inside_the_package_is_not_the_cases_observation():
