@@ -139,12 +139,27 @@ def verify(backup: Path) -> None:
 
 # --------------------------------------------------------------------- restore
 
+LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
 def identity(conninfo: str) -> dict:
-    """Which database a conninfo names. `user` is part of it: every hosted project behind the
-    same regional pooler shares host and dbname and differs only in `postgres.<ref>`."""
+    """Which database a conninfo names, resolved the way libpq resolves it: key, else
+    `hostaddr` for the host, else the PG* environment, else libpq's default (port 5432, the
+    OS user, dbname = user); every loopback spelling is 127.0.0.1. `user` is part of it:
+    every hosted project behind the same regional pooler shares host and dbname and differs
+    only in `postgres.<ref>`. Best effort - two DNS names for one server still differ - so
+    the empty-target guard, not this, is the operative protection (restore.md A5)."""
+    import getpass
     from psycopg.conninfo import conninfo_to_dict
     parsed = conninfo_to_dict(conninfo)
-    return {key: str(parsed.get(key, "")) for key in ("host", "port", "user", "dbname")}
+
+    def value(key: str, env: str) -> str:
+        return str(parsed.get(key) or os.environ.get(env) or "")
+    host = value("host", "PGHOST") or value("hostaddr", "PGHOSTADDR")
+    host = "127.0.0.1" if host in LOOPBACK else host
+    user = value("user", "PGUSER") or getpass.getuser()
+    return {"host": host, "port": value("port", "PGPORT") or "5432", "user": user,
+            "dbname": value("dbname", "PGDATABASE") or user}
 
 
 def refuse_live_target(conninfo: str, meta: dict) -> None:

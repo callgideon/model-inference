@@ -262,6 +262,36 @@ def test_i3b_bk01e_b_a_backup_is_never_restored_onto_its_own_source(tmp_path):
         assert _write_state(source) == before
 
 
+SOURCE = "host=127.0.0.1 port=5432 user=postgres dbname=infrx_i3b_src sslmode=disable"
+SPELLINGS = {        # the same server and database, as an operator might type it
+    "localhost": ("host=localhost port=5432 user=postgres dbname=infrx_i3b_src", {}),
+    "uri": ("postgresql://postgres@127.0.0.1:5432/infrx_i3b_src?sslmode=require", {}),
+    "omitted_port": ("host=127.0.0.1 user=postgres dbname=infrx_i3b_src", {}),
+    "hostaddr": ("hostaddr=127.0.0.1 port=5432 user=postgres dbname=infrx_i3b_src", {}),
+    "environment": ("", {"PGHOST": "127.0.0.1", "PGPORT": "5432", "PGUSER": "postgres",
+                         "PGDATABASE": "infrx_i3b_src"}),
+}
+
+
+@pytest.mark.parametrize("spelling", SPELLINGS)
+def test_i3b_bk01e_c_every_spelling_of_the_source_is_the_source(monkeypatch, spelling):
+    """RS-1 residual: the identity check resolves a conninfo the way libpq does (hostaddr
+    for an empty host, the PG* environment, port 5432, every loopback name), so the source
+    spelled another way is still refused - before any connection is made. A different
+    database or login is not the source. Layer 1: no server is contacted."""
+    for name in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGUSER", "PGDATABASE"):
+        monkeypatch.delenv(name, raising=False)
+    meta = {"source": pg.identity(SOURCE), "auth_tables": []}
+    conninfo, env = SPELLINGS[spelling]
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(RuntimeError, match="the backup's own source"):
+        pg.refuse_live_target(conninfo, meta)
+    for other in (SOURCE.replace("dbname=infrx_i3b_src", "dbname=infrx_i3b_copy"),
+                  SOURCE.replace("user=postgres", "user=postgres.other")):
+        assert pg.identity(other) != meta["source"], other
+
+
 # RS-2: one damage per catalog family (and row content), applied to a copy of a GOOD
 # restore; the check must name that family and no other. Each family is a single-edit
 # mutant in mutants_i3b.py (i3bm60-64) that only its own parameter kills.

@@ -92,9 +92,13 @@ $PY infra/runbooks/pgrestore.py restore --conninfo "$LOCAL" --from "$BACKUP"
 ```
 
 It verifies `SHA256SUMS` first and refuses a damaged backup (`bk01d`); it refuses, before
-writing anything, a target that is the backup's own source (host, port, user and dbname
-recorded in `meta.json`) or is not empty - an `infrx` schema, a table in `public` or an auth
-row (`bk01e`). Then it restores the auth
+writing anything, a target that is not empty - an `infrx` schema, a table in `public` or an
+auth row (`bk01e_a`) - and a target that is the backup's own source (host, port, user and
+dbname recorded in `meta.json`, resolved as libpq resolves them: `localhost`, a URI, an
+omitted port, `hostaddr=` or the PG* environment all count as the same source - `bk01e_b`,
+`bk01e_c`). **The emptiness guard is the operative protection:** the source check is best
+effort (two DNS names for one server still look different), and a live database is never
+empty. Then it restores the auth
 rows, empties the template's default privileges, restores the project through the filtered
 table of contents, then replays the auth trigger and the global function default.
 
@@ -247,3 +251,5 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   the tool drops pg_restore's DETAIL/CONTEXT lines (row data) from its errors (`rb06`).
 - 2026-09-23 (RS-5): A9 gains the backup's retention and removal step; `.gitignore` refuses
   `*.dump` and `infrx-backups/`.
+- 2026-09-23 (confirmation fold-in, RS-1 residual): the source identity is resolved like
+  libpq (bk01e_c); A5 names the emptiness guard as the operative one.
