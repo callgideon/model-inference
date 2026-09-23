@@ -470,6 +470,8 @@ DEPLOYMENT_EXPECTED = {
     "MAX_MESSAGES": 64, "MAX_PARTS": 16, "MAX_TEXT_CODEPOINTS": 131072,
     "MAX_URL_CHARS": 8192, "MAX_NUMBER_DIGITS": 20,
     "LARGE_BODY_LIMIT": 2, "LARGE_BODY_THRESHOLD_BYTES": 1048576,
+    # M1-L2: the media object store's place in S3_MEDIA_BUCKET, and an S3-compatible endpoint
+    "S3_MEDIA_PREFIX": "infrx/", "S3_ENDPOINT_URL": "",
 }
 
 # Everything except the text values (the secret, the accounting regime).

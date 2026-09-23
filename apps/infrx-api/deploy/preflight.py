@@ -191,6 +191,8 @@ TUNABLE = (
     "DATABASE_POOL_STATEMENT_TIMEOUT_MS", "MAX_MESSAGES", "MAX_PARTS",
     "MAX_TEXT_CODEPOINTS", "MAX_URL_CHARS", "MAX_NUMBER_DIGITS", "LARGE_BODY_LIMIT",
     "LARGE_BODY_THRESHOLD_BYTES",
+    # M1-L2: the media store's prefix in S3_MEDIA_BUCKET; an S3-compatible endpoint
+    "S3_MEDIA_PREFIX", "S3_ENDPOINT_URL",
     # F2P wire-in: the admission regime, legacy_usd or credit (validate_deployment)
     "ACCOUNTING_REGIME",
     # the F1 names that keep theirs until G/W retire them (08 §5)
