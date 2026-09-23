@@ -584,8 +584,11 @@ def test_a_credit_deployment_needs_an_approved_rate_card():
         # name is refused at startup rather than served (`validate_pilot` is off this path).
         with pytest.raises(config.RuntimeMisconfigured, match="requires ACTIVE_RATE_CARD_VERSION"):
             _app({**env, "ACTIVE_RATE_CARD_VERSION": "  "})
-        with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
-            _app({**env, "ACTIVE_RATE_CARD_VERSION": " rc_marlin2b_2026_09_provisional "})
+        # CONF-N1: padding on one side only is padding too (a one-sided strip must not pass).
+        for padded in (" rc_marlin2b_2026_09_provisional ", "rc_marlin2b_2026_09_provisional ",
+                       " rc_marlin2b_2026_09_provisional"):
+            with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
+                _app({**env, "ACTIVE_RATE_CARD_VERSION": padded})
     assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
     # F2P confirmation CONF-N2: whitespace-only is unset in every regime, so a legacy
     # deployment starts; a padded card is refused in every regime (the rule is the text's).
