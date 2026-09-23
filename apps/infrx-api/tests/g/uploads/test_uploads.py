@@ -350,6 +350,29 @@ def test_media_sec__no_store_value_outside_the_frozen_ticket_leaves():
             response.text
         assert ORG_A not in response.text and "upl_x" not in response.text
 
+
+def test_media_sec__every_refusal_closes_the_connection():
+    """The intake's rule for refusals made while a body may still be arriving: the socket
+    closes. An operator key (403), a malformed or unknown handle (404) and a type the
+    destination does not store (400) are all refused before the read, on every route."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        return [await create(client, TOKEN_OPERATOR),
+                await put(client, handle, token=TOKEN_OPERATOR),
+                await complete(client, handle, token=TOKEN_OPERATOR),
+                await put(client, "upl_short"), await complete(client, "upl_short"),
+                await put(client, UNKNOWN_HANDLE, mime="application/json"),
+                await client.put(put_path(UNKNOWN_HANDLE), content=b"x" * 64,
+                                 headers=bearer(**{"content-type": "video/mp4"}))]
+
+    answers = run(app, script)
+    assert [response.status_code for response in answers] == [403, 403, 403, 404, 404, 400,
+                                                              404]
+    for response in answers:
+        assert response.headers.get("connection") == "close", response.request.url
+
 # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
 def created_handle(client_answer) -> str:
     assert client_answer.status_code == 201, client_answer.text

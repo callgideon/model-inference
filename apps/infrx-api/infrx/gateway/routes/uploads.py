@@ -56,7 +56,22 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
     # Built at mount, like the ingress's: in `pilot` a shared legacy key refuses here (R51).
     auth = AuthResolver(rt)
     limits = rt.settings.pilot
-    guarded = intake.guard(new_request_id)
+    guard = intake.guard(new_request_id)
+
+    def guarded(handler):
+        """`intake.guard`, and every refusal closes the connection. A refusal raised before
+        the read leaves the caller's body still arriving - the intake's rule for its own
+        pre-read refusals - and an upload body is the largest this API takes."""
+        translated = guard(handler)
+
+        async def closing(request: Request):
+            answer = await translated(request)
+            if answer.status_code >= 400:
+                answer.headers["Connection"] = "close"
+            return answer
+
+        closing.__name__ = handler.__name__
+        return closing
 
     async def tenant(request):
         """The key's identity. An operator credential runs no inference (catalog's rule),

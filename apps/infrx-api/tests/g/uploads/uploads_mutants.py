@@ -83,6 +83,9 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "timeout_s=limits.intake_timeout_s, clock=rt.clock)",
        "timeout_s=limits.intake_timeout_s * 100, clock=rt.clock)",
        "test_media_sec__a_slow_control_body_is_cut_at_the_deadline"),
+    _m("refusals_keep_the_connection", "every upload refusal closes the connection",
+       U, '                answer.headers["Connection"] = "close"', "                pass",
+       "test_media_sec__every_refusal_closes_the_connection"),
     # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -----------
     _m("destination_cap_is_the_request_cap", "the destination reads at most MAX_MEDIA_BYTES",
        U, "max_bytes=limits.max_media_bytes,", "max_bytes=limits.max_request_bytes,",
