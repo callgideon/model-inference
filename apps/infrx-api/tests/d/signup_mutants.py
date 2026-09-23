@@ -56,6 +56,10 @@ MIGRATION_MUTANTS = (
        "             where o.created_by = p_user_id and o.id = (select v.personal_org_id from "
        "infrx.verified_user(p_user_id) v) and infrx.legacy_usd_rollout_hold(o.id)) then",
        "signup_eligibility", "R72: USD owed through a second organization is ignored"),
+    _m("a1_campaign_length_unchecked",
+       "  if length(coalesce(p_campaign_version, '')) > 100 then",
+       "  if length(coalesce(p_campaign_version, '')) > 1000 then",
+       "signup_eligibility", "an over-long campaign is a constraint crash, not a 22023 answer"),
     _m("a1_denial_not_recorded",
        "    perform infrx.record_signup_denial(p_user_id, 'unverified');",
        "    null;",

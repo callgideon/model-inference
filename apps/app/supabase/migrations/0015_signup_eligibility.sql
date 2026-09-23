@@ -140,6 +140,11 @@ begin
   if p_user_id is null then
     raise exception 'invalid_request: a user is required' using errcode = '22023';
   end if;
+  -- 0006's `signup_entitlements.campaign_version` CHECK, answered as the request error.
+  if length(coalesce(p_campaign_version, '')) > 100 then
+    raise exception 'invalid_request: campaign_version is at most 100 characters'
+      using errcode = '22023';
+  end if;
   if exists (select 1 from infrx.retired_individuals r where r.user_id = p_user_id) then
     perform infrx.record_signup_denial(p_user_id, 'retired');
     return query select 'retired'::text, p_user_id, null::uuid, null::uuid, null::text,

@@ -211,6 +211,11 @@ def check_eligibility(conn) -> str:
         raise psycopg.Rollback()
     assert why is not None and why.startswith("55000"), f"flag off: {why!r}"
     refused(conn, "no user", "select * from public.claim_signup_grant(null)", "22023")
+    long = uid(1, 9)
+    individual(conn, long, "long1@example.com")
+    refused(conn, "a 101-character campaign",
+            f"select * from public.claim_signup_grant('{long}', '{'c' * 101}')", "22023")
+    assert claim(conn, long, campaign="c" * 100)[0] == "granted", "a 100-character campaign"
     return ("eligibility: 1 grant per individual, 3 replays, unverified/soft-deleted/unknown "
             "alike, identity reuse, 4 rollout holds (+, -, 2nd org), USD untouched, flag and null "
             "refused")
