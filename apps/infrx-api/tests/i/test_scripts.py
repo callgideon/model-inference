@@ -353,8 +353,8 @@ def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
 def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatch):
     """After a dev install over the monolith, rollback.sh puts the previous env file and
     gateway unit back byte for byte, removes (and disables) the units that did not exist,
-    and restarts the gateway onto them. A dev -> legacy revert is allowed: dev was never
-    metered. The backup holds the previous env file's secrets: root-only, 0700 and 0600."""
+    and restarts the gateway onto them - and only the gateway: without ENGINE=restart the
+    engine is left alone. A dev -> legacy revert is allowed: dev was never metered. The backup holds the previous env file's secrets: root-only, 0700 and 0600."""
     host = Host(tmp_path, monkeypatch)
     host.monolith()
     assert host.run("install.sh", INFRX_MODE="dev").returncode == 0
@@ -370,6 +370,8 @@ def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatc
     assert "systemctl disable --now infrx-worker.service" in host.events
     assert "systemctl restart marlin2b-gateway" in host.events
     assert host.events[-1].endswith("http://127.0.0.1:8001/health")
+    # a plain rollback leaves the engine alone: only ENGINE=restart (runbook R2) restarts it
+    assert not [e for e in host.events if e.startswith("systemctl restart marlin2b-vllm")]
 
 
 def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime(
