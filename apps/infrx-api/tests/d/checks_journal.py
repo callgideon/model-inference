@@ -837,6 +837,55 @@ def check_usage(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
+# --------------------------------------------------------------------- item 9
+def check_credit_journal(conn) -> str:
+    """The journal is shared by both regimes: a CREDIT job (`credit_running`, 0016's MY-3
+    refuses its claim until WorkV2) appends, replays to its own organization only, and its
+    cancellation writes the one terminal event, with its CREDIT hold quarantined."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = cl.credit_running(conn, world)
+        code, answer = append(conn, lease, b.events("credit"))
+        assert code is None, code
+        code, page = read(conn, request)
+        assert code is None and chunks(page["chunks"]) == chunks(answer["chunks"]), page
+        assert read(conn, request, org=b.ORG_A)[0] == "not_found"
+        assert cancel(conn, request)[0] is None
+        one_terminal_last(conn, request.request_id, "a CREDIT cancel")
+        assert cl.credit_hold(conn, request.request_id)[0] == "unknown", \
+            "the published CREDIT job's hold was not quarantined"
+        return "a CREDIT job's journal: append, owned replay, one terminal event"
+    return ca._in_rollback(conn, body)
+
+
+CALLABLE = ("infrx.append(jsonb)", "infrx.read_journal(jsonb)", "infrx.expire_journal(jsonb)",
+            "infrx.journal_usage()")
+INTERNAL = ("infrx.journal_terminal_event()", "infrx.chunk_doc(infrx.stream_chunks)")
+
+
+def check_journal_privileges(conn) -> str:
+    """R59: `append`, `read_journal`, `expire_journal` and `journal_usage` are executable by
+    `service_role` only; the trigger function and `chunk_doc` by nobody. The terminal
+    trigger is a row-level AFTER UPDATE OF settled_at on `infrx.jobs`."""
+    def may(role: str, fn: str) -> bool:
+        return conn.execute("select has_function_privilege(%s, %s, 'execute')",
+                            (role, fn)).fetchone()[0]
+    for fn in CALLABLE:
+        assert may("service_role", fn), f"service_role cannot execute {fn}"
+        for role in ("anon", "authenticated"):
+            assert not may(role, fn), f"{role} may execute {fn}"
+    for fn in INTERNAL:
+        for role in ("service_role", "anon", "authenticated"):
+            assert not may(role, fn), f"{role} may execute the internal {fn}"
+    trigger = conn.execute("select pg_get_triggerdef(oid) from pg_trigger where tgrelid = "
+                           "'infrx.jobs'::regclass and tgname = 'jobs_terminal_journal_event'"
+                           ).fetchone()
+    assert trigger and "AFTER UPDATE OF settled_at ON infrx.jobs FOR EACH ROW" in trigger[0], \
+        trigger
+    return f"{len(CALLABLE)} service operations, {len(INTERNAL)} internal functions"
+
+
 # --------------------------------------------------------------------- item 6 (SQL half)
 def returns_without_waiting(holder, conn, call, within_s: float = 5.0):
     """`call(conn)` while `holder` keeps a transaction open: it must answer without waiting;

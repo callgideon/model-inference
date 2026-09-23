@@ -106,6 +106,15 @@ def test_expire__usage_reports_the_charge() -> None:
     print(checks_journal.check_usage(_db()))
 
 
+# --- item 9: CREDIT jobs and the boundary surface ---------------------------------------------
+def test_credit__append_replay_and_terminal_event_on_a_credit_job() -> None:
+    print(checks_journal.check_credit_journal(_db()))
+
+
+def test_privileges__journal_operations_service_only_internals_nobody() -> None:
+    print(checks_journal.check_journal_privileges(_db()))
+
+
 # --- item 6 (the concurrency check the migration mutants run; committed rows: own DB) --------
 def test_races__appends_serialize_and_expire_skips_a_locked_job() -> None:
     _db()

@@ -2164,6 +2164,10 @@ D4_MUTANTS: tuple[Mutant, ...] = (
     _m("d4_no_terminal_event_on_cancel", JOURNAL, _J_WHEN,
        "                    and new.journal_reserved_bytes > 0 and new.state <> 'cancelled')",
        "admission", "terminal_every_path", "a cancelled stream never ends for its client"),
+    _m("d4_terminal_event_legacy_regime_only", JOURNAL, _J_WHEN,
+       "                    and new.journal_reserved_bytes > 0\n"
+       "                    and new.accounting_regime = 'legacy_usd')",
+       "admission", "credit_journal", "a CREDIT job's stream never ends (the journal is shared)"),
     _m("d4_terminal_event_bytes_uncounted", JOURNAL,
        "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes + v_bytes\n"
        "   where request_id = new.request_id;\n", "",
@@ -2236,6 +2240,20 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "    perform 1 from infrx.jobs where request_id = v_job for update;",
        "admission", "journal_races", "the pruner stalls behind every in-flight append"),
     # --- item 9b: privileges --------------------------------------------------------------
+    _m("d4_append_granted_to_authenticated", JOURNAL,
+       "-- `append` keeps 0004's grant (service_role only): `create or replace` preserves it.",
+       "grant execute on function infrx.append(jsonb) to authenticated;",
+       "admission", "journal_privileges", "a browser session writes a job's output"),
+    _m("d4_journal_usage_granted_to_anon", JOURNAL,
+       "grant execute on function infrx.journal_usage() to service_role;",
+       "grant execute on function infrx.journal_usage() to service_role, anon;",
+       "admission", "journal_privileges", "an anonymous caller reads the platform's load"),
+    _m("d4_chunk_doc_callable_by_the_service", JOURNAL,
+       "revoke all on function infrx.chunk_doc(infrx.stream_chunks)\n"
+       "  from public, anon, authenticated, service_role;",
+       "revoke all on function infrx.chunk_doc(infrx.stream_chunks)\n"
+       "  from public, anon, authenticated;",
+       "admission", "journal_privileges", "an internal helper widens the service surface"),
 )
 MUTANTS = MUTANTS + D4_MUTANTS
 
@@ -2366,6 +2384,8 @@ _CHECKS = {
     "expire_prefix": checks_journal.check_expire_prefix,
     "expire_bytes": checks_journal.check_expire_bytes,
     "usage": checks_journal.check_usage,
+    "credit_journal": checks_journal.check_credit_journal,
+    "journal_privileges": checks_journal.check_journal_privileges,
     "journal_races": lambda conn: checks_journal.check_journal_races(pgharness.connect, MUT_DB),
 }
 
