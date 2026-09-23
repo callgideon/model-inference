@@ -274,12 +274,16 @@ DAMAGE = {
     # the source had them), so the same grant there is a no-op; 0004 narrowed `infrx`'s.
     "default_acls": "alter default privileges for role postgres in schema infrx "
                     "grant all on tables to anon",
+    # RS-3: the two facts the money RPCs and the tenant guard rest on beyond their text.
+    "triggers": "alter table public.api_keys disable trigger user",
+    "functions_config": "alter function public.handle_new_user() set search_path = public",
     "rows": "update public.models set limits = limits || '{{\"i3b\": 1}}' "
             "where id = (select min(id) from public.models)",
 }
 
 
 def _family(problem: str) -> str:
+    """`functions differ: ...` -> `functions`; a DAMAGE id names its family first."""
     return "rows" if problem.startswith("rows of ") else problem.split(" differ", 1)[0]
 
 
@@ -312,7 +316,8 @@ def test_i3b_bk01f_the_check_names_each_damaged_family(good_restore, family):
                 "from pg_policies where schemaname = 'public' order by 1 limit 1").fetchone()[0]
             conn.execute(DAMAGE[family].format(policy=policy))
         problems = pg.compare(source, fingerprint(damaged))
-        assert {_family(problem) for problem in problems} == {family}, problems
+        assert {_family(problem) for problem in problems} == {family.split("_config")[0]}, \
+            problems
     finally:
         _admin(f"drop database if exists {damaged} with (force)")
 

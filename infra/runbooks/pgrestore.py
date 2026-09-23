@@ -223,9 +223,11 @@ CATALOG = {
                 "where schemaname = any(%(s)s) order by 1, 2",
     "functions": "select n.nspname || '.' || p.proname, pg_get_function_identity_arguments(p.oid), "
                  "p.prosecdef, array(select unnest(p.proacl)::text order by 1)::text, "
-                 "md5(p.prosrc) from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                 "md5(p.prosrc), coalesce(p.proconfig::text, '') from pg_proc p "
+                 "join pg_namespace n on n.oid = p.pronamespace "
                  "where n.nspname = any(%(s)s) order by 1, 2",
-    "triggers": "select c.relname, t.tgname, pg_get_triggerdef(t.oid) from pg_trigger t "
+    "triggers": "select c.relname, t.tgname, pg_get_triggerdef(t.oid), t.tgenabled::text "
+                "from pg_trigger t "
                 "join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid "
                 "join pg_namespace fn on fn.oid = p.pronamespace "
                 "where not t.tgisinternal and fn.nspname = any(%(s)s) order by 1, 2",
