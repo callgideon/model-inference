@@ -56,6 +56,7 @@ NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
 ONE_404 = "test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404"
 OPERATOR = "test_dur_rls__an_operator_key_owns_no_job"
 READ_OUTAGE = "test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503"
+PROVIDER_DEV = "test_dur_rls__a_provider_dev_key_owns_its_own_jobs"
 RESULT = "test_api_modes__the_result_is_served_only_after_the_terminal_commit"
 FAILURES = "test_api_modes__a_failed_cancelled_or_expired_job_is_a_result_not_an_error"
 STORE_CLOCK = "test_api_modes__result_expiry_is_judged_on_the_store_clock"
@@ -163,6 +164,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("operator_owns_jobs", "an operator credential owns no job (R33/R66)",
        J, "        if auth.audience not in OWNERS or not ids.JOB_HANDLE_RE.fullmatch(handle):",
        "        if not ids.JOB_HANDLE_RE.fullmatch(handle):", OPERATOR),
+    _m("provider_dev_owns_none", "a provider-dev key owns the jobs it submits",
+       J, "OWNERS = frozenset({CredentialAudience.consumer, CredentialAudience.provider_dev})",
+       "OWNERS = frozenset({CredentialAudience.consumer})", PROVIDER_DEV),
     _m("status_leaks_foreign", "a foreign handle is the unknown handle's 404 (the store's check)",
        ST, "        if job is None or job.request.org_id != org_id:", "        if job is None:",
        ONE_404),

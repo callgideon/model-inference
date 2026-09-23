@@ -26,6 +26,7 @@ from fastapi import FastAPI
 
 from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors, fixtures, wire
+from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
@@ -494,6 +495,28 @@ def test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404():
     assert world.jobs.holds[job.id].state is HoldState.held
     assert world.failures.count("read_owned") == journal_reads     # no journal was read
 
+
+def test_dur_rls__a_provider_dev_key_owns_its_own_jobs():
+    """Brief item 2: a provider-dev key of the organization owns the jobs it submits (to its
+    private endpoint): its own handle's status and DELETE answer 200, and a consumer key of
+    another organization gets the unknown handle's 404 for it."""
+    world = JobsWorld()
+    world.catalog.publish(rs.support.preview_card())
+    world.jobs.set_price(rs.support.DEV_MODEL, b.price(model_revision=rs.support.DEV_MODEL))
+    world.jobs.grant(rs.support.IDS.provider_org, "100")
+    world.as_key(rs.support.PROVIDER_ROW)
+    accepted = post(world, payload=rs.body(model=rs.support.DEV_MODEL))
+    assert accepted.status == 202, accepted.body
+    job = world.only_job()
+    assert job.request.org_id == rs.support.IDS.provider_org
+    own = status(world)
+    assert own.status == 200 and own.json().get("state") == "preparing"
+    world.as_key(OTHER_ROW)
+    assert refusal(status(world)) == (404, "not_found")
+    world.as_key(rs.support.PROVIDER_ROW)
+    cancelled = delete(world)
+    assert cancelled.status == 200 and cancelled.json()["state"] == "cancelled"
+    assert job.outcome.cause is TerminalCause.client_cancelled
 
 def test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503():
     """Every handle route's store read - the owned row (status, result, events, DELETE) and
