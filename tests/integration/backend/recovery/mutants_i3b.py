@@ -113,6 +113,8 @@ MUTANTS: tuple[Mutant, ...] = (
            "        pass", OBSERVE, "ob08"),
     Mutant("i3bm36", "M3: a mount that stops answering keeps no old byte counts", HOST,
            '    reg.clear("infrx_disk_bytes")', "    pass", OBSERVE, "ob08"),
+    Mutant("i3bm85", "OB-3: a mount dropped from the configuration keeps no free-ratio series",
+           HOST, '    reg.clear("infrx_disk_free_ratio")', "    pass", OBSERVE, "ob08"),
     Mutant("i3bm37", "M3: a failed nvidia-smi fabricates no memory reading", HOST,
            '    reg.set("infrx_gpu_up", 1.0 if parsed else 0.0)\n',
            '    reg.set("infrx_gpu_up", 1.0 if parsed else 0.0)\n'

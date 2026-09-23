@@ -247,6 +247,8 @@ def test_i3b_ob08_host_gauges_read_the_machine_and_fail_towards_the_alert(tmp_pa
     host.collect_disks(reg, {"media": "/gone"}, statvfs=statvfs)
     assert reg.value("infrx_disk_free_ratio", mount="media") == 0.0
     assert reg.value("infrx_disk_bytes", mount="media", state="free") is None
+    # OB-3: `spool` was configured before and is not now - no ratio of it remains either
+    assert reg.value("infrx_disk_free_ratio", mount="spool") is None
 
 
 # ------------------------------------------------------------------ the wiring helpers

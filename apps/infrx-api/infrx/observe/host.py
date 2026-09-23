@@ -39,6 +39,7 @@ def _resident(proc: Path) -> int | None:
 def collect_disks(reg: Registry, disks: Mapping[str, str], *,
                   statvfs: Callable = os.statvfs) -> None:
     reg.clear("infrx_disk_bytes")                   # a mount that fails keeps no old bytes
+    reg.clear("infrx_disk_free_ratio")              # a mount no longer configured: no ratio
     for mount, path in disks.items():
         try:
             fs = statvfs(path)
