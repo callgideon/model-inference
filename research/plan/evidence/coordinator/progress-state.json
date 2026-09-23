@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:12:43Z",
+  "updated": "2026-09-23T12:24:05Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "D4": {
       "lane": "codex-d4 / codex/d4-stream-journal",
-      "phase": "review fix_required at a4598b0 (5 blocking: two-pruner watermark race unkilled, empty-journal terminal TTL unkilled, unstorable jsonb payloads untyped vs the fake, stored byte measure claim false for floats, expire per-pass bound unkilled; 10 nonblocking) \u2192 fix round running; confirmation next; D5 at the confirmed head",
+      "phase": "round 2 HANDED BACK 7d3ef59 (impl a4e0f39; all 5 blocking + most nonblocking closed; 0017 unchanged; 51 migration + 14 code mutants; plain sweep 802); confirmation workflow running \u2192 merge \u2192 D5 dispatch",
       "since": "2026-09-23T05:12:27Z",
       "note": "0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook"
     },
@@ -64,8 +64,8 @@
       "since": "2026-09-23T11:20:35Z"
     },
     "D4": {
-      "phase": "fix_required at a4598b0 (wf_db54ab74-d3f; 13 agents; JSON evidence/d/D4-review-a4598b0.json) \u2192 fix round",
-      "since": "2026-09-23T11:42:37Z"
+      "phase": "confirmation at 7d3ef59 running (round 1 fix_required at a4598b0)",
+      "since": "2026-09-23T12:24:05Z"
     }
   },
   "gates": {
