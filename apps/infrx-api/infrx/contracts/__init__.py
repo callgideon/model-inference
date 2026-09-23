@@ -1,4 +1,4 @@
-"""Contracts v1, executable. Coordinator-owned: a change here is a contract revision.
+"""Contracts v1 (and, under `v2`, revision 2), executable. Coordinator-owned: a change here is a contract revision.
 
 Submodules load on first attribute access (`contracts.money`) or by direct
 import (`from infrx.contracts import money`). Nothing is imported eagerly, so
@@ -18,8 +18,10 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+# `v2` is the contracts-v2 package (F2P wire-in, item 1): `contracts.v2` resolves by
+# attribute access like every other submodule, and still loads nothing until touched.
 _SUBMODULES = ("codec", "errors", "ids", "limits", "money", "ports", "records",
-                "tasklocal", "wire")
+                "tasklocal", "v2", "wire")
 
 __all__ = list(_SUBMODULES)
 

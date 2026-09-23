@@ -4,13 +4,14 @@
 // hand-written guards. No schema dependency is added: 08 §6 forbids a new console package,
 // and a bad fixture must fail here rather than surface as a mystery in a UI track.
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import judgeFixture from "../../lib/contracts/fixtures/judge.json" with { type: "json" };
 import orgsFixture from "../../lib/contracts/fixtures/orgs.json" with { type: "json" };
 import traceFixture from "../../lib/contracts/fixtures/traces.json" with { type: "json" };
 import { isMoney } from "../../lib/contracts/money.ts";
 import {
+  AUDIT_ACTIONS,
   AUTHOR_ROLES,
   CALIBRATION_LABELS,
   ENTITLEMENT_LIMIT_NAMES,
@@ -368,4 +369,31 @@ test("the judge fixtures keep dry-run, live and ambiguous runs honest", () => {
     judge.runs.some((run) => run.samples.some((sample) => sample.limited_evaluation)),
     "a limited evaluation is required",
   );
+});
+
+test("every model a trace template names carries its public model id (R62)", () => {
+  // F2R-B NB-2: `<public_model_id>@<revision>`, the form every other surface uses. The unprefixed
+  // `marlin-2b@2026-09-01` this file used to carry is the defect R62 names; a template that
+  // regressed would render a model identity no request could have used.
+  const PUBLIC_REVISION = /^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9.-]*@\d{4}-\d{2}-\d{2}$/;
+  const models = traceFixture.content_templates.map((template) => template.request.model);
+  assert.ok(models.length > 0, "no trace content template names a model");
+  for (const model of models) {
+    assert.match(model, PUBLIC_REVISION, `trace template model ${model} lacks its public model id`);
+    assert.ok(orgsFixture.models.includes(model), `trace template model ${model} is not a served model`);
+  }
+});
+
+test("the console audit actions are D1's ten, in D1's order", () => {
+  // F2P review HON-1: 0009's CHECK constraint is the authority; the console list mirrors it by
+  // hand, so every value (not only the one the fake writes) is compared here.
+  const sql = readFileSync(
+    new URL("../../supabase/migrations/0009_operator_seams.sql", import.meta.url),
+    "utf8",
+  );
+  const check = /add constraint audit_entries_action_check\s+check \(action in \(([^)]*)\)\)/.exec(sql);
+  assert.ok(check, "0009 no longer declares audit_entries_action_check");
+  const d1 = [...check[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.equal(d1.length, 10);
+  assert.deepEqual([...AUDIT_ACTIONS], d1);
 });

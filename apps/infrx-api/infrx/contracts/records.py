@@ -651,6 +651,17 @@ class Work(Record):
     prepared_refs: tuple[MediaRef, ...] = ()
     price_snapshot: PriceSnapshot
     budgets: Budgets
+    # Preparation's exact prompt token count, stored once with the prepared refs (D2's
+    # `jobs.prepared_prompt_tokens`, filled by D3's `load_work`; W2's request). None until
+    # preparation has counted, and never beyond the ceiling the hold was sized for.
+    prompt_tokens: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _prompt_fits_the_admitted_ceiling(self) -> Work:
+        if self.prompt_tokens is not None and self.prompt_tokens > self.request.max_input_tokens:
+            raise ValueError("prompt_tokens exceeds the request's max_input_tokens, which the "
+                             "hold was sized for")
+        return self
 
 
 class PreparedRequest(Record):

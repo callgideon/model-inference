@@ -2,6 +2,8 @@
 
 The [database map](06-database-map.md) specifies persistence keys and constraints. Read [architecture](../platforms/01-architecture.md), [credits](../platforms/02-credits.md) and [API boundaries](../platforms/07-api-contracts.md) for the 2026-09-21 amendment. F2R repairs the implemented v1 contract at `271add9`; F2P must encode this revision 2 as executable types, fixtures and contract tests. This document is the target, not a claim that product-v2 code or SQL exists. Preserve the implemented signatures in [ports.py](../../apps/infrx-api/infrx/contracts/ports.py) and accepted v1 rulings except explicitly revised behavior. Changes require a coordinator-owned revision and affected consumers' tests.
 
+**Executable encoding.** Revision 2 exists as code: the v1 → v2 field map, its rulings (R64–R78 in [08 §10](08-contracts-v1-encoding.md)) and what the wire-in composed are in [01a-contracts-v2-map.md](01a-contracts-v2-map.md); the persistence side is [06a-database-map-v2.md](06a-database-map-v2.md).
+
 ## Identity, authorization and errors
 
 - `request_id`: UUID minted at ingress, also the accepted job/usage/trace identity and `Inference-Id`. Rejected requests retain a request ID but are not accepted jobs or billable usage.
@@ -87,6 +89,8 @@ Result access expires at 24h, processing cache at 7d, full trace content at owne
 - 2026-09-20: Frozen proposed v1 semantics for F2 implementation. All configuration values here require tests and, where performance-dependent, pilot measurement.
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+- 2026-09-22: F2P wire-in (item 7, file 13): linked the executable v2 appendix (01a) and its persistence appendix (06a). No contract text here changed.
 
 ## F3 follow-on Lab contracts (not App launch prerequisites)
 

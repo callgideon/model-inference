@@ -1,5 +1,5 @@
 {
-  "_comment": "R32/R40: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to be killed by a NAMED case listed in its `cases` — a non-zero exit alone is not a kill, and a load, syntax, stripping or timeout failure is a runner error that fails the run. `kills_by: \"throw\"` marks the mutants whose thrown error IS the defect (an accepted out-of-domain value that then throws); every other mutant must die on an assertion. Ids are this repository's; `was` records the round-4 reviewer's id where their description identified the mutant. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent.",
+  "_comment": "R32/R40: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to be killed by a NAMED case listed in its `cases` — a non-zero exit alone is not a kill, and a load, syntax, stripping or timeout failure is a runner error that fails the run. `kills_by: \"throw\"` marks the mutants whose thrown error IS the defect (an accepted out-of-domain value that then throws); every other mutant must die on an assertion. Ids are this repository's; `was` records the round-4 reviewer's id where their description identified the mutant. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent. `entry` names the suite that must kill a mutant: absent is the exported conformance suite, `v2` is the contracts-v2 console suites (tests/contracts/v2/*.test.ts), folded in from `mutants-v2.json` by the F2P wire-in (item 11); compile-time invariants of the v2 unit brands are checked by the `@ts-expect-error` blocks in money-units.test.ts under `tsc --noEmit`, which no runtime mutant can express.",
   "mutants": [
     {
       "id": "AUDIT-01",
@@ -15,8 +15,8 @@
       "id": "AUDIT-02",
       "note": "a restore overwrites the earlier suspension entry instead of appending",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
-      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"suspension_set\") audit.pop();\n        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
+      "find": "        appendAudit(session, \"admin_set_suspension\", target.org_id, reason, before, {",
+      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"admin_set_suspension\") audit.pop();\n        appendAudit(session, \"admin_set_suspension\", target.org_id, reason, before, {",
       "cases": [
         "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
@@ -35,8 +35,8 @@
       "id": "AUDIT-04",
       "note": "the entitlement audit entry loses the reason",
       "file": "lib/contracts/fake-services.ts",
-      "find": "          \"entitlements_set\",\n          target.org_id,\n          input.reason.trim(),",
-      "replace": "          \"entitlements_set\",\n          target.org_id,\n          \"\",",
+      "find": "          \"admin_set_entitlements\",\n          target.org_id,\n          input.reason.trim(),",
+      "replace": "          \"admin_set_entitlements\",\n          target.org_id,\n          \"\",",
       "cases": [
         "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
@@ -1415,8 +1415,8 @@
       "id": "XJUDGE-02",
       "note": "the sample count does not match the samples it carries, although nothing was capped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        sample_count: samples.length,",
-      "replace": "        sample_count: samples.length + 1,",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: run.sample_count ?? samples.length + 1,",
       "cases": [
         "judge runs separate estimates, limited evaluations and held budgets"
       ]
@@ -1636,8 +1636,8 @@
       "id": "JUDGESAMPLE-03",
       "note": "sample_count is one less than the samples the row carries, which is how a capped array becomes a wrong count",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        sample_count: samples.length,",
-      "replace": "        sample_count: Math.max(0, samples.length - 1),",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: run.sample_count ?? Math.max(0, samples.length - 1),",
       "cases": [
         "judge runs separate estimates, limited evaluations and held budgets"
       ]
@@ -1660,6 +1660,432 @@
       "replace": "        consent_snapshot_at: run.consent_snapshot_at ?? run.created_at,",
       "cases": [
         "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
+      ]
+    },
+    {
+      "id": "V2-UNIT-01",
+      "entry": "v2",
+      "note": "an unknown unit token is accepted instead of refused",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  if (typeof unit !== \"string\" || !(MONEY_UNITS as readonly string[]).includes(unit)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "a wrong or unknown unit token is refused, since the brand is gone at runtime"
+      ]
+    },
+    {
+      "id": "V2-UNIT-02",
+      "entry": "v2",
+      "note": "an unknown accounting regime is accepted",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  if (typeof regime !== \"string\" || !(ACCOUNTING_REGIMES as readonly string[]).includes(regime)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "the accounting regime fixes the unit and an unknown regime refuses"
+      ]
+    },
+    {
+      "id": "V2-UNIT-03",
+      "entry": "v2",
+      "note": "the legacy regime is mapped to CREDIT",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  legacy_usd: \"USD\",",
+      "replace": "  legacy_usd: \"CREDIT\",",
+      "cases": [
+        "the accounting regime fixes the unit and an unknown regime refuses",
+        "a mixed history totals per unit and refuses a regime/unit mismatch"
+      ]
+    },
+    {
+      "id": "V2-UNIT-04",
+      "entry": "v2",
+      "note": "an out-of-domain total is returned instead of refused",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  if (sum === null) throw new RangeError(`${unit} total overflows numeric(20, 8)`);",
+      "replace": "  if (false) throw new RangeError(`${unit} total overflows numeric(20, 8)`);",
+      "cases": [
+        "same-unit arithmetic is exact at eight places and overflow throws"
+      ]
+    },
+    {
+      "id": "V2-UNIT-05",
+      "entry": "v2",
+      "note": "a non-canonical decimal is accepted as canonical",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  return units !== null && tryMoneyFromUnits(units) === value;",
+      "replace": "  return units !== null;",
+      "cases": [
+        "the surface and schema version are declared once, and canonical form is exact"
+      ]
+    },
+    {
+      "id": "V2-UNIT-06",
+      "entry": "v2",
+      "note": "credits are displayed with a currency symbol",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  return `${negative ? \"-\" : \"\"}${whole}${fraction.length > 0 ? `.${fraction}` : \"\"} credits`;",
+      "replace": "  return `${negative ? \"-\" : \"\"}$${whole}${fraction.length > 0 ? `.${fraction}` : \"\"}`;",
+      "cases": [
+        "credits are displayed as credits, never with a currency symbol"
+      ]
+    },
+    {
+      "id": "V2-UNIT-07",
+      "entry": "v2",
+      "note": "the parity table is classified by a looser grammar",
+      "file": "lib/contracts/v2/money-units.ts",
+      "find": "  const canonical = tryMoneyFromUnits(units);\n  if (canonical === null) throw new RangeError(`${unit} amount overflows numeric(20, 8)`);\n  return canonical as unknown as T;",
+      "replace": "  return String(value) as unknown as T;",
+      "cases": [
+        "the generated money-unit table is classified exactly as Python classifies it"
+      ]
+    },
+    {
+      "id": "V2-BAL-01",
+      "entry": "v2",
+      "note": "available credit is the stored counter rather than a derivation",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  return subCredit(parseCredit(balance.ledger_total), parseCredit(balance.reserved_total));",
+      "replace": "  return parseCredit(balance.ledger_total);",
+      "cases": [
+        "available credit is recomputed, not trusted"
+      ]
+    },
+    {
+      "id": "V2-BAL-02",
+      "entry": "v2",
+      "note": "a consumer entitlement is claimed for every wallet kind",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  return wallet.kind === \"consumer\";",
+      "replace": "  return true;",
+      "cases": [
+        "the committed wallet fixtures type-check as the console's DTOs"
+      ]
+    },
+    {
+      "id": "V2-USE-01",
+      "entry": "v2",
+      "note": "a regime/unit mismatch is read instead of refused",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    if (row.unit !== unitOfRegime(row.accounting_regime)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "a mixed history totals per unit and refuses a regime/unit mismatch"
+      ]
+    },
+    {
+      "id": "V2-USE-02",
+      "entry": "v2",
+      "note": "the dollar total is reported under the CREDIT key",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (dollars.length > 0) totals.USD = totalUsd(dollars);",
+      "replace": "  if (dollars.length > 0) totals.CREDIT = totalUsd(dollars);",
+      "cases": [
+        "a mixed history totals per unit and refuses a regime/unit mismatch"
+      ]
+    },
+    {
+      "id": "V2-ROLE-01",
+      "entry": "v2",
+      "note": "the developer role reaches customer content",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    developer: [\"read_aggregate_health\", \"manage_dev_deployment\", \"run_evaluation\"],",
+      "replace": "    developer: [\"read_aggregate_health\", \"manage_dev_deployment\", \"run_evaluation\", \"read_customer_content\"],",
+      "cases": [
+        "no provider role reaches customer content, and roles default deny"
+      ]
+    },
+    {
+      "id": "V2-ROLE-02",
+      "entry": "v2",
+      "note": "a membership of another provider permits its capabilities",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (membership.provider_org_id !== providerOrgId) return false;",
+      "replace": "  if (false) return false;",
+      "cases": [
+        "no provider role reaches customer content, and roles default deny"
+      ]
+    },
+    {
+      "id": "V2-ROLE-03",
+      "entry": "v2",
+      "note": "a revoked membership still permits",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;",
+      "replace": "  if (false) return false;",
+      "cases": [
+        "no provider role reaches customer content, and roles default deny"
+      ]
+    },
+    {
+      "id": "V2-ROLE-04",
+      "entry": "v2",
+      "note": "every role permits every capability",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  return ROLE_CAPABILITIES[membership.role].includes(capability);",
+      "replace": "  return true;",
+      "cases": [
+        "no provider role reaches customer content, and roles default deny",
+        "content access needs a current membership and a current grant"
+      ]
+    },
+    {
+      "id": "V2-GRANT-01",
+      "entry": "v2",
+      "note": "revocation is ignored",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;",
+      "replace": "  if (false) return false;",
+      "cases": [
+        "a grant is checked current, and every dimension must match",
+        "content access needs a current membership and a current grant"
+      ]
+    },
+    {
+      "id": "V2-GRANT-02",
+      "entry": "v2",
+      "note": "expiry is ignored",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (grant.expires_at !== undefined && at >= instantKey(grant.expires_at)) return false;",
+      "replace": "  if (false) return false;",
+      "cases": [
+        "a grant is checked current, and every dimension must match"
+      ]
+    },
+    {
+      "id": "V2-GRANT-03",
+      "entry": "v2",
+      "note": "the purpose is not checked, so one grant covers all four",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    grant.purposes.includes(options.purpose)",
+      "replace": "    true",
+      "cases": [
+        "a grant is checked current, and every dimension must match"
+      ]
+    },
+    {
+      "id": "V2-GRANT-04",
+      "entry": "v2",
+      "note": "the model scope is not checked, so an empty scope permits everything",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    grant.model_ids.includes(options.modelId) &&",
+      "replace": "    true &&",
+      "cases": [
+        "a grant is checked current, and every dimension must match"
+      ]
+    },
+    {
+      "id": "V2-GRANT-05",
+      "entry": "v2",
+      "note": "the recipient provider is not checked",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    grant.recipient_provider_org_id === options.providerOrgId &&",
+      "replace": "    true &&",
+      "cases": [
+        "a grant is checked current, and every dimension must match"
+      ]
+    },
+    {
+      "id": "V2-BOTH-01",
+      "entry": "v2",
+      "note": "content access needs only the membership",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    membershipPermits(membership, \"manage_dev_deployment\", options.now, options.providerOrgId) &&\n    grantPermits(grant, options)",
+      "replace": "    membershipPermits(membership, \"manage_dev_deployment\", options.now, options.providerOrgId)",
+      "cases": [
+        "content access needs a current membership and a current grant"
+      ]
+    },
+    {
+      "id": "V2-BOTH-02",
+      "entry": "v2",
+      "note": "a viewer's aggregate-health capability is enough for content",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    membershipPermits(membership, \"manage_dev_deployment\", options.now, options.providerOrgId) &&",
+      "replace": "    membershipPermits(membership, \"read_aggregate_health\", options.now, options.providerOrgId) &&",
+      "cases": [
+        "content access needs a current membership and a current grant"
+      ]
+    },
+    {
+      "id": "V2-GIFT-01",
+      "entry": "v2",
+      "note": "the promotional grant amount changes",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "export const INITIAL_SIGNUP_GRANT_CREDIT = \"10000.00000000\" as Credit;",
+      "replace": "export const INITIAL_SIGNUP_GRANT_CREDIT = \"1000.00000000\" as Credit;",
+      "cases": [
+        "the signup grant fixture is the exact individual entitlement"
+      ]
+    },
+    {
+      "id": "V2-NS-01",
+      "entry": "v2",
+      "note": "the v2 namespace is not the v2 DTO module (F2P wire-in item 9)",
+      "file": "lib/contracts/types.ts",
+      "find": "export * as v2 from \"./v2/types.ts\";",
+      "replace": "export * as v2 from \"./v2/money-units.ts\";",
+      "cases": [
+        "the v1 contract module carries the v2 revision as a namespace, not a shadow"
+      ]
+    },
+    {
+      "id": "V2-NS-02",
+      "entry": "v2",
+      "note": "the v2 namespace drops the unit vocabulary (item 9)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "export * from \"./money-units.ts\";\n",
+      "replace": "",
+      "cases": [
+        "the v1 contract module carries the v2 revision as a namespace, not a shadow"
+      ]
+    },
+    {
+      "id": "JUDGESAMPLE-04",
+      "note": "a capped run's sample_count is derived from the capped array (F2R-B NB-1)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: samples.length,",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "R62-TRACES-01",
+      "entry": "fixtures",
+      "note": "a trace content template drops the public model id (F2R-B NB-2)",
+      "file": "lib/contracts/fixtures/traces.json",
+      "find": "\"content_templates\": [\n    {\n      \"v\": 1,\n      \"request\": {\n        \"model\": \"nemostation/marlin-2b@2026-09-01\"",
+      "replace": "\"content_templates\": [\n    {\n      \"v\": 1,\n      \"request\": {\n        \"model\": \"marlin-2b@2026-09-01\"",
+      "cases": [
+        "every model a trace template names carries its public model id (R62)"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-01",
+      "entry": "v2",
+      "note": "a grant's revocation is compared as raw text (01a §7)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;",
+      "replace": "  if (grant.revoked_at !== undefined && options.now >= grant.revoked_at) return false;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-02",
+      "entry": "v2",
+      "note": "fractional seconds are not padded to one width",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  return `${match[1]}.${(match[2] ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return `${match[1]}.${match[2] ?? \"\"}Z`;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-03",
+      "entry": "v2",
+      "note": "an offset spelling is compared instead of refused",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "(?:\\.(\\d{1,6}))?Z$/;",
+      "replace": "(?:\\.(\\d{1,6}))?(?:Z|[+-]\\d{2}:\\d{2})$/;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-04",
+      "entry": "v2",
+      "note": "a membership's revocation is compared as raw text",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;",
+      "replace": "  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-05",
+      "entry": "v2",
+      "note": "a prefixed instant is keyed by its tail (the pattern is not anchored at the start; F2P review CFG-5)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "const CONTRACT_INSTANT = /^(\\d{4}",
+      "replace": "const CONTRACT_INSTANT = /(\\d{4}",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-06",
+      "entry": "v2",
+      "note": "a suffixed instant is keyed by its head (the pattern is not anchored at the end; F2P confirmation CONF-N4)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "(?:\\.(\\d{1,6}))?Z$/;",
+      "replace": "(?:\\.(\\d{1,6}))?Z/;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "AUDIT-ACTION-02",
+      "entry": "fixtures",
+      "note": "a read-only audit action drifts from 0009's constraint (F2P review HON-1)",
+      "file": "lib/contracts/types.ts",
+      "find": "  \"admin_key_issue\",",
+      "replace": "  \"key_issue\",",
+      "cases": [
+        "the console audit actions are D1's ten, in D1's order"
+      ]
+    },
+    {
+      "id": "AUDIT-ACTION-01",
+      "note": "an operator grant is audited under the console's old spelling, not D1's `admin_grant` (F2P wire-in, AuditAction alignment)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        appendAudit(\n          session,\n          \"admin_grant\",",
+      "replace": "        appendAudit(\n          session,\n          \"grant\" as never,",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "PROJ-01",
+      "note": "the v1 read projection invents `settled` for a legacy row (item 10)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (row.settlement_state !== null) record.outcome = row.settlement_state;",
+      "replace": "  record.outcome = row.settlement_state ?? \"settled\";",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
+    },
+    {
+      "id": "PROJ-02",
+      "note": "the projection reads a v1 pilot row as a CREDIT row",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    accounting_regime: \"legacy_usd\",\n    unit: \"USD\",",
+      "replace": "    accounting_regime: row.accounting_regime === \"pilot\" ? \"credit\" : \"legacy_usd\",\n    unit: \"USD\",",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
+    },
+    {
+      "id": "PROJ-03",
+      "note": "the projection invents zero usage for a row that recorded no tokens",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (row.prompt_tokens !== null && row.completion_tokens !== null) {",
+      "replace": "  if (true) {",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
+    },
+    {
+      "id": "PROJ-04",
+      "note": "the projection drops a half-recorded token pair instead of refusing it (F2P confirmation MONEY-N3)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if ((row.prompt_tokens === null) !== (row.completion_tokens === null)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
       ]
     }
   ]

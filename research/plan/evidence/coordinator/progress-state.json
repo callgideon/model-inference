@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-23T04:47:12Z",
+  "updated": "2026-09-23T05:16:20Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in confirmation (Opus) of fix round at ced6751; then merge",
+      "phase": "wire-in round 2 (MONEY-C1 + test strength) then coordinator check and merge",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -17,9 +17,27 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
+      "phase": "phase 2 implementing on codex-e3b2 / codex/e3b-phase2-gate (real-store gate; namespace e3b2 56700-56799)",
       "since": "2026-09-22T18:46:49Z",
-      "note": "gate not passable until G/D/W/Q lanes merge"
+      "note": "phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)"
+    },
+    "D4": {
+      "lane": "codex-d4 / codex/d4-stream-journal",
+      "phase": "implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md"
+    },
+    "G2": {
+      "lane": "codex-g2 / codex/g2-chat-relay",
+      "phase": "implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md"
+    },
+    "G4U": {
+      "lane": "codex-g4u / codex/g4u-upload-adapter",
+      "phase": "implementing (upload routes over M3's MediaUploads; new files only)",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "base 9c1c6ed; fakes only; brief G4U.md"
     }
   },
   "reviews": {},
@@ -76,9 +94,15 @@
     },
     {
       "id": "P-04-sweep",
-      "what": "W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box's measured value) until then.",
-      "blocks": "W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status",
-      "owner": "coordinator (box op)"
+      "what": "W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside",
+      "blocks": "ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 \u26a0\ufe0f / cutover keeps 32 explicitly); W4's first input",
+      "owner": "W4 (tuning) / W3 (record)"
+    },
+    {
+      "id": "P-20",
+      "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) \u2014 until then the pilot admits what the engine cannot serve",
+      "blocks": "E4B certification; G2's validation ceiling",
+      "owner": "W4 decides; G2 applies"
     }
   ],
   "checkpoints": [

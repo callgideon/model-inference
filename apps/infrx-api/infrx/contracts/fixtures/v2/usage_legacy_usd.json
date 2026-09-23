@@ -2,7 +2,6 @@
   "accounting_regime": "legacy_usd",
   "charged_amount": "0.01414000",
   "org_id": "a0000002-0000-4000-8000-000000000002",
-  "outcome": "settled",
   "price_version": "pv_2026_09_01",
   "request_id": "f0000002-0000-4000-8000-000000000002",
   "schema_version": 2,

@@ -524,7 +524,7 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     else:
         raise AssertionError("the per-key active job limit was exceeded")
     # a different key in the same org still fits under the org limit
-    request = b.request(harness, key_id=b.KEY_B)
+    request = b.request(harness, key_id=b.KEY_A2)
     await harness.port.admit(request, b.idem(request, "key-other"), ())
     assert len(harness.extra["active_jobs"]()) == 3
 
@@ -533,10 +533,10 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     harness = factory(limits=DEFAULTS.replace(max_active_jobs_per_org=3, max_active_jobs=64,
                                               max_active_jobs_per_key=8))
     harness.extra["grant"](b.ORG_A, "100.00")
-    for n, key_id in enumerate((b.KEY_A, b.KEY_B, b.KEY_A)):
+    for n, key_id in enumerate((b.KEY_A, b.KEY_A2, b.KEY_A)):
         request = b.request(harness, key_id=key_id)
         await harness.port.admit(request, b.idem(request, f"org-{n}"), ())
-    request = b.request(harness, key_id=b.KEY_B)
+    request = b.request(harness, key_id=b.KEY_A2)
     try:
         await harness.port.admit(request, b.idem(request, "org-over"), ())
     except errors.CapacityExhausted:
@@ -552,8 +552,9 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     # total: two organizations filling 4 of 4 with both per-scope ceilings slack
     harness = factory(limits=DEFAULTS.replace(max_active_jobs=4, max_active_jobs_per_org=16,
                                               max_active_jobs_per_key=8))
-    for org_id, key_id in ((b.ORG_A, b.KEY_A), (b.ORG_A, b.KEY_B),
-                           (b.ORG_B, b.KEY_A), (b.ORG_B, b.KEY_B)):
+    # Four keys, each its own organization's: a key never spans two organizations.
+    for org_id, key_id in ((b.ORG_A, b.KEY_A), (b.ORG_A, b.KEY_A2),
+                           (b.ORG_B, b.KEY_B), (b.ORG_B, b.KEY_B2)):
         harness.extra["grant"](org_id, "100.00")
         request = b.request(harness, org_id=org_id, key_id=key_id)
         await harness.port.admit(request, b.idem(request, f"all-{org_id}-{key_id}"), ())

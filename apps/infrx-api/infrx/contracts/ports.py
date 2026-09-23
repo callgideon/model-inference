@@ -21,6 +21,9 @@ Two rules hold for every operation below (contracts v1 revision r1):
   No operation takes a caller-supplied time for an expiry, lease or 24 h
   decision (R7): the adapter reads the database clock inside its transaction.
 
+`CreditJobStore` is the contracts-v2 sibling of `JobStore` (the CREDIT regime of the same
+store); the v2 trusted directories are `contracts/v2/ports.py`.
+
 The ninth row of the table, console services, is TypeScript
 (`apps/app/lib/contracts/services.ts`, 08 §9) and has no Python protocol.
 """
@@ -38,6 +41,7 @@ from .records import (Admission, AuthContext, AuthorRole, Chunk, ConsentSnapshot
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
                       TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
                       TraceOfferResult, Work)
+from .v2.records import AdmissionV2, SettlementV2, WorkV2
 
 
 @runtime_checkable
@@ -139,6 +143,50 @@ class JobStore(Protocol):
         Takes no caller time (R7): every expiry, lease and 24 h decision reads the
         database clock inside the transaction, so a caller cannot release an
         unknown-usage hold early by claiming it is later than it is."""
+
+
+@runtime_checkable
+class CreditJobStore(Protocol):
+    """D (D2 admission, D5 settlement): the CREDIT regime of the same `JobStore`.
+
+    contracts v2 siblings of `admit`/`get_owned`/`load_work`/`complete` (F2P wire-in,
+    item 4). They do not replace the v1 operations, which serve the legacy USD regime
+    until D2-D5 cut over; a store implements both, and every other operation (claims,
+    heartbeat, cancel, recover, the journal) is shared. The lifecycle and every v1 rule
+    above apply unchanged; what differs is only where the money comes from and goes:
+
+    * the store resolves the credential's audience and identities from the **key row**,
+      the wallet through `v2.ports.resolve_wallet` - the only writer of a CREDIT job's
+      `wallet_id` (R66) - and the pins and card through `v2.ports.pin_admission` (R69,
+      R70), in the admitting transaction; nothing is taken from the request beyond the
+      model name it asked for;
+    * the hold is `card.maximum_hold` of the validated ceilings, reserved on that CREDIT
+      wallet and never on the organization's USD wallet (R64);
+    * settlement is `v2.records.settle` at the **admitted** card (R68); the v1
+      `TerminalOutcome.debit` of a CREDIT job is always zero, because that field is USD.
+
+    A v1 read or settlement of a CREDIT job (`get_owned`, `load_work`, `complete`) and a
+    CREDIT read or settlement of a legacy job are `not_found`, and one idempotency key never replays across regimes
+    (`IdempotencyConflict`). `prepared` answers a CREDIT job with its `AdmissionV2`.
+    """
+
+    async def admit_credit(self, request: NormalizedRequest, idem: IdempotencyRef) -> AdmissionV2:
+        """One transaction, as `admit`, in the CREDIT regime. Refusals: an operator
+        credential spends no wallet and a foreign wallet is `forbidden`; an unknown,
+        retired or someone else's private model is `not_found`; an unpriced model is
+        `invalid_request`; a hold beyond the wallet's available CREDIT is
+        `insufficient_credit`. Replays return the pinned admission with `replayed=True`."""
+
+    async def get_owned_credit(self, org_id: str,
+                               job_handle: str) -> tuple[AdmissionV2, TerminalOutcome | None]: ...
+
+    async def load_work_credit(self, lease: Lease) -> WorkV2:
+        """Fenced like `load_work`; carries the admitted pins and card, never current ones."""
+
+    async def complete_credit(self, lease: Lease, outcome: TerminalOutcome
+                              ) -> tuple[TerminalOutcome, SettlementV2 | None]:
+        """`complete`, plus the money half: a `SettlementV2` exactly when the outcome is
+        `settled`, else None."""
 
 
 @runtime_checkable

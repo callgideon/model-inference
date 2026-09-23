@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import moneyCases from "../../tests/contracts/money_cases.json" with { type: "json" };
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
+import * as v2 from "./v2/types.ts";
 import {
   ACCOUNTING_REGIMES,
   AUDIT_ACTIONS,
@@ -110,8 +111,10 @@ export type ConsoleHarness = {
    * True when the harness holds the pre-pilot and nullable history the projection has to survive:
    * at least one `legacy_usd` usage row carrying a charge, at least one usage row whose key has
    * since been deleted, at least one api key with no recorded capture mode, at least one audit
-   * entry whose target organization is gone, and at least one judge run that never reached a
-   * provider (no model version, no consent snapshot, a sample whose trace is gone).
+   * entry whose target organization is gone, at least one judge run that never reached a
+   * provider (no model version, no consent snapshot, a sample whose trace is gone), and at least
+   * one judge run whose embedded sample array is full at `JUDGE_RUN_SAMPLE_CAP` with a larger
+   * `sample_count` of its own.
    *
    * The cases that prove it are **skipped, naming this flag**, on a harness that declares nothing —
    * a skip is visible in the report and is never a pass. A harness that declares it and does not
@@ -2114,7 +2117,7 @@ export function runConsoleServicesConformance(
       assert.equal(appended, 3, "suspend, grant and restore each append one entry");
       const suspensions = auditAfter
         .slice(0, appended)
-        .filter((entry) => entry.action === "suspension_set")
+        .filter((entry) => entry.action === "admin_set_suspension")
         .map((entry) => entry.reason)
         .sort();
       assert.deepEqual(suspensions, ["lift probe: restore", "lift probe: suspend"], "both statuses are recorded");
@@ -2779,11 +2782,17 @@ export function runConsoleServicesConformance(
         assert.ok(entry.after !== null && typeof entry.after === "object", "and what it changed to");
       }
       const actions = added.map((entry) => entry.action).sort();
-      assert.deepEqual(actions, ["calibration_label", "entitlements_set", "grant", "suspension_set", "suspension_set"]);
+      assert.deepEqual(actions, [
+        "admin_grant",
+        "admin_set_entitlements",
+        "admin_set_suspension",
+        "admin_set_suspension",
+        "calibration_label",
+      ]);
 
       // The restore did not overwrite the suspension: both entries are there, with their own
       // reasons, and the before/after of each says what changed.
-      const suspensions = added.filter((entry) => entry.action === "suspension_set");
+      const suspensions = added.filter((entry) => entry.action === "admin_set_suspension");
       assert.equal(suspensions.length, 2, "a restore adds an entry rather than replacing one");
       const reasons = suspensions.map((entry) => entry.reason).sort();
       assert.deepEqual(reasons, ["audit: restore", "audit: suspend"], "each keeps its own reason");
@@ -2791,7 +2800,7 @@ export function runConsoleServicesConformance(
         assert.ok(entry.before !== null, "a status change records what it changed from");
         assert.notDeepEqual(entry.before, entry.after, "and that something actually changed");
       }
-      const entitled = added.find((entry) => entry.action === "entitlements_set");
+      const entitled = added.find((entry) => entry.action === "admin_set_entitlements");
       assert.ok(entitled !== undefined);
       assert.equal(entitled.reason, "audit: entitle", "the entitlement reason is kept in the audit");
       assert.ok(entitled.after !== null && typeof entitled.after === "object");
@@ -2862,7 +2871,7 @@ export function runConsoleServicesConformance(
       assert.deepEqual(await auditFor(ids.otherOrgId), afterFive, "a conflict must not append an audit entry");
 
       // before/after, pinned for each action rather than only for suspension.
-      const grantEntry = added.find((entry) => entry.action === "grant");
+      const grantEntry = added.find((entry) => entry.action === "admin_grant");
       assert.ok(grantEntry !== undefined);
       const balanceNow = expectOk(await services.balances(sessions.otherOwner), "their balance");
       assert.equal(
@@ -3073,12 +3082,26 @@ export function runConsoleServicesConformance(
     });
 
     it("judge runs separate estimates, limited evaluations and held budgets", async () => {
-      const { services, sessions } = await makeHarness();
+      const harness = await makeHarness();
+      const { services, sessions } = harness;
       const runs = await walkAll<JudgeRun>(
         (cursor) => services.judgeRuns(sessions.owner, { limit: 20, cursor }),
         "judge runs",
       );
       for (const run of runs) assertJudgeRun(run);
+      if (harness.hasLegacyRows === true) {
+        // F2R-B NB-1: a run whose embedded array is full (D1's cap) reports its own count beyond
+        // the array. `assertJudgeRun` only bounds the count from below, so without a capped run in
+        // the data a projection deriving the count from the array would pass.
+        const capped = runs.filter((run) => run.samples.length === JUDGE_RUN_SAMPLE_CAP);
+        assert.ok(capped.length > 0, "the harness declares its history but carries no capped judge run");
+        for (const run of capped) {
+          assert.ok(
+            run.sample_count > JUDGE_RUN_SAMPLE_CAP,
+            `judge run ${run.id}: a capped array reports sample_count ${run.sample_count}, not the run's own count`,
+          );
+        }
+      }
     });
 
     it("an aggregate without a window is invalid_request, not an all-time total", async () => {
@@ -3107,6 +3130,55 @@ export function runConsoleServicesConformance(
       // about the operation being broken.
       expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "bounded summary");
       expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME }), "bounded daily");
+    });
+
+    it("a pre-cutover usage row reads as a legacy USD v2 record and invents nothing", async (t) => {
+      // F2P wire-in item 10: the v1 read projection, over the same rows the harness serves (C1's
+      // harness speaks D1's `console_usage`). Both v1 regimes are USD history before the CREDIT
+      // cutover; the projection keeps every absence and the totals stay one figure per unit.
+      const harness = await makeHarness();
+      if (harness.hasLegacyRows !== true) {
+        return t.skip("the harness declares no legacy history (ConsoleHarness.hasLegacyRows)");
+      }
+      const { services, sessions } = harness;
+      const rows = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      assert.ok(rows.some((row) => row.accounting_regime === "legacy_usd"), "no legacy row to project");
+      let cost = ZERO_MONEY;
+      const projected = rows.map((row) => {
+        cost = addMoney(cost, row.cost);
+        const record = v2.projectV1UsageRow(row, harness.ids.orgId);
+        assert.equal(record.accounting_regime, "legacy_usd", `${row.request_id}: a v1 row is pre-cutover USD`);
+        assert.equal(record.unit, "USD", `${row.request_id}: in USD`);
+        assert.equal(record.charged_amount, row.cost, `${row.request_id}: its charge, to the digit`);
+        assert.equal(record.rate_card_version, undefined, `${row.request_id}: no rate card invented`);
+        assert.equal(record.serving_version_id, undefined, `${row.request_id}: no serving revision invented`);
+        assert.equal(
+          record.outcome,
+          row.settlement_state ?? undefined,
+          `${row.request_id}: the outcome is the row's own, or absent`,
+        );
+        assert.equal(
+          record.usage === undefined,
+          row.prompt_tokens === null || row.completion_tokens === null,
+          `${row.request_id}: usage exists exactly when tokens were recorded`,
+        );
+        return record;
+      });
+      assert.ok(
+        projected.some((record) => record.outcome === undefined),
+        "a legacy row has no settlement state, and its projection must not invent one",
+      );
+      assert.deepEqual(v2.usageTotalsByUnit(projected), { USD: cost }, "one USD total, no CREDIT figure");
+      // 0001 constrains neither token column: a row that recorded one count is refused, never
+      // read as "no usage" (F2P confirmation MONEY-N3).
+      for (const half of [{ prompt_tokens: 1000, completion_tokens: null },
+                          { prompt_tokens: null, completion_tokens: 250 }]) {
+        assert.throws(() => v2.projectV1UsageRow({ ...rows[0], ...half }, harness.ids.orgId), TypeError,
+                      "a half-recorded token pair was projected");
+      }
     });
 
     it("legacy and key-less usage rows keep their nulls and are still counted", async (t) => {

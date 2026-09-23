@@ -16,7 +16,7 @@ api-test:
 # suite runs a subset; a surviving mutant is a failed suite either way.
 # Track mutant lists join here as their task merges (M1, Q1, J1, W1, T1, D1, G1 — D's list needs Docker and skips visibly without it); each gates on INFRX_MUTANTS.
 api-mutants:
-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/i/test_mutants.py tests/contracts/v2/test_mutants_v2.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/i/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -31,12 +31,12 @@ console-typecheck:
 
 # R32/R36: exported console conformance must kill every declared mutant.
 # Track runners join here as their task merges (V1, U1, C1). Each exits non-zero on a survivor.
+# The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
 console-mutants:
-	cd apps/app && pnpm test:mutants
+	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
 	cd apps/app && node tests/v/run-mutants.mjs
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
-	cd apps/app && node tests/contracts/v2/run-mutants-v2.mjs --self-test && node tests/contracts/v2/run-mutants-v2.mjs
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.

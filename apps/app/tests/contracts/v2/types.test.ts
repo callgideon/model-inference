@@ -16,6 +16,7 @@ import {
   availableCredit,
   grantPermits,
   hasSignupEntitlement,
+  instantKey,
   mayReadCustomerContent,
   membershipPermits,
   unitOfRow,
@@ -168,4 +169,52 @@ test("content access needs a current membership and a current grant", () => {
     "a viewer has a membership and still cannot read content",
   );
   assert.equal(mayReadCustomerContent(membership, { ...grant, revoked_at: NOW }, base), false);
+});
+
+test("the v1 contract module carries the v2 revision as a namespace, not a shadow", async () => {
+  // F2P wire-in item 9: `v2.X` from lib/contracts/types.ts is the v2 module itself, and the one
+  // name both revisions declare differently stays distinct in each.
+  const v1 = await import("../../../lib/contracts/types.ts");
+  assert.equal(v1.v2.availableCredit, availableCredit, "v2 is not the v2 DTO module");
+  assert.equal(v1.v2.SURFACE_VERSION, "contracts-v2.0", "the v2 namespace lost the unit module");
+  assert.deepEqual(v1.v2.ACCOUNTING_REGIMES, ["legacy_usd", "credit"]);
+  assert.deepEqual(v1.ACCOUNTING_REGIMES, ["legacy_usd", "pilot"]);
+  assert.deepEqual(v1.v2.CREDENTIAL_AUDIENCES, ["consumer", "provider_dev", "operator"]);
+});
+
+test("grant and membership checks compare instants, never mixed spellings", () => {
+  // F2P wire-in (01a §7): a revocation at 12:00:00.5Z is in force at 12:00:00.600Z although, as
+  // raw text, "12:00:00.600Z" < "12:00:00.5Z" is false only by accident of padding and
+  // "12:00:00Z" > "12:00:00.5Z" is simply wrong. Offsets are refused, not compared.
+  assert.equal(instantKey("2026-09-22T12:00:00Z"), "2026-09-22T12:00:00.000000Z");
+  assert.equal(instantKey("2026-09-22T12:00:00.5Z"), "2026-09-22T12:00:00.500000Z");
+  for (const bad of ["2026-09-22T12:00:00+00:00", "2026-09-22T12:00:00z", "2026-09-22T12:00:00",
+                     "2026-09-22T12:00:00.1234567Z", "2026-09-22 12:00:00Z",
+                     "x2026-09-22T12:00:00Z", "2026-09-22T12:00:00Zx"]) {
+    assert.throws(() => instantKey(bad), TypeError, bad);
+  }
+  const grant = fixture<AccessGrant>("access_grant.json");
+  const base = {
+    providerOrgId: grant.recipient_provider_org_id,
+    modelId: grant.model_ids[0],
+    category: grant.categories[0],
+    purpose: grant.purposes[0],
+  };
+  const revokedAt = grant.effective_at.replace("Z", ".5Z");
+  const revoked = { ...grant, revoked_at: revokedAt };
+  // Before the revocation (same second, whole-second spelling): current.
+  assert.equal(grantPermits(revoked, { ...base, now: grant.effective_at }), true);
+  // After it (fraction longer than the revocation's): revoked.
+  assert.equal(grantPermits(revoked, { ...base, now: grant.effective_at.replace("Z", ".600Z") }), false);
+  assert.throws(() => grantPermits(grant, { ...base, now: grant.effective_at.replace("Z", "+00:00") }), TypeError);
+  const membership = fixture<ProviderMembership>("provider_membership.json");
+  const later = membership.granted_at.replace("Z", ".5Z");
+  assert.equal(
+    membershipPermits({ ...membership, revoked_at: later }, "read_aggregate_health", membership.granted_at, membership.provider_org_id),
+    true,
+  );
+  assert.equal(
+    membershipPermits({ ...membership, revoked_at: later }, "read_aggregate_health", later.replace(".5Z", ".6Z"), membership.provider_org_id),
+    false,
+  );
 });
