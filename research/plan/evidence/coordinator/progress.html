@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:40:50Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T10:43:20Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>21</b><span>done</span></div>
 <div class="tile prog"><b>7</b><span>in progress</span></div>
@@ -128,6 +128,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-22T21:18:49Z</span> — E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009</li>
 <li><span class="meta">2026-09-22T22:14:13Z</span> — F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark</li>
 <li><span class="meta">2026-09-23T00:46:03Z</span> — Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)</li>
+<li><span class="meta">2026-09-23T10:43:20Z</span> — Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>

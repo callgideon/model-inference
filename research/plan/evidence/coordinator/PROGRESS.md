@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T10:40:50Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T10:43:20Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 21 done · 7 in progress · 2 remaining (of 30).**
 
@@ -100,6 +100,7 @@ Generated 2026-09-23T10:40:50Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T21:18:49Z: E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009
 - 2026-09-22T22:14:13Z: F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark
 - 2026-09-23T00:46:03Z: Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)
+- 2026-09-23T10:43:20Z: Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc
 
 ## Authorizations
 
