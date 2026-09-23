@@ -117,6 +117,7 @@ LABELS = "test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement"
 RECORD = "test_e4b_the_declared_settings_are_the_serving_record_read_never_typed"
 RULES = "test_e4b_each_stated_client_rule_holds_one_assertion_each"
 EXIT = "test_e4b_the_suite_halves_carry_pytests_own_exit_code"
+BOX_ARGS = "test_e4b_a_box_run_names_its_release_and_reads_its_metrics"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -340,7 +341,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if release_sha is not None and start.get(\"sha\") != release_sha:\n",
        "    if False:\n", NOGIT),
     _m("box_without_release_sha_accepted", "a box run names the release it certifies",
-       "    if args.box and not args.release_sha:\n", "    if False:\n", NOGIT),
+       "    if args.box and not args.release_sha:\n", "    if False:\n", BOX_ARGS),
     # --- review F3: the build the gateway serves ---------------------------------------
     _m("served_revision_unchecked", "the gateway serves the report's tree",
        "    elif not (head_sha and len(str(revision)) >= 7 and head_sha.startswith(str(revision))):\n",
@@ -355,7 +356,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("build_info_read_from_any_series", "the revision is infrx_build_info's",
        'if series == "infrx_build_info" and value == 1),', "if value == 1),", SCRAPE),
     _m("box_without_metrics_accepted", "a box run reads the gateway's build from /metrics",
-       "    if args.box and not args.metrics_url:\n", "    if False:\n", SERVED),
+       "    if args.box and not args.metrics_url:\n", "    if False:\n", BOX_ARGS),
     # --- review F4: every unanswered attempt is a failure ------------------------------
     _m("transport_failures_uncounted", "a timeout or a reset is a failure like a 5xx",
        '    failed = [r for r in rows if r.get("outcome") == "failed"]\n',

@@ -853,9 +853,6 @@ def test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity(tmp_path
     assert certify.identity_problems(CLEAN, CLEAN, release_sha="e" * 40) == [
         f"the tree is {'c' * 40}, not the release {'e' * 40}"]
     assert certify.identity_problems(CLEAN, CLEAN, release_sha="c" * 40) == []
-    with pytest.raises(SystemExit):
-        certify.main(["--box", "--target", "http://gw/v1", "--engine-url", "http://engine",
-                      "--report", str(out)])
 
 
 def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch):
@@ -890,9 +887,6 @@ def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch)
     monkeypatch.delenv("INFRX_CERTIFY_GATEWAY_IMAGE")
     certify.served_build_check(report, "http://gw/metrics")
     assert report.stages[-1]["status"] == certify.FAIL
-    with pytest.raises(SystemExit):
-        certify.main(["--box", "--release-sha", sha, "--target", "http://gw/v1",
-                      "--engine-url", "http://engine"])
 
 
 def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path, monkeypatch,
@@ -970,6 +964,23 @@ def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypa
         monkeypatch.setattr(certify, "scrape", lambda url, answer=unreadable: answer)
         certify.preconditions_check(report, {**TARGET, "engine_url": "http://e"}, box=True)
         assert report.stages[-1]["detail"][0] == "the engine is not idle (running+waiting = None)"
+
+
+def test_e4b_a_box_run_names_its_release_and_reads_its_metrics(tmp_path, monkeypatch):
+    """Reviews F2/F3: `--box` without `--release-sha` (the release it certifies) or without
+    `--metrics-url` (where the served build is read) is refused before anything runs; with
+    both it starts (stopped here at its first step, before any network)."""
+    monkeypatch.setattr(certify, "release_hashes",
+                        lambda: (_ for _ in ()).throw(RuntimeError("stopped at the first step")))
+    box = ["--box", "--no-stack", "--target", "http://gw/v1", "--engine-url", "http://engine",
+           "--workdir", str(tmp_path), "--report", str(tmp_path / "r.json")]
+    release, metrics = ["--release-sha", "c" * 40], ["--metrics-url", "http://gw/metrics"]
+    for missing in (release, metrics):
+        argv = box + (metrics if missing is release else release)
+        with pytest.raises(SystemExit):
+            certify.main(argv)
+    assert certify.main(box + release + metrics) == 1
+    assert json.loads((tmp_path / "r.json").read_text())["stages"][0]["stage"] == "runner-error"
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
