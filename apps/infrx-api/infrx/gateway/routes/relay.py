@@ -237,9 +237,10 @@ class Relay:
         """Complete an acceptance: the pinned card and capability rechecks (CREDIT), then the
         staged refs bound to the job - before the refs, so a refused job can never run. Run
         on a fresh admission and, from the first acceptance's staged record, on the replay
-        of a job still in flight (`_resume`); both steps are idempotent. A definitive refusal cancels the job (nothing ran, nothing is billed)
-        and is answered; a dependency that failed leaves the job for the same-key retry its
-        503 invites (money-B2; the stored deadline ends it otherwise)."""
+        of a job still in flight (`_resume`); both steps are idempotent. A definitive
+        refusal cancels the job (nothing ran, nothing is billed) and is answered; a
+        dependency that failed leaves the job for the same-key retry its 503 invites
+        (money-B2; the stored deadline ends it otherwise)."""
         try:
             if self.regime == CREDIT:
                 pins = admission.pins
