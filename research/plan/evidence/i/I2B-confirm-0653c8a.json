@@ -1,0 +1,430 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "RB-1",
+      "severity": "blocking",
+      "file": "infra/rollout/steps/90-revert.sh",
+      "line": "15-20 (and apps/infrx-api/deploy/rollback.sh 44-45; infra/rollout/README.md \u00a72 row R2)",
+      "claim_broken": "R2 'previous checkout, the backed-up files, previous gateway, engine restarted onto its previous unit, then drain.sh resume' restores service after a step-8 exit 4. It does only when the engine is healthy. When step 8's exit 4 is the engine's (install.sh step 5: 'the engine is not healthy; nothing else was restarted' - the case the FC-1 window note and FC-2 are about, e.g. serve.sh refusing a value), rollback.sh restarts the restored monolith gateway and waits for 127.0.0.1:8001/health with READY_S default 120 s BEFORE 90-revert restarts the engine; the monolith's /health (infrx/gateway/routes/health.py at d18177e: `r = await rt.client.get('/health')` -> 503 unless the engine answers) is 503 while the engine is down, so rollback.sh dies 4 ('the restored runtime is not ready'), set -e stops 90-revert, the engine is never restarted onto its restored unit, no resume runs, the edge stays maintenance, and the runbook names no next step (a rerun fails the same way until someone restarts the engine by hand). The READY_S=900 M1 added covers only the resume line, not the readiness gate that runs first.",
+      "evidence": "Reproduced with the suite's own Host harness (drills copy, reviewer case test_confirm__r2_when_step8_failed_on_the_engine): monolith host -> 30-pause's lines -> install.sh pilot with 8000/health failing -> exit 4 'engine is not healthy' -> 90-revert's tail with a curl wrapper that fails 8001/health until 'systemctl restart marlin2b-vllm' appears in events.log (the monolith's health semantics): `R2-ENGINE-DOWN exit 4 stderr: the restored runtime is not ready 4`, events end after 'systemctl restart marlin2b-gateway' + repeated 'curl \u2026 8001/health / ENGINE-DOWN-503', `ACTIVE SITE: # Maintenance`, `ENGINE RESTARTED BY R2: False`. The suite's M1 case passes only because its curl stub answers every /health regardless of the engine. Candidate fix verified in the drills copy: rollback.sh gains `if [ \"${ENGINE:-}\" = restart ]; then systemctl restart marlin2b-vllm; wait_http http://127.0.0.1:8000/health \"${ENGINE_READY_S:-900}\" || die \u2026 4; fi` after daemon-reload and before `systemctl restart $units`, and 90-revert calls `ENGINE=restart \"$d/rollback.sh\" \"$BACKUP\"` in place of its own restart line: the same drill then gives `R2-ENGINE-DOWN exit 0`, `ACTIVE SITE: # The only public listener`, `ENGINE RESTARTED BY R2: True`, and the M1 R2 case and the engine-restart-fails case still hold (3 passed).",
+      "minimal_fix": "Move the engine restart into rollback.sh behind ENGINE=restart, after `systemctl daemon-reload` and before `systemctl restart $units`, with `wait_http http://127.0.0.1:8000/health \"${ENGINE_READY_S:-900}\"` (die 4 'the restored engine is not healthy'); 90-revert.sh: `ENGINE=restart \"$d/rollback.sh\" \"$BACKUP\"` and drop its own `systemctl restart marlin2b-vllm`; README R2: say the engine is restarted before the gateway because the monolith's /health needs it, and what exit 4 from rollback.sh means. Add a Host case whose curl fails 8001/health until 'systemctl restart marlin2b-vllm' is in events.log (kills the current order); update test_ops_recover__the_revert_restores_the_tree_before_the_runtime's string order and the M1 case's slice (it starts at '\"$d/rollback.sh\"', which drops an `ENGINE=restart` prefix - slice from the line start).",
+      "lens": "rollout",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed from code at 0653c8a; no experiment needed. (1) Order: infra/rollout/steps/90-revert.sh runs `\"$d/rollback.sh\" \"$BACKUP\"` (line 15) before `systemctl restart marlin2b-vllm` (line 16); with set -e a non-zero rollback.sh stops the step before the engine restart and before `drain.sh resume` (line 20). (2) rollback.sh lines 43-45: restored mode is \"\" (pre-I2B env has no INFRX_MODE) -> units=marlin2b-gateway, `systemctl restart`, then `wait_ready legacy` = lib.sh line 55 `wait_http http://127.0.0.1:8001/health \"${READY_S:-120}\"`, `|| die \"the restored runtime is not ready\" 4`. READY_S=900 in 90-revert is a per-command prefix on the drain.sh line only, not exported; README R2's ssm.sh command passes no READY_S. (3) The restored gateway is the box's monolith: I1B inventory says the box's HEAD is 8f1d2f6 running gateway.py; `git show 8f1d2f6:apps/infrx-api/gateway.py` /health proxies `client.get(\"/health\")` and returns 503 unless the engine answers 200 (same at d18177e routes/health.py). (4) The restored marlin2b-gateway.service (d18177e) has only After=marlin2b-vllm, no Requires/BindsTo, so restarting the gateway does not start the engine. Hence after an install.sh step-5 exit 4 (engine unhealthy, runtime never restarted) rollback.sh waits 120 s on a 503 and dies 4; the engine is never restarted onto the restored unit, no resume runs, the edge stays on the maintenance site the backup restored, and README \u00a72 R2 names no next step. Only mitigating nuance: both engine units have Restart=always, so in the serve.sh-exits subcase systemd may auto-restart the engine on the restored unit after daemon-reload, but it still needs its full load time (the authors budget 900 s / TimeoutStartSec=900, far over the 120 s gate), and a hung-but-running engine gets no restart at all, so the path fails either way. The suite does not cover it: the M1 case (tests/i/test_scripts.py test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime) fails step 8 with curl_fails=[8001/readyz] (engine healthy), and the Host curl stub answers 8001/health unconditionally. Files: infra/rollout/steps/90-revert.sh:15-20, apps/infrx-api/deploy/rollback.sh:43-45, apps/infrx-api/deploy/lib.sh:52-56, infra/rollout/README.md:49.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed from code and by experiment. Code (worktree codex-i2b @ 0653c8a): infra/rollout/steps/90-revert.sh runs `\"$d/rollback.sh\" \"$BACKUP\"` (line 15) BEFORE `systemctl restart marlin2b-vllm` (line 16); apps/infrx-api/deploy/rollback.sh restores the files, then `systemctl restart $units` (line 44, units = marlin2b-gateway for a restored monolith, since its env file has no INFRX_MODE) and `wait_ready legacy` (line 45) = lib.sh wait_http http://127.0.0.1:8001/health \"${READY_S:-120}\" -> `die \"the restored runtime is not ready\" 4`. The monolith the box actually runs (I1B inventory: repo at 8f1d2f6, pre-F1 gateway.py) implements /health as `r = await client.get(\"/health\", timeout=5)` -> 503 unless the engine answers; the current infrx/gateway/routes/health.py is identical. So after install.sh dies 4 at its step 5 (\"the engine is not healthy; nothing else was restarted\" - the case README row 7 explicitly foresees: engine stays down until step 8 or R2), rollback.sh's readiness gate cannot pass, set -e stops 90-revert before line 16, the engine is never restarted onto the restored unit, drain.sh resume never runs, the edge stays on the maintenance site. The READY_S=900 on line 20 only reaches drain.sh resume, not rollback.sh. Experiment: scratch copy of the suite, reviewer's drill (monolith -> 30-pause lines -> install.sh pilot with 8000/health failing -> exit 4 'engine is not healthy' -> 90-revert tail with a curl stub that fails 8001/health until 'systemctl restart marlin2b-vllm' appears in events.log): result `R2-ENGINE-DOWN exit 4 stderr: the restored runtime is not ready 4`, events tail = repeated `curl ... 8001/health` / `ENGINE-DOWN-503` after `systemctl restart marlin2b-gateway`, `ACTIVE SITE: # Maintenance`, `ENGINE RESTARTED BY R2: False`. The existing M1 case passes only because the shared curl stub answers /health unconditionally. Only partial mitigation found: the engine unit has Restart=always, so a crash-looping engine may pick up the restored unit on its own after daemon-reload, but the engine's load time (TimeoutStartSec=900) exceeds rollback.sh's default 120 s gate, a hung (non-crashed) engine never auto-restarts, and the runbook's R2 line passes no READY_S to rollback.sh - so this does not refute the finding. Reviewer's fix (engine restart moved into rollback.sh behind ENGINE=restart with wait_http 8000/health before `systemctl restart $units`; 90-revert calls `ENGINE=restart \"$d/rollback.sh\"`) is consistent with the code read; not re-verified here.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "RB-2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/deploy/preflight.py",
+      "line": "217-218 (_positive_int), 197 (TUNABLE_SHAPES)",
+      "claim_broken": "FC-2 as closed: 'ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY are positive_int \u2026 refused before anything changes rather than found after the engine restart'. `_positive_int` is `value.isdigit() and int(value) > 0`: '007' and the Arabic-Indic digit '\u0663' pass (isdigit, int>0) and are written to the env file, but W3's serve.sh validates `^[1-9][0-9]*$` and exits 2 on both, so the cutover's `ENGINE=restart` crash-loops the engine (Restart=always, RestartSec=5) and install.sh fails at step 5 after ENGINE_READY_S (900 s) - the same failure FC-2 fixed for 0, and it then lands in RB-1's R2 path. '\u00b2' (superscript two: isdigit True, int() raises) crashes preflight with an uncaught ValueError traceback (exit 1, not the documented 2; the value is echoed in the traceback - a tunable, not a secret). Same shape guards MAX_INFLIGHT (manifest, SSM-read).",
+      "evidence": "Reviewer drill through the real preflight.apply with support.stubs (drills copy, test_confirm__fc2_leading_zero_and_unicode_digits): `FC2 '007' -> 0 written: '007'`, `arabic-3: 0`, `superscript-2: CRASH ValueError: invalid literal for int() with base 10: '\u00b2'`; '1e3', ' 8', '8 ', '+8', '0x8' -> 2 (refused), '32' -> 0. W3's serve.sh at its current head (codex-w3, read-only) with a stub docker and I2B's unit argv (none): `ENGINE_MAX_NUM_SEQS=007` -> `serve.sh: ENGINE_MAX_NUM_SEQS must be a positive integer`, exit=2; Arabic-Indic 3 -> exit=2; `=32` -> `--max-num-seqs 32` on the docker argv, exit 0. Fix candidate `return bool(re.fullmatch(r\"[1-9][0-9]*\", value))` in the drills copy: tests/i test_packaging+test_install+test_scripts `71 passed`, and the drill then refuses all three (`007: 2 arabic-3: 2 superscript-2: 2`). Own mutant positive_int_isdigit_only (accept 0) is KILLED by test_packaging (1 failed), so the 0 half of FC-2 is pinned; the grammar half has no case.",
+      "minimal_fix": "`_positive_int = lambda value: bool(re.fullmatch(r\"[1-9][0-9]*\", value))` (serve.sh's grammar; ASCII only, no leading zero, no exception path); add '007' and '\u0663' to the refused values in test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime and a mutant `positive_int_by_isdigit` (fullmatch -> `value.isdigit() and int(value) > 0`).",
+      "lens": "rollout",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed, not refuted. Code at 0653c8a: apps/infrx-api/deploy/preflight.py:217-218 `_positive_int` is `value.isdigit() and int(value) > 0`; it is the shape for ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (line 197) and MAX_INFLIGHT (line 129, installer-supplied via --max-inflight, not SSM - a minor mislabel in the claim). Python check: '007'.isdigit()=True/int=7, '\u0663'.isdigit()=True/int=3, '\u00b2'.isdigit()=True/int raises ValueError. Nothing between shape_problem and the caller catches it (tunables() -> collect() -> apply(); main has no try). Experiment 1 (scratchpad drill through the real preflight.apply with tests/i/support.stubs, worktree untouched): ENGINE_MAX_NUM_SEQS=007 -> rc 0, env file carries '007', systemctl calls ['daemon-reload','restart marlin2b-vllm marlin2b-gateway']; \u0663 -> rc 0, written; \u00b2 -> uncaught ValueError (exit would be 1 with the value in the traceback, though this happens in collect() before clear_stale/stage, so nothing on disk changes); 32 -> rc 0. Experiment 2 (W3 serve.sh at codex-w3 head 4fc1081, stub docker, fake weights dir, no argv): 007 -> 'must be a positive integer' exit 2; \u0663 -> exit 2; \u00b2 -> exit 2; 32 -> '--max-num-seqs 32' exit 0. The unit marlin2b-vllm.service has ExecStart=.../serve.sh, EnvironmentFile=/etc/marlin2b-gateway.env, Restart=always, RestartSec=5; install.sh with ENGINE=restart does `systemctl restart marlin2b-vllm` then wait_http ... ${ENGINE_READY_S:-900} || die ... 4, so an accepted '007' crash-loops the engine and fails the cutover after 900 s exactly as claimed. The existing test test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime only pins 0/-1/abc; there is no case for leading zero or non-ASCII digits, so the grammar half of FC-2 is unpinned. Fix candidate `bool(re.fullmatch(r\"[1-9][0-9]*\", value))` matches serve.sh's grammar and is one line. Caveat on severity: the trigger is an operator-typo-shaped --set value, and the \u00b2 path fails closed (nothing written), but the '007'/'\u0663' path falsifies FC-2's closure statement ('refused before anything changes rather than found after the engine restart') with a real engine outage on the pilot cutover, which is the failure class FC-2 exists to prevent.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed from code and a minimal experiment at I2B head 0653c8a. `apps/infrx-api/deploy/preflight.py:217-218` is `value.isdigit() and int(value) > 0`, called unguarded from `shape_problem` (line 254) and `apply` (no try/except around `collect`; `main` has none). Running `shape_problem(Key('ENGINE_MAX_NUM_SEQS','tunable','positive_int'), v)`: '007' -> None (accepted), '\u0663' (Arabic-Indic 3) -> None (accepted), '\u00b2' -> uncaught `ValueError: invalid literal for int() with base 10: '\u00b2'` (would be a traceback with exit 1, not REFUSED=2), '0' and '1e3' -> refused. W3's serve.sh at codex-w3 head 4fc1081 line 67-68 checks `^[1-9][0-9]*$` and `exit 2`; a bash test refuses both 007 and \u0663 and accepts 32. The runtime probe cannot catch it either: `infrx/config.py` does not read ENGINE_MAX_NUM_SEQS (only a comment in worker/engine.py mentions WORKER_CONCURRENCY), so the staged file passes `validate_runtime`, is committed, and the unit (`EnvironmentFile=/etc/marlin2b-gateway.env`, `ExecStart=serve.sh`, `Restart=always`, `RestartSec=5`) crash-loops; install.sh step 5 then dies at `wait_http \u2026 ENGINE_READY_S` (exit 4) exactly as the reviewer describes - the after-restart failure FC-2's comment at line 194-196 claims is now refused beforehand. The existing test (tests/i/test_packaging.py:304) only pins 0/-1/abc, so the grammar half is untested. Reviewer's one-line fix (`re.fullmatch(r\"[1-9][0-9]*\", value)`) matches serve.sh's grammar and removes the exception path. Note the trigger requires an operator-typed leading zero or non-ASCII digit, so real-world likelihood is low, but the FC-2 closure statement is false as written.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "RB-3",
+      "severity": "nonblocking",
+      "file": "infra/rollout/steps/90-revert.sh",
+      "line": "16-21",
+      "claim_broken": "'revert when the engine restart itself fails': `systemctl restart marlin2b-vllm` failing (set -e) ends 90-revert with the engine's exit code, no `drain.sh resume`, the edge left in maintenance - correct fail-closed behaviour, but the last stdout line is rollback.sh's 'rolled back to \u2026 restarted marlin2b-gateway' and nothing says the edge is still closed or what to do next.",
+      "evidence": "Host drill with a systemctl wrapper failing only 'restart marlin2b-vllm': `ENGINE-FAIL exit 1`, stdout tail `rolled back to \u2026 (mode legacy); restarted marlin2b-gateway`, stderr '', events end at the failed restart (no reload, no start), active site = maintenance. Resume after READY_S expiry: `exit 4, 'the runtime is not ready; the edge stays in maintenance'`, no docker event; double resume: both exit 0, normal site, two start+health+reload triplets (idempotent).",
+      "minimal_fix": "Wrap the engine restart (or, with RB-1's fix, rollback.sh's exit) with a message: 'engine restart failed; the edge stays in maintenance - fix the engine, then `drain.sh resume`'; one line in README R2.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/lib.sh",
+      "line": "62-72 (edge_install)",
+      "claim_broken": "FC-4 'validates both sites \u2026 before install': an invalid maintenance site is refused before any edge change (verified), but the order validate-then-put has no killable case - only 'both validated' and 'edge after readiness' are asserted.",
+      "evidence": "Host drill with a docker wrapper failing the maintenance validate: 30-pause's lines exit 1, etc/caddy absent, no systemctl/reload/run -d events; through install.sh pilot: exit 1 (undocumented code; README lists 2 and 4), edge untouched, runtime already restarted. Own mutant validate_after_put (the validate loop moved below the two `put`s, still before caddy_site): SURVIVED, `29 passed` (test_scripts + test_packaging).",
+      "minimal_fix": "In test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness (or the drain case) add a docker stub failure on the Caddyfile.maintenance mount and assert etc/caddy does not exist and no reload/run -d happened; list the mutant. Optionally document exit 1 from step 7 in README step 8 (edge unchanged, runtime on the new config).",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "48-50 (OUTSIDE_TRANSACTION)",
+      "claim_broken": "M6's keyword scan: `--` comment lines are not flagged (the pattern needs the keyword at line start), REINDEX CONCURRENTLY is; but `[^;]*` spans newlines, so an inline comment inside a multi-line CREATE TABLE ('x int -- filled concurrently by the worker'), a line starting with `create \u2026 concurrently` inside a /* */ block, and a plpgsql body with `vacuum` on its own line are refused at plan (false positives, fail-closed); `alter table \u2026 detach partition \u2026 concurrently` and `create database` are not caught (fail at apply, exit 3, rolled back - safe).",
+      "evidence": "Regex drill over 16 bodies: accepted '-- concurrently', '-- create index concurrently later', '-- vacuum after', string literal, column comment; REFUSED block-comment line, inline comment in CREATE TABLE, REINDEX/CREATE INDEX/DROP INDEX CONCURRENTLY, VACUUM, ALTER SYSTEM, function body executing CIC, function body with vacuum line; accepted DETACH PARTITION CONCURRENTLY and CREATE DATABASE. On the pinned supabase/postgres: the inline-comment file -> `PLAN REFUSED: 0001_h.sql: VACUUM, ALTER SYSTEM or CONCURRENTLY cannot run\u2026`. D's 0001-0009 do not match (evidence, rehearsal step 8 plans pass).",
+      "minimal_fix": "Strip `--\u2026` to end of line and /* \u2026 */ before scanning (`re.sub(r\"--[^\\n]*|/\\*.*?\\*/\", \"\", body, flags=re.S)`), or replace `[^;]*` with `[^;\\n]*` and accept the documented exit-3 fallback for the rest.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "169-174 (PARTIAL message)",
+      "claim_broken": "M2 as fixed detects, it does not prevent (Limits 14 says so). Verified on the pinned database: a plpgsql function body containing 'commit;' text is not flagged (applied), a DO block calling COMMIT inside the plan's transaction is an InvalidTransactionTermination -> exit 3 fully rolled back, a bare COMMIT -> exit 4. The exit-4 message 'nothing after it ran' is about files: statements after the COMMIT in the same file did run and are committed, and the next apply is stuck on DuplicateTable.",
+      "evidence": "Drill: A (function body '-- commit;' and a string 'commit;') `applied: 0001, 0002` exit 0; B (DO \u2026 commit) `failed (InvalidTransactionTermination); every pending migration was rolled back` exit 3, tables unchanged; C (create c_c; commit; create c_c2) exit 4, history 0001,0002, tables c_a,c_c,c_c2; re-apply `0003_bare.sql failed (DuplicateTable)` exit 3; D (bare ROLLBACK) exit 4; E (`begin;` inside a file) applied exit 0 (nested BEGIN is a warning).",
+      "minimal_fix": "Wording only: 'statements after the COMMIT in this file ran too; no later file ran'. Otherwise as designed.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-7",
+      "severity": "nonblocking",
+      "file": "infra/rollout/steps/50-install.sh",
+      "line": "12-13",
+      "claim_broken": "M7 'refuses to start without MIGRATION_DIGEST (step 6's applied digest or nothing-pending)' - any non-empty string is accepted: 'nothing-pending' while something is pending, 'x', or a typo of the sentinel all reach install.sh. Accepted by design (the script, README step 8 and Limits 15 say it is the operator's recorded statement, not a check), stated here; the shape is not even the documented one.",
+      "evidence": "Cutover step's own bytes against a stand-in checkout: MIGRATION_DIGEST 'nothing-pending' -> `cutover abc123 after hosted migrations: nothing-pending | install ran`; 'x' -> install ran; 64 zeros -> install ran; unset -> refused (suite case).",
+      "minimal_fix": "None required; optionally `[[ $MIGRATION_DIGEST =~ ^([0-9a-f]{64}|nothing-pending)$ ]] || exit 2` so a typo of the sentinel is not recorded as the statement.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-8",
+      "severity": "nonblocking",
+      "file": "infra/rollout/steps/40-checkout.sh",
+      "line": "4-6 (README \u00a71 step 7)",
+      "claim_broken": "'From here to step 8 no engine restart' is prose only: nothing mechanical (no mask, no unit swap) prevents a restart in the window, and the installed base unit has Restart=always, so an engine crash in the window auto-restarts with `--max-num-seqs 32` against the checked-out W3 serve.sh (exit 2) and loops every 5 s until step 8 (install.sh puts the new unit, daemon-reloads and restarts it - the recovery) or 90-revert.",
+      "evidence": "By reading: 40-checkout.sh has only the comment; 50-install.sh has no guard; base unit at d18177e `ExecStart=\u2026/serve.sh --max-num-seqs 32`, `Restart=always`, `RestartSec=5`; W3's serve.sh with that argv -> `--max-num-seqs is pinned here`, exit 2 (drill). FC-1 verified: I2B's unit argv (none) + ENGINE_MAX_NUM_SEQS=32 from the env file -> `--max-num-seqs 32` on the docker argv, exit 0; default without the setting -> 8.",
+      "minimal_fix": "Accept as procedural (step 8 is the recovery either way) and say so in the README step-7 cell, or have 40-checkout.sh `systemctl mask --runtime`-free alternative: run 50-install immediately in the same ssm.sh invocation.",
+      "lens": "rollout"
+    },
+    {
+      "id": "RB-9",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rollback.sh",
+      "line": "47-49",
+      "claim_broken": "'The edge serves whatever site the backup had' (rollback's caddy_reload) has no killable tests/i case on a pilot host; the rehearsal step 7 kills it with the real Caddy.",
+      "evidence": "Own mutant rollback_skips_edge_reload (`caddy_reload` -> `true` in rollback.sh): `1 failed, 8 passed` in test_scripts - KILLED after all, by the M1 case (its RELOAD count/last-event assertions). Recorded as verified, not a gap.",
+      "minimal_fix": "None.",
+      "lens": "rollout"
+    },
+    {
+      "id": "C-S1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rehearse.sh",
+      "line": "51-53 (teardown)",
+      "claim_broken": "'Every container, network and volume it makes is named $NS-* ... teardown removes exactly those' / evidence: 'two rehearsals never touch each other'. True for containers (label filter) and false for volumes: `docker volume ls -q --filter \"name=$NS-\" | xargs -r docker volume rm` is a substring match, so a namespace whose name has this one as a prefix loses its (unused) volumes - and the implementer's own two namespaces, `infrx-i2b` and `infrx-i2b-fix`, are exactly that shape. The `left=` report uses the same filter and lists foreign objects as LEFT.",
+      "evidence": "Planted a container `infrx-confirm-i2b-secrets-other-box` (label ai.infrx.rehearsal=infrx-confirm-i2b-secrets-other) and volumes `infrx-confirm-i2b-secrets-other-caddy_data`/`-other-stale`; ran `REHEARSAL_NS=infrx-confirm-i2b-secrets rehearse.sh` three times (one exited 2 at the dirty-tree check before creating anything, one collided on my own postgres name, one REHEARSAL PASSED 43/0): after every teardown the two other-* volumes were gone (`docker volume ls -q --filter name=infrx-confirm-i2b-secrets-other` -> 0) and the other-box container untouched; teardown printed `LEFT: 9c04c9c08de0` (the foreign container). `docker volume ls -q --filter name=infrx-confirm-i2b-secrets-` also lists `infrx-confirm-i2b-secrets-sub-v2`; the anchored form `--filter 'name=^infrx-confirm-i2b-secrets-v'` lists only `-v1`.",
+      "minimal_fix": "Anchor and terminate the name: keep the rehearsal's own volume names in a known list (caddy_data, caddy_config, any $NS-* the wrapper created) and `docker volume rm` exactly those, or filter with `\"name=^$NS-(caddy_data|caddy_config|...)$\"`; same for the `left=` name filters. Local host only, dev-time hazard; not a box or secret matter.",
+      "lens": "secrets"
+    },
+    {
+      "id": "C-S4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_rollout.py",
+      "line": "159-180 (test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line)",
+      "claim_broken": "S4's evidence row claims 'a 0600 mktemp header file' and the script comment claims the file is 0600 and cleaned up; the argv property is pinned (key_in_curl_argv killed) but the 0600 mode and the removal after exit have no killing case: the fake curl reads the file's content only.",
+      "evidence": "Own mutants in a second archive copy: `hdr_file_world_readable` (`hdr=$(mktemp)` -> `hdr=$(mktemp); chmod 644 \"$hdr\"`): `6 passed`, SURVIVED; `hdr_file_kept_after_exit` (trap line removed): `6 passed`, SURVIVED. Behaviour unmutated is correct: stub curl saw `mode=0o600 uid=1000`, file absent after a normal exit (exit 12) and after SIGTERM mid-run (143); `mktemp` under umask 000 still 600.",
+      "minimal_fix": "In FAKE_CURL also log `oct(stat.S_IMODE(p.stat().st_mode))` and the path; assert `mode=0o600` in the log and `not pathlib.Path(path).exists()` after the run; list both mutants.",
+      "lens": "secrets"
+    },
+    {
+      "id": "C-S3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_scripts.py",
+      "line": "157-178 (test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host)",
+      "claim_broken": "infra/README.md \u00a75.2 'a run the preflight refuses removes its own' backup - the 'its own' half has no killing case: the refused-install case starts with no earlier backup, so a refusal that deletes every backup passes.",
+      "evidence": "Own mutant `refused_install_rm_all_backups` (`rm -rf \"$backup\"` -> `rm -rf \"$BACKUPS\"/*`): `9 passed`, SURVIVED. Behaviour unmutated is correct (scratch case under umask 000: dev install -> backup b1 (0700/0700, files.tar 0600, env member 0600); then a denied-SSM pilot run exits 2 and `backups(host) == [b1]`; rollback restores the env file 0600).",
+      "minimal_fix": "In that test, create one earlier backup directory (or run a successful dev install first) and assert it is still there after the refused run; list the mutant.",
+      "lens": "secrets"
+    },
+    {
+      "id": "C-S5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_rollout.py",
+      "line": "22-24 (SECRET_SHAPES) and 183-202",
+      "claim_broken": "'every rollout step ... names no secret' now has a runtime canary (printed values, stdout and stderr) and an inline `-e NAME=value` shape, but a literal `NAME=value` assignment on a line of its own - in a step or in the README - with a value of no known shape is caught by neither.",
+      "evidence": "Own mutants on the scratch copy: M-b `SUPABASE_SERVICE_ROLE_KEY=sbp_0123456789abcdef...` appended to 60-verify-local.sh: `6 passed`, SURVIVED; M-f README step 10 `export LEGACY_KEY=sk-literal-0123456789 #$(...)`: `6 passed`, SURVIVED. Caught: a stderr echo of the file (M-a), a JWT-shaped literal (M-c), `grep -v ^#` of the file (M-d), `-e MIGRATE_DATABASE_URL=literalpw123` (M-e), a `sed -n s/^DATABASE_URL=//p` print (M-g) - each `1 failed, 5 passed`.",
+      "minimal_fix": "One more shape, e.g. `r\"^\\s*(export\\s+)?[A-Z_]*(KEY|SECRET|TOKEN|PASSWORD|DSN)=[^$\\s\\\"']\"` over steps and README (the README's legitimate lines read secrets with `read -rs` or `$(aws ...)`), or state in the test docstring that a bare unshaped literal is out of the check's reach.",
+      "lens": "secrets"
+    },
+    {
+      "id": "C-S6",
+      "severity": "nonblocking",
+      "file": "infra/rollout/verify-external.sh",
+      "line": "22, 29, 56-57 (unchanged by the fix round)",
+      "claim_broken": "Coordinator-host hygiene, pre-existing: response bodies go to the fixed, predictable path `/tmp/infrx-verify.body` (`curl -o` follows a pre-planted symlink in a shared /tmp), and an interrupted run leaves it behind - the EXIT trap removes only `$hdr`. No key is in it.",
+      "evidence": "After the SIGTERM drill: `/tmp/infrx-verify.body exists after run? YES` (removed by me). Bodies are the edge's responses, not credentials.",
+      "minimal_fix": "`body=$(mktemp)` and `trap 'rm -f \"$hdr\" \"$body\"' EXIT`, replacing the three literal paths.",
+      "lens": "secrets"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "rollout",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "revert_resume_before_engine",
+          "edit": "90-revert.sh: the `READY_S=\u2026 drain.sh resume` line moved above `systemctl restart marlin2b-vllm`",
+          "result": "KILLED (1 failed, 14 passed: test_scripts + test_rollout)",
+          "killed_by": "test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime"
+        },
+        {
+          "name": "revert_resume_ready_default",
+          "edit": "90-revert.sh: `READY_S=${READY_S:-900} \"$d/drain.sh\" resume` -> `\"$d/drain.sh\" resume` (120 s default)",
+          "result": "SURVIVED (15 passed) - a timing number, no case can kill it; noted, not a finding",
+          "killed_by": "none"
+        },
+        {
+          "name": "cutover_digest_optional",
+          "edit": "50-install.sh: `: \"${MIGRATION_DIGEST:?\u2026}\"` -> `: \"${MIGRATION_DIGEST:-}\"`",
+          "result": "KILLED (1 failed, 5 passed)",
+          "killed_by": "test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret / the_cutover_keeps_the_engines_concurrency"
+        },
+        {
+          "name": "resume_without_readiness",
+          "edit": "drain.sh resume: the `wait_ready \u2026 || die \u2026 4` line removed",
+          "result": "KILLED (2 failed, 7 passed)",
+          "killed_by": "test_ops_recover__drain_closes_the_edge_before_stopping_the_worker, \u2026the_r2_revert_reopens_the_edge\u2026"
+        },
+        {
+          "name": "validate_after_put",
+          "edit": "lib.sh edge_install: the two-file validate loop moved below the two `put`s (still before caddy_site)",
+          "result": "SURVIVED (29 passed: test_scripts + test_packaging) - finding RB-4",
+          "killed_by": "none in the suite; my FC-4 drill (etc/caddy absent after a failed validate) kills it"
+        },
+        {
+          "name": "rollback_skips_edge_reload",
+          "edit": "rollback.sh: `caddy_reload` -> `true`",
+          "result": "KILLED (1 failed, 8 passed)",
+          "killed_by": "test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime"
+        },
+        {
+          "name": "positive_int_isdigit_only",
+          "edit": "preflight.py `_positive_int`: `value.isdigit() and int(value) > 0` -> `value.isdigit()` (accepts 0)",
+          "result": "KILLED (1 failed, 19 passed in test_packaging; my first run against test_install.py was the wrong file - 42 passed there is not a survival)",
+          "killed_by": "test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime"
+        },
+        {
+          "name": "positive_int_strict (fix candidate, not a mutant)",
+          "edit": "preflight.py `_positive_int` -> `bool(re.fullmatch(r\"[1-9][0-9]*\", value))`",
+          "result": "71 passed (test_packaging + test_install + test_scripts); reviewer FC-2 drill then refuses 007 / \u0663 / \u00b2 with exit 2",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "engine_restart_inside_rollback (fix candidate for RB-1, not a mutant)",
+          "edit": "rollback.sh: `ENGINE=restart` block (restart marlin2b-vllm + wait 8000/health) after daemon-reload, before `systemctl restart $units`; 90-revert: `ENGINE=restart \"$d/rollback.sh\" \"$BACKUP\"`, own restart line dropped",
+          "result": "reviewer drills 3 passed: engine-down R2 exit 0 / normal site / engine restarted; M1 R2 still passes; engine-restart failure still exit 1 with the edge closed. The suite's M1 case fails only because its slice starts at '\"$d/rollback.sh\"' and drops the ENGINE=restart prefix (slice from the line start)",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C \u2026/codex-i2b archive 0653c8a | tar -x -C /tmp/claude-1000/confirm-i2b-rollout-2129364 && make api-env (in the scratch); git init + one commit in the scratch (rehearse.sh needs a clean git checkout; .venv/rehearsal/*.log excluded)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0; scratch HEAD ba1cf4bf\u2026, porcelain 0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -p no:cacheprovider tests/i --ignore=tests/i/test_mutants.py (scratch, detached)",
+          "exit": 0,
+          "tail": "98 passed in 27.84s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/i/test_mutants.py (scratch, detached, 03:17:21Z-03:23:25Z)",
+          "exit": 0,
+          "tail": "166 passed in 364.34s (0:06:04)  (159 mutants killed + runner self-tests)"
+        },
+        {
+          "cmd": "REHEARSAL_NS=infrx-confirm-i2b-rollout bash apps/infrx-api/deploy/rehearse.sh <scratch>/rehearsal (scratch repo root, detached, 03:17:22Z-03:18:30Z)",
+          "exit": 0,
+          "tail": "PASS rollback.sh restored the edge as it was backed up - maintenance, through the admin socket (503 {\"ok\":false} ) / PASS drain.sh resume (90-revert's last line) reopens the edge (200 {\"ok\":true} ) / PASS a migration with its own COMMIT stops the plan: exit 4 (got 4), history still 0001..0009 / REHEARSAL PASSED / teardown: nothing infrx-confirm-i2b-rollout-* left; grep -c ^PASS 43, ^FAIL 0"
+        },
+        {
+          "cmd": "pytest -s tests/i/test_confirm_rollout.py (reviewer Host-harness drills in a second `git archive` copy under the scratch, so the running mutant list's tree copies were never edited)",
+          "exit": 1,
+          "tail": "M1 exit 0, active site normal, reloads at maintenance then normal; R2-after-OK exit 0 (same two reloads; my 40-char slice assertion was the only failure); ENGINE-FAIL exit 1, active maintenance, no resume; RESUME-EXPIRED exit 4 'stays in maintenance'; double resume 2x exit 0; FC4 pause exit 1, etc/caddy absent, no systemctl; FC5 Pilot/PILOT/'pilot ' exit 2 no events no backup; FC2 007 -> 0 written '007', \u0663 -> 0, \u00b2 -> CRASH ValueError, 1e3/' 8'/'8 '/+8/0x8 -> 2, 32 -> 0; M7 'nothing-pending'/'x'/64 zeros -> install ran; 7 passed, 1 failed (own assertion)"
+        },
+        {
+          "cmd": "pytest -s tests/i/test_confirm_rollout.py -k step8_failed_on_the_engine (curl wrapper: 8001/health fails until 'systemctl restart marlin2b-vllm' is in events.log)",
+          "exit": 1,
+          "tail": "R2-ENGINE-DOWN exit 4 stderr: the restored runtime is not ready 4; ACTIVE SITE: # Maintenance; ENGINE RESTARTED BY R2: False - finding RB-1; with the candidate fix applied to the drills copy: exit 0, ACTIVE SITE: # The only public listener, ENGINE RESTARTED BY R2: True, 3 passed"
+        },
+        {
+          "cmd": "W3's serve.sh (\u2026/codex-w3/models/marlin2b/serve.sh, read-only) with a stub docker on PATH, WEIGHTS with a config.json, PROCESSING_CACHE_DIR a dir",
+          "exit": 0,
+          "tail": "no argv + ENGINE_MAX_NUM_SEQS=32 -> docker argv \u2026 --max-num-seqs 32 \u2026 --allowed-local-media-path <dir>, exit=0; no setting -> --max-num-seqs 8; =007 -> 'must be a positive integer' exit=2; Arabic-Indic 3 -> exit=2; --max-num-seqs 32 on argv (base unit) -> '--max-num-seqs is pinned here' exit=2"
+        },
+        {
+          "cmd": "docker run -d --name infrx-confirm-i2b-rollout-pg -p 127.0.0.1:55831:5432 supabase/postgres@sha256:7768d0d1\u2026; migrate.py from the scratch .venv (psycopg 3.3.6) over drill dirs A-F",
+          "exit": 0,
+          "tail": "A function-body 'commit;' text: applied 0001,0002 exit 0 | B DO-block COMMIT: InvalidTransactionTermination exit 3, rolled back | C bare COMMIT: exit 4, history 0001,0002, tables c_a,c_c,c_c2 committed; re-apply DuplicateTable exit 3 | D bare ROLLBACK: exit 4 | E `begin;` in a file: applied exit 0 | F inline-comment 'concurrently' in CREATE TABLE: PLAN REFUSED"
+        },
+        {
+          "cmd": "OUTSIDE_TRANSACTION regex drill (16 bodies, python)",
+          "exit": 0,
+          "tail": "accepted: '-- concurrently', '-- create index concurrently later', '-- vacuum after', string literal, column comment, DETACH PARTITION CONCURRENTLY, CREATE DATABASE; REFUSED: block-comment line, inline comment in CREATE TABLE, REINDEX/CREATE INDEX/DROP INDEX CONCURRENTLY, VACUUM, ALTER SYSTEM, function body executing CIC, function body with a vacuum line"
+        },
+        {
+          "cmd": "reviewer mutants in the drills copy (edit, run named test files, restore; diff -rq against the scratch tree afterwards)",
+          "exit": 0,
+          "tail": "validate_after_put SURVIVED 29 passed; rollback_skips_edge_reload KILLED; revert_resume_before_engine KILLED; revert_resume_ready_default SURVIVED (timing); cutover_digest_optional KILLED; resume_without_readiness KILLED; positive_int_isdigit_only KILLED (test_packaging); positive_int_strict 71 passed; drills restored"
+        },
+        {
+          "cmd": "git -C \u2026/codex-i2b status --porcelain | wc -l; git -C \u2026/codex-w3 status --porcelain -- models/marlin2b/serve.sh | wc -l",
+          "exit": 0,
+          "tail": "0 and 0 (before and after)"
+        }
+      ],
+      "fabrication_check": "Verified by running: tests/i 98 passed and the full I list 166 passed (159/159 killed) at 0653c8a in the scratch, matching the evidence's commands 3 and 5; rehearse.sh in my own namespace 43 PASS / 0 FAIL with the new step-7 R2 lines, the :2019 absence, the ENGINE_MAX_NUM_SEQS=0 drill and the COMMIT-file exit 4, matching command 6; M1 in the Host harness (pause -> exit-4 install -> 90-revert's tail: monolith env back, normal site active, reloaded after /health after the engine restart; the two reloads happen on the maintenance site then the normal site); the same after a successful cutover; the documented intent that R2 ends on the release's normal site (README R2, Limits 18) is what happens; READY_S expiry keeps maintenance with exit 4; double resume is idempotent; FC-1 against W3's actual serve.sh (32 from the env file, 8 by default, exit 2 for the base unit's argv); FC-4 refuses before any edge change; FC-5 case-sensitive; M2/M6/M8 on the pinned supabase/postgres (M8's 'applied: 0001 init, 0002 seed_models' seen in my rehearsal log too); M4's typo loop and M7's unset-digest refusal via the suite. Not delivered as claimed: FC-2's grammar ('007', non-ASCII digits pass preflight, serve.sh refuses them; '\u00b2' crashes preflight) - RB-2; and the M1-fixed R2 path assumes a healthy engine, which is not the engine-caused exit-4 case - RB-1 (the evidence's rehearsal step 7 and the suite's M1 case both run with an engine that answers). By reading only: the 7->8 window is prose (RB-8); M5's attestation wording in infra/README.md \u00a78 and README R2 is present; MIGRATION_DIGEST is any non-empty string (RB-7, by design). Not verified: nothing ran against the box, AWS, SSM or hosted Supabase; the runtime image was built only by the rehearsal (same id sha256:dc573222\u2026 as the evidence); the monolith's /health dependence on the engine is from routes/health.py at the base d18177e, not observed on the box; real systemd auto-restart behaviour in the window is reasoned from the base unit's Restart=always, not run. The evidence's 'REHEARSAL PASSED \u2026 0 by the script's own rule; the detached status was not captured' is consistent with my run (exit=0 captured).",
+      "cleanup": "Removed: the scratch tree /tmp/claude-1000/confirm-i2b-rollout-2129364 (its .venv, git repo, drills copy with the reviewer test file, rehearsal work dir, logs, fc1/m2 drill dirs); container infrx-confirm-i2b-rollout-pg; the rehearsal's image tag infrx-confirm-i2b-rollout-runtime:ba1cf4bf\u2026 (untagged; the image id dc573222\u2026 is shared with other sessions' tags and was left). Verified after: docker ps -a / volume ls / network ls / images filtered on infrx-confirm-i2b-rollout all 0; the rehearsal's own teardown reported 'nothing infrx-confirm-i2b-rollout-* left'. No file in any worktree was edited or committed (codex-i2b porcelain 0; codex-w3 serve.sh untouched). Untouched: other sessions' containers and images, pytest's rotating /tmp/pytest-of-rey basetemp."
+    },
+    {
+      "lens": "secrets",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "admin_api_widened / maintenance_admin_widened / reload_on_default_admin (implementer's)",
+          "edit": "Caddyfiles `admin unix//config/admin.sock` -> `admin localhost:2019`; lib.sh reload drops `--address unix//config/admin.sock`",
+          "result": "KILLED 3/3 (tests/i/mutants.py in the scratch). Note: `reload_on_default_admin` is killed by string assertions only - on the pinned Caddy a `caddy reload --config ... --adapter caddyfile` without `--address` also exits 0, because Caddy takes the admin address from the config it loads; harmless, the socket is the address either way",
+          "killed_by": "test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health, test_ops_recover__drain_closes_the_edge_before_stopping_the_worker"
+        },
+        {
+          "name": "connect_error_unwrapped, missing_dsn_attempted, refused_backup_kept, backup_dir_world_readable, backup_archive_world_readable, key_in_curl_argv, verify_local_prints_values, inventory_prints_values, readme_inline_env_value, tunable_shape_unchecked, engine_seqs_zero_accepted (implementer's)",
+          "edit": "as listed in tests/i/mutants.py",
+          "result": "KILLED 11/11 (`14/14 killed`, exit 0)",
+          "killed_by": "their named cases"
+        },
+        {
+          "name": "refused_install_rm_all_backups",
+          "edit": "install.sh: `|| { code=$?; rm -rf \"$backup\"; exit \"$code\"; }` -> `rm -rf \"$BACKUPS\"/*`",
+          "result": "SURVIVED (9 passed) - finding C-S3; my scratch case kills it",
+          "killed_by": "none in the suite"
+        },
+        {
+          "name": "gateway_mounts_caddy_config",
+          "edit": "marlin2b-gateway.service: add `-v caddy_config:/config`",
+          "result": "KILLED (1 failed, 19 passed)",
+          "killed_by": "test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health"
+        },
+        {
+          "name": "worker_mounts_caddy_data",
+          "edit": "infrx-worker.service: add `-v caddy_data:/data:ro`",
+          "result": "KILLED (1 failed, 19 passed)",
+          "killed_by": "test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health"
+        },
+        {
+          "name": "admin_socket_world_writable",
+          "edit": "Caddyfile: `admin unix//config/admin.sock` -> `admin unix//config/admin.sock|0666`",
+          "result": "KILLED (1 failed, 19 passed)",
+          "killed_by": "test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health"
+        },
+        {
+          "name": "connect_refusal_echoes_failure",
+          "edit": "migrate.py connect(): append `: {failure}` to the Refused message",
+          "result": "KILLED (1 failed, 5 passed)",
+          "killed_by": "test_deploy_failclosed__a_connection_failure_never_echoes_the_dsn"
+        },
+        {
+          "name": "hdr_file_kept_after_exit",
+          "edit": "verify-external.sh: `trap 'rm -f \"$hdr\"' EXIT` removed",
+          "result": "SURVIVED (6 passed) - finding C-S4",
+          "killed_by": "none"
+        },
+        {
+          "name": "hdr_file_world_readable",
+          "edit": "verify-external.sh: `hdr=$(mktemp)` -> `hdr=$(mktemp); chmod 644 \"$hdr\"`",
+          "result": "SURVIVED (6 passed) - finding C-S4",
+          "killed_by": "none"
+        },
+        {
+          "name": "backup_absent_before_chmod",
+          "edit": "install.sh: `mkdir -p \"$backup\" && chmod 0700 \"$BACKUPS\" \"$backup\"` -> `mkdir -p \"$backup\"`",
+          "result": "KILLED (1 failed, 8 passed)",
+          "killed_by": "test_ops_recover__rollback_restores_every_replaced_file"
+        },
+        {
+          "name": "rollback_reload_default_admin",
+          "edit": "rollback.sh: `caddy_reload` -> the old `docker exec caddy caddy reload --config ... --adapter caddyfile` line",
+          "result": "KILLED (1 failed, 28 passed)",
+          "killed_by": "test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health"
+        },
+        {
+          "name": "S5 canary probes M-a..M-g (60-verify-local.sh, 10-inventory.sh, README)",
+          "edit": "M-a stderr echo of the env file on a missing-name error; M-b bare `SUPABASE_SERVICE_ROLE_KEY=sbp_...` line; M-c bare JWT-shaped line; M-d `grep -v ^#` of the file; M-e README `-e MIGRATE_DATABASE_URL=literalpw123`; M-f README `export LEGACY_KEY=sk-literal-...`; M-g `sed -n s/^DATABASE_URL=//p`",
+          "result": "M-a KILLED, M-b SURVIVED, M-c KILLED, M-d KILLED, M-e KILLED, M-f SURVIVED, M-g KILLED - finding C-S5",
+          "killed_by": "test_backend_deploy__the_read_only_steps_print_names_never_values (M-a, M-d, M-g); test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret (M-c, M-e)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-i2b archive 0653c8a | tar -x -C /tmp/claude-1000/confirm-i2b-secrets-2136878 && make api-env (in the scratch)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -p no:cacheprovider tests/i --ignore=tests/i/test_mutants.py (scratch, detached)",
+          "exit": 0,
+          "tail": "98 passed in 28.37s"
+        },
+        {
+          "cmd": "drills/caddy.sh: pinned caddy@sha256:14a9c0... with the real deploy/Caddyfile + Caddyfile.maintenance (INFRX_SITE=http://:8080, --cap-drop ALL --cap-add NET_BIND_SERVICE --read-only, -v caddy_data/-v caddy_config) in --network none box infrx-confirm-i2b-secrets-box; sibling --network container: --user 10001:10000",
+          "exit": 0,
+          "tail": "validate Caddyfile exit=0, validate Caddyfile.maintenance exit=0 (no admin, no /config mount) | sibling: 2019 refused: 111 Connection refused; 8080 CONNECTED; POST :2019/load -> URLError [Errno 111] Connection refused | in-container: `s-w------- root root admin.sock` (0200), caddy runs uid=0 | reload --address unix//config/admin.sock exit=0; reload without --address exit=0 (Caddy reads the admin address from the config file); maintenance reload via socket -> 503 {\"ok\":false} Retry-After 120 | docker restart then reload via socket exit=0 | sibling mounting caddy_config as uid 10001: socket connect -> 13 Permission denied; as uid 0: HTTP/1.1 200 OK | teardown: 0 containers, 0 volumes"
+        },
+        {
+          "cmd": "pytest -s tests/i/test_confirm_secrets.py (scratch-only file): S3 under os.umask(0) via the Host harness; S2 through the real connect against infrx-confirm-i2b-secrets-postgres (pinned supabase/postgres on 127.0.0.1:55917) and offline DSNs, plan and apply",
+          "exit": 0,
+          "tail": "MODES {'infrx': '0o700', '<UTC>-<sha>': '0o700', 'files.tar': '0o600', 'absent': '0o666'} | TAR MEMBERS {'etc/marlin2b-gateway.env': '0o600', ...} | REFUSED exit 2, backups == [b1] | RESTORED ENV MODE 0o600 | bad host / bad password / bad dbname / tls verify-full / verify-ca+missing root cert / malformed ipv6 / malformed percent / bad port / keyword form / unknown param: plan and apply each exit=2 `MIGRATE_DATABASE_URL: the connection failed (OperationalError|ProgrammingError); the value is not echoed`, MARKER never in output | 11 passed in 5.06s"
+        },
+        {
+          "cmd": "drills/s4.sh: verify-external.sh with a stub curl recording /proc/self/cmdline, /proc/self/environ, the header file's mode and content; SIGTERM mid-run",
+          "exit": 0,
+          "tail": "exit=12 (fake 200s) | MARKER in script output: 0 | curl argv lines with MARKER: 0 | HDRFILE mode=0o600 uid=1000 content=Bearer <key> (x3 keys + the made-up key) | ENV-HAS-MARKER True (curl inherits the exported keys; /proc/<pid>/environ is owner-only) | header file after exit: no | SIGTERM: script exit 143, file removed | mktemp under umask 000: 600 | /tmp/infrx-verify.body left by the killed run: YES"
+        },
+        {
+          "cmd": ".venv/bin/python tests/i/mutants.py <14 lens mutants> (scratch, detached)",
+          "exit": 0,
+          "tail": "[killed] inventory_prints_values: 1 failed, 5 deselected | [killed] readme_inline_env_value | 14/14 killed"
+        },
+        {
+          "cmd": "ownmut.py in a second archive copy (9 own mutants, edit/run/restore) and drills/s5.sh (7 canary probes)",
+          "exit": 0,
+          "tail": "refused_install_rm_all_backups SURVIVED; gateway_mounts_caddy_config killed; worker_mounts_caddy_data killed; admin_socket_world_writable killed; connect_refusal_echoes_failure killed; hdr_file_kept_after_exit SURVIVED; hdr_file_world_readable SURVIVED; backup_absent_before_chmod killed; rollback_reload_default_admin killed | S5: M-a killed, M-b SURVIVED, M-c killed, M-d killed, M-e killed, M-f SURVIVED, M-g killed"
+        },
+        {
+          "cmd": "docker volume ls -q --filter name=infrx-confirm-i2b-secrets- (with -v1 and -sub-v2 created) / --filter 'name=^infrx-confirm-i2b-secrets-v'",
+          "exit": 0,
+          "tail": "substring: infrx-confirm-i2b-secrets-sub-v2, infrx-confirm-i2b-secrets-v1 | anchored: infrx-confirm-i2b-secrets-v1"
+        },
+        {
+          "cmd": "REHEARSAL_NS=infrx-confirm-i2b-secrets bash apps/infrx-api/deploy/rehearse.sh <logs>/rehearsal (scratch committed as a throwaway git repo; detached; planted other-namespace container + 2 volumes)",
+          "exit": 0,
+          "tail": "first attempt exit=2 (my logs dirtied the scratch tree), second exit=125 (my S2 postgres shared the rehearsal's $NS-postgres name - my collision), third: PASS=43 FAIL=0, `REHEARSAL PASSED`, `teardown: LEFT: 9c04c9c08de0` (the foreign container, untouched); after each teardown the two planted other-* volumes were gone; MARKER count in the log 0"
+        },
+        {
+          "cmd": "grep -rn 'set -x|printenv|declare -p|DETAIL|CONTEXT' apps/infrx-api/deploy infra/rollout; grep units for -v/--env-file; grep W3 serve.sh (codex-w3 d80c04d) for -e/-p/--max-num-seqs",
+          "exit": 0,
+          "tail": "no set -x / env dump in any script; migrate.py prints exception type names only; only Caddy mounts caddy_data/caddy_config; W3 serve.sh: `-p 127.0.0.1:$PORT:8000`, only `-e VLLM_LOGGING_LEVEL`, refuses `--max-num-seqs*` on argv, validates ENGINE_MAX_NUM_SEQS as a positive int"
+        },
+        {
+          "cmd": "git status --porcelain in codex-i2b and infrx-impl (before and after)",
+          "exit": 0,
+          "tail": "0 / 0"
+        }
+      ],
+      "fabrication_check": "Verified against the evidence's claims. S1 closed: both Caddyfiles set `admin unix//config/admin.sock`; on the pinned Caddy the socket is created 0200 root-owned in the caddy_config volume; from a sibling uid-10001 container in the shared loopback :2019 is ECONNREFUSED (not 404) and POST /load is refused; `caddy validate` runs with --network none and no /config mount; `caddy reload --address unix//config/admin.sock` works, also after a `docker restart` (stale socket file); no unit mounts caddy_config or caddy_data (units' -v lines: usage dir and PROCESSING_CACHE_DIR only; test pins 'no caddy in any -v'). Residual, stated precisely against infra/README \u00a75.2: a container that mounts caddy_config reaches the socket only as root (uid 10001 mount -> EACCES on the 0200 socket); host root reaches it at /var/lib/docker/volumes/caddy_config/_data/admin.sock and via docker exec; all root-equivalent, as \u00a75.2 says; the TLS store (caddy_data) is mounted nowhere else. One inaccuracy in the evidence's framing, not a defect: 'every reload names it' is a documentation pin - Caddy's reload without --address exits 0 too because it reads the admin address from the config it loads, so `reload_on_default_admin` dies by string comparison, not behaviour. S2 closed: all ten failure paths (bad host, password, dbname, TLS verify-full, verify-ca with a missing root cert, two parser failures, bad port, keyword DSN, unknown param) print the variable and the exception type only, plan and apply, exit 2; the mutant is killed by a real-connect case. S3 closed: 0700/0700/0600 under umask 000, tar member env 0600 and restored 0600, a refused run removes its own backup and keeps the earlier one; but 'only its own' has no killing case (C-S3). S4 closed: keys reach curl only through a 0600 mktemp file (created 0600 before printf writes it; removed on exit and on SIGTERM); never in argv; the keys remain in curl's inherited environment (owner-only /proc, inherent to the runbook's `export`); mode and removal are untested (C-S4); a killed run leaves /tmp/infrx-verify.body (C-S6, pre-existing). S5 closed for printed values and inline `-e NAME=value`; a bare unshaped literal assignment survives (C-S5). Rehearsal reproduced under REHEARSAL_NS: 43/0 as the evidence states (the R2 order, the socket reloads, the COMMIT-inside-a-migration exit 4, ENGINE_MAX_NUM_SEQS=0 refused, `applied: 0001 init, 0002 seed_models`); the label change is documented in the evidence ('was ai.infrx.i2b.rehearsal=1') and the script header; teardown never touched another namespace's container but does remove another namespace's unused volumes when its name is a prefix (C-S1). FC-1/request 10 checked by reading: W3's serve.sh at d80c04d publishes loopback only, passes a single `-e VLLM_LOGGING_LEVEL`, refuses `--max-num-seqs` on argv and reads ENGINE_MAX_NUM_SEQS, which 50-install.sh now sets to 32 through INFRX_SET. Not verified: nothing ran against the box, AWS or hosted Supabase; the runtime image was built by the rehearsal only; 08 \u00a710 has no R84 (rulings end at R83); the evidence's own two rehearsal runs were not repeated beyond mine. Two of my three rehearsal attempts failed for my own reasons (logs written inside the scratch tree; my Postgres container reused the rehearsal's $NS-postgres name), not the script's.",
+      "cleanup": "Removed: containers infrx-confirm-i2b-secrets-box, -caddy, -postgres, -other-box and every rehearsal container; volumes infrx-confirm-i2b-secrets-caddy_data/-caddy_config/-v1/-sub-v2/-other-*; the rehearsal's network; the image tag infrx-confirm-i2b-secrets-runtime:<sha> (docker ps -a / volume ls / network ls / images filtered on infrx-confirm-i2b-secrets: 0/0/0/0); /tmp/infrx-verify.body; the scratch trees /tmp/claude-1000/confirm-i2b-secrets-2136878, -mut and -logs including both .venv copies, the throwaway git repo, drill scripts, the scratch test file tests/i/test_confirm_secrets.py (existed only in the scratch) and all logs. Untouched: other sessions' containers and images (e.g. infrx-confirm-i2b-rollout-runtime), the pilot box, AWS, hosted projects; no file in any worktree was edited or committed (git status --porcelain: 0 lines in codex-i2b and infrx-impl, before and after)."
+    }
+  ]
+}

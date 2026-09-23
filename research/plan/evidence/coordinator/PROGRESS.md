@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:33:18Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:35:19Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
 
@@ -69,7 +69,7 @@ Generated 2026-09-23T03:33:18Z from `tasks.json` (manifest v4) and `progress-sta
 - D2: codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — round 3 (RV2-1 membership/claim race) after re-confirmation of d8a3e84 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — fold-in done at 4fc1081; writing measured box values (inventory/capability); merge with I2B after its confirmation since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
-- I2B: codex-i2b / codex/i2b-deployment — confirmation review of fix round at 0653c8a; merge with/after W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
+- I2B: codex-i2b / codex/i2b-deployment — round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation PASS at 1ba884b; nonblocking fold-in then merge since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2's head after review of b4b1ec7 since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 

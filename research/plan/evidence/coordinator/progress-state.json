@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:33:18Z",
+  "updated": "2026-09-23T03:35:19Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "I2B": {
       "lane": "codex-i2b / codex/i2b-deployment",
-      "phase": "confirmation review of fix round at 0653c8a; merge with/after W3",
+      "phase": "round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a",
       "since": "2026-09-22T22:37:58Z",
       "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
     },
