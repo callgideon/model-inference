@@ -20,7 +20,8 @@ from . import support
 ROLLOUT = support.REPO / "infra" / "rollout"
 STEPS = sorted((ROLLOUT / "steps").glob("*.sh"))
 SECRET_SHAPES = (r"postgres(?:ql)?://[^:@\s/]+:[^@\s]+@", r"eyJ[A-Za-z0-9_-]{16,}",
-                 r"AKIA[0-9A-Z]{16}", r"--value\s+(?!file://)\S")
+                 r"AKIA[0-9A-Z]{16}", r"--value\s+(?!file://)\S",
+                 r"-e\s+[A-Z_]+=\S")         # docker -e passes names; a value there is inline
 
 FAKE_AWS = '''#!{python}
 import json, pathlib, sys
@@ -182,3 +183,29 @@ def test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line(tmp_
     assert support.MARKER not in done.stdout + done.stderr
     for key in keys.values():
         assert f"HEADER FILE Authorization: Bearer {key}\n" in log, key
+
+
+BOX_BINARIES = ("hostname", "uptime", "df", "docker", "git", "systemctl", "ss", "curl")
+
+
+def test_backend_deploy__the_read_only_steps_print_names_never_values(tmp_path):
+    """10-inventory and 60-verify-local are the steps that read the env file, and their
+    output lands in SSM and the coordinator's record: run with a canary env file (every
+    box binary a silent success), each prints the file's names and never a value."""
+    canary = f"{support.MARKER}-canary"
+    env_file = tmp_path / "marlin2b-gateway.env"
+    env_file.write_text(f"INFRX_MODE=pilot\nDATABASE_URL=postgresql://infrx:{canary}@db/x\n"
+                        f"SUPABASE_SERVICE_ROLE_KEY={canary}\n")
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    for name in BOX_BINARIES:
+        (stub / name).write_text("#!/usr/bin/env bash\nexit 0\n")
+        (stub / name).chmod(0o755)
+    for step in ("10-inventory.sh", "60-verify-local.sh"):
+        text = (ROLLOUT / "steps" / step).read_text().replace("/etc/marlin2b-gateway.env",
+                                                              str(env_file))
+        done = subprocess.run(["bash", "-c", text], capture_output=True, text=True,
+                              env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}"})
+        assert done.returncode == 0, (step, done.stderr)
+        assert "DATABASE_URL" in done.stdout and "SUPABASE_SERVICE_ROLE_KEY" in done.stdout, step
+        assert support.MARKER not in done.stdout + done.stderr, step
