@@ -923,6 +923,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '    (lambda *a, **k: None)("G2-R1", why="the sync/SSE relay that sees the disconnect',
            "tests/integration/backend/test_stage.py", "held_cutover",
            cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm52", "E3B2 round 3 (HON-6): an INTEGRATED task is stale too, not only implemented",
+           "tests/integration/run.py",
+           '                  if tasks.get(task) in ("implemented", "integrated")\n',
+           '                  if tasks.get(task) in ("implemented",)\n',
+           "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
+           cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
 )
 
 

@@ -145,13 +145,16 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeyp
 
 def test_a_pending_id_naming_a_merged_task_fails_the_stage():
     """Review H2: whatever vocabulary a `PENDING[..]` skip came through, an id tasks.json
-    marks implemented/integrated that is not a named RESIDUAL fails the stage (D1R merged
-    and is no residual); a RESIDUAL id still counts as pending."""
+    marks implemented OR integrated fails the stage (D1R is implemented, D1 integrated). A
+    RESIDUAL id is excused only in I3B's recovery cases (R3-1, cd8099b; the held-cutover case
+    pins that half); an owner reference is no task and never stale."""
     cases = run.classify(XML % '<testcase classname="x" name="stale"><skipped '
-                               'message="PENDING[D1R] a merged task"/></testcase>')
-    assert run.stale_pending(cases) == ["D1R"]
+                               'message="PENDING[D1R] a merged task"/></testcase>'
+                               '<testcase classname="x" name="old"><skipped '
+                               'message="PENDING[D1] an integrated task"/></testcase>')
+    assert run.stale_pending(cases) == ["D1", "D1R"]
     status, summary = run.backend_summary(cases, 0)
-    assert (status, summary["stale_pending"]) == (run.FAIL, ["D1R"])
+    assert (status, summary["stale_pending"]) == (run.FAIL, ["D1", "D1R"])
     # An owner reference (I3B's recoverykit.OWNERS) is no task: pending, never stale.
     owner = run.classify(XML % '<testcase classname="x" name="rc08b"><skipped '
                                'message="PENDING[I2B-R4] no worker entry point"/></testcase>')
