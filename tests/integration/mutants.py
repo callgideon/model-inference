@@ -1054,6 +1054,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_journey.py",
            "backend_journey and text and sync and not resume", layer=2,
            cases=("test_backend_journey[text-sync]",)),
+    Mutant("e3bm72", "E3B3 review H-B1: while the stack is up the make targets run M1-L2's S3 "
+                     "cases on its MinIO",
+           "tests/integration/run.py",
+           "        env.update(INFRX_M_S3_ENDPOINT=harness.s3_endpoint(), "
+           "INFRX_M_S3_LOCAL_CREDS=\"1\")\n",
+           "        pass\n",
+           "tests/integration/test_run.py", "s3_cases_on_this_stacks_minio",
+           cases=("test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio",)),
 )
 
 

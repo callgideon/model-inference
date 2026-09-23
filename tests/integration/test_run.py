@@ -1157,6 +1157,27 @@ def test_the_report_records_the_tree_at_the_start_and_at_the_end(monkeypatch, tm
     assert clean["git_head"] == clean["git_head_end"] == {"sha": head, "dirty": False}
 
 
+def test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio(monkeypatch):
+    """Review H-B1: with the stack up, `make api-test` gets the S3 endpoint and MinIO's local
+    literals, so M1-L2's S3 cases run instead of skipping (an unattributed skip fails the
+    stage); with no stack, only `-rfEs`."""
+    seen = {}
+
+    def fake_shell(argv, **kw):
+        seen[argv[-1]] = kw.get("env")
+        return {"argv": " ".join(argv), "exit": 0, "counts": {"passed": 5}, "skips": [],
+                "seconds": 1.0, "tail": ""}
+    monkeypatch.setattr(runner, "shell", fake_shell)
+    monkeypatch.setattr(harness, "load_state", lambda: {"seed": 1})
+    runner.suites(runner.Report(), own_only=False)
+    assert seen["api-test"] == {"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS,
+                                "INFRX_M_S3_ENDPOINT": harness.s3_endpoint(),
+                                "INFRX_M_S3_LOCAL_CREDS": "1"}, seen
+    monkeypatch.setattr(harness, "load_state", lambda: None)
+    runner.suites(runner.Report(), own_only=False)
+    assert seen["api-test"] == {"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS}, seen
+
+
 def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
     known, attributed set fails the stage - a skip is never a pass."""
