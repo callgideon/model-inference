@@ -145,10 +145,10 @@ One behaviour change touches a 0001 table. `public.org_members` gains the trigge
 >
 > - anonymises the profile to `retired+<uuid>@invalid`, with name and avatar null;
 > - revokes every key whose individual is the user (`coalesce(user_id, created_by)`);
-> - renames each personal org the user alone owns to `retired` and suspends it (audited `admin_set_suspension`, code `operator_request`);
+> - renames every organization the user created and alone owns (not only the personal one) to `retired` and suspends it (audited `admin_set_suspension`, code `operator_request`) *(restated in review round 3, RV2-2)*;
 > - freezes the wallet: no new CREDIT hold and no signup grant. In-flight settlement and D5 compensating entries still land.
 >
-> An organization the user created but shares with another member is neither renamed nor suspended. *(Added in review round 2, RM-1/RM-3.)* The signup-time R72 scope is every organization the individual created (`organizations.created_by`). An organization with a NULL `created_by` is outside that scope, and no product path creates one: 0001's `handle_new_user` is the only insert and always sets it.
+> An organization the user created but shares with another member is neither renamed nor suspended, and neither is one they solely own but did not create *(RV2-2, round 3)*. *(Added in review round 2, RM-1/RM-3.)* The signup-time R72 scope is every organization the individual created (`organizations.created_by`). An organization with a NULL `created_by` is outside that scope, and no product path creates one: 0001's `handle_new_user` is the only insert and always sets it.
 >
 > The ledger, entitlement and identity claim are retained as money history. Eligibility is one grant per individual UUID **and** per verified address: sha256 of the lower-cased, trimmed email, stored as a digest only. The digest is retained after retirement, so delete + re-create with the same address is `identity_reused`, never a second grant.
 >
@@ -315,8 +315,47 @@ Requests 1–10 above still stand. Changes in this round:
 - **8:** now carries the SEC-R3 revocation-lag line (input needed from D2/P-05).
 - **9:** R-A1 is to be recorded as **R85**.
 
+## Review round 3 (re-confirmation fix_required at `d8a3e84`), head `d653e7c`
+
+The re-confirmation (`research/plan/evidence/a/A1-confirm-d8a3e84.json` on `claude/backend-impl`) closed RM-1…RM-5 and SEC-R1…SEC-R4. It raised one new blocking item, RV2-1, and one nonblocking item, RV2-2. Its nonblocking list has no other entries. There is one commit per item; the last code commit is `d653e7c` (the header note).
+
+| Item | Commit | Change | Killing test / mutant (plain and supabase give the same detail) |
+|---|---|---|---|
+| **RV2-1** (blocking) | `5205780` | The reviewer's verified two-line fix. `personal_org_binding_guard` takes `for share` on the organization row(s) before its wallet check. `claim_signup_grant` takes `for no key update` on the organizations the individual created, immediately before `grant_signup_credit`. `check_binding` gains a two-order race through `_behind`. **Claim first:** A holds the claim open and B inserts a member into the org → B waits, then gets `23514` frozen, and the org keeps 1 member. **Member first:** A holds the member insert open and B claims → B waits, then answers `rollout_hold` with no wallet. | `test_binding__…`. Mutant `a1_binding_guard_unlocked` (drops the guard's `for share`) is killed: `a member joined a personal org while the claim bound it: {…, 'got': None}`. Mutant `a1_claim_binding_unlocked` (drops the claim's `for no key update`) is killed with the same message. Each lock is needed in both orders, so whichever order runs first kills both mutants; the pristine check asserts both orders. |
+| RV2-2 | `277116c` | The migration comment (at the loop and in the header bullet) and R-A1 now say "every organization the user created and alone owns (not only the personal one); one shared with another member, or solely owned but created by someone else, is left as is". `check_retirement` adds two orgs before `retire(t)`. `solo`, created by t and owned by t alone, ends as `('retired', True)`. `kept`, created by o and owned by t alone, ends as `('kept', False)`. | `test_retirement__…`. Mutant `a1_retirement_ignores_created_by` (`where o.created_by = p_user` → `where true`, the reviewer's `rv2_retire_loop_ignores_created_by`) is killed: `an organization the individual owns but did not create was retired` |
+| header | `d653e7c` | 0015 line 1 now ends `(M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2); applied to no hosted or shared environment (R84).` | — |
+
+Version of 0015 tested (R84): `git rev-parse d653e7c:apps/app/supabase/migrations/0015_signup_eligibility.sql` → `195b62117651cccec3d5f768356dee02c64bc337`.
+
+### Results
+
+UTC, 2026-09-23, in `apps/infrx-api`, at `d653e7c`. Logs are in `/tmp/claude-1000/a1-round3/`. Before the first step could start, the shared port 55432 was held by another run (a full `tests` sweep from the coordinator's scratchpad). The runner retried on HarnessBusy three times, a minute apart, and touched nothing else (`steps.log`: `busy kill_new_plain; retry in 60s` ×3, then started at 03:30:44Z).
+
+| Command | Exit | Tail |
+|---|---|---|
+| `kill()` on the 3 new mutants (plain / `INFRX_D1_IMAGE=supabase`) | 0 / 0 | all 3 `killed` on both images, with the details in the table above |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py` (plain) | 0 | `33 passed in 44.98s` |
+| same, `INFRX_D1_IMAGE=supabase` | 0 | `33 passed in 52.79s` |
+| `INFRX_MUTANTS=all … tests/d/test_migration_mutants.py -k 'a1_ or well_formed'` (plain) | 0 | `35 passed, 194 deselected in 48.00s` |
+| same, `INFRX_D1_IMAGE=supabase` | 0 | `35 passed, 194 deselected in 51.51s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d` (plain, full D suite with every mutant) | 0 | `308 passed in 431.32s (0:07:11)` (03:34–03:41Z) |
+
+Mutant lists, by import: `D total 227 A1 migration 34 A1 code 15 checks 46`. The D list is 227 = 193 D + 34 A1. New this round: `a1_binding_guard_unlocked`, `a1_claim_binding_unlocked` and `a1_retirement_ignores_created_by`. There is no new check, and the test count is unchanged, because the race rides in `check_binding` and the scope cases in `check_retirement`. The full `tests/d` sweep was not rerun on Supabase; the brief asked for plain only, and the A1 slice ran on both images. Cleanup: `docker ps -a | grep -c infrx-d1-postgres` → `0`.
+
+### Limits (round 3)
+
+- The claim now takes, in order, the profile KEY SHARE (RM-2) and then FOR NO KEY UPDATE on every organization the individual created (RV2-1). `retire_individual` takes the profile FOR UPDATE and then the org FOR UPDATE (through `set_suspension`). Both take the profile first, so a claim and a retirement cannot deadlock.
+- Two claims for the same individual lock that individual's created orgs in the same statement's scan order. There is no `order by`, as in the reviewer's verified fix. With several created orgs, an order difference between two concurrent claims could deadlock (40P01, raised rather than answered). The 10×8 race has one created org per individual and never hit it.
+- The guard's FOR SHARE is taken on every `org_members` write, including 0001's `handle_new_user` owner insert. That lock waits only on a claim holding the same org.
+- The earlier limits are unchanged.
+
+### integration_requests
+
+Unchanged from round 2 (requests 1–10 with the round-2 amendments). Adding `a1_binding_guard_unlocked` to the default `ALWAYS` subset is optional (request 2).
+
 ## Verification log
 
 - 2026-09-22: Written by the A1 implementation session at `38aea7f`. Counts are quoted from the sweep logs.
 - 2026-09-23: Review round appended (M-1…M-6, SEC-3…SEC-6, H3, H5). In place, marked: the H5 fixture line, integration request 8 (SEC-6), and R-A1's rename and digest wording (SEC-3/SEC-4). Counts are quoted from the logs at `c4d7fa3`.
 - 2026-09-23: Review round 2 appended (RM-1 blocking; RM-2…RM-5, SEC-R1…SEC-R4). In place, marked: Limits item 3 (RM-2), integration requests 8 (SEC-R3) and 9 (R85), and R-A1's shared-org and created_by-scope lines (RM-1/RM-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round2/*.log` at `ef58367`/`8a26524`.
+- 2026-09-23: Review round 3 appended (RV2-1 blocking, RV2-2). In place, marked: R-A1's retirement-scope bullet and the shared/not-created line (RV2-2). Counts and tails are quoted from `/tmp/claude-1000/a1-round3/*.log` at `d653e7c`.
