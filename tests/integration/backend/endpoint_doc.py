@@ -47,6 +47,38 @@ def code(name: str) -> str:
     return f"`{name}` ({errors.http_status(name)})"
 
 
+# Review V1: the function that builds each route's success answer - so its 2xx is read, not typed.
+SUCCESS_BUILT_BY = {
+    ("POST", "/v1/jobs"): ("infrx.gateway.routes.jobs", "accepted"),
+    ("POST", "/v1/uploads"): ("infrx.gateway.routes.uploads", "create_upload"),
+    ("PUT", "/v1/uploads/{handle}"): ("infrx.gateway.routes.uploads", "put_upload"),
+    ("POST", "/v1/uploads/{handle}/complete"): ("infrx.gateway.routes.uploads", "complete_upload"),
+}
+
+
+def success_function(method: str, path: str):
+    module_name, function = SUCCESS_BUILT_BY[(method, path)]
+    source = Path(importlib.import_module(module_name).__file__).read_text()
+    node = next(node for node in ast.walk(ast.parse(source))
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == function)
+    return source, node
+
+
+def ok(method: str, path: str) -> int:
+    """The 2xx a route answers: the `status_code=` its answer is built with, or Starlette's
+    default 200 when it names none."""
+    _, node = success_function(method, path)
+    codes = {kw.value.value for call in ast.walk(node) if isinstance(call, ast.Call)
+             for kw in call.keywords
+             if kw.arg == "status_code" and isinstance(kw.value, ast.Constant)}
+    (status,) = codes or {200}
+    return status
+
+
+ACCEPTED = ok("POST", "/v1/jobs")
+
+
 def cancel_cause() -> str:
     """The cause DELETE /v1/jobs/{handle} cancels with, read from the jobs module's call."""
     tree = ast.parse(Path(jobs.__file__).read_text())
@@ -66,8 +98,8 @@ DESCRIPTIONS = {
                          "the byte-identical 404 of an unknown path",
     ("GET", "/v1/models"): "the model list (OpenAI shape)",
     ("POST", "/v1/chat/completions"): "chat: JSON by default, SSE with `\"stream\": true`, a "
-                                      "202 job with `Prefer: respond-async`",
-    ("POST", "/v1/jobs"): "an explicit asynchronous job: the chat body, answered 202 "
+                                      f"{ACCEPTED} job with `Prefer: respond-async`",
+    ("POST", "/v1/jobs"): f"an explicit asynchronous job: the chat body, answered {ACCEPTED} "
                           "`JobAccepted` once admission has committed",
     ("GET", "/v1/jobs/{handle}"): "`JobStatus` from the committed row",
     ("GET", "/v1/jobs/{handle}/result"): f"`JobResult`; {code('result_pending')} while it "
@@ -76,9 +108,13 @@ DESCRIPTIONS = {
                                          "an observer that leaves detaches, never cancels",
     ("DELETE", "/v1/jobs/{handle}"): f"cancel (`{cancel_cause()}`), answering the committed "
                                      "outcome",
-    ("POST", "/v1/uploads"): "create an upload from its constraints: 201 `UploadCreated`",
-    ("PUT", "/v1/uploads/{handle}"): "the bytes, to the constrained destination: 204",
-    ("POST", "/v1/uploads/{handle}/complete"): "finalize (no body): 200 `UploadCompleted`; "
+    ("POST", "/v1/uploads"): f"create an upload from its constraints: "
+                             f"{ok('POST', '/v1/uploads')} `UploadCreated`",
+    ("PUT", "/v1/uploads/{handle}"): f"the bytes, to the constrained destination: "
+                                     f"{ok('PUT', '/v1/uploads/{handle}')}",
+    ("POST", "/v1/uploads/{handle}/complete"): f"finalize (no body): "
+                                               f"{ok('POST', '/v1/uploads/{handle}/complete')} "
+                                               "`UploadCompleted`; "
                                                "then send `infrx-upload:<handle>`",
 }
 LIMITS = (("max_request_bytes", "request body, bytes"),
@@ -172,9 +208,9 @@ def examples(model: str) -> list[str]:
         f"curl -sS -N -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1.k2' \\",
         f"     \"$BASE{chat}\" -d '{video}, \"stream\": true}}'",
         "",
-        "# 3. an explicit async job, polled at the 202's Retry-After, then its result",
+        f"# 3. an explicit async job, polled at the {ACCEPTED}'s Retry-After, then its result",
         f"curl -sS -D - -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1.k3' \\",
-        f"     \"$BASE{jobs.JOBS_PATH}\" -d '{video}}}'          # 202 JobAccepted: job_handle",
+        f"     \"$BASE{jobs.JOBS_PATH}\" -d '{video}}}'          # {ACCEPTED} JobAccepted: job_handle",
         "JOB=<job_handle>",
         f"curl -sS -H @.auth \"$BASE{job}\"                     # JobStatus",
         f"curl -sS -H @.auth \"$BASE{job}/result\"              # JobResult "
@@ -188,10 +224,12 @@ def examples(model: str) -> list[str]:
         "",
         "# 5. an owned upload, then the chat request names it",
         f"curl -sS -H @.auth -H 'Content-Type: application/json' \"$BASE{uploads.UPLOADS_PATH}\" \\",
-        "     -d '{\"accepted_mime\": [\"video/mp4\"], \"max_bytes\": 67108864}'   # 201 UploadCreated",
+        "     -d '{\"accepted_mime\": [\"video/mp4\"], \"max_bytes\": 67108864}'   "
+        f"# {ok('POST', uploads.UPLOADS_PATH)} UploadCreated",
         "UPL=<upload_handle>",
         f"curl -sS -X PUT -H @.auth -H 'Content-Type: video/mp4' --data-binary @clip.mp4 \\",
-        f"     \"$BASE{uploads.DESTINATION_PATH.replace('{handle}', '$UPL')}\"   # 204",
+        f"     \"$BASE{uploads.DESTINATION_PATH.replace('{handle}', '$UPL')}\"   "
+        f"# {ok('PUT', uploads.DESTINATION_PATH)}",
         f"curl -sS -X POST -H @.auth \"$BASE{uploads.COMPLETE_PATH.replace('{handle}', '$UPL')}\"",
         "#   then in the chat body: {\"type\": \"video_url\", \"video_url\": "
         f"{{\"url\": \"{validate.UPLOAD_SCHEME}$UPL\"}}}}",
@@ -251,7 +289,7 @@ def render() -> str:
         f"`{wire.HEADER_IDEMPOTENCY_REPLAYED}` header says so); the same key with another "
         "payload or another mode is `409 idempotency_conflict` and writes nothing. A key "
         f"keeps answering for `idempotency_ttl_s` = {DEFAULTS.idempotency_ttl_s:g} s after "
-        f"terminal. A 202 carries `{wire.HEADER_RETRY_AFTER}: {jobs.POLL_AFTER_S}` as the poll hint "
+        f"terminal. A {ACCEPTED} carries `{wire.HEADER_RETRY_AFTER}: {jobs.POLL_AFTER_S}` as the poll hint "
         f"and `{jobs.HEADER_LOCATION}` naming the job. `POST {jobs.JOBS_PATH}` is always async: "
         f"a body with `\"stream\": true` is refused {code('invalid_request')} with `param` "
         "`stream`.",

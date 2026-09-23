@@ -148,3 +148,29 @@ def test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_modules_impl
     assert ("`POST /v1/jobs` is always async: a body with `\"stream\": true` is refused "
             f"`invalid_request` ({errors.http_status('invalid_request')}) with `param` `stream`"
             in " ".join(doc.split()))
+
+
+def test_e4b_every_success_status_the_prose_cites_is_the_one_its_route_answers():
+    """Review V1: the 2xx statuses are read from the function that builds each route's
+    answer (its `status_code=`, or Starlette's default 200), every 2xx the document cites is
+    one of those, at the place that names it, and there is no other."""
+    import ast
+    routes = sorted(endpoint_doc.SUCCESS_BUILT_BY)
+    for route in routes:
+        source, node = endpoint_doc.success_function(*route)
+        segment = ast.get_source_segment(source, node)
+        status = endpoint_doc.ok(*route)
+        assert (f"status_code={status}" in segment) if "status_code=" in segment \
+            else status == 200, (route, status)
+    jobs_ok = endpoint_doc.ok("POST", "/v1/jobs")
+    upload, put, done = (endpoint_doc.ok(*route) for route in (
+        ("POST", "/v1/uploads"), ("PUT", "/v1/uploads/{handle}"),
+        ("POST", "/v1/uploads/{handle}/complete")))
+    doc = " ".join(endpoint_doc.render().split())
+    expected = [f"a {jobs_ok} job with", f"answered {jobs_ok} `JobAccepted`",
+                f"constraints: {upload} `UploadCreated`", f"destination: {put} |",
+                f"(no body): {done} `UploadCompleted`", f"A {jobs_ok} carries",
+                "a stream that already answered 200", f"polled at the {jobs_ok}'s Retry-After",
+                f"# {jobs_ok} JobAccepted", f"# {upload} UploadCreated", f"# {put} curl"]
+    assert [snippet for snippet in expected if snippet not in doc] == []
+    assert len(re.findall(r"\b2\d\d\b", doc)) == len(expected)
