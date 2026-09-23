@@ -31,6 +31,7 @@ carries the legacy chat route leaves that route in charge of its path.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -43,6 +44,7 @@ from starlette.routing import Match
 from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
+from ...contracts.records import ExecutionMode
 from ...observe.route import is_direct_loopback
 from . import intake
 from .validate import MAX_OPENERS, MAX_SEPARATORS, Validator, idempotency
@@ -153,7 +155,7 @@ class Ingress:
             body = intake.parse_object(text)
             normalized = await self.validator.normalize(body, auth, request_id,
                                                         request.headers)
-            idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
+            idem = idempotency(auth, request.headers, identity_digest(normalized), CHAT_OPERATION)
             return auth, normalized, idem
         finally:
             # Every exit path, refusals included: a slot that is not released is a slot
@@ -166,6 +168,19 @@ class Ingress:
             # with nothing accounting for it. Stage the payload and drop the reference
             # (M's job) before waiting, or carry the slot through staging.
             large.release()
+
+
+def identity_digest(request) -> str:
+    """R94: what an idempotency key names - the canonical payload AND the execution mode.
+    `stream` is a body field, so the payload digest already tells sync from stream; an async
+    request (`Prefer: respond-async`, `POST /v1/jobs`) folds its mode in. Reusing a key across
+    sync and async is then `idempotency_conflict` at `lookup`/`admit`, before any store write,
+    and a replay always answers in the job's own mode. Sync and stream keep the payload digest
+    itself (their identity is unchanged)."""
+    if request.execution_mode is not ExecutionMode.async_:
+        return request.payload_digest
+    folded = f"{request.payload_digest}\n{request.execution_mode.value}".encode()
+    return "sha256:" + hashlib.sha256(folded).hexdigest()
 
 
 def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:

@@ -353,6 +353,35 @@ def test_api_modes__plain_chat_is_never_a_surprise_202():
     streamed = post(world, CHAT, rs.body(stream=True))
     assert streamed.status == 200 and streamed.data()[-1] == "[DONE]"
 
+def test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on():
+    """R94: an idempotency key names one execution mode. A synchronous retry of an async job's
+    key, whose client would then leave, is 409 `idempotency_conflict`: no wait is attached, and
+    the async job runs on to its own end - one job, one hold. The reverse, an async replay of
+    a synchronous job's key, is 409 too. The same mode still replays (chat with `Prefer`
+    under a `POST /v1/jobs` key)."""
+    world = JobsWorld()
+    assert post(world, key="k-async").status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    leave = asyncio.Event()
+    world.during.append(leave.set)            # were a wait attached, its client would leave
+    sync_retry = post(world, CHAT, key="k-async", leave=leave)
+    assert refusal(sync_retry) == (409, "idempotency_conflict")
+    assert job.state is JobState.running and not job.terminal
+    assert list(world.jobs.jobs) == [job.id] and list(world.jobs.holds) == [job.id]
+    same_mode = post(world, CHAT, key="k-async", headers=PREFER)
+    assert same_mode.status == 202
+    assert same_mode.json()["job_handle"] == job.admission.job_handle
+    rs.run(world.complete(lease))
+    assert job.outcome.cause is TerminalCause.completed
+
+    synchronous = JobsWorld()
+    synchronous.during.append(synchronous.work)
+    assert post(synchronous, CHAT, key="k-sync").status == 200
+    async_replay = post(synchronous, key="k-sync")
+    assert refusal(async_replay) == (409, "idempotency_conflict")
+    assert len(synchronous.jobs.jobs) == 1
+
 # --- item 2: status --------------------------------------------------------------------
 def status(world, handle=None, **kw):
     return get(world, job_path(handle or world.handle()), **kw)
