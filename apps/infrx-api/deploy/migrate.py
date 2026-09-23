@@ -28,7 +28,8 @@ applied. Rules, each a refusal with nothing changed:
 
 Exit codes: 0 done (or nothing pending), 2 refused (nothing changed), 3 a migration
 failed and was rolled back (nothing changed), 4 a migration ended the transaction itself:
-what ran before that point may be committed without its history rows - resolve with D.
+what ran before that point, and the rest of that file, may be committed without history
+rows (a re-apply then fails on the objects it made) - resolve with D.
 """
 from __future__ import annotations
 
@@ -174,7 +175,8 @@ def apply_command(directory: pathlib.Path, expect: str) -> int:
                 conn.rollback()
                 print(f"{version}_{name}.sql ended the transaction (a COMMIT or ROLLBACK "
                       f"inside a migration): what ran before it may be committed without "
-                      f"its history rows; nothing after it ran", file=sys.stderr)
+                      f"its history rows, and statements after the COMMIT in this file ran "
+                      f"too; no later file ran", file=sys.stderr)
                 return PARTIAL
             values = {"version": version, "name": name, "statements": [body.decode()]}
             conn.execute(f"insert into {HISTORY} ({', '.join(insert)}) values "
