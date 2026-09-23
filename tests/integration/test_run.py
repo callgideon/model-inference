@@ -950,7 +950,9 @@ def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
         return run
 
     monkeypatch.setattr(mutants, "BASELINES", {})
-    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")]))
+    # Red both times, so a runner that skipped the baseline verdict would report a KILL here
+    # (and die at the status assertion below, never of an IndexError).
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")] * 2))
     red = mutants.run_one(mutant, stack_available=False)
     assert red["status"] == "baseline-red" and "already red" in red["why"], red
     assert calls == [mutant.occurrences], "the baseline must run on the unmutated copy only"
