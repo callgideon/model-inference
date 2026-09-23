@@ -637,8 +637,10 @@ SERVE = _serve
 
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="controllable fake vLLM for E2")
-    import harness                       # the namespace's port (E2: 55580)
-    parser.add_argument("--port", type=int, default=harness.PORTS["fake_vllm"])
+    # A literal on purpose: W3's mutant runner copies this file WITHOUT the harness, so it may
+    # not import it (E3B phase 2 measured the breakage). Every harness start passes --port
+    # (`harness.PORTS["fake_vllm"]`, which INFRX_E2_NAMESPACE moves); only a hand run uses this.
+    parser.add_argument("--port", type=int, default=55580)
     parser.add_argument("--host", default="127.0.0.1",
                         help="loopback only unless --allow-non-loopback is given")
     parser.add_argument("--allow-non-loopback", action="store_true",
