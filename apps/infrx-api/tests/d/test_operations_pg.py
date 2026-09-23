@@ -261,3 +261,145 @@ def test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a
     identity = run(ops.PgSignup(ops._Db(connect)).verified_user(cc.CONSUMER_2))
     grant, replayed = run(ledger.grant_initial(identity, str(uuid.uuid4()), AT))
     assert (grant.wallet_id, replayed) == (wallet.wallet_id, True), (grant, replayed)
+
+
+# --- item 7: G6B's service on the PostgreSQL adapters (the E3B item-6 path) ---------------
+from infrx.contracts.limits import DEFAULTS  # noqa: E402
+from infrx.operations import service  # noqa: E402
+from infrx.state.catalog import PgCatalogDirectory  # noqa: E402
+from infrx.state.journal import PgStreamStore  # noqa: E402
+
+SERVICE_DB = f"{pgharness.DATABASE}_ops_service"
+R = "support ticket 42"
+
+
+def _operations():
+    """`service.Operations` composed from the PostgreSQL adapters only (the ports G6B's
+    fakes stood in for), on a committed admission-scenario database with a bootstrapped
+    operator key whose secret this test holds."""
+    if "service" not in _state:
+        pgharness.ensure()
+        pgharness.recreate(SERVICE_DB)
+        pgharness.apply(SERVICE_DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+        owner = pgharness.connect(SERVICE_DB)
+        checks_admission.seed_admission(owner)
+        owner.execute("update public.api_keys set revoked_at = infrx.now() "
+                      "where audience = 'operator'")
+        secret = service.new_secret()
+        owner.execute("select infrx.bootstrap_operator_key(%s, 'bootstrap', %s, %s, "
+                      "'ops@test', 'operator bootstrap')",
+                      (b.ORG_B, secret[:service.PREFIX_CHARS], service.hash_key(secret)))
+        owner.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
+                      (cc.CONSUMER_1,))
+        connect = connector(pgharness.dsn(SERVICE_DB))
+        built = service.Operations(
+            identities=ops.PgSignup(ops._Db(connect)), tenants=ops.PgTenantStore(connect),
+            ledger=ops.PgLedger(connect), audit=ops.PgAuditLog(connect),
+            registry=ops.PgRegistry(connect), wallets=ops.PgWalletDirectory(connect),
+            catalog=PgCatalogDirectory(connect), jobs=PgJobStore(connect),
+            accounts=ops.PgAccountView(connect),
+            clock=lambda: datetime.now(timezone.utc))
+        _state["service"] = (owner, connect, built, secret)
+    return _state["service"]
+
+
+def test_api_ops__the_operations_service_runs_on_the_postgres_adapters() -> None:
+    """G6B's operator and tenant sessions end to end on PostgreSQL: the operator key's
+    audience, the A1 grant (replayed), a key revealed once, a tenant's own balance and
+    quote, an audited idempotent adjustment, a suspension that refuses new keys, a
+    revocation that ends the key, a tenant-scoped cancellation, and the 24 h
+    reconciliation - every write audited once under the operator's idempotency key."""
+    owner, connect, ops_, secret = _operations()
+    org = cc.personal_org(owner, cc.CONSUMER_1)
+
+    async def go():
+        op = await ops_.operator(secret)
+        granted = await op.grant_initial(cc.CONSUMER_1, idempotency_key="g1", reason=R)
+        assert granted["replayed"] is True and granted["amount"] == "10000.00000000", granted
+        issued = await op.issue_key(cc.CONSUMER_1, "sweep", idempotency_key="k1", reason=R)
+        assert issued.secret and issued.org_id == org and not issued.replayed
+        again = await op.issue_key(cc.CONSUMER_1, "sweep", idempotency_key="k1", reason=R)
+        assert (again.secret, again.replayed, again.key_id) == (None, True, issued.key_id)
+        tenant = await ops_.tenant(issued.secret)
+        assert (tenant.auth.org_id, tenant.auth.user_id) == (org, cc.CONSUMER_1)
+        before = (await tenant.balance()).available
+        pins, card = await tenant.quote(v2fix.REQUESTED_MODEL)
+        assert card == v2fix.BUILDERS["rate_card_marlin.json"]() and \
+            pins.deployment_revision_id == IDS_PROD, (pins, card)
+        adjusted = await op.adjust(cc.CONSUMER_1, "5.00000000", idempotency_key="a1", reason=R)
+        assert await op.adjust(cc.CONSUMER_1, "5.00000000", idempotency_key="a1",
+                               reason=R) == adjusted
+        assert (await tenant.balance()).available == before + Credit("5.00000000")
+        await op.set_suspension(org, "abuse", idempotency_key="s1", reason=R)
+        with pytest.raises(errors.OrgSuspended):
+            await op.issue_key(cc.CONSUMER_1, "ci", idempotency_key="k2", reason=R)
+        await op.set_suspension(org, None, idempotency_key="s2", reason=R)
+        await op.revoke_key(org, issued.key_id, idempotency_key="r1", reason=R)
+        with pytest.raises(errors.InvalidApiKey):
+            await ops_.tenant(issued.secret)
+        # a tenant-scoped cancellation and the 24 h reconciliation of a CREDIT job
+        store = PgJobStore(connect)
+        world = type("World", (), {"clock": type("C", (), {"now": staticmethod(
+            lambda: owner.execute("select infrx.now()").fetchone()[0])}),
+            "ids": checks_admission._Ids()})()
+        request = checks_admission.credit_request(world, checks_admission.C1_KEY, org)
+        admitted = await store.admit_credit(request, b.idem(request, "cancel-me"))
+        with pytest.raises(errors.NotFound):
+            await op.cancel_job(b.ORG_A, admitted.job_handle, idempotency_key="c0", reason=R)
+        cancelled = await op.cancel_job(org, admitted.job_handle, idempotency_key="c1",
+                                        reason=R)
+        assert (cancelled["state"], cancelled["cause"]) == ("cancelled", "client_cancelled")
+        unknown = checks_admission.credit_request(world, checks_admission.C1_KEY, org)
+        await store.admit_credit(unknown, b.idem(unknown, "unknown"))
+        await store.prepared(await store.claim_preparation(unknown.request_id, "prep"))
+        lease = await store.claim(unknown.request_id, "w")
+        await PgStreamStore(connect).append(lease, b.events("published"))
+        await store.complete_credit(lease, b.outcome(
+            unknown.request_id, world, cause=b.TerminalCause.client_disconnected,
+            state=b.JobState.failed, tokens=None, result_ref=None))
+        with pytest.raises(errors.StateConflict):
+            await op.reconcile(org, unknown.request_id, idempotency_key="rc0", reason=R)
+        owner.execute("select infrx_test.advance(%s)", (DEFAULTS.unknown_usage_reconcile_s,))
+        with pytest.raises(errors.NotFound):
+            await op.reconcile(b.ORG_A, unknown.request_id, idempotency_key="rc1", reason=R)
+        result = await op.reconcile(org, unknown.request_id, idempotency_key="rc2", reason=R)
+        assert result["settlement"] == "released_platform_absorbed", result
+    run(go())
+    audits = owner.execute("select idempotency_key, count(*) from infrx.audit_entries where "
+                           "idempotency_key in ('g1', 'k1', 'a1', 's1', 's2', 'r1', 'c1', "
+                           "'rc2') group by 1 order by 1").fetchall()
+    assert audits == [(k, 1) for k in sorted(("g1", "k1", "a1", "s1", "s2", "r1", "c1",
+                                              "rc2"))], audits
+
+
+IDS_PROD = v2fix.IDS.prod_deployment
+
+
+def test_api_ops__a_partial_publication_is_unreachable_and_rerunnable() -> None:
+    """G6B request 7 on the real registry: `service.publish` puts serving, deployment and
+    card, THEN moves the alias - so a card refused by the registry (`Conflict`: a different
+    card under an existing version) leaves the written rows unreachable (the label does
+    not resolve) and no audit row, and re-running with a good card completes it and
+    reaches it."""
+    owner, _connect, ops_, secret = _operations()
+    label = "d5-partial"
+    serving, deployment, card = _release(label)
+    clash = card.model_copy(update={"rate_card_version": v2fix.RATE_CARD_VERSION})
+    model = f"{v2fix.PUBLIC_MODEL_ID}@{label}"
+    catalog = PgCatalogDirectory(connector(pgharness.dsn(SERVICE_DB)))
+
+    async def go():
+        op = await ops_.operator(secret)
+        with pytest.raises(errors.Conflict):
+            await op.publish(serving, deployment, clash, model, idempotency_key="p1",
+                             reason=R)
+        assert await catalog.resolve(model, audience=CredentialAudience.consumer,
+                                     endpoint_id=None) is None, "a partial publication resolves"
+        assert await ops_.audit.by_idempotency_key("p1") is None
+        done = await op.publish(serving, deployment, card, model, idempotency_key="p1",
+                                reason=R)
+        assert done["written"] == [False, False, True], done
+        found = await catalog.resolve(model, audience=CredentialAudience.consumer,
+                                      endpoint_id=None)
+        assert found == deployment, found
+    run(go())

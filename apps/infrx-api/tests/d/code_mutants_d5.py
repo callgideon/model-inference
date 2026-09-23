@@ -19,7 +19,16 @@ from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 
 J = "state/jobstore.py"
-RUNNER = Runner(name="d5", targets=("tests/d/test_settle_units.py",))
+O = "state/operations.py"
+C = "state/catalog.py"
+RUNNER = Runner(name="d5", targets=("tests/d/test_settle_units.py",
+                                    "tests/d/test_operations_units.py"))
+TENANT = "test_tenant_store__binds_the_organization_and_reads_a_replay_as_one"
+REVOKE = "test_tenant_store__revocation_keeps_the_first_instant_and_suspension_sends_the_code"
+AUDIT = "test_audit_log__looks_up_by_its_own_key"
+ACCOUNT = "test_account_view__each_row_keeps_its_unit_and_holds_are_credit_only"
+LEDGER = "test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry"
+CATALOG = "test_catalog__a_private_deployment_only_for_its_provider_and_errors_raised"
 SENDS = "test_complete__sends_the_proposal_the_regime_and_the_stores_ttls"
 REFUSAL = "test_complete__a_committed_refusal_is_raised_as_its_type"
 SETTLEMENT = "test_complete_credit__a_settlement_exactly_when_settled_at_the_recorded_charge"
@@ -86,6 +95,47 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("released_never_cleared", "each sweep reports its own releases",
        "        self.released = tuple(released)", "        self.released += tuple(released)",
        RELEASED),
+    # --- item 7: the operator adapters -------------------------------------------------
+    _m("key_lookup_ignores_org", "a key is read only within its own organization",
+       '_KEY + "id = %s and org_id = %s", (key_id, org_id))', '_KEY + "id = %s", (key_id,))',
+       TENANT, file=O),
+    _m("insert_key_duplicates", "a replayed key insert writes nothing",
+       ' on conflict (id) do nothing returning id",', ' returning id",', TENANT, file=O),
+    _m("insert_key_reports_every_call_written", "a replay is reported as a replay",
+       "        return written is not None", "        return True", TENANT, file=O),
+    _m("revoke_rewrites_revoked_at", "a revocation keeps its first instant",
+       '"update public.api_keys set revoked_at = coalesce(revoked_at, infrx.now()) "',
+       '"update public.api_keys set revoked_at = infrx.now() "', REVOKE, file=O),
+    _m("suspension_lift_suspends", "lifting sends suspended = false",
+       "            (org_id, reason is not None, reason,", "            (org_id, True, reason,",
+       REVOKE, file=O),
+    _m("audit_lookup_by_any_key", "an audit row answers only its own idempotency key",
+       '"infrx.audit_by_idempotency_key(%s)", (key,))',
+       '"infrx.audit_by_idempotency_key(%s)", ("",))', AUDIT, file=O),
+    _m("usage_totals_merge_units", "R73: each usage row keeps its own unit",
+       "        request_id=str(request_id), org_id=str(org_id), accounting_regime=regime, "
+       "unit=unit,", "        request_id=str(request_id), org_id=str(org_id), "
+       "accounting_regime=regime, unit=\"CREDIT\",", ACCOUNT, file=O),
+    _m("holds_read_usd_as_credit", "a USD hold is never read as a CREDIT hold",
+       '"select request_id, state, amount from infrx.active_holds(%s) "\n'
+       '            "where accounting_regime = \'credit\'"',
+       '"select request_id, state, amount from infrx.active_holds(%s) "', ACCOUNT, file=O),
+    _m("adjust_allocates", "an adjustment is an operator_adjustment",
+       '"wallet_id": wallet.wallet_id, "kind": "operator_adjustment",',
+       '"wallet_id": wallet.wallet_id, "kind": "operator_allocation",', LEDGER, file=O),
+    # --- item 8: the catalog -----------------------------------------------------------
+    _m("private_visible_to_consumer", "a private deployment only for its provider_dev key",
+       "        if row is None and audience is CredentialAudience.provider_dev and endpoint_id:",
+       "        if row is None and endpoint_id:", CATALOG, file=C),
+    _m("card_not_effective_checked", "a card is active only once effective (DB clock)",
+       "  where deployment_revision_id = %s and effective_at <= infrx.now()",
+       "  where deployment_revision_id = %s", CATALOG, file=C),
+    _m("errors_become_none", "a database error is raised, never answered as None",
+       "                return await (await conn.execute(sql, params)).fetchall()\n"
+       "            except Error as failed:\n                raise _typed(failed) from None",
+       "                return await (await conn.execute(sql, params)).fetchall()\n"
+       "            except Error as failed:\n                return []",
+       CATALOG, file=O),
 )
 
 
