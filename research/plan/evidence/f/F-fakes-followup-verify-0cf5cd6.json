@@ -1,0 +1,235 @@
+{
+ "verdict": "pass",
+ "head": "0cf5cd6",
+ "reviews": [
+  {
+   "verdict_hint": "pass",
+   "findings": [
+    {
+     "id": "V1",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+     "line": "3041-3047 (dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark, second job)",
+     "claim_broken": "P3 says a terminal event takes the NEWEST chunk's TTL, and the mutant terminal_ttl_ignores_the_newest_chunk claims to pin that. The second job has only one chunk and no clock advance before the cancel, so the case cannot distinguish 'newest' from 'oldest', 'longest-lived' or 'remaining lifetime'. The code is correct: 0017 orders by generation desc, sequence desc, and the fake's stored[-1] is in cursor order. The probe shows fake and PostgreSQL agree on every scenario tried.",
+     "evidence": "On the fake, these verifier mutants SURVIVE the named case and all of tests/contracts (1051 passed; the only failures were the 3 environmental test_v1_projection_pg tests): v_ttl_from_oldest_chunk (stored[0]), v_ttl_longest_lived_chunk (max TTL), v_ttl_is_remaining_time (stored[-1].expires_at - now). Each would diverge from PostgreSQL in a reachable flow. Probe S2 (chunk at TTL 30, retune to 600, chunk at TTL 600, cancel) gives fake=pg=[(delta,1,1,30),(delta,1,2,600),(terminal,1,3,600)]; the oldest-chunk mutant would give 30. Probe S5 (chunk at TTL 30, +10 s, cancel) gives fake=pg terminal TTL 30; the remaining-time mutant would give 20.",
+     "minimal_fix": "In the second job, give the chunks distinct TTLs and advance the clock before the cancel. For example: retune to 600 and append; retune to 100 and append; retune to 5; advance 10 s; cancel. Then assert the TTLs are [30?, 600, 100, 100], with the terminal event at 100. Declare the oldest-chunk and remaining-time mutants against the case."
+    },
+    {
+     "id": "V2",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+     "line": "3175-3177 (comment in dur_output__an_unjournalable_event_refuses_the_whole_batch)",
+     "claim_broken": "The case's comment says 'the fence, which can terminalize a job past its deadline, never runs for a batch that stores nothing'. Only the fence's ANSWER is pinned, not its side effect. The superseded-lease iteration runs on a job that is already terminal, so it answers already_terminal and never stale_lease on a live job.",
+     "evidence": "The verifier mutant v_fence_side_effect_then_refuse runs self.jobs._fence(lease) under the lock, swallows any DomainError and then refuses. It SURVIVES the case and all of tests/contracts. Probe P1 (live lease, clock +10^6 s, NUL batch) gives fake=pg=JournalWriteFailed with the job left non-terminal on both stores; under the mutant the fake would terminalize it. The code is correct today.",
+     "minimal_fix": "Optional. Before the cancel, advance the clock past the lease deadline, append a NUL batch, and assert that get_owned still shows no outcome. Or drop the parenthetical claim from the comment."
+    },
+    {
+     "id": "V3",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+     "line": "1448-1450 (write_terminal chunkless TTL)",
+     "claim_broken": "The case pins the chunkless terminal TTL only under a store TTL of 30 s, below the 3600 constant. A fake whose chunkless TTL is max(3600, store TTL) passes, but it would diverge from 0017's frozen 3600 under any store TTL above 3600.",
+     "evidence": "The verifier mutant v_chunkless_ttl_at_least_store SURVIVES the named case and all of tests/contracts. With store TTL 7200 it would give fake 7200 against pg 3600. Nothing in the tree configures a TTL above 3600 today.",
+     "minimal_fix": "Optional. Add one chunkless-terminal assertion under a store TTL above 3600 (for example a job that never appended, at journal_chunk_ttl_s=7200), expecting 3600."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "refuse_after_fence (lane, declared)",
+     "edit": "fake append: the journalable check becomes `if self.jobs._fence(lease) and not all(...)`",
+     "result": "anchor count 1; killed: jobs.py:3185 AssertionError: an unjournalable batch was fenced first: already_terminal; runner [killed]",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "expired_by_key_presence (lane, declared)",
+     "edit": "_expired: `job_id not in self.chunks` instead of `not self.chunks.get(job_id)`",
+     "result": "anchor count 1; killed: jobs.py:3013 AssertionError: an empty batch revived a journal pruned to nothing: replay_gap; runner [killed]",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "chunkless_terminal_ttl_from_the_store (lane, declared)",
+     "edit": "write_terminal: the chunkless TTL is self.limits.journal_chunk_ttl_s",
+     "result": "anchor count 1; killed: jobs.py:3039 AssertionError: a chunkless terminal event lives 0:00:30; runner [killed]",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "terminal_ttl_ignores_the_newest_chunk (lane, declared)",
+     "edit": "write_terminal: the TTL with chunks is the store's current journal_chunk_ttl_s",
+     "result": "anchor count 1; killed: jobs.py:3046 AssertionError: the terminal event did not take the newest chunk's TTL; runner [killed]",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "surrogates_are_journalable (lane, dies_by UnicodeEncodeError)",
+     "edit": "_journalable drops the lone-surrogate clause",
+     "result": "anchor count 1; dies at codec.py:30 with UnicodeEncodeError: 'utf-8' codec can't encode character '\\ud800' in position 13: surrogates not allowed; runner [killed] with dies_by. With dies_by removed, the runner answers [broken_runner] undeclared exception deaths ['UnicodeEncodeError@codec.py'], so the _undeclared gate honours the declaration",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "v_pg_fence_first_via_empty_append (verifier, PostgreSQL)",
+     "edit": "PgStreamStore.append: `PgJobStore._answer(await self._db._call(\"append\", self._append_args(lease, ())))` before the journalable check (the DB fence runs first)",
+     "result": "killed on PostgreSQL: jobs.py:3185 AssertionError: an unjournalable batch was fenced first: already_terminal. The new P1 assertion kills it on the real store",
+     "killed_by": "tests/d/test_streamstore_conformance.py[dur_output__an_unjournalable_event_refuses_the_whole_batch]"
+    },
+    {
+     "name": "v_pg_refuse_after_call (verifier, PostgreSQL)",
+     "edit": "PgStreamStore.append: the journalable check moved after _call",
+     "result": "killed on PostgreSQL by psycopg.errors.UntranslatableCharacter (raw 22P05) on the live-lease loop. With the H1 catch-all removed, the raw error propagates and fails the case",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch (PG)"
+    },
+    {
+     "name": "v_0017_chunkless_ttl_30 (verifier, migration)",
+     "edit": "0017 journal_terminal_event: `v_ttl := interval '30 seconds'` in place of 3600",
+     "result": "killed on PostgreSQL: jobs.py:3039 AssertionError: a chunkless terminal event lives 0:00:30",
+     "killed_by": "tests/d/test_streamstore_conformance.py[dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark]"
+    },
+    {
+     "name": "v_superseded_lease_fenced_first (verifier, fake)",
+     "edit": "fake append: fence first when lease.generation != job.generation",
+     "result": "killed: jobs.py:3185 AssertionError: an unjournalable batch was fenced first: already_terminal (the second iteration)",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "v_expired_ignores_watermark_when_list_empty (verifier, fake)",
+     "edit": "_expired: `job_id not in self.chunks and not self.chunks.get(job_id)`",
+     "result": "killed: jobs.py:3013 AssertionError: an empty batch revived a journal pruned to nothing: replay_gap",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "v_ttl_from_oldest_chunk (verifier, fake)",
+     "edit": "write_terminal: stored[0] in place of stored[-1]",
+     "result": "SURVIVED the named case and all of tests/contracts (1054 passed): finding V1",
+     "killed_by": ""
+    },
+    {
+     "name": "v_ttl_longest_lived_chunk (verifier, fake)",
+     "edit": "write_terminal: max(c.expires_at - c.persisted_at for c in stored)",
+     "result": "SURVIVED the named case and all of tests/contracts (1051 passed; 3 environmental PG projection failures): finding V1",
+     "killed_by": ""
+    },
+    {
+     "name": "v_ttl_is_remaining_time (verifier, fake)",
+     "edit": "write_terminal: stored[-1].expires_at - self.clock.now()",
+     "result": "SURVIVED the named case and all of tests/contracts (1051 passed; 3 environmental PG projection failures): finding V1",
+     "killed_by": ""
+    },
+    {
+     "name": "v_chunkless_ttl_at_least_store (verifier, fake)",
+     "edit": "write_terminal: the chunkless TTL is max(3600, store TTL)",
+     "result": "SURVIVED the named case and all of tests/contracts: finding V3",
+     "killed_by": ""
+    },
+    {
+     "name": "v_fence_side_effect_then_refuse (verifier, fake)",
+     "edit": "fake append: run _fence under the lock, swallow any DomainError, then refuse",
+     "result": "SURVIVED the named case and all of tests/contracts: finding V2",
+     "killed_by": ""
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C codex-ffakes archive 0cf5cd6 | tar -x -C /tmp/claude-1000/verify-ffakes-3221733 && make api-env; pgharness.py patched in the scratch only (INFRX_D_TASK=verify-ffakes -> container infrx-verify-ffakes-postgres, 127.0.0.1:55561, DB infrx_verify_ffakes, lock /tmp/infrx-verify-ffakes.lock)",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes uv run --frozen pytest -q -p no:cacheprovider tests/d/test_streamstore_conformance.py",
+     "exit": 0,
+     "tail": "15 passed, 5 xfailed in 15.35s"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes uv run --frozen pytest -v tests/d/test_streamstore_conformance.py -k 'pruned_to_nothing or unjournalable'",
+     "exit": 0,
+     "tail": "[dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark] PASSED; [dur_output__an_unjournalable_event_refuses_the_whole_batch] PASSED; 2 passed, 18 deselected in 3.61s"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes uv run --frozen pytest -q tests/d/test_journal_units.py -rs (stubbed-DB units; no PostgreSQL needed)",
+     "exit": 0,
+     "tail": "6 passed in 0.34s"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes uv run --frozen pytest -q -p no:cacheprovider tests/d/test_jobstore_conformance.py -rxXs",
+     "exit": 1,
+     "tail": "1 failed, 48 passed, 24 xfailed, 1 xpassed in 39.30s. The single failure is dur_settle__cancel_records_its_cause_and_settles_by_r21: UnsupportedParameter: cause client_disconnected needs migration 0018 (D5). This is P6, which the coordinator owns."
+    },
+    {
+     "cmd": "(base ae0f2a2 archive, same patched harness) INFRX_D_TASK=verify-ffakes pytest tests/d/test_jobstore_conformance.py -k cancel_records_its_cause",
+     "exit": 1,
+     "tail": "1 failed, 72 deselected in 3.40s (the same failure exists at the base, so this lane did not introduce it)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+     "exit": 0,
+     "tail": "1051 passed in 83.62s (0:01:23)"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.contracts.mutants refuse_after_fence expired_by_key_presence chunkless_terminal_ttl_from_the_store terminal_ttl_ignores_the_newest_chunk surrogates_are_journalable",
+     "exit": 0,
+     "tail": "5/5 killed"
+    },
+    {
+     "cmd": "(dies_by removed from surrogates_are_journalable in a separate scratch) python -m tests.contracts.mutants surrogates_are_journalable",
+     "exit": 1,
+     "tail": "[broken_runner] surrogates_are_journalable: undeclared exception deaths ['UnicodeEncodeError@codec.py']; 0/1 killed"
+    },
+    {
+     "cmd": "python -m tests.contracts.mutants --list; grep -n 'dies_by=(' tests/contracts/mutants.py",
+     "exit": 0,
+     "tail": "422 mutants over 214 named cases; 7 declarations (lines 372, 532, 1195, 1284, 1510, 1919, 1925) plus the def and a docstring mention, so the header's 'seven' is correct"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (detached, 16:04:48Z-16:23:49Z)",
+     "exit": 0,
+     "tail": "442 passed in 1141.09s (0:19:01) EXIT=0"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes pytest -q -s tests/d/test_zz_probe.py (verifier probe, fake vs PgStreamStore)",
+     "exit": 0,
+     "tail": "All SAME. S1 prune-to-nothing+cancel from 1-2: [terminal,1,3,3600] on both; expire +31 0/0, +3631 1/1, then JournalExpired on both. S2 30->600: terminal 600/600. S3 600, retune 30: terminal 600/600. S4 never journaled: [terminal,1,1,3600] on both. S5 +10 s: terminal 30/30. S6 600->30: terminal 30/30. P1 NUL on a lease past its deadline and on gen+1: JournalWriteFailed on both, job not terminalized on either; a later ok append gives AlreadyTerminal/failed on both. 2 passed"
+    },
+    {
+     "cmd": "handrun.py own.json / own_full.json (verifier fake mutants; named case, then all of tests/contracts)",
+     "exit": 0,
+     "tail": "v_ttl_from_oldest_chunk 1054 passed; v_ttl_is_remaining_time / v_ttl_longest_lived_chunk / v_chunkless_ttl_at_least_store / v_fence_side_effect_then_refuse 3 failed, 1051 passed. The 3 failures are test_v1_projection_pg on port 55432 held by another checkout, not kills."
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-ffakes handrun.py pg2.json (v_pg_fence_first_via_empty_append); sed 0017 v_ttl 3600->30 + pytest -k pruned_to_nothing",
+     "exit": 0,
+     "tail": "jobs.py:3185 AssertionError: an unjournalable batch was fenced first: already_terminal; jobs.py:3039 AssertionError: a chunkless terminal event lives 0:00:30; sources restored (diff -q clean)"
+    }
+   ],
+   "fabrication_check": "Every tail quoted above is copied from output I ran in this session on scratch archives of 0cf5cd6 (and of ae0f2a2 for the P6 base check). The lane's claims match what I observed. The kill texts of all five named mutants are identical to the evidence table. 1051 contracts matches. 442 passed = 422 declared mutants matches. The dies_by header count of seven is true. journal_units 6 passed (these are stubbed-DB units, so the lane's 'runs without Docker' is accurate). The lane's statement 'NOT run on PostgreSQL' was honest, and the claim it makes from the code holds on the real store. Both exported cases pass on PgStreamStore. The P1 NUL-after-cancel and superseded-lease checks answer JournalWriteFailed. The P2 empty batch returns () and read stays journal_expired. The P3 3600 s and newest-chunk TTLs match. No new PENDING or RAISES entry is needed. PgStreamStore.append is the only caller-payload path: write_terminal is 0017's trigger and finalize_in_transaction takes no payload, and the check precedes _call there. I did not run tests/g, tests/w, code_mutants_d4 or the merge-tree checks; those figures are the lane's own.",
+   "cleanup": "Removed the scratch copies /tmp/claude-1000/verify-ffakes-3221733, -base and -hand, and the lock /tmp/infrx-verify-ffakes.lock. My container infrx-verify-ffakes-postgres was removed by the harness at every exit, and no container now carries a verify-ffakes checkout label. The codex-ffakes worktree is untouched: HEAD 0cf5cd6, status clean. DEVIATION: for my own mutant sweep I ran the whole tests/contracts without --ignore of test_v1_projection_pg and without INFRX_D_TASK, so that module used the default d1 harness on the shared port 55432. The first sweep run (about 16:04-16:06Z) ran those 3 tests on 55432, so it appears to have created, used and removed its own labelled infrx-d1-postgres container there. The later runs found the port held by another checkout's container (infrx-d1-postgres, label confirm-e3b2-gate-3290059, created 16:13:36Z). The harness refused them without altering anything, which gave the 3 environmental failures. I did not touch that container or the shared /tmp/infrx-d1-postgres-55432.lock, and both remain. No network, no AWS, no secrets."
+  }
+ ],
+ "confirmed_blocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "V1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+   "line": "3041-3047 (dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark, second job)",
+   "claim_broken": "P3 says a terminal event takes the NEWEST chunk's TTL, and the mutant terminal_ttl_ignores_the_newest_chunk claims to pin that. The second job has only one chunk and no clock advance before the cancel, so the case cannot distinguish 'newest' from 'oldest', 'longest-lived' or 'remaining lifetime'. The code is correct: 0017 orders by generation desc, sequence desc, and the fake's stored[-1] is in cursor order. The probe shows fake and PostgreSQL agree on every scenario tried.",
+   "evidence": "On the fake, these verifier mutants SURVIVE the named case and all of tests/contracts (1051 passed; the only failures were the 3 environmental test_v1_projection_pg tests): v_ttl_from_oldest_chunk (stored[0]), v_ttl_longest_lived_chunk (max TTL), v_ttl_is_remaining_time (stored[-1].expires_at - now). Each would diverge from PostgreSQL in a reachable flow. Probe S2 (chunk at TTL 30, retune to 600, chunk at TTL 600, cancel) gives fake=pg=[(delta,1,1,30),(delta,1,2,600),(terminal,1,3,600)]; the oldest-chunk mutant would give 30. Probe S5 (chunk at TTL 30, +10 s, cancel) gives fake=pg terminal TTL 30; the remaining-time mutant would give 20.",
+   "minimal_fix": "In the second job, give the chunks distinct TTLs and advance the clock before the cancel. For example: retune to 600 and append; retune to 100 and append; retune to 5; advance 10 s; cancel. Then assert the TTLs are [30?, 600, 100, 100], with the terminal event at 100. Declare the oldest-chunk and remaining-time mutants against the case."
+  },
+  {
+   "id": "V2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+   "line": "3175-3177 (comment in dur_output__an_unjournalable_event_refuses_the_whole_batch)",
+   "claim_broken": "The case's comment says 'the fence, which can terminalize a job past its deadline, never runs for a batch that stores nothing'. Only the fence's ANSWER is pinned, not its side effect. The superseded-lease iteration runs on a job that is already terminal, so it answers already_terminal and never stale_lease on a live job.",
+   "evidence": "The verifier mutant v_fence_side_effect_then_refuse runs self.jobs._fence(lease) under the lock, swallows any DomainError and then refuses. It SURVIVES the case and all of tests/contracts. Probe P1 (live lease, clock +10^6 s, NUL batch) gives fake=pg=JournalWriteFailed with the job left non-terminal on both stores; under the mutant the fake would terminalize it. The code is correct today.",
+   "minimal_fix": "Optional. Before the cancel, advance the clock past the lease deadline, append a NUL batch, and assert that get_owned still shows no outcome. Or drop the parenthetical claim from the comment."
+  },
+  {
+   "id": "V3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "1448-1450 (write_terminal chunkless TTL)",
+   "claim_broken": "The case pins the chunkless terminal TTL only under a store TTL of 30 s, below the 3600 constant. A fake whose chunkless TTL is max(3600, store TTL) passes, but it would diverge from 0017's frozen 3600 under any store TTL above 3600.",
+   "evidence": "The verifier mutant v_chunkless_ttl_at_least_store SURVIVES the named case and all of tests/contracts. With store TTL 7200 it would give fake 7200 against pg 3600. Nothing in the tree configures a TTL above 3600 today.",
+   "minimal_fix": "Optional. Add one chunkless-terminal assertion under a store TTL above 3600 (for example a job that never appended, at journal_chunk_ttl_s=7200), expecting 3600."
+  }
+ ]
+}

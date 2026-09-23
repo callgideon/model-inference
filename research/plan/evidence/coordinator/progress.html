@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T16:05:55Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T16:25:21Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>26</b><span>done</span></div>
 <div class="tile prog"><b>3</b><span>in progress</span></div>
@@ -99,7 +99,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — fix round 2 HANDED BACK b0a64e1 (gate red only on I3B ids; 39 e3bm + all e2m killed); confirmation dispatched → MERGE (IR2-1 one commit; IR2-3 R93 dr04 pin; then I3B follow-up with IR2-2) since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges</li>
 <li><code>I3B-followup</code> — codex-i3bf / codex/i3b-followup — round-2 confirmation at 662c07c fix_required (DRL-1 readiness retry unpinned; restore lens pass; 8 nonblocking) → round 3 dispatched → single verifier → merge after E3B2 since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)</li>
 <li><code>D5</code> — codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items</li>
-<li><code>F-fakes-followup</code> — codex-ffakes / codex/f-fakes-followup — round 2 HANDED BACK 0cf5cd6 (P1/P2 pinned, P3 TTL fixed, H1 dies_by); verifier on PostgreSQL running → merge after G3 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2&#x27;s lookup/_replay; flips D4&#x27;s pinned fake-delta assertion</li>
+<li><code>F-fakes-followup</code> — codex-ffakes / codex/f-fakes-followup — round-2 verifier PASS at 0cf5cd6 → MERGE next (after the G3 merged-tree lists) since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2&#x27;s lookup/_replay; flips D4&#x27;s pinned fake-delta assertion</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
 <li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
@@ -107,7 +107,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>D4</code> — MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z</li>
 <li>review <code>G3</code> — MERGED b560b51 (+ Makefile 31bfd05) after the round-3 confirmation pass at 9133efe; merged-tree checks running (g3-merged-31bfd05.log) since 2026-09-23T16:04:40Z</li>
 <li>review <code>I3B-followup</code> — fix_required at 662c07c (wf_f6e063df-a4a; JSON evidence/i/I3B-followup-confirm-662c07c.json) → round 3 since 2026-09-23T16:04:40Z</li>
-<li>review <code>F-fakes-followup</code> — round-2 verification at 0cf5cd6 running (single Opus parity verifier + refuters) since 2026-09-23T16:02:37Z</li>
+<li>review <code>F-fakes-followup</code> — verifier pass at 0cf5cd6 (wf_4a397730-fd1; JSON evidence/f/F-fakes-followup-verify-0cf5cd6.json) → merge since 2026-09-23T16:25:21Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
