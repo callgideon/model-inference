@@ -394,6 +394,10 @@ MUTANTS += (
                       "detector (pgrestore.drift), and any row it reports fails the drill",
            PGRESTORE, 'f"select * from {view} where ledger_drift <> 0 "',
            'f"select * from {view} where ledger_drift = 0 "', DRILLS, "rc04a", layer=2),
+    Mutant("i3bm116", "DRL-R4-3: the reconcile runbook's drift detector reports a real "
+                      "drift (never a vacuous [])", PGRESTORE,
+           "            found += conn.execute(", "            found += [] and conn.execute(",
+           DRILLS, "rc04a", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),

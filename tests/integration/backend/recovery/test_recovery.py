@@ -259,7 +259,8 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
     after the lease TTL and the next claim is generation 2; the wallet's summary reserves
     exactly the three holds and debits nothing, and it agrees with the ledger and the holds
     themselves (`infrx.wallet_reconciliation`: zero drift, and the runbook's detector finds
-    none). Settling across the loss is rc04b's (terminalize is still D5's stub)."""
+    none - and names ORG_A once a hold is released behind the summary's back). Settling
+    across the loss is rc04b's (terminalize is still D5's stub)."""
     import pgstate
 
     import test_restore as bk
@@ -322,6 +323,13 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
                                   (b.ORG_A,)).fetchone()
         assert drifts == (0, 0, holds), drifts
         assert bk.drift(database) == [], "the reconcile runbook's detector reports drift"
+        # DRL-R4-3: and it does report one - a hold released behind the summary's back (this
+        # scratch database is dropped afterwards)
+        with bk.connect(database) as conn:
+            conn.execute("update infrx.credit_holds set state = 'released' "
+                         "where request_id = %s", (first.request_id,))
+        assert {str(row[0]) for row in bk.drift(database)} == {b.ORG_A}, \
+            "the detector missed a released hold"
 
     with bk.scratch("infrx_i3b_jobs") as (database,):
         with bk.connect(database) as conn:
