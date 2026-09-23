@@ -41,3 +41,13 @@ def test_a_parity_or_manifest_disagreement_fails_the_run():
         if "manifest" in broken:
             row["parity"]["manifest"] = {**good["parity"]["manifest"], **broken["manifest"]}
         assert harness.disagrees(row), broken
+
+
+def test_a_refusal_row_names_its_code_reason_and_message():
+    """Review H3: the tagged early refusal keeps its message in the row."""
+    from infrx.contracts import errors
+
+    refusal = errors.UnsupportedMedia("the video is longer than 120s")
+    refusal.reason = "header"
+    assert harness.outcome(refusal) == "unsupported_media:header:the video is longer than 120s"
+    assert harness.outcome(object()) == "ok"

@@ -265,10 +265,11 @@ def summary(values: list[float], scale: float = 1.0, digits: int = 3) -> dict:
 
 
 def outcome(result) -> str:
-    """`ok`, or `<error code>:<reason class or operator detail>` for a refusal."""
+    """`ok`, or `<error code>:<reason>:<detail>` for a refusal - both, so an early refusal's
+    message can be compared with the whole-object one's in the rows (review H3)."""
     if isinstance(result, Exception):
         return (f"{getattr(result, 'code', type(result).__name__)}:"
-                f"{getattr(result, 'reason', '') or getattr(result, 'detail', '')}")
+                f"{getattr(result, 'reason', '')}:{getattr(result, 'detail', '')}")
     return "ok"
 
 
