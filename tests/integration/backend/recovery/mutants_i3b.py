@@ -185,6 +185,10 @@ MUTANTS += (
     Mutant("i3bm32", "reconcile catches a failed job that keeps its hold", STATE,
            "else SettlementState.released_platform_absorbed)\n            self._release_hold(wallet, hold)",
            "else SettlementState.released_platform_absorbed)\n            pass", DRILLS, "rc05"),
+    Mutant("i3bm34", "D1: reconcile catches a settled debit that is not price snapshot x usage "
+                     "(a consistent overcharge in ledger and outcome alike)", STATE,
+           "                debit = candidate\n", "                debit = candidate + candidate\n",
+           DRILLS, "rc01"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),

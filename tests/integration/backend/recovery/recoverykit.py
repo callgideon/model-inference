@@ -213,7 +213,8 @@ class World:
         * no accepted job is lost: each is still owned by its tenant and is terminal;
         * pins are the ones frozen at acceptance (price snapshot, hold, deadlines, budgets);
         * each terminal job has one usage projection (two once its unknown-usage hold was
-          released), a debit only when settled,
+          released), a debit only when settled and then exactly the frozen price
+          snapshot's debit of the terminal usage,
           and a succeeded job's output comes from exactly one generation (no duplicate
           executable attempt reached the customer);
         * per tenant: ledger = granted - settled debits, reserved = holds still held
@@ -238,6 +239,10 @@ class World:
                 assert projections == 1 + (request_id in self.released), (request_id, projections)
                 if outcome.settlement_state is not SettlementState.settled:
                     assert outcome.debit == 0, (request_id, outcome)
+                else:       # D1: the amount itself - frozen price snapshot x usage
+                    assert outcome.debit == accepted.price_snapshot.debit(
+                        outcome.usage.prompt_tokens, outcome.usage.completion_tokens), \
+                        (request_id, outcome.debit)
                 if outcome.settlement_state is SettlementState.held_unknown:
                     reserved += accepted.maximum_hold
                     held += 1
