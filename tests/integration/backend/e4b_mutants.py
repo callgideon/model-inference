@@ -108,6 +108,7 @@ SOAK = "test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samp
 OVERLOAD = "test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx"
 SCRAPE = "test_e4b_scrape_reads_the_series_the_soak_judges"
 CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge"
+CRASH = "test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
 ROUTES = "test_e4b_every_mounted_route_has_one_description_and_every_description_a_route"
@@ -286,6 +287,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("soak_at_the_full_rate", "the box soak runs at the declared fraction of the envelope",
        'rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)',
        'rate = soak.get("rate") or supported', CELLS),
+    _m("crashed_client_accepted", "a client run that did not finish cleanly fails its cell",
+       '"client_exit", decide.PASS if code == 0 else decide.FAIL', '"client_exit", decide.PASS',
+       CLIMB, CELLS),
+    _m("settlement_not_awaited", "a debit that lands after the answer is waited for",
+       "        if not problems or time.monotonic() >= end:", "        if True:", DATASET),
+    _m("runner_error_escapes", "an unexpected error is recorded and the report still written",
+       "        except Exception as crashed:", "        except KeyboardInterrupt as crashed:",
+       CRASH),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

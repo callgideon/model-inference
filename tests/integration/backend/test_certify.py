@@ -311,8 +311,14 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
     assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]["detail"]
     views = iter([(BEFORE, [], []), (AFTER, USAGE[1:], HOLDS)])
-    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
+    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views),
+                          settle_wait_s=0)
     assert report.stages[-1]["status"] == certify.FAIL
+    # a debit that lands after the answer is waited for (bounded), not failed on sight
+    monkeypatch.setattr(certify.time, "sleep", lambda s: None)
+    views = iter([(BEFORE, [], []), (BEFORE, [], HOLDS), (AFTER, USAGE, HOLDS)])
+    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
+    assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]["detail"]
     # the client half fails on its own: a run the signal never interrupted, a resume that
     # did not finish - on any target, before a ledger is read
     monkeypatch.setattr(certify, "interrupted_run",
@@ -540,6 +546,8 @@ def test_e4b_the_supported_rate_is_the_highest_rung_climbing_from_the_lowest():
     tail = [*good[:2], ("ttft_p95_short", "unknown", "", "BOX"), good[3]]
     assert certify.envelope_summary([(0.5, good), (1.0, tail)]) == (certify.PENDING, ("BOX",),
                                                                    1.0)
+    crashed = [*good, ("client_exit", "fail", "exit 2", "BOX")]
+    assert certify.envelope_summary([(0.5, good), (1.0, crashed), (2.0, good)])[2] == 0.5
     capped = [*good[:3], ("duration_cap", "fail", "", "BOX")]
     assert certify.envelope_summary([(0.5, good), (1.0, bad), (2.0, capped)])[0] == certify.FAIL
 
@@ -634,6 +642,13 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         ("e4b.b.envelope", certify.PENDING, ["BOX"]),
         ("e4b.b.soak", certify.PENDING, ["BOX"]),
         ("e4b.b.overload", certify.PENDING, ["BOX"])]
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: {
+        **fake_client(argv, env), "exit": 2 if "soak-raw.jsonl" in argv[argv.index("--raw") + 1]
+        else 0})
+    report = certify.Report(engine)
+    certify.load_cells(report, engine, tmp_path, None)
+    assert report.stages[1]["stage"] == "e4b.b.soak" and report.stages[1]["status"] == certify.FAIL
+    monkeypatch.setattr(certify, "client", fake_client)
     gateway = {**engine, "bench_target": "gateway", "scale": "box", "label": certify.MEAS}
     seen.clear()
     certify.load_cells(report, gateway, tmp_path, None)
@@ -644,6 +659,25 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
     assert seen[-1][2] == box["overload"]["burst"]
     assert report.stages[-1]["status"] == certify.PASS
+
+
+def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(tmp_path,
+                                                                                   monkeypatch):
+    """A run that dies before writing its JSON is no evidence (E3B phase 2's lost report):
+    an unexpected error becomes a FAIL entry, the report is written, the exit is 1."""
+    def broken():
+        raise RuntimeError("the serving record is unreadable")
+    monkeypatch.setattr(certify, "release_hashes", broken)
+    out = tmp_path / "report.json"
+    try:
+        code = certify.main(["--no-stack", "--workdir", str(tmp_path), "--report", str(out)])
+    except RuntimeError:
+        code = None
+    assert code == 1
+    doc = json.loads(out.read_text())
+    assert doc["exit_code"] == 1
+    assert [(s["stage"], s["status"]) for s in doc["stages"]] == [("runner-error", certify.FAIL)]
+    assert "unreadable" in doc["stages"][0]["detail"]
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

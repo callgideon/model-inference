@@ -468,7 +468,11 @@ def interrupted_run(argv: list[str], raw: Path, *, after: int, env: dict,
     return {"exit": process.returncode, "signalled": signalled}
 
 
-def dataset_check(report: Report, target: dict, workdir: Path, ledger=None) -> None:
+SETTLE_WAIT_S = 300.0      # a debit may land after the answer: the ledger is re-read until then
+
+
+def dataset_check(report: Report, target: dict, workdir: Path, ledger=None,
+                  settle_wait_s: float = SETTLE_WAIT_S) -> None:
     """E4B.a's large-dataset recipe: interruption, resume, and (on a metered target) the
     tenant's ledger reconciled item by item."""
     shape = MATRIX[target["scale"]]["dataset"]
@@ -513,8 +517,13 @@ def dataset_check(report: Report, target: dict, workdir: Path, ledger=None) -> N
                      "(no PostgreSQL AccountView/Ledger adapter), so the tenant's ledger cannot "
                      "be read", owners=("D5",), measured=measured, label=target["label"])
         return
-    balance, usage, holds = ledger()
-    problems = reconcile_problems(rows_first + rows_second, usage, holds, before, balance)
+    end = time.monotonic() + settle_wait_s
+    while True:
+        balance, usage, holds = ledger()
+        problems = reconcile_problems(rows_first + rows_second, usage, holds, before, balance)
+        if not problems or time.monotonic() >= end:
+            break
+        time.sleep(5)
     measured["ledger"] = {"before": str(before.ledger_total), "after": str(balance.ledger_total),
                           "reserved_after": str(balance.reserved_total)}
     report.check("e4b.a.dataset-resume", FAIL if problems else PASS, problems or "reconciled",
@@ -768,7 +777,8 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
     refusals pass; the check is that rung's verdicts plus every rung's duration cap."""
     supported, chosen = None, None
     for rate, verdicts in sorted(rungs):
-        core = [v for name, v, _, _ in verdicts if name in ("failure_rate", "rejections")]
+        core = [v for name, v, _, _ in verdicts
+                if name in ("failure_rate", "rejections", "client_exit")]
         if any(v != decide.PASS for v in core):
             break
         supported, chosen = rate, verdicts
@@ -835,6 +845,11 @@ def overload_problems(rows: list[dict], clips: dict) -> list[str]:
     return problems
 
 
+def client_exit(code: int) -> tuple:
+    """A client run that did not finish cleanly is a failed cell, never an unjudged one."""
+    return ("client_exit", decide.PASS if code == 0 else decide.FAIL, f"exit {code}", "BOX")
+
+
 def sampled_run(argv: list[str], env: dict, metrics_url: str | None,
                 every_s: float) -> tuple[dict, list[dict]]:
     """A client run with the target's /metrics read every `every_s` seconds alongside."""
@@ -874,7 +889,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                                        requests=shape["envelope"]["requests"],
                                        dataset_version=f"{version}-{name}"), env)["exit"]
         rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
-                                          gateway=gateway)))
+                                          gateway=gateway) + [client_exit(runs[name])]))
     status, owners, supported = envelope_summary(rungs)
     report.check("e4b.b.envelope", status,
                  {"supported_rate_per_s": supported, "client_exits": runs,
@@ -890,7 +905,8 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
             bench_argv(target, workdir, "soak", rate=rate,
                        requests=max(1, round(rate * soak["seconds"])),
                        dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
-        verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips)
+        verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips) + [
+            client_exit(done["exit"])]
         status, owners = summarise(verdicts)
         report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
                                             "client_exit": done["exit"], "verdicts": verdicts,
@@ -1004,6 +1020,9 @@ def main(argv: list[str] | None = None) -> int:
             engine_checks(report, target, workdir, args)
         except run.Interrupted as stop:
             report.add("interrupted", FAIL, f"signal {stop.signum}")
+        except Exception as crashed:                  # noqa: BLE001 - recorded, and the
+            # report is still written: a run that dies before its JSON is no evidence (E3B)
+            report.add("runner-error", FAIL, f"{type(crashed).__name__}: {crashed}")
     payload = report.as_json()
     if args.report:
         args.report.write_text(payload)
