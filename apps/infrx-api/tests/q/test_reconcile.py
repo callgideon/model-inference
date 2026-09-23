@@ -557,8 +557,9 @@ def test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass(adapter):
 
 class SnapshotDown:
     """The store, except that `dispatch_snapshot` always fails - after `delay_s`, as a
-    statement timeout would (the unbounded snapshot under a backlog) - and the first
-    `dispatch_pending` fails once. Counts both."""
+    statement timeout would (the unbounded snapshot under a backlog) - with an error that
+    is not a connection error (review DUR-8), and the first `dispatch_pending` fails once.
+    Counts both."""
 
     def __init__(self, store, delay_s: float = 0.0) -> None:
         self.store, self.delay_s, self.pending_failures = store, delay_s, 1
@@ -567,7 +568,7 @@ class SnapshotDown:
     async def dispatch_snapshot(self):
         self.passes += 1
         await asyncio.sleep(self.delay_s)
-        raise ConnectionError("snapshot timed out")
+        raise RuntimeError("snapshot timed out")
 
     async def dispatch_pending(self, **kw):
         self.drains += 1

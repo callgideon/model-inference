@@ -237,6 +237,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "                except errors.DomainError:\n                    self._failed(step.__name__)",
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass",
        "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
+    _m("the_loop_survives_only_connection_errors",
+       "review DUR-8: the relay outlives any failing step, not only a lost connection "
+       "(one handler serves both steps, so review X15 and X16 are this one edit)",
+       "                except Exception:\n                    self._failed(step.__name__)",
+       "                except ConnectionError:\n                    self._failed(step.__name__)",
+       "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
     _m("the_drain_runs_behind_the_pass_loop",
        "review DUR-1: the drain does not wait for the passes to end",
        "        await asyncio.gather(every(self.reconcile, reconcile_every_s, drain_every_s),\n"
