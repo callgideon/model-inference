@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:38:47Z",
+  "updated": "2026-09-23T04:45:36Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,18 +20,6 @@
       "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
-    },
-    "W3": {
-      "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2",
-      "since": "2026-09-22T22:37:58Z",
-      "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
-    },
-    "I2B": {
-      "lane": "codex-i2b / codex/i2b-deployment",
-      "phase": "round 2 handed back d620f14 (RB-1/RB-2 closed); needs an Opus confirmation, then merge with W3",
-      "since": "2026-09-22T22:37:58Z",
-      "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
     },
     "A1-followup": {
       "lane": "codex-a1 / codex/a1-signup-grant",
@@ -254,6 +242,16 @@
       "merged": "D3 @ 92687f8 merged --no-ff (f237237) + follow-up d57e04e (harness 0016, TASK_PORTS d3)",
       "at": "2026-09-23T04:38:47Z",
       "note": "review fix_required \u2192 fix round confirmed pass \u2192 five residuals folded (87 mutants); merged-tree tests/d both images running; CREDIT jobs not claimable until WorkV2 (MY-3); complete() past the fence is D5's"
+    },
+    "W3": {
+      "merged": "W3 @ c81ef36 merged --no-ff (65e2c99); follow-up: tests/i real-script case passes the pilot gate; api-mutants += tests/w/test_w3_mutants.py",
+      "at": "2026-09-23T04:45:36Z",
+      "note": "review + confirmation pass; box inventory/capability measured (image equals the pin, KV 2,644,426 tokens); concurrency sweep HELD (P-04-sweep); registry oids \u26a0\ufe0f HF_TOKEN; software half only \u2014 box rollout not done"
+    },
+    "I2B": {
+      "merged": "I2B @ e82d77f merged --no-ff (08d3240) in the same step as W3 (FC-1)",
+      "at": "2026-09-23T04:45:36Z",
+      "note": "three review rounds (M1, S1 Caddy admin socket, RB-1 revert order, RB-2 grammar, RC2-X backup naming); I list 189; rehearsal 44/0; box rollout per the runbook is a separate coordinator operation (not done); I3B's --max-age 180 alert timer has no unit yet (composition item)"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

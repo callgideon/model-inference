@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**119 records; 113 active; 6 retired; 80 planned; 28 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 78 planned; 30 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
@@ -24,7 +24,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | Q3 | implemented / Q | [Outbox/reconciler integration and index loss recovery](handoffs/Q-scheduling.md) | Q2, F2P | D2, D3 |
 | W1 | implemented / W | [Engine adapter and deterministic execution fakes](handoffs/W-worker.md) | F2 | — |
 | W2 | implemented / W | [Lease-aware execution, cancellation and completion](handoffs/W-worker.md) | W1, F2P | D5, M2, Q3 |
-| W3 | planned / W | [Drain, engine pin and measured concurrency](handoffs/W-worker.md) | W2, F2P | E1, S2M |
+| W3 | implemented / W | [Drain, engine pin and measured concurrency](handoffs/W-worker.md) | W2, F2P | E1, S2M |
 | G2 | planned / G | [Synchronous chat and persistent SSE relay](handoffs/G-gateway.md) | G1R | D5, W2, M2, Q3, I0 |
 | G3 | planned / G | [Explicit jobs, status, cancellation and replay](handoffs/G-gateway.md) | G1R | D5, W2, I0 |
 | I1 | integrated / I | [Read-only inventory and deploy design](handoffs/I-infrastructure.md) | — | — |
@@ -41,7 +41,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | S2M | implemented / S | [Freeze Marlin SOP inference launch profile](12-complete-build-plan.md) | S1 | — |
 | G6B | implemented / G | [Headless endpoint provisioning and operations](18-marlin-backend-first.md) | F2P | D1R, D5, A1, G1R |
 | E3B | planned / E | [Backend-only durability, security and protocol integration gate](18-marlin-backend-first.md) | E2R, F2P | D1R, D5, G1R, G2, G3, G4U, G6B, M3, Q3, W3, I0, S2M |
-| I2B | planned / I | [Reproducible Marlin endpoint deployment independent of frontends](18-marlin-backend-first.md) | I1, F2P | E3B, I0, W3, G6B |
+| I2B | implemented / I | [Reproducible Marlin endpoint deployment independent of frontends](18-marlin-backend-first.md) | I1, F2P | E3B, I0, W3, G6B |
 | I3B | implemented / I | [Backend recovery, observability, restore and rollback proof](18-marlin-backend-first.md) | I2B, F2P | E3B |
 | E1B | planned / E | [Measure the end-to-end Marlin baseline and operating envelope](18-marlin-backend-first.md) | E1, S2M, F2P | E3B, I2B, W3 |
 | M4 | implemented / M | [Optimize bounded video retrieval, decoding and preparation](18-marlin-backend-first.md) | M2, M3, F2P | E1B, W2 |
