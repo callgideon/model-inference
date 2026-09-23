@@ -147,8 +147,10 @@ class PilotSettings:
     # contracts v2 (F2P wire-in, item 5). Contract data, so empty is allowed and means:
     # no CREDIT rate card is approved for serving yet (R69: unpriced is unserveable - a
     # CREDIT-regime deployment refuses to start without one, `config.validate_runtime`).
-    # The catalog's card is authoritative per request; this names the one the operator
-    # approved for this deployment, so a start with no approved card is a refusal.
+    # The catalog's card is authoritative per request. Today this is a startup gate (set,
+    # exact text) and nothing compares it with the card `pin_admission` pins: that
+    # comparison is the composition root's (G1R) - until then it names the operator's
+    # intent, not an enforced match.
     active_rate_card_version: str = ""
     # The most CREDIT one audited operator allocation may move into a provider's dev
     # wallet (02-credits: "an internal capped testing budget"). Zero by default. Not

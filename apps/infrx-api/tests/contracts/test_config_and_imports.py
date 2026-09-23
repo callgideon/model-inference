@@ -575,6 +575,12 @@ def test_a_credit_deployment_needs_an_approved_rate_card():
             refused = "ACTIVE_RATE_CARD_VERSION" in str(caught)
         assert refused, f"mode {mode!r} started a CREDIT deployment with no approved card"
         assert _app({**env, "ACTIVE_RATE_CARD_VERSION": "rc_marlin2b_2026_09_provisional"})
+        # F2P review M-6/CFG-2: whitespace is not a card (refused as missing), and a padded
+        # name is refused at startup rather than served (`validate_pilot` is off this path).
+        with pytest.raises(config.RuntimeMisconfigured, match="requires ACTIVE_RATE_CARD_VERSION"):
+            _app({**env, "ACTIVE_RATE_CARD_VERSION": "  "})
+        with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
+            _app({**env, "ACTIVE_RATE_CARD_VERSION": " rc_marlin2b_2026_09_provisional "})
     assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
 
 

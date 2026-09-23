@@ -254,6 +254,11 @@ def validate_runtime(settings):
     if deployment.accounting_regime == CREDIT_REGIME \
             and not _configured(pilot.active_rate_card_version):
         raise RuntimeMisconfigured(mode, ("ACTIVE_RATE_CARD_VERSION",))
+    # And the card is exact text at startup too (`validate_pilot` is not on this path): a
+    # padded name is a card nobody published.
+    if pilot.active_rate_card_version != pilot.active_rate_card_version.strip():
+        raise RuntimeMisconfigured(
+            mode, detail="ACTIVE_RATE_CARD_VERSION must not carry surrounding whitespace")
     if mode == MODE_UNSET:
         logging.getLogger("infrx").info(
             "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
