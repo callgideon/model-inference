@@ -975,6 +975,13 @@ MUTANTS: tuple[Mutant, ...] = (
            '"debit", "settled_at", "reconcile_after")', '"settled_at", "reconcile_after")',
            "tests/integration/backend/test_drills.py", "dr07 and postgres and not dr07c",
            layer=2, cases=("test_e3b_dr07_a_duplicate_settlement_settles_once[postgres]",)),
+    Mutant("e3bm61", "E3B3 rc04b: the usage a job settled at before a database loss reaches "
+                     "the port after it",
+           "apps/infrx-api/infrx/state/jobstore.py",
+           '_OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", ',
+           '_OUTCOME_FIELDS = ("job_id", "state", "cause", "result_ref", ',
+           "tests/integration/backend/recovery/test_recovery.py", "rc04b", layer=2,
+           cases=("test_i3b_rc04b_settlement_across_a_database_loss",)),
 )
 
 

@@ -14,7 +14,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
 | rc03 gateway restart | - | PENDING G2-R1 (G2's cutover that mounts the relay, held); the store half is E3B dr01 |
-| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim | rc04b: settlement, PENDING on terminalize's stub owner (D5); the database's own boundary is `test_restore.py` bk03 |
+| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim; rc04b: settlement across the kill (D5's terminalize, E3B phase 3) | the database's own boundary is `test_restore.py` bk03 |
 | rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
@@ -260,7 +260,7 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
     exactly the three holds and debits nothing, and it agrees with the ledger and the holds
     themselves (`infrx.wallet_reconciliation`: zero drift, and the runbook's detector finds
     none - and names ORG_A once a hold is released behind the summary's back). Settling
-    across the loss is rc04b's (terminalize is still D5's stub)."""
+    across the loss is rc04b's."""
     import pgstate
 
     import test_restore as bk
@@ -341,17 +341,74 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
         kit.run(lambda: body(database, factory))
 
 
-def test_i3b_rc04b_settlement_across_a_database_loss_is_pending_on_terminalize():
-    """The other half of rc04: a job SETTLED across the PostgreSQL kill needs
-    `infrx.terminalize`, still an `infrx.unimplemented` stub. It pends on the task the stub
-    names (E3B's per-drill probe, measured on the stack; D5 today) and fails the day
-    terminalize is implemented."""
-    kit.needs_stack()
-    stubs = stack.stubbed(("terminalize",))
-    if not stubs:
-        pytest.fail("terminalize is implemented: settle a job across rc04a's PostgreSQL kill now")
-    kit.pending(*sorted(set(stubs.values())),
-                why=f"{sorted(stubs)} is still an infrx.unimplemented stub")
+def test_i3b_rc04b_settlement_across_a_database_loss(monkeypatch):
+    """The other half of rc04 (E3B phase 3: D5's `terminalize` merged): two jobs claimed on
+    PgJobStore, then PostgreSQL SIGKILLed and restarted. Job 1's settlement COMMITTED before
+    the kill and its answer was lost; job 2 was still running. After the restart, with the
+    store object built before the kill: job 1's identical retry replays the committed
+    outcome, job 2 settles, each once at its ADMITTED price (one usage projection each), both
+    holds are released, and the wallet's summary agrees with the ledger and the holds (zero
+    drift; the runbook's detector silent)."""
+    import pgstate
+
+    import test_restore as bk
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.fakes.support import CrashAfterCommit
+    from infrx.contracts.records import ExecutionMode, OutboxKind, SettlementState
+    from infrx.state import migrations as d_migrations
+    from infrx.state import pgtesting
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    tokens = b.usage(1200, 200)         # inside the 256-token envelope
+
+    async def body(database: str, factory) -> None:
+        h = factory()
+        h.extra["grant"](b.ORG_A, kit.GRANT)
+        store = h.port
+        admitted, leases = [], []
+        for n in (1, 2):
+            request = b.request(h, mode=ExecutionMode.async_, max_output_tokens=256)
+            admission = await store.admit(request, b.idem(request, f"rc04b-{n}"))
+            lease = await store.claim_preparation(admission.request_id, "prep-a")
+            await store.prepared(lease, ())
+            admitted.append(admission)
+            leases.append(await store.claim(admission.request_id, "worker-a"))
+        proposals = [b.outcome(a.request_id, h, tokens=tokens) for a in admitted]
+        h.failures.crash_after_commit("complete")
+        with pytest.raises(CrashAfterCommit):
+            await store.complete(leases[0], proposals[0])
+        committed = (await store.get_owned(b.ORG_A, admitted[0].job_handle))[1]
+        bk.kill_postgres(database)
+        rig = factory()                 # the hooks' and the clock's own connection, anew
+        replayed = await store.complete(leases[0], proposals[0])
+        settled = await store.complete(leases[1], proposals[1])
+        assert replayed == committed, (replayed, committed)
+        debits = Decimal(0)
+        for admission, outcome in zip(admitted, (replayed, settled)):
+            debit = admission.price_snapshot.debit(1200, 200)
+            assert (outcome.settlement_state, outcome.debit, outcome.usage) == (
+                SettlementState.settled, debit, tokens), outcome
+            assert (await store.get_owned(b.ORG_A, admission.job_handle))[1] == outcome
+            assert rig.extra["outbox_kinds"](admission.request_id).count(
+                OutboxKind.usage_projection) == 1, admission.request_id
+            debits += debit
+        balance = rig.extra["balance"](b.ORG_A)
+        assert (balance["ledger"], balance["reserved"]) == (Decimal(kit.GRANT) - debits, 0), \
+            balance
+        with bk.connect(database) as conn:
+            drifts = conn.execute("select ledger_drift, reserved_drift, active_holds from "
+                                  "infrx.wallet_reconciliation where org_id = %s",
+                                  (b.ORG_A,)).fetchone()
+        assert drifts == (0, 0, 0), drifts
+        assert bk.drift(database) == [], "the reconcile runbook's detector reports drift"
+
+    with bk.scratch("infrx_i3b_settle") as (database,):
+        with bk.connect(database) as conn:
+            pgstate.apply_migrations(conn)
+            pgstate.install_test_clock(conn)
+            pgtesting.seed(conn)
+            conn.execute(d_migrations.SEED_MARLIN.read_text())
+        factory = pgtesting.make_jobstore_factory(lambda: database, bk.conninfo)
+        kit.run(lambda: body(database, factory))
 
 
 # ------------------------------------------------------------------ media: object store, disk
