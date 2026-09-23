@@ -86,7 +86,10 @@ name must start `infrx_` like E2's, which is what keeps D1's test clock out of p
 $PY infra/runbooks/pgrestore.py restore --conninfo "$LOCAL" --from "$BACKUP"
 ```
 
-It verifies `SHA256SUMS` first and refuses a damaged backup (`bk01d`), restores the auth
+It verifies `SHA256SUMS` first and refuses a damaged backup (`bk01d`); it refuses, before
+writing anything, a target that is the backup's own source (host, port, user and dbname
+recorded in `meta.json`) or is not empty - an `infrx` schema, a table in `public` or an auth
+row (`bk01e`). Then it restores the auth
 rows, empties the template's default privileges, restores the project through the filtered
 table of contents, then replays the auth trigger and the global function default.
 
@@ -224,3 +227,5 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   `pgrestore.py` on the pinned image (E2's stack): the three plain-restore defects above were
   found by that drill and are handled by the tool. Nothing has been run against hosted or the
   box; all hosted/box windows are ⚠️.
+- 2026-09-23 (I3B fix round, RS-1): A5's "never over live data" is now enforced by the tool
+  (source identity + empty-target guard before any write), drilled by `bk01e_a`/`bk01e_b`.

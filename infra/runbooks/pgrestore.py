@@ -32,7 +32,8 @@ image and handled here (each one is a drill: bk01, bk01b, bk01c):
    from PUBLIC). Both are read from the source at dump time into `meta.json` and replayed.
 
 A backup is `project.dump`, `auth.dump`, `meta.json` and `SHA256SUMS`, mode 0600 in a 0700
-directory; `restore` refuses a directory whose checksums do not match.
+directory; `restore` refuses a directory whose checksums do not match, and refuses - before
+writing anything - a target that is the backup's own source or is not empty (bk01e).
 """
 from __future__ import annotations
 
@@ -107,7 +108,8 @@ def dump(conninfo: str, out: Path) -> dict:
         auth = existing(conn, AUTH_TABLES, "table")
         acl = conn.execute(GLOBAL_FUNCTION_DEFAULT, (ROLE,)).fetchone()
         meta = {"dumped_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "image": IMAGE, "schemas": schemas, "auth_tables": auth,
+                "source": identity(conninfo), "image": IMAGE,
+                "schemas": schemas, "auth_tables": auth,
                 "auth_triggers": [row[0] for row in
                                   conn.execute(AUTH_TRIGGERS, (list(SCHEMAS),)).fetchall()],
                 "global_function_default": acl[0] if acl else None,
@@ -134,6 +136,32 @@ def verify(backup: Path) -> None:
 
 # --------------------------------------------------------------------- restore
 
+def identity(conninfo: str) -> dict:
+    """Which database a conninfo names. `user` is part of it: every hosted project behind the
+    same regional pooler shares host and dbname and differs only in `postgres.<ref>`."""
+    from psycopg.conninfo import conninfo_to_dict
+    parsed = conninfo_to_dict(conninfo)
+    return {key: str(parsed.get(key, "")) for key in ("host", "port", "user", "dbname")}
+
+
+def refuse_live_target(conninfo: str, meta: dict) -> None:
+    """Before any write: the target is not the backup's source, and it is empty - no infrx
+    schema, no table in public, no auth row. A restore that would fail on a live database
+    must fail here, not after it has changed that database's default privileges."""
+    if meta.get("source") == identity(conninfo):
+        raise RuntimeError("refusing to restore: the target is the backup's own source")
+    with connect(conninfo) as conn:
+        occupied = conn.execute(
+            "select to_regnamespace('infrx') is not null or exists (select 1 from pg_class c "
+            "join pg_namespace n on n.oid = c.relnamespace "
+            "where n.nspname = 'public' and c.relkind in ('r', 'p'))").fetchone()[0]
+        occupied = occupied or any(conn.execute(f"select exists (select 1 from {table})")
+                                   .fetchone()[0] for table in meta["auth_tables"])
+    if occupied:
+        raise RuntimeError("refusing to restore: the target is not empty (restore only into a "
+                           "fresh database from the Supabase template)")
+
+
 def restorable(listing: str) -> str:
     """`pg_restore -l` minus what the target's template already provides (item 1)."""
     keep = []
@@ -153,6 +181,7 @@ def restore(conninfo: str, backup: Path, *, neutralize: bool = True) -> None:
     database created from the Supabase template - never onto live data."""
     verify(backup)
     meta = json.loads((backup / "meta.json").read_text())
+    refuse_live_target(conninfo, meta)
     run(backup, "pg_restore", "-d", conninfo, "--data-only", "--exit-on-error",
         "/backup/auth.dump")
     if neutralize:

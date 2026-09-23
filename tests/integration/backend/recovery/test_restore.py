@@ -12,7 +12,8 @@ ARE that rehearsal, on the pinned `supabase/postgres` 17.6 image (hosted runs 17
   table, plus the privileges, policies, functions, triggers, constraints, indexes and
   default privileges the tenant boundary depends on - and the detectors report zero drift.
   bk01b/bk01c/bk01d prove the check catches a lost trigger, widened privileges and a
-  damaged backup.
+  damaged backup; bk01e refuses a non-empty target and the backup's own source before any
+  write.
 * bk02 - a database shaped like hosted today (0001-0002, four users, two keys, one usage
   row, no ledger): back it up, restore it, apply 0003-0009 to the RESTORED copy, and prove
   the rows the deployed pre-refactor gateway reads and writes are value-identical and its
@@ -213,6 +214,51 @@ def test_i3b_bk01d_detects_a_damaged_backup_and_restores_nothing(tmp_path):
             assert conn.execute("select count(*) from pg_class c join pg_namespace n "
                                 "on n.oid = c.relnamespace where n.nspname = 'public' "
                                 "and c.relkind = 'r'").fetchone()[0] == 0
+
+
+DEFAULT_ACLS = ("select defaclrole::regrole::text, defaclnamespace::regnamespace::text, "
+                "defaclobjtype::text, defaclacl::text from pg_default_acl order by 1, 2, 3")
+
+
+def _write_state(database: str) -> tuple:
+    """What a refused restore must leave exactly as it was: the default privileges (the
+    first thing the unguarded restore changed) and the auth rows (the second)."""
+    with connect(database) as conn:
+        return (conn.execute(DEFAULT_ACLS).fetchall(),
+                conn.execute("select count(*) from auth.users").fetchone()[0])
+
+
+def test_i3b_bk01e_a_a_non_empty_target_is_refused_before_any_write(tmp_path):
+    """RS-1: restoring over a LIVE-shaped database (0001-0009 applied, no auth row - the
+    shape where the unguarded tool got past the auth rows and emptied `public`'s default
+    privileges before failing on CREATE SCHEMA infrx) raises before writing anything:
+    pg_default_acl and auth.users are identical before and after."""
+    kit.needs_stack()
+    with scratch("infrx_i3b_live") as (live,):
+        apply(live, migrations(1, 9))
+        backup = tmp_path / "backup"
+        pg.dump(conninfo(harness.PG_DATABASE), backup)
+        before = _write_state(live)
+        assert before[0], "the live-shaped target has no default privileges to lose"
+        with pytest.raises(RuntimeError, match="the target is not empty"):
+            pg.restore(conninfo(live), backup)
+        assert _write_state(live) == before
+
+
+def test_i3b_bk01e_b_a_backup_is_never_restored_onto_its_own_source(tmp_path):
+    """RS-1: the backup records the database it came from (host, port, user, dbname) and
+    `restore` refuses that target - even when it is empty, which is the one case the
+    emptiness guard cannot see."""
+    kit.needs_stack()
+    with scratch("infrx_i3b_empty_source") as (source,):
+        backup = tmp_path / "backup"
+        meta = pg.dump(conninfo(source), backup)
+        assert meta["source"] == {"host": "127.0.0.1", "port": str(harness.PORTS["postgres"]),
+                                  "user": harness.PG_USER, "dbname": source}
+        before = _write_state(source)
+        with pytest.raises(RuntimeError, match="the backup's own source"):
+            pg.restore(conninfo(source), backup)
+        assert _write_state(source) == before
 
 
 def _resum(backup: Path) -> None:
