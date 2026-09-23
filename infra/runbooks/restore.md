@@ -170,7 +170,7 @@ A longer period is a coordinator decision recorded in the operation log with its
 
 ```bash
 # only after A8 is verified and logged
-rm -rf -- "$BACKUP"; ls -d "$BACKUP" 2>/dev/null && echo "NOT REMOVED"
+rm -rf -- "$BACKUP" && [ ! -e "$BACKUP" ] && echo "backup removed"
 ```
 
 Windows: `meas. local` (bk01, bk02: E2's stack, ~50-row databases) - dump, restore and
