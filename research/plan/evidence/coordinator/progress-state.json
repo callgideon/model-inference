@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T14:44:06Z",
+  "updated": "2026-09-23T14:47:34Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "re-dispatched (Opus) 14:16Z to finish round 3 on codex-g2 @ 35ac886 \u2192 confirmation \u2192 MERGE",
+      "phase": "round 3 HANDED BACK 76ba3bb (code 66effa6; all 5 blocking + 9 nonblocking closed; G list 306 = 299 mutants); confirmation (round 3) running \u2192 MERGE",
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
@@ -56,8 +56,8 @@
       "since": "2026-09-23T10:33:10Z"
     },
     "G2": {
-      "phase": "confirmation fix_required at a786af7 (wf_575b11a2-ce2; 13 agents; JSON evidence/g/G2-confirm-a786af7.json) \u2192 round 3",
-      "since": "2026-09-23T12:44:00Z"
+      "phase": "round-3 confirmation at 76ba3bb running",
+      "since": "2026-09-23T14:47:34Z"
     },
     "E3B2": {
       "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
