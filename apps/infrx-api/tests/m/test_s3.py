@@ -22,6 +22,7 @@ and dead local endpoints: they never reach AWS.
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import sys
 import uuid
@@ -443,6 +444,53 @@ def test_the_pilot_runtime_probe_refuses_an_image_without_botocore(tmp_path, mon
     monkeypatch.setattr(preflight, "_importable", lambda module: True)
     assert not any("botocore" in problem
                    for problem in preflight.probe(staged, "pilot")["problems"])
+
+
+# --- the error-vs-absent rule, every arm (review A2) -------------------------------------
+def stubbed():
+    """An `S3ObjectStore` whose client answers from a script (botocore's Stubber): no
+    socket, no credentials of anyone's."""
+    import botocore.session
+    from botocore.stub import Stubber
+    client = botocore.session.get_session().create_client(
+        "s3", region_name="us-east-1", aws_access_key_id="local", aws_secret_access_key="local")
+    stub = Stubber(client)
+    stub.activate()
+    return S3ObjectStore(client, "infrx-m1l2", "test/m1l2/"), stub
+
+
+def test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent():
+    """A 409 ConditionalRequestConflict (a concurrent conditional write) is neither
+    "written" nor "occupied": a retryable dependency_unavailable. A body that breaks while
+    it is read is an error, never a missing object. A 404 on a read is absent."""
+    from botocore.response import StreamingBody
+    objects, stub = stubbed()
+    stub.add_client_error("put_object", "ConditionalRequestConflict", http_status_code=409)
+    with pytest.raises(errors.DependencyUnavailable) as refused:
+        run(objects.put_if_absent(SOURCE, b"x", "video/mp4"))
+    assert refused.value.retry_after_s
+    stub.add_response("get_object", {"Body": StreamingBody(io.BytesIO(b"three"), 64)})
+    with pytest.raises(errors.DependencyUnavailable):
+        run(objects.get(SOURCE))
+    stub.add_client_error("get_object", "NoSuchKey", http_status_code=404)
+    assert run(objects.get(SOURCE)) is None
+    stub.add_client_error("head_object", "404", http_status_code=404)
+    assert run(objects.head(SOURCE)) is None
+    stub.assert_no_pending_responses()
+
+
+@needs_s3
+def test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing(monkeypatch):
+    """Limit 3, pinned: HeadObject's 404 has no body, so `head`/`describe` cannot tell a
+    missing bucket from a missing key and answer None; every call whose error has a body -
+    get, put, list, delete - names NoSuchBucket and is dependency_unavailable."""
+    s3_env(monkeypatch)
+    objects = S3ObjectStore.connect(absent_bucket(), unique_prefix(), ENDPOINT)
+    assert run(objects.head(SOURCE)) is None and run(objects.describe(SOURCE)) is None
+    for call in (objects.get(SOURCE), objects.put_if_absent(SOURCE, b"x", "video/mp4"),
+                 objects.keys("media/"), objects.delete(SOURCE)):
+        with pytest.raises(errors.DependencyUnavailable):
+            run(call)
 
 
 # --- the harness itself (review A1) -------------------------------------------------------

@@ -55,6 +55,8 @@ INSTALL_REFUSES = "test_a_pilot_install_without_a_bucket_is_refused"
 NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
 CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
 CLEANUP = "test_what_a_case_writes_is_removed_after_it"
+STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
+NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -141,6 +143,18 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("s3_cleanup_skipped", "what a case writes under its test prefix is deleted after it",
        H, "            objects.client.delete_objects(", "            (lambda **kw: None)(",
        CLEANUP, s3=True),
+    # === review A2: every arm of the error-vs-absent rule ================================
+    _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
+       S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',
+       NO_BUCKET, s3=True),
+    _m("own_body_failure_is_absent", "a body that breaks mid-read is an error, not absence",
+       S3, '        return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()',
+       '        try:\n'
+       '            return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()\n'
+       '        except Exception:\n            return None', STUBBED),
+    _m("own_conflict_is_not_written", "a 409 conditional-write conflict is a retryable error, "
+       "never 'occupied'", S3, '            if code == "PreconditionFailed":',
+       '            if code in ("PreconditionFailed", "ConditionalRequestConflict"):', STUBBED),
 )
 
 
