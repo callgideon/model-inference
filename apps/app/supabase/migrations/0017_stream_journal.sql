@@ -227,13 +227,14 @@ create or replace trigger jobs_terminal_journal_event after update of settled_at
 -- Args `{org_id, job_handle, cursor: {generation, sequence} | null, limit}`; answers
 -- `{"chunks": [...]}`, at most 1000 (the fake's MAX_READ_LIMIT), in cursor order. R10:
 -- ownership is the WHERE clause - another tenant's handle and an unknown one are the same
--- `not_found`.
+-- `not_found`. The cursor is a client's (`Last-Event-ID`), so its parts are read as numeric:
+-- any magnitude is a typed answer (past the head), never an integer overflow.
 create or replace function infrx.read_journal(p_args jsonb) returns jsonb
 language plpgsql stable security definer set search_path = infrx, public, pg_temp as $$
 declare
-  v_limit int := (p_args->>'limit')::int;
-  v_position_generation int := coalesce((p_args->'cursor'->>'generation')::int, 0);
-  v_position_sequence int := coalesce((p_args->'cursor'->>'sequence')::int, 0);
+  v_limit numeric := (p_args->>'limit')::numeric;
+  v_position_generation numeric := coalesce((p_args->'cursor'->>'generation')::numeric, 0);
+  v_position_sequence numeric := coalesce((p_args->'cursor'->>'sequence')::numeric, 0);
   v_head_generation int := 0;
   v_head_sequence int := 0;
   v_chunks jsonb;

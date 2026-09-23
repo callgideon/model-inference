@@ -678,7 +678,7 @@ def check_read_typed(conn) -> str:
         assert append(conn, lease, b.events("a", "b"), limits=SHORT)[0] is None
         code, answer = read(conn, request, at(1, 2))
         assert code is None and answer["chunks"] == [], "the head is simply nothing new"
-        for beyond in (at(1, 3), at(2, 1), at(9, 9)):
+        for beyond in (at(1, 3), at(2, 1), at(9, 9), at(2 ** 40, 1), at(1, 10 ** 20)):
             assert read(conn, request, beyond)[0] == "invalid_cursor", beyond
         advance(conn, SHORT.journal_chunk_ttl_s + 1)
         assert append(conn, lease, b.events("c"), limits=SHORT)[0] is None
