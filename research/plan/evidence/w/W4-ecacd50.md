@@ -406,3 +406,174 @@ above; then W4 phase B in a later dispatch with the committed outputs.
 
 - 2026-09-23: phase A implemented at `ecacd50` on base `a237d6f`; protocol `4614392`
   committed before the first script `58e2659`. No box contact, no container, no measurement.
+
+## Round 2 — fix round for `W4-review-db12a5a.json` (fix_required: 6 blocking, 21 nonblocking)
+
+The base is unchanged (`a237d6f`) and round 1's head was `db12a5a`. Round 2's commits:
+- `c79a6e7`: the fixes, their cases and the new mutants.
+- `086a127`: the protocol's log amendment 1, plus two cases sharpened after a pre-check of the new mutants.
+- This section.
+
+There was no rebase, reset or amend, nothing was pushed, and no box, AWS or container was touched. The round-1 sections above stay as they were; where round 2 corrects them, it says so here.
+
+### Blocking findings
+
+| Finding | Change | Killing case (what it now asserts) | Mutants (all killed) |
+|---|---|---|---|
+| **BS-1** inactive unit / second run | `candidate.sh`: `systemctl is-active marlin2b-vllm` must report `active` before anything is recorded. `exec 9>$NVME/w4-candidate.lock; flock -n 9` takes a lock that is released at exit; the candidate engine and the host sampler get `9>&-` | `test_ops_recover__the_candidate_run_refuses_in_flight_work_and_unlisted_flags`, cases `unit-inactive` and `second-run` (the test holds the lock with `fcntl.flock`). Each gives exit 2 and `refused:`, with no `systemctl stop/start`, no `docker run/stop/rm`, and nothing under `$NVME/w4-*` except the lock file | `unit_not_active_accepted`, `second_run_not_locked` |
+| **BS-2 / HON-2** untested guards | Cases added. The `set +e` in `restore` now carries a comment saying it is load-bearing | Refusal cases: `not-canonical` (`OUT=$NVME/w4-x/../../escape`), `no-execstart` (`systemctl show` prints an empty ExecStart, as it does for a missing unit), `waiting` (running 0, waiting 3.0). Restore cases, each ending in `restored=no` and exit 4: `image` (the unit comes back on another image; prints `image_diff:`), `unhealthy` (same args and image, `/health` never answers; prints `healthy=no`), `start-fails` (`systemctl start` fails, and the report still prints `healthy=no`) | `out_not_canonical` (M1), `restore_ignores_the_image` (M2), `restore_ignores_health` (M3), `restore_under_set_e` (M4), `waiting_not_counted` (M6), `empty_execstart_accepted` (M7) |
+| **D1** warm cells adopted | `decide.criteria`: any level whose `profile.engine_state` is not `restarted` makes `w3_rule`, `severe_tail` and the paired criteria `unknown`. `c*` is still printed as a computed figure | `test_perf_envelope__cells_at_different_cache_states_are_not_compared` now also runs one warm level (c = 4) on both sides of otherwise restarted runs. It expects `w3_rule` unknown with "not restarted [4]", and the tail and paired criteria unknown. `passing_pair` is relabelled `restarted`, which is what candidate.sh produces. `test_engine_opt__the_050411Z_sweep_has_no_qualifying_level` asserts that the rule is `unknown` on the warm W3 sweep | `warm_levels_in_the_rule` |
+| **D2** truncated raw rows | `Level.reconciled`: the raw rows (before any set-aside) must match the bench row's `attempts`, accepted count and failed count, and accepted + rejected + failed + cancelled must equal `requests`. A mismatch makes overload masking `fail` and the error rate `unknown`. `Level.retries_known`: a raw row without `retries`, or a bench row without `denominators.retried_requests`, makes overload masking `unknown`. The bench row's `retried_requests` is added to the raw retries | `test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it`: `rows_lost` (six accepted rows deleted from `raw/c32.jsonl`) gives overload masking `fail`, error rate `unknown`, nothing adopted. `retries_unrecorded` gives `unknown`. The six-failures case now also updates the bench row's counts, so its `fail` comes from reconciled rows | `raw_rows_not_reconciled`, `error_rate_ignores_reconciliation`, `missing_retries_read_as_zero` |
+| **D3** three unkillable invariants | New cases only | `test_engine_opt__the_rule_holds_at_its_boundaries`: levels 8 (T = 1.8), 16 (2.0) and 32 (1.9) all qualify, and the case expects `c* = 8`. In the passing case: `oom_line` (a "CUDA out of memory" line in `engine-errors-c16.log`) makes `oom` fail; `gpu_growth` (+300 MiB on the second half of the c = 32 samples) makes `memory_growth` fail | `largest_qualifying_level`, `oom_line_ignored`, `gpu_growth_unchecked` |
+| **HON-1** substring flag check | The protocol case now requires each `candidate.sh` flag set to **equal** the protocol's §2 cell. It also checks `decide.LEVELS` against §1 and against `candidate.sh`, and `decide.PAIRS` against §2's baseline column | `test_engine_opt__the_protocol_states_the_criteria_decide_applies` | `e3_flag_dropped` (and `e1_flag_off_protocol`) |
+
+### Nonblocking findings
+
+| Finding | Disposition | Case → mutant |
+|---|---|---|
+| BS-3 duplicate `run` | The stub docker exits 125 when the name is already in use. The restores case counts **successful** runs (the `runs` file must hold 7) against 7 attempts | restores → `candidate_started_over_the_last_one` |
+| BS-4 corpus-synth | `corpus-synth/manifest.json` and `synth.py` are now part of the checkout check. A new `parity.py --check` must find every parity clip in the cache before the stop, otherwise the run is refused with `refused: the parity set is not in the cache`. `synth.py verify` is **recorded** (`synth=` in `candidate.log`), not a refusal: its pinned bytes may not reproduce on the box's CPU (the per-CPU finding), and parity pairs runs by each clip's own sha256 | refusal `parity-missing` → `parity_set_unchecked`; parity client (`--check` exits 1 with 4 of 9 clips present, 0 with all 9) → `parity_check_always_passes` |
+| BS-5 environment reaches serve.sh | The launch pins `PORT=8000 GPU=0 WEIGHTS=$NVME/marlin2b VLLM_LOGGING_LEVEL=INFO PROCESSING_CACHE_DIR=` (empty, so no media mount). Every start's `startup-<label>.log` begins with `args=`, the container's own `.Args` | The restores case runs with `PORT=8001 GPU=1 WEIGHTS=<elsewhere> VLLM_LOGGING_LEVEL=DEBUG PROCESSING_CACHE_DIR=<a dir>` and asserts `-p 127.0.0.1:8000:8000`, `device=0`, `$NVME/marlin2b:/model:ro`, `INFO`, and no `--allowed-local-media-path`. The records case asserts the `args=` line → `port_from_the_environment`, `weights_from_the_environment`, `media_root_from_the_environment`, `start_args_unrecorded` |
+| BS-6 READY_S | Must match `^[1-9][0-9]*$`; checked alongside the other pure refusals | refusal `ready-s` (`15m`) → `ready_s_unvalidated` |
+| BS-7 `__pycache__` in the checkout | `export PYTHONDONTWRITEBYTECODE=1` | records (the stub parity sees the variable) → `bytecode_written_to_the_checkout` |
+| BS-8 in-flight check timing | Now the last check: after the corpus and parity checks, just before `$OUT` is created and the unit stopped | the existing in-flight, waiting and metrics-down refusals (mutants unchanged) |
+| D4 usage `None` treated as equal | `usage_verdict`: if a clip both sides accepted lacks `prompt_tokens` on either side, the result is `unknown`. `parity_verdict`: an accepted pair without usage is `unknown`. The parity client's rule that an answer without usage is not accepted is now tested | passing `usage_blank` → `blank_usage_compared`; token-or-content drift → `parity_blank_usage_compared`; parity client (a 120 s answer with `[DONE]` but no usage is `failed`) → `accepted_without_usage` |
+| D5 floor(X) = 0 adopts 0 | `adopt` now needs `floor(X) >= 1`. The set-aside case uses X = 12.6, which must give 12 | passing `x-below-one` → `setting_below_one_adopted`; set-aside → `floor_x_rounds` |
+| D6 unpaired baseline | The baseline may not be the candidate's own run (compared by resolved root). The `(candidate, baseline)` pair, read from each `candidate.log`'s `candidate=` line, must be (e1, e0) or (e3, e1). Otherwise the paired criteria are `unknown` | passing `pair` (a baseline logged as e3) and a report paired with itself → `any_pair_accepted`, `baseline_may_be_the_candidate` |
+| D7 missing levels | `w3_rule` is `unknown` unless all of `LEVELS = (1, 2, 4, 8, 16, 32)` are present | passing `level_missing` → `missing_levels_ignored` |
+| D8, D9, HON-5 wording | The `decide.py` docstrings now state what `smart_resize` and `worst_tokens` cover: sides ≥ 32 px, and a source with at least F − 2 frames. The protocol's body is not rewritten; its log amendment 1 carries the corrections. **Correction to round 1:** the wording "a residual that depends on the frame count only" (limit 6 and the P-20 record above) is wrong. The residual depends on the frame count and the prompt text: at 4 frames it spans 39–48 tokens across prompts. The band 9.181–9.808 comes from 140 accepted rows, which are 20 distinct clips of ≥ 24 groups seen at every level | — (wording) |
+| D10 boundaries | `test_engine_opt__the_rule_holds_at_its_boundaries` pins each edge: T exactly 0.9 × max qualifies and 1.799 does not; 1 % failures is a fail; a tail breach at c* itself fails; of two X lines the smaller is taken (80.70 and 60.10 → 60.1); `c01` does not set aside `c012-…`; a short-class p95 of 3.5 s passes against 1.5 × 2.0 + 1.0; a parity row on different bytes is `unknown` | `threshold_exclusive`, `error_rate_boundary`, `tail_skips_c_star`, `x_is_the_largest`, `set_aside_prefix_without_dash`, `starvation_slack_dropped`, `parity_pairs_by_clip_only` |
+| HON-3 refusal assertions | All 17 refusal cases now assert: no `systemctl stop/start`, no `docker run/stop/rm`, nothing under `$NVME/w4-*` except the lock file, and no `escape` or `elsewhere` directory | — (strengthened case) |
+| HON-4 protocol log | Appended amendment 1. The calibration helpers ran on the W3 sweep before the protocol commit (protocol at 06:05:35Z, `decide.py` committed at 06:11:16Z). Git order proves only that no W4 script was committed first and that no W4 cell existed | — |
+| HON-6 the 82 s ceiling | Stated in the protocol amendment and here: the ceiling holds only for a source with at least F − 2 frames at the budget's rate (about 2 fps or more). A source with far fewer frames gets larger frames and can exceed 16,384 below 82 s. The result is a free `engine_error`, not a wrong answer. Admission does not bound the frame count today; adding that would be M's or S2M's change | — |
+| HON-7 abridged block | Round 1's `--set-aside` block above left out its six `level c=` lines (filtered with `grep -v`) without saying so. The round-2 outputs below are unabridged | — |
+| HON-8 orderings | Re-run on scratch exports of `a237d6f` and `086a127` in one environment; the diff is below | — |
+| HON-9 wording | The refusal case (`test_engine_opt__a_deterministic_engine_refusal_settles_once_and_free`) drives W1's real adapter and the real `AttemptRunner` against `FakeUpstream` and `test_loop.World`'s in-memory store, journal and ledger fakes. The PostgreSQL/Valkey settlement path is covered by D's and Q's suites. The on-wire shape (a role chunk before the SSE error) is inferred from the coordinator's quote and the sweep's raw rows (`http_status` 200, `stream_error_event`, `content_chars` 0). No raw artifact shows whether vLLM actually sends the role chunk first | — |
+
+Findings left as they are, with the reason:
+- **Boxsafety reviewer's M10** (the restore's `stop_candidate`): not load-bearing on the box, because the unit's `ExecStartPre=docker rm -f marlin2b-8000` removes the candidate anyway.
+- **M11** (record every PartOf unit, not only the active ones): it would start a unit that was not running. Low impact; no case added.
+- **Decision reviewer's M13** (no `break` after a stream error): the mutant is equivalent, because the error is recorded and the outcome stays `failed`.
+- **The HON-1 refuter's single failure** of the records case at its last assertion (`c16.concurrency.log` starts with `run=w3-L1-stub-c16`): it did not recur in any run here. The assertion now prints the file's head when it fails.
+
+Round 2 adds 40 mutants (52 → 92) and one case (14 → 15). Before `086a127`, a pre-check ran the new mutants in four parallel groups and found two not killed:
+- `checkout_not_checked`: the new `parity.py --check` also refused a checkout without `parity.py`, which masked the mutant. The no-checkout case now removes `concurrency.sh` instead, which nothing else checks before the stop.
+- `start_args_unrecorded` was `broken_runner`: the case parsed a line it had not asserted.
+
+Both were fixed in `086a127` and re-run: `2/2 killed`.
+
+### Round-2 commands and results
+
+Every run below is at `086a127`, the code this section describes. Tails are quoted from the logs in the session scratchpad.
+
+| Command (from `apps/infrx-api` unless a make target) | UTC | Exit | Tail |
+|---|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py` | 09:31:21Z | 0 | `15 passed in 115.83s (0:01:55)` |
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w` | 09:33:40Z | 0 | `179 passed in 510.31s (0:08:30)`. Base `a237d6f` collected 156; the +23 are `test_w4.py` 15 + `test_w4_mutants.py` 8 |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4_mutants.py` (the whole list, detached) | 09:31:01Z | 0 | `94 passed in 1102.37s (0:18:22)`: 92 mutants killed plus the 2 list checks |
+| `uv run --frozen python -m tests.w.w4_mutants --list \| tail -1` | — | 0 | `92 mutants over 15 named cases`, the same count the run above killed |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w3_mutants.py` (W3, detached) | 09:31:11Z | 0 | `87 passed in 327.57s (0:05:27)` |
+| `make bench-test` | 09:33:24Z | 0 | `67 passed in 8.44s` |
+
+**HON-8: both orderings, on base and head, in one environment.** All four runs used the same setup:
+- scratch `git archive` exports of `a237d6f` and `086a127`;
+- the same venv (`apps/infrx-api/.venv/bin/python`);
+- the same `PATH`, with a `docker` shim first that refuses every call, so D's and Q's harnesses skip instead of creating containers;
+- the same ignores: `tests/d`, `tests/contracts/v2/test_v1_projection_pg.py`, and the three Q mutant lists whose nested runs get a fixed `PATH=/usr/bin:/bin` and would reach the real docker (`tests/q/test_mutants.py`, `test_valkey_mutants.py`, `test_reconcile_mutants.py`).
+
+There is no `-k` deselection this time, because the Valkey cases skip on the shim. The script is `orderings2.sh <export> <label>` in the session scratchpad:
+- legacy-first: `python -m pytest -q -p no:cacheprovider <ignores>`;
+- track-first: `… tests/g tests/i tests/j tests/m tests/q tests/t tests/w tests/contracts tests/test_app_factory.py tests/test_gateway_auth.py tests/test_inflight.py tests/test_media.py <ignores>`.
+
+| Run | Started (UTC) | Exit | Tail |
+|---|---|---|---|
+| base `a237d6f` legacy-first | 09:23:23Z | 1 | `37 failed, 2478 passed, 85 skipped, 2 warnings in 790.73s (0:13:10)` |
+| base `a237d6f` track-first | 09:36:38Z | 1 | `37 failed, 2478 passed, 85 skipped, 2 warnings in 670.45s (0:11:10)` |
+| head `086a127` legacy-first | 09:42:21Z | 1 | `37 failed, 2501 passed, 85 skipped, 2 warnings in 1009.07s (0:16:49)` |
+| head `086a127` track-first | 09:59:18Z | 1 | `37 failed, 2501 passed, 85 skipped, 2 warnings in 1007.57s (0:16:47)` |
+
+`diff` of the sorted `FAILED`/`ERROR` id lists printed `identical` for all three comparisons: base legacy against head legacy, base track against head track, and head legacy against head track.
+
+The 37 failures are all pre-existing and all in I's suite:
+- `tests/i/test_mutants.py::test_mutant_is_killed` ×36;
+- `tests/i/test_packaging.py::test_backend_deploy__the_config_schema_is_every_name_the_runtime_reads`, I's config-schema case (ACCOUNTING_REGIME, ACTIVE_RATE_CARD_VERSION, PROVIDER_DEV_ALLOCATION_CEILING_CREDIT). It sits in the I list's pristine baseline, which is why the 36 mutants fail with it. Owner: I / coordinator.
+
+Head passes 23 more than base (`test_w4.py` 15 + `test_w4_mutants.py` 8). The 85 skips are the same in all four runs: the Valkey and PostgreSQL harness cases, skipping on the shim.
+
+Round 1's quoted orderings (42 failed / 6 errors) differ because they ran with `-k "not valkey"` while a stale `infrx-q3-valkey` container without its port was up. The coordinator has since removed that container, and this environment makes those cases skip instead of wait.
+
+### decide.py at `086a127`, unabridged
+
+```
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/sweep-20260923T050411Z   @ 2026-09-23T09:42:54Z (head 086a127)
+run=research/plan/evidence/w/box/sweep-20260923T050411Z baseline=None set_aside=none X=80.7 start_to_ready_s=[]
+level c=1 state=warm attempts=64 accepted=60 T=0.353 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=1.0 peak_kv=0.00573436921938586 peak_gpu_mib=44251.0 util_median=100.0 ttft_p95=3.046 latency_p95=6.2907 repeats=0
+level c=2 state=warm attempts=64 accepted=60 T=0.812 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=2.0 peak_kv=0.007029226785053688 peak_gpu_mib=44251.0 util_median=100.0 ttft_p95=1.7052 latency_p95=5.5045 repeats=0
+level c=4 state=warm attempts=64 accepted=60 T=1.301 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=4.0 peak_kv=0.012393636699962962 peak_gpu_mib=45139.0 util_median=100.0 ttft_p95=2.4332 latency_p95=6.3195 repeats=0
+level c=8 state=warm attempts=64 accepted=60 T=1.888 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=8.0 peak_kv=0.02219755826859049 peak_gpu_mib=45139.0 util_median=84.5 ttft_p95=3.773 latency_p95=8.5095 repeats=0
+level c=16 state=warm attempts=64 accepted=60 T=2.206 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=13.0 peak_kv=0.03311135775064744 peak_gpu_mib=45139.0 util_median=86.0 ttft_p95=7.0806 latency_p95=13.4532 repeats=0
+level c=32 state=warm attempts=128 accepted=120 T=2.376 F=8 {'stream_error_event': 8} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=unknown peak_running=24.0 peak_kv=0.05937846836847949 peak_gpu_mib=45139.0 util_median=83.0 ttft_p95=11.7668 latency_p95=22.453 repeats=64
+w3_rule c*=None threshold=2.1384 setting=None
+criterion w3_rule=unknown (c*=None is not taken: levels missing [], not restarted [1, 2, 4, 8, 16, 32])
+criterion error_rate=fail (28/448 = 0.0625)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (not restarted at c=[1, 2, 4, 8, 16, 32])
+criterion oom=unknown (no candidate.log (engine exits not recorded))
+criterion memory_growth=unknown (c=32 growth unsupported (gpu 0.0, host None))
+criterion cancellation=unknown (no capability.sh cancellation line)
+criterion short_job_starvation=unknown (no paired baseline)
+criterion usage_drift=unknown (no paired baseline)
+criterion output_drift=unknown (no paired baseline)
+e3_trigger=yes c=[16, 32]
+verdict: no setting adopted - failed: ['error_rate']; unknown: ['w3_rule', 'severe_tail', 'oom', 'memory_growth', 'cancellation', 'short_job_starvation', 'usage_drift', 'output_drift']
+exit=0
+
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/sweep-20260923T050411Z --set-aside c012,c025,c038,c051
+run=research/plan/evidence/w/box/sweep-20260923T050411Z baseline=None set_aside=c012,c025,c038,c051 X=80.7 start_to_ready_s=[]
+level c=1 state=warm attempts=60 accepted=60 T=0.353 F=0 {} failed_clips=- W=0.0 peak_running=1.0 peak_kv=0.00573436921938586 peak_gpu_mib=44251.0 util_median=100.0 ttft_p95=3.046 latency_p95=6.2907 repeats=0
+level c=2 state=warm attempts=60 accepted=60 T=0.812 F=0 {} failed_clips=- W=0.0 peak_running=2.0 peak_kv=0.007029226785053688 peak_gpu_mib=44251.0 util_median=100.0 ttft_p95=1.7052 latency_p95=5.5045 repeats=0
+level c=4 state=warm attempts=60 accepted=60 T=1.301 F=0 {} failed_clips=- W=0.0 peak_running=4.0 peak_kv=0.012393636699962962 peak_gpu_mib=45139.0 util_median=100.0 ttft_p95=2.4332 latency_p95=6.3195 repeats=0
+level c=8 state=warm attempts=60 accepted=60 T=1.888 F=0 {} failed_clips=- W=0.0 peak_running=8.0 peak_kv=0.02219755826859049 peak_gpu_mib=45139.0 util_median=84.5 ttft_p95=3.773 latency_p95=8.5095 repeats=0
+level c=16 state=warm attempts=60 accepted=60 T=2.206 F=0 {} failed_clips=- W=0.0 peak_running=13.0 peak_kv=0.03311135775064744 peak_gpu_mib=45139.0 util_median=86.0 ttft_p95=7.0806 latency_p95=13.4532 repeats=0
+level c=32 state=warm attempts=120 accepted=120 T=2.376 F=0 {} failed_clips=- W=unknown peak_running=24.0 peak_kv=0.05937846836847949 peak_gpu_mib=45139.0 util_median=83.0 ttft_p95=11.7668 latency_p95=22.453 repeats=60
+w3_rule c*=16 threshold=2.1384 setting=16
+criterion w3_rule=unknown (c*=16 is not taken: levels missing [], not restarted [1, 2, 4, 8, 16, 32])
+criterion error_rate=pass (0/420 = 0.0)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (not restarted at c=[1, 2, 4, 8, 16, 32])
+criterion oom=unknown (no candidate.log (engine exits not recorded))
+criterion memory_growth=unknown (c=32 growth unsupported (gpu 0.0, host None))
+criterion cancellation=unknown (no capability.sh cancellation line)
+criterion short_job_starvation=unknown (no paired baseline)
+criterion usage_drift=unknown (no paired baseline)
+criterion output_drift=unknown (no paired baseline)
+e3_trigger=yes c=[16, 32]
+verdict: no setting adopted - failed: []; unknown: ['w3_rule', 'severe_tail', 'oom', 'memory_growth', 'cancellation', 'short_job_starvation', 'usage_drift', 'output_drift']
+exit=0
+
+### python3 models/marlin2b/measure/decide.py --ceiling 16384; python3 models/marlin2b/measure/decide.py --ceiling 32768; python3 models/marlin2b/measure/decide.py --overheads research/plan/evidence/w/box/sweep-20260923T050411Z
+duration_s=80 frames=160 worst_video_tokens=15760
+duration_s=81 frames=162 worst_video_tokens=16038
+duration_s=82 frames=164 worst_video_tokens=16154
+duration_s=83 frames=166 worst_video_tokens=16434
+duration_s=84 frames=168 worst_video_tokens=16548
+ceiling_s=82 budget_tokens=16384
+duration_s=118 frames=236 worst_video_tokens=23128
+duration_s=119 frames=238 worst_video_tokens=23443
+duration_s=120 frames=240 worst_video_tokens=23520
+ceiling_s=120 budget_tokens=32768
+clips=140 per_group_min=9.181 per_group_max=9.808
+```
+
+### What changes for the coordinator's box run
+
+The SSM block above still applies. Before the stop, `candidate.sh` now also enforces:
+- the unit must be `active`, and no other `candidate.sh` may hold `$NVME/w4-candidate.lock`;
+- every parity clip must be in the cache, so precondition 3 (`sop-synth-v1` built) is now checked, not only stated;
+- `READY_S`, if set, must be a whole number of seconds.
+
+The candidate engine always serves the unit's weights at `$NVME/marlin2b` on `127.0.0.1:8000`, GPU 0, whatever the SSM environment carries. `decide.py` must now be given the predeclared baseline: `decide.py <w4-e1-*> --baseline <w4-e0-*>`, and `<w4-e3-*> --baseline <w4-e1-*>`.
+
+### Round-2 verification log
+
+- 2026-09-23: fix round for `W4-review-db12a5a.json`; head `086a127` plus this section. Status unchanged: implemented, measurement pending the coordinator's box run.
