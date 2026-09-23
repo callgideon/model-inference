@@ -673,8 +673,8 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_an_expected_failure_is_not_pending_even_if_it_says_so",)),
     Mutant("e3bm12", "E3B stage (rv07): backend() reports the status its summary computed",
            "tests/integration/run.py",
-           '    report.add("backend", status, {"postgrest": postgrest, **summary},\n',
-           '    report.add("backend", PASS, {"postgrest": postgrest, **summary},\n',
+           '        report.add("backend", status, {"postgrest": postgrest, **summary},\n',
+           '        report.add("backend", PASS, {"postgrest": postgrest, **summary},\n',
            "tests/integration/backend/test_stage.py", "reports_the_summary",
            cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
 

@@ -87,6 +87,8 @@ def test_the_backend_stage_reports_the_summary_of_what_its_suite_produced(monkey
     assert stage["status"] == run.PENDING
     assert (stage["detail"]["passed"], stage["detail"]["pending"]) == (2, 2)
     assert report.exit_code == 3
+    # Confirmation G-N2: the stage is recorded before its teardown (its seconds are its own).
+    assert [entry["stage"] for entry in report.stages] == ["backend", "backend-teardown"]
 
 
 # ------------------------------------------------------------------ E3B phase 2, item 1

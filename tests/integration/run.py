@@ -611,13 +611,14 @@ def backend(report: Report) -> None:
                         cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "off"})
             cases = classify(junit.read_text()) if junit.exists() else \
                 {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}
+        status, summary = backend_summary(cases, run["exit"])
+        # Confirmation G-N2: recorded BEFORE its teardown, so the stage's seconds are its own.
+        report.add("backend", status, {"postgrest": postgrest, **summary},
+                   cases=cases, runs=[run])
     finally:
         # Measured: PostgREST's pool holds sessions on `infrx_e2`, so a dirtying mutant's
         # re-provision (DROP DATABASE) later in the run is refused while it is up.
         backend_teardown(report)
-    status, summary = backend_summary(cases, run["exit"])
-    report.add("backend", status, {"postgrest": postgrest, **summary},
-               cases=cases, runs=[run])
 
 
 def backend_teardown(report: Report) -> None:
