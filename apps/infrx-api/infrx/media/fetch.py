@@ -67,6 +67,10 @@ UNDECLARED_TYPES = ("", "application/octet-stream", "binary/octet-stream")
 # reason; this exists only for the phases no injected clock can see, so it must not win
 # the race against them.
 BACKSTOP_GRACE_S = 1.0
+# M4: the first time a download's head is shown to `early`, and then each time it has
+# doubled - so at most seven looks up to the 64 MiB cap, and none for a body so small that
+# refusing it early saves nothing worth a look.
+EARLY_LOOK_BYTES = 1 << 20
 DATA_PREFIX = "data:"
 HTTP_PREFIXES = ("http://", "https://")
 
@@ -217,15 +221,19 @@ class MediaFetcher:
             trust_env=False,
             transport=self.transport)
 
-    async def fetch(self, url: str) -> Fetched:
-        """Materialize an http(s) source once. Raises a typed `DomainError`."""
+    async def fetch(self, url: str, *, early=None) -> Fetched:
+        """Materialize an http(s) source once. Raises a typed `DomainError`.
+
+        `early(head)` (M4), when given, is shown the body received so far once it reaches
+        `EARLY_LOOK_BYTES` and each time it has doubled since; it refuses by raising, and
+        the rest of the body is then never read."""
         try:
             # The backstop on the real clock: the injected `monotonic` bounds the phases
             # this module can see, and this bounds the ones it cannot (a resolver or a
             # transport that never returns at all). It deliberately fires a moment *after*
             # the per-phase budgets, so a refusal that can name its host and reason does.
             async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):
-                return await self._fetch(url)
+                return await self._fetch(url, early)
         except errors.DomainError as refusal:
             self.log.warning("media fetch refused: host=%s reason=%s",
                              getattr(refusal, "host", "") or "-",
@@ -240,7 +248,7 @@ class MediaFetcher:
             self.log.warning("media fetch failed: type=%s", type(exc).__name__)
             raise refused("fetch-failed") from None
 
-    async def _fetch(self, url: str) -> Fetched:
+    async def _fetch(self, url: str, early=None) -> Fetched:
         limits = self.limits
         cap = limits.max_media_bytes
         expires_at = self.monotonic() + limits.media_fetch_timeout_s
@@ -311,6 +319,7 @@ class MediaFetcher:
                     # 64 MiB cap: one full copy and one full hash less on the event loop, and
                     # a high-water of about 2x the body instead of 3x (M4 evidence).
                     hasher = hashlib.sha256()
+                    look = EARLY_LOOK_BYTES
                     async for chunk in response.aiter_raw():
                         body += chunk
                         if len(body) > cap:
@@ -318,6 +327,9 @@ class MediaFetcher:
                             # Content-Length buys an attacker nothing.
                             raise refused("too-large", host=host, exc=errors.RequestTooLarge)
                         hasher.update(chunk)
+                        if early is not None and len(body) >= look:
+                            look = 2 * len(body)
+                            early(body)
                         if self.monotonic() >= expires_at:
                             raise refused("timeout", host=host)
                     if not body:

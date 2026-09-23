@@ -283,6 +283,23 @@ class MediaPreparation(MediaStaging):
         self.profile.check(probed, len(data))
         return probed.mime, probed.duration_s
 
+    def refuse_early(self, head) -> None:
+        """M4: the fetcher's look at a download still in progress (`MediaFetcher.fetch`).
+
+        A header-first clip the profile refuses - most often one over the duration cap - is
+        refused from its `moov`, and the rest of the body is never read. Measured before
+        this, a 56 MB clip of 150 s was downloaded to its last byte and only then refused.
+        Anything the header does not settle is left to `facts`, which still probes the
+        whole object: this only ever refuses sooner, never accepts.
+        """
+        probed = probing.probe_header(head)
+        if probed is not None:
+            try:
+                self.profile.check(probed, 0)       # bytes are the fetcher's own cap
+            except errors.DomainError as refusal:
+                refusal.reason = "header"           # for the operator's log line
+                raise
+
     # --- admission-time preparation -------------------------------------------
     async def prepare_request(self, org_id: str, request: NormalizedRequest) -> NormalizedRequest:
         """The validated request with its media materialized, measured and referenced.

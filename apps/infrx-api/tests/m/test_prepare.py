@@ -887,3 +887,85 @@ def test_no_full_body_digest_runs_on_the_event_loop(tmp_path, monkeypatch):
     asyncio.run(adapter.prepare("job-1", "v1"))
     asyncio.run(adapter.materialize(b.ORG_A, data_url(WEBM, "video/webm")))
     assert on_loop == []
+
+
+# --- M4: refusing from the header of a download still in progress -------------------
+FTYP = support.box(b"ftyp", b"isom\x00\x00\x02\x00isom")
+CHUNK = 64 << 10
+
+
+def _moov(seconds: float, pad: int = 0) -> bytes:
+    extra = (support.box(b"udta", bytes(pad)),) if pad else ()
+    return support.box(b"moov", support.mvhd(round(seconds * 1000)), support.trak(), *extra)
+
+
+def _streamed(body: bytes) -> support.Chunks:
+    return support.Chunks([body[at:at + CHUNK] for at in range(0, len(body), CHUNK)])
+
+
+def _served(tmp_path, stream):
+    return preparation(tmp_path, transport=support.Transport(support.response(stream=stream)))
+
+
+def test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives(tmp_path):
+    """M4: measured before this, a 56 MB header-first clip of 150 s was read to its last
+    byte and then refused. Its `moov` says 121 s in the first look (1 MiB), and the other
+    3 MiB are never read; nothing is stored, and the log line says why."""
+    body = FTYP + _moov(121.0) + support.box(b"mdat", bytes(4 << 20))
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    with pytest.raises(errors.UnsupportedMedia) as caught:
+        run(adapter.materialize(b.ORG_A, URL))
+    assert "longer than 120s" in caught.value.detail
+    assert getattr(caught.value, "reason", None) == "header"
+    assert stream.read < fetch.EARLY_LOOK_BYTES + CHUNK < len(body)
+    assert adapter.objects.objects == {} and adapter.refs == {}
+
+
+def test_a_header_that_is_not_complete_yet_is_looked_at_again(tmp_path):
+    """The first look sees half a `moov` (1.5 MB of `udta`); its probe refuses, which must
+    stay inside the look. The second look settles it: at the cap, so accepted."""
+    body = FTYP + _moov(DEFAULTS.max_video_seconds, pad=1_500_000) \
+        + support.box(b"mdat", bytes(2 << 20))
+    stream = _streamed(body)
+    ref = run(_served(tmp_path, stream).materialize(b.ORG_A, URL))
+    assert ref.duration_s == DEFAULTS.max_video_seconds and stream.read == len(body)
+
+
+def test_a_media_first_clip_over_the_cap_is_refused_once_it_has_arrived(tmp_path):
+    """No gain and no change where the header comes last: nothing can be read early, and
+    the whole-object probe is still the one that refuses."""
+    body = FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(121.0)
+    stream = _streamed(body)
+    adapter = _served(tmp_path, stream)
+    with pytest.raises(errors.UnsupportedMedia) as caught:
+        run(adapter.materialize(b.ORG_A, URL))
+    assert "longer than 120s" in caught.value.detail and stream.read == len(body)
+    assert adapter.objects.objects == {}
+
+
+def test_the_header_scan_stops_where_the_probe_would(monkeypatch):
+    """The early walk reads at most MAX_ELEMENTS box headers, like the probe. The answer
+    would be None either way (the probe refuses a file with that many boxes); the bound is
+    what keeps a prefix of 8-byte boxes from costing ~130k header reads per MiB per look."""
+    moov = _moov(121.0)
+    assert probe.probe_header(FTYP + moov) is not None                  # non-vacuous
+    reads = []
+    real = probe._u
+    monkeypatch.setattr(probe, "_u", lambda data, at, size: reads.append(at) or real(data, at, size))
+    many = FTYP + support.box(b"free") * (4 * probe.MAX_ELEMENTS) + moov
+    assert probe.probe_header(many) is None
+    assert len(reads) <= probe.MAX_ELEMENTS
+
+
+def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():
+    """At most seven looks up to the 64 MiB cap: an 8 MiB body in 64 KiB chunks is looked
+    at four times, at 1, 2, 4 and 8 MiB."""
+    body = FTYP + support.box(b"mdat", bytes((8 << 20) - len(FTYP) - 8))
+    looks = []
+    fetcher = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                                 transport=support.Transport(
+                                     support.response(stream=_streamed(body))).transport,
+                                 monotonic=support.Ticker(), log=support.Records())
+    run(fetcher.fetch(URL, early=lambda head: looks.append(len(head))))
+    assert looks == [1 << 20, 2 << 20, 4 << 20, 8 << 20]

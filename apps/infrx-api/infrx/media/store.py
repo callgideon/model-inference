@@ -154,6 +154,11 @@ def media_handle(digest: str) -> str:
 class MediaStaging:
     """`ports.MediaStore`, for the operations M1 owns."""
 
+    #: M4: what the fetcher shows the head of a download to (`MediaFetcher.fetch` `early=`).
+    #: M1 has no probe, so nothing is refused early; `MediaPreparation` refuses from the
+    #: header of a clip the profile would refuse anyway.
+    refuse_early = None
+
     def __init__(self, objects: ObjectStore, *, limits: PilotSettings = DEFAULTS,
                  fetcher: MediaFetcher | None = None, job_org=None,
                  profile_version: str = "v1") -> None:
@@ -223,7 +228,8 @@ class MediaStaging:
             fetched, kind = await asyncio.to_thread(
                 decode_data_url, source, self.limits, self.fetcher.allowed_mime), MediaKind.inline
         elif source.startswith(HTTP_PREFIXES):
-            fetched, kind = await self.fetcher.fetch(source), MediaKind.url
+            fetched, kind = await self.fetcher.fetch(source, early=self.refuse_early), \
+                MediaKind.url
         else:
             raise errors.InvalidRequest("a media source must be an http(s) or data: URL")
         if len(fetched.data) > self.limits.max_media_bytes:

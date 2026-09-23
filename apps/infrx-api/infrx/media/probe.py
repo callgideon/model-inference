@@ -336,6 +336,36 @@ def probe_matroska(data: bytes) -> Probed:
                   codec=MATROSKA_CODECS[video["codec"]])
 
 
+# --- M4: the header of a download still in progress -----------------------------
+def probe_header(data) -> Probed | None:
+    """What a header-first ISO file says before its media has arrived, or None.
+
+    The probe of every top-level box up to the end of the first `moov`. None when there is
+    nothing to read yet - not ISO base media, the `moov` still arriving, or the media first
+    (the `moov` is then at the end, and only the whole object says anything). Never a
+    refusal of its own: a prefix that does not probe is left to `probe` on the whole object.
+    A `Probed` from here is read from bytes the whole-object probe reads the same way, so a
+    profile refusal based on it is one the complete download would also get - it only comes
+    sooner. `data` may be the fetcher's growing `bytearray`; nothing here keeps it.
+    """
+    if data[4:8] != b"ftyp":
+        return None
+    at = 0
+    try:
+        for _ in range(MAX_ELEMENTS):
+            size, kind = _u(data, at, 4), data[at + 4:at + 8]
+            if size == 1:
+                size = _u(data, at + 8, 8)
+            if kind == b"moov":
+                return probe(data[:at + size])
+            if size < BOX_HEADER:          # "to the end of the file": no header after it
+                return None
+            at += size
+    except errors.UnsupportedMedia:        # truncated, or a moov that does not probe (yet)
+        return None
+    return None
+
+
 # --- the entry point ---------------------------------------------------------
 def probe(data: bytes) -> Probed:
     """What the bytes are, by their own magic. The declared type is not an argument.

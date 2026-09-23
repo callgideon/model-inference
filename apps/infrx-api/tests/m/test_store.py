@@ -234,7 +234,7 @@ def test_the_digest_is_measured_not_taken_from_the_fetcher():
     class Lies:
         allowed_mime = frozenset({"video/mp4"})
 
-        async def fetch(self, url):
+        async def fetch(self, url, early=None):
             return fetch.Fetched(mime="video/mp4", data=MP4, digest=b.digest("not this"),
                                  host="example.com")
 
@@ -380,7 +380,7 @@ def test_an_oversize_source_never_reaches_the_object_store():
     # returned more than MAX_MEDIA_BYTES (a limits mismatch, a future streaming source)
     # must not get an object written for it.
     class Generous:
-        async def fetch(self, url):
+        async def fetch(self, url, early=None):
             return fetch.Fetched(mime="video/mp4", data=b"x" * 400,
                                  digest=fetch.digest_of(b"x" * 400), host="example.com")
 
