@@ -1,3 +1,4 @@
 2026-09-23T19:39:17Z	1a607dca-a132-4c2c-8cb9-7c7060ae9ec3	step1 inventory.sh (no HF, read-only)
 2026-09-23T19:39:49Z	c1a0b401-d895-4490-809e-ad37d0e50edb	step1 capability.sh on the live engine (data: URL media, no HF)
 2026-09-23T19:40:31Z	fb16bf96-97f6-4641-88cf-1da82edfbef7	step1 read-only inspection (units, caddy, Caddyfile hash, checkout, disk)
+2026-09-23T19:42:25Z	fe06b414-dbf5-43f0-83a6-407de2e4828d	step2 fetch bundle 37a0d8a into /opt/dlami/nvme/w3-checkout, detach at 37a0d8a
