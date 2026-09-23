@@ -49,8 +49,9 @@ LOCK_KEY = 0x12BD3B
 # Statements PostgreSQL refuses inside a transaction block. `apply` runs the whole plan in
 # one, so such a file is refused at `plan`, before the window, not failed mid-`apply`. A
 # heuristic over comment-stripped text, one statement head per line: what it misses (a
-# statement split across lines, DETACH PARTITION CONCURRENTLY, CREATE DATABASE) fails at
-# `apply` instead - exit 3, rolled back.
+# statement split across lines, a second statement on the same line, comment markers
+# inside a string literal that hide the lines after them, DETACH PARTITION CONCURRENTLY,
+# CREATE DATABASE) fails at `apply` instead - exit 3, rolled back.
 OUTSIDE_TRANSACTION = re.compile(r"^\s*(vacuum|alter\s+system|(create|drop|reindex)\b[^;\n]*"
                                  r"\bconcurrently)\b", re.I | re.M)
 COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.S)

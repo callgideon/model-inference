@@ -203,7 +203,8 @@ def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path
                                {"0003_other.sql": "select 1;"},
                                {"0004_idx.sql": "create unique index concurrently i on a (x);"},
                                {"0004_vac.sql": "-- tidy up\nVACUUM a;"},
-                               {"0004_sys.sql": "alter system set work_mem = '64MB';"})):
+                               {"0004_sys.sql": "alter system set work_mem = '64MB';"},
+                               {"0004_reidx.sql": "reindex index concurrently i;"})):
         odd = migrations(tmp_path / f"odd{i}", **extra)
         conn = Conn()
         assert run(monkeypatch, conn, "plan", "--dir", str(odd)) == 2 and conn.log == []
