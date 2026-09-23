@@ -139,22 +139,27 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- rebuild -------------------------------------------------------------
     _m("the_rebuild_is_not_topped_up",
        "Q2's hole: a delivery acknowledged behind a stale snapshot survives the rebuild",
-       "        report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n"
-       '        self.metrics["rebuilds"] += 1',
-       "        report = Counter(repaired=0)\n"
-       '        self.metrics["rebuilds"] += 1',
+       "            report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n"
+       '            self.metrics["rebuilds"] += 1',
+       "            report = Counter(repaired=0)\n"
+       '            self.metrics["rebuilds"] += 1',
        "test_q3_reconcile__a_delivery_behind_a_stale_snapshot_survives_the_rebuild"),
     _m("the_rebuild_starts_empty_and_applies_the_caps",
        "a rebuild is recovery: PostgreSQL's whole snapshot, caps not applied",
-       "        count = await index.rebuild(await self.store.dispatch_snapshot())",
-       "        count = await index.rebuild(())",
+       "            count = await index.rebuild(await self.store.dispatch_snapshot())",
+       "            count = await index.rebuild(())",
        "test_q3_reconcile__a_rebuild_is_recovery_and_ignores_the_caps"),
     _m("rebuilds_are_not_counted",
        "the rebuild counter moves once per rebuild",
-       '        self.metrics["rebuilds"] += 1',
-       '        self.metrics["rebuilds"] += 0',
+       '            self.metrics["rebuilds"] += 1',
+       '            self.metrics["rebuilds"] += 0',
        "test_q3_reconcile__an_acknowledged_candidate_postgresql_still_wants_forces_a_rebuild",
        "test_q3_reconcile__the_rebuild_is_postgresql_truth"),
+    _m("a_blocked_rebuild_is_not_repeated",
+       "review DUR-4: an acknowledgment landing inside the rebuild is repaired by it",
+       '            if not report["blocked"]:\n                break',
+       "            break",
+       "test_q3_reconcile__an_acknowledgment_inside_the_rebuild_is_repaired_by_the_rebuild"),
     # --- (3) the switch ------------------------------------------------------
     _m("the_switch_is_not_topped_up_after_the_swap",
        "a delivery into the old index during the switch reaches the new one",

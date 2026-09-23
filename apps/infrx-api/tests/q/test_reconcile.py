@@ -659,6 +659,30 @@ def test_q3_drill__an_acknowledgment_after_a_rebuild_is_repaired_by_the_next_pas
     run(body)
 
 
+def test_q3_reconcile__an_acknowledgment_inside_the_rebuild_is_repaired_by_the_rebuild(
+        adapter):
+    """Review DUR-4: the worker's acknowledgment lands between the rebuild and its
+    top-up. The rebuild runs once more, so the job is indexed when `rebuild()` returns,
+    not a whole reconcile period later."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)
+
+        async def acknowledged():
+            await w.index.acknowledge(held)                   # the claim never landed
+
+        w.rec.store = Interleave(w.outbox, 2, acknowledged)
+        await w.rec.rebuild()
+        assert list((await rig.members(w)).values()) == [job]
+        assert w.rec.metrics["rebuilds"] == 2
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
 def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_job():
     """The acceptance. A drain loop, a reconcile loop, two preparation and two inference
     workers run concurrently over real Valkey while jobs keep arriving; one inference

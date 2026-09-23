@@ -174,11 +174,18 @@ class Reconciler:
         that still wants dispatch, and topping up from it re-indexes exactly those
         (`enqueue` is replay safe, and the rebuild cleared the acknowledged set). The
         caps are not applied to the rebuild itself: it is recovery.
+
+        A worker that acknowledges a re-indexed candidate between the rebuild and the
+        top-up (its claim never landed) leaves the top-up `blocked`; the rebuild then runs
+        once more rather than leaving the job unindexed until the next pass (DUR-4).
         """
         index = self.index if index is None else index
-        count = await index.rebuild(await self.store.dispatch_snapshot())
-        report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)
-        self.metrics["rebuilds"] += 1
+        for _ in range(2):
+            count = await index.rebuild(await self.store.dispatch_snapshot())
+            report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)
+            self.metrics["rebuilds"] += 1
+            if not report["blocked"]:
+                break
         return count + report["repaired"]
 
     # --- (3) switching adapters ---------------------------------------------
