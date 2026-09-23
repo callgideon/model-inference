@@ -956,6 +956,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '"no:cacheprovider", "-rs", f"--junitxml={junit}"],',
            "tests/integration/backend/test_stage.py", "reports_the_summary",
            cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
+    Mutant("e3bm58", "E3B2 round 4 (GATE-N2): RESIDUAL is excused by the recovery MODULE PATH",
+           "tests/integration/run.py",
+           '    return "recovery" in case.split("::")[0].split(".")\n',
+           '    return "recovery" in case\n',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
 )
 
 

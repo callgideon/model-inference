@@ -200,6 +200,10 @@ def test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task(monkeypatch):
     i3b = "tests.integration.backend.recovery.test_recovery::test_i3b_rc03"
     assert run.stale_pending({"pending": {"G1R": [e3b, i3b]}}) == ["G1R"]
     assert run.stale_pending({"pending": {"G1R": [i3b], "G2-R1": [e3b]}}) == []
+    # Verification GATE-N2/RUN-N4: "recovery" must be the MODULE PATH's component - an E3B case
+    # merely named like one is still stale.
+    assert run.stale_pending({"pending": {"G1R": ["b.test_drills::test_e3b_recovery_like"]}}) \
+        == ["G1R"]
 
 
 def test_a_live_defect_is_refused_outside_this_processs_clones(monkeypatch):
