@@ -787,6 +787,25 @@ def judged(rows: list[dict], clips: dict) -> list[dict]:
     return [row for row in rows if _duration(row, clips) <= ceiling]
 
 
+def failures(rows: list[dict]) -> tuple:
+    """Review F4: every attempt that got no answer counts - the platform-caused ones (a 5xx,
+    a broken stream) and the transport ones (a timeout, a reset) alike, because a client that
+    got nothing was not served within the envelope; a refusal or a client cancel is not a
+    failure. The platform-caused share is kept in the detail (R21 makes those free)."""
+    failed = [r for r in rows if r.get("outcome") == "failed"]
+    platform = sum(bench.is_platform_failure(r) for r in failed)
+    rate = len(failed) / len(rows) if rows else None
+    return ("failure_rate", UNKNOWN if rate is None else
+            decide.PASS if rate < CRITERIA["max_failure_rate"] else decide.FAIL,
+            f"{len(failed)}/{len(rows)} ({platform} platform-caused)", "BOX")
+
+
+def answered(rows: list[dict]) -> tuple:
+    """A cell that accepted nothing supports nothing, whatever else it measured."""
+    accepted = sum(r.get("outcome") == "accepted" for r in rows)
+    return ("answered", decide.PASS if accepted else decide.FAIL, f"{accepted} accepted", "BOX")
+
+
 def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool) -> list[tuple]:
     """Protocol §4 envelope criteria for one rate. Attempts on clips beyond the engine's
     ceiling are the duration cap's: they must be refused at admission and are no one's
@@ -807,11 +826,7 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool) -> list[tuple
         out.append(("duration_cap", verdict, {"over_ceiling_not_refused": admitted,
                                               "within_cap_refused": refused,
                                               "ceiling_s": ceiling, "cap_s": cap}, "BOX"))
-    platform = [r for r in counted if bench.is_platform_failure(r)]
-    rate = len(platform) / len(counted) if counted else None
-    out.append(("failure_rate", UNKNOWN if rate is None else
-                decide.PASS if rate < CRITERIA["max_failure_rate"] else decide.FAIL,
-                f"{len(platform)}/{len(counted)}", "BOX"))
+    out += [failures(counted), answered(counted)]
     refusals = [r for r in counted if r.get("outcome") == "rejected"
                 and _duration(r, clips) <= cap]
     out.append(("rejections", decide.FAIL if refusals else decide.PASS,
@@ -841,7 +856,7 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
     supported, chosen = None, None
     for rate, verdicts in sorted(rungs):
         core = [v for name, v, _, _ in verdicts
-                if name in ("failure_rate", "rejections", "client_exit")]
+                if name in ("failure_rate", "answered", "rejections", "client_exit")]
         if any(v != decide.PASS for v in core):
             break
         supported, chosen = rate, verdicts
@@ -856,10 +871,7 @@ def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict) -> list[tu
     """Protocol §4 soak criteria: failures, memory growth from /metrics, the reconciler's
     drift at the end, and the latency of the last third against the first."""
     counted = judged(rows, clips)
-    platform = [r for r in counted if bench.is_platform_failure(r)]
-    out = [("failure_rate", UNKNOWN if not counted else
-            decide.PASS if len(platform) / len(counted) < CRITERIA["max_failure_rate"]
-            else decide.FAIL, f"{len(platform)}/{len(counted)}", "BOX")]
+    out = [failures(counted), answered(counted)]
     for name, key, limit in (("host_growth_mib", "rss_mib", CRITERIA["max_host_growth_mib"]),
                              ("gpu_growth_mib", "gpu_used_mib", CRITERIA["max_gpu_growth_mib"])):
         grew = decide.growth([sample.get(key) for sample in samples])
@@ -902,7 +914,7 @@ def overload_problems(rows: list[dict], clips: dict) -> list[str]:
     if wrong:
         problems.append(f"refusals without 429 + Retry-After + an overload code: {wrong[:5]}")
     broken = [(r.get("http_status"), r.get("error_class")) for r in rows
-              if (r.get("http_status") or 0) >= 500 or bench.is_platform_failure(r)]
+              if (r.get("http_status") or 0) >= 500 or r.get("outcome") == "failed"]
     if broken:
         problems.append(f"5xx or platform-caused failures under overload: {broken[:5]}")
     return problems

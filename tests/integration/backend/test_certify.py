@@ -539,7 +539,7 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     capped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
     verdicts = certify.rung_verdicts(capped, clips, gateway=True)
     assert {row[0]: row[1] for row in verdicts} == {
-        "duration_cap": "pass", "failure_rate": "pass", "rejections": "pass",
+        "duration_cap": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
         "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
     engine_failed = [*ok, _attempt("over", "failed", error="stream_error_event")]
     assert _verdict(certify.rung_verdicts(engine_failed, clips, gateway=True),
@@ -572,6 +572,36 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
         "unknown"
 
 
+def test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause():
+    """Review F4 (PERF-ENVELOPE: raw denominators include every error): a timeout or a reset
+    is a failed attempt like a 5xx, and a cell that accepted nothing supports no rate - an
+    endpoint that answered nothing is never certified at a rate."""
+    clips = _clips()
+    ok = [_attempt("short") for _ in range(84)]
+    timeouts = [_attempt("short", "failed", status=None, error="ReadTimeout")] * 36
+    verdicts = certify.rung_verdicts([*ok, *timeouts], clips, gateway=True)
+    assert _verdict(verdicts, "failure_rate") == "fail"
+    assert ("failure_rate", "fail", "36/120 (0 platform-caused)", "BOX") in verdicts
+    dead = [_attempt("short", "failed", status=None, error="ConnectError")] * 120
+    nothing = certify.rung_verdicts(dead, clips, gateway=True)
+    assert _verdict(nothing, "answered") == _verdict(nothing, "failure_rate") == "fail"
+    assert certify.envelope_summary([(0.5, nothing), (1.0, nothing)]) == (certify.FAIL, (), None)
+    only_capped = [_attempt("over", "rejected", status=400)] * 5
+    unanswered = certify.rung_verdicts(only_capped, clips, gateway=True)
+    assert _verdict(unanswered, "answered") == "fail"
+    assert certify.envelope_summary([(0.5, unanswered)])[2] is None
+    gave_up = certify.rung_verdicts([_attempt("short", "cancelled")] * 20, clips, gateway=True)
+    assert _verdict(gave_up, "failure_rate") == "pass" and _verdict(gave_up, "answered") == "fail"
+    assert certify.envelope_summary([(0.5, gave_up)]) == (certify.FAIL, (), None)
+    flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
+    soak = [dict(row, send_s=i) for i, row in enumerate([*ok[:30], *timeouts[:36]])]
+    assert certify.summarise(certify.soak_verdicts(soak, flat, clips))[0] == certify.FAIL
+    reset = _attempt("short", "failed", status=None, error="RemoteProtocolError")
+    honest = [_attempt("short")] * 8 + [_attempt("short", "rejected", status=429,
+                                                 code="capacity_exhausted", retry=2.0)] * 8
+    assert "5xx or platform" in first(certify.overload_problems([*honest, reset], clips))
+
+
 def test_e4b_the_supported_rate_is_the_highest_rung_climbing_from_the_lowest():
     """The envelope is contiguous from the bottom: a failing rung ends the climb, whatever
     passes above it; latency unknowns pend, and a cap failure on any rung fails the cell."""
@@ -598,8 +628,8 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     rows = [dict(_attempt("short", latency=2.0), send_s=i) for i in range(18)]
     flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
     assert {row[0]: row[1] for row in certify.soak_verdicts(rows, flat, clips)} == {
-        "failure_rate": "pass", "host_growth_mib": "pass", "gpu_growth_mib": "pass",
-        "reconciled_at_end": "pass", "latency_drift": "pass"}
+        "failure_rate": "pass", "answered": "pass", "host_growth_mib": "pass",
+        "gpu_growth_mib": "pass", "reconciled_at_end": "pass", "latency_drift": "pass"}
     leak = flat[:4] + [{**flat[0], "rss_mib": 1500.0}] * 4
     assert _verdict(certify.soak_verdicts(rows, leak, clips), "host_growth_mib") == "fail"
     vram = flat[:4] + [{**flat[0], "gpu_used_mib": 40300.0}] * 4
@@ -609,7 +639,8 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     slower = [dict(row, latency_s=2.0 if row["send_s"] < 12 else 3.5) for row in rows]
     assert _verdict(certify.soak_verdicts(slower, flat, clips), "latency_drift") == "fail"
     blind = certify.soak_verdicts(rows, [], clips)
-    assert [row[1] for row in blind[1:4]] == ["unknown"] * 3
+    assert [_verdict(blind, name) for name in ("host_growth_mib", "gpu_growth_mib",
+                                                 "reconciled_at_end")] == ["unknown"] * 3
     assert certify.summarise(blind) == (certify.PENDING, ("BOX",))
     assert _verdict(certify.soak_verdicts(rows[:17], flat, clips), "latency_drift") == "unknown"
 

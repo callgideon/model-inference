@@ -112,6 +112,7 @@ CRASH = "test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_w
 IDENTITY = "test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails"
 NOGIT = "test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity"
 SERVED = "test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves"
+UNANSWERED = "test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -339,6 +340,20 @@ MUTANTS: tuple[Mutant, ...] = (
        'if series == "infrx_build_info" and value == 1),', "if value == 1),", SCRAPE),
     _m("box_without_metrics_accepted", "a box run reads the gateway's build from /metrics",
        "    if args.box and not args.metrics_url:\n", "    if False:\n", SERVED),
+    # --- review F4: every unanswered attempt is a failure ------------------------------
+    _m("transport_failures_uncounted", "a timeout or a reset is a failure like a 5xx",
+       '    failed = [r for r in rows if r.get("outcome") == "failed"]\n',
+       "    failed = [r for r in rows if bench.is_platform_failure(r)]\n", UNANSWERED),
+    _m("nothing_accepted_passes", "a cell that accepted nothing supports nothing",
+       '    return ("answered", decide.PASS if accepted else decide.FAIL,',
+       '    return ("answered", decide.PASS,', UNANSWERED),
+    _m("climb_ignores_answers", "the envelope climb stops at a rung that answered nothing",
+       'if name in ("failure_rate", "answered", "rejections", "client_exit")]',
+       'if name in ("failure_rate", "rejections", "client_exit")]', UNANSWERED),
+    _m("overload_resets_accepted", "a reset under overload is a failure, not a refusal",
+       '              if (r.get("http_status") or 0) >= 500 or r.get("outcome") == "failed"]',
+       '              if (r.get("http_status") or 0) >= 500 or bench.is_platform_failure(r)]',
+       UNANSWERED),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',
