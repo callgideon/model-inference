@@ -500,6 +500,18 @@ def test_ops_recover__readiness_is_never_public_and_leaks_nothing():
         await asyncio.sleep(0.05)
         assert moved.loop.claimed == 0 and moved._pool is None
 
+        # a readiness port already taken: start fails before the pool claims anything, so
+        # a restart loop on a busy port cannot orphan a claimed job each time round
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 0))
+            taken.listen()
+            busy = service_for(world, Blocking(), reap_interval_s=3600,
+                               health_port=taken.getsockname()[1])
+            with pytest.raises(OSError):
+                await busy.start()
+            await asyncio.sleep(0.05)
+            assert busy.loop.claimed == 0 and busy._pool is None
+
         service = service_for(world, Blocking(), drain_s=0.01, reap_interval_s=3600,
                               health_port=0)
         await service.start()

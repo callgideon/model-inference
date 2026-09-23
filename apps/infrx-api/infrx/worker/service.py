@@ -104,13 +104,13 @@ class WorkerService:
     # --- lifecycle ------------------------------------------------------------
     async def start(self) -> None:
         self._check_loopback()                    # again: the field is mutable after init
+        if self.health_port is not None:          # first: a busy port must claim nothing
+            self._server = await asyncio.start_server(self._probe, self.health_host,
+                                                      self.health_port)
         await self.reap_once()                    # a restart requeues what died with us
         self._pool = asyncio.create_task(
             self.loop.run(concurrency=self.concurrency, stop_when_idle=False), name="pool")
         self._reaper = asyncio.create_task(self._reap_forever(), name="reaper")
-        if self.health_port is not None:
-            self._server = await asyncio.start_server(self._probe, self.health_host,
-                                                      self.health_port)
 
     async def stop(self) -> DrainReport:
         """Drain, then tear down. Returns (and logs) what the drain did to each job."""

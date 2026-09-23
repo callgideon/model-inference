@@ -257,6 +257,21 @@ PY_MUTANTS: tuple[Mutant, ...] = (
     _m("listener_binds_every_interface", "the listener binds the loopback address given",
        V, "start_server(self._probe, self.health_host,", 'start_server(self._probe, "0.0.0.0",',
        PUBLIC),
+    _m("listener_bound_after_the_pool", "a readiness port that is taken claims nothing",
+       V, "        if self.health_port is not None:          # first: a busy port must claim "
+          "nothing\n            self._server = await asyncio.start_server(self._probe, "
+          "self.health_host,\n                                                      "
+          "self.health_port)\n        await self.reap_once()                    # a restart "
+          "requeues what died with us\n        self._pool = asyncio.create_task(\n"
+          "            self.loop.run(concurrency=self.concurrency, stop_when_idle=False), "
+          'name="pool")\n',
+       "        await self.reap_once()                    # a restart requeues what died with "
+       "us\n        self._pool = asyncio.create_task(\n            self.loop.run("
+       'concurrency=self.concurrency, stop_when_idle=False), name="pool")\n'
+       "        if self.health_port is not None:          # first: a busy port must claim "
+       "nothing\n            self._server = await asyncio.start_server(self._probe, "
+       "self.health_host,\n                                                      "
+       "self.health_port)\n", PUBLIC),
     _m("health_check_unbounded", "an engine that does not answer in time is down",
        V, "            async with asyncio.timeout(HEALTH_TIMEOUT_S):",
        "            async with asyncio.timeout(None):", READY),
