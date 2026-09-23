@@ -1290,12 +1290,25 @@ class FakeStreamStore:
         self.failures = failure_hooks(failures)
         self.chunks: dict[str, list[Chunk]] = {}
         self.pruned_to: dict[str, tuple[int, int]] = {}
-        self.expired_jobs: set[str] = set()
         jobs.stream = self          # one database: settlement writes the terminal event
 
     @staticmethod
     def event_bytes(event: EngineEvent) -> int:
         return len(compact_bytes(event.payload))
+
+    def _expired(self, job_id: str) -> bool:
+        """D4's definition (0017), not a flag: a prune watermark and no chunk left. A later
+        append or terminal event lands past the watermark and the journal is live again."""
+        return job_id in self.pruned_to and not self.chunks.get(job_id)
+
+    def _last_sequence(self, job_id: str, generation: int) -> int:
+        """The last sequence `generation` issued, pruned or not. Numbering continues past a
+        prune watermark and never restarts below it (D4 J4): a restarted journal would
+        reissue cursors that already named pruned events."""
+        pruned_generation, pruned_sequence = self.pruned_to.get(job_id, (0, 0))
+        return max([chunk.sequence for chunk in self.chunks.get(job_id, ())
+                    if chunk.generation == generation]
+                   + [pruned_sequence if pruned_generation == generation else 0])
 
     async def append(self, lease: Lease, events: tuple[EngineEvent, ...]) -> tuple[Chunk, ...]:
         self.failures.before("append")
@@ -1321,8 +1334,7 @@ class FakeStreamStore:
                         f"event of {size} bytes exceeds {self.limits.journal_event_max_bytes}")
             self.jobs.journal.store(job.id, sum(sizes))
             stored = self.chunks.setdefault(job.id, [])
-            sequence = max((chunk.sequence for chunk in stored
-                            if chunk.generation == lease.generation), default=0)
+            sequence = self._last_sequence(job.id, lease.generation)
             committed = []
             for event, size in zip(events, sizes):
                 sequence += 1
@@ -1347,7 +1359,7 @@ class FakeStreamStore:
         if not isinstance(limit, int) or limit <= 0:
             raise errors.InvalidRequest(f"limit must be a positive integer, not {limit!r}")
         limit = min(limit, MAX_READ_LIMIT)
-        if job.id in self.expired_jobs:
+        if self._expired(job.id):
             raise errors.JournalExpired(f"journal for {job_handle} has expired")
         position = (cursor.generation, cursor.sequence) if cursor else (0, 0)
         head = max(((chunk.generation, chunk.sequence) for chunk in self.chunks.get(job.id, ())),
@@ -1382,7 +1394,7 @@ class FakeStreamStore:
         if not job.terminal:
             raise errors.StateConflict("finalize_in_transaction runs inside the settling "
                                        "transaction, after the terminal outcome")
-        if job.id in self.expired_jobs:
+        if self._expired(job.id):
             raise errors.JournalExpired(f"journal for job {job.id} has expired")
         if outcome != job.outcome:
             # The argument is a lookup key, not content: an outcome that is not the
@@ -1427,8 +1439,7 @@ class FakeStreamStore:
             if chunk.event_type is ChunkEventType.terminal:
                 return chunk                        # one terminal event, replay safe
         generation = max((chunk.generation for chunk in stored), default=job.generation) or 1
-        sequence = max((chunk.sequence for chunk in stored if chunk.generation == generation),
-                       default=0) + 1
+        sequence = self._last_sequence(job.id, generation) + 1
         now = self.clock.now()
         payload = self.terminal_payload(outcome)
         chunk = Chunk(job_id=job.id, generation=generation, sequence=sequence,
@@ -1458,5 +1469,4 @@ class FakeStreamStore:
                 self.chunks[job_id] = keep
             else:
                 del self.chunks[job_id]
-                self.expired_jobs.add(job_id)
         return removed

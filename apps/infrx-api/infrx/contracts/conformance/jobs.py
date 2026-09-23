@@ -2990,6 +2990,40 @@ async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
     assert [chunk.payload["content"] for chunk in page] == ["c"]
 
 
+async def dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark(factory):
+    """DUR-OUTPUT / D4 J4 (0017): pruning is a prefix and the watermark only grows. When a
+    running job's journal is pruned to nothing, the next append - and later the terminal
+    event - continues PAST the watermark, never restarting at 1 below it (a restarted
+    journal reissues cursors that named pruned events), and the journal is live again: a
+    replay from the start is an explicit gap, a replay from the watermark is the new tail."""
+    harness = factory(limits=DEFAULTS.replace(journal_chunk_ttl_s=30))
+    jobs = hook(harness, "jobs")
+    request, admission, lease = await _stream_job(harness)
+    await harness.port.append(lease, b.events("a", "b"))
+    harness.clock.advance(31)
+    assert await harness.port.expire(harness.clock.now()) == 2
+    chunks = await harness.port.append(lease, b.events("c"))
+    assert [(chunk.generation, chunk.sequence) for chunk in chunks] == [(1, 3)], \
+        "the journal restarted below its prune watermark"
+    try:
+        await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    except errors.ReplayGap as exc:
+        assert errors.http_status(exc.code) == 410
+    else:
+        raise AssertionError("a replay from the start hid the pruned prefix")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle,
+                                            Cursor.parse("1-2"), 10)
+    assert [chunk.payload["content"] for chunk in page] == ["c"]
+    # and the settling transaction's terminal event after a second full prune
+    harness.clock.advance(31)
+    assert await harness.port.expire(harness.clock.now()) == 1
+    await jobs.cancel(request.org_id, admission.job_handle)
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle,
+                                            Cursor.parse("1-3"), 10)
+    assert [(chunk.event_type, chunk.generation, chunk.sequence) for chunk in page] == \
+        [(ChunkEventType.terminal, 1, 4)], "the terminal event restarted below the watermark"
+
+
 async def dur_output__expiry_never_runs_on_a_callers_clock(factory):
     """DUR-OUTPUT / r1 R7: `expire` reads the database clock. A caller passing a time a
     year ahead must prune nothing that is still live, or a client could have another
@@ -3210,6 +3244,7 @@ def streamstore_cases():
         dur_output__no_terminal_event_anywhere_in_a_batch,
         dur_output__expiry_never_runs_on_a_callers_clock,
         dur_output__a_pruned_prefix_is_an_explicit_replay_gap,
+        dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark,
         dur_output__an_expired_journal_is_gone_not_regenerated,
         dur_cap__stored_unexpired_bytes_keep_counting,
         dur_cap__a_job_cannot_store_past_its_journal_reservation,
