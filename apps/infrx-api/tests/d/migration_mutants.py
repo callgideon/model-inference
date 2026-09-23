@@ -2611,9 +2611,17 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "   where request_id = (p_args->>'request_id')::uuid\n   for update;",
        "admission", "reconcile_tenant", "an operator path reconciles another tenant's request"),
     _m("d5_reconcile_replay_audits_again", SETTLE,
-       "  if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then",
+       "  select * into a from infrx.audit_entries where idempotency_key = v_key;\n"
+       "  if found then",
+       "  select * into a from infrx.audit_entries where idempotency_key = v_key;\n"
        "  if false then", "admission", "reconcile_clock",
-       "a retried reconcile fails on its own audit row"),
+       "a retried reconcile fails on its own audit row (untyped 23505, a 500)"),
+    # review B3 / H-B2 / CF-8: the replay is THIS request's operation
+    _m("d5_reconcile_replay_any_request", SETTLE,
+       "    if a.after->>'request_id' is distinct from j.request_id::text then",
+       "    if false then", "admission", "reconcile_clock",
+       "an operation id reused for ANOTHER request answers `replayed` and that request's "
+       "unknown hold stays reserved"),
     # --- item 10a: the privilege surface --------------------------------------------------
     _m("d5_reconcile_granted_to_anon", SETTLE,
        "    execute format('grant execute on function %s to service_role', f);",

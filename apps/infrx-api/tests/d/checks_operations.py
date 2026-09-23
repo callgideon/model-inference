@@ -185,6 +185,15 @@ def check_reconcile_clock(conn) -> str:
         assert (again["replayed"], again["settlement_state"]) == \
             (True, "released_platform_absorbed"), again
         assert rows(conn, "infrx.audit_entries") == audit, "a replay audited again"
+        # the same operation id for ANOTHER request: a conflict, and that request's hold
+        # stays where it was (review B3)
+        other = unknown_job(conn, world, "wo")
+        advance(conn, DEFAULTS.unknown_usage_reconcile_s)
+        code, _ = reconcile(conn, other.org_id, other.request_id, op="rec-a")
+        assert code == "idempotency_conflict", \
+            f"an operation id reused for another request answered: {code}"
+        assert credit_hold(conn, other.request_id) == "unknown" and \
+            rows(conn, "infrx.audit_entries") == audit, "a conflicting reuse released or audited"
         # the reaper got there first: the same end state, answered
         call(conn, "recover", {"limits": cl.LIMITS})
         code, answer = reconcile(conn, legacy.org_id, legacy.request_id, op="rec-b")

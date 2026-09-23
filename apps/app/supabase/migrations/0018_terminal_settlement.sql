@@ -712,7 +712,8 @@ end $$;
 -- late charge - once the DATABASE clock is past `reconcile_after` (R7: the caller's `at` is
 -- audit data). Another organization's request is the same `not_found` as an unknown one
 -- (R10); before the window, or a job with no unknown usage, is `state_conflict`. Audited
--- `admin_reconcile`; a replayed operation id answers the state and writes nothing. Args
+-- `admin_reconcile`; a replayed operation id answers the state and writes nothing, and the
+-- same id for another request is `idempotency_conflict`. Args
 -- `{org_id, request_id, operation_id, actor, at}`; answers `{settlement_state, replayed}`.
 create or replace function infrx.reconcile(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
@@ -720,6 +721,7 @@ declare
   v_now timestamptz := infrx.now();
   v_key text := 'reconcile:' || (p_args->>'operation_id');
   j infrx.jobs%rowtype;
+  a infrx.audit_entries%rowtype;
   v_before text;
 begin
   if coalesce(p_args->>'org_id', '') !~* '^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'
@@ -737,7 +739,14 @@ begin
     perform infrx.refuse('not_found', 'no request ' || (p_args->>'request_id')
                          || ' in organization ' || (p_args->>'org_id'));
   end if;
-  if exists (select 1 from infrx.audit_entries where idempotency_key = v_key) then
+  select * into a from infrx.audit_entries where idempotency_key = v_key;
+  if found then
+    -- A replay is THIS request's operation; the id reused for another request is the
+    -- conflict `grant_credit` names (review B3), never a silent "replayed".
+    if a.after->>'request_id' is distinct from j.request_id::text then
+      perform infrx.refuse('idempotency_conflict', 'operation ' || (p_args->>'operation_id')
+                           || ' reconciled another request');
+    end if;
     return jsonb_build_object('settlement_state', j.settlement_state, 'replayed', true);
   end if;
   if j.usage_certainty is distinct from 'unknown' then
