@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T15:38:21Z",
+  "updated": "2026-09-23T16:02:37Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "F-fakes-followup": {
       "lane": "codex-ffakes / codex/f-fakes-followup",
-      "phase": "review at 4209aee fix_required (P1 refuse-before-fence unpinned, P2 empty-list expiry unpinned; P3/H1 nonblocking) \u2192 fix round running \u2192 re-verify \u2192 merge after G3",
+      "phase": "round 2 HANDED BACK 0cf5cd6 (P1/P2 pinned, P3 TTL fixed, H1 dies_by); verifier on PostgreSQL running \u2192 merge after G3",
       "since": "2026-09-23T12:58:13Z",
       "note": "from the integration head \u2265 ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion"
     }
@@ -70,8 +70,8 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "F-fakes-followup": {
-      "phase": "fix_required at 4209aee (wf_c651c5fa-262; JSON evidence/f/F-fakes-followup-review-4209aee.json) \u2192 fix round",
-      "since": "2026-09-23T15:38:21Z"
+      "phase": "round-2 verification at 0cf5cd6 running (single Opus parity verifier + refuters)",
+      "since": "2026-09-23T16:02:37Z"
     }
   },
   "gates": {

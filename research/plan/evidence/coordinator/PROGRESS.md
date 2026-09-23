@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T15:38:21Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T16:02:37Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 25 done · 4 in progress · 1 remaining (of 30).**
 
@@ -70,7 +70,7 @@ Generated 2026-09-23T15:38:21Z from `tasks.json` (manifest v4) and `progress-sta
 - G3: codex-g3 / codex/g3-jobs — round 3 HANDED BACK 9133efe (G2 r3 merged clean; B1/B2/B3/C1 + N1/N3/C2/C3/C4 closed; G3 list 79 mutants; tests/g 559); re-confirmation running → MERGE after G2 since 2026-09-23T10:09:50Z — routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)
 - I3B-followup: codex-i3bf / codex/i3b-followup — round 2 HANDED BACK 662c07c (DR-1/RST-1/RST-4 closed + DR-3/DR-4/RST-2/RST-3; I3B list 96/94 on the E3B2 merge); confirmation running (restore + drill) → merge after E3B2 with R2-A/R2-B/request-1 stack.py since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)
 - D5: codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- F-fakes-followup: codex-ffakes / codex/f-fakes-followup — review at 4209aee fix_required (P1 refuse-before-fence unpinned, P2 empty-list expiry unpinned; P3/H1 nonblocking) → fix round running → re-verify → merge after G3 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion
+- F-fakes-followup: codex-ffakes / codex/f-fakes-followup — round 2 HANDED BACK 0cf5cd6 (P1/P2 pinned, P3 TTL fixed, H1 dies_by); verifier on PostgreSQL running → merge after G3 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d after the round-3 confirmation pass at 76ba3bb (evidence/g/G2-confirm-76ba3bb.json); merged-tree checks running (g2-merged-2391d4d.log) since 2026-09-23T15:38:21Z
@@ -78,7 +78,7 @@ Generated 2026-09-23T15:38:21Z from `tasks.json` (manifest v4) and `progress-sta
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: round-3 confirmation at 9133efe running (admission + stream lenses + refuters) since 2026-09-23T15:33:16Z
 - review I3B-followup: round-2 confirmation at 662c07c running (wf_f6e063df-a4a) since 2026-09-23T15:38:21Z
-- review F-fakes-followup: fix_required at 4209aee (wf_c651c5fa-262; JSON evidence/f/F-fakes-followup-review-4209aee.json) → fix round since 2026-09-23T15:38:21Z
+- review F-fakes-followup: round-2 verification at 0cf5cd6 running (single Opus parity verifier + refuters) since 2026-09-23T16:02:37Z
 
 ## Checkpoints
 
