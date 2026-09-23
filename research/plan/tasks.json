@@ -1557,7 +1557,7 @@
         "CREDIT-UNITS"
       ],
       "handoff": "09-amendment-workstreams.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",

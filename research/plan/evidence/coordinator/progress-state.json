@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:13:18Z",
+  "updated": "2026-09-23T04:18:26Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,12 +20,6 @@
       "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
-    },
-    "A1": {
-      "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "round 4 needed: RV3-1 delete/move race case + mutant (or narrow docstring); RV3-2/RV3-3 wording \u2014 then merge after D2 (JSON evidence/a/A1-confirm-dc3cb9c.json)",
-      "since": "2026-09-22T22:35:57Z",
-      "note": "new files only; migrations 0015+; D2 in flight"
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
@@ -250,6 +244,11 @@
       "merged": "D2 @ 2e386f0 merged --no-ff (24b4589) + follow-up (harness 0010-0014, api-mutants += tests/d/test_code_mutants.py)",
       "at": "2026-09-23T04:13:18Z",
       "note": "three review rounds; pre-merge 393 passed; merged-tree tests/d both images detached (.claude-logs/d2-merged-*.log); OB-5b implemented by D3; migrations 0010-0014 unapplied on hosted"
+    },
+    "A1": {
+      "merged": "A1 @ fb3a5a1 merged --no-ff (2d9d9c5) + follow-up (harness 0015, api-mutants += tests/d/test_signup.py, R85)",
+      "at": "2026-09-23T04:18:26Z",
+      "note": "four review rounds (abbf066 review; 47b0382, d8a3e84, dc3cb9c confirmations; round 4 tests/notes only); D list 228 = 193 + 35; merged-tree tests/d verification pending on the D2 sweep's port"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
