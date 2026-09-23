@@ -318,7 +318,8 @@ def test_media_parity__token_or_content_drift_disqualifies():
     base = [row("c012", "failed", error_message=REFUSED_112.format(n=21504), **long)]
     assert verdict([row("c012", prompt_tokens=21504 + 112 * 9 + 40, **long)], base)[0] == "pass"
     assert verdict([row("c012", prompt_tokens=21504 + 112 * 5, **long)], base)[0] == "fail"
-    assert verdict([row("c012", prompt_tokens=21000 + 112 * 9, **long)],
+    # a baseline that counted something else fails even when the prompt looks right
+    assert verdict([row("c012", prompt_tokens=21504 + 112 * 9 + 40, **long)],
                    [row("c012", "failed", error_message=REFUSED_112.format(n=21000), **long)]
                    )[0] == "fail"
     assert verdict([row("c012", prompt_tokens=21504 + 112 * 9, **long)],
@@ -543,10 +544,11 @@ CHECKOUT_STUBS = {
 }
 
 
-def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, **env: str):
+def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, damage=None, **env: str):
     """A pilot box in a directory: the engine it found (running, the unit and its PartOf
     worker active), stub docker/systemctl/curl, a measurement checkout at $NVME/w3-checkout
-    (serve.sh real, the measurement scripts stubbed), and candidate.sh with NVME there."""
+    (serve.sh real, the measurement scripts stubbed), and candidate.sh with NVME there.
+    `damage(tmp)` changes the box before the run."""
     tmp.mkdir(parents=True, exist_ok=True)
     nvme, state, bin_dir = tmp / "nvme", tmp / "state", tmp / "bin"
     for directory in (state, bin_dir, tmp / "weights"):
@@ -570,6 +572,8 @@ def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, **env: str)
     assert source.count("NVME=/opt/dlami/nvme\n") == 1
     script = tmp / "candidate.sh"
     script.write_text(source.replace("NVME=/opt/dlami/nvme\n", f"NVME={nvme}\n"))
+    if damage is not None:
+        damage(tmp)
     done = subprocess.run(
         ["bash", str(script), *args], capture_output=True, text=True, timeout=180,
         env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp), "STATE": str(state),
@@ -633,18 +637,11 @@ def check_candidate_refuses(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     for name, damage in (("no-container", lambda box: (box / "state" / "running").unlink()),
                          ("no-checkout", lambda box: (box / "nvme" / "w3-checkout" / "models" /
                                                       "marlin2b" / "measure" / "parity.py").unlink())):
-        box = tmp / name
-        candidate_box(repo, box, CANDIDATE="e9")            # lays the box out, refused early
-        damage(box)
-        (box / "state" / "calls").unlink(missing_ok=True)
-        done = subprocess.run(
-            ["bash", str(box / "candidate.sh")], capture_output=True, text=True, timeout=60,
-            env={"PATH": f"{box / 'bin'}:/usr/bin:/bin", "HOME": str(box),
-                 "STATE": str(box / "state"), "PY": sys.executable, "CANDIDATE": "e1",
-                 "W4_ENGINE_RESTART_OK": "1"})
-        calls = (box / "state" / "calls").read_text() if (box / "state" / "calls").exists() else ""
-        assert done.returncode == 2 and "refused:" in done.stderr, (name, done.stderr[-300:])
-        assert "systemctl stop" not in calls and "docker run" not in calls, (name, calls)
+        done, state, nvme, calls = candidate_box(repo, tmp / name, damage=damage)
+        assert done.returncode == 2 and "refused:" in done.stderr, (name, done.returncode,
+                                                                    done.stderr[-300:])
+        assert not any(call.startswith(("systemctl stop", "docker run")) for call in calls), (
+            name, calls)
 
 
 def test_ops_recover__the_candidate_run_refuses_in_flight_work_and_unlisted_flags(tmp_path):
