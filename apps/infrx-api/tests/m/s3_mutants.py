@@ -61,6 +61,7 @@ WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
 TWO_ATTEMPTS = "test_a_failing_call_is_tried_twice_and_no_more"
 INSTALL_WAIT = "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
 BUILT_IN_CODE = "test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse"
+PAGES = "test_a_listing_past_one_page_names_every_key"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -178,6 +179,12 @@ MUTANTS: tuple[Mutant, ...] = (
        r'S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")', SETTINGS),
     _m("own_store_takes_any_prefix", "a store built in code refuses what the settings refuse",
        S3, "        if not S3_PREFIX_RE.fullmatch(prefix):", "        if False:", BUILT_IN_CODE),
+    # === review A6: a listing is every page =================================================
+    _m("own_listing_first_page_only", "a listing reads every page, not the first 1000 keys",
+       S3, '        pages = self.client.get_paginator("list_objects_v2").paginate(\n'
+           '            Bucket=self.bucket, Prefix=self.prefix + prefix)',
+       "        pages = [self.client.list_objects_v2(\n"
+       "            Bucket=self.bucket, Prefix=self.prefix + prefix)]", PAGES, s3=True),
 )
 
 

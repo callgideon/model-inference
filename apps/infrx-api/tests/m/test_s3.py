@@ -320,6 +320,22 @@ def test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest(objects):
 
 # --- S3 only ---------------------------------------------------------------------------
 @needs_s3
+def test_a_listing_past_one_page_names_every_key(monkeypatch):
+    """ListObjectsV2 answers 1000 keys a page; the 1001st is listed too. A first-page-only
+    listing never deletes a live ref, but everything past page one would leak."""
+    from concurrent.futures import ThreadPoolExecutor
+    objects = s3_store(monkeypatch)
+    keys = [f"media/{b.ORG_A}/v1/{index:016x}/source" for index in range(1001)]
+
+    def put(key):
+        objects.client.put_object(Bucket=objects.bucket, Key=objects.prefix + key, Body=b"x")
+
+    with ThreadPoolExecutor(16) as pool:
+        list(pool.map(put, keys))
+    assert run(objects.keys("media/")) == sorted(keys)
+
+
+@needs_s3
 def test_a_denied_store_is_an_error_never_absence(monkeypatch):
     """A 403 is not a 404: every operation of a store the bucket refuses raises the typed,
     retryable `dependency_unavailable` rather than answering "absent" or "not written"."""
