@@ -1,0 +1,395 @@
+{
+ "verdict": "fix_required",
+ "head": "e1bb54f",
+ "reviews": [
+  {
+   "lens": "adapter",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count, time and outcome above comes from a command run in this session on an archive of e1bb54f with my own MinIO (infrx-review-m1l2-minio, 127.0.0.1:55661, same image digest and credentials as the harness). I never touched namespace e2, port 55432, any other lane's container, or AWS; the scripted fake S3 and blackhole listeners were local on 55662-55665. I confirmed the lane's headline numbers (28/28 conformance, 28/28 mutants, 509 G, 1022 + 1 pre-existing contracts failure) myself. tests/m gave 370 + 1 environmental skip, not the lane's 371. Finding A1 comes from reading the code, not from a run against AWS. The dot-key behaviour on AWS (a literal key) is my expectation and was not measured; only MinIO's refusal was. /proc/self/io byte counts were unreliable, so the size-cap result rests on the botocore operation log (HEAD only, no GetObject), not on a byte count.",
+   "cleanup": "Removed container infrx-review-m1l2-minio (docker rm -f -v, volume included). Deleted /tmp/claude-1000/review-m1l2-rv (the scratch archive, venv, probes and per-mutant copies), /tmp/claude-1000/review-m1l2-base, the scratch merge clone /tmp/claude-1000/review-m1l2-merge and all logs. No listeners remain on 55661-55665. The codex-objstore worktree was never written to and its git status is clean. No infrx-e2-* container was started or touched.",
+   "mutants": [
+    {
+     "name": "s3_prefix_prefix_matched (declared, hand-applied)",
+     "edit": "config.py fullmatch -> match on S3_PREFIX_RE",
+     "result": "killed",
+     "killed_by": "test_the_store_settings_refuse_a_value_that_cannot_place_an_object: DID NOT RAISE RuntimeMisconfigured"
+    },
+    {
+     "name": "s3_endpoint_prefix_matched (declared, hand-applied)",
+     "edit": "config.py fullmatch -> match on S3_ENDPOINT_RE",
+     "result": "killed",
+     "killed_by": "same settings case: DID NOT RAISE"
+    },
+    {
+     "name": "s3_transport_failure_is_absence (declared, hand-applied)",
+     "edit": "BotoCoreError handler returns None",
+     "result": "killed",
+     "killed_by": "test_an_unreachable_store_is_an_error_never_absence: DID NOT RAISE DependencyUnavailable"
+    },
+    {
+     "name": "s3_key_without_the_prefix (declared, hand-applied, 4 occurrences)",
+     "edit": "Key=self.prefix + key -> Key=key",
+     "result": "killed",
+     "killed_by": "test_two_stores_never_see_each_others_objects[s3]:223 the sibling put answers False (the key is shared)"
+    },
+    {
+     "name": "s3_put_not_conditional (declared, hand-applied)",
+     "edit": "drop IfNoneMatch=\"*\"",
+     "result": "killed",
+     "killed_by": "test_put_is_write_once[s3] (assert True is False) and the no-checksum case"
+    },
+    {
+     "name": "s3_any_error_is_absence (declared, hand-applied)",
+     "edit": "if code in MISSING -> if True",
+     "result": "killed",
+     "killed_by": "DENIED DID NOT RAISE; write-once None is False; no-checksum"
+    },
+    {
+     "name": "s3_digest_not_asked_for (declared, hand-applied)",
+     "edit": "drop ChecksumMode=ENABLED",
+     "result": "killed",
+     "killed_by": "round trip 'sha256:' != digest; write-once; collector dies by NotFound 'object for upload is gone' (typed DomainError, an honest death under R83)"
+    },
+    {
+     "name": "s3_checksum_not_sent (declared, hand-applied)",
+     "edit": "drop ChecksumSHA256 on PutObject",
+     "result": "killed",
+     "killed_by": "round trip, write-once, collector (same reasons)"
+    },
+    {
+     "name": "s3_unchecksummed_object_is_absent (declared, hand-applied)",
+     "edit": "NO_DIGEST branch -> None",
+     "result": "killed",
+     "killed_by": "no-checksum case: assert None == 'sha256:'"
+    },
+    {
+     "name": "s3_size_under_by_one (declared, hand-applied)",
+     "edit": "ContentLength - 1",
+     "result": "killed",
+     "killed_by": "round trip (0 != 1), write-once, SIZE_BOUND 'an oversize object was downloaded to be refused'"
+    },
+    {
+     "name": "s3_listing_ignores_its_prefix (declared, hand-applied)",
+     "edit": "Prefix=self.prefix + prefix -> Prefix=self.prefix",
+     "result": "killed",
+     "killed_by": "listing case and collector (a media listing includes uploads/)"
+    },
+    {
+     "name": "s3_probe_skipped (declared, hand-applied)",
+     "edit": "remove objects.probe()",
+     "result": "killed",
+     "killed_by": "REFUSES[unreachable,missing]: the refusal becomes 'unreachable at startup: journal, price_source', not S3_MEDIA_BUCKET"
+    },
+    {
+     "name": "s3_refusal_echoes_the_failure (declared, hand-applied)",
+     "edit": "({reason(failure)}) -> ({failure})",
+     "result": "killed",
+     "killed_by": "REFUSES[unreachable]: the bucket name is in the message"
+    },
+    {
+     "name": "s3_install_refusal_echoes_the_bucket (declared, hand-applied)",
+     "edit": "code group -> bucket",
+     "result": "killed",
+     "killed_by": "INSTALL_ASKS: '(403)' missing / bucket named"
+    },
+    {
+     "name": "s3_image_without_botocore (declared, hand-applied)",
+     "edit": "if not _importable(\"botocore\") -> if False",
+     "result": "killed",
+     "killed_by": "NO_BOTOCORE: assert False"
+    },
+    {
+     "name": "s3_prefix_not_composed (declared, hand-applied)",
+     "edit": "compose with \"infrx/\" instead of S3_MEDIA_PREFIX",
+     "result": "killed",
+     "killed_by": "STARTS: (bucket, 'infrx/') != (bucket, prefix)"
+    },
+    {
+     "name": "objects_from_settings_in_memory (G, re-anchored, hand-applied + runner)",
+     "edit": "return InMemoryObjectStore() before S3ObjectStore.connect",
+     "result": "killed",
+     "killed_by": "test_f_base__create_app_never_stages_into_process_memory[bucket-set x pilot/dev/test]: the refusal is 'requires VALKEY_URL', not S3_MEDIA_BUCKET; the shared runner also reports killed"
+    },
+    {
+     "name": "own_nosuchbucket_is_absent",
+     "edit": "MISSING = (\"404\",\"NoSuchKey\",\"NoSuchBucket\")",
+     "result": "survived (28 passed)",
+     "killed_by": "nothing - finding A2"
+    },
+    {
+     "name": "own_body_failure_is_absent",
+     "edit": "_get: Body.read() failure -> return None",
+     "result": "survived (28 passed)",
+     "killed_by": "nothing - finding A2"
+    },
+    {
+     "name": "own_conflict_is_not_written",
+     "edit": "PreconditionFailed or ConditionalRequestConflict -> False",
+     "result": "survived (28 passed)",
+     "killed_by": "nothing - finding A2"
+    },
+    {
+     "name": "own_listing_first_page_only",
+     "edit": "paginator -> one list_objects_v2 call",
+     "result": "survived (28 passed)",
+     "killed_by": "nothing - finding A6 (declared Limit 5)"
+    },
+    {
+     "name": "own_prefix_may_be_root",
+     "edit": "S3_PREFIX_RE + -> *",
+     "result": "survived (28 passed)",
+     "killed_by": "nothing - finding A5 (from_env refuses an empty value, so this only matters for settings built in code)"
+    },
+    {
+     "name": "own_delete_unprefixed",
+     "edit": "_delete Key=self.prefix + key -> Key=key (one site)",
+     "result": "killed",
+     "killed_by": "test_delete_removes_exactly_one_object[s3], collector[s3]"
+    },
+    {
+     "name": "own_put_unprefixed",
+     "edit": "_put Key=self.prefix + key -> Key=key (one site)",
+     "result": "killed",
+     "killed_by": "round trip, write-once, delete, listing, isolation, size-bound (9 cases)"
+    },
+    {
+     "name": "own_startup_catch_narrowed",
+     "edit": "except Exception -> except LookupError in pilot.object_store",
+     "result": "killed",
+     "killed_by": "REFUSES[unreachable] (raw EndpointConnectionError naming the endpoint and bucket), REFUSES[missing]"
+    },
+    {
+     "name": "own_reason_echoes_message",
+     "edit": "reason(): code or str(failure)",
+     "result": "killed",
+     "killed_by": "REFUSES[unreachable]: the bucket appears in the refusal"
+    },
+    {
+     "name": "own_type_constant",
+     "edit": "describe ContentType -> \"video/mp4\"",
+     "result": "killed",
+     "killed_by": "round trip (application/json body)"
+    },
+    {
+     "name": "own_get_truncates",
+     "edit": "Body.read() -> Body.read(1<<20)",
+     "result": "killed",
+     "killed_by": "round trip at 64 MiB"
+    },
+    {
+     "name": "own_no_retries",
+     "edit": "retries max_attempts 3 -> 0",
+     "result": "survived (expected: retry budget is not a claimed invariant)",
+     "killed_by": "n/a"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git archive e1bb54f | tar -x -C /tmp/claude-1000/review-m1l2-rv && make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "docker run -d --name infrx-review-m1l2-minio -p 127.0.0.1:55661:9000 (E2 literals) quay.io/minio/minio@sha256:14cea493... server /data",
+     "exit": 0,
+     "tail": "live (/minio/health/live)"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55661 uv run --frozen pytest -q tests/m/test_s3.py",
+     "exit": 0,
+     "tail": "28 passed in 11.11s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/m/test_s3.py (no endpoint)",
+     "exit": 0,
+     "tail": "16 passed, 12 skipped in 6.15s"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55661 INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_s3_mutants.py",
+     "exit": 0,
+     "tail": "28 passed in 109.64s (27 mutants + list check)"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=... uv run --frozen pytest -q tests/m --ignore=tests/m/test_mutants.py --ignore=tests/m/test_s3_mutants.py",
+     "exit": 0,
+     "tail": "370 passed, 1 skipped in 14.81s (the skip is test_parity.py:113 'corpus cache not found', environmental; the lane's 371 had the cache)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/g (without the four mutant files)",
+     "exit": 0,
+     "tail": "509 passed, 2 warnings in 27.76s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/i/test_packaging.py",
+     "exit": 0,
+     "tail": "22 passed in 6.37s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py",
+     "exit": 1,
+     "tail": "FAILED test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record; 1 failed, 1022 passed in 23.60s"
+    },
+    {
+     "cmd": "(base 43fe900 archive) python -m pytest -q tests/contracts/test_cancel_cause.py",
+     "exit": 1,
+     "tail": "FAILED ...before_0018...; 1 failed, 1 passed - pre-existing on 43fe900, not the lane's"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py -k 'objects_from_settings_in_memory or objects_unset_in_memory or well_formed'",
+     "exit": 0,
+     "tail": "3 passed, 318 deselected in 62.34s"
+    },
+    {
+     "cmd": "python probe/hand.py <16 declared/G mutants> (hand-applied, named cases)",
+     "exit": 0,
+     "tail": "all 16 killed for the invariant's reason (see mutants)"
+    },
+    {
+     "cmd": "python probe/hand.py <12 own mutants> (whole test_s3.py)",
+     "exit": 0,
+     "tail": "7 killed; 5 survived (nosuchbucket, body_failure, conflict_409, first_page_only, prefix_root) + no_retries expected survivor"
+    },
+    {
+     "cmd": "python probe/probe_fake.py (scripted fake S3 on 127.0.0.1:55662)",
+     "exit": 0,
+     "tail": "head 403/get NoSuchBucket/short body/RST mid-body/wrong checksum on GET/SlowDown x4/409/delete 403 -> DependencyUnavailable; 412 -> False; put 404 bare -> None; list 404 -> None; composite checksum -> a wrong 'sha256:<hex>'"
+    },
+    {
+     "cmd": "python probe/probe_minio.py",
+     "exit": 0,
+     "tail": "race 16 threads: exactly 1 True, 15 False, stored==winner, head==digest; forged x-amz-checksum-sha256 refused XAmzContentChecksumMismatch; unchecksummed get -> bytes, head 'sha256:'; '../' and './' keys -> DependencyUnavailable (XMinioInvalidResourceName), memory accepts; nested prefix a/ lists a/media/'s object"
+    },
+    {
+     "cmd": "python probe/probe_page.py",
+     "exit": 0,
+     "tail": "listed 1101, live at index 1100 (page 2); sweep deleted 1100, live kept, bytes intact; cap+1 (67108865) -> RequestTooLarge ops ['HEAD'] (no GET); cap (67108864) -> passes size check, ops ['HEAD','GET'], refused later by the probe (UnsupportedMedia); describe exact"
+    },
+    {
+     "cmd": "python probe/probe_startup.py runtime / install",
+     "exit": 0,
+     "tail": "runtime :9 4.1s EndpointConnectionError; runtime blackhole 123.2s ReadTimeoutError; install :9 1.0s exit 255; install blackhole 182.5s exit 255; no refusal names the bucket or endpoint"
+    },
+    {
+     "cmd": "python probe/probe_hang.py",
+     "exit": 0,
+     "tail": "route timed out after 1s; 5s later executor thread asyncio_0 still busy with the PutObject"
+    },
+    {
+     "cmd": "git clone --shared; checkout d611004 (origin/claude/backend-impl); merge 6cb8ebe (origin/codex/cutover-mount); merge e1bb54f",
+     "exit": 0,
+     "tail": "both merges clean, no conflicts; uv.lock/pyproject unchanged vs e1bb54f"
+    },
+    {
+     "cmd": "(merged tree) pytest -q tests/m/test_s3.py tests/m/test_s3_mutants.py tests/g/test_composition.py tests/i/test_packaging.py",
+     "exit": 0,
+     "tail": "82 passed, 2 warnings in 86.71s"
+    },
+    {
+     "cmd": "docker rm -f -v infrx-review-m1l2-minio; rm -rf scratch dirs",
+     "exit": 0,
+     "tail": "container and volume removed; no /tmp/claude-1000/review-m1l2* left; no listener on 55661-55665"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "A1",
+   "severity": "blocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "48-60, 36-42 (s3_env / needs_s3); evidence M1L2-eae07a9.md Limit 8 + Integration request 1",
+   "claim_broken": "Limit 8 says: \"the fixture takes any endpoint; with no S3_ENDPOINT_URL it is AWS\". Request 1 says one run of tests/m/test_s3.py against the real bucket on the box closes the check. The coordinator has already scheduled that run for the rollout (commit e68224e: media bucket = llm-bootcamp-641134885443, prefix infrx/). The run cannot work as written, so the lane's riskiest unverified claim (If-None-Match write-once and the SHA-256 on HeadObject behaving the same on AWS as on MinIO) has no verification path that can execute.",
+   "evidence": "needs_s3 skips every S3 case when INFRX_M_S3_ENDPOINT is empty, so leaving the endpoint unset gives skips, not an AWS run. Setting it to an AWS endpoint does not help either: s3_store() calls s3_env() on every case, which forces AWS_ACCESS_KEY_ID=infrxe2minio and AWS_SECRET_ACCESS_KEY=infrx-e2-local-secret, sets AWS_EC2_METADATA_DISABLED=true and points both AWS config files at /dev/null. The instance role therefore cannot be used, and every call would send the MinIO literals to AWS and get a 403. The cases also never delete what they write, and each round-trip case leaves a 64 MiB random object, which on the shared project bucket accumulates under test/m1l2/. I established this by reading the code. I did not contact AWS.",
+   "minimal_fix": "Replace the credentials only when a local-credentials flag is set (for example INFRX_M_S3_LOCAL_CREDS=1, set by the MinIO instructions). Otherwise leave botocore's chain, including IMDS, untouched. Document the box command (INFRX_M_S3_ENDPOINT=https://s3.us-east-1.amazonaws.com INFRX_M_S3_BUCKET=<bucket>). Add a finalizer that deletes each case's test/m1l2/<uuid>/ prefix. Correct the text of Limit 8 and Request 1.",
+   "lens": "adapter",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed from the code and by one experiment on a scratch `git archive` of e1bb54f. I used no AWS and no MinIO. The only server was a local header-capture stub on 127.0.0.1:55666, which I stopped afterwards.\n\n**What the code does** (`apps/infrx-api/tests/m/test_s3.py`):\n- Lines 42-44: `needs_s3` skips every S3 case when `INFRX_M_S3_ENDPOINT` is empty. Leaving the endpoint unset gives 12 skips, not an AWS run. The evidence already records this at line 117: \"16 passed, 12 skipped\".\n- Lines 51-59 and 71: `s3_store()` calls `s3_env()` on every case. That function forces `AWS_ACCESS_KEY_ID=infrxe2minio` and `AWS_SECRET_ACCESS_KEY=infrx-e2-local-secret`, sets `AWS_EC2_METADATA_DISABLED=true`, and points both AWS config files at `os.devnull`. The instance role can never be used.\n- The module docstring (lines 13-14) says so on purpose: \"Nothing reaches AWS: every case replaces the environment's AWS variables with the local literals\". The evidence says the same at line 56.\n- This contradicts Limit 8 at line 136 (\"the fixture takes any endpoint; with no S3_ENDPOINT_URL it is AWS\"). Limit 8 also names the wrong variable: the fixture reads `INFRX_M_S3_ENDPOINT`, not `S3_ENDPOINT_URL`. It also contradicts Integration request 1 at line 143.\n- Nothing in the test file deletes what it writes; the only deletes are part of what cases test. Line 173 writes `os.urandom(DEFAULTS.max_media_bytes)`.\n- The default bucket `infrx-m1l2` would also send a CreateBucket to AWS.\n\n**Experiment.** I set a fake role key in the environment and pointed the endpoint at the stub:\n`AWS_ACCESS_KEY_ID=AKIAREALROLEKEYXXXXX AWS_SECRET_ACCESS_KEY=x INFRX_M_S3_ENDPOINT=http://127.0.0.1:55666 .venv/bin/python -m pytest -q -x tests/m/test_s3.py -k \"delete_removes and s3\"`\n\nTail of the output:\n`ERROR tests/m/test_s3.py::test_delete_removes_exactly_one_object[s3] - botoco...`\n`1 passed, 26 deselected, 1 error in 0.85s`\n\nThe stub captured:\n`PUT /infrx-m1l2 AUTH: AWS4-HMAC-SHA256 Credential=infrxe2minio/20260923/us-east-1/`\n\nSo the environment's key was replaced by the MinIO literal, and a CreateBucket was the first call. Against AWS this gives a 403 or an error on the default bucket.\n\n**Why blocking.** The one verification path the evidence offers for its riskiest unverified claim cannot run as written:\n- The claim is that If-None-Match write-once and the SHA-256 checksum on HeadObject behave on AWS S3 as they do on MinIO.\n- The coordinator has already scheduled that run for the rollout (e68224e).\n- The evidence text is false about how the test behaves.\n- Run as written, the test either skips quietly (and could be read as closing the check) or fails with 403. If someone fixed the credentials only, it would leave 64 MiB random objects in the shared project bucket.\n\nThe adapter code in `infrx/media/s3.py` is not at fault. The problem is the test harness and the evidence text. The reviewer's minimal fix is correct: an opt-in flag for the local credentials, a documented box command, a finalizer that deletes each case's prefix, and corrected text for Limit 8 and Request 1.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The finding holds. I confirmed it from the code at e1bb54f and one offline experiment (a git archive scratch copy using the lane's pinned venv, no network, no AWS, no container).\n\nCode:\n- `needs_s3` in `tests/m/test_s3.py` skips when `INFRX_M_S3_ENDPOINT` is empty.\n- `s3_store()` calls `s3_env()` on every case. `s3_env()` sets the E2 MinIO literals as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, sets `AWS_EC2_METADATA_DISABLED=true` and points both AWS config files at `/dev/null`.\n- The module docstring even says \"Nothing reaches AWS\". Limit 8 (\"the fixture takes any endpoint; with no S3_ENDPOINT_URL it is AWS\") and Integration request 1 (\"one run of tests/m/test_s3.py on the box against the real bucket\") contradict the test they cite.\n- No case deletes what it writes. The round-trip case writes a `MAX_MEDIA_BYTES` (64 MiB) `os.urandom` body under `test/m1l2/<uuid>/`.\n\nExperiment:\n- Command: `env -u INFRX_M_S3_ENDPOINT .venv/bin/python -m pytest -q -rs tests/m/test_s3.py`. Tail: every S3 case skips with \"SKIPPED [1] tests/m/test_s3.py:281: M1-L2 (owner: M): no S3-compatible endpoint ...\", then \"16 passed, 12 skipped in 7.47s\". Leaving the endpoint unset gives skips, not an AWS run.\n- A probe test first set `AWS_ACCESS_KEY_ID=ASIAINSTANCEROLE`, then called `s3_env` and `S3ObjectStore.connect(..., \"https://s3.us-east-1.amazonaws.com\")`. It printed the client's resolved credentials: \"RESOLVED infrxe2minio env true /dev/null\", then \"SKIP_WHEN_EMPTY True (True,)\", then \"1 passed\". With an AWS endpoint, the box's credentials and the instance role are replaced by the MinIO literals, so every call would be refused (403 / InvalidAccessKeyId).\n\nSeverity: nonblocking. The adapter code (`s3.py`) is not at fault. The failure is loud: every case skips or errors. It can never falsely pass, so no one is misled into believing the AWS behaviour was checked. The evidence file already marks that behaviour ⚠️ TO BE VERIFIED. The defect is a wrong statement in the evidence plus a test harness that cannot run the scheduled box check. The fix is a few lines: an opt-in flag for the local credentials, a finalizer that deletes each case's prefix, and corrected text for Limit 8 and Request 1. It should land before the rollout's box run (e68224e), but it does not have to block the merge.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "A2",
+   "severity": "blocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "266-278 (the only error-vs-absent cases: a 403 on all six operations, and connection-refused on head)",
+   "claim_broken": "The evidence and proposed ruling (3) say: \"Only a 404/NoSuchKey is absent: any other failure - 403, throttling, 5xx, transport, a 409 conditional-write conflict - is dependency_unavailable\". Limit 3 adds: \"Writes then fail (NoSuchBucket -> 503)\". Only the 403 part and a connect-time transport failure on head can be killed by a test. The code is currently correct, but three parts of the claim have no killable test.",
+   "evidence": "Three of my mutants survive all 28 cases on MinIO. own_nosuchbucket_is_absent (MISSING += \"NoSuchBucket\") means get, put, keys and delete on a deleted bucket answer absent. own_body_failure_is_absent (GetObject Body.read() failure returns None) means a truncated or reset body looks like a missing object, so finalize says \"no object uploaded\" and prepare says NotFound \"gone\". own_conflict_is_not_written (409 ConditionalRequestConflict returns False) contradicts the ponytail comment and ruling (3). A scripted fake S3 shows the current code handles all three correctly: get with a 404 NoSuchBucket body raises DependencyUnavailable, a short Content-Length body raises DependencyUnavailable, an RST mid-body raises DependencyUnavailable, and put with a 409 raises DependencyUnavailable. Nothing would stop a regression.",
+   "minimal_fix": "Add two cases. (a) On MinIO, a store on a bucket that does not exist: get, put_if_absent, keys and delete raise DependencyUnavailable, while head and describe return None as Limit 3 documents. (b) A no-Docker case using botocore.stub.Stubber or a fake client: put_object raises a ClientError with code ConditionalRequestConflict, and get_object returns a Body whose read() raises IncompleteReadError; both must raise DependencyUnavailable. Add the three mutants above to s3_mutants.py.",
+   "lens": "adapter",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed, both from the code and by experiment. At e1bb54f, s3.py `_s3` maps a ClientError to None only if its code is in MISSING=(\"404\",\"NoSuchKey\"), and to False only for PreconditionFailed. Everything else raises DependencyUnavailable, so the code is correct today. But the only error cases in test_s3.py are the 403 at lines 268-278 and an unreachable endpoint. The \"missing\" param of test_create_app_refuses_to_start_when_the_bucket_does_not_answer goes through `probe()` -> head_bucket, not through `_s3`, so a NoSuchBucket mutant cannot reach it. A grep for ConditionalRequestConflict, NoSuchBucket, IncompleteRead and Stubber across tests/ and infrx/ finds only the ponytail comment at s3.py:74.\n\nExperiment: I extracted the tree with git archive into scratch, applied each of the three mutants to its own copy, and ran it against my own MinIO (infrx-review-m1l2-verify-1-0 on 127.0.0.1:55667, now removed). Command per copy: `INFRX_M_S3_ENDPOINT=http://127.0.0.1:55667 .venv/bin/python -m pytest -q -p no:cacheprovider tests/m/test_s3.py | tail -3`. Tails: base \"28 passed in 12.39s\"; nosuchbucket (MISSING += \"NoSuchBucket\") \"28 passed in 12.80s\"; body (a GetObject Body.read() exception returns None) \"28 passed in 10.21s\"; conflict (ConditionalRequestConflict -> False) \"28 passed in 9.77s\". No case was skipped, and all three mutants survive.\n\nDirect probe of a store on a bucket that does not exist. Base: head None, describe None, get/put/keys/delete DependencyUnavailable, which matches Limit 3 in the evidence doc. Under the nosuchbucket mutant: get None, put None (falsy, so it reads as \"not written\"), keys None, delete None, and nothing fails.\n\nProposed ruling (3) in research/plan/evidence/m/M1L2-eae07a9.md:154 and Limit 3 at :131 therefore state an invariant with no killable case. By this review's rules that is blocking, even though the production code is currently right. The reviewer's minimal fix fits: (a) one MinIO case on a bucket that does not exist, (b) one no-Docker Stubber or fake-client case for a 409 ConditionalRequestConflict on put and an IncompleteReadError from Body.read, plus the three mutants in s3_mutants.py.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed. The code at e1bb54f is correct, but three parts of ruling (3) and Limit 3 have no test that could catch a regression.\n\nFrom the code: in apps/infrx-api/infrx/media/s3.py, `_s3` treats only MISSING = (\"404\", \"NoSuchKey\") as absent and turns every other ClientError or BotoCoreError into DependencyUnavailable. `_get` reads the Body inside the worker thread, so a failure while reading it also becomes a BotoCoreError. Only two tests check error-versus-absent: test_a_denied_store_is_an_error_never_absence (a 403 on six operations) and test_an_unreachable_store_is_an_error_never_absence (connection refused on head). No test covers the other three paths. Grepping tests/m for NoSuchBucket, IncompleteRead, ResponseStreaming, ConditionalRequestConflict, 409 or Stubber finds nothing relevant. The only missing-bucket case (REFUSES \"missing\") goes through probe() and head_bucket, never through `_s3`. s3_mutants.py has no mutant for any of these three paths.\n\nExperiment: I copied e1bb54f to scratch with git archive and ran it against my own MinIO (infrx-review-m1l2-verify-1-1, 127.0.0.1:55668, since removed).\n- Baseline, `INFRX_M_S3_ENDPOINT=http://127.0.0.1:55668 python -m pytest -q tests/m/test_s3.py`, tail: `28 passed in 12.10s`.\n- I then applied all three mutants together. They were: MISSING += \"NoSuchBucket\"; a 409 ConditionalRequestConflict treated like PreconditionFailed (returns False); and `_get` returning None when body.read() raises. Same command, tail: `28 passed in 11.61s`. All three mutants survive.\n- On a bucket that does not exist, the original gives: head -> None; get, keys, put and delete raise DependencyUnavailable. This matches Limit 3's \"Writes then fail (NoSuchBucket -> 503)\". With the mutant: head -> None, get -> None, keys -> None, put -> None, delete -> None. The write now returns a falsy value where it should raise a 503, and nothing catches it.\n\nWhy it is blocking: it fits \"an invariant with no killable test\". Ruling (3) is proposed as binding text and names 409 and transport failures; Limit 3 claims writes on a missing bucket are a 503. Neither is backed by a test that fails when it breaks. The fix is small and should hold as the reviewer proposed it:\n- (a) A MinIO case on a bucket that does not exist: get, put_if_absent, keys and delete raise; head and describe return None.\n- (b) A no-Docker case with botocore Stubber or a fake client: put_object raising a 409 ConditionalRequestConflict ClientError, and a Body whose read() raises IncompleteReadError, both give DependencyUnavailable.\n- The three mutants added to s3_mutants.py.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "A3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/media/s3.py",
+   "line": "27, 66-69 (MISSING applied to every operation)",
+   "claim_broken": "put_if_absent returns a bool (\"True if written\") and keys returns a list, as the InMemoryObjectStore reference does. Here MISSING (\"404\"/\"NoSuchKey\") is treated as absent for every call, not only head, get and describe.",
+   "evidence": "Scripted fake S3: a PUT answered by a bare 404 (or 404 NoSuchKey) makes put_if_absent return None. ListObjectsV2 answered by a bare 404 makes keys() return None, and the gc sweep then fails with a TypeError on `for key in None` (logged as \"media sweep failed\"). _write_once treats None as falsy, heads, and raises Conflict (\"an object already exists ... with different content\") for an endpoint or bucket fault instead of a 503. Unlikely on AWS or MinIO, which answer NoSuchBucket with a body, but it contradicts the stated semantics.",
+   "minimal_fix": "Pass an `absent_ok` flag to _s3 and set it only from head, get, describe and delete; put and keys raise DependencyUnavailable on any 404.",
+   "lens": "adapter"
+  },
+  {
+   "id": "A4",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/m/M1L2-eae07a9.md",
+   "line": "Limit 10",
+   "claim_broken": "\"Startup latency: an unreachable endpoint costs up to ~3 s (standard retry mode, 3 attempts)\".",
+   "evidence": "Measured. With an endpoint that accepts the TCP connection and never answers (127.0.0.1 listener that never accepts), pilot.object_store refuses after 123.2 s (ReadTimeoutError). botocore's `max_attempts: 3` means 3 retries, so 4 attempts of 30 s each; the fake S3 also saw 4 requests on SlowDown. preflight bucket_problems (aws-cli 2.36.2, subprocess.run without a timeout) took 182.5 s. A refused connection costs 4.1 s at runtime and 1.0 s at install. The same budget applies to every runtime S3 call: G4U's wait_for(put_upload, 30 s) times out, but the worker thread keeps the PutObject and its body (up to 64 MiB) alive for up to about 2 minutes after the large-body slot is released. Demonstrated: the executor thread was still busy 5 s after the timeout. The write may still land after the client received deadline_exceeded, which is safe because a retry takes the 412 path and compares digests.",
+   "minimal_fix": "Correct Limit 10 to about 2 min at runtime and about 3 min at install. Consider `total_max_attempts=2` with read_timeout scaled to the body size, and `timeout=` on the preflight subprocess. Record that a timed-out upload's bytes outlive its slot.",
+   "lens": "adapter"
+  },
+  {
+   "id": "A5",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/config.py",
+   "line": "S3_PREFIX_RE (+ test BAD_PREFIXES)",
+   "claim_broken": "The comment says \"never the bucket root, never //\", and the prefix is supposed to be able to place an object.",
+   "evidence": "validate_deployment accepts '../', './', 'infrx/../other/' and 'infrx/./'. MinIO refuses every such key with XMinioInvalidResourceName, which becomes DependencyUnavailable, while HeadBucket still passes. The gateway therefore starts and then answers 503 on every media operation. AWS would store the key literally. Mutant own_prefix_may_be_root (regex + to *) survives: BAD_PREFIXES has no '' case. from_env refuses an empty variable, so this only matters for settings built in code.",
+   "minimal_fix": "Change S3_PREFIX_RE to r\"(?:(?!\\.\\.?/)[A-Za-z0-9._-]+/)+\" and add '', './' and 'a/../b/' to BAD_PREFIXES.",
+   "lens": "adapter"
+  },
+  {
+   "id": "A6",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_s3.py",
+   "line": "test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest (Limit 5)",
+   "claim_broken": "Limit 5: the listing is only proven for one page (declared).",
+   "evidence": "Probe on MinIO: 1100 orphans plus one live job's source, with the live key at index 1100 (page 2). keys() returned 1101 entries, and after the grace the sweep deleted exactly the 1100 orphans and kept the live source with its bytes intact (3.7 s). Mutant own_listing_first_page_only (a single list_objects_v2 call) survives all cases. The failure it would cause is a leak (unlisted keys are kept), never deletion of a live ref.",
+   "minimal_fix": "Add a 1001-key listing case on the S3 fixture (a few seconds with 1-byte objects) and the mutant.",
+   "lens": "adapter"
+  },
+  {
+   "id": "A7",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/media/s3.py",
+   "line": "head(): base64.b64decode(checksum)",
+   "claim_broken": "head returns \"the SHA-256 the server measured\" or NO_DIGEST.",
+   "evidence": "A composite (multipart) checksum 'xxx=-3' decodes to a 32-byte value that is reported as the object's sha256 (fake S3 probe). Because it is a checksum of part checksums, it equals no real digest, so no caller is fooled. It is still neither NO_DIGEST nor the object's digest. Only objects written outside the store can trigger it; the store itself never uses multipart.",
+   "minimal_fix": "Use b64decode(validate=True), return NO_DIGEST when the value contains '-' or does not decode to 32 bytes, and read ChecksumType when present.",
+   "lens": "adapter"
+  }
+ ]
+}
