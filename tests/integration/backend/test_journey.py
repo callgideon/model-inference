@@ -255,6 +255,33 @@ def test_backend_journey(trip, input_kind, mode):
         trip.conserved(tenant)
 
 
+def test_backend_journey__video_url_on_a_separate_worker_process(tmp_path):
+    """The TARGET composition for video (review J2): the worker is a process of its own - what
+    I2B-R4's `python -m infrx.worker` composes - not the gateway's. Today a video job fails
+    there (`platform_error`): M's attach and processing-cache index are process memory, so the
+    worker cannot resolve the file the gateway prepared (M3-U2). The case measures exactly that
+    failure and pends on `M3-U2`; the day the request succeeds it fails, asking for the owner
+    reference to go and the matrix to run this way. Nothing about it is ever a pass."""
+    import pilotbox
+    if not stack.has_stack():
+        pytest.skip(f"no {stack.harness.PROJECT} stack: run `tests/integration/run.py "
+                    f"--layer 3`")
+    with pilotbox.journey(tmp_path, embedded=False) as trip:
+        alpha = trip.world.alpha
+        answer = trip.send(alpha, "sync", messages_for(trip, alpha, "video_url"), "m3u2-sync")
+        request_id = answer.headers.get("inference-id")
+        state = trip.db("select state, outcome_cause from infrx.jobs where request_id = %s",
+                        request_id) if request_id else []
+        assert (answer.status_code, error_code(answer), state) == (
+            500, "internal_error", [("failed", "platform_error")]), \
+            f"M3-U2 looks fixed ({answer.status_code} {state}): delete stack.OWNERS['M3-U2'] " \
+            f"and run the video cells on a separate worker process"
+        trip.conserved(alpha)
+    stack.pending("M3-U2", why="a worker process cannot resolve media the gateway process "
+                               "prepared (M's attach and cache index are process memory)")
+    pytest.fail("a video job failed on a separate worker process and nothing pended")
+
+
 def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property):
     """04 BACKEND-JOURNEY / MARLIN-SOP: E1B's bench client (models/marlin2b/bench.py, the
     dataset client, `--target gateway`, text form) runs 8 items against the mounted gateway

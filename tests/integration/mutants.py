@@ -1027,6 +1027,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "            raise errors.DependencyUnavailable(",
            "tests/integration/backend/recovery/test_recovery.py", "rc05b", layer=2,
            cases=("test_i3b_rc05b_an_object_store_outage_on_minio_through_the_s3_adapter",)),
+
+    # ---------------- E3B phase 3, the review fix round (E3B3-review-4ac1419.json)
+    Mutant("e3bm69", "E3B3 review J2: a video job on a separate worker process PENDS on M3-U2, "
+                     "never passes",
+           "tests/integration/backend/test_journey.py",
+           '    stack.pending("M3-U2", why=', '    (lambda *a, **k: None)("M3-U2", why=',
+           "tests/integration/backend/test_journey.py", "separate_worker", layer=2,
+           cases=("test_backend_journey__video_url_on_a_separate_worker_process",)),
 )
 
 

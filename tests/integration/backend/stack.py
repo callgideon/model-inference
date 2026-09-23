@@ -62,7 +62,12 @@ if importlib.util.find_spec("infrx") is None:
 # `codex/m-pilot-media` fixes it, and its merge retires the reference).
 OWNERS = {"M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
                    "finalized infrx-upload:upl_… refs from the object store as the contract "
-                   "fake does; today it accepts only http(s)/data: sources"}
+                   "fake does; today it accepts only http(s)/data: sources",
+          # E3B phase 3 review J2: the coordinator's text; the M lane retires it too.
+          "M3-U2": "M: persist the attach (MediaUploads.by_job) and the processing-cache "
+                   "index (ProcessingCache.entries) so a worker process resolves local_uri for "
+                   "media the gateway prepared; today both are process memory (G2 R2-4, "
+                   "I2B-R4)"}
 # E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
 # no id here; the cases that pended on it (dr07c, dr07[postgres], every journey) run.
 PENDING = {**OWNERS}
