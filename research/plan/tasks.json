@@ -2167,7 +2167,7 @@
       "title": "Encode product-v2 CREDIT, identity, serving and permission contracts",
       "track": "F",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2R"
       ],

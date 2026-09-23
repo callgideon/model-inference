@@ -24,7 +24,8 @@ from decimal import Decimal
 from .. import errors, money
 from ..codec import compact_bytes
 from ..limits import DEFAULTS, PilotSettings
-from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation, Chunk,
+from ..records import (Admission, BILLABLE_CAUSES, Budgets, CANCEL_CAUSES, CapacityReservation,
+                       Chunk,
                        ChunkEventType, Cursor, EngineEvent, HoldState, IdempotencyRef, IndexEvent,
                        JobState, Lease, LeaseKind, MediaRef, NormalizedRequest, OutboxEvent,
                        OutboxKind, PriceSnapshot, ReservationKind, SettlementState,
@@ -955,15 +956,19 @@ class FakeJobStore:
             self._terminalize(job, TerminalCause.deadline_exceeded, None, None, JobState.failed)
             raise errors.AlreadyTerminal(f"job {job.id} passed its deadline")
 
-    async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
+    async def cancel(self, org_id: str, job_handle: str, *,
+                     cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:
+        """R21: the outcome records the given cause and `_terminalize` settles by it."""
         self.failures.before("cancel")
+        if cause not in CANCEL_CAUSES:
+            # Checked before anything is read: a refused cause changes nothing.
+            raise errors.InvalidRequest(f"{cause!r} is not a cancellation cause")
         async with self._lock:
             job = self._owned(org_id, job_handle)
             if job.terminal:
                 # Completion won the race; a completed job stays completed.
                 return job.outcome
-            outcome = self._terminalize(job, TerminalCause.client_cancelled, None, None,
-                                       JobState.cancelled)
+            outcome = self._terminalize(job, cause, None, None, JobState.cancelled)
         self.failures.after_commit("cancel")
         return outcome
 

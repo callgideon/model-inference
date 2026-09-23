@@ -1,0 +1,211 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "M1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+      "line": "2336",
+      "claim_broken": "Once a caller can name a cause, cancelling an already-cancelled job must return the committed outcome with the first cause. The port says the committed outcome is returned (and G2's verbatim contract: cancel answers the COMMITTED outcome). This is a new dimension of that promise, and no case checks it.",
+      "evidence": "My mutant rv_second_cancel_rewrites_cause made the fake's `if job.terminal:` branch rewrite a cancelled outcome's cause to the new one (`dataclasses.replace(job.outcome, cause=cause)`). It SURVIVED the three new cases, and it also survived a separate copy running all of tests/contracts/test_conformance.py, v2/test_conformance_v2.py, test_cancel_cause.py, tests/w/test_loop.py and tests/q/test_memory_scheduler.py (315 passed). The fake itself is correct: a probe of sync_deadline then client_disconnected returned an outcome equal to the first (sync_deadline, released_platform_absorbed) with the balance unchanged. D5's 0018 is judged only by this suite, so a 0018 that rewrites outcome_cause on a repeat cancel would go unnoticed. Note: the briefed expectation 'already_terminal' does not match the port or 0016. Both return the committed outcome and do not raise, and that is correct.",
+      "minimal_fix": "In dur_settle__cancel_records_its_cause_and_settles_by_r21, after each first cancel, call cancel again with a different CANCEL_CAUSES member. Assert the result == committed and the balance is unchanged. Add a mutant like rv_second_cancel_rewrites_cause and name that case.",
+      "lens": "money"
+    },
+    {
+      "id": "M2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/jobstore.py",
+      "line": "364",
+      "claim_broken": "G2 requires that a disconnect or timeout durably cancels the job, with no orphaned execution. Before 0018, the Pg refusal of client_disconnected/sync_deadline leaves the job running.",
+      "evidence": "PgJobStore.cancel raises UnsupportedParameter before any SQL, and I confirmed nothing is sent. So a G2 relay composed against Pg before D5's 0018 that passes cause=client_disconnected or sync_deadline gets a 400-class error, and the job keeps its hold and keeps running until the R29 reaper (platform-absorbed, so no customer charge). It is also refused on an already-terminal job, where the committed outcome would otherwise be returned. The evidence documents this: 'G2 composes after D5 merge'. The class choice is right: UnsupportedParameter is an InvalidRequest subclass, so the port's single refusal type holds.",
+      "minimal_fix": "No code change in this lane. The coordinator should record the order D5 0018 then G2 cause-passing in G2's brief, or G2 should fall back to the default cancel on UnsupportedParameter(param='cause') so the job is never orphaned.",
+      "lens": "money"
+    },
+    {
+      "id": "M3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/test_jobstore_conformance.py",
+      "line": "74",
+      "claim_broken": "Merging this lane alone turns tests/d red.",
+      "evidence": "On my own PostgreSQL (port 55539), as merged: `-k cancel` gives 1 failed (dur_settle__cancel_records_its_cause_and_settles_by_r21, UnsupportedParameter client_disconnected), 2 passed, 1 xpassed. With integration request 1's PENDING line applied in scratch: 86 passed, 3 skipped, 25 xfailed, 1 xpassed. The new case is a strict XFAIL with the D5 reason.",
+      "minimal_fix": "The coordinator applies integration request 1's PENDING line in the same merge commit. It goes in a D5-owned file, as the evidence states.",
+      "lens": "money"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "cancel_port_default_is_not_the_client",
+          "edit": "ports.py default -> client_disconnected",
+          "result": "killed (lane)",
+          "killed_by": "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"
+        },
+        {
+          "name": "cancel_causes_widened",
+          "edit": "CANCEL_CAUSES += completed",
+          "result": "killed (lane)",
+          "killed_by": "test_cancel_cause default test + dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"
+        },
+        {
+          "name": "cancel_cause_dropped / credit_cancel_cause_dropped",
+          "edit": "fake terminalizes with client_cancelled",
+          "result": "killed (lane)",
+          "killed_by": "dur_settle__/credit_settle__cancel_records_its_cause_and_settles_by_r21"
+        },
+        {
+          "name": "cancel_unknown_cause_mapped_to_client_cancelled / cancel_accepts_any_cause",
+          "edit": "refusal -> remap / if False",
+          "result": "killed (lane)",
+          "killed_by": "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"
+        },
+        {
+          "name": "cancel_sync_deadline_charged_to_the_client / cancel_client_disconnected_absorbed_by_the_platform",
+          "edit": "BILLABLE_CAUSES +sync_deadline / -client_disconnected",
+          "result": "killed (lane)",
+          "killed_by": "both settles_by_r21 cases (+ only_three_causes_can_charge)"
+        },
+        {
+          "name": "pg_cancel_records_an_unsupported_cause",
+          "edit": "jobstore.py refusal -> if False",
+          "result": "killed (lane)",
+          "killed_by": "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"
+        },
+        {
+          "name": "rv_sync_deadline_unpublished_released_free",
+          "edit": "never_charged uses CANCEL_CAUSES instead of BILLABLE_CAUSES",
+          "result": "killed",
+          "killed_by": "dur_settle__ and credit_settle__cancel_records_its_cause_and_settles_by_r21"
+        },
+        {
+          "name": "rv_published_sync_deadline_released_at_once",
+          "edit": "published branch skips sync_deadline",
+          "result": "killed",
+          "killed_by": "both settles_by_r21 cases"
+        },
+        {
+          "name": "rv_fake_default_disconnected",
+          "edit": "FakeJobStore.cancel default -> client_disconnected",
+          "result": "killed",
+          "killed_by": "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"
+        },
+        {
+          "name": "rv_pg_default_disconnected",
+          "edit": "PgJobStore.cancel default -> client_disconnected",
+          "result": "killed",
+          "killed_by": "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"
+        },
+        {
+          "name": "rv_cancel_causes_narrowed",
+          "edit": "CANCEL_CAUSES drops sync_deadline",
+          "result": "killed",
+          "killed_by": "default-signature test + both settles_by_r21 cases"
+        },
+        {
+          "name": "rv_pg_lets_sync_deadline_through",
+          "edit": "Pg guard -> not in (client_cancelled, sync_deadline)",
+          "result": "killed",
+          "killed_by": "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"
+        },
+        {
+          "name": "rv_pg_refuses_after_sql",
+          "edit": "guard executes _call('cancel') before raising",
+          "result": "killed",
+          "killed_by": "test_dur_settle__before_0018_... (sent == [])"
+        },
+        {
+          "name": "rv_pg_refusal_untyped_class",
+          "edit": "UnsupportedParameter(param=cause) -> InvalidRequest",
+          "result": "killed",
+          "killed_by": "test_dur_settle__before_0018_..."
+        },
+        {
+          "name": "rv_guard_after_terminal_check",
+          "edit": "guard only refuses non-TerminalCause values",
+          "result": "killed",
+          "killed_by": "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"
+        },
+        {
+          "name": "rv_second_cancel_rewrites_cause",
+          "edit": "terminal branch rewrites cancelled outcome's cause to the new one",
+          "result": "SURVIVED: the declared cases plus the full conformance/v2/cancel_cause/W/Q suites all pass (see M1)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_published_hold_released_at_zero_window",
+          "edit": "reconcile_after = now + 0s",
+          "result": "survived the new cases; killed by the pre-existing unknown-usage cases (8 failed in a full-suite copy), so the window is already pinned",
+          "killed_by": "dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed, dur_settle__an_unknown_usage_hold_is_never_released_on_a_callers_clock, credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git archive b691add | tar -x -C /tmp/claude-1000/review-fcancel-1691429; make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants <the nine lane mutants>",
+          "exit": 0,
+          "tail": "9/9 killed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (detached, Monitor)",
+          "exit": 0,
+          "tail": "424 passed in 968.32s (0:16:08)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "1048 passed in 99.37s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:randomly tests/test_*.py tests/contracts --ignore=.../test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "1077 passed, 2 warnings in 102.15s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts tests/test_*.py --ignore=.../test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "1077 passed, 2 warnings in 85.89s"
+        },
+        {
+          "cmd": "python -m tests.contracts.review_mutants (11 own mutants, scratch only)",
+          "exit": 1,
+          "tail": "9/11 killed; survived: ['rv_second_cancel_rewrites_cause', 'rv_cancel_releases_published_hold_to_ledger_absorbed_now']"
+        },
+        {
+          "cmd": "survivors in full-suite copies: pytest tests/contracts/test_conformance.py tests/contracts/v2/test_conformance_v2.py tests/contracts/test_cancel_cause.py tests/w/test_loop.py tests/q/test_memory_scheduler.py",
+          "exit": 1,
+          "tail": "second-cancel: 315 passed (survives); zero-window: 8 failed, 307 passed (killed by pre-existing cases)"
+        },
+        {
+          "cmd": "probe.py on FakeJobStore (second cancel with another cause, bogus on terminal, cross-tenant, str cause, window-1 and window+1)",
+          "exit": 0,
+          "tail": "second==first True sync_deadline released_platform_absorbed True / bogus on terminal -> InvalidRequest / cross -> NotFound / str cause type: TerminalCause / at window-1: held_unknown True 75 / after window: sync_deadline released_platform_absorbed reserved 0 ledger 75"
+        },
+        {
+          "cmd": "Pg (own container infrx-review-fcancel-postgres:55539, patched pgharness in scratch copy, PENDING applied): pytest tests/d/test_leases.py tests/d/test_jobstore_conformance.py tests/d/test_lease_units.py tests/d/test_adapter_units.py",
+          "exit": 0,
+          "tail": "86 passed, 3 skipped, 25 xfailed, 1 xpassed in 45.62s (new case strict XFAIL, D5 item 3 reason)"
+        },
+        {
+          "cmd": "Pg as merged (PENDING removed): pytest tests/d/test_jobstore_conformance.py -k cancel",
+          "exit": 1,
+          "tail": "UnsupportedParameter: cause client_disconnected needs migration 0018 (D5); 1 failed, 2 passed, 69 deselected, 1 xpassed"
+        },
+        {
+          "cmd": "Pg own port: pytest tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "3 passed in 3.03s"
+        }
+      ],
+      "fabrication_check": "Checked the evidence file against my reruns. 9/9 killed, the folded list at 424 passed, tests/contracts at 1048 (excluding the shared-port module), 1077 for both orderings, and the Pg results with and without PENDING (86/3/25/1 and 1 failed/UnsupportedParameter) all match what I measured. The caller list in the evidence matches my grep of every `.cancel(org, handle)` call (W test_loop, Q memory_scheduler/q3differential/test_reconcile, operations/service.py:381, D e3b_drills/lease_units, conformance internals). All of them are positional and default to client_cancelled. The 11 other TerminalCause members are correct: 14 minus 3. The per-cause settlement table matches 0016's terminalize_no_usage (sync_deadline unpublished gives released_platform_absorbed) and D5's `d5_sync_deadline_released_free` mutant. Not reproduced: tests/q/test_reconcile.py (it needs another lane's Valkey), the Supabase image and make check. CANCEL_CAUSES is the single code source: the fake uses it, and the Pg adapter deliberately uses `!= client_cancelled` until 0018. Widening it is killed. The unit test and the conformance case restate the three causes as independent oracles. No console or D1R projection effect: no SQL or wire change, a cancel writes no ledger row in either store, the fake's usage_projection outbox carries only settlement_state, and v1 projection on Pg passes (3/3).",
+      "cleanup": "Scratch /tmp/claude-1000/review-fcancel-1691429 removed (including my own mutant copies, probe and review_mutants.py). Container infrx-review-fcancel-postgres was removed by the harness at exit: `docker ps -a | grep -c review-fcancel` gives 0, and port 55539 is not listening. I did not touch ports 55432\u201355438 or any hosted project. The codex-fcancel worktree is unmodified (`git status --short` is empty) and I made no commits. The background mutant run and the monitor both finished."
+    }
+  ]
+}

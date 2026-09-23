@@ -1106,6 +1106,69 @@ async def credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_walle
         assert final.settlement_state is v1.SettlementState.released_platform_absorbed
 
 
+async def credit_settle__cancel_records_its_cause_and_settles_by_r21(factory):
+    """CREDIT-SPEND / R21 on the CREDIT wallet (G2 D-new): `cancel(..., cause=)` of a CREDIT
+    job records the given cause in state `cancelled` with a zero v1 debit. Before any
+    output the client's causes are `released_free` and `sync_deadline` is
+    `released_platform_absorbed`, the hold back on the CREDIT wallet at once; after
+    publication every cause is `held_unknown` on that wallet until the fenced 24 h, then
+    released platform-absorbed. The CREDIT ledger and the organization's USD wallet never
+    move, and a repeat cancel with a different cause answers the committed outcome."""
+    from .harness import hook
+    from ..limits import DEFAULTS
+    harness = factory()
+    publish = hook(harness, "publish")
+    balance = harness.extra["credit_balance"]
+    before = balance(IDS.consumer_wallet)
+    unpublished = {v1.TerminalCause.client_cancelled: v1.SettlementState.released_free,
+                   v1.TerminalCause.client_disconnected: v1.SettlementState.released_free,
+                   v1.TerminalCause.sync_deadline: v1.SettlementState.released_platform_absorbed}
+    held = []
+    for cause, settlement in unpublished.items():
+        for published in (False, True):
+            request = _credit_request(harness)
+            admission = await harness.port.admit_credit(
+                request, b_idem(request, f"cancel-{cause.value}-{published}"))
+            lease = await _credit_run(harness, request, admission)
+            if published:
+                await publish(lease)
+            outcome = await harness.port.cancel(IDS.consumer_org, admission.job_handle,
+                                                cause=cause)
+            assert (outcome.cause, outcome.state) == (cause, v1.JobState.cancelled), outcome
+            assert outcome.debit == money.ZERO, cause
+            _owned, committed = await harness.port.get_owned_credit(IDS.consumer_org,
+                                                                    admission.job_handle)
+            assert committed == outcome, (cause, committed)
+            # A repeat cancel with another cause answers the committed outcome, moves nothing.
+            settled = balance(IDS.consumer_wallet)
+            other = next(c for c in unpublished if c is not cause)
+            again = await harness.port.cancel(IDS.consumer_org, admission.job_handle, cause=other)
+            _owned, still = await harness.port.get_owned_credit(IDS.consumer_org,
+                                                                admission.job_handle)
+            assert again == committed and still == committed, (cause, other, again, still)
+            assert balance(IDS.consumer_wallet) == settled, (cause, other)
+            if published:
+                assert outcome.settlement_state is v1.SettlementState.held_unknown, cause
+                held.append((admission, cause))
+            else:
+                assert outcome.settlement_state is settlement, (cause, outcome.settlement_state)
+    holding = sum(admission.maximum_hold.raw(mu.CREDIT) for admission, _cause in held)
+    now = balance(IDS.consumer_wallet)
+    assert now["ledger"] == before["ledger"], "a cancel moved the CREDIT ledger"
+    assert now["reserved"] == before["reserved"] + holding, \
+        "an unpublished cancel kept its hold, or a published one released it at once"
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+    await harness.port.recover()
+    assert balance(IDS.consumer_wallet) == before
+    for admission, cause in held:
+        _owned, final = await harness.port.get_owned_credit(IDS.consumer_org,
+                                                            admission.job_handle)
+        assert (final.cause, final.settlement_state) == (
+            cause, v1.SettlementState.released_platform_absorbed), (cause, final)
+    usd = harness.extra["balance"](IDS.consumer_org)
+    assert usd["ledger"] == 0 and usd["reserved"] == 0, "a CREDIT cancel moved the USD wallet"
+
+
 def b_idem(request, key: str = "credit-1"):
     from . import builders as b
     return b.idem(request, key)
@@ -1120,6 +1183,7 @@ def credit_jobstore_cases() -> list[Callable]:
         credit_settle__at_the_admitted_card_on_the_credit_wallet_only,
         credit_settle__a_free_outcome_moves_no_credit,
         credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet,
+        credit_settle__cancel_records_its_cause_and_settles_by_r21,
     ]
 
 

@@ -2333,6 +2333,83 @@ async def dur_settle__cancelling_after_publication_reconciles(factory):
     assert harness.extra["balance"](other.org_id)["reserved"] == 0
 
 
+async def dur_settle__cancel_records_its_cause_and_settles_by_r21(factory):
+    """DUR-SETTLE / R21 (G2 D-new): `cancel(..., cause=)` records the cause it is given, in
+    state `cancelled`, and settles by it. Before any output the client's causes
+    (`client_cancelled`, `client_disconnected`) are `released_free`, and the platform's own
+    `sync_deadline` is `released_platform_absorbed`. After publication every cause is
+    `held_unknown` with the hold still held, released platform-absorbed after the fenced
+    24 h. No cause moves the ledger: a cancel carries no usage. A repeat cancel with a
+    different cause answers the committed outcome and moves nothing."""
+    harness = factory()
+    publish = hook(harness, "publish")
+    unpublished = {TerminalCause.client_cancelled: SettlementState.released_free,
+                   TerminalCause.client_disconnected: SettlementState.released_free,
+                   TerminalCause.sync_deadline: SettlementState.released_platform_absorbed}
+    held = []
+    for cause, settlement in unpublished.items():
+        for published in (False, True):
+            request, admission, lease = await _running(harness, key=f"{cause.value}-{published}")
+            if published:
+                await publish(lease)
+            before = harness.extra["balance"](request.org_id)
+            outcome = await harness.port.cancel(request.org_id, admission.job_handle, cause=cause)
+            assert (outcome.cause, outcome.state) == (cause, JobState.cancelled), (cause, outcome)
+            assert outcome.debit == 0, cause
+            _stored, committed = await harness.port.get_owned(request.org_id, admission.job_handle)
+            assert committed == outcome, (cause, committed)
+            after = harness.extra["balance"](request.org_id)
+            assert after["ledger"] == before["ledger"], cause
+            # A second cancel naming another cause answers the committed outcome, first
+            # cause and all, and moves nothing.
+            other = next(c for c in unpublished if c is not cause)
+            again = await harness.port.cancel(request.org_id, admission.job_handle, cause=other)
+            _stored, still = await harness.port.get_owned(request.org_id, admission.job_handle)
+            assert again == committed and still == committed, (cause, other, again, still)
+            assert harness.extra["balance"](request.org_id) == after, (cause, other)
+            if published:
+                assert outcome.settlement_state is SettlementState.held_unknown, cause
+                assert outcome.reconcile_after is not None, cause
+                assert after["reserved"] == before["reserved"], (cause, "released at once")
+                held.append((request, admission, cause))
+            else:
+                assert outcome.settlement_state is settlement, (cause, outcome.settlement_state)
+                assert after["reserved"] == before["reserved"] - admission.maximum_hold, cause
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+    await harness.port.recover()
+    for request, admission, cause in held:
+        _stored, final = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert (final.cause, final.settlement_state) == (
+            cause, SettlementState.released_platform_absorbed), (cause, final)
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
+
+
+async def dur_settle__cancel_refuses_any_other_cause_and_changes_nothing(factory):
+    """DUR-SETTLE / R21: a canceller names a client cause or the synchronous deadline and
+    nothing else. Every other `TerminalCause` - `completed`, the platform's failures, the
+    queue and generation deadlines - and a value that is no cause at all are
+    `invalid_request`: the job is still running, its hold still held, nothing recorded,
+    and the same job then cancels normally."""
+    harness = factory()
+    request, admission, _lease = await _running(harness)
+    before = harness.extra["balance"](request.org_id)
+    allowed = {TerminalCause.client_cancelled, TerminalCause.client_disconnected,
+               TerminalCause.sync_deadline}
+    for cause in (*(c for c in TerminalCause if c not in allowed), "bogus"):
+        try:
+            await harness.port.cancel(request.org_id, admission.job_handle, cause=cause)
+        except errors.DomainError as exc:
+            assert isinstance(exc, errors.InvalidRequest), (cause, exc.code)
+        else:
+            raise AssertionError(f"cancel accepted the cause {cause!r}")
+        _stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is None, f"the refused cause {cause!r} terminalized the job"
+        assert harness.extra["balance"](request.org_id) == before, cause
+    cancelled = await harness.port.cancel(request.org_id, admission.job_handle)
+    assert (cancelled.cause, cancelled.state) == (TerminalCause.client_cancelled,
+                                                  JobState.cancelled)
+
+
 async def dur_settle__a_published_job_past_its_deadline_reconciles(factory):
     """DUR-SETTLE / r1 R21+R29: a job killed by our own generation deadline **after**
     publishing output produced tokens nobody counted, so it is `held_unknown` with the
@@ -2659,6 +2736,8 @@ def jobstore_cases():
         dur_settle__the_winning_worker_can_always_replay_its_completion,
         dur_settle__only_three_causes_can_charge,
         dur_settle__cancelling_after_publication_reconciles,
+        dur_settle__cancel_records_its_cause_and_settles_by_r21,
+        dur_settle__cancel_refuses_any_other_cause_and_changes_nothing,
         dur_settle__a_published_job_past_its_deadline_reconciles,
         dur_settle__a_settlement_that_cannot_journal_moves_no_money,
         dur_settle__one_unsettleable_job_does_not_stop_the_sweep,
