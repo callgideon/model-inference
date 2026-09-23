@@ -4,14 +4,20 @@ against `InMemoryObjectStore` and a real S3-compatible store, plus the settings 
 place it and the startup that refuses without it.
 
     uv run --frozen pytest -q tests/m/test_s3.py            # memory + the no-Docker cases
-    INFRX_M_S3_ENDPOINT=http://127.0.0.1:55500 uv run --frozen pytest -q tests/m/test_s3.py
+    # MinIO (the E2 stack's s3 service, or any MinIO taking the E2 literals):
+    INFRX_M_S3_ENDPOINT=http://127.0.0.1:55500 INFRX_M_S3_LOCAL_CREDS=1 \
+        uv run --frozen pytest -q tests/m/test_s3.py
+    # AWS S3 on the box, with its instance role (nothing replaces botocore's chain):
+    INFRX_M_S3_ENDPOINT=https://s3.us-east-1.amazonaws.com INFRX_M_S3_BUCKET=<bucket> \
+        uv run --frozen pytest -q tests/m/test_s3.py
 
-The S3 half needs the E2 stack's `s3` service (MinIO, tests/integration/compose.yaml) or
-another S3-compatible endpoint taking the E2 literals as credentials. Without
-`INFRX_M_S3_ENDPOINT` it skips, naming its owner. Each S3 case writes under a prefix of
-its own, `test/m1l2/<uuid>/`, in `INFRX_M_S3_BUCKET` (default `infrx-m1l2`, created if
-absent). Nothing reaches AWS: every case replaces the environment's AWS variables with
-the local literals and turns the instance-metadata lookup off.
+Without `INFRX_M_S3_ENDPOINT` the S3 half skips, naming its owner. Each S3 case writes
+under a prefix of its own, `test/m1l2/<uuid>/`, of `INFRX_M_S3_BUCKET`, and everything
+under it is deleted after the case. Credentials: with `INFRX_M_S3_LOCAL_CREDS=1` the E2
+literals are the only ones botocore can find (and the bucket, default `infrx-m1l2`, is
+created); without it botocore's own chain is untouched - the environment, then the
+instance role - and no bucket is created. The no-Docker cases always use local literals
+and dead local endpoints: they never reach AWS.
 """
 from __future__ import annotations
 
@@ -39,20 +45,28 @@ BUCKET = os.environ.get("INFRX_M_S3_BUCKET", "infrx-m1l2")
 ACCESS_KEY, SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
 # Nothing listens on the discard port: a store there never answers.
 UNREACHABLE = "http://127.0.0.1:9"
+LOCAL_FLAG = "INFRX_M_S3_LOCAL_CREDS"
 needs_s3 = pytest.mark.skipif(
     not ENDPOINT, reason="M1-L2 (owner: M): no S3-compatible endpoint - start the E2 "
-                         "stack's s3 service and export INFRX_M_S3_ENDPOINT")
+                         "stack's s3 service and export INFRX_M_S3_ENDPOINT (and "
+                         "INFRX_M_S3_LOCAL_CREDS=1 for MinIO)")
 
 
 def run(coroutine):
     return asyncio.run(coroutine)
 
 
-def s3_env(monkeypatch, secret: str = SECRET_KEY) -> None:
-    """The local literals as the only credentials botocore can find."""
+def s3_env(monkeypatch, secret: str | None = None, *, local: bool = False) -> None:
+    """The credentials a case's store is built with. The E2 literals become the only ones
+    botocore can find with INFRX_M_S3_LOCAL_CREDS=1 (MinIO) or `local` (a case that never
+    reaches a store); `secret` is a deliberately wrong one. Otherwise botocore's own chain
+    is left untouched: on the box, the instance role."""
+    if secret is None and not local and os.environ.get(LOCAL_FLAG) != "1":
+        return
     for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"):
         monkeypatch.delenv(name, raising=False)
-    for name, value in (("AWS_ACCESS_KEY_ID", ACCESS_KEY), ("AWS_SECRET_ACCESS_KEY", secret),
+    for name, value in (("AWS_ACCESS_KEY_ID", ACCESS_KEY),
+                        ("AWS_SECRET_ACCESS_KEY", secret or SECRET_KEY),
                         ("AWS_DEFAULT_REGION", "us-east-1"), ("AWS_EC2_METADATA_DISABLED", "true"),
                         ("AWS_CONFIG_FILE", os.devnull),
                         ("AWS_SHARED_CREDENTIALS_FILE", os.devnull)):
@@ -63,14 +77,44 @@ def unique_prefix() -> str:
     return f"test/m1l2/{uuid.uuid4().hex}/"
 
 
+def absent_bucket() -> str:
+    """A bucket name nobody has: random, so on AWS it is not someone else's (a 403)."""
+    return f"infrx-m1l2-absent-{uuid.uuid4().hex[:20]}"
+
+
 _READY: set[str] = set()
+#: The stores this case wrote through; `_remove_what_the_case_wrote` empties their prefixes.
+_WRITTEN: list[S3ObjectStore] = []
 
 
-def s3_store(monkeypatch, prefix: str | None = None, secret: str = SECRET_KEY) -> S3ObjectStore:
-    """A store on the test bucket under a prefix of its own (the bucket made once)."""
+def remove_prefix(objects: S3ObjectStore) -> None:
+    """Delete everything under a store's own test prefix, 1000 keys a call. Never anything
+    outside `test/m1l2/`: on the box the bucket is the project's."""
+    assert objects.prefix.startswith("test/m1l2/"), objects.prefix
+    pages = objects.client.get_paginator("list_objects_v2").paginate(
+        Bucket=objects.bucket, Prefix=objects.prefix)
+    for page in pages:
+        batch = [{"Key": item["Key"]} for item in page.get("Contents", ())]
+        if batch:
+            objects.client.delete_objects(Bucket=objects.bucket,
+                                          Delete={"Objects": batch, "Quiet": True})
+
+
+@pytest.fixture(autouse=True)
+def _remove_what_the_case_wrote():
+    yield
+    while _WRITTEN:
+        remove_prefix(_WRITTEN.pop())
+
+
+def s3_store(monkeypatch, prefix: str | None = None, secret: str | None = None) -> S3ObjectStore:
+    """A store on the test bucket under a prefix of its own, emptied after the case. With
+    local credentials the bucket is made once; on AWS it must exist."""
     s3_env(monkeypatch, secret)
     objects = S3ObjectStore.connect(BUCKET, prefix or unique_prefix(), ENDPOINT)
-    if BUCKET not in _READY and secret == SECRET_KEY:
+    if secret is None:
+        _WRITTEN.append(objects)
+    if BUCKET not in _READY and secret is None and os.environ.get(LOCAL_FLAG) == "1":
         from botocore.exceptions import ClientError
         try:
             objects.client.create_bucket(Bucket=BUCKET)
@@ -156,7 +200,7 @@ def test_an_unreachable_store_is_an_error_never_absence(monkeypatch):
     """Fail closed: a store that does not answer never says "not there" (a staging would
     then write, a finalize would call the destination empty) - it is a typed, retryable
     `dependency_unavailable`, whatever the transport said."""
-    s3_env(monkeypatch)
+    s3_env(monkeypatch, local=True)
     objects = S3ObjectStore.connect("infrx-m1l2", "test/m1l2/", UNREACHABLE)
     with pytest.raises(errors.DependencyUnavailable):
         run(objects.head("media/k"))
@@ -323,6 +367,7 @@ def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch)
     media = cutover_app(settings("dev", BUCKET, s3_media_prefix=prefix,
                                  s3_endpoint_url=ENDPOINT)).state.runtime.media_store
     assert isinstance(media.objects, S3ObjectStore)
+    _WRITTEN.append(media.objects)
     assert (media.objects.bucket, media.objects.prefix) == (BUCKET, prefix)
     handle = run(media.create_upload(b.ORG_A, {}))["upload_handle"]
     run(media.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
@@ -336,10 +381,10 @@ def test_create_app_refuses_to_start_when_the_bucket_does_not_answer(case, monke
     """Fail closed, before anything is served: no bucket, an endpoint nobody answers at,
     or a bucket that does not exist. The refusal names S3_MEDIA_BUCKET and the S3 error,
     never the bucket or where the store is."""
-    s3_env(monkeypatch)
+    s3_env(monkeypatch, local=case != "missing")
     bucket, endpoint = {"unset": ("", UNREACHABLE),
                         "unreachable": ("infrx-m1l2-pilot", UNREACHABLE),
-                        "missing": ("infrx-m1l2-no-such-bucket", ENDPOINT)}[case]
+                        "missing": (absent_bucket(), ENDPOINT)}[case]
     with pytest.raises(RuntimeMisconfigured) as refused:
         cutover_app(settings("pilot", bucket, s3_endpoint_url=endpoint))
     message = str(refused.value)
@@ -398,3 +443,28 @@ def test_the_pilot_runtime_probe_refuses_an_image_without_botocore(tmp_path, mon
     monkeypatch.setattr(preflight, "_importable", lambda module: True)
     assert not any("botocore" in problem
                    for problem in preflight.probe(staged, "pilot")["problems"])
+
+
+# --- the harness itself (review A1) -------------------------------------------------------
+def test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones(
+        monkeypatch):
+    """The box run must reach AWS with the instance role: without INFRX_M_S3_LOCAL_CREDS
+    nothing in the environment is replaced (no literal key, no metadata switch-off)."""
+    monkeypatch.delenv(LOCAL_FLAG, raising=False)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "ASIAFROMTHEINSTANCEROLE")
+    monkeypatch.delenv("AWS_EC2_METADATA_DISABLED", raising=False)
+    s3_env(monkeypatch)
+    assert os.environ["AWS_ACCESS_KEY_ID"] == "ASIAFROMTHEINSTANCEROLE"
+    assert "AWS_EC2_METADATA_DISABLED" not in os.environ
+    monkeypatch.setenv(LOCAL_FLAG, "1")
+    s3_env(monkeypatch)
+    assert os.environ["AWS_ACCESS_KEY_ID"] == ACCESS_KEY
+    assert os.environ["AWS_EC2_METADATA_DISABLED"] == "true"
+
+
+@needs_s3
+def test_what_a_case_writes_is_removed_after_it(monkeypatch):
+    objects = s3_store(monkeypatch)
+    run(objects.put_if_absent(SOURCE, b"x", "video/mp4"))
+    remove_prefix(objects)
+    assert run(objects.keys("")) == []

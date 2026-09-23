@@ -24,6 +24,7 @@ S3 = "infrx/media/s3.py"
 C = "infrx/config.py"
 P = "infrx/gateway/pilot.py"
 D = "deploy/preflight.py"
+H = "tests/m/test_s3.py"        # review A1: the harness's own credential and cleanup rules
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1, s3=False):
@@ -52,6 +53,8 @@ REFUSES = "test_create_app_refuses_to_start_when_the_bucket_does_not_answer"
 INSTALL_ASKS = "test_a_pilot_install_asks_the_bucket_before_replacing_the_file"
 INSTALL_REFUSES = "test_a_pilot_install_without_a_bucket_is_refused"
 NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
+CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
+CLEANUP = "test_what_a_case_writes_is_removed_after_it"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -130,6 +133,14 @@ MUTANTS: tuple[Mutant, ...] = (
        D, "code.group(1) if code else f'exit {done.returncode}'", "bucket", INSTALL_ASKS),
     _m("s3_image_without_botocore", "the pilot probe refuses an image without botocore",
        D, '        if not _importable("botocore"):', "        if False:", NO_BOTOCORE),
+    # === review A1: the harness can run on the box ========================================
+    _m("s3_local_flag_ignored", "without INFRX_M_S3_LOCAL_CREDS the environment's (the "
+       "instance role's) credentials are used", H,
+       '    if secret is None and not local and os.environ.get(LOCAL_FLAG) != "1":\n        return\n',
+       "", CREDENTIALS),
+    _m("s3_cleanup_skipped", "what a case writes under its test prefix is deleted after it",
+       H, "            objects.client.delete_objects(", "            (lambda **kw: None)(",
+       CLEANUP, s3=True),
 )
 
 
@@ -145,7 +156,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 
 RUNNER = Runner(name="m1l2", package="", layout=_layout, targets=("tests/m/test_s3.py",),
-                env=("INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET"))
+                env=("INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET", "INFRX_M_S3_LOCAL_CREDS"))
 
 
 def run_mutant(mutant: Mutant):
