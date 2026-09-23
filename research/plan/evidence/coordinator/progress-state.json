@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:04:40Z",
+  "updated": "2026-09-23T16:05:55Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "fix round running on codex-e3b2 @ f97bfb7+ (its layer-3 gate on infrx-e3b2-* running) \u2192 confirmation \u2192 merge",
+      "phase": "fix round 2 HANDED BACK b0a64e1 (gate red only on I3B ids; 39 e3bm + all e2m killed); confirmation dispatched \u2192 MERGE (IR2-1 one commit; IR2-3 R93 dr04 pin; then I3B follow-up with IR2-2)",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
@@ -48,8 +48,8 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
-      "since": "2026-09-23T11:20:35Z"
+      "phase": "round-2 confirmation at b0a64e1 dispatched (gate + honesty lenses)",
+      "since": "2026-09-23T16:05:55Z"
     },
     "D4": {
       "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
