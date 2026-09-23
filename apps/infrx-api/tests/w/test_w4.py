@@ -287,6 +287,11 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
     rep = verdict_of(decide, cand, base)
     assert rep["verdict"] == "adopt ENGINE_MAX_NUM_SEQS=16 (WORKER_CONCURRENCY=16)", rep
     assert rep["start_to_ready_s"] == [95.0] * 6
+    printed = io.StringIO()
+    with redirect_stdout(printed):
+        decide.main([str(cand), "--baseline", str(base), "--set-aside", ",".join(FOUR)])
+    assert re.search(r"^w3_rule c\*=16 threshold=\S+ setting=16$", printed.getvalue(), re.M), \
+        printed.getvalue()[-600:]
 
     def blocks(name, damage, state="fail", criterion=None):
         cand, base = passing_pair(tmp_path / name)
@@ -391,6 +396,13 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
             ("requests_miscounted", lambda c, b: at32(c, lambda row: row.update(rejected=1)))):
         rep = blocks(name, damage, criterion="overload_masking")
         assert rep["criteria"]["error_rate"]["state"] == "unknown", (name, rep["criteria"])
+    def one_attempt_too_many(c, b):                 # --retries 0: attempts must be requests
+        path = c / SWEEP_RUN / "raw" / "c32.jsonl"
+        rows = lines(path)
+        extra = next(dict(row) for row in rows if row.get("outcome") == "accepted")
+        write_lines(path, rows + [{**extra, "outcome": "rejected", "seq": 999}])
+        at32(c, lambda row: row.update(attempts=row["attempts"] + 1, rejected=1))
+    blocks("attempts_over_requests", one_attempt_too_many, criterion="overload_masking")
     # DEC-R2-2: the bench row's own retry count
     at2 = lambda change: lambda c, b: edit_bench(          # noqa: E731
         c, lambda row: change(row["denominators"]) if row["concurrency"] == 2 else None)
@@ -403,9 +415,11 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
         b, lambda row: row.update(concurrency=3) if row["concurrency"] == 32 else None),
         "unknown", "usage_drift")
     # D7: the rule is taken over the six predeclared levels
-    blocks("level_missing", lambda c, b: edit_bench(c, lambda row: row.update(concurrency=3)
-                                                    if row["concurrency"] == 1 else None),
-           "unknown", "w3_rule")
+    rep = blocks("level_missing", lambda c, b: edit_bench(c, lambda row: row.update(concurrency=3)
+                                                          if row["concurrency"] == 1 else None),
+                 "unknown", "w3_rule")
+    paired = rep["criteria"]["usage_drift"]           # the candidate short of a level: not paired
+    assert paired["state"] == "unknown" and "not all six levels" in paired["detail"], paired
     # D6: the baseline is the predeclared one - not the candidate itself, not another pair
     blocks("pair", lambda c, b: (b / "candidate.log").write_text("candidate=e3 flags=-\n"),
            "unknown", "usage_drift")
@@ -683,6 +697,7 @@ elif a[0] == "logs":
 elif a[0] in ("stop", "rm"):
     running.unlink(missing_ok=True)
 elif a[0] == "stats":
+    open(st / "stats-fds", "a").write(" ".join(sorted(os.listdir("/proc/self/fd"))) + "\n")
     print("1.50GiB / 62.0GiB")
 '''
 # systemctl: the unit, its PartOf worker, and how the restore may go wrong
@@ -741,6 +756,8 @@ CHECKOUT_STUBS = {
     "corpus-synth/synth.py": "print('verified 12 file(s), 0 missing, 0 error(s)')\n",
     "measure/capability.sh": 'echo "probe=cancellation result=pass chunks_read=5"\n',
     "measure/concurrency.sh": 'echo "run=w3-L1-stub-c$LEVELS"\n'
+                              'for _ in $(seq 100); do [ -e "$STATE/stats-fds" ] && break; '
+                              'sleep 0.05; done\n'
                               'echo "levels=$LEVELS state=$ENGINE_STATE" >> "$STATE/sweeps"\n'
                               'echo "level=$LEVELS peak_running=1 peak_waiting=0"\n'
                               'exit "${SWEEP_EXIT:-0}"\n',
@@ -806,6 +823,9 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert "restored=yes" in done.stdout, done.stdout[-800:]
     inherited = [fds for fds in (state / "run-fds").read_text().splitlines() if "9" in fds.split()]
     assert not inherited, f"the candidate engine inherited the lock's fd 9: {inherited}"
+    sampled = (state / "stats-fds").read_text().splitlines()
+    assert sampled and not [fds for fds in sampled if "9" in fds.split()], \
+        f"the host sampler inherited the lock's fd 9: {sampled[:3]}"
     stop = calls.index("systemctl stop marlin2b-vllm")
     attempts = [i for i, call in enumerate(calls) if call.startswith("docker run")]
     assert min(attempts) > stop
@@ -870,6 +890,7 @@ def check_candidate_refuses(repo: pathlib.Path, tmp: pathlib.Path) -> None:
                                          / "escape")}, None),
         "ready-s": ((), {"READY_S": "15m"}, None),
         "ready-s-zero": ((), {"READY_S": "0"}, None),
+        "ready-s-zeros": ((), {"READY_S": "00"}, None),
         "second-run": ((), {}, hold_the_lock),
         "unit-inactive": ((), {}, unlink("state", "active-marlin2b-vllm")),
         "no-container": ((), {}, unlink("state", "running")),
