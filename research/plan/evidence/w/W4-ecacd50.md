@@ -577,3 +577,38 @@ The candidate engine always serves the unit's weights at `$NVME/marlin2b` on `12
 ### Round-2 verification log
 
 - 2026-09-23: fix round for `W4-review-db12a5a.json`; head `086a127` plus this section. Status unchanged: implemented, measurement pending the coordinator's box run.
+
+## Round 3 — confirmation `W4-confirm-b0a44a0.json` (box-safety passed; decision: 2 blocking)
+
+Everything for this round is in one code commit, `9490e7c`, plus this section. There was no rebase, reset, amend or push, and no box, Docker or AWS.
+
+| Finding | Change | Killing case | Mutants (all killed) |
+|---|---|---|---|
+| **DEC-R2-1** (blocking) only the attempts clause of `Level.reconciled` was killable | Cases only: one per clause | The passing case adds three variants, each checking one reconciliation clause:<ul><li>`failed_miscounted`: six raw accepted rows relabelled `cancelled` while the bench row moves accepted −6 / failed +6.</li><li>`accepted_miscounted`: the bench row's accepted −1 / cancelled +1, raw rows unchanged.</li><li>`requests_miscounted`: the bench row's `rejected` = 1.</li></ul>Each must give overload masking `fail`, error rate `unknown`, and no adoption | `reconcile_ignores_failed`, `reconcile_ignores_accepted`, `reconcile_ignores_requests` |
+| **DEC-R2-2** (blocking) the bench row's `denominators.retried_requests` clauses were unkilled | Cases only | Two new variants:<ul><li>`bench_retried` (`retried_requests=1` at c = 2) must give overload masking `fail`.</li><li>`bench_retries_unrecorded` (the key removed) must give `unknown`.</li></ul> | `bench_retries_ignored`, `bench_retries_absent_read_as_zero` |
+| DEC-R2-3 wording | Protocol log **amendment 2**: a level not `restarted` makes the rule, the tail and the paired criteria `unknown`; a level missing from the candidate makes the rule `unknown`; the paired criteria need all six levels on both sides; the tail is taken over the levels present at or below `c*` | — | — |
+| DEC-R2-4 a baseline short of levels | `decide.criteria`: the paired criteria are `unknown` unless both the candidate and the baseline have all six levels | passing `baseline_level_missing` | `baseline_levels_unchecked` |
+| DEC-R2-5 `setting=16` printed next to a rule not taken | The report line now reads `setting=16 (not taken)` when `w3_rule` is not `pass` | the set-aside case asserts it | `setting_printed_as_taken` |
+| BX-N1 lock released at exit | The restores case runs a second, clean `candidate.sh` on the same box, which must exit 0 with `restored=yes` | restores | `lock_by_file_existence` |
+| BX-N2 `READY_S=0` | New refusal case `ready-s-zero` | refuses | `ready_s_zero_accepted` |
+| BX-N3 fd 9 | The stub docker records `/proc/self/fd` on every `run`; the case asserts fd 9 is never inherited | restores | `lock_fd_inherited` |
+| BX-N4 stub fidelity | The stub curl answers only `http://127.0.0.1:8000/…`. The stub docker answers only the exact formats, and `{{.Config.Image}}` returns a different value | restores | `health_on_another_port` |
+| BX-N5 `ENGINE_MAX_NUM_SEQS` from the environment | The restores case's hostile environment now also sets `ENGINE_MAX_NUM_SEQS=8` | restores | `seqs_from_the_environment` |
+
+All twelve new mutants were pre-checked before the full run with `python -m tests.w.w4_mutants <the 12>`, which printed `12/12 killed`.
+
+**Runs at `9490e7c`.** Tails are quoted from the logs in the session scratchpad (`w4-lane/`).
+
+| Command (from `apps/infrx-api`) | UTC | Exit | Tail |
+|---|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py` | 11:18:57Z | 0 | `15 passed in 112.54s (0:01:52)` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4_mutants.py` (the whole list, detached) | 11:18:49Z | 0 | `106 passed in 1269.19s (0:21:09)`: 104 mutants killed plus the 2 list checks |
+| `uv run --frozen python -m tests.w.w4_mutants --list \| tail -1` | — | 0 | `104 mutants over 15 named cases`, the declared count |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w3_mutants.py` (detached) | 11:18:49Z | 0 | `87 passed in 311.37s (0:05:11)` |
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w` (detached) | 11:18:49Z | 0 | `179 passed in 548.38s (0:09:08)` |
+
+`decide.py … sweep-20260923T050411Z --set-aside c012,c025,c038,c051` now prints `w3_rule c*=16 threshold=2.1384 setting=16 (not taken)`. The rest of its output is unchanged from round 2's block.
+
+### Round-3 verification log
+
+- 2026-09-23: confirmation round for `W4-confirm-b0a44a0.json` at `9490e7c`. Status unchanged: implemented, measurement pending the coordinator's box run.
