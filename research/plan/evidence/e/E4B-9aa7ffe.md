@@ -481,3 +481,19 @@ Changes from the first version:
 5. **W4 phase B / the box - B2.** Unchanged. A new digest or flag lands in
    `serving-version.json` and `serve.sh` together; the pin follows the record.
 6. **Coordinator - ports.** Unchanged.
+
+### Round-2 runs (UTC 2026-09-23, at `5afe3d9`, a clean tree)
+
+| # | Command | Exit | Tail |
+|---|---|---|---|
+| R2-1 | `INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py` (21:50:10Z) | **0** | **`128 passed in 336.22s`** = 126 mutants killed + 2 list checks (`r2-list.log ac3bbe6b989f18ba`) |
+| R2-2 | layer 0 from the repo root: `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration` (after R2-5's teardown; no stack) | **0** | **`195 passed, 99 skipped, 2 warnings in 37.00s`**, no FAILED/ERROR line (`r2-layer0.log f93c8387481a56fd`) |
+| R2-3 | `cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/i` | **0** | **`143 passed in 168.03s`** (`r2-tests-i.log 58db403b1c0ae60c`) |
+| R2-4 | `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_endpoint_doc.py` | **0** | **`8 passed in 0.99s`** |
+| R2-5 | the full local runner, detached, e2 free (`docker ps -a` showed no `infrx-e2-*`): `INFRX_E2_NAMESPACE=e2 apps/infrx-api/.venv/bin/python tests/integration/backend/certify.py --workdir $SC/r2stack/work --report $SC/r2stack/report.json` (21:49:51Z → 21:52:52Z) | **1** | **report sha256 `379a4a0a8436aa4868655eb5d25da0a494aac69ea830a28183d51c1723b601a0`** (log `d2077c3e0c8ace2f`). **`release-identity` PASS: `one clean tree: 5afe3d9a1b3a…`**. rls `696` PASS; backend `passed 165, pending 17, failed 0`; `e4b.a.protocol` PENDING `{G2-R1: 11, D5: 12}` (98 passed); `e4b.b.recovery` PENDING `{G2-R1, D5, M1-L2, I2B-R4}` (67 passed); teardown clean; parity PASS (fake engine); dataset-resume, envelope (`0/11 (0 platform-caused)`), soak (`0/19`, `19 accepted`) and overload PENDING[BOX]. The two FAILs are the same measured findings: the dev host's App (request 2) and B1 (request 3). Afterwards `docker ps -a \| grep -c 'infrx-e2-\|infrx-e3b-postgrest'` → `0` |
+
+- 2026-09-23 (round 2): the review fix round appended (findings F1-F9 and N1-N5, the box
+  protocol v2, integration requests replaced); runs R2-1…R2-5 quoted from their logs and
+  `report.json`. Nothing earlier was rewritten, except a pointer under the first box
+  protocol's heading. No hosted project, AWS, box, GPU or secret was used. The only
+  containers were this lane's `infrx-e2-*` and `infrx-e3b-postgrest`, all removed.
