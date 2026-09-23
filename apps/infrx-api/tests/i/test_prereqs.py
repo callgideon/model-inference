@@ -207,7 +207,8 @@ def test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot(t
     morning, which no measured result can be attributed to. Required in pilot only."""
     script = support.serve_script(tmp_path, image="vllm/vllm-openai:nightly")
     assert preflight.engine_problems(script, "dev") == []
-    assert any("digest" in problem for problem in preflight.engine_problems(script, "pilot"))
+    assert any("does not pin the engine image by digest" in problem
+               for problem in preflight.engine_problems(script, "pilot"))
     assert preflight.engine_problems(support.serve_script(tmp_path, image=support.PINNED),
                                      "pilot") == []
 

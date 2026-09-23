@@ -436,9 +436,9 @@ def engine_problems(script: pathlib.Path | None, mode: str) -> list[str]:
     """What the vLLM unit would start, checked against what the adapter supports.
 
     The flags are asserted against the script the unit actually runs. The image digest
-    is a **pilot** requirement and is not satisfiable yet: `models/marlin2b/serve.sh`
-    defaults to a floating `:nightly` tag and W3 owns the pin, so this is the pending
-    input, recorded rather than waived.
+    is a **pilot** requirement, satisfied since W3 pinned `models/marlin2b/serve.sh` by
+    digest with its `serving-version.json` beside it; an unpinned script still gets the
+    refusal text below.
     """
     if script is None:
         return ["no engine script given: pass --serve-script so the flags can be checked"]
