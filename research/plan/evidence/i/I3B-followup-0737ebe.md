@@ -351,6 +351,83 @@ Artifacts (session scratch, sha256 prefix): `m-all.json d38573c0586c13e6` (R6), 
 94261dfe0a488b6f` (R1), `l0-merge.log 6d0cf41b2556100b` (R2), `recovery-d3.log c9feecf9608d9df1`
 (R4), `m-reds2.json fb7447b1346d3c4d` (R7), **`m-all2.json 0e12d59209e7c0af` (R11)**.
 
+## Round 3 — confirmation fix round (confirmation of `662c07c`)
+
+The confirmation of round 2 (`research/plan/evidence/i/I3B-followup-confirm-662c07c.json` on
+`claude/backend-impl`) returned **fix_required**. The restore lens passed; the drill lens found
+one blocking finding (DRL-1, both refuters agree), and there were seven nonblocking findings.
+This round fixes DRL-1 and folds in every nonblocking finding: DRL-2, DRL-3, RST-R2-1 and
+RST-R2-2 change code, while RST-R2-3, DRL-4 and RST-R2-4 are corrections and requests,
+recorded below.
+
+| Field | Value |
+|---|---|
+| Base | `662c07c` (round 2) |
+| Round-3 head | `b140378` code; this section is committed on top of it |
+| Verified against | a scratch clone (`git clone --shared`, removed afterwards) of `662c07c` merged with **`origin/codex/e3b-phase2-gate` @ `b0a64e1`**. The merge was clean. On top of it: request 1's `stack.py` half (b0a64e1's RESIDUAL still lists G1R/D2/D3/M3/W3/I2B), R2-A and R2-B, then each round-3 commit cherry-picked. `b0a64e1` has none of the three |
+
+### Findings → fixes
+
+| Finding | Commit | Change | Case (dies at) | Declared mutant → kill (E's runner, scratch merge) |
+|---|---|---|---|---|
+| **DRL-1** (blocking): the readiness retry was not pinned | `428dbe7` | The stub can fail a call only its first `$INFRX_I3B_FAILS` times, counted in its own events log. New **rc10c** (layer 1): the gateway's `/readyz` fails once, then answers; the case expects exit 0, **exactly rc10's commands with `curl … 8001/readyz` issued twice**, then 8002, `docker inspect`, `docker exec … reload`, and the previous release's files. rc10b now asserts `len(retries) > 1`. lib.sh is unchanged (it is I2B's); the mutant edits only the runner's copy | rc10c exit code (test_recovery.py:954); rc10b (:938) | **i3bm104** lib.sh `until curl … "$1"; do` → `… "$1" \|\| return 1; do` (H1): `killed`, `test_recovery.py:954: AssertionError` (`assert 4 == 0`, by hand). By hand, rc10b[8001/8002] also die at `:938` (`assert (1 > 1)`) |
+| DRL-2: rc03 pinned to G2, which has merged | `9a17db2` | G2 merged (2391d4d) and its cutover is held. The cutover is **G2 integration request 1**, owned by the coordinator. `recoverykit.OWNERS` gains one entry, **`"G2-R1"`**, in the I2B-R4/M1-L2 shape. rc03 pends on `PENDING[G2-R1]` and rc00 pins it. rc03 still fails the day the ingress is mounted | rc00 (:686) | **i3bm105** rc03 back on `"G2"`: `killed`, `test_recovery.py:686: AssertionError` |
+| DRL-3: rc04's admit/claim half | `b140378` | **It could run today, and now does** (rc04a). The rig is D's `PgJobStore` from `pgtesting.make_jobstore_factory` on a migrated `infrx_i3b_jobs`, on the D harness or E2's PostgreSQL. PostgreSQL is SIGKILLed and restarted after a claim by `test_restore.kill_postgres`: this run's own D container, or bk03's E2 path, which bk03 now calls. **The same store object carries on:** the claimed job is `running` with its pins and the queued job is `queued`; a replayed admission is the same job; a second claim raises `NotClaimable`; a new admission is accepted and prepared; the reaper requeues the claimed job (one `IndexEvent`, attempt 1) and the next claim is generation 2; the wallet shows ledger = the grant and reserved = the three holds. `pg_postmaster_start_time()` must move, which proves the loss was injected. Kill-to-connection on d3 was 1.7 s (junit property). **rc04b** keeps the settlement half, pending on `stack.stubbed(("terminalize",))` (D5). Measured along the way: an admitted job that is never prepared is failed free by the reaper once the lease TTL passes (`preparation_failed`/`released_free`), so rc04a prepares the third job | rc04a (:293) | **i3bm107** `kill_postgres`'s `docker kill` → `docker inspect`: `killed`, `test_recovery.py:293: AssertionError` ("PostgreSQL was not restarted") |
+| RST-R2-2: the column ACL check only saw presence | `ef72763` | `DAMAGE["column_acls"]` now moves `update (full_name)` from authenticated to anon (the grantee is swapped, the cardinality is the same) | bk01f[column_acls] (test_restore.py:466) | **i3bm106** `array(select unnest(a.attacl)…)` → `cardinality(a.attacl)` (R8): `killed`, `:466: AssertionError` |
+| RST-R2-1: i3bm103 was a key rename | `14efe44` | i3bm103 now adds `and false` to the family's WHERE clause (R2), so the family's rows really disappear. Round 2 called it "family dropped", which was wrong: it was a rename, killed only by the name mismatch | bk01f[column_acls] (:466) | **i3bm103**: `killed`, `:466: AssertionError` |
+| RST-R2-3: plain-image count | correction | Round 2's `6 passed, 20 skipped` was measured at `2d5df9f`, before RST-3 added `bk01f[column_acls]`: 10 at :109 + 9 bk01f + bk03. At `662c07c` and at this head it is **`6 passed, 21 skipped`** (10 `UNSUPPORTED[plain D image]` at :109, 10 at :449, and bk03's `no infrx-e2 stack`), exit 0, re-run at `b140378` | - | - |
+| DRL-4 / RST-R2-4: what R2-B shares | wording + request | R2-B stands, but it shares pgharness's lock only among runs with **the same `TMPDIR`**, because the lock is `gettempdir()/<container>-<port>.lock`. Under the private TMPDIR each lane uses for its list runs, R2-B keeps a list run's children on the parent's lock and nothing more: two lanes with different TMPDIRs on d3 are still not serialised. A fix that holds across TMPDIRs belongs to D: see **R3-2**. pgharness is not changed here | - | - |
+
+Round-3 mutants: i3bm104-i3bm107, plus i3bm103 redefined, so **100** in the list. All die by
+`AssertionError`.
+
+### Round-3 runs
+
+UTC 2026-09-23. `PY=apps/infrx-api/.venv/bin/python`, `D=INFRX_I3B_PG=d INFRX_D_TASK=d3
+INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey`,
+private `TMPDIR` for every D run and mutant run.
+
+| # | Command | Where | Exit | Result (quoted) |
+|---|---|---|---|---|
+| Q1 | layer 0: `$PY -m pytest -q -rs tests/integration/test_harness.py tests/integration/backend/test_stage.py tests/integration/test_run.py tests/integration/backend/recovery` (16:16:52Z) | this branch at `b140378` | **0** | `95 passed, 31 skipped, 2 warnings in 13.72s`; PENDING `[G2-R1]`, `[I2B-R4]`, `[M1-L2]` once each (round 2: 94/30; +rc10c; +rc04a, a no-stack skip at layer 0) |
+| Q2 | same (16:17:06Z) | scratch merge | **0** | `111 passed, 31 skipped, 1 xfailed, 2 warnings in 14.38s`; same three PENDING |
+| Q3 | `$D $PY -m pytest -rs -v tests/integration/backend/recovery` (16:17:30Z) | scratch merge | **0** | `60 passed, 9 skipped, 2 warnings in 75.25s` (round 2: 58/9). test_restore.py: 26 passed, 1 skipped (bk03). rc04a, rc00, rc10, rc10b×2, rc10c, bk01f[column_acls] PASSED; rc04b skipped (no E2 stack). Skips: PENDING[G2-R1], [M1-L2], [I2B-R4] + 6 that need E2's stack. No d3/i3b container left |
+| Q4 | `INFRX_I3B_PG=d INFRX_D_TASK=d3 $PY -m pytest -q -rs …/test_restore.py` on the **plain** image | this branch at `b140378` | **0** | `6 passed, 21 skipped in 0.43s` (RST-R2-3) |
+| Q5 | `--only` i3bm104; i3bm105 (layer 1); i3bm103, i3bm106, i3bm107 (layer 2, `$D`), as each landed | scratch merge | **0** | each `killed`, `problems: null`; the kill lines are in the table above |
+| Q6 | **the full list**, `$D $PY tests/integration/backend/recovery/mutants_i3b.py --layer all --report m-all3.json` (16:19:51Z-16:32:08Z) | scratch merge | 1 | **`{"mutants": 100, "killed": 98, "controls_survived": 1, "not_killed": 1, "pending": 0, "problems": ["i3bm33"]}`**, which equals the declared list (100). The only problem is i3bm33 `no-cases` (rc06 needs E2's Valkey), and there are no baseline-reds. Death sites: 87 `AssertionError`, 8 `Failed`, 1 `RuntimeError` (i3bm48, pgrestore.py:299, the tool's own read-only guard), and 2 not visible in the tail (i3bm11/12). Round-3 mutants: i3bm103/106 `test_restore.py:466`, i3bm104 `test_recovery.py:954`, i3bm105 `:686`, i3bm107 `:293`; i3bm94 is now `:898` (lines moved) |
+| Q7 | `cd apps/infrx-api && $PY -m pytest -q -rs tests/i` (16:18:58Z) | scratch merge | **0** | `143 passed in 186.73s (0:03:06)` |
+| Q8 | G2-merged simulation: `claude/backend-impl`'s `tasks.json` (G2 `implemented`) copied into the scratch merge; `$PY -m pytest -q tests/integration/backend/test_stage.py` | scratch merge (`origin/claude/backend-impl` @ `6208d65`'s tasks.json) | 1 | `AssertionError: ({'G2', 'G3'}, set())`, `1 failed, 8 passed`. Both ids come from E3B2's own `stack.PENDING`; no I3B case names either (R3-1) |
+
+### Limits (round 3)
+
+1. rc04a's **E2 path** (`kill_postgres` on E2's compose service) has not been run here, because
+   E2's stack is not this lane's to start. It is bk03's code, moved into the helper without
+   change, and bk03 calls it; the gate's layer 3 runs both. rc04b is still a no-stack skip here.
+2. On the scratch merge, rc04a passed on the Supabase 17.6 D image with `pgtesting` as of
+   `b0a64e1` (D4's PgStreamStore hooks). On this branch alone the case is a layer-0 skip.
+3. R2-B does not serialise lanes that use different TMPDIRs (DRL-4); R3-2 is the fix.
+
+### Integration requests (round 3)
+
+- **R2-1 / R2-A / R2-B: unchanged, and still required on `b0a64e1`.** That head has none of
+  them. Q2 passes only with all three applied.
+- **R3-1 (E3B2) - NEW (DRL-2's other half).** G2 has merged, so `stack.PENDING["G2"]` is a
+  merged task in E3B's own vocabulary. I3B no longer names G2 (it uses `G2-R1`, in
+  `recoverykit.OWNERS`). Q8 fails with the coordinator's tasks.json (`({'G2', 'G3'}, set())`), because both are E3B2's `stack.PENDING` entries and both have merged. E3B2 should drop them, or move them to RESIDUAL with reasons.
+- **R3-2 (D, pgharness) - NEW (DRL-4 / RST-R2-4).** Give the port lock a path that does not
+  depend on TMPDIR (for example `/tmp/infrx-<task>-<port>.lock` or `/run/lock`). Two runs on the
+  same task port are then serialised whatever TMPDIR each uses. Until then, D-mode list runs
+  that could overlap must share one TMPDIR.
+- R2-C (reserve the task ports from the ephemeral range) is unchanged.
+
+### Changes (round 3)
+
+`git diff --stat 662c07c..b140378`: 4 files, +176/−37 (`mutants_i3b.py`, `recoverykit.py`, `test_recovery.py`, `test_restore.py`). Every file changed is under
+`tests/integration/backend/recovery/`. No runbook, pgrestore, module, contract, migration,
+deploy script (lib.sh untouched), D or E file changed. **Migrations: none.** New cases:
+rc10c, rc04a, rc04b (rc04 split). rc10b, rc00, rc03, bk01f[column_acls] and bk03 changed
+(bk03 by refactor only). Artifacts (session scratch, sha256 prefix): `l0-head3.log b51dc00729edc00b` (Q1), `l0-merge3.log 98830782da193fcb` (Q2), `recovery-d3-r3.log 270a3b6ff6d6d2f6` (Q3), **`m-all3.json 137b74b78491762b` (Q6)**, `tests-i3.log c2b703242ed1fb46` (Q7).
+
 ## Verification log
 
 - 2026-09-23: Authored from the runs above; every count is quoted from command output or the
@@ -360,3 +437,9 @@ Artifacts (session scratch, sha256 prefix): `m-all.json d38573c0586c13e6` (R6), 
   RST-5 left with reasons. Every count is quoted from command output or the JSON reports; the
   19 baseline-reds of R6 were diagnosed (P-21, R8) and re-run (R7). Status **implemented, not
   integrated**. Nothing deployed; E2's stack not started.
+- 2026-09-23 (round 3): confirmation of `662c07c` answered. DRL-1 is fixed (rc10c + rc10b's
+  retry count, i3bm104). DRL-2 (G2-R1, i3bm105), DRL-3 (rc04a on the D harness, rc04b,
+  i3bm107), RST-R2-1 (i3bm103 a real drop) and RST-R2-2 (grantee swap, i3bm106) are folded in.
+  RST-R2-3, DRL-4 and RST-R2-4 are corrected in the text above, with R3-2 to D. Full list on
+  the merge: 100 mutants, 98 killed, the control survived, i3bm33 no-cases. Status
+  **implemented, not integrated**. Nothing deployed; E2's stack not started.
