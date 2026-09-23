@@ -166,9 +166,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("the_rebuild_is_not_topped_up",
        "Q2's hole: a delivery acknowledged behind a stale snapshot survives the rebuild",
        "            report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n"
-       '            self.metrics["rebuilds"] += 1',
+       '            if not report["blocked"]:',
        "            report = Counter(repaired=0)\n"
-       '            self.metrics["rebuilds"] += 1',
+       '            if not report["blocked"]:',
        "test_q3_reconcile__a_delivery_behind_a_stale_snapshot_survives_the_rebuild"),
     _m("the_rebuild_starts_empty_and_applies_the_caps",
        "a rebuild is recovery: PostgreSQL's whole snapshot, caps not applied",
@@ -186,6 +186,18 @@ MUTANTS: tuple[Mutant, ...] = (
        '            if not report["blocked"]:\n                break',
        "            break",
        "test_q3_reconcile__an_acknowledgment_inside_the_rebuild_is_repaired_by_the_rebuild"),
+    _m("a_twice_blocked_rebuild_counts_what_it_lost",
+       "review DUR-4b: the rebuild's count leaves out the candidates a blocked top-up lost",
+       '        return count + report["repaired"] - report["blocked"]',
+       '        return count + report["repaired"]',
+       "test_q3_reconcile__a_rebuild_blocked_twice_leaves_the_job_to_the_next_pass"),
+    _m("a_rebuild_is_counted_only_after_its_top_up",
+       "review DUR-4b: a rebuild is counted once the index is replaced, whatever follows",
+       '            self.metrics["rebuilds"] += 1              # the index was replaced (DUR-4b)\n'
+       "            report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n",
+       "            report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n"
+       '            self.metrics["rebuilds"] += 1\n',
+       "test_q3_reconcile__a_rebuild_whose_top_up_fails_is_still_counted"),
     # --- (3) the switch ------------------------------------------------------
     _m("the_switch_is_not_topped_up_after_the_swap",
        "a delivery into the old index during the switch reaches the new one",

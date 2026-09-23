@@ -270,17 +270,19 @@ def test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch(adapter):
 # --- (2) the reconciler -------------------------------------------------------------
 
 class Interleave:
-    """The store, except that its `n`-th `dispatch_snapshot` is read, THEN `action` runs,
-    THEN the (now stale) snapshot is returned: "something happened between the snapshot
-    and what the reconciler did with it", made deterministic."""
+    """The store, except that its `n`-th `dispatch_snapshot` (or each of several `n`) is
+    read, THEN `action` runs, THEN the (now stale) snapshot is returned: "something
+    happened between the snapshot and what the reconciler did with it", made
+    deterministic."""
 
-    def __init__(self, store, n: int, action) -> None:
-        self.store, self.n, self.action, self.calls = store, n, action, 0
+    def __init__(self, store, n, action) -> None:
+        self.store, self.action, self.calls = store, action, 0
+        self.n = {n} if isinstance(n, int) else set(n)
 
     async def dispatch_snapshot(self):
         snapshot = await self.store.dispatch_snapshot()
         self.calls += 1
-        if self.calls == self.n:
+        if self.calls in self.n:
             await self.action()
         return snapshot
 
@@ -782,6 +784,48 @@ def test_q3_reconcile__an_acknowledgment_inside_the_rebuild_is_repaired_by_the_r
         assert w.rec.metrics["rebuilds"] == 2
         await rig.finish(w)
         rig.settled(w)
+    run(body)
+
+
+def test_q3_reconcile__a_rebuild_blocked_twice_leaves_the_job_to_the_next_pass(adapter):
+    """Review DUR-4b: the acknowledgment lands inside BOTH rebuilds (snapshots 2 and 4).
+    The rebuild stops at two and says so - it holds 0 candidates, not 1 - and the next
+    pass rebuilds again."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)
+
+        async def acknowledged():
+            await w.index.acknowledge(held)                   # the claim never landed
+
+        w.rec.store = Interleave(w.outbox, (2, 4), acknowledged)
+        assert await w.rec.rebuild() == 0
+        assert await rig.members(w) == {}
+        assert w.rec.metrics["rebuilds"] == 2
+        assert await w.rec.reconcile() == {"missing": 1, "rebuilt": 1}
+        assert list((await rig.members(w)).values()) == [job]
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_reconcile__a_rebuild_whose_top_up_fails_is_still_counted(adapter):
+    """Review DUR-4b: the index was replaced even if the top-up then fails."""
+    w = rig.world(adapter)
+
+    async def body():
+        await rig.admit(w)
+
+        async def admitted():
+            await rig.admit(w)                     # the top-up has one to enqueue
+
+        w.rec.store = Interleave(w.outbox, 1, admitted)
+        with pytest.raises(ConnectionError):
+            await w.rec.rebuild(FlakyIndex(w.index, fail_on=1))
+        assert w.rec.metrics["rebuilds"] == 1
     run(body)
 
 

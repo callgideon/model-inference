@@ -186,16 +186,18 @@ class Reconciler:
 
         A worker that acknowledges a re-indexed candidate between the rebuild and the
         top-up (its claim never landed) leaves the top-up `blocked`; the rebuild then runs
-        once more rather than leaving the job unindexed until the next pass (DUR-4).
+        once more rather than leaving the job unindexed until the next pass (DUR-4). At
+        most twice: if the second is blocked too, the count leaves the blocked candidates
+        out and the next pass rebuilds again (DUR-4b).
         """
         index = self.index if index is None else index
         for _ in range(2):
             count = await index.rebuild(await self.store.dispatch_snapshot())
+            self.metrics["rebuilds"] += 1              # the index was replaced (DUR-4b)
             report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)
-            self.metrics["rebuilds"] += 1
             if not report["blocked"]:
                 break
-        return count + report["repaired"]
+        return count + report["repaired"] - report["blocked"]
 
     # --- (3) switching adapters ---------------------------------------------
     async def switch(self, index: Any) -> int:
