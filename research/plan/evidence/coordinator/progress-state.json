@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T01:46:21Z",
+  "updated": "2026-09-23T01:47:51Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "fix round 1 (negative-USD hold case; frozen-wallet acceptance cases; 12 fold-ins)",
+      "phase": "closure review (2-lens workflow) of fix round at 47b0382",
       "since": "2026-09-22T22:35:57Z",
       "note": "new files only; migrations 0015+; D2 in flight"
     },
