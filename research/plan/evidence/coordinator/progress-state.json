@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:27:29Z",
+  "updated": "2026-09-23T16:35:30Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,13 +11,13 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "fix round 2 HANDED BACK b0a64e1 (gate red only on I3B ids; 39 e3bm + all e2m killed); confirmation dispatched \u2192 MERGE (IR2-1 one commit; IR2-3 R93 dr04 pin; then I3B follow-up with IR2-2)",
+      "phase": "fix round 2 HANDED BACK b0a64e1 (gate red only on I3B ids; 39 e3bm + all e2m killed); confirmation dispatched \u2192 MERGE (IR2-1 one commit; IR2-3 R93 dr04 pin; then I3B follow-up with IR2-2) | R3-1 (I3B Q8): stack.PENDING[G2]/[G3] are merged tasks \u2192 re-key on the held cutover owner (G2-R1) \u2014 lane asked",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round-2 confirmation at 662c07c fix_required (DRL-1 readiness retry unpinned; restore lens pass; 8 nonblocking) \u2192 round 3 dispatched \u2192 single verifier \u2192 merge after E3B2",
+      "phase": "round 3 HANDED BACK 1a7a256 (DRL-1 rc10c + i3bm104; G2-R1 owner; rc04a live PostgreSQL restart; I3B list 100/98); single verifier running \u2192 merge after E3B2 (IR2-2, R2-A, R2-B, request-1 stack.py)",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
@@ -54,8 +54,8 @@
       "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "fix_required at 662c07c (wf_f6e063df-a4a; JSON evidence/i/I3B-followup-confirm-662c07c.json) \u2192 round 3",
-      "since": "2026-09-23T16:04:40Z"
+      "phase": "round-3 verifier at 1a7a256 running (single Opus drill verifier + refuters)",
+      "since": "2026-09-23T16:35:30Z"
     },
     "F-fakes-followup": {
       "phase": "MERGED a2779d1 after the verifier pass at 0cf5cd6; merged-tree checks running (ffakes-merged-a2779d1.log)",
