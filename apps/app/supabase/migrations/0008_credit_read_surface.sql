@@ -8,6 +8,10 @@
 -- through narrow `infrx` functions only. Units are never combined (R73): the CREDIT
 -- wallet summary and the legacy USD statement are separate calls with separate units.
 -- Re-runnable (create or replace).
+--
+-- D2 amendment 2026-09-22 (in place: 0006-0009 are applied to no hosted project; D1R
+-- review (e), R84): a comment only, on `console_legacy_usd_statement` - the requested
+-- `infrx.now()` for `as_of` is declined there, with the reason. No object changes.
 
 -- ======================================================= admission-pin resolution ===
 -- `model -> deployment_revision -> serving_version + rate_card_version + policy_version`
