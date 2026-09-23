@@ -1,0 +1,90 @@
+{
+  "about": "The Marlin-2B serving version (W3): serve.sh's pinned default, verified by tests/w/test_serving.py (check_pinned_launch). `flags` is what serve.sh passes after the image on a launch with no extra arguments, with ${NAME} for the two settings. Flags a caller appends pass through to vLLM and are outside this record (a new serving version); a second value for either setting, or an --api-key, is refused, and the environment cannot change the image, --max-model-len or --gpu-memory-utilization. `engine_options_digest` is sha256 of the flags' compact JSON with `settings` substituted.",
+  "recorded_at": "2026-09-22",
+  "measured_on_box_at": "2026-09-23 (pilot box i-0e8449a4ffca29bab, coordinator-run measure/inventory.sh and measure/capability.sh; raw outputs on claude/backend-impl under research/plan/evidence/w/box/)",
+  "model": {
+    "repo": "NemoStation/Marlin-2B",
+    "commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+    "weight_shard_digests": [
+      "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+      "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+    ],
+    "tokenizer_digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+    "config_digest": "sha256:1325d77937ce3a4a54eec9748269206901afdbd365abb1842bf32a42f5cabd20",
+    "generation_config_digest": "sha256:0d54a28c36c5143413aa18a910f661d17483909e87321f34ad58859b66cf25b4",
+    "digest_source": "served_bytes",
+    "served_bytes_measured": "meas. 2026-09-23, research/plan/evidence/w/box/inventory-20260923T0319Z.txt (SSM command 6a8569bd-e958-4a1d-9797-6496e0b12b42, 2026-09-23T03:19:48Z): the two shards, tokenizer.json and chat_template.jinja hash to exactly the four digests above (S2M's, 2026-09-22); config.json and generation_config.json (first recorded here) equal the repository copies research/models/marlin2b/config.json and generation_config.json byte for byte (sha256 of those files)",
+    "registry_oid_equality": "⚠️ TO BE VERIFIED: needs HF_TOKEN on the serving host (research/workloads/marlin-sop.md §1.3); measure/inventory.sh prints both sides when HF_TOKEN is exported"
+  },
+  "profile_version": "v1",
+  "eos_token_ids": [
+    248044,
+    248046
+  ],
+  "eos_supplied_by": "stop_token_ids on every request (infrx/worker/engine.py MODEL_EOS_TOKEN_IDS); accepted and honoured by the pinned image - meas. 2026-09-23 (capability.sh): both ids accepted (200, finish_reason stop), and a greedy run given its own 3rd token (561) as the stop id stopped there (finish_reason stop, stop_reason 561, 3 completion tokens)",
+  "runtime_image": {
+    "ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "digest": "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "digest_source": "registry_oid_confirmed",
+    "digest_kind": "manifest list (OCI index): what a pull by `ref` resolves; on linux/amd64 it resolves to linux_amd64_manifest, whose image config is linux_amd64_config",
+    "resolved_from": "vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
+    "resolved_at": "2026-09-22T22:42:53Z",
+    "resolved_by": "docker buildx imagetools inspect (read-only registry call); sha256 of the raw manifest list equals the digest",
+    "linux_amd64_manifest": "sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b",
+    "linux_amd64_config": "sha256:38e8c0e60293aefc23edee5c074107e44b89d64f26d5399cd2f5956801b6ef24",
+    "vllm_build_commit": "a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
+    "created": "2026-09-19T05:47:54Z",
+    "pilot_box": "meas. 2026-09-23, research/plan/evidence/w/box/inventory-20260923T0319Z.txt (SSM command 6a8569bd-e958-4a1d-9797-6496e0b12b42, 2026-09-23T03:19:48Z): image_equals_pin=yes - the running container's image id is sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 (the full digest above), RepoDigests [vllm/vllm-openai@sha256:4cbfd34a...20b42], tag :nightly, created 2026-09-19T05:47:54.316012075Z, ai.vllm.build.commit a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b; docker 29.7.2 with storage driver `overlayfs`. The local id there is the INDEX digest, not the amd64 config digest: `overlayfs` is Docker's name for the containerd image store's snapshotter (the classic store reports `overlay2` and would show the config digest, 38e8c0e6...) - the equality is measured, the store is read from the driver name. The box still runs the pre-pin serve.sh (by tag): same image, but its flags carry --max-num-seqs 32 and no --allowed-local-media-path until I2B's pinned deploy"
+  },
+  "flags": [
+    "--served-model-name",
+    "marlin2b",
+    "--hf-overrides",
+    "{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}",
+    "--max-model-len",
+    "32768",
+    "--max-num-seqs",
+    "${ENGINE_MAX_NUM_SEQS}",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--limit-mm-per-prompt",
+    "{\"video\":1,\"image\":4}",
+    "--dtype",
+    "bfloat16",
+    "--allowed-local-media-path",
+    "${PROCESSING_CACHE_DIR}"
+  ],
+  "settings": {
+    "ENGINE_MAX_NUM_SEQS": "8",
+    "PROCESSING_CACHE_DIR": "/opt/dlami/nvme/processing"
+  },
+  "settings_status": {
+    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: the pilot value (contracts limits engine_max_num_seqs); the pilot box ran 32 (I1B), and still serves 32 (meas. 2026-09-23, container args). The sweep is held by the coordinator (P-04: it needs a checkout and a corpus build on the box), so until it runs the cutover sets 32 explicitly (I2B FC-1). measure/concurrency.sh measures it and refuses unless the engine serves --max-num-seqs 32, so the sweep runs either before the pinned unit is deployed (the box's current unit passes 32) or after `INFRX_SET=ENGINE_MAX_NUM_SEQS=32` through I2B's install.sh (the validated /etc/marlin2b-gateway.env, which the vLLM unit and the runtime both read) and a restart of marlin2b-vllm; the W3 evidence's predeclared rule then sets the value that replaces 8",
+    "PROCESSING_CACHE_DIR": "proposed for I2B: on the box's NVMe (I1B: /opt/dlami/nvme, 386 G free); the same value for the gateway, the worker and serve.sh"
+  },
+  "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+  "not_passed": "the B300 recommendations (--mamba-cache-mode=align, --block-size 128, --media-io-kwargs, --mm-processor-cache-type shm): never measured on the L40S pilot; adopting one is a new serving version (marlin-sop.md D13). Measured 2026-09-23: without the flag the engine already runs mamba_cache_mode align (its default with prefix caching) and picks block size 544 itself",
+  "kv_capacity": {
+    "kv_cache_size_tokens": 2644426,
+    "max_concurrency_at_32768_tokens": 80.70,
+    "num_gpu_blocks": 5407,
+    "block_size": 544,
+    "available_kv_cache_memory": "33.67 GiB",
+    "measured": "meas. 2026-09-23, engine-reported (vllm:cache_config_info kv_cache_size_tokens/num_gpu_blocks/block_size and the start-up log 'GPU KV cache size: 2,644,426 tokens, Maximum concurrency for 32,768 tokens per request: 80.70x'), research/plan/evidence/w/box/inventory-20260923T0319Z.txt (SSM command 6a8569bd-e958-4a1d-9797-6496e0b12b42, 2026-09-23T03:19:48Z)",
+    "conditions": "L40S (46068 MiB), --gpu-memory-utilization 0.90, --max-model-len 32768, --max-num-seqs 32 (the box's current engine); ⚠️ re-read after the pinned deploy (default 8), since the start-up profile may differ",
+    "note": "the capacity is the engine's own token count, 2,644,426 (= 80.70 x 32,768). num_gpu_blocks x block_size is 2,941,408 here, NOT the capacity: this hybrid model shares the block pool between linear-attention (mamba-style) state and attention pages (the log sets the attention block to 544 so the pages match), so E1B's formula overstates it; the reason for the exact gap is not derived here"
+  },
+  "engine_version": "0.29.1rc1.dev397+ga8d1aa9c9 - meas. 2026-09-23, GET /version (research/plan/evidence/w/box/inventory-20260923T0319Z.txt (SSM command 6a8569bd-e958-4a1d-9797-6496e0b12b42, 2026-09-23T03:19:48Z)); the +g suffix is the pin's build commit a8d1aa9c9",
+  "engine_capabilities": {
+    "measured": "meas. 2026-09-23, research/plan/evidence/w/box/capability-20260923T0320Z.txt (SSM command 2593cc22-7829-4e3c-b444-b15045638df5, 2026-09-23T03:20:49Z), on the engine as it runs today (data: URL media; no --allowed-local-media-path)",
+    "stop_token_ids": "accepted and honoured (see eos_supplied_by)",
+    "cache_salt": "known: accepted (200), a wrong type refused 400 ('Parameter 'cache_salt' must be a non-empty string if provided.'), nothing logged as ignored",
+    "mm_uuids_top_level": "accepted_but_ignored: 200, and a wrong type (an int) also 200 with nothing logged - the engine is not shown to read it",
+    "mm_uuids_per_part": "accepted_but_ignored: the same for a per-part `uuid`",
+    "mm_uuids_consequence": "neither form is shown to be read, so the adapter's top-level mm_uuids is inert on this build and moving it per part (W3 limit 4's condition: per-part `known`) would not help; the adapter keeps sending it, harmless, and the multimodal cache keeps its own default keying. Tenant namespacing does not rest on it: cache_salt is known",
+    "file_url_under_allowed_path": "⚠️ not_run: today's engine has no --allowed-local-media-path; needs I2B's pinned deploy (PROCESSING_CACHE_DIR set), step 2b",
+    "file_url_outside_refused": "⚠️ not_run: as above",
+    "cancellation": "pass: 5 chunks read, client disconnect, vllm:num_requests_running 1 -> 0 in 0.11 s; no abort line found in the engine log"
+  }
+}

@@ -274,9 +274,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if cause is TerminalCause.client_cancelled:\n        return JobState.failed",
        BILLABLE, dies_by=("ValidationError",)),
     _m("result_never_stored", "r1 R30: a success the customer cannot fetch is not a success",
-       A, "        if cause is TerminalCause.completed:\n            try:\n"
+       A, "        if cause is TerminalCause.completed:\n            began = self.clock.now()\n"
+          "            try:\n"
           "                result_ref = await _maybe_await(self.put_result(state.lease.job_id,",
-       "        if False:\n            try:\n"
+       "        if False:\n            began = self.clock.now()\n            try:\n"
        "                result_ref = await _maybe_await(self.put_result(state.lease.job_id,",
        HAPPY),
     _m("result_store_failure_still_completes",
@@ -337,7 +338,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '"video_url": {"url": ref.storage_ref}},', MEDIA_FILE),
     _m("media_root_is_not_the_engines", "the root is the one the engine was started with",
        E, "local_media_url(ref, self.local_media_root, org_id,",
-       "local_media_url(ref, LOCAL_MEDIA_ROOT, org_id,", MEDIA_FILE,
+       'local_media_url(ref, "/srv/infrx/processing", org_id,', MEDIA_FILE,
        # M2's path under the pinned root fails the default root's check: that is the kill
        dies_by=("NotFound",)),
     _m("media_path_unchecked", "R61: M2's path is checked, not trusted",

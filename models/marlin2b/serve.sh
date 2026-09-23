@@ -7,9 +7,29 @@
 # .caption()/.find() helpers are transformers-only, so callers send the canonical
 # prompt themselves — see smoke.py, which reads it from modeling_marlin.py.
 #
-#   ./marlin2b/serve.sh                      # foreground, port 8000
-#   PORT=8001 GPU=1 ./marlin2b/serve.sh      # another GPU/port
-#   ./marlin2b/serve.sh --max-num-seqs 64    # extra vLLM flags pass through
+# The serving version (W3, serving-version.json beside this file) is this script's
+# pinned default, verified by tests/w/test_serving.py (check_pinned_launch) on a launch
+# with no extra arguments: the image by registry digest (an IMAGE in the environment is
+# ignored), the engine on loopback only with no API key (the gateway and the worker are
+# its only clients), and two settings read under the names the gateway reads, so each
+# fact has one place:
+#
+#   ENGINE_MAX_NUM_SEQS    concurrent sequences (08 §5), a positive integer; 8 until
+#                          measured. ⚠️ the pilot box ran 32 (I1B). measure/concurrency.sh
+#                          decides, and refuses to run unless the engine serves 32 (the
+#                          sweep, not the engine, must be the cap): start this script with
+#                          ENGINE_MAX_NUM_SEQS=32 for the sweep, then the measured value.
+#   PROCESSING_CACHE_DIR   prepared-media root (R61 (2)): absolute and canonical, never a
+#                          system directory; mounted read-only at the same path and
+#                          passed as --allowed-local-media-path. Unset: no local media,
+#                          and the worker refuses every video.
+#
+# Both EOS ids [248044, 248046] are re-supplied by every request (stop_token_ids).
+#
+#   ./marlin2b/serve.sh                          # foreground, 127.0.0.1:8000
+#   PORT=8001 GPU=1 ./marlin2b/serve.sh          # another GPU/port
+#   ./marlin2b/serve.sh --enable-log-requests    # other vLLM flags pass through; they are
+#                                                # outside the record (a new serving version)
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common/env.sh
@@ -18,25 +38,65 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/model.env"
 
 WEIGHTS=${WEIGHTS:-$WEIGHTS_ROOT/$EXP}
-PORT=${PORT:-8000}          # BIND=0.0.0.0 to expose beyond localhost (the gateway fronts it)
+PORT=${PORT:-8000}
 GPU=${GPU:-0}
-IMAGE=${IMAGE:-vllm/vllm-openai:nightly}   # Qwen3.5 needs vLLM main (base model card)
+# vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b, resolved 2026-09-22
+# (Qwen3.5 needs vLLM main): its manifest-list (index) digest. The pilot box runs exactly
+# this image (measure/inventory.sh, 2026-09-23: image_equals_pin=yes, /version
+# 0.29.1rc1.dev397+ga8d1aa9c9).
+# The environment cannot replace the image: `unset` first, so this `${IMAGE:-…}` default
+# (the form I0's preflight reads) is the only value.
+unset IMAGE
+IMAGE=${IMAGE:-vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42}
 # 240 frames x 196 tokens per 2-frame temporal patch at 448x448 = ~23.5K video
 # tokens, so 32K covers the longest input the model was trained on and keeps the
 # KV budget for batching instead of an idle 262K window.
-MAX_MODEL_LEN=${MAX_MODEL_LEN:-32768}
+# Recorded in serving-version.json, so not an environment knob either.
+MAX_MODEL_LEN=32768
+ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-8}
 
 test -f "$WEIGHTS/config.json" || { echo "no weights at $WEIGHTS — run ./marlin2b/download.sh" >&2; exit 1; }
 
+# A pinned setting has one source: the caller cannot pass a second, conflicting value.
+for arg in "$@"; do
+  case "$arg" in
+    --max-num-seqs*|--allowed-local-media-path*|--api-key*)
+      echo "serve.sh: ${arg%%=*} is pinned here; set ENGINE_MAX_NUM_SEQS or PROCESSING_CACHE_DIR" >&2
+      exit 2 ;;
+  esac
+done
+[[ $ENGINE_MAX_NUM_SEQS =~ ^[1-9][0-9]*$ ]] || {
+  echo "serve.sh: ENGINE_MAX_NUM_SEQS must be a positive integer" >&2; exit 2; }
+
+media=() flags=()
+if [ -n "${PROCESSING_CACHE_DIR:-}" ]; then
+  # The engine may open any file under it by file://: absolute and canonical (no `..`,
+  # `//` or trailing `/` to walk out of the checks below; realpath of a relative path is
+  # absolute, so it never compares equal), never a system directory or the weights mount -
+  # as spelled, nor where its symlinks lead (docker mounts the resolved source).
+  [ "$(realpath -m -s -- "$PROCESSING_CACHE_DIR")" = "$PROCESSING_CACHE_DIR" ] || {
+    echo "serve.sh: PROCESSING_CACHE_DIR must be an absolute, canonical path" >&2; exit 2; }
+  for path in "$PROCESSING_CACHE_DIR" "$(realpath -m -- "$PROCESSING_CACHE_DIR")"; do
+    case "$path" in
+      /|/etc|/etc/*|/home|/home/*|/model|/model/*)
+        echo "serve.sh: PROCESSING_CACHE_DIR may not be $path" >&2; exit 2 ;;
+    esac
+  done
+  test -d "$PROCESSING_CACHE_DIR" || { echo "serve.sh: no directory at PROCESSING_CACHE_DIR" >&2; exit 1; }
+  media=(-v "$PROCESSING_CACHE_DIR:$PROCESSING_CACHE_DIR:ro")
+  flags=(--allowed-local-media-path "$PROCESSING_CACHE_DIR")
+fi
+
 exec docker run --rm --name "marlin2b-$PORT" --gpus "\"device=$GPU\"" --ipc=host \
-  -p "${BIND:-127.0.0.1}:$PORT:8000" \
-  -v "$WEIGHTS:/model:ro" \
+  -p "127.0.0.1:$PORT:8000" \
+  -v "$WEIGHTS:/model:ro" "${media[@]}" \
   -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-INFO}" \
   "$IMAGE" /model \
   --served-model-name marlin2b \
   --hf-overrides '{"architectures":["Qwen3_5ForConditionalGeneration"]}' \
   --max-model-len "$MAX_MODEL_LEN" \
-  --gpu-memory-utilization "${GPU_MEM:-0.90}" \
+  --max-num-seqs "$ENGINE_MAX_NUM_SEQS" \
+  --gpu-memory-utilization 0.90 \
   --limit-mm-per-prompt '{"video":1,"image":4}' \
   --dtype bfloat16 \
-  "$@"
+  "${flags[@]}" "$@"

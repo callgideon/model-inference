@@ -35,9 +35,10 @@ from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode,
                                      SettlementState, TerminalCause, Usage)
 from infrx.worker import AttemptRunner, WorkerLoop, prepared_request
 from infrx.worker.attempt import BATCH_MAX_EVENTS
-from infrx.worker.engine import (LOCAL_MEDIA_ROOT, MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
+from infrx.worker.engine import (MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
                                  local_media_url)
-from infrx.worker.fakes import FakeUpstream, engine_factory as engine_harness, m2_local_uri
+from infrx.worker.fakes import (FAKE_MEDIA_ROOT, FakeUpstream, engine_factory as engine_harness,
+                               m2_local_uri)
 from infrx.worker.reasoning import filter_text
 from tests.w.test_engine import Box as _Box
 from tests.w.test_engine import text_prepared as _text_prepared
@@ -1238,9 +1239,10 @@ def test_api_stream__a_prepared_video_reaches_the_engine_as_a_local_file_of_its_
 
     default = FakeUpstream(clock=box.clock).engine()
     assert default.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
-        "url": f"file://{LOCAL_MEDIA_ROOT}/{org}/v1/{d16}/source.mp4"}
-    # the root is a deployment fact, and it is the engine's, not the request's
-    pinned = FakeUpstream(clock=box.clock).engine(local_media_root="/srv/cache")
+        "url": f"file://{FAKE_MEDIA_ROOT}/{org}/v1/{d16}/source.mp4"}
+    # the root is a deployment fact (PROCESSING_CACHE_DIR), the engine's, not the request's
+    pinned = FakeUpstream(clock=box.clock,
+                          limits=DEFAULTS.replace(processing_cache_dir="/srv/cache")).engine()
     assert pinned.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
         "url": f"file://{good}"}
 
