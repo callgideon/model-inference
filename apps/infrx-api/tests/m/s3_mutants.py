@@ -160,6 +160,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("own_v_bucket_created_without_flag", "no CreateBucket without INFRX_M_S3_LOCAL_CREDS",
        H, '    if BUCKET not in _READY and secret is None and os.environ.get(LOCAL_FLAG) == "1":',
        "    if BUCKET not in _READY and secret is None:", NO_CREATE),
+    _m("own_v_timeout_refusal_names_bucket", "an install's timeout refusal never names the bucket",
+       D, '        return [f"S3_MEDIA_BUCKET: HeadBucket did not answer within "',
+       '        return [f"S3_MEDIA_BUCKET: HeadBucket {bucket} did not answer within "', INSTALL_WAIT),
     # === review A2: every arm of the error-vs-absent rule ================================
     _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
        S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',

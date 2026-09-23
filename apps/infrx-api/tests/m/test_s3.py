@@ -607,8 +607,11 @@ def test_a_pilot_install_waits_for_the_bucket_a_bounded_time(tmp_path, monkeypat
     monkeypatch.setattr(preflight, "BUCKET_PROBE_TIMEOUT_S", 0.5)
     slow = (sys.executable, "-c", "import time; time.sleep(3)")
     cfg = preflight.Config(mode="pilot", env_file=tmp_path / "gateway.env", aws=slow)
-    refused = preflight.bucket_problems(cfg, {"S3_MEDIA_BUCKET": "infrx-media-pilot"})
+    refused = preflight.bucket_problems(cfg, {"S3_MEDIA_BUCKET": "infrx-media-pilot",
+                                              "S3_ENDPOINT_URL": "http://endpoint-host.example:9000"})
     assert len(refused) == 1 and "did not answer within 0.5 s" in refused[0]
+    # the setting and the bound, never the bucket or where the store is (verifier V4)
+    assert "infrx-media-pilot" not in refused[0] and "endpoint-host" not in refused[0]
 
 
 # --- the harness itself (review A1) -------------------------------------------------------
