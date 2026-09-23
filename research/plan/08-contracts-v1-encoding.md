@@ -84,7 +84,7 @@ Names reuse the older spec where the meaning is unchanged. All are read only in 
 
 | Name | Default | Name | Default |
 |---|---|---|---|
-| `INFRX_MODE` | no default — see R44 (`dev`/`test`/`pilot`; `pilot` refuses to start unauthenticated or unmetered) | `DATABASE_URL` | unset (required in `pilot`) |
+| `INFRX_MODE` | no default — see R44 (`dev`/`test`/`pilot`; `pilot` refuses to start unauthenticated or unmetered; unset refuses to start since the cutover) | `DATABASE_URL` | unset (required in `pilot`); since the cutover `create_app` builds D5's catalog, D4's journal and the job store on one pool from it (`pilot.adapters_from_env`) |
 | `MAX_REQUEST_BYTES` | 100663296 | `INTAKE_TIMEOUT_S` | 30 |
 | `MAX_MEDIA_BYTES` | 67108864 | `MAX_VIDEO_SECONDS` | 120 |
 | `MEDIA_FETCH_CONNECT_TIMEOUT_S` | 3 | `MEDIA_FETCH_TIMEOUT_S` | 20 |
@@ -106,7 +106,8 @@ Names reuse the older spec where the meaning is unchanged. All are read only in 
 | `TRACE_QUEUE_MAX` | 10000 | `TRACE_SPOOL_DIR` | unset (capture disabled) |
 | `TRACE_SPOOL_MAX_BYTES` | 10737418240 | `TRACE_SPOOL_MIN_FREE_BYTES` | 2147483648 |
 | `TRACE_FSYNC_INTERVAL_S` | 2 | `JUDGE_MODE` / `JUDGE_LIVE_BUDGET_USD` | `dry_run` / `0` |
-| `VALKEY_URL` | unset ⇒ memory scheduler | `CLICKHOUSE_URL`, `S3_MEDIA_BUCKET`, `S3_TRACE_BUCKET` | unset |
+| `VALKEY_URL` | unset ⇒ memory scheduler (harnesses); the gateway composition refuses without it unless an index is injected | `CLICKHOUSE_URL`, `S3_TRACE_BUCKET` | unset |
+| `S3_MEDIA_BUCKET` | unset ⇒ `create_app` refuses to start in every mode, naming it: the object store that outlives the process has no other source, and the gateway never stages media in process memory (02 step 1). Set, it is refused too until M's S3 adapter exists (M1 limit 2, unowned); the installer's probe refuses a pilot install on the same check, and tests inject `objects=` | | |
 | `PROCESSING_CACHE_DIR` | unset ⇒ no local processing cache; set, an absolute path (R61 (2)) | | |
 | `MAX_INDEX_ITEMS` / `MAX_INDEX_BYTES` | 500 / 268435456 (Q1's scheduler index caps; moved from §5.1 by the F2P wire-in, Q2 request 3; zero refuses startup) | `ACTIVE_RATE_CARD_VERSION` | unset ⇒ no CREDIT rate card approved; set, exact text (padded refuses startup); required when `ACCOUNTING_REGIME=credit` (`validate_runtime`) |
 | `PROVIDER_DEV_ALLOCATION_CEILING_CREDIT` | 0 (a `Credit` amount, never negative; the most one audited operator allocation may move into a provider dev wallet; not enforced until the allocation port exists ⚠️ TO BE VERIFIED, P-08) | | |
@@ -121,7 +122,7 @@ Read by the same rules as the table above with one deliberate difference: an **e
 |---|---|---|
 | `TRACE_SPOOL_SEGMENT_BYTES` | 16777216 | one spool segment; T1 keeps a local default, T2 reads this ⚠️ TO BE VERIFIED against a real spool |
 | `CONSOLE_CURSOR_SECRET` | unset | signs C's keyset cursors; **the console runtime's requirement, not this gateway's** — set, it must be ≥ 16 characters in any mode; unset, the gateway still starts, because a process that serves no console page has nothing to sign. C2 requires it, and the G2/I2 deployment checklist must write it |
-| `DATABASE_POOL_MIN_SIZE` / `DATABASE_POOL_MAX_SIZE` | 1 / 10 | min may not exceed max ⚠️ TO BE VERIFIED — D2 owns the measured numbers |
+| `DATABASE_POOL_MIN_SIZE` / `DATABASE_POOL_MAX_SIZE` | 1 / 10 | min may not exceed max; the ONE pool the catalog, the journal and the job store share (opened by the lifespan; before it opens, the startup probe connects on its own, configured alike) ⚠️ TO BE VERIFIED — D2 owns the measured numbers |
 | `DATABASE_POOL_CONNECT_TIMEOUT_S` | 5 | ⚠️ TO BE VERIFIED |
 | `DATABASE_POOL_STATEMENT_TIMEOUT_MS` | 15000 | zero means *no* limit in PostgreSQL, so zero is refused ⚠️ TO BE VERIFIED |
 | `MAX_MESSAGES` / `MAX_PARTS` | 64 / 16 | G1's structure caps (today module constants in `gateway/routes/validate.py`) |
@@ -296,3 +297,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-09-23: Ruling R91 added at the G2 review (fix round): the replay lookup port method; G2 authorised to add it to `ports.py` and the fakes for this fix only. Next free ruling R92.
 - 2026-09-23: Rulings R92–R93 added at the E3B phase 2 review (bk01 restore-comparison artefact; the fake's requeue event id). Next free ruling R94.
 - 2026-09-23: Ruling R94 added at the G3 review (the execution mode joins the idempotency identity; G3 implements it in the ingress digest with a case and a mutant). Next free ruling R95.
+- 2026-09-23: Cutover lane: §5 `INFRX_MODE` (unset refuses), `DATABASE_URL` (the three stores from it), `VALKEY_URL` (the gateway needs it or an injected index) and a `S3_MEDIA_BUCKET` row of its own (unset or adapterless refuses; never process memory); §5.1 `DATABASE_POOL_*` (the one shared pool). No ruling numbered (next free R95).
