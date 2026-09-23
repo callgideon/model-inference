@@ -226,14 +226,20 @@ def test_credit_rate__alias_move_changes_resolve_not_an_admitted_job() -> None:
 
 def test_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered() -> None:
     """G2 request 4: `pilot.Probe` asks its first answer on its own thread; the adapter holds
-    no loop-bound pool, so a new thread with a new event loop is answered."""
+    no loop-bound pool or connection. Review CF-4: ONE adapter answers on the main thread's
+    loop first, then two threads at once, each on its own new loop - a connection kept from
+    an earlier call (bound to a loop that is gone) would fail or hang one of them."""
     catalog = RigCatalog(fresh())
+    want = v2fix.BUILDERS["rate_card_marlin.json"]()
+    assert run(catalog.active_rate_card(IDS.prod_deployment)) == want
     out: dict = {}
-    thread = threading.Thread(target=lambda: out.setdefault("card", asyncio.run(
-        catalog.active_rate_card(IDS.prod_deployment))))
-    thread.start()
-    thread.join(30)
-    assert out["card"] == v2fix.BUILDERS["rate_card_marlin.json"](), out
+    threads = [threading.Thread(target=lambda i=i: out.setdefault(i, asyncio.run(
+        catalog.active_rate_card(IDS.prod_deployment)))) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert out == {0: want, 1: want}, out
 
 
 def test_credit_rate__a_database_error_is_raised_not_answered_none() -> None:

@@ -130,6 +130,27 @@ def test_registry__the_alias_moves_at_the_deployments_newest_effective_card() ->
                       "deployment": v2fix.IDS.prod_deployment}, params
 
 
+def test_catalog__every_lookup_opens_and_closes_its_own_connection() -> None:
+    """Review CF-4: one fresh connection per statement, closed after it - nothing is kept
+    across calls (a kept connection is bound to the event loop that opened it, and
+    `pilot.Probe` asks from its own thread and loop)."""
+    opened, closed = [], []
+
+    class Spy(_Conn):
+        async def close(self) -> None:
+            closed.append(self)
+
+    async def connect():
+        opened.append(Spy([[]]))
+        return opened[-1]
+    catalog = cat.PgCatalogDirectory(connect)
+    for _ in range(3):
+        assert _ok(catalog.active_rate_card(v2fix.IDS.prod_deployment)) is None
+    assert _ok(catalog.serving_revision(v2fix.IDS.serving_version)) is None
+    assert len(opened) == 4 and len({id(c) for c in opened}) == 4, opened
+    assert closed == opened, "a connection outlived its statement"
+
+
 DEV = (v2fix.IDS.dev_deployment, v2fix.IDS.dev_endpoint, v2fix.IDS.provider_org,
        v2fix.IDS.serving_version, "dev", "private", "ready_private", 30720, 2048, v2fix.T0)
 

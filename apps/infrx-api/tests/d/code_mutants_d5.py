@@ -29,6 +29,7 @@ AUDIT = "test_audit_log__looks_up_by_its_own_key"
 ACCOUNT = "test_account_view__each_row_keeps_its_unit_and_holds_are_credit_only"
 LEDGER = "test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry"
 REGISTRY = "test_registry__the_alias_moves_at_the_deployments_newest_effective_card"
+CONNECTIONS = "test_catalog__every_lookup_opens_and_closes_its_own_connection"
 CATALOG = "test_catalog__a_private_deployment_only_for_its_provider_and_errors_raised"
 SENDS = "test_complete__sends_the_proposal_the_regime_and_the_stores_ttls"
 REFUSAL = "test_complete__a_committed_refusal_is_raised_as_its_type"
@@ -162,6 +163,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("card_not_effective_checked", "a card is active only once effective (DB clock)",
        "  where deployment_revision_id = %s and effective_at <= infrx.now()",
        "  where deployment_revision_id = %s", CATALOG, file=C),
+    _m("a_connection_cached_across_calls", "review CF-4 (R09): a fresh connection per "
+       "statement", "        conn = await self._connect()\n        try:\n            yield conn",
+       '        conn = self.__dict__.get("_kept") or self.__dict__.setdefault('
+       '"_kept", await self._connect())\n        try:\n            yield conn',
+       CONNECTIONS, file=O),
+    _m("a_connection_never_closed", "review CF-4: every statement's connection is closed",
+       "        finally:\n            await conn.close()", "        finally:\n            pass",
+       CONNECTIONS, file=O),
     _m("errors_become_none", "a database error is raised, never answered as None",
        "                return await (await conn.execute(sql, params)).fetchall()\n"
        "            except Error as failed:\n                raise _typed(failed) from None",
