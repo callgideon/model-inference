@@ -22,7 +22,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 from infrx.config import Settings
-from infrx.contracts import errors, ports
+from infrx.contracts import errors, fixtures, ports
 from infrx.contracts.codec import compact_bytes
 from infrx.contracts.conformance import MissingHook, OPTIONAL_HOOKS, SUITES, run_cases
 from infrx.contracts.conformance import builders as b
@@ -482,7 +482,7 @@ def test_api_stream__unsupported_options_are_refused_explicitly():
     for name, value in (("tools", [{"type": "function"}]), ("tool_choice", "auto"),
                         ("response_format", {"type": "json_object"}), ("guided_json", {}),
                         ("logprobs", True), ("n", 2), ("price_snapshot", {"price_version": "x"}),
-                        ("max_tokens", 4096), ("stream", False), ("who_knows", 1)):
+                        ("stream_options", {}), ("who_knows", 1)):
         upstream, engine, held, _prepared = drive()
         prepared = text_prepared(Box(), parameters={name: value})
         with pytest.raises(errors.UnsupportedParameter) as refused:
@@ -495,6 +495,39 @@ def test_api_stream__unsupported_options_are_refused_explicitly():
     body = engine.upstream_body(text_prepared(Box(), parameters={"temperature": 0.2, "seed": 7,
                                                                 "n": 1}))
     assert body["temperature"] == 0.2 and body["seed"] == 7 and body["n"] == 1
+    # and what the record consumed (G2 W-new) is neither refused nor forwarded as asked:
+    # the ceiling is the record's 256 and the transport is ours
+    body = accepted(engine, text_prepared(Box(), parameters={
+        "stream": False, "max_tokens": 4096, "max_completion_tokens": 4096}))
+    assert isinstance(body, dict), body
+    assert body["stream"] is True and body["max_tokens"] == 256
+    assert "max_completion_tokens" not in body
+
+
+def test_api_stream__the_frozen_normalized_request_reaches_the_engine_capped():
+    """G2 W-new: the frozen `normalized_request` fixture - what G1R's validator emits, with
+    `stream` and `max_tokens` still in `parameters` - is accepted, and the engine is capped
+    by the record's `max_output_tokens`, which the validator derived from that `max_tokens`
+    (refusing it past `min(MAX_OUTPUT_TOKENS, the deployment's)`). Refusing these keys
+    settled every validated streaming or capped request `platform_error`."""
+    request = fixtures.model("normalized_request.json")
+    assert request.parameters["stream"] is True
+    assert request.parameters["max_tokens"] == request.max_output_tokens == 256
+    # the upload handle as M's preparation hands it over: a stored, prepared ref
+    prepared_refs = (b.media(request.org_id),)
+    work = Work(request=request, media_refs=prepared_refs, prepared_refs=prepared_refs,
+                price_snapshot=b.DEFAULT_PRICE,
+                budgets=Budgets.of(DEFAULTS, request.execution_mode))
+    _upstream, engine, _lease, _prepared = drive()
+    body = accepted(engine, prepared_request(work, prompt_tokens=1200))
+    assert isinstance(body, dict), body
+    assert body["max_tokens"] == 256 and body["stream"] is True
+    assert body["temperature"] == 0.2 and body["n"] == 1
+    # a smaller record ceiling wins over the parameter it was derived from
+    capped = request.model_copy(update={"max_output_tokens": 64})
+    body = accepted(engine, prepared_request(work.model_copy(update={"request": capped}),
+                                             prompt_tokens=1200))
+    assert isinstance(body, dict) and body["max_tokens"] == 64, body
 
 
 def test_api_stream__the_output_ceiling_is_validated_and_enforced():
