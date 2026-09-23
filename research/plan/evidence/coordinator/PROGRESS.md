@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T14:59:30Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T15:05:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 24 done · 5 in progress · 1 remaining (of 30).**
 
@@ -71,7 +71,7 @@ Generated 2026-09-23T14:59:30Z from `tasks.json` (manifest v4) and `progress-sta
 - G3: codex-g3 / codex/g3-jobs — round 3 running on 3194578+ (G2 r3 76ba3bb merged, R3-1 re-anchored); confirmation fix_required at cb096fb (4 blocking) being answered → re-confirmation → merge after G2 since 2026-09-23T10:09:50Z — routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)
 - I3B-followup: codex-i3bf / codex/i3b-followup — fix round running on codex-i3bf @ e3577b3+ (round 2: DR-4 rc00 owner pins; restore tests bk01f/g) → confirmation → merge after E3B2 since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)
 - D5: codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- F-fakes-followup: codex-ffakes / codex/f-fakes-followup — running on codex-ffakes @ 985ef1c+ (evidence WIP; full mutant list running) → review → merge after G2 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion
+- F-fakes-followup: codex-ffakes / codex/f-fakes-followup — HANDED BACK 4209aee (items 1–3; 10c declined with reasons); review running (parity on PostgreSQL + honesty) → merge after G2 since 2026-09-23T12:58:13Z — from the integration head ≥ ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: round-3 confirmation at 76ba3bb running since 2026-09-23T14:47:34Z
@@ -79,6 +79,7 @@ Generated 2026-09-23T14:59:30Z from `tasks.json` (manifest v4) and `progress-sta
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: confirmation fix_required at cb096fb (wf_e024f4f2-8dc; 10 agents; JSON evidence/g/G3-confirm-cb096fb.json) → round 3 on the G2 r3 merge since 2026-09-23T14:52:04Z
 - review I3B-followup: fix_required at d99da09 (wf_cb972a2c-da6 restore lens + wf_28258566-66d drill lens; JSON evidence/i/I3B-followup-review-d99da09.json) → fix round since 2026-09-23T14:44:06Z
+- review F-fakes-followup: review at 4209aee running (2 Opus lenses + refuters) since 2026-09-23T15:05:00Z
 
 ## Checkpoints
 

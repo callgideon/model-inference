@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T14:59:30Z",
+  "updated": "2026-09-23T15:05:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "F-fakes-followup": {
       "lane": "codex-ffakes / codex/f-fakes-followup",
-      "phase": "running on codex-ffakes @ 985ef1c+ (evidence WIP; full mutant list running) \u2192 review \u2192 merge after G2",
+      "phase": "HANDED BACK 4209aee (items 1\u20133; 10c declined with reasons); review running (parity on PostgreSQL + honesty) \u2192 merge after G2",
       "since": "2026-09-23T12:58:13Z",
       "note": "from the integration head \u2265 ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion"
     }
@@ -74,6 +74,10 @@
     "I3B-followup": {
       "phase": "fix_required at d99da09 (wf_cb972a2c-da6 restore lens + wf_28258566-66d drill lens; JSON evidence/i/I3B-followup-review-d99da09.json) \u2192 fix round",
       "since": "2026-09-23T14:44:06Z"
+    },
+    "F-fakes-followup": {
+      "phase": "review at 4209aee running (2 Opus lenses + refuters)",
+      "since": "2026-09-23T15:05:00Z"
     }
   },
   "gates": {
