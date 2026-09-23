@@ -48,7 +48,8 @@ from starlette.responses import Response
 
 from ...contracts import errors, wire
 from ...contracts.limits import DEFAULTS, PilotSettings
-from ...contracts.records import ChunkEventType, ExecutionMode, JobState, TerminalCause
+from ...contracts.records import (ChunkEventType, ExecutionMode, JobState, NormalizedRequest,
+                                  TerminalCause)
 from ...observe import metrics
 from . import intake
 from .catalog import check_capability
@@ -146,7 +147,8 @@ class Relay:
         # even once the customer's media URL has expired, and nothing is fetched again.
         found = await self._lookup(auth.org_id, idem)
         prepared = refs = None
-        if found is None or found[1] is None:
+        if found is None:
+            # Media is fetched and staged only for a request that maps no job (R91).
             # M2 request 5: preparation replaces the record G1 built, so the staged payload
             # and the admission carry our media refs, never the customer's URL or bytes.
             prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
@@ -174,10 +176,13 @@ class Relay:
             # Nothing is re-admitted or regenerated: the answer attaches to the same job's
             # wait or stream, and a terminal job answers its committed result.
             headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"
-        if found is None or found[1] is None:
-            # A fresh admission, or the replay of a job still in flight whose first
-            # acceptance may have been cut short (money-B2): the same idempotent steps.
+        if found is None:
+            # A fresh admission: the rechecks, then the staged refs bound to the job.
             await self._admitted(job, admission, prepared, refs)
+        elif found[1] is None:
+            # A job in flight, whose first acceptance may have been cut short between the
+            # admission and the attach (money-B2, G3 (b)2).
+            await self._resume(job, admission)
         if not admission.replayed:
             self._count("infrx_jobs_accepted_total", mode=request.execution_mode,
                         tenant=auth.org_id)
@@ -202,11 +207,26 @@ class Relay:
             raise errors.IdempotencyConflict("the key names a job of another accounting regime")
         return found
 
+    async def _resume(self, job: _Job, admission) -> None:
+        """The replay of a job in flight (R91; review r2 money-B1). Nothing is prepared or
+        staged: an acceptance this process left unfinished is completed from the record its
+        first acceptance staged (M's staged payload: the prepared request and its refs),
+        never from a fresh preparation."""
+        try:
+            payload = self.media.staged_payload(job.request_id)
+        except errors.NotFound:
+            return                              # staged by another process: as it stands
+        data = await _dependency(self.media.objects.get(payload.ref))
+        if data is None:
+            return
+        staged = NormalizedRequest.model_validate_json(data)
+        await self._admitted(job, admission, staged, staged.media)
+
     async def _admitted(self, job: _Job, admission, prepared, refs) -> None:
         """Complete an acceptance: the pinned card and capability rechecks (CREDIT), then the
         staged refs bound to the job - before the refs, so a refused job can never run. Run
-        on a fresh admission and on the replay of a job still in flight; both steps are
-        idempotent. A definitive refusal cancels the job (nothing ran, nothing is billed)
+        on a fresh admission and, from the first acceptance's staged record, on the replay
+        of a job still in flight (`_resume`); both steps are idempotent. A definitive refusal cancels the job (nothing ran, nothing is billed)
         and is answered; a dependency that failed leaves the job for the same-key retry its
         503 invites (money-B2; the stored deadline ends it otherwise)."""
         try:

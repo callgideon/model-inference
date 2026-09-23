@@ -21,8 +21,9 @@ import httpx
 import pytest
 
 from infrx.contracts import errors, wire
+from infrx.contracts.conformance import builders as b
 from infrx.contracts.records import (HoldState, JobState, SettlementState, TerminalCause,
-                                     TerminalOutcome)
+                                     TerminalOutcome, Usage)
 from infrx.gateway.routes.relay import CREDIT
 
 from . import relay_support as rs
@@ -35,6 +36,43 @@ def refusing_host() -> httpx.MockTransport:
 
 def payloads(world) -> list[str]:
     return [key for key in world.objects.objects if key.startswith("payloads/")]
+
+
+def staging(world) -> list:
+    """What every `stage` call returned, in order: [0] is the first acceptance's refs."""
+    stage, staged = world.media.stage, []
+
+    async def recorded(org_id, request):
+        staged.append(await stage(org_id, request))
+        return staged[-1]
+
+    world.media.stage = recorded
+    return staged
+
+
+def ids(refs) -> list:
+    return [(ref.handle, ref.digest) for ref in refs]
+
+
+def dies_before_the_wait(world) -> None:
+    """The next acceptance completes (admitted, rechecked, attached), then its handler dies
+    before the wait: the answer is lost and the job runs on (a SIGKILL, say)."""
+    async def accept(auth, request, idem):
+        await world.relay.admit(auth, request, idem)
+        del world.relay._accept
+        raise RuntimeError("the process died before the wait")
+
+    world.relay._accept = accept
+
+
+async def settle(world, text: str = "Two people unload boxes.") -> None:
+    """The one job run to a success by hand, in either regime (W's runner cannot run a
+    CREDIT job before WorkV2): prepared, leased, its result stored, then completed."""
+    lease = await world.lease()
+    ref = await world.put_result(lease.job_id, text)
+    outcome = b.outcome(lease.job_id, world, tokens=Usage.of(1200, 5), result_ref=ref)
+    complete = world.jobs.complete_credit if world.regime == CREDIT else world.jobs.complete
+    await complete(lease, outcome)
 
 
 # --- money-B1: a keyed replay is answered before anything is prepared ------------------
@@ -90,12 +128,36 @@ def test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict():
     assert len(world.jobs.jobs) == 1
 
 
+def test_dur_output__an_in_flight_replay_prepares_nothing_and_answers_when_the_host_fails():
+    """R91 (review r2 money-B1): a video job was accepted - admitted and attached - and its
+    handler died before the wait. The same-key retry arrives once the media URL expired:
+    nothing is fetched or staged for a mapped job, its bound refs are left as they are,
+    and the retry answers the job's result."""
+    world = rs.World()
+    dies_before_the_wait(world)
+    first = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-3"))
+    assert first.status == 500, first.body
+    job = world.only_job()
+    assert job.outcome is None and job.id in world.media.by_job
+    bound, staged = world.media.by_job[job.id], payloads(world)
+    world.media.fetcher.transport = refusing_host()
+    world.during.append(world.work)
+    again = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-3"))
+    assert again.status == 200, again.body
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    assert payloads(world) == staged and world.media.by_job[job.id] == bound
+    assert world.only_job() is job and job.outcome.state is JobState.succeeded
+
+
 # --- money-B2: an acceptance cut short is completed by the same-key retry --------------
 def test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry():
     """The media store fails while the staged refs are bound to the admitted job: a
     retryable 503, and the job is left (not cancelled as the customer's). The same-key
-    retry completes the acceptance - the idempotent attach - and gets the result."""
+    retry completes the acceptance - the idempotent attach of the refs the first
+    acceptance staged, never a new preparation (review r2 money-N1) - and gets the
+    result."""
     world = rs.World()
+    staged = staging(world)
     attach = world.media.attach
     failures = [OSError("object store unreachable at s3.internal:443")]
 
@@ -105,26 +167,31 @@ def test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_re
         return await attach(job_id, refs)
 
     world.media.attach = flaky_attach
-    first = rs.run(rs.call(world.app, rs.body(), key="k-2"))
+    first = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="k-2"))
     assert (first.status, first.json()["error"]["code"]) == (503, "dependency_unavailable")
     assert first.headers.get(wire.HEADER_RETRY_AFTER)
     job = world.only_job()
     assert job.outcome is None, job.outcome
     world.during.append(world.work)
-    again = rs.run(rs.call(world.app, rs.body(), key="k-2"))
+    again = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="k-2"))
     assert again.status == 200, again.body
     assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
     assert world.only_job() is job and job.outcome.state is JobState.succeeded
+    assert len(staged) == 1 and ids(world.media.by_job[job.id]) == ids(staged[0]) != []
 
 
+@pytest.mark.parametrize("regime", [rs.LEGACY, CREDIT])
 @pytest.mark.parametrize("lookup", ["served", "refused_until_d5"])
-def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry(lookup):
+def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry(lookup, regime):
     """G3's DUR-ADMIT probe (G3 request (b)2): the admission committed and the answer was
     lost before the staged refs were bound to the job. The same-key retry finds the job in
-    flight and re-runs the (idempotent) attach, so the job is prepared and answered -
-    rather than ending unbilled at its preparation deadline. Through R91's lookup, and
-    through admission's replay answer while the store refuses the lookup (until D5)."""
-    world = rs.World()
+    flight and attaches the refs the first acceptance staged (review r2 money-N1), so the
+    job is prepared and answered - rather than ending unbilled at its preparation deadline.
+    Through R91's lookup, and through admission's replay answer while the store refuses
+    the lookup (until D5, when the retry re-prepares before admission says "replay"); in
+    both regimes, the CREDIT one to a settled 200 (review r2 money-N5)."""
+    world = rs.World(regime=regime)
+    staged = staging(world)
     if lookup == "refused_until_d5":
         async def refused(org_id, idem):
             raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
@@ -134,17 +201,20 @@ def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry
     assert (first.status, first.json()["error"]["code"]) == (503, "dependency_unavailable")
     job = world.only_job()
     assert job.outcome is None and job.id not in world.media.by_job
-    world.during.append(world.work)
+    world.during.append(lambda: settle(world))
     again = rs.run(rs.call(world.app, rs.body(rs.VIDEO), key="clip-9"))
     assert again.status == 200, again.body
     assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
     assert world.only_job() is job and job.outcome.state is JobState.succeeded
+    assert ids(world.media.by_job[job.id]) == ids(staged[0]) != []
+    if regime == CREDIT:
+        assert world.jobs.jobs[job.id].settlement is not None and world.released(job)
 
 
 def test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable():
     """CREDIT: the catalog read behind the pinned-revision recheck fails after
     `admit_credit` committed. That is a 503 with the job left, and the same-key retry
-    passes the recheck and waits on the same job."""
+    passes the recheck, attaches, and answers the settled job (review r2 money-N5)."""
     world = rs.World(regime=CREDIT)
     serving = world.catalog.serving_revision
     failed = []
@@ -161,11 +231,12 @@ def test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable():
     assert b"secret" not in first.body
     job = world.only_job()
     assert job.outcome is None, job.outcome
-    world.during.append(lambda: world.clock.advance(3_600))       # the wait ends
+    world.during.append(lambda: settle(world))
     again = rs.run(rs.call(world.app, rs.body(), key="k-3"))
     assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
-    assert (again.status, again.json()["error"]["code"]) == (504, "deadline_exceeded")
-    assert world.only_job() is job and job.outcome.cause is TerminalCause.sync_deadline
+    assert again.status == 200, again.body
+    assert world.only_job() is job and job.outcome.state is JobState.succeeded
+    assert world.jobs.jobs[job.id].settlement is not None and world.released(job)
 
 
 # --- money-N1: a refusal whose cancel is unconfirmed is not final ------------------------
