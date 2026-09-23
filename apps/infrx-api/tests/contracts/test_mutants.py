@@ -187,6 +187,23 @@ def test_every_subprocess_gets_its_own_cache_and_temporary_directory():
     assert 'cache, temp = root / ".pycache", root / ".tmp"' in source
 
 
+def test_a_runner_passes_only_the_variables_it_names(monkeypatch, tmp_path):
+    """Q3 HON-3 / F2P review HON-2: a lane's own service port (`INFRX_Q2_VALKEY_PORT`)
+    reaches the copy when its runner names it; nothing else of the caller's does."""
+    seen = {}
+    monkeypatch.setenv("INFRX_Q2_VALKEY_PORT", "55727")
+    monkeypatch.setenv("INFRX_UNNAMED", "leak")
+    monkeypatch.setattr(mutation_list.subprocess, "run",
+                        lambda *a, **k: seen.update(k["env"]))
+    runner = mutation_list.Runner(name="env-probe", env=("INFRX_Q2_VALKEY_PORT", "INFRX_ABSENT"))
+    mutation_list._pytest(tmp_path, tmp_path, runner, (), "x", 1)
+    assert seen["INFRX_Q2_VALKEY_PORT"] == "55727"
+    assert "INFRX_UNNAMED" not in seen and "INFRX_ABSENT" not in seen
+    seen.clear()
+    mutation_list._pytest(tmp_path, tmp_path, mutation_list.CONTRACTS, (), "x", 1)
+    assert "INFRX_Q2_VALKEY_PORT" not in seen
+
+
 def test_a_known_lethal_mutant_is_killed_for_the_right_reason():
     """The positive control: the same machinery reports a real kill, and the failing
     test id is the case the mutant names."""

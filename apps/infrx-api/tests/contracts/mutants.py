@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import os
 import pathlib
 import re
 import shutil
@@ -2086,6 +2087,8 @@ class Runner:
     different shape (track I mutates `deploy/`, outside the package, and one case reads
     a repository file): it fills the temporary root and returns the directory pytest runs
     in; a mutant's `file` is then relative to that directory joined with `package`.
+    `env` names caller variables the copy inherits (a lane's own Valkey port, Q3 HON-3);
+    every other variable of the caller stays out.
     """
 
     name: str
@@ -2096,6 +2099,7 @@ class Runner:
     require_every_case: bool = False
     targets_for: "Callable[[tuple[str, ...]], Sequence[str]] | None" = None
     layout: "Callable[[pathlib.Path], pathlib.Path] | None" = None
+    env: tuple[str, ...] = ()
 
     def select(self, cases: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(self.targets_for(cases)) if self.targets_for else self.targets
@@ -2244,7 +2248,8 @@ def _pytest(root: pathlib.Path, api: pathlib.Path, runner: Runner, targets, sele
          "-p", "no:cacheprovider", "-rfE", "--tb=line",
          *runner.extra_args, *targets, "-k", selection],
         cwd=api, capture_output=True, text=True, timeout=timeout_s,
-        env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
+        env={**{name: os.environ[name] for name in runner.env if name in os.environ},
+             "PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
              "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
 
 
