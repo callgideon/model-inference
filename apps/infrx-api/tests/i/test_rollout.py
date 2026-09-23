@@ -118,7 +118,8 @@ def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
     release's serve.sh reads `ENGINE_MAX_NUM_SEQS` from the validated file and defaults
     to 8, so the cutover step hands install.sh 32 as a schema setting unless the operator
     names another value - a silent 4x cut otherwise. Runs the step's own bytes against a
-    stand-in checkout; without step 6's digest it does not reach install.sh at all."""
+    stand-in checkout; without step 6's digest (64 hex, or exactly `nothing-pending`) it
+    does not reach install.sh at all."""
     box = tmp_path / "box"
     deploy = box / "apps" / "infrx-api" / "deploy"
     deploy.mkdir(parents=True)
@@ -141,8 +142,11 @@ def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
     assert "install INFRX_SET=[ENGINE_MAX_NUM_SEQS=32 ] pilot restart" in done.stdout
     done = cutover(MIGRATION_DIGEST="nothing-pending", ENGINE_MAX_NUM_SEQS="16")
     assert "INFRX_SET=[ENGINE_MAX_NUM_SEQS=16 ]" in done.stdout
-    done = cutover()
-    assert done.returncode != 0 and "install" not in done.stdout
+    done = cutover(MIGRATION_DIGEST="a" * 64)
+    assert done.returncode == 0 and "install INFRX_SET=" in done.stdout
+    for statement in (None, "nothing-pendng", "x", "A" * 64):
+        done = cutover(**({} if statement is None else {"MIGRATION_DIGEST": statement}))
+        assert done.returncode != 0 and "install" not in done.stdout, statement
 
 
 FAKE_CURL = """#!{python}

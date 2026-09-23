@@ -10,6 +10,8 @@
 set -euo pipefail
 : "${RELEASE:?the release commit}"
 : "${MIGRATION_DIGEST:?the plan digest step 6 applied, or nothing-pending}"
+[[ $MIGRATION_DIGEST =~ ^([0-9a-f]{64}|nothing-pending)$ ]] \
+  || { echo "MIGRATION_DIGEST is neither a plan digest (64 hex) nor nothing-pending" >&2; exit 2; }
 echo "cutover $RELEASE after hosted migrations: $MIGRATION_DIGEST"
 cd /home/ubuntu/model-inference
 [ "$(git -c safe.directory="$PWD" rev-parse HEAD)" = "$RELEASE" ] || { echo "run 40-checkout first" >&2; exit 2; }
