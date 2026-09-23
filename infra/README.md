@@ -658,6 +658,7 @@ coordinator runs [the rollout runbook](rollout/README.md). What §2 proposed, as
 | One configuration authority | `/etc/marlin2b-gateway.env`, written only by `preflight.py apply` | the manifest keys plus `--set` tunables, which must be names the runtime reads (the schema is every name `config.from_env` reads, pinned by a test); systemd reads `INFRX_IMAGE`, the containers and serve.sh read the rest |
 | Media root R | `PROCESSING_CACHE_DIR=/opt/dlami/nvme/processing` | **changed from §2's `/var/lib/infrx/media`** to W3's proposal: a rebuildable 7-day cache on the instance-store NVMe (386 G free, I1B), one value for the gateway (writer), worker and engine (read-only); the units recreate it with its owner at every start because a stop wipes the NVMe |
 | Usage spill | `/var/lib/infrx/usage/usage.jsonl` | row `M-SCRATCH`: root EBS, survives a stop |
+| Install backups | `/var/backups/infrx/<UTC>-<sha>/` (`files.tar`, `absent`) | each holds the **previous env file, secrets included** (`SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`): root-only (directories 0700, archive 0600); a run the preflight refuses removes its own; nothing prunes them automatically - the coordinator removes those older than the last accepted release's under the lock (runbook step 11), so a rotated secret does not live on in them |
 | Disk budget | `preflight.DISK_BUDGET` | pilot refuses below 10 GiB free for `/var/lib/infrx` and 60 GiB for R (`est.`) |
 | Edge | `deploy/Caddyfile`, `Caddyfile.maintenance` | pinned Caddy; `/metrics`, `/readyz`, `/internal` 404; public `/health` is `{"ok":true}` / `{"ok":false}` only; no route to the engine; bodies bounded at `MAX_REQUEST_BYTES` (declared length refused up front); maintenance is the active site, so it survives a Caddy restart |
 | Scripts | `install.sh` (deploy), `migrate.py`, `drain.sh`, `rollback.sh`, `rehearse.sh` | install: commit → image → backup → preflight (secrets, probe in the image, rename) → units → engine → runtime → readiness → edge; a refusal changes nothing. migrate: reviewed plan digest, one transaction, Supabase CLI history. rollback: files back; a pilot is never returned to an unmetered runtime without the operator's statement that no pilot request was accepted (§8) |
@@ -1065,3 +1066,5 @@ target group.
 - 2026-09-23 (I2B review fix M5): §8 states that `rollback.sh`'s unmetered-rollback
   statement is operator-attested and how the coordinator corroborates it (read-only hosted
   counts), rather than implying the script verifies it.
+- 2026-09-23 (I2B review fix S3): §5.2 row "Install backups" - they hold past env files
+  (secrets), are root-only, are removed on a refused run, and are pruned by the coordinator.

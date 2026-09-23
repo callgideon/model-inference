@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import re
+import stat
 import subprocess
 import sys
 import tarfile
@@ -156,7 +157,8 @@ def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_pa
     """DEPLOY-FAILCLOSED end to end through the deploy script: a denied secret read, and
     the repository's own pilot today (refused by the composition gate and W3's pending
     pins), both exit 2 with the env file and every unit byte-identical, no unit touched
-    by systemctl, no state directory made and the edge untouched."""
+    by systemctl, no state directory made, the edge untouched - and no backup left
+    behind: it holds a copy of the previous env file's secrets."""
     for params in ({**{n: {"value": v} for n, v in support.VALID.items()},
                     "/model-inference/pg_journal_url": {"error": "AccessDeniedException"}},
                    None):
@@ -173,6 +175,7 @@ def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_pa
         assert not host.file("var/lib/infrx").exists()
         assert [e for e in host.of("docker") if "caddy" in e] == []
         assert "refusing to install" in done.stderr
+        assert backups(host) == []
 
 
 def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monkeypatch):
@@ -331,11 +334,13 @@ def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatc
     """After a dev install over the monolith, rollback.sh puts the previous env file and
     gateway unit back byte for byte, removes (and disables) the units that did not exist,
     and restarts the gateway onto them. A dev -> legacy revert is allowed: dev was never
-    metered."""
+    metered. The backup holds the previous env file's secrets: root-only, 0700 and 0600."""
     host = Host(tmp_path, monkeypatch)
     host.monolith()
     assert host.run("install.sh", INFRX_MODE="dev").returncode == 0
     [backup] = backups(host)
+    for path, mode in ((backup.parent, 0o700), (backup, 0o700), (backup / "files.tar", 0o600)):
+        assert stat.S_IMODE(path.stat().st_mode) == mode, (path.name, oct(path.stat().st_mode))
     host.clear()
     done = host.run("rollback.sh", str(backup))
     assert done.returncode == 0, done.stderr

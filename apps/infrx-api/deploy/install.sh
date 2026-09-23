@@ -49,7 +49,9 @@ docker build -q --provenance=false -f "$here/Dockerfile" -t "infrx-runtime:$sha"
 image=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$sha")
 echo "release $sha image $image"
 
-# 3. the backup: every path this run may replace, and which of them did not exist
+# 3. the backup: every path this run may replace, and which of them did not exist. It holds
+# the previous env file - secrets - so it is root-only (0700, the archive 0600), and a run
+# that step 4 refuses removes it again.
 backup=$BACKUPS/$(date -u +%Y%m%dT%H%M%SZ)-$sha
 mkdir -p "$backup" && chmod 0700 "$BACKUPS" "$backup"
 paths=("${ENV_FILE#/}" etc/caddy/Caddyfile etc/caddy/infrx/Caddyfile etc/caddy/infrx/Caddyfile.maintenance)
@@ -59,14 +61,15 @@ present=()
 for p in "${paths[@]}"; do
   if [ -e "$ROOT/$p" ]; then present+=("$p"); else echo "$p" >> "$backup/absent"; fi
 done
-tar -C "${ROOT:-/}" -cpf "$backup/files.tar" --files-from /dev/null "${present[@]}"
+( umask 077; tar -C "${ROOT:-/}" -cpf "$backup/files.tar" --files-from /dev/null "${present[@]}" )
 echo "backup $backup"
 
 # 4. the env file (the only step that reads secrets); refused -> nothing above mattered
 sets=()
 for pair in ${INFRX_SET:-}; do sets+=(--set "$pair"); done
 "$PYTHON" "$PREFLIGHT" apply --mode "$mode" --env-file "$ROOT$ENV_FILE" --owner "$ENV_OWNER" \
-  --region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}"
+  --region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}" \
+  || { code=$?; rm -rf "$backup"; exit "$code"; }
 
 # 5. state directories, units, the index and the engine
 # The usage spill is on the root EBS volume (row M-SCRATCH); the media root is recreated by
