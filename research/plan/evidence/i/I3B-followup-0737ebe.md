@@ -489,6 +489,58 @@ UTC 2026-09-23. `PY`, `D` and the private `TMPDIR` are as in round 3.
 E file changed. **Migrations: none.** New case: bk01f[column_acls_privilege]; rc10b and rc04a
 gained assertions. Artifacts (session scratch, sha256 prefix): `l0-head4.log e71da9bdb3f44fb6` (S1), `l0-merge4.log bb63bc05fa0a70c6` (S2), `l0-merge4-coord.log 6881a17407cbe698` (S3), `recovery-d3-r4.log 1af578ecf0f312ad` (S4, second attempt), **`m-all4.json c2a4f90f48397f0d` (S6)**, `tests-i4.log 73bb6d9ccf94cc8e` (S7).
 
+## Round 5 — the round-4 verifier's four cheap items (verification of `95b7df7`: PASS)
+
+The round-4 verifier (`research/plan/evidence/i/I3B-followup-verify-95b7df7.json`) returned
+**PASS**. Its one blocking claim, DRL-R4-1, was downgraded to nonblocking by both refuters. The
+coordinator asked for all four items to be folded in while E3B2's round 4 runs. Each one has a
+case and a declared mutant.
+
+| Field | Value |
+|---|---|
+| Base | `95b7df7` (round 4) |
+| Round-5 head | `d420699` code; this section is committed on top of it |
+| Verified against | a scratch clone (removed afterwards) of `95b7df7` merged with **`origin/codex/e3b-phase2-gate` @ `0924cf2`**. The merge was clean. **IR2-2** is applied on top, then the round-5 commits are cherry-picked one at a time |
+
+### Items → fixes
+
+| Item | Commit | Change | Case (dies at) | Declared mutant → kill (E's runner, scratch merge) |
+|---|---|---|---|---|
+| DRL-R4-1: no upper bound on the READY_S wait | `937f58a` | rc10b: `assert 2 <= waited < 4` (the message is unchanged); the comment now reads "for READY_S (between 2 and 4 s here), not a fixed budget of 1 s or 5 s+" | rc10b (test_recovery.py:961) | **i3bm112** `local deadline=$((SECONDS + 5))`: `killed`, `:961: AssertionError`; by hand `gave up after 4.21 s of a 3 s READY_S (276 probes)` |
+| DRL-R4-2: poll interval not pinned | `9eb7529` | rc10b: `assert 10 <= len(retries) < 400`. The real code makes ~150-200 probes at POLL_S=0.01 over 3 s, and a POLL_S sleep caps it near 300 | rc10b (:959) | **i3bm113** `sleep $(( $2 / 2 ))`: `killed`, `:959`; by hand `4 probes in 3.04 s`. **i3bm114** the sleep deleted (a busy loop): `killed`, `:959`; by hand `617 probes in 2.52 s` |
+| RST-R4-1: grant option not witnessed | `c80b5c4` | New bk01f parameter **`column_acls_grantopt`** (`grant update (full_name) on public.profiles to authenticated with grant option`, so `w` → `w*`). `FAMILY` → column_acls | bk01f[column_acls_grantopt] (test_restore.py:475) | **i3bm115** attacl projected through `replace(x::text, '*', '')`: `killed`, `test_restore.py:475: AssertionError` |
+| DRL-R4-3: drift detector only ever asserted `== []` | `d420699` | After its zero-drift checks, rc04a releases the first job's hold behind the wallet summary's back (`update infrx.credit_holds set state = 'released' where request_id = <first>`, in its scratch database) and asserts that `pgrestore.drift` names exactly ORG_A. i3bm111 stays | rc04a (test_recovery.py:331) | **i3bm116** `found += [] and conn.execute(` (the detector never reports): `killed`, `:331: AssertionError` ("the detector missed a released hold") |
+
+Round-5 mutants are i3bm112-i3bm116, **109** in the list. All die by `AssertionError`.
+
+### Round-5 runs
+
+UTC 2026-09-23. `PY`, `D` and the private `TMPDIR` are as in rounds 3-4.
+
+| # | Command | Where | Exit | Result (quoted) |
+|---|---|---|---|---|
+| T1 | `$PY -m pytest -q -k rc10 --durations=0 …/test_recovery.py`, run 5 times, no D env (rc10 skips: it needs PostgreSQL) | scratch merge | **0** ×5 | each `3 passed, 1 skipped, 13 deselected`; rc10b call times [8002]/[8001]: 3.01/2.95, 2.99/2.26, 3.00/2.21, 3.00/2.22, 3.00/2.20 s |
+| T2 | rc10b's own measurement repeated (a scratch script calling the case's helpers: install, backup, `rollback_sh(..., ready_s=3)`), 5× per probe | scratch merge | - | 8001: exit 4 every time; waited 2.44/2.99/2.99/2.99/2.99 s; 159/194/194/193/197 probes. 8002: exit 4; 3.00/2.99/2.99/2.99/3.00 s; 197/195/196/196/196 probes. All inside `2 <= waited < 4` and `10 <= probes < 400` |
+| T3 | `$D $PY -m pytest -q -rs …/test_recovery.py -k "rc10 or rc04a"` (17:58:24Z) | scratch merge | **0** | `5 passed, 12 deselected in 14.27s` (rc10, rc10b×2, rc10c, rc04a) |
+| T4 | `$D $PY -m pytest -q -rs …/test_restore.py` (17:58:39Z) | scratch merge | **0** | `28 passed, 1 skipped in 44.42s` (bk03 needs E2's stack; round 4: 27/1, plus [column_acls_grantopt]) |
+| T5 | `--only i3bm112 … i3bm116`, `--layer all`, `$D` | scratch merge | **0** | `{"mutants": 5, "killed": 5, …, "problems": null}`; sites as in the table |
+| T6 | layer 0 (the four paths), 18:01:07Z | this branch at `d420699` | **0** | `95 passed, 33 skipped, 2 warnings in 14.43s` (round 4: 95/32; +1 skip, bk01f[column_acls_grantopt], which needs PostgreSQL) |
+| T7 | same, 18:01:22Z | scratch merge | **0** | `116 passed, 33 skipped, 1 xfailed, 2 warnings in 18.52s`; PENDING `[G2-R1]`, `[I2B-R4]`, `[M1-L2]` |
+| T8 | **the full list**, `$D $PY …/mutants_i3b.py --layer all --report m-all5.json` (18:01:51Z-18:12:48Z) | scratch merge | 1 | **`{"mutants": 109, "killed": 107, "controls_survived": 1, "not_killed": 1, "pending": 0, "problems": ["i3bm33"]}`**, which equals the declared list (109). The only problem is i3bm33 `no-cases` (rc06 needs E2's Valkey), and there are 0 baseline-reds. Death sites: 96 `AssertionError`, 8 `Failed`, 1 `RuntimeError` (i3bm48, pgrestore.py:299), and 2 not visible in the tail (i3bm11/12). Round 5: i3bm112 `test_recovery.py:961`, i3bm113/114 `:959`, i3bm115 `test_restore.py:475`, i3bm116 `test_recovery.py:331`. i3bm109 (two tries) now dies first at the probe-count bound `:959`, and i3bm108 at `:961`; i3bm111 is at `:325` |
+| T9 | `cd apps/infrx-api && $PY -m pytest -q -rs tests/i` (18:01:51Z) | scratch merge | **0** | `143 passed in 141.76s (0:02:21)` |
+
+### Integration requests
+
+These are unchanged from round 4: IR2-2 on E3B2 at `e95bce5` or later (verified here on
+`0924cf2`), R3-2 (D: a lock path that does not depend on TMPDIR) and R2-C (task ports out of the
+ephemeral range). The merge order is unchanged too: E3B2 with IR2-2 first, then this branch.
+
+### Changes (round 5)
+
+`git diff --stat 95b7df7..d420699`: 3 files, +40/−6 (`mutants_i3b.py`, `test_recovery.py`, `test_restore.py`). All files are under
+`tests/integration/backend/recovery/`. No lib.sh, pgrestore, runbook, module, migration, D or
+E file changed. **Migrations: none.** Artifacts (session scratch, sha256 prefix): `l0-head5.log 5d2c5648c114d137` (T6), `l0-merge5.log bce85a8a72f37321` (T7), `restore-d3-r5.log b955dc5f38243fbe` (T4), **`m-all5.json 9f6c4369927642a4` (T8)**, `tests-i5.log 697f65fc204be674` (T9).
+
 ## Verification log
 
 - 2026-09-23: Authored from the runs above; every count is quoted from command output or the
@@ -509,4 +561,9 @@ gained assertions. Artifacts (session scratch, sha256 prefix): `l0-head4.log e71
   (reconciliation drift + detector, i3bm111; docstring reworded) are folded in. The requests
   are restated against E3B2 `5eb7b85` + IR2-2 (R2-A/R2-B done there). Full list on that merge:
   104 mutants, 102 killed, the control survived, i3bm33 no-cases. Status **implemented, not
+  integrated**. Nothing deployed; E2's stack not started.
+- 2026-09-23 (round 5): the round-4 verifier's PASS, plus four cheap items: rc10b bounds the
+  wait (2 <= waited < 4) and the probe count (10 <= n < 400); bk01f[column_acls_grantopt];
+  rc04a makes the drift detector report (i3bm112-116). Full list on E3B2 `0924cf2` + IR2-2:
+  109 mutants, 107 killed, the control survived, i3bm33 no-cases. Status **implemented, not
   integrated**. Nothing deployed; E2's stack not started.
