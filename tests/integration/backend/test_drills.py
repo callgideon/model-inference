@@ -252,10 +252,14 @@ def test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once(backend):
         assert service.reaped == 1
         assert [(e.job_id, e.attempt) for e in events] == [(admission.request_id, 1)]
         # D2 delta / Q3 FID-5: the requeue is a NEW dispatch row, never the acknowledged one.
-        # The real store only: the contract fake mints the event's id apart from its row's
-        # (integration request #3).
         first, again = dispatch_ids(h, admission.request_id, OutboxKind.inference_dispatch)
-        assert backend == "fake" or events[0].event_id == again != first
+        if backend == "fake":
+            # Integration request #3, accepted (coordinator ruling b): the contract fake mints
+            # the requeue event's id apart from its row's. This pin goes red the day the fake
+            # is fixed at the E3B2 merge; then this branch is deleted (review F4).
+            assert events[0].event_id not in (first, again), (events, first, again)
+        else:
+            assert events[0].event_id == again != first
         second = await h.port.claim(admission.request_id, "w2")
         assert second.generation == 2
         assert h.extra["outbox_kinds"](admission.request_id).count(
