@@ -45,6 +45,6 @@ systemctl restart $units
 wait_ready "${restored:-legacy}" || die "the restored runtime is not ready" 4
 # The edge serves whatever site the backup had (none on a pre-pilot host).
 if [ -f "$CADDY_DIR/Caddyfile" ] && docker inspect caddy >/dev/null 2>&1; then
-  docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+  caddy_reload
 fi
 echo "rolled back to $backup (mode ${restored:-legacy}); restarted $units"

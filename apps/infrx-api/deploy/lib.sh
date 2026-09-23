@@ -36,7 +36,13 @@ wait_http() {
 # restarted Caddy reads the active file, so maintenance survives a Caddy restart.
 caddy_site() {
   put "$CADDY_DIR/infrx/$1" "$CADDY_DIR/Caddyfile"
-  docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+  caddy_reload
+}
+
+# The admin API is a unix socket in the caddy_config volume (see the Caddyfile), never
+# loopback: the gateway and the worker share the host's.
+caddy_reload() {
+  docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock
 }
 
 # Readiness per mode. pilot: the gateway's /readyz (G2) and the worker's loopback /readyz

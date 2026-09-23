@@ -2,8 +2,11 @@
 # ports 80 and 443 must be reachable and DNS must point here. `INFRX_SITE` exists for the
 # local rehearsal (a plain-HTTP address, no ACME); the box leaves it unset.
 {
-	# The admin API is Caddy's default, loopback only; stated so nobody widens it.
-	admin localhost:2019
+	# The admin API can replace this whole site, and every runtime container shares the
+	# host's loopback (--network host), so it is not on loopback: a unix socket in the
+	# caddy_config volume, which only the Caddy container mounts. Reloads name it
+	# (lib.sh caddy_reload).
+	admin unix//config/admin.sock
 }
 
 {$INFRX_SITE:marlin2b.callbill.ai} {

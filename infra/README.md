@@ -662,6 +662,20 @@ coordinator runs [the rollout runbook](rollout/README.md). What §2 proposed, as
 | Edge | `deploy/Caddyfile`, `Caddyfile.maintenance` | pinned Caddy; `/metrics`, `/readyz`, `/internal` 404; public `/health` is `{"ok":true}` / `{"ok":false}` only; no route to the engine; bodies bounded at `MAX_REQUEST_BYTES` (declared length refused up front); maintenance is the active site, so it survives a Caddy restart |
 | Scripts | `install.sh` (deploy), `migrate.py`, `drain.sh`, `rollback.sh`, `rehearse.sh` | install: commit → image → backup → preflight (secrets, probe in the image, rename) → units → engine → runtime → readiness → edge; a refusal changes nothing. migrate: reviewed plan digest, one transaction, Supabase CLI history. rollback: files back; a pilot is never returned to an unmetered runtime without the operator's statement that no pilot request was accepted (§8) |
 
+**Edge admin API, and what remains of its risk.** Caddy's admin API replaces the whole
+running configuration on one unauthenticated request, and the gateway and worker - the
+processes that decode untrusted media - run `--network host`, so on loopback it would put
+the public site one POST away from any of them (a `reverse_proxy 127.0.0.1:8000` makes the
+private engine public; a `file_server` on `/data` serves the TLS private keys). Both
+Caddyfiles therefore set `admin unix//config/admin.sock`, a socket in the `caddy_config`
+volume that only the Caddy container mounts; every reload names it
+(`lib.sh caddy_reload`), `tests/i` pins both, and `verify-external.sh` still checks that
+:2019 does not answer from outside. Residual: Caddy runs as root **inside** its container
+(`--cap-drop ALL` plus `NET_BIND_SERVICE`, read-only root) with the `caddy_data` volume -
+the certificates and their private keys - mounted read-write, so a compromise of the Caddy
+process itself is a compromise of the certificate; and anyone who can `docker exec` on the
+host can reach the socket, which is already root-equivalent.
+
 ## 6. Backup and restore per durable layer
 
 No EC2 snapshot, AMI or AWS Backup plan exists in us-east-1 (row `O-BACKUPS`);
@@ -1036,3 +1050,6 @@ target group.
   unit files **after** the env file is validated (I0 installed them before, inert), so a
   refused install leaves the units untouched as well. The rollout is `rollout/README.md`,
   coordinator-run. Row `O-FAILOPEN` still describes the deployed host.
+- 2026-09-23 (I2B review fix S1, local only): §5.2 records the edge admin API moved from
+  loopback :2019 to a unix socket in the `caddy_config` volume, and the residual risk (Caddy
+  as in-container root with the certificate volume; `docker exec` reaches the socket).

@@ -3,7 +3,7 @@
 # for "retry later"; public health is down. In-flight responses on the previous
 # configuration finish - a Caddy reload is graceful.
 {
-	admin localhost:2019
+	admin unix//config/admin.sock
 }
 
 {$INFRX_SITE:marlin2b.callbill.ai} {

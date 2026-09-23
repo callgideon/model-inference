@@ -289,7 +289,8 @@ def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
     assert host.run("drain.sh", "pause").returncode == 0
     assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
     assert host.events == [
-        "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile",
+        "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile "
+        "--address unix//config/admin.sock",
         "systemctl stop infrx-worker marlin2b-gateway"]
 
     host.clear()

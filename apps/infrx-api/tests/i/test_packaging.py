@@ -382,9 +382,20 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     public `/health` is `{"ok": true|false}` whatever the gateway's body says; every
     proxied request goes to the gateway on loopback, never to the engine; bodies are
     bounded at 08 §5's `MAX_REQUEST_BYTES`; and the edge's own errors are the contract's
-    envelopes."""
+    envelopes. Its admin API - which can replace all of that - is a unix socket in a
+    volume only Caddy mounts, never the loopback the gateway and worker share, and every
+    reload the scripts do names that socket."""
     from infrx.contracts.limits import DEFAULTS
 
+    for site in ("Caddyfile", "Caddyfile.maintenance"):
+        admin = re.findall(r"^\s*admin (\S+)", (DEPLOY / site).read_text(), re.M)
+        assert admin == ["unix//config/admin.sock"], (site, admin)
+    reloads = [line for script in sorted(DEPLOY.glob("*.sh"))
+               for line in script.read_text().splitlines() if "caddy reload" in line]
+    assert reloads and all("--address unix//config/admin.sock" in r for r in reloads), reloads
+    assert "-v caddy_config:/config" in (DEPLOY / "lib.sh").read_text()
+    for name in CONTAINER_UNITS:
+        assert not [v for v in flag(docker_run(name), "-v") if "caddy" in v], name
     text = (DEPLOY / "Caddyfile").read_text()
     private = re.search(r"@private path (.+)", text).group(1).split()
     for path in ("/metrics", "/metrics/*", "/readyz", "/readyz/*"):
