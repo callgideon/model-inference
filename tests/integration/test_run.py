@@ -905,3 +905,17 @@ def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
     assert {m.id for m in mutants_i3b.MUTANTS if m.layer == 1} <= set(seen), seen
     copied = tuple(f"{tree}/" for tree in (*mutants.OWNED_TREES, mutants.API_TREE))
     assert [m.id for m in mutants.all_mutants() if not m.path.startswith(copied)] == []
+
+
+def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():
+    """E3B phase 2 (measured: `make api-test` past 1800 s crashed the gate and lost its
+    report): a timed-out run comes back as exit 124 with its output, which the suites stage
+    reports as a failure."""
+    import subprocess
+    try:
+        result = runner.shell([sys.executable, "-c", "import time; print('started', "
+                               "flush=True); time.sleep(30)"], cwd=harness.REPO_ROOT,
+                              timeout=1.0)
+    except subprocess.TimeoutExpired:
+        pytest.fail("a timed-out suite raised out of shell(): the gate loses its report")
+    assert result["exit"] == 124 and "timed out after 1 s" in result["tail"], result

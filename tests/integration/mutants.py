@@ -742,6 +742,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '"apps/infrx-api/tests/d"' ')',
            "tests/integration/test_run.py", "every_list_through_one_runner",
            cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm24", "E3B2 item 9: a suite past its budget is a failed run, not a crash",
+           "tests/integration/run.py",
+           "    except subprocess.TimeoutExpired as late:\n",
+           "    except ZeroDivisionError as late:\n",
+           "tests/integration/test_run.py", "outlives_its_budget",
+           cases=("test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback",)),
 )
 
 

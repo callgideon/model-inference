@@ -157,11 +157,20 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
     detail long before its summary block, so a tail-only search reported "detected but not
     named" for a failure that was named perfectly well."""
     started = time.monotonic()
-    result = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
-                            timeout=timeout, env={**os.environ, **(env or {})})
-    output = result.stdout + result.stderr
+    try:
+        result = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
+                                timeout=timeout, env={**os.environ, **(env or {})})
+        code, output = result.returncode, result.stdout + result.stderr
+    except subprocess.TimeoutExpired as late:
+        # E3B phase 2, measured: `make api-test` outlived 1800 s on a loaded host and the
+        # traceback lost the whole report. A run past its budget is a FAILED run (exit 124,
+        # the `timeout` convention) with what it printed, never a crash of the gate.
+        code = 124
+        output = "".join(part.decode(errors="replace") if isinstance(part, bytes) else
+                         (part or "") for part in (late.stdout, late.stderr)) \
+            + f"\ntimed out after {timeout:.0f} s"
     return {"argv": " ".join(argv), "cwd": str(cwd.relative_to(harness.REPO_ROOT) or "."),
-            "exit": result.returncode, "seconds": round(time.monotonic() - started, 1),
+            "exit": code, "seconds": round(time.monotonic() - started, 1),
             "counts": counts(output),
             "named": None if needle is None else (needle.lower() in output.lower()),
             "tail": "\n".join(output.strip().splitlines()[-12:])}
@@ -368,7 +377,8 @@ def suites(report: Report, *, own_only: bool) -> None:
                   env={"INFRX_E2_CANARY": "off"})]
     if not own_only:
         for target in ("api-test", "console-test", "bench-test"):
-            runs.append(shell(["make", target], cwd=harness.REPO_ROOT))
+            # E3B phase 2: the D suite alone has grown past 30 min on a shared host.
+            runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0))
     failed = [run["argv"] for run in runs if run["exit"] != 0]
     # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
     # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose
