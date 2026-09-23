@@ -459,6 +459,49 @@ def test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass(adapter):
     run(body)
 
 
+class SnapshotDown:
+    """The store, except that `dispatch_snapshot` always fails (the unbounded snapshot
+    timing out under a backlog) and the first `dispatch_pending` fails once."""
+
+    def __init__(self, store) -> None:
+        self.store, self.pending_failures = store, 1
+
+    async def dispatch_snapshot(self):
+        raise ConnectionError("snapshot timed out")
+
+    async def dispatch_pending(self, **kw):
+        if self.pending_failures:
+            self.pending_failures -= 1
+            raise ConnectionError("store unreachable")
+        return await self.store.dispatch_pending(**kw)
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+
+def test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain(adapter):
+    """Review DUR-1: every reconcile pass fails, and the drain still delivers every
+    dispatch; a drain that fails once is retried at the next tick."""
+    w = rig.world(adapter)
+
+    async def body():
+        jobs = [await rig.admit(w) for _ in range(3)]
+        w.rec.store = SnapshotDown(w.outbox)
+        stop = asyncio.Event()
+        task = asyncio.create_task(w.rec.run(stop, drain_every_s=0.001,
+                                             reconcile_every_s=0.01))
+        for _ in range(500):
+            if len(await rig.members(w)) == 3:
+                break
+            await asyncio.sleep(0.002)
+        stop.set()
+        assert await asyncio.gather(task, return_exceptions=True) == [None]
+        assert sorted((await rig.members(w)).values()) == sorted(jobs)
+        assert w.outbox.unacknowledged() == []
+        assert w.rec.metrics["errors"] >= 2          # the drain's one and the passes
+    run(body)
+
+
 # --- (3) switching adapters ---------------------------------------------------------
 
 @pytest.mark.parametrize("old,new", [("memory", "valkey"), ("valkey", "memory")])

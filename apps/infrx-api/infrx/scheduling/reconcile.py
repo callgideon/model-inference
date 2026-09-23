@@ -63,9 +63,11 @@ class Reconciler:
 
         A failure of either - Valkey restarting, PostgreSQL unreachable - is logged,
         counted in `metrics["errors"]` and retried at the next tick (a failed pass stays
-        due): the relay has to outlive the outages it exists to repair. The first tick
-        reconciles, so a process starting against an index that lost its data repairs it
-        at once.
+        due): the relay has to outlive the outages it exists to repair. Each step fails on
+        its own: a pass that keeps failing (the unbounded snapshot timing out under a
+        backlog, a row the index rejects) never stops the drain behind it (review DUR-1).
+        The first tick reconciles, so a process starting against an index that lost its
+        data repairs it at once.
         """
         loop = asyncio.get_running_loop()
         due = loop.time()
@@ -74,14 +76,20 @@ class Reconciler:
                 if loop.time() >= due:
                     await self.reconcile()
                     due = loop.time() + reconcile_every_s
+            except Exception:
+                self._failed("reconcile")
+            try:
                 await self.drain()
             except Exception:
-                self.metrics["errors"] += 1
-                log.warning("scheduling relay: pass failed, retrying", exc_info=True)
+                self._failed("drain")
             try:
                 await asyncio.wait_for(stop.wait(), drain_every_s)
             except TimeoutError:
                 pass
+
+    def _failed(self, step: str) -> None:
+        self.metrics["errors"] += 1
+        log.warning("scheduling relay: %s failed, retrying", step, exc_info=True)
 
     # --- (1) the drain -------------------------------------------------------
     async def drain(self) -> dict[str, int]:

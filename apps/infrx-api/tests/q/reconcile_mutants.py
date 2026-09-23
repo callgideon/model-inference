@@ -167,10 +167,29 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- the loop ------------------------------------------------------------
     _m("the_loop_dies_on_an_outage",
        "the relay outlives a failing pass",
-       "            except Exception:\n                self.metrics[\"errors\"] += 1",
-       "            except errors.DomainError:\n                self.metrics[\"errors\"] += 1",
+       "            except Exception:\n                self._failed(\"reconcile\")",
+       "            except errors.DomainError:\n                self._failed(\"reconcile\")",
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass",
-       "test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_job"),
+       "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
+    _m("the_loop_dies_on_a_failed_drain",
+       "the relay outlives a failing drain",
+       "            except Exception:\n                self._failed(\"drain\")",
+       "            except errors.DomainError:\n                self._failed(\"drain\")",
+       "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
+    _m("a_failing_pass_skips_the_drain",
+       "review DUR-1: a pass that keeps failing never stops the drain (two try blocks)",
+       "                    due = loop.time() + reconcile_every_s\n"
+       "            except Exception:\n"
+       "                self._failed(\"reconcile\")\n"
+       "            try:\n"
+       "                await self.drain()\n",
+       "                    due = loop.time() + reconcile_every_s\n"
+       "                await self.drain()\n"
+       "            except Exception:\n"
+       "                self._failed(\"reconcile\")\n"
+       "            try:\n"
+       "                pass\n",
+       "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
     _m("the_first_tick_does_not_reconcile",
        "a starting relay reconciles at once",
        "        due = loop.time()\n",
@@ -185,8 +204,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass"),
     _m("errors_are_not_counted",
        "every failed pass is counted",
-       '                self.metrics["errors"] += 1',
-       '                self.metrics["errors"] += 0',
+       '        self.metrics["errors"] += 1',
+       '        self.metrics["errors"] += 0',
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass"),
     # --- the adapters' members() and caps -----------------------------------
     _m("memory_members_forget_in_flight_candidates",
