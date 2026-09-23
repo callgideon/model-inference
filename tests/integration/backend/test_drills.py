@@ -1169,9 +1169,10 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
 def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_routers(tmp_path,
                                                                                    monkeypatch):
     """Forced fallback to legacy unmetered ingress, after the cutover: the pilot composition
-    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs)` - the
-    metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
-    uploads - and no route is the legacy F1 chat module (no durable admission, no hold). The
+    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs, metrics)` -
+    the metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
+    uploads, I3B's loopback `/metrics` last (the cutover's item 7, merged with M) - and no
+    route is the legacy F1 chat module (no durable admission, no hold). The
     composition's own module check refuses a second chat handler, the legacy one included.
 
     `create_app` builds EVERY adapter from the pilot environment - the stores on one pool,
@@ -1181,6 +1182,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     from infrx.config import RuntimeMisconfigured, from_env
     from infrx.gateway import app as composition
     from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+    from infrx.observe import route as metrics
     h = stack.pg_jobstore()
     env = stack.pilot_env(h.extra["database"], tmp_path)
     for name in stack.AWS_UNSET:                      # botocore reads the process environment
@@ -1188,7 +1190,8 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     for name in stack.s3_env():
         monkeypatch.setenv(name, env[name])
     app = composition.create_app(from_env(env))
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs), composition.ROUTERS
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics), \
+        composition.ROUTERS
     assert app.state.runtime.mode == "pilot"
     served = {(method, route.path): route.endpoint.__module__ for route in app.routes
               for method in (getattr(route, "methods", None) or ())
@@ -1199,6 +1202,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
                                                 ingress.JOBS_ROUTES}, served
     assert {module for (_, path), module in served.items()
             if path.startswith("/v1/uploads")} == {uploads.__name__}, served
+    assert served[("GET", metrics.PATH)] == metrics.__name__, served
     assert chat.__name__ not in served.values(), served
     chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
     with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):

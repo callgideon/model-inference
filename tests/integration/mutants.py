@@ -976,8 +976,8 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("e3bm62", "E3B3 dr17: the pilot mounts G4U's uploads router beside the ingress and "
                      "G3's jobs router",
            "apps/infrx-api/infrx/gateway/app.py",
-           "ROUTERS = (health, models, ingress, uploads, jobs)",
-           "ROUTERS = (health, models, ingress, jobs)",
+           "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+           "ROUTERS = (health, models, ingress, jobs, metrics)",
            "tests/integration/backend/test_drills.py", "dr17", layer=2,
            cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
                   "routers",)),
