@@ -399,6 +399,10 @@ def settlement_rows() -> list[Check]:
    - The port and fake cancel-cause change itself was merged earlier (0024da2); nothing else is needed from F.
 3. **G2.**
    - 0018 records the cancel cause, so the relay's fallback on `UnsupportedParameter(param="cause")` no longer fires. G3/E4B remove it and its case (per the addendum).
+   - **The lookup-refusal fallback is dead on PostgreSQL too** (review H-N4, added in the fix round). Since 0018's `idempotency_lookup`, the Pg store no longer raises `UnsupportedParameter(param="lookup")`, yet `infrx/gateway/routes/relay.py:204-211` still handles it.
+     - Its cases are `tests/g/test_relay_recovery.py:97-105` (`test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked`) and `:190-202` (`test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_retry`). Both inject stores that raise `UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")`.
+     - Its mutant is `tests/g/mutants.py:957` `lookup_refusal_escapes` ("until D5 …").
+     - Like the cause fallback, G3/E4B removes it once D5 is merged. D5 does not (these are G's files).
    - Compose `PgCatalogDirectory(connector(dsn))`, or the pool's `Connect`. Every lookup is one statement on a fresh connection, and `test_credit_rate__a_lookup_from_a_fresh_thread_and_loop_is_answered` proves the probe path.
    - The sync wait's terminal commit is now real on PostgreSQL.
    - **Platform cancel cause (addendum 2), a ruling candidate.** Add `TerminalCause.platform_cancelled` to `CANCEL_CAUSES`, for the relay's own non-client stops and post-admission refusals. Its R21 settlement would be the `sync_deadline` row: platform-absorbed when unpublished, `held_unknown` when published, never billed. In 0018 it is one more literal in `infrx.cancel`'s cause check and in `cause_carries_state`, so it needs a new migration once ruled.
