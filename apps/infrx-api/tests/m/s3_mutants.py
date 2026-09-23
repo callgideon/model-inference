@@ -60,6 +60,7 @@ NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
 WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
 TWO_ATTEMPTS = "test_a_failing_call_is_tried_twice_and_no_more"
 INSTALL_WAIT = "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
+BUILT_IN_CODE = "test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -168,6 +169,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("own_install_waits_unbounded", "an install waits for HeadBucket a bounded time",
        D, "capture_output=True, text=True, timeout=BUCKET_PROBE_TIMEOUT_S)",
        "capture_output=True, text=True)", INSTALL_WAIT),
+    # === review A5: never the bucket root, never a dot segment ============================
+    _m("own_prefix_may_be_root", "the prefix is at least one segment (never the bucket root)",
+       C, r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)+")',
+       r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)*")', SETTINGS),
+    _m("own_prefix_dot_segments", "a . or .. segment is refused",
+       C, r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)+")',
+       r'S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")', SETTINGS),
+    _m("own_store_takes_any_prefix", "a store built in code refuses what the settings refuse",
+       S3, "        if not S3_PREFIX_RE.fullmatch(prefix):", "        if False:", BUILT_IN_CODE),
 )
 
 

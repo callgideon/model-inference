@@ -164,7 +164,8 @@ def uploaded(adapter, data=CLIP, **constraints):
 
 
 # --- the settings that place the store (08 §5.1) ----------------------------------------
-BAD_PREFIXES = ("/infrx/", "infrx", "infrx//", "in frx/", "infrx/media")
+BAD_PREFIXES = ("/infrx/", "infrx", "infrx//", "in frx/", "infrx/media", "", "./", "../",
+                "infrx/../other/", "infrx/./")
 BAD_ENDPOINTS = ("ftp://minio:9000", "http://user:secret@minio:9000",
                  "http://minio:9000/bucket", "minio:9000", "https://minio:9000?x=1")
 
@@ -180,12 +181,20 @@ def test_the_store_settings_refuse_a_value_that_cannot_place_an_object():
             with pytest.raises(RuntimeMisconfigured) as refused:
                 config.validate_deployment(deployment, "pilot")
             assert name in str(refused.value), value
-            assert value not in str(refused.value) and "secret" not in str(refused.value)
-    for prefix in ("infrx/", "test/m1l2/0a1b/", "a.b-c_d/"):
+            assert not value or value not in str(refused.value)
+            assert "secret" not in str(refused.value)
+    for prefix in ("infrx/", "test/m1l2/0a1b/", "a.b-c_d/", ".hidden/", "v1.2/"):
         config.validate_deployment(DEPLOYMENT_DEFAULTS.replace(s3_media_prefix=prefix), "pilot")
     for endpoint in ("", "http://127.0.0.1:55500", "https://s3.us-east-1.amazonaws.com",
                      "http://minio:9000/"):
         config.validate_deployment(DEPLOYMENT_DEFAULTS.replace(s3_endpoint_url=endpoint), "dev")
+
+
+def test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse():
+    for prefix in ("", "infrx", "../", "infrx/../other/", "./"):
+        with pytest.raises(ValueError, match="S3_MEDIA_PREFIX"):
+            S3ObjectStore(None, "infrx-m1l2", prefix)
+    assert S3ObjectStore(None, "infrx-m1l2", "infrx/").prefix == "infrx/"
 
 
 def test_the_store_settings_are_read_from_the_environment():
@@ -368,7 +377,7 @@ def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch)
     media = cutover_app(settings("dev", BUCKET, s3_media_prefix=prefix,
                                  s3_endpoint_url=ENDPOINT)).state.runtime.media_store
     assert isinstance(media.objects, S3ObjectStore)
-    _WRITTEN.append(media.objects)
+    _WRITTEN.append(S3ObjectStore(media.objects.client, BUCKET, prefix))   # the case's prefix
     assert (media.objects.bucket, media.objects.prefix) == (BUCKET, prefix)
     handle = run(media.create_upload(b.ORG_A, {}))["upload_handle"]
     run(media.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))

@@ -24,6 +24,7 @@ import asyncio
 import base64
 import hashlib
 
+from ..config import S3_PREFIX_RE
 from ..contracts import errors
 
 #: "No such object": HeadObject's bodiless 404 and GetObject's code - absent only where the
@@ -44,11 +45,14 @@ def reason(failure: BaseException) -> str:
 
 
 class S3ObjectStore:
-    def __init__(self, client, bucket: str, prefix: str = "") -> None:
+    def __init__(self, client, bucket: str, prefix: str) -> None:
+        if not S3_PREFIX_RE.fullmatch(prefix):
+            # the settings path refuses this at startup; a store built in code does too
+            raise ValueError("S3_MEDIA_PREFIX must be path segments, each ending in /")
         self.client, self.bucket, self.prefix = client, bucket, prefix
 
     @classmethod
-    def connect(cls, bucket: str, prefix: str = "", endpoint_url: str = "") -> S3ObjectStore:
+    def connect(cls, bucket: str, prefix: str, endpoint_url: str = "") -> S3ObjectStore:
         """A client from the environment's credentials. `endpoint_url` is for an
         S3-compatible store (MinIO in tests), addressed path-style; unset is AWS S3."""
         import botocore.session
