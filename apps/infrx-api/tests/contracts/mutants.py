@@ -1817,6 +1817,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("credit_replay_crosses_regimes", "one idempotency key never replays across regimes",
        S, "        if (job.credit is not None) is not credit:", "        if False:",
        "credit_admit__a_replay_is_pinned_and_never_crosses_regimes"),
+    # --- R91 (G2 review money-B1): the read-only replay lookup ---------------------
+    _m("lookup_reads_another_orgs_scope", "lookup answers only the caller's own scope (R10)",
+       S, "        if idem.org_id != org_id:\n            # r1 R10: one organization never reads "
+          "another's idempotency scope.",
+       "        if False:\n            # r1 R10: one organization never reads "
+       "another's idempotency scope.",
+       "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"),
+    _m("lookup_raises_on_an_expired_mapping", "an expired mapping answers None, not an error",
+       S, "            except errors.IdempotencyExpired:\n                return None",
+       "            except errors.IdempotencyExpired:\n                raise",
+       "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"),
+    _m("lookup_crosses_regimes", "lookup answers a CREDIT job's own pinned admission",
+       S, "            credit = job.credit is not None", "            credit = False",
+       "credit_admit__lookup_answers_the_pinned_admission"),
     _m("credit_replay_not_marked", "a CREDIT replay is marked replayed",
        S, '                                               "replayed": True})',
        '                                               "replayed": False})',

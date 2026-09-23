@@ -1,0 +1,479 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "confirmed_blocking": [
+  {
+   "id": "P1",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "1315-1322 (FakeStreamStore.append)",
+   "claim_broken": "The lane says the fake refuses an unjournalable batch 'before anything is fenced, stored or charged', where PgStreamStore refuses it before sending (code comment and evidence item 2). No test checks that this happens before the fence.",
+   "evidence": "Reviewer mutant rv_refuse_after_fence moves the _journalable check inside the lock after self.jobs._fence(lease). It SURVIVES dur_output__an_unjournalable_event_refuses_the_whole_batch ('1 passed, 766 deselected'). With that mutant, a NUL payload on a terminal or stale lease would be answered AlreadyTerminal/StaleLease by the fake. A probe on the real stores (cancel, then append {\"x\":\"\\x00\"}) gives 'fake= !JournalWriteFailed | pg= !JournalWriteFailed'. The current code agrees with PostgreSQL, but the claimed ordering is not pinned.",
+   "minimal_fix": "In the case, after the refused batches: cancel the job (or use a stale lease) and assert that an unjournalable append still raises JournalWriteFailed. Declare the mutant rv_refuse_after_fence (check moved after _fence) against the case.",
+   "lens": "parity",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed on a scratch git-archive copy of 4209aee; the worktree was not touched and the scratch copy has been deleted. No PostgreSQL container was needed.\n\nCode at apps/infrx-api/infrx/contracts/fakes/state.py:1315-1320: FakeStreamStore.append runs the _journalable check before `async with self.jobs._lock: job = self.jobs._fence(lease)`. The comment says the batch is refused \"before anything is fenced\". PgStreamStore.append (infrx/state/journal.py:73-75) also refuses before `self._db._call(\"append\", ...)`, so on PostgreSQL the fence never runs for such a batch. The current code agrees with PostgreSQL.\n\nThe test does not pin that order. In dur_output__an_unjournalable_event_refuses_the_whole_batch (conformance/jobs.py:3125), every unjournalable append goes to a live lease. The job is cancelled only after the refused batches, and the case never appends again on that cancelled lease. The seven mutants declared against it (mutants.py:351-377) all change the check itself, never where it sits.\n\nExperiment: I moved the check to just after `job = self.jobs._fence(lease)` inside the lock.\n- `pytest -q tests/contracts/test_conformance.py -k \"dur_output or stale or fence or journal\"` → tail: `42 passed, 135 deselected in 0.75s`.\n- The full `tests/contracts` run, without test_mutants, had 7 failures. The 6 that `grep FAILED` listed were all console-parity and PostgreSQL v1-projection tests. The seventh (test_parity_v2) failed on the first run because the TS contract files were missing from the scratch copy, and did not show up again in the second listing. None of them is a journal case, so the mutant survives.\n\nProbe (fake stream store; `_stream_job`, then `jobs.cancel`, then append `{\"x\":\"\\x00\"}`):\n- mutant copy prints `AlreadyTerminal`\n- original 4209aee prints `JournalWriteFailed`\n\nSo under the mutant the fake answers AlreadyTerminal where PostgreSQL gives JournalWriteFailed, and no test catches it.\n\nThe finding holds. The ordering is claimed in code and in the evidence, but no test pins it. Minimal fix: after the cancel, append an unjournalable batch on the now-terminal lease and assert JournalWriteFailed. Then declare a mutant that moves the check after _fence. I rate it blocking under this lane's rule that every claimed invariant needs a mutant that kills it. The code itself is correct today.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed. I could not refute it from the code or by experiment.\n\nCode at 4209aee:\n- FakeStreamStore.append in apps/infrx-api/infrx/contracts/fakes/state.py (lines 1314-1319) runs the `_journalable` check before `async with self.jobs._lock: job = self.jobs._fence(lease)`. Its comment says \"before anything is fenced, stored or charged - where PgStreamStore.append refuses it\".\n- PgStreamStore.append in infrx/state/journal.py (lines 73-75) checks before calling `self._db._call(\"append\", ...)`. So PostgreSQL returns JournalWriteFailed whatever state the lease is in.\n- The case dur_output__an_unjournalable_event_refuses_the_whole_batch (conformance/jobs.py:3125) only appends bad batches on a live lease. On a live lease, `_fence` passes, so checking before or after the fence looks the same from outside.\n- None of the seven mutants declared against that case in tests/contracts/mutants.py moves the check.\n- Moving the check matters beyond the error type. `_fence` calls `_enforce_deadlines`, which can terminalize the job (R29). A fake with the check after the fence could therefore terminalize a job on a NUL append that PostgreSQL would refuse without changing anything.\n\nExperiment: a git-archive scratch copy of 4209aee with the check moved inside the lock after `_fence` (the reviewer's rv_refuse_after_fence).\n- Command: `.venv/bin/python -m pytest -q -p no:cacheprovider tests/contracts/test_conformance.py -k unjournalable_event_refuses_the_whole_batch`\n- Tail: `1 passed, 176 deselected in 0.26s`. The mutant survives.\n- Broader run: `pytest -q tests/contracts tests/w/test_loop.py tests/d/test_journal_units.py -k \"not mutant\"` on the mutant gave `6 failed, 1060 passed`. All 6 failures are environmental: test_parity_console needs the console tree, and test_v1_projection_pg needs PostgreSQL. No journal test kills the mutant.\n\nProbe on the fake (cancel, or a lease with generation+1, then append {\"x\":\"\\x00\"}):\n- Original: `cancel nul JournalWriteFailed`, `stale nul JournalWriteFailed`\n- Mutant: `cancel nul AlreadyTerminal`, `stale nul StaleLease`\n\nSo the mutant does diverge from PostgreSQL, whose check comes before the database call. I did not run PostgreSQL, because the code settles it.\n\nWhat is actually wrong: the current code is correct and matches PostgreSQL. The gap is that no test pins the refuse-before-fence ordering, which the lane claims in its code comment and in evidence item 2.\n\nFix, as the reviewer proposed:\n- After the refused batches, cancel the job (or use a stale lease) and assert that a NUL append still raises JournalWriteFailed.\n- Declare the mutant against that case.\n\nI removed my scratch copies. No container was used, and the codex-ffakes worktree is unchanged.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "P2",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "1299-1302 (_expired)",
+   "claim_broken": "Item 3 redefines expiry as D4's 'a watermark and NO CHUNK left' (not a key being present). No test checks the empty-list case, and append's setdefault creates exactly that state.",
+   "evidence": "Reviewer mutant rv_expired_by_key_presence (`job_id in self.pruned_to and job_id not in self.chunks`) SURVIVES the three cases it could reach, pruned_to_nothing / pruned_prefix / expired_journal ('3 passed, 764 deselected'). The divergence it creates is reachable: prune to nothing, then append(lease, ()) (PostgreSQL accepts an empty batch and writes nothing), then read_owned(None). Probe output: 'mutant ... fake= !ReplayGap' vs 'original: fake= !JournalExpired | pg= !JournalExpired'. The lane's code is correct; the invariant has no test that kills a mutant of it.",
+   "minimal_fix": "In dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark, before appending 'c': append(lease, ()) and assert read_owned(None) raises JournalExpired. Declare rv_expired_by_key_presence against the case.",
+   "lens": "parity",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute it; every part of the claim held up.\n\nCode at 4209aee: `_expired` (apps/infrx-api/infrx/contracts/fakes/state.py:1302) is `job_id in self.pruned_to and not self.chunks.get(job_id)`. `append` calls `self.chunks.setdefault(job.id, [])` (line 1336) even when the batch is empty. So after a full prune (which runs `del self.chunks[job_id]`) followed by `append(lease, ())`, the fake holds `chunks[job] == []`. That is the one state where the reviewer's key-presence mutant differs from the original.\n\nPostgreSQL: in 0017, `read_journal` refuses `journal_expired` when no `stream_chunks` row exists and `journal_pruned_generation is not null` (lines 252-256). `tests/d/checks_journal.py::check_append_empty` asserts that PG accepts an empty batch and writes nothing. So on this path PG answers JournalExpired, and the original fake matches it.\n\nExperiment (scratch git-archive copy of 4209aee, mutant `return job_id in self.pruned_to and job_id not in self.chunks`):\n`python -m pytest -q -p no:cacheprovider tests/contracts/test_conformance.py -k \"pruned_to_nothing or pruned_prefix or expired_journal\"` -> `3 passed, 174 deselected in 0.30s`. The mutant survives.\nI also ran all of tests/contracts plus tests/d/test_journal_units.py with the mutant applied: `6 failed, 1015 passed`. All 6 failures are FileNotFoundError from apps/app files my partial archive left out (parity/pg projection). None is a journal test, so nothing kills the mutant.\nProbe (prune (1,1..2) to nothing, `append(lease, ())`, `read_owned(None)`):\noriginal: `before empty append: JournalExpired / empty append -> () / after empty append: JournalExpired`\nmutant: `before empty append: JournalExpired / empty append -> () / after empty append: ReplayGap`\n\nThe divergence is reachable and no test covers it. The reviewer's fix works: add an empty append plus an `assert JournalExpired` inside `dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark`, before `c` is appended, and declare the mutant against that case. That kills it, and PG already gives the same answer.\n\nSeverity: the lane's code is correct and fake/PG parity holds today. This is a missing test (mutation-coverage gap), not a behaviour bug. The declared mutant `a_pruned_journal_expires_for_ever` already kills removing the no-chunk clause outright. The one that survives only differs between an empty list and a missing key, so I rate it nonblocking. It is a cheap one-line addition worth folding into the next round.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. The test gap is real, but the lane's code is correct, so this is a missing test and not a defect.\n\n1. Code. `_expired` in `state.py:1302` is `job_id in self.pruned_to and not self.chunks.get(job_id)`. When `expire` removes every chunk it runs `del self.chunks[job_id]`. `append` then runs `self.chunks.setdefault(job.id, [])` (line 1336) before its loop, so `append(lease, ())` leaves an empty list under that key. After that, \"key present\" and \"chunk present\" give different answers.\n\n2. The mutant survives the whole fake-side suite, not only the three cases the reviewer ran. I applied `job_id not in self.chunks` to a `git archive 4209aee` copy under `scratchpad/ffv2`:\n   - Command: `pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/test_mutants.py`\n   - Tail: `1015 passed in 21.02s`\n   - `grep` found no other non-PostgreSQL test that references `JournalExpired` or `expire(`. The D suites run the PostgreSQL store, not the fake.\n\n3. The divergence is reachable. The probe (`scratchpad/ffv_probe.py`) prunes to nothing, calls `append(lease, ())`, then `read_owned(None)`:\n   - Original: `before empty append JournalExpired / append(()) -> () / after empty append JournalExpired`\n   - Mutant: `before empty append JournalExpired / append(()) -> () / after empty append ReplayGap`\n\n4. PostgreSQL agrees with the original. I checked this from the code and did not run PostgreSQL. `PgStreamStore.finalize_in_transaction` in `infrx/state/journal.py` computes expiry as `j.journal_pruned_generation is not null and not exists (select 1 from infrx.stream_chunks ...)`. An empty batch inserts no rows, so PostgreSQL stays expired, which matches the reviewer's `pg= !JournalExpired`.\n\nSeverity. The declared mutant `a_pruned_journal_expires_for_ever` does kill the \"flag for ever\" version. The survivor only differs in the empty-batch corner, where the fake alone could drift from PostgreSQL. The proposed fix is small and correct: in `dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark`, call `append(lease, ())` before appending 'c', assert `read_owned(None)` raises `JournalExpired`, and declare `rv_expired_by_key_presence` against that case.\n\nI rate it nonblocking: a follow-up test hardening, not a merge blocker. No container was started. The scratch copies are `ffv2` and `ffv_orig` in the session scratchpad.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "P3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "write_terminal (expires_at = now + limits.journal_chunk_ttl_s)",
+   "claim_broken": "The fake and PostgreSQL disagree on the terminal event's TTL. 0017 uses the newest chunk's TTL, else a frozen 3600 s (D4 Limit 2). The fake always uses the store's journal_chunk_ttl_s. Item 3 newly makes the fake reach the chunkless state (pruned to nothing, then terminal), where this shows.",
+   "evidence": "Probe on both stores with TTL 30, the lane's own case flow, then +31 s: terminal fake=('terminal',1,4,'0:00:30') | pg=('terminal',1,4,'1:00:00'); expire_after_terminal_31s fake=1 | pg=0; read(None) fake=!JournalExpired | pg=!ReplayGap; at +3631 s fake=0 | pg=1. Reviewer mutant rv_terminal_ttl_default (3600) survives. Invisible at the default TTL (3600). This is not in D4 Limit 4's list of fake deltas.",
+   "minimal_fix": "write_terminal takes the newest stored chunk's (expires_at - persisted_at), else 3600 s. Or record it as a Limit next to D4 Limit 2 and pin it with one assertion in the pruned-to-nothing case.",
+   "lens": "parity"
+  },
+  {
+   "id": "P4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+   "line": "dur_output__an_unjournalable_event_refuses_the_whole_batch (journalable tail)",
+   "claim_broken": "'-0.0 and 1e308 are stored': both stores accept them, but PostgreSQL does not return the same values, so the payload differs by more than the byte measure (Limit 5).",
+   "evidence": "Probe, reading back on both stores: neg_zero fake=-0.0 (copysign -1) | pg=0.0 (copysign +1); big 1e308 fake float | pg int 10**308, bytes 12 vs 316; 1e20 fake float | pg int, 11 vs 28; the escape text 15 vs 16 bytes. Raw SQL: `'{\"z\": -0.0}'::jsonb::text` = '{\"z\": 0.0}'. The case compares content only, which the evidence acknowledges for 1e308.",
+   "minimal_fix": "Add one line to the D4 Limit 5 text / F evidence: jsonb normalises -0 to 0 and returns exponent-form floats as integers.",
+   "lens": "parity"
+  },
+  {
+   "id": "P5",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "_last_sequence",
+   "claim_broken": "The rule that the watermark counts only for its own generation has no killable test. This is by construction, not a gap in the lane's tests.",
+   "evidence": "Reviewer mutant rv_watermark_any_generation survives. The mutant is equivalent: any append sets published, so a lapsed lease after output is terminalised lost_after_publication on both stores (probe: fake=[lost_after_publication] | pg=[lost_after_publication]). A generation-1 watermark followed by generation 2 is therefore unreachable. The guard mirrors 0017.",
+   "minimal_fix": "None required. Optionally note in the _last_sequence docstring that the cross-generation branch cannot be reached today.",
+   "lens": "parity"
+  },
+  {
+   "id": "P6",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/test_jobstore_conformance.py",
+   "line": "PENDING dur_settle__cancel_records_its_cause_and_settles_by_r21",
+   "claim_broken": "The strict jobstore partition on PostgreSQL is red, but the failure predates this lane and is not in any file it changed.",
+   "evidence": "Head 4209aee: '1 failed, 63 passed, 29 xfailed, 1 xpassed' across both suites, and the failure raises UnsupportedParameter under xfail(raises=NotImplementedError). Base ae0f2a2, same case: '1 failed, 72 deselected'.",
+   "minimal_fix": "Outside this lane: add RAISES[...] = errors.UnsupportedParameter for this case (D4 H2 pattern), or let D5's 0018 remove it.",
+   "lens": "parity"
+  },
+  {
+   "id": "H1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/conformance/jobs.py",
+   "line": "3147",
+   "claim_broken": "R83 kill modes: a death that is not an assertion or a typed DomainError has to be declared in dies_by",
+   "evidence": "The mutant surrogates_are_journalable is killed only through an untyped UnicodeEncodeError that the fake's compact_bytes raises inside infrx/contracts/fakes/state.py. The case's `except Exception as untyped: raise AssertionError(...)` turns that into an assertion inside contracts/conformance/, so the runner's _undeclared gate never sees it. Hand-run message: `jobs.py:3148: AssertionError: {'content': 'x\\ud800'} was answered UnicodeEncodeError, not journal_write_failed`. The kill is real (an untyped answer from a port breaks the contract) and the evidence says so openly. The same catch-all pattern already exists at jobs.py:145/671/2809. Still, the catch-all would also turn any unrelated crash in append during the 27-batch loop into an 'honest' kill for all 7 item-2 mutants.",
+   "minimal_fix": "Narrow the catch to the database's raw error classes (psycopg DataError) plus UnicodeEncodeError, or leave the case alone and declare dies_by=(\"UnicodeEncodeError\",) on surrogates_are_journalable with a one-line rationale, as the list does for its other guard mutants.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/contracts/mutants.py",
+   "line": "n/a",
+   "claim_broken": "Every hand-applied mutant dies on the case's own assertion message",
+   "evidence": "Three mutants die by a typed DomainError that propagates out of the case, not by the case's own assert. R83 counts these as honest deaths, and each one is the defect itself. the_escape_text_is_refused dies with `JournalWriteFailed: journal_write_failed: an event carries a NUL character...`, raised on the journalable append. the_terminal_event_restarts_below_the_watermark dies with `InvalidCursor: invalid_cursor: cursor 1-3 is past the last event` (the terminal event landed at (1,1)). a_pruned_journal_expires_for_ever dies with `JournalExpired: journal_expired: journal for job_fake...2 has expired` in both named cases. The case messages 'a journalable event was refused' and 'the terminal event restarted below the watermark' can never fire for these defects.",
+   "minimal_fix": "Optional: catch the typed error in those two steps and assert with the invariant's message, so the kill reads as the case's own observation.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/state/journal.py",
+   "line": "72",
+   "claim_broken": "Docs match behaviour after the flip",
+   "evidence": "The PgStreamStore.append docstring still says '(The fake stores such payloads: recorded delta, coordinator request.)', and its error text omits 'lone surrogate', which the fake's copy includes. The lane correctly left D's adapter untouched. Separately, R93's ruling text in 08 §10 describes a lapsed *preparation* lease publishing an event. The lane's evidence states accurately that the preparation path publishes no IndexEvent in either store and that the divergence was the inference requeue.",
+   "minimal_fix": "Coordinator/D: drop the stale sentence at the merge; reword R93 to name the inference requeue.",
+   "lens": "honesty"
+  }
+ ],
+ "reviews": [
+  {
+   "lens": "parity",
+   "verdict_hint": "fix_required",
+   "mutants": [
+    {
+     "name": "rv_requeue_emits_two_rows",
+     "edit": "emit an extra inference_dispatch row before the one the event uses",
+     "result": "killed",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "rv_requeue_event_reuses_first_row_id",
+     "edit": "IndexEvent id = the job's FIRST inference_dispatch row id",
+     "result": "killed",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "rv_requeue_row_dropped",
+     "edit": "no outbox row inserted on requeue; event id minted apart",
+     "result": "killed",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "rv_prep_row_dropped",
+     "edit": "lapsed preparation inserts no prepare_dispatch row",
+     "result": "killed",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "rv_prep_publishes_index_event",
+     "edit": "lapsed preparation returns an IndexEvent for its new row",
+     "result": "killed",
+     "killed_by": "dur_output__every_requeued_candidate_carries_the_right_kind (the new R93 case ignores recover's return for preparation)"
+    },
+    {
+     "name": "rv_only_first_event_checked",
+     "edit": "_journalable over events[:1]",
+     "result": "killed",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "rv_lists_unchecked",
+     "edit": "list/tuple branch returns True",
+     "result": "killed",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "rv_inf_allowed",
+     "edit": "math.isfinite -> not math.isnan",
+     "result": "killed",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "rv_refuse_after_store",
+     "edit": "extra late check added after journal.store (early check left in place)",
+     "result": "survived (equivalent: the early check still fires first; replaced by rv_refuse_after_fence)"
+    },
+    {
+     "name": "rv_refuse_after_fence",
+     "edit": "move the _journalable refusal inside the lock after _fence(lease)",
+     "result": "SURVIVED: finding P1"
+    },
+    {
+     "name": "rv_watermark_any_generation",
+     "edit": "_last_sequence counts the watermark whatever its generation",
+     "result": "survived (equivalent: a cross-generation watermark is unreachable, P5)"
+    },
+    {
+     "name": "rv_expired_by_key_presence",
+     "edit": "_expired: job_id not in self.chunks instead of not self.chunks.get(job_id)",
+     "result": "SURVIVED: finding P2 (probe: ReplayGap on the fake vs JournalExpired on PostgreSQL after an empty append)"
+    },
+    {
+     "name": "rv_expired_never",
+     "edit": "_expired returns False",
+     "result": "killed",
+     "killed_by": "one of the pruned_to_nothing / pruned_prefix / expired_journal cases"
+    },
+    {
+     "name": "rv_terminal_skips_one",
+     "edit": "terminal sequence = _last_sequence + 2",
+     "result": "killed",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "rv_terminal_ttl_default",
+     "edit": "terminal expires_at = now + 3600 s (PostgreSQL's chunkless default)",
+     "result": "survived: TTL unpinned; this mutant makes the fake closer to PostgreSQL (P3)"
+    },
+    {
+     "name": "lane-declared 12 + updated anchor lost_inference_emits_a_prepare_dispatch",
+     "edit": "re-run by name through tests.contracts.mutants",
+     "result": "13/13 killed",
+     "killed_by": "as declared"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "make api-env (scratch of 4209aee)",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/d/test_journal_units.py",
+     "exit": 0,
+     "tail": "6 passed in 0.75s"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen pytest -q -rxXs tests/d/test_streamstore_conformance.py tests/d/test_jobstore_conformance.py (own container infrx-review-ffakes-parity-postgres:55531)",
+     "exit": 1,
+     "tail": "1 failed, 63 passed, 29 xfailed, 1 xpassed in 59.74s (failure: dur_settle__cancel_records_its_cause_and_settles_by_r21, UnsupportedParameter; pre-existing, P6)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen pytest -v tests/d/test_{streamstore,jobstore}_conformance.py -k 'a_requeue_publishes_its_own_fresh or pruned_to_nothing or unjournalable or pruned_prefix or every_requeued'",
+     "exit": 0,
+     "tail": "5 passed, 89 deselected in 5.65s (all three new exported cases PASSED on PostgreSQL)"
+    },
+    {
+     "cmd": "base ae0f2a2 scratch: INFRX_D_TASK=d4 uv run --frozen pytest -q tests/d/test_jobstore_conformance.py -k cancel_records_its_cause",
+     "exit": 1,
+     "tail": "1 failed, 72 deselected in 4.49s (pre-existing at base)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen python -m tests.d.code_mutants_d4",
+     "exit": 0,
+     "tail": "17/17 killed"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+     "exit": 0,
+     "tail": "1051 passed in 104.62s (0:01:44)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen python -m tests.d.review_probe (fake vs PostgreSQL: requeue, payloads, prune, generations)",
+     "exit": 0,
+     "tail": "requeue: r1/r2 event id == new row on both, rows (1,2,3,3) both, prep_index_events [] both, prep_rows (1,2,2,True) both; payloads: 5 bad refused both, no bytes charged, nothing stored; !! neg_zero -0.0 vs 0.0, big/e20 float vs int; prune: (1,3), ReplayGap from None and 1-1, 'c' from 1-2, InvalidCursor past head, terminal (1,4) both; !! terminal TTL 0:00:30 vs 1:00:00 -> expire_after_terminal_31s 1 vs 0, read JournalExpired vs ReplayGap; generations: job failed lost_after_publication on both (cross-generation unreachable)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen python -m tests.d.review_probe2",
+     "exit": 0,
+     "tail": "empty_append () both; read_after_empty_append JournalExpired both; recover_after_publish lost_after_publication both; sql -0.0 jsonb: ('{\"z\": 0.0}', '0', False, 16)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=d4 uv run --frozen python -m tests.d.review_probe3",
+     "exit": 0,
+     "tail": "stale/terminal lease + NUL: fake= !JournalWriteFailed | pg= !JournalWriteFailed; mutant rv_expired_by_key_presence ... fake= !ReplayGap; original: fake= !JournalExpired | pg= !JournalExpired"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.contracts.review_mutants (14 reviewer mutants)",
+     "exit": 0,
+     "tail": "10 killed; survived: rv_refuse_after_store (equivalent), rv_watermark_any_generation (equivalent), rv_expired_by_key_presence, rv_terminal_ttl_default"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.contracts.review_mutants2",
+     "exit": 0,
+     "tail": "rv_refuse_after_fence Result(outcome=survived, detail='1 passed, 766 deselected in 1.05s')"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.contracts.mutants <12 lane mutants + lost_inference_emits_a_prepare_dispatch>",
+     "exit": 0,
+     "tail": "13/13 killed"
+    },
+    {
+     "cmd": "grep -rn expired_jobs (whole scratch tree) + git grep on codex/g2-chat-relay, codex/e3b-phase2-gate, origin/codex/e3b-phase2-gate, claude/backend-impl",
+     "exit": 0,
+     "tail": "no reader of expired_jobs anywhere except the lane's evidence text (tests/g, tests/integration, relay: none)"
+    }
+   ],
+   "fabrication_check": "I checked the implementer's claims by running them myself. tests/contracts gives 1051 passed (matches). test_journal_units gives 6 passed (matches). code_mutants_d4 gives 17/17 (matches). The 12 declared mutants plus the updated anchor give 13/13 killed (matches). The lane said the three new exported cases would pass on PostgreSQL but did not run them there; I ran them on a real PostgreSQL 16.14 container and all three PASS. On the R93 wording, both stores publish no IndexEvent for a lapsed preparation, as stated. On removing expired_jobs, nothing else reads the flag, as stated. The flipped unit test does compare both stores over one table, but its PgStreamStore side uses a stub connection, so it proves only the refusal before sending. I confirmed separately that real PostgreSQL stores the 3 JOURNALABLE payloads (the probe and the PG conformance case). I did not re-run the 20-minute full 438 list, tests/g or tests/w; those counts are the implementer's and I have not verified them. I found no fabricated numbers.",
+   "cleanup": "Containers infrx-review-ffakes-parity-postgres were removed by the harness atexit hook after each run; a final `docker ps -a | grep review-ffakes-parity` counts 0. I started no Valkey container. Removed: scratch /tmp/claude-1000/review-ffakes-parity-1981301, the base scratch /tmp/claude-1000/review-ffakes-parity-1981301-base, and the lock /tmp/infrx-review-ffakes-parity.lock. The codex-ffakes worktree is untouched (git status is clean). I touched no other lane's containers."
+  },
+  {
+   "lens": "honesty",
+   "verdict_hint": "pass",
+   "mutants": [
+    {
+     "name": "requeue_event_id_minted_apart",
+     "edit": "IndexEvent(event_id=dispatch.event_id -> self.ids.event_id()) (anchor count 1, compiles)",
+     "result": "killed: jobs.py:1412 AssertionError 'the requeue event 00000006-... is not its fresh dispatch row ['00000005-...']'",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "lapsed_preparation_reopens_its_old_row",
+     "edit": "prepare_dispatch _emit -> self.outbox.append(<old row>) (anchor count 1)",
+     "result": "killed: jobs.py:1421 AssertionError 'a lapsed preparation lease was not redispatched by a fresh row: [id8] -> [id8, id8]'",
+     "killed_by": "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"
+    },
+    {
+     "name": "lost_inference_emits_a_prepare_dispatch (re-anchored)",
+     "edit": "dispatch = self._emit(... inference_dispatch -> prepare_dispatch (anchor count 1)",
+     "result": "killed: jobs.py:1371 'a lost inference attempt emitted a preparation dispatch'; also incidentally fails the new R93 case (not declared, harmless)",
+     "killed_by": "dur_output__every_requeued_candidate_carries_the_right_kind"
+    },
+    {
+     "name": "unjournalable_payload_stored",
+     "edit": "journalable guard -> if False: (anchor count 1)",
+     "result": "killed: jobs.py:3151 'the journal stored an unjournalable payload {'content': 'a\\x00b'}'",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "only_the_last_event_is_checked",
+     "edit": "events -> events[-1:] (anchor count 1)",
+     "result": "killed: jobs.py:3151 'the journal stored an unjournalable payload {'content': 'a\\x00b'}'",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "surrogates_are_journalable",
+     "edit": "drop the surrogate range test (anchor count 1)",
+     "result": "killed via case catch-all: jobs.py:3148 AssertionError '{'content': 'x\\ud800'} was answered UnicodeEncodeError, not journal_write_failed' (see H1)",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "keys_are_not_checked",
+     "edit": "_journalable(key) and _journalable(item) -> _journalable(item) (anchor count 1)",
+     "result": "killed: jobs.py:3151 'the journal stored an unjournalable payload {'a\\x00b': 'key'}'",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "non_finite_numbers_are_journalable",
+     "edit": "return math.isfinite(value) -> return True (anchor count 1)",
+     "result": "killed: jobs.py:3151 'the journal stored an unjournalable payload {'logprob': nan}'",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "the_escape_text_is_refused",
+     "edit": "also refuse the literal text \\u0000 (anchor count 1)",
+     "result": "killed by typed JournalWriteFailed on the journalable append (DomainError, honest under R83; see H2)",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "a_refused_batch_is_charged",
+     "edit": "journal.store(lease.job_id, 100) before the raise (anchor count 1)",
+     "result": "killed: jobs.py:3156 'a refused batch charged journal bytes'",
+     "killed_by": "dur_output__an_unjournalable_event_refuses_the_whole_batch"
+    },
+    {
+     "name": "pruned_journal_restarts_at_one",
+     "edit": "watermark term -> [0] (anchor count 1)",
+     "result": "killed: jobs.py:3006 'the journal restarted below its prune watermark'",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "the_terminal_event_restarts_below_the_watermark",
+     "edit": "write_terminal sequence -> pre-change max(chunks)+1 (anchor count 1)",
+     "result": "killed by typed InvalidCursor 'cursor 1-3 is past the last event' (DomainError; see H2)",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"
+    },
+    {
+     "name": "a_pruned_journal_expires_for_ever",
+     "edit": "_expired -> job_id in self.pruned_to (anchor count 1)",
+     "result": "killed in both named cases by typed JournalExpired (DomainError)",
+     "killed_by": "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark, dur_output__a_pruned_prefix_is_an_explicit_replay_gap"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "make api-env (scratch archive of 4209aee)",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py (head 4209aee)",
+     "exit": 0,
+     "tail": "1051 passed in 87.28s (0:01:27)"
+    },
+    {
+     "cmd": "same on base ae0f2a2 (full tree archive, head venv)",
+     "exit": 0,
+     "tail": "1048 passed in 102.02s (0:01:42)"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (detached, Monitor)",
+     "exit": 0,
+     "tail": "438 passed in 1168.33s (0:19:28)"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.contracts.mutants --list (head / base)",
+     "exit": 0,
+     "tail": "418 mutants over 214 named cases / 406 mutants over 211 named cases"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/d/test_journal_units.py (no Docker, fake + mocked adapter)",
+     "exit": 0,
+     "tail": "6 passed in 0.33s"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.d.code_mutants_d4",
+     "exit": 0,
+     "tail": "17/17 killed"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/g",
+     "exit": 0,
+     "tail": "405 passed, 2 warnings in 110.79s (0:01:50)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/w -x",
+     "exit": 0,
+     "tail": "157 passed in 172.72s (0:02:52)"
+    },
+    {
+     "cmd": "pytest tests/d/test_{streamstore,jobstore}_conformance.py -k '<3 new cases>' (plain postgres 16.14, own container infrx-review-ffakes-honesty-postgres:55534, db infrx_revffh)",
+     "exit": 0,
+     "tail": "3 passed, 91 deselected in 5.47s"
+    },
+    {
+     "cmd": "pytest tests/d/test_streamstore_conformance.py tests/d/test_jobstore_conformance.py tests/d/test_journal_units.py (plain postgres)",
+     "exit": 1,
+     "tail": "FAILED ...[dur_settle__cancel_records_its_cause_and_settles_by_r21] UnsupportedParameter: cause client_disconnected needs migration 0018 (D5); 1 failed, 69 passed, 29 xfailed, 1 xpassed. Already fails the same way on base ae0f2a2 (1 failed, 72 deselected); not this lane's code"
+    },
+    {
+     "cmd": "INFRX_D1_IMAGE=supabase pytest D conformance -k '<3 new cases> or streamstore'",
+     "exit": 0,
+     "tail": "16 passed, 73 deselected, 5 xfailed in 21.07s"
+    },
+    {
+     "cmd": "PYTHONPATH=. python m4probe.py (retune journal_job_reserve_bytes=4096, admit, append 8000 B)",
+     "exit": 0,
+     "tail": "jobs.limits 4096 journal.limits 16777216 reserved for job admitted after retune 16777216 / append 8000 after retune to 4096: [8014]"
+    },
+    {
+     "cmd": "git merge-tree --write-tree 4209aee origin/codex/g2-chat-relay (76ba3bb)",
+     "exit": 0,
+     "tail": "f276b16082c40b9e1d09eb11b931ed1d0b1d07c9 (no conflicts)"
+    },
+    {
+     "cmd": "git merge-tree --write-tree 4209aee origin/codex/e3b-phase2-gate (f97bfb7)",
+     "exit": 0,
+     "tail": "e64400e6aee0a80d10eab9013190494b6e15a27f (no conflicts)"
+    },
+    {
+     "cmd": "git merge-tree --write-tree 4209aee origin/claude/backend-impl (c64f8dd)",
+     "exit": 0,
+     "tail": "5942e5a98e485fcb2a07974ddbc24728b7462929 (no conflicts; backend-impl has not touched contracts since ae0f2a2)"
+    },
+    {
+     "cmd": "pytest tests/g on the G2 trial-merge tree f276b16",
+     "exit": 0,
+     "tail": "493 passed, 2 warnings in 126.24s (0:02:06)"
+    },
+    {
+     "cmd": "pytest tests/integration/backend/test_drills.py -k 'dr04 and fake' on the E3B trial-merge tree e64400e",
+     "exit": 1,
+     "tail": "test_drills.py:261: AssertionError: ([IndexEvent(... event_id='00000005-...')], '00000004-...', '00000005-...') - 1 failed (dr04 red-on-merge confirmed: event id == fresh row 'again')"
+    },
+    {
+     "cmd": "same after replacing `if backend == \"fake\":` with `if False:` (keep the else assertion)",
+     "exit": 0,
+     "tail": "12 passed, 26 deselected in 0.45s"
+    }
+   ],
+   "fabrication_check": "Every number in the evidence was re-derived. tests/contracts 1051 at head and 1048 at base both reproduced. The full contracts list gave 438 passed = 418 mutants over 214 named cases, reproduced (19:28 here against 20:16 claimed). The base list is 406 over 211, so +12 mutants and +3 cases. test_journal_units 6 passed, and it runs without Docker. code_mutants_d4 17/17, tests/g 405 and tests/w 157 all reproduced. On the '380 → 392 _m( entries' count: a raw `grep -c \"_m(\"` gives 381 → 393 because it also matches the `def _m(` line. The delta of 12 is the same, and the list count of 12 new names is confirmed. The per-item targeted runs (4/4, 7/7, 8/8) were not re-run as such; all 12 mutants plus the re-anchor were hand-applied here, each anchor matched exactly once, compiled, and was killed only in its declared cases (plus the whole-suite meta tests). I reproduced the item-4 probe exactly: `[8014]`, jobs.limits 4096 against journal.limits 16777216, and a post-retune job reserving 16777216. The factory's retune never touches jobs.journal.limits. PG's `_limits()` sends the retuned store.limits journal_job_reserve_bytes to admission, so the claimed delta is real. No merged test retunes a journal limit: grep of tests/ and conformance shows journal limits are set only at construction, which does reach _Journal. So nothing relies on the fake ceiling firing after a retune. Relay claim: tests/g has no expire() call and no reference to expired_jobs. Its NUL and surrogate strings are request-body and upload validation at the edge, not journal appends. The lane's 'not run on PostgreSQL' limit is honest; I closed it here. The 3 new cases pass on both plain postgres 16.14 and supabase/postgres 17.6.1.173. The dr04 red-on-merge claim is confirmed, and the proposed fix (keep the else-branch assertion) passes. No claim was found to be fabricated.",
+   "cleanup": "Removed everything I created: the scratch copies (/tmp/claude-1000/review-ffakes-honesty-1978846 and its -base sibling), the trial-merge extracts (ffh-merge-e3b, ffh-merge-g2), the mutant workdir and logs, and /tmp/infrx-review-ffakes-honesty.lock. The pgharness patch changed only the scratch copy. Container infrx-review-ffakes-honesty-postgres was created and removed by the harness on each run; `docker ps -a | grep honesty` returns 0. No other container was touched; infrx-review-ffakes-parity-postgres belongs to another lens and was left alone. No Valkey was started. The codex-ffakes worktree is unmodified at 4209aee with a clean status. No commits, no AWS, no hosted project."
+  }
+ ]
+}

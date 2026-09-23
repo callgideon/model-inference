@@ -68,7 +68,7 @@ for c in $LEVELS; do
   sample "$c" >> "$out/samples.tsv" &
   sampler=$!
   "$PY" "$bench" --target direct --base-url "$ENGINE/v1" --corpus "$manifest" --subset full \
-    --seed 20260922 --max-tokens 128,512,1024 --engine-state warm -c "$c" -n "$n" \
+    --seed 20260922 --max-tokens 128,512,1024 --engine-state "${ENGINE_STATE:-warm}" -c "$c" -n "$n" \
     --dataset-version e1b-2026-09-22 --profile-version v1 --label "$run_id-c$c" \
     --out "$out/bench.jsonl" --raw "$out/raw/c$c.jsonl" > "$out/c$c.log" 2>&1 \
     || echo "level=$c bench_exit=$? (see $out/c$c.log)"

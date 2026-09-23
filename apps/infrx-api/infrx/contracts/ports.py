@@ -85,6 +85,18 @@ class JobStore(Protocol):
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""
 
+    async def lookup(self, org_id: str,
+                     idem: IdempotencyRef) -> tuple[Admission, TerminalOutcome | None] | None:
+        """R91: the job an idempotency scope already maps to, read-only, or None.
+
+        The same scope rule as `admit` (org + operation + key): a scope that maps nothing,
+        a request without a key, or an expired mapping answers None; a changed payload hash
+        is the same `IdempotencyConflict` `admit` raises. The admission comes back with
+        `replayed=True`. `idem` must name `org_id` (R10), or `forbidden`. Nothing is written,
+        so a caller can learn it is replaying before it prepares anything (G2: a lost answer
+        is recovered by key without re-fetching the customer's media). A CREDIT job answers
+        its `AdmissionV2` (`CreditJobStore.lookup`)."""
+
     async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
         """r1 R46: `Lease(kind=preparation)` for a `preparing` job, fenced exactly like
         an inference lease (own generation counter, owner, state, expiry).
@@ -195,6 +207,11 @@ class CreditJobStore(Protocol):
         retired or someone else's private model is `not_found`; an unpriced model is
         `invalid_request`; a hold beyond the wallet's available CREDIT is
         `insufficient_credit`. Replays return the pinned admission with `replayed=True`."""
+
+    async def lookup(self, org_id: str,
+                     idem: IdempotencyRef) -> tuple[AdmissionV2, TerminalOutcome | None] | None:
+        """R91: `JobStore.lookup` for a CREDIT job - the pinned admission, never a current
+        resolution."""
 
     async def get_owned_credit(self, org_id: str,
                                job_handle: str) -> tuple[AdmissionV2, TerminalOutcome | None]: ...

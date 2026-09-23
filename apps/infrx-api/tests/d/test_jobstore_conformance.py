@@ -42,6 +42,10 @@ PENDING: dict[str, str] = {
     # The per-scope limits themselves pass in tests/d/test_admission.py (capacity check).
     "dur_cap__total_org_and_key_limits_reject_with_retry_guidance":
         "F2 conformance: the case reuses one key across two organizations",
+    # R91 (G2, merged 2391d4d): PgJobStore.lookup refuses (UnsupportedParameter,
+    # param="lookup") until D5's SQL read behind it lands.
+    "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing":
+        "D5: the SQL read behind JobStore.lookup (R91)",
 }
 
 CASES = jobstore_cases()
@@ -49,7 +53,9 @@ CASES = jobstore_cases()
 
 #: D4 review H2: the exception each pending case must die of (the refused key for the F2
 #: case), so a regression before that step fails, never xfails.
-RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey}
+RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey,
+          "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing":
+              errors.UnsupportedParameter}
 
 
 def _param(case):

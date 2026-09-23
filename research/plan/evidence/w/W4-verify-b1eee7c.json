@@ -1,0 +1,131 @@
+{
+  "verdict": "pass",
+  "mutants": [
+    {
+      "name": "O5 (hand) paired-levels elif, candidate half dropped",
+      "edit": "decide.py:439 'elif missing or set(base.levels) != set(LEVELS):' -> 'elif set(base.levels) != set(LEVELS):'",
+      "result": "killed: 1 failed, 14 passed. test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it failed at test_w4.py:422 'assert paired[\"state\"] == \"unknown\" and \"not all six levels\" in paired[\"detail\"]' with AssertionError: {'detail': '60 clips', 'state': 'pass'}. The candidate's missing c=1 was paired anyway. That is the invariant's reason, not a crash.",
+      "killed_by": "test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it (level_missing variant, usage_drift assertion)"
+    },
+    {
+      "name": "O6 (hand) setting always flagged not taken",
+      "edit": "decide.py:492 'taken = \"\" if rep[\"criteria\"][\"w3_rule\"][\"state\"] == PASS else \" (not taken)\"' -> 'taken = \" (not taken)\"'",
+      "result": "killed: test_w4.py:293 re.search(r'^w3_rule c\\*=16 threshold=\\S+ setting=16$', ...) returned None while the report still said 'verdict: adopt ENGINE_MAX_NUM_SEQS=16'. The adopted report line gained the suffix. That is the invariant's reason.",
+      "killed_by": "test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it (adopted report-line assertion)"
+    },
+    {
+      "name": "O12 (hand) host sampler holds lock fd 9",
+      "edit": "candidate.sh:206 'host_sampler > \"$OUT/host-mem-c$c.tsv\" 9>&- &' -> 'host_sampler > \"$OUT/host-mem-c$c.tsv\" &'",
+      "result": "killed: 1 failed, 14 passed (32 s). check_candidate_restores at test_w4.py:827 failed with AssertionError: the host sampler inherited the lock's fd 9: ['0 1 2 3 4 9', '0 1 2 3 4 9', '0 1 2 3 4 9']. That is the invariant's reason.",
+      "killed_by": "test_ops_recover__the_candidate_run_restores_the_engine_it_found"
+    },
+    {
+      "name": "O8 (hand) READY_S accepts '00'",
+      "edit": "candidate.sh:61 '[[ $READY_S =~ ^[1-9][0-9]*$ ]]' -> '[[ $READY_S =~ ^([0-9][0-9]+|[1-9])$ ]]'",
+      "result": "killed: 1 failed, 14 passed. check_candidate_refuses at test_w4.py:909 failed with AssertionError: ('ready-s-zeros', 1, ''), assert (1 == 2). READY_S=00 was not refused: the run went on to 'restored=yes ready_s=0' and exited 1. That is the invariant's reason: it must be refused with exit 2 and 'refused:'.",
+      "killed_by": "test_ops_recover__the_candidate_run_refuses_in_flight_work_and_unlisted_flags (ready-s-zeros)"
+    },
+    {
+      "name": "(5, informational, hand) reconcile tally == attempts",
+      "edit": "decide.py:165 'tally == row.get(\"requests\")' -> 'tally == row.get(\"attempts\")'",
+      "result": "killed: 1 failed, 14 passed. test_w4.py:405 blocks('attempts_over_requests', ...) failed at :301 with AssertionError: ('attempts_over_requests', {'detail': '--retries 0, every attempt accounted', 'state': 'pass'}), assert 'pass' == 'fail'. The same variant, with rejected=1, passes overload_masking once reconciliation is mutated. So the kill comes from the reconciliation clause and not from the rejected count. That is the invariant's reason.",
+      "killed_by": "test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it (attempts_over_requests variant)"
+    },
+    {
+      "name": "paired_levels_candidate_unchecked (registered)",
+      "edit": "as O5",
+      "result": "PASSED (killed) in the INFRX_MUTANTS=all run",
+      "killed_by": "shared runner"
+    },
+    {
+      "name": "setting_always_printed_not_taken (registered)",
+      "edit": "as O6",
+      "result": "PASSED (killed) in the INFRX_MUTANTS=all run",
+      "killed_by": "shared runner"
+    },
+    {
+      "name": "sampler_holds_the_lock (registered)",
+      "edit": "as O12",
+      "result": "PASSED (killed) in the INFRX_MUTANTS=all run, through assertion_kill on the RESTORES case",
+      "killed_by": "box-script runner"
+    },
+    {
+      "name": "ready_s_zero_accepted / ready_s_unvalidated / baseline_levels_unchecked (pre-existing, related)",
+      "edit": "unchanged from round 3",
+      "result": "all PASSED (killed) in the full run",
+      "killed_by": "shared or box runner"
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "git -C <codex-w4> diff --stat ba95e42..b1eee7c",
+      "exit": 0,
+      "tail": "apps/infrx-api/tests/w/test_w4.py | 27 +++-, apps/infrx-api/tests/w/w4_mutants.py | 9 +, research/plan/evidence/w/W4-ecacd50.md | 15 +; 3 files changed. No product file: decide.py and candidate.sh are unchanged."
+    },
+    {
+      "cmd": "git archive b1eee7c | tar -x -C /tmp/claude-1000/verify-w4-r4-1106587 && make api-env",
+      "exit": 0,
+      "tail": "uv sync --frozen ... + zstandard==0.25.0"
+    },
+    {
+      "cmd": "uv run --frozen pytest -q tests/w/test_w4.py",
+      "exit": 0,
+      "tail": "15 passed in 121.95s (0:02:01)"
+    },
+    {
+      "cmd": "uv run --frozen python -m tests.w.w4_mutants --list",
+      "exit": 0,
+      "tail": "107 mutants over 15 named cases (104 at ba95e42; +3 new)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w4_mutants.py -rA",
+      "exit": 0,
+      "tail": "109 passed in 1244.38s (0:20:44); 0 FAILED, 0 SKIPPED"
+    },
+    {
+      "cmd": "hand O5 on a second scratch copy: pytest -q tests/w/test_w4.py",
+      "exit": 1,
+      "tail": "FAILED ...a_passing_candidate_is_adopted_and_each_disqualifier_blocks_it; 1 failed, 14 passed in 113.02s; restored (cmp ok)"
+    },
+    {
+      "cmd": "hand O6: pytest -q tests/w/test_w4.py",
+      "exit": 1,
+      "tail": "test_w4.py:293 AssertionError (no 'setting=16$' line); restored (cmp ok)"
+    },
+    {
+      "cmd": "hand (5) tally==attempts: pytest -q tests/w/test_w4.py",
+      "exit": 1,
+      "tail": "1 failed, 14 passed in 121.31s; restored (cmp ok)"
+    },
+    {
+      "cmd": "hand O12: pytest -q tests/w/test_w4.py",
+      "exit": 1,
+      "tail": "1 failed, 14 passed in 32.09s; restored (cmp ok)"
+    },
+    {
+      "cmd": "hand O8: pytest -q tests/w/test_w4.py",
+      "exit": 1,
+      "tail": "1 failed, 14 passed in 114.42s; restored (cmp ok)"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R4-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "claim_broken": "The brief speaks of 'four new registered mutants'. The commit registers three (paired_levels_candidate_unchecked, setting_always_printed_not_taken, sampler_holds_the_lock), so --list goes from 104 to 107. The fourth round-4 item (READY_S=00) is a new refusal variant, not a new mutant. The lane's own evidence says three, which is consistent.",
+      "evidence": "git diff ba95e42..b1eee7c -- w4_mutants.py adds exactly three '_m(' entries. The ba95e42 evidence records '104 mutants over 15 named cases'. At b1eee7c the list prints '107 mutants over 15 named cases'.",
+      "minimal_fix": "None needed in the lane. Record the count as three in the coordinator's round-4 note."
+    },
+    {
+      "id": "R4-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "claim_broken": "R83 'no crash': suppose a mutant stops the sampler from running at all. The stub level waits at most 5 s (seq 100 x 0.05 s) and then goes on. check_candidate_restores then calls (state / 'stats-fds').read_text() on a file that was never created, and the case dies with FileNotFoundError rather than an assertion. It is still killed, but by a crash rather than for the invariant's reason. No registered mutant hits this path today.",
+      "evidence": "test_w4.py:825 `sampled = (state / \"stats-fds\").read_text().splitlines()` has no existence guard in front of the 'sampled and ...' assertion.",
+      "minimal_fix": "`sampled = (state / \"stats-fds\").read_text().splitlines() if (state / \"stats-fds\").exists() else []` so that the existing assert reports it."
+    }
+  ],
+  "fabrication_check": "Every result above comes from commands I ran in this session on scratch copies extracted by git archive at b1eee7c: /tmp/claude-1000/verify-w4-r4-1106587 for the lists and a separate -hand copy for the hand mutants, so the concurrent full run was never disturbed. The counts I reproduced (15 passed; --list 107; 109 passed) match the lane's evidence table (15 passed; 109 passed; 107 mutants). The failure texts are copied from pytest --tb=short output. Each hand mutant's diff was shown before its run, and cmp confirmed the file was restored afterwards. I did not contact the pilot box, run candidate.sh or concurrency.sh outside the test stubs, use Docker, use the network, or read any secrets. I did not re-check the lane's '8/8 killed' pre-check claim directly. The full-list run covers those mutants.",
+  "cleanup": "I removed /tmp/claude-1000/verify-w4-r4-1106587, /tmp/claude-1000/verify-w4-r4-1106587-hand and the /tmp/claude-1000/w4r4* temp files. /tmp/claude-1000/verify-w4-r4-3843324 and /tmp/claude-1000/verify-w4-r4-hand belong to other runs and were left alone. The codex-w4 worktree was only read and `git status --short` is clean."
+}

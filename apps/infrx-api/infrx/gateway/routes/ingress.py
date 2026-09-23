@@ -38,10 +38,12 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match
 
 from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
+from ...observe.route import is_direct_loopback
 from . import intake
 from .validate import MAX_OPENERS, MAX_SEPARATORS, Validator, idempotency
 
@@ -187,6 +189,27 @@ def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
     app.add_exception_handler(Exception, unhandled)
 
 
+def assert_route_table(app) -> None:
+    """G1R review C4: exactly one `/v1/chat/completions` handler, and it is this module's.
+
+    `validate_runtime` checks which *modules* `ROUTERS` names; this checks what the route
+    table serves, which is what a client reaches. The composition root calls it after its
+    router loop, so neither a later router nor a second registration can put another
+    handler - the legacy one, say, which admits nothing and holds nothing - on the path.
+    """
+    served = [route for route in app.routes if getattr(route, "path", None) == CHAT_PATH]
+    # And the route Starlette would actually pick (review C6): a pattern route registered
+    # earlier (`/v1/{rest:path}`, a Mount) serves the path without being "at" it.
+    scope = {"type": "http", "path": CHAT_PATH, "root_path": "", "method": "POST"}
+    first = next((route for route in app.routes if route.matches(scope)[0] is Match.FULL),
+                 None)
+    if len(served) != 1 or getattr(getattr(first, "endpoint", None), "__module__", None) \
+            != __name__:
+        mode = getattr(getattr(app.state, "runtime", None), "mode", "")
+        raise RuntimeMisconfigured(mode, detail=f"{CHAT_PATH} must have exactly one handler, "
+                                                f"the metered ingress")
+
+
 def register(app, rt, deps: IngressDeps | None = None):
     """Mount the ingress. Returns the `Ingress` so a test can drive it directly.
 
@@ -207,8 +230,12 @@ def register(app, rt, deps: IngressDeps | None = None):
     @app.get(READY_PATH)
     @guarded
     async def readyz(request: Request, request_id: str):
-        """Protected readiness: explains component state to an authenticated tenant."""
-        await ingress.auth.context(request)
+        """Readiness for the host itself: component state for a direct loopback peer (I2B's
+        `deploy/lib.sh wait_ready` polls it unauthenticated), the unknown-path answer for
+        anyone else. A request relayed by the edge carries a proxy header, so it is refused
+        here even if the edge rule that 404s `/readyz` were lost (observe/route.py's rule)."""
+        if not is_direct_loopback(request):
+            raise errors.NotFound("readiness is answered to a direct loopback peer only")
         state = component_state(deps.checks)
         headers = {wire.HEADER_INFERENCE_ID: request_id}
         if any(value != OK for value in state.values()):
@@ -229,5 +256,9 @@ def register(app, rt, deps: IngressDeps | None = None):
         # left to each acceptor, so no success path can be the one that forgets it.
         accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)
         return accepted
+
+    # The guard's wrapper is defined in `intake`; the route table names the ingress as the
+    # handler of the metered path (`assert_route_table`, and E3B dr17's module check).
+    chat.__module__ = __name__
 
     return ingress
