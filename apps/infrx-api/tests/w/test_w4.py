@@ -832,7 +832,7 @@ def check_candidate_refuses(repo: pathlib.Path, tmp: pathlib.Path) -> None:
         "no-execstart": ((), {"UNIT_EXEC_EMPTY": "1"}, None),
         "unit-tree": ((), {"UNIT_SCRIPT": str(checkout)}, None),
         "no-checkout": ((), {}, unlink("nvme", "w3-checkout", "models", "marlin2b", "measure",
-                                       "parity.py")),
+                                       "concurrency.sh")),
         "unverified": ((), {"CORPUS_BAD": "1"}, None),
         "parity-missing": ((), {"PARITY_MISSING": "1"}, None),
         "in-flight": ((), {"INFLIGHT": "2.0"}, None),
@@ -875,7 +875,9 @@ def check_candidate_records(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     startup = (out / "startup-c1.log").read_text()
     assert "Maximum concurrency for 32,768 tokens per request: 73.24x" in startup
     assert "Encoder cache will be initialized" in startup and "vllm:cache_config_info" in startup
-    served = json.loads(re.search(r"^args=(.*)$", startup, re.M).group(1))
+    recorded = re.search(r"^args=(.*)$", startup, re.M)
+    assert recorded, f"no args= line in startup-c1.log: {startup}"
+    served = json.loads(recorded.group(1))
     assert served[0] == "/model" and served[-2:] == ["--max-num-batched-tokens", "32768"], served
     assert (out / "host-mem-c1.tsv").exists()
     assert [json.loads(line)["bytecode"] for line in (out / "parity.jsonl").read_text()

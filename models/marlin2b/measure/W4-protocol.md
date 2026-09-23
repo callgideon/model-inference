@@ -199,3 +199,25 @@ before anything else, and the run's numbers are still read by these rules.
   and `decide.py` exist and before any W4 measurement. The W3 sweep's numbers
   (`sweep-20260923T050411Z`) informed the choice of candidates and the overhead band; no
   W4 cell has run.
+- 2026-09-23, amendment 1 (review `W4-review-db12a5a.json`, before any W4 cell; no criterion
+  value changed). **Correction to the entry above (HON-4):** `decide.py`'s processor
+  arithmetic and `--overheads` helper were drafted and run on the W3 sweep before this file
+  was committed (06:05:35Z; the `decide.py` commit `58e2659` followed at 06:11:16Z), which is
+  where §2's and §5's quoted figures come from; "before `decide.py` exists" is wrong. The git
+  order proves only that no W4 script was committed first and that no W4 cell existed.
+  **Wording (D8, D9, HON-5, HON-6), read the body with these:** (a) §2/§6 "over every
+  geometry" means every geometry with both sides ≥ 32 px (the stdlib port has no branch for
+  a smaller side) and an aspect the processor accepts; (b) the 82 s interim ceiling holds
+  only when the source has at least F − 2 frames at the budget's rate (about 2 fps or more;
+  a source with far fewer frames gets larger frames and can exceed the budget below 82 s -
+  a free `engine_error`, not a wrong answer); (c) §5's overhead row and §6: the per-group
+  overhead depends on the frame count **and the prompt text** (at 4 frames the W3 sweep's
+  residuals are 39-48 tokens across prompts), and the band 9.181-9.808 is over 140 accepted
+  rows, 20 distinct clips of ≥ 24 groups seen at every level, not "20 clips at c = 1".
+  **Decision rule, made explicit in `decide.py` (D1, D2, D5, D6, D7; §4/§5/§7 already said
+  so):** a level not labelled `restarted`, or any of the six levels missing, makes W3's rule,
+  the tail and the paired criteria `unknown`; raw rows that do not reconcile with the bench
+  row's attempts/accepted/failed make overload masking `fail` and the error rate `unknown`,
+  and unrecorded retries `unknown`; `floor(X) < 1` adopts nothing; the baseline must be the
+  predeclared one (E1 against E0, E3 against E1, from each run's `candidate=` line) and never
+  the candidate's own run.
