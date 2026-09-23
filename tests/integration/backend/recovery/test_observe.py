@@ -333,7 +333,10 @@ def test_i3b_ob10_every_rule_and_panel_names_a_declared_metric():
             _check_series(where, rule["divide_by"]["metric"], rule["divide_by"].get("match"))
             assert rule.get("agg"), f"{where}: a ratio needs an aggregate"
         assert rule["op"] in alerts.OPS and rule["severity"] in ("page", "ticket")
-        assert isinstance(rule["threshold"], (int, float)) and rule["threshold_status"].strip()
+        assert isinstance(rule["threshold"], (int, float))
+        # M4: a threshold is exact, or it is marked unmeasured - nothing in between
+        status = rule["threshold_status"]
+        assert status.startswith("exact") or "⚠️ TO BE VERIFIED (P-18)" in status, where
         assert rule.get("agg") in (None, *alerts.AGGREGATES)
     for row in DASHBOARD["rows"]:
         for panel in row["panels"]:

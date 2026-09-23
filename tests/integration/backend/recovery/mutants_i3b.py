@@ -148,6 +148,10 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bm23", "every rule names a declared metric", RULES,
            '"metric": "infrx_unsettleable_jobs"', '"metric": "infrx_unsettleable_job"',
            OBSERVE, "ob10"),
+    Mutant("i3bm38", "M4: an unmeasured threshold carries the ⚠️ marker", RULES,
+           '"threshold_status": "⚠️ TO BE VERIFIED (P-18): engineering guess; one transaction',
+           '"threshold_status": "provisional: engineering guess; one transaction',
+           OBSERVE, "ob10"),
     Mutant("i3bm24", "every metric family has a dashboard panel", DASHBOARD,
            '        {"title": "GPU utilization", "metric": "infrx_gpu_utilization_ratio", '
            '"by": ["gpu"], "unit": "ratio"},\n', "", OBSERVE, "ob10"),

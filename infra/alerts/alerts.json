@@ -113,7 +113,7 @@
       "divide_by": {"metric": "infrx_jobs_terminal_total", "agg": "sum"},
       "op": ">",
       "threshold": 0.01,
-      "threshold_status": "provisional (P-18): E1B protocol §4 error-rate criterion <1% platform-caused failures",
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): E1B protocol §4 error-rate criterion <1% platform-caused failures; one failure in a quiet interval already exceeds it",
       "runbook": "infra/runbooks/restart.md#engine"
     },
     {
