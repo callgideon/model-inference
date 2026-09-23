@@ -51,6 +51,10 @@ PENDING: dict[str, str] = {
     # Its last step settles generation 2; the stale generation-1 refusal before it is D3's
     # and passes (tests/d/test_leases.py proves it on its own).
     "dur_fence__a_stale_generation_is_rejected": _D5,
+    # F cancel-cause: 0016 records only client_cancelled, so the adapter refuses the other
+    # two causes (UnsupportedParameter) until D5's 0018 infrx.cancel records them.
+    "dur_settle__cancel_records_its_cause_and_settles_by_r21":
+        "D5 item 3: 0018's infrx.cancel records client_disconnected/sync_deadline",
     **{name: _D5 for name in (
         "dur_settle__one_settlement_with_exact_decimals",
         "dur_settle__the_store_rounds_half_up_once",
