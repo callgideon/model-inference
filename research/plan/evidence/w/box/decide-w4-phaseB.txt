@@ -89,3 +89,16 @@ criterion output_drift=pass (9 clips)
 e3_trigger=yes c=[16, 32]
 verdict: no setting adopted - failed: ['w3_rule', 'memory_growth']; unknown: ['severe_tail']
 exit=0
+
+### python3 models/marlin2b/measure/decide.py --ceiling 16384; python3 models/marlin2b/measure/decide.py --ceiling 32768   @ 2026-09-23T21:56:47Z (head 762389e)
+duration_s=80 frames=160 worst_video_tokens=15760
+duration_s=81 frames=162 worst_video_tokens=16038
+duration_s=82 frames=164 worst_video_tokens=16154
+duration_s=83 frames=166 worst_video_tokens=16434
+duration_s=84 frames=168 worst_video_tokens=16548
+ceiling_s=82 budget_tokens=16384
+duration_s=118 frames=236 worst_video_tokens=23128
+duration_s=119 frames=238 worst_video_tokens=23443
+duration_s=120 frames=240 worst_video_tokens=23520
+ceiling_s=120 budget_tokens=32768
+exit=0
