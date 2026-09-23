@@ -98,14 +98,14 @@ def test_backend_deploy__ssm_carries_a_step_byte_for_byte(tmp_path):
 def test_ops_recover__the_revert_restores_the_tree_before_the_runtime():
     """The monolith and the engine unit run from the working tree, so the revert checks
     out the previous HEAD before rollback.sh restarts the restored gateway, and restarts
-    the engine onto its restored unit after; the pause saves that HEAD and the old
-    Caddyfile before it replaces the edge."""
+    the engine onto its restored unit after; the pause saves that HEAD before it replaces
+    the edge."""
     revert = (ROLLOUT / "steps" / "90-revert.sh").read_text()
     order = [revert.find(s) for s in ("checkout --quiet --detach \"$previous\"",
                                       '"$d/rollback.sh" "$BACKUP"',
                                       "systemctl restart marlin2b-vllm")]
     assert -1 not in order and order == sorted(order), order
     pause = (ROLLOUT / "steps" / "30-pause.sh").read_text()
-    order = [pause.find(s) for s in ("pre-$RELEASE.Caddyfile", "pre-$RELEASE.head",
-                                     'edge_install "$d"', '"$d/drain.sh" pause')]
+    order = [pause.find(s) for s in ("pre-$RELEASE.head", 'edge_install "$d"',
+                                     '"$d/drain.sh" pause')]
     assert -1 not in order and order == sorted(order), order

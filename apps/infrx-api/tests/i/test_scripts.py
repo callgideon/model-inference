@@ -99,11 +99,18 @@ class Host:
         (self.bin / "behaviour.json").write_text(json.dumps(spec))
 
     def run(self, script, *args, **env) -> subprocess.CompletedProcess:
+        return self._bash([str(DEPLOY / script), *args], env)
+
+    def shell(self, code, **env) -> subprocess.CompletedProcess:
+        """Lines of a runbook step, run against the same sandbox and stubs."""
+        return self._bash(["-c", code], env)
+
+    def _bash(self, argv, env) -> subprocess.CompletedProcess:
         base = {"INFRX_ROOT": str(self.root), "ENV_OWNER": support.owner_name(),
                 "PYTHON": sys.executable, "SERVE_SCRIPT": str(self.serve), "POLL_S": "0.05",
                 "READY_S": "1", "ENGINE_READY_S": "1", "PATH": os.environ["PATH"]}
-        return subprocess.run(["bash", str(DEPLOY / script), *args], capture_output=True,
-                              text=True, env={**base, **env}, cwd=str(self.root))
+        return subprocess.run(["bash", *argv], capture_output=True, text=True,
+                              env={**base, **env}, cwd=str(self.root))
 
     @property
     def serve(self) -> pathlib.Path:
@@ -342,3 +349,37 @@ def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runti
                     ROLLBACK_TO_UNMETERED="no-pilot-request-was-accepted")
     assert done.returncode == 0, done.stderr
     assert host.file(ENV).read_text() == MONOLITH_ENV
+
+
+def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp_path,
+                                                                              monkeypatch):
+    """Runbook R2, in runbook order, with the steps' own lines: 30-pause makes maintenance
+    the active site, so step 8's backup holds it and rollback.sh restores it - the edge
+    would stay 503 for good. 90-revert therefore ends with `drain.sh resume`, after the
+    engine restart: the normal site comes back once the restored runtime is ready."""
+    steps = support.REPO / "infra" / "rollout" / "steps"
+    pause = (steps / "30-pause.sh").read_text()
+    pause = pause[pause.index('( . "$d/lib.sh"'):pause.index('echo "paused')]
+    revert = (steps / "90-revert.sh").read_text()
+    revert = revert[revert.index('"$d/rollback.sh"'):]
+    host = Host(tmp_path, monkeypatch)
+    host.monolith()
+    active = host.file("etc/caddy/Caddyfile")
+    done = host.shell(f'set -euo pipefail; d="{DEPLOY}"\n{pause}')             # step 5
+    assert done.returncode == 0, done.stderr
+    assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
+    host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8001/readyz"])
+    assert host.run("install.sh", INFRX_MODE="pilot",                           # step 8: exit 4
+                    PREFLIGHT=host.pilot_preflight()).returncode == 4
+    [backup] = backups(host)
+    host.behave(caddy_image="running")
+    host.clear()
+    done = host.shell(f'set -euo pipefail; d="{DEPLOY}"; previous=before\n{revert}',
+                      BACKUP=str(backup), ROLLBACK_TO_UNMETERED="no-pilot-request-was-accepted")
+    assert done.returncode == 0, done.stderr
+    assert host.file(ENV).read_text() == MONOLITH_ENV
+    assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
+    events = host.events
+    engine = events.index("systemctl restart marlin2b-vllm")
+    assert events[-1].startswith("docker exec caddy caddy reload"), events
+    assert events[-2].endswith("http://127.0.0.1:8001/health") and len(events) - 2 > engine
