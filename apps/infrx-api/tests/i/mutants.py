@@ -283,6 +283,7 @@ U = "deploy/"
 CADDY, MAINT = "deploy/Caddyfile", "deploy/Caddyfile.maintenance"
 PACK = "test_backend_deploy__"
 FACTORY = "the_gateway_runs_the_factory_from_what_the_image_copies"
+EDGE = "the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered"
 MUTANTS += (
     # the runtime image and its probe
     # the cutover (CUTOVER item 2): the factory, and nothing of the retired shim
@@ -476,6 +477,21 @@ MUTANTS += (
        CADDY, "reverse_proxy 127.0.0.1:8001 {\n\t\t\tflush_interval -1",
        "reverse_proxy 127.0.0.1:8000 {\n\t\t\tflush_interval -1",
        PACK + "the_edge_hides_operator_paths_and_sanitizes_health"),
+    # the cutover's routes at the edge (CUTOVER item 3; G3 request (e), G4U)
+    _m("edge_strips_a_contract_response_header", "Location etc. reach the client untouched",
+       CADDY, "\t\t\tflush_interval -1\n", "\t\t\tflush_interval -1\n\t\t\theader_down -Location\n",
+       PACK + EDGE),
+    _m("edge_strips_last_event_id", "Last-Event-ID reaches the gateway untouched",
+       CADDY, "\t\t\tflush_interval -1\n",
+       "\t\t\tflush_interval -1\n\t\t\theader_up -Last-Event-ID\n", PACK + EDGE),
+    _m("edge_buffers_events", "a stream (jobs events, chat SSE) is never buffered",
+       CADDY, "\t\t\tflush_interval -1\n", "\t\t\tflush_interval 1s\n", PACK + EDGE),
+    _m("edge_hides_jobs", "the edge proxies the jobs routes",
+       CADDY, "@private path /metrics /metrics/* /readyz",
+       "@private path /v1/jobs/* /metrics /metrics/* /readyz", PACK + EDGE),
+    _m("edge_hides_uploads", "the edge proxies the upload routes",
+       CADDY, "@private path /metrics /metrics/* /readyz",
+       "@private path /v1/uploads /v1/uploads/* /metrics /metrics/* /readyz", PACK + EDGE),
     _m("health_body_passed_through", "public health is up/down only",
        CADDY, 'respond `{"ok":true}` 200', "copy_response 200",
        PACK + "the_edge_hides_operator_paths_and_sanitizes_health"),

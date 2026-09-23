@@ -465,6 +465,63 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     assert envelopes == {404: _envelope("not_found"), 413: _envelope("request_too_large")}
 
 
+#: G3 request (e) / G2 E3B2: what must cross the edge untouched, each way.
+PASSTHROUGH = ("Location", "Retry-After", "Preference-Applied", "Idempotency-Replayed",
+               "Inference-Id", "Last-Event-ID", "Prefer", "Idempotency-Key")
+
+
+def _edge_block(text: str, path: str) -> str:
+    """The handler a public request for `path` reaches at the edge: the private 404, the
+    sanitised /health, or the catch-all proxy's own block (Caddy's `handle` blocks are
+    exclusive; the matcherless one is last)."""
+    import fnmatch
+
+    private = re.search(r"@private path (.+)", text).group(1).split()
+    if any(fnmatch.fnmatchcase(path, pattern) for pattern in private):
+        return "private"
+    if path == "/health":
+        return "health"
+    start = text.index("\thandle {\n")
+    depth, end = 0, start
+    for end, char in enumerate(text[start:], start):
+        depth += {"{": 1, "}": -1}.get(char, 0)
+        if depth == 0 and char == "}":
+            break
+    return text[start:end + 1]
+
+
+def test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered():
+    """G3 request (e) and G4U: every route the cutover mounts - chat, the five jobs routes,
+    the three upload routes - reaches the gateway through the catch-all proxy, which streams
+    (`flush_interval -1`, no buffering or encoding: `/v1/jobs/{h}/events` is SSE), outlasts a
+    quiet stream's keepalive, admits an upload's bytes, and rewrites no header: the contract
+    headers pass through both ways."""
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.gateway.routes import ingress, uploads
+
+    text = (DEPLOY / "Caddyfile").read_text()
+    routes = [("POST", ingress.CHAT_PATH), *ingress.JOBS_ROUTES,
+              ("POST", uploads.UPLOADS_PATH), ("PUT", uploads.DESTINATION_PATH),
+              ("POST", uploads.COMPLETE_PATH)]
+    reached = {path: _edge_block(text, path.replace("{handle}", ingress.SAMPLE_JOB_HANDLE))
+               for _, path in routes}
+    assert {path for path, where in reached.items() if where in ("private", "health")} == set()
+    block = reached[ingress.CHAT_PATH]
+    assert set(reached.values()) == {block}
+    assert re.search(r"^\t\treverse_proxy 127\.0\.0\.1:8001 \{$", block, re.M), block
+    assert re.search(r"^\s*flush_interval -1$", block, re.M), "a stream would be buffered"
+    for directive in ("header_up", "header_down", "encode", "request_buffers",
+                      "response_buffers", "buffer_requests", "buffer_responses"):
+        assert not re.search(rf"^\s*{directive}\b", block, re.M), directive
+    for name in PASSTHROUGH:                      # comments aside, nowhere in the site
+        code = "\n".join(line.split("#")[0] for line in text.splitlines())
+        assert name.lower() not in code.lower(), name
+    read = int(re.search(r"read_timeout (\d+)s", block).group(1))
+    assert read > DEFAULTS.sse_keepalive_s
+    size = int(re.search(r"max_size (\d+)MiB", text).group(1)) * 2**20
+    assert size >= DEFAULTS.max_media_bytes
+
+
 def test_backend_deploy__maintenance_answers_every_request_with_the_retry_envelope():
     """drain.sh's edge: nothing is proxied, public health is down, and every request is
     the contract's `dependency_unavailable` 503 whose `retry_after_s` equals the
