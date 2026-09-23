@@ -34,6 +34,7 @@ from ...contracts.records import UploadState
 from . import intake
 from .catalog import CALLABLE
 from .ingress import install_error_handlers
+from .validate import UPLOAD_SCHEME
 
 UPLOADS_PATH = "/v1/uploads"
 DESTINATION_PATH = UPLOADS_PATH + "/{handle}"
@@ -86,8 +87,15 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
         intake.check_content_type(request)
         body = await control_body(request)
         created = await store.create_upload(context.org_id, body)
-        return JSONResponse(wire.UploadCreated.model_validate(created).model_dump(mode="json"),
-                            status_code=201, headers={wire.HEADER_INFERENCE_ID: request_id})
+        ticket = wire.UploadCreated.model_validate(created).model_dump(mode="json")
+        # R61(1)/R47 at the port boundary: the values too, not only the keys. A store that
+        # put an object key or an org into the destination is ours to refuse, not render.
+        handle = ticket["upload_handle"]
+        if not ids.UPLOAD_HANDLE_RE.fullmatch(handle) \
+                or ticket["destination_ref"] != UPLOAD_SCHEME + handle:
+            raise errors.InternalError("the store issued a ticket outside the contract")
+        return JSONResponse(ticket, status_code=201,
+                            headers={wire.HEADER_INFERENCE_ID: request_id})
 
     @app.put(DESTINATION_PATH)
     @guarded

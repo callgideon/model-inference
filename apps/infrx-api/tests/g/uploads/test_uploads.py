@@ -327,6 +327,29 @@ def test_media_sec__a_slow_control_body_is_cut_at_the_deadline():
     assert list(store.uploads) == [handle] and store.uploads[handle].state == "created"
 
 
+
+def test_media_sec__no_store_value_outside_the_frozen_ticket_leaves():
+    """R61(1)/R47: the values are checked too. A store whose destination is an object key
+    carrying the org, or whose handle is not `upl_` + 22..64, is an `internal_error`, and
+    neither value is rendered."""
+    app, _, store, _ = mounted()
+    issued = store.create_upload
+    rewrites = (
+        lambda ticket, org: {**ticket, "destination_ref":
+                             f"s3://bucket/uploads/{org}/{ticket['upload_handle']}"},
+        lambda ticket, org: {**ticket, "upload_handle": "upl_x",
+                             "destination_ref": "infrx-upload:upl_x"})
+
+    for rewrite in rewrites:
+        async def leaky(org_id, constraints, rewrite=rewrite):
+            return rewrite(await issued(org_id, constraints), org_id)
+
+        store.create_upload = leaky
+        response = run(app, create)
+        assert response.status_code == 500 and code_of(response) == "internal_error", \
+            response.text
+        assert ORG_A not in response.text and "upl_x" not in response.text
+
 # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
 def created_handle(client_answer) -> str:
     assert client_answer.status_code == 201, client_answer.text
