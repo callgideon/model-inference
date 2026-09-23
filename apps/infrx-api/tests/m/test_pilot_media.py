@@ -379,7 +379,7 @@ def admitted_on(harness):
     """The admission D2 commits: the prepared request becomes the job row the attach's
     foreign key names."""
     def admit(prepared):
-        run(harness.port.admit(prepared, b.idem(prepared)))
+        run(harness.port.admit(prepared, b.idem(prepared, key=prepared.request_id)))
     return admit
 
 
@@ -434,3 +434,38 @@ def test_mpilot_pg__an_attach_is_write_once_and_tenant_bound(tmp_path):
     with pytest.raises(errors.Conflict):
         run(durable.put(job.request_id, (forged,)))
     assert run(durable.get(job.request_id)) is None
+
+
+def test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql(tmp_path):
+    """Item 3 on PostgreSQL: the two exported cases MPILOT added, against `MediaUploads`
+    whose attach record is `PgAttachments` on the D harness's database. `admitted` commits
+    the staged request as the job row the attach's foreign key names (D2's `infrx.admit`);
+    the store's clock is the database's, so the window moves with it."""
+    from infrx.contracts.conformance import SUITES, Harness
+    from infrx.contracts.conformance import services
+    from infrx.contracts.records import NormalizedRequest
+    from psycopg.types.json import Jsonb
+
+    from .test_uploads import conformance_factory
+
+    def factory(limits=None, **_kw):
+        pg, durable = postgres()
+        base = conformance_factory(limits)
+        adapter, conn, store = base.port, pg.extra["conn"], pg.extra["store"]
+        adapter.attachments, adapter.now = durable, pg.clock.now
+
+        def admitted(job_id, org_id):
+            adapter.jobs[job_id] = org_id
+            stored = adapter.objects.objects[adapter.staged_payload(job_id).ref][1]
+            request = NormalizedRequest.model_validate_json(stored)
+            conn.execute("select infrx.admit(%s)", (Jsonb(store._admit_args(
+                "legacy_usd", request, b.idem(request, key=job_id))),))
+
+        return Harness(port=adapter, clock=pg.clock, ids=base.ids,
+                       extra={**base.extra, "admitted": admitted})
+
+    ours = (services.media_sec__an_upload_is_usable_only_within_its_window,
+            services.media_parity__an_attach_outlives_the_process_that_made_it)
+    assert set(ours) <= set(SUITES["mediastore"][0]())
+    for case in ours:
+        asyncio.run(case(factory))

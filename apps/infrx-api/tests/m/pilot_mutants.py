@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import shutil
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
@@ -114,7 +115,7 @@ PG_MUTANTS: tuple[Mutant, ...] = (
     _m("attach_not_persisted_pg",
        "the attach is written to D2's staged tables another process reads",
        S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
-       SECOND_PG),
+       SECOND_PG, "test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql"),
     _m("another_jobs_refs_returned",
        "a job reads back its own refs, never another job's",
        A, "where m.job_id = %s and", "where %s::text is not null and",
@@ -144,14 +145,34 @@ def case_names() -> set[str]:
 
 #: The shared runner's default copy (package, tests, pyproject) is all these cases need.
 RUNNER = Runner(name="mpilot", targets=(SUITE_FILE,))
+
+
+def _pg_layout(root: pathlib.Path) -> pathlib.Path:
+    """The default copy, one level down as `apps/infrx-api`, beside a copy of the migrations
+    `infrx.state.migrations` reads from `<repo>/apps/app/supabase/migrations` - the D harness
+    builds its template database from them."""
+    api = root / "apps" / "infrx-api"
+    api.mkdir(parents=True)
+    shared._copy(api, RUNNER)
+    migrations = pathlib.Path("apps", "app", "supabase", "migrations")
+    shutil.copytree(API_DIR.parents[1] / migrations, root / migrations)
+    return api
+
+
 #: The PostgreSQL cases: the copy inherits the D harness's task (`INFRX_D_TASK`), so it
 #: provisions that task's own container and port, never the default one.
-PG_RUNNER = Runner(name="mpilot-pg", targets=(SUITE_FILE,), env=("INFRX_D_TASK",))
+PG_RUNNER = Runner(name="mpilot-pg", targets=(SUITE_FILE,), env=("INFRX_D_TASK",),
+                   layout=_pg_layout)
 
 
 def run_mutant(mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names."""
-    return shared.run_mutant(mutant, PG_RUNNER if mutant in PG_MUTANTS else RUNNER)
+    """Apply one mutant to a throwaway copy and run the cases it names. The PostgreSQL list
+    is not a module's `MUTANTS`, so the shared runner would take no baseline for it: its
+    cases run unmutated first, once per process (R83 (b))."""
+    if mutant not in PG_MUTANTS:
+        return shared.run_mutant(mutant, RUNNER)
+    cases = tuple(sorted({case for m in PG_MUTANTS for case in m.cases}))
+    return shared.pristine(cases, PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
 
 
 if __name__ == "__main__":
