@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:00:07Z",
+  "updated": "2026-09-23T04:11:33Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -47,7 +47,7 @@
     },
     "D3": {
       "lane": "codex-d3 / codex/d3-fenced-leases",
-      "phase": "fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2's head after review of b4b1ec7",
+      "phase": "confirmation review (Opus) of fix round at 41e5cef; merge after D2",
       "since": "2026-09-22T22:40:37Z",
       "note": "stacked on D2's head; leases, reaper, cancellation"
     }
