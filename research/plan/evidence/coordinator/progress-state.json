@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:41:52Z",
+  "updated": "2026-09-23T19:29:02Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,9 +11,27 @@
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) \u2192 review \u2192 merge after I3B",
+      "phase": "review running on the committed head c67e4f5 (impl 4bcac3b) while the lane finishes its lists \u2192 ONE fix round (+ merge the integration head) \u2192 single verifier \u2192 MERGE",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
+    },
+    "E4B": {
+      "lane": "codex-e4b / codex/e4b-certify",
+      "phase": "dispatched (Opus) 2026-09-23T19:2xZ from 7c52627: software half (certify runner, envelope/soak/overload/recovery protocol, release decision, headless examples, capability docs); box-measured half needs the maintenance window",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "namespace e2, d2/55466, Q 55493"
+    },
+    "CUTOVER": {
+      "lane": "codex-cutover / codex/cutover-mount",
+      "phase": "dispatched (Opus) from a0711ac (7c52627 + D5 c67e4f5): mount ingress/uploads/jobs, adapters from settings, retire gateway.py, Caddy proxying, preflight",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "d3 ports, Q 55492; merges together with E3B phase 3"
+    },
+    "E3B-phase3": {
+      "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
+      "phase": "dispatched (Opus) from a0711ac: dr07c/dr07[postgres] now; journeys \u00d79, dataset resume, dr11 after merging the cutover mount; retire G2-R1; full gate on namespace e3b2",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "namespace e3b2 / 56732"
     }
   },
   "reviews": {

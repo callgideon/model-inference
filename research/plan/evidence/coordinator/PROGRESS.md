@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T18:41:52Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T19:29:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 27 done · 2 in progress · 1 remaining (of 30).**
+**Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@ Generated 2026-09-23T18:41:52Z from `tasks.json` (manifest v4) and `progress-sta
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **done** | implemented | needs allocated GPU/staging (P-04) |
-| B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **in-progress** | planned | namespace e2, d2/55466, Q 55493 |
 
 ## Gates
 
@@ -66,7 +66,10 @@ Generated 2026-09-23T18:41:52Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- D5: codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
+- D5: codex-d5 / codex/d5-terminal-transaction — review running on the committed head c67e4f5 (impl 4bcac3b) while the lane finishes its lists → ONE fix round (+ merge the integration head) → single verifier → MERGE since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
+- E4B: codex-e4b / codex/e4b-certify — dispatched (Opus) 2026-09-23T19:2xZ from 7c52627: software half (certify runner, envelope/soak/overload/recovery protocol, release decision, headless examples, capability docs); box-measured half needs the maintenance window since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- CUTOVER: codex-cutover / codex/cutover-mount — dispatched (Opus) from a0711ac (7c52627 + D5 c67e4f5): mount ingress/uploads/jobs, adapters from settings, retire gateway.py, Caddy proxying, preflight since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
+- E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — dispatched (Opus) from a0711ac: dr07c/dr07[postgres] now; journeys ×9, dataset resume, dr11 after merging the cutover mount; retire G2-R1; full gate on namespace e3b2 since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
