@@ -77,13 +77,17 @@ def test_split_contract__a_consumer_key_cannot_reach_a_private_dev_endpoint():
     """R70: not_found, the same answer as a name nobody published - never a 403 that
     confirms the artifact - even when the dev deployment is priced and the catalog
     hands its row to anyone."""
-    tc, calls = app_with(catalog=leaky(with_preview_card()))
-    private = chat(tc, model=support.DEV_MODEL)
-    unknown = chat(tc, model="nemostation/nothing@2026-09-01")
-    for response in (private, unknown):
+    tc, calls = app_with(catalog=replaced(leaky(with_preview_card()),
+                                          state=DeploymentState.retired))
+    answers = (chat(tc, model=support.DEV_MODEL),                    # private
+               chat(tc, model="nemostation/nothing@2026-09-01"),     # unknown
+               chat(tc, model=support.MODEL_REVISION))               # retired
+    for response in answers:
         refused(response, 404, "not_found")
+    # Identical envelopes modulo request_id: same code, type, fixed message and length.
     strip = lambda r: {k: v for k, v in support.error_of(r).items() if k != "request_id"}  # noqa
-    assert strip(private) == strip(unknown)
+    assert strip(answers[0]) == strip(answers[1]) == strip(answers[2])
+    assert len({r.headers["content-length"] for r in answers}) == 1
     assert calls == []
 
 
