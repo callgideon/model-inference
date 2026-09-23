@@ -115,6 +115,8 @@ wallet detectors show no drift. Any line in `problems` is a failed rehearsal: st
 ACLs are compared by the privileges they grant (R92): an object whose ACL equals its owner's
 default is written by pg_dump as nothing and restored as NULL, which is the same set
 (`infrx.job_results` is one), while an ACL emptied by a revoke is still a difference.
+The migrated schema has no sequence in `public` or `infrx` today (no serial or identity
+column); the check still compares sequences, so the first one a migration adds is covered.
 
 ### A7 Rehearse the apply on the restored copy
 

@@ -463,7 +463,7 @@ def test_i3b_bk01g_an_acl_is_compared_by_the_privileges_it_grants():
     """R92: a NULL ACL is its owner's default (`acldefault`). The same privileges written
     out - which is what pg_dump turns back into NULL on a restore - compare equal, for a
     schema, a table, a sequence and a function; an ACL emptied by a revoke from the owner
-    (`{}`, not NULL) is a real loss and is still named."""
+    (`{}`, not NULL) is a real loss and is still named, as is a sequence grant widened."""
     with scratch("infrx_i3b_acl") as (database,):
         with connect(database) as conn:
             conn.execute("create schema infrx")
@@ -479,7 +479,15 @@ def test_i3b_bk01g_an_acl_is_compared_by_the_privileges_it_grants():
             conn.execute("grant execute on function infrx.f() to public, postgres")
             assert conn.execute(ACLS).fetchone() == (False,) * 4, "the premise: explicit"
         assert pg.compare(implicit, fingerprint(database)) == []
+        # RST-4: a sequence's ACL is compared too (the migrated schema has no sequence, so
+        # this scratch one is the only witness): a widening is named, then put back.
         with connect(database) as conn:
+            conn.execute("grant usage on sequence infrx.s to anon")
+        problems = pg.compare(implicit, fingerprint(database))
+        assert [_family(problem) for problem in problems] == ["relations"] \
+            and "'infrx.s'" in problems[0], problems
+        with connect(database) as conn:
+            conn.execute("revoke all on sequence infrx.s from anon")
             conn.execute("revoke all on table infrx.t from postgres")
         problems = pg.compare(implicit, fingerprint(database))
         assert {_family(problem) for problem in problems} == {"relations"}, problems

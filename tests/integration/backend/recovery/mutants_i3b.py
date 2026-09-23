@@ -321,6 +321,9 @@ MUTANTS += (
                      "boundary's first gate)", PGRESTORE,
            "unnest(coalesce(nspacl, acldefault('n', ", "unnest(coalesce(null, acldefault('n', ",
            RESTORE, "bk01f and schemas", layer=2),
+    Mutant("i3bm96", "RST-4: the check compares sequences (relkind 'S'), not only tables and "
+                     "views", PGRESTORE, "c.relkind in ('r','p','v','m','S')",
+           "c.relkind in ('r','p','v','m')", RESTORE, "bk01g", layer=2),
     Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
                      "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
            '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',
