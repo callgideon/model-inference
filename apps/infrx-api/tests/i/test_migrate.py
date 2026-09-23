@@ -162,8 +162,29 @@ def test_deploy_failclosed__a_migration_that_ends_the_transaction_stops_the_plan
     assert "0002_seed.sql ended the transaction" in capsys.readouterr().err
 
 
+def test_deploy_failclosed__a_connection_failure_never_echoes_the_dsn(tmp_path, monkeypatch,
+                                                                    capsys):
+    """The DSN carries the password, and libpq quotes a DSN it cannot parse in its error:
+    through the real `connect`, a malformed value is a refusal (exit 2) naming the
+    variable and the failure's type, never the value. Both values fail in the parser, so
+    no connection is attempted."""
+    directory = migrations(tmp_path)
+    for dsn in (f"postgresql://infrx:{support.MARKER}@[::1:5432/infrx",
+                f"postgresql://infrx:{support.MARKER}%zz@db.invalid:5432/infrx"):
+        monkeypatch.setenv(migrate.DSN_ENV, dsn)
+        try:
+            code = migrate.main(["plan", "--dir", str(directory)])
+        except Exception as leaked:         # noqa: BLE001 - what a traceback would print
+            code = type(leaked).__name__
+            print(leaked, file=sys.stderr)
+        out = capsys.readouterr()
+        assert code == 2, code
+        assert support.MARKER not in out.out + out.err
+        assert f"{migrate.DSN_ENV}: the connection failed" in out.err
+
+
 def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path,
-                                                                         monkeypatch):
+                                                                         monkeypatch, capsys):
     """No history table, a version the repository lacks, a gap, a file outside the
     grammar, a statement that cannot run inside the plan's one transaction, no DSN, or no
     digest: each is exit 2 before any migration runs."""
@@ -189,8 +210,11 @@ def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path
     assert run(monkeypatch, Conn(), "apply", "--dir", str(directory)) == 2
     monkeypatch.undo()                      # the real `connect`, with no DSN set
     monkeypatch.delenv(migrate.DSN_ENV, raising=False)
+    capsys.readouterr()
     try:
         code = migrate.main(["plan", "--dir", str(directory)])
     except Exception as attempted:          # noqa: BLE001 - a connection was attempted
         code = type(attempted).__name__
     assert code == 2, code
+    # refused for the missing value, not for a default connection that happened to fail
+    assert f"{migrate.DSN_ENV} is not set" in capsys.readouterr().err

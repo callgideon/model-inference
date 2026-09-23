@@ -124,7 +124,11 @@ def connect():
     dsn = os.environ.get(DSN_ENV, "")
     if not dsn.strip():
         raise Refused(f"{DSN_ENV} is not set")
-    return psycopg.connect(dsn, autocommit=False)
+    try:
+        return psycopg.connect(dsn, autocommit=False)
+    except Exception as failure:  # noqa: BLE001 - libpq quotes a malformed DSN, password and all
+        raise Refused(f"{DSN_ENV}: the connection failed ({type(failure).__name__}); "
+                      f"the value is not echoed") from None
 
 
 def plan_command(directory: pathlib.Path) -> int:
