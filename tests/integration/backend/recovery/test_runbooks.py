@@ -6,7 +6,8 @@
 * rollback.md's maintenance statement is bk04's, character for character;
 * every `bash` step block parses (a step that cannot run over SSM is not a step);
 * every relative link and anchor between runbooks resolves;
-* a failed restore client never re-raises row data (RS-4).
+* a failed restore client never re-raises row data (RS-4), and a timed-out one never
+  re-raises its argv.
 """
 from __future__ import annotations
 
@@ -100,3 +101,23 @@ def test_i3b_rb06_a_failed_client_never_re_raises_row_data(monkeypatch, tmp_path
         raise AssertionError("a failed client did not raise")
     assert "users_pkey" in said
     assert "0a000000" not in said and "one@example.com" not in said, said
+
+
+def test_i3b_rb07_a_client_timeout_never_re_raises_its_argv(monkeypatch, tmp_path):
+    """RS-4 residual: `subprocess.TimeoutExpired`'s text is the whole argv - the `-d`
+    conninfo, LOCAL's password included. The tool re-raises the client's name only, and
+    does not chain the original (a traceback would print it)."""
+    pg = test_restore.pg
+
+    def hang(argv, **_):
+        raise subprocess.TimeoutExpired(argv, 1800)
+    monkeypatch.setattr(pg.subprocess, "run", hang)
+    try:
+        pg.run(tmp_path, "pg_restore", "-d", "host=x password=sekritXYZ dbname=y")
+    except Exception as failure:                        # noqa: BLE001 - the type is asserted
+        raised = failure
+    else:
+        raise AssertionError("a timed-out client did not raise")
+    assert isinstance(raised, RuntimeError), type(raised)
+    assert "timed out" in str(raised) and "sekritXYZ" not in str(raised), str(raised)
+    assert raised.__cause__ is None and raised.__suppress_context__, "the argv is chained"

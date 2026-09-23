@@ -80,8 +80,12 @@ def client(backup: Path) -> list[str]:
 
 
 def run(backup: Path, *argv: str) -> str:
-    result = subprocess.run([*client(backup), *argv], capture_output=True, text=True,
-                            timeout=1800)
+    try:
+        result = subprocess.run([*client(backup), *argv], capture_output=True, text=True,
+                                timeout=1800)
+    except subprocess.TimeoutExpired:
+        # Its text is the whole argv, conninfo included: names only, and not chained.
+        raise RuntimeError(f"{argv[0]} timed out after 1800 s") from None
     if result.returncode != 0:
         # DETAIL/CONTEXT quote key values or a whole row (auth.users e-mails): never re-raised.
         said = "\n".join(line for line in result.stderr.splitlines()
