@@ -748,6 +748,11 @@ MUTANTS: tuple[Mutant, ...] = (
            "    except ZeroDivisionError as late:\n",
            "tests/integration/test_run.py", "outlives_its_budget",
            cases=("test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback",)),
+    Mutant("e3bm26", "E3B2 review H1: a mutant whose cases are red unmutated is never a kill",
+           "tests/integration/mutants.py",
+           "        if red is not None:\n", "        if False:\n",
+           "tests/integration/test_run.py", "baseline_red",
+           cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
     Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
            "tests/integration/pgstate.py",
            "    lag = (read_back - returned).total_seconds()\n",
@@ -805,22 +810,18 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
             return {"id": mutant.id, "status": "stale", "invariant": mutant.invariant,
                     "why": f"the mutated text occurs {found} times, expected "
                            f"{mutant.occurrences}: the mutant no longer describes the code"}
+        # R83 pristine baseline (E3B phase 2, review H1): the named cases must PASS on this
+        # copy BEFORE the edit, or a "kill" is only the case's own red. Once per distinct
+        # (suite, selector, copy kind) in this process.
+        key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)
+        if key not in BASELINES:
+            BASELINES[key] = _baseline(mutant, *_pytest(root, mutant, api_root))
+        red = BASELINES[key]
+        if red is not None:
+            return {"id": mutant.id, "status": "baseline-red", "invariant": mutant.invariant,
+                    "must_survive": mutant.must_survive, "why": red}
         target.write_text(source.replace(mutant.before, mutant.after, mutant.occurrences))
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
-             "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
-            cwd=str(root), capture_output=True, text=True, timeout=240,
-            env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
-                 # `infrx` (the pinned contracts package) always comes from the real
-                 # checkout; only the owned trees above are the copy's.
-                 "PYTHONPATH": str(api_root),
-                 # The copy must claim the provisioning checkout's identity or B1's ownership
-                 # label correctly makes the live stack foreign, and every layer-2 mutant is
-                 # skipped instead of killed.
-                 "INFRX_E2_CHECKOUT": harness.working_dir(),
-                 "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
-        output = result.stdout + result.stderr
-        verdict = _verdict(mutant, result.returncode, output)
+        verdict = _verdict(mutant, *_pytest(root, mutant, api_root))
     litter = sorted(str(path) for path in _temp_litter() - litter_before)
     for path in litter:
         pathlib_path = Path(path)
@@ -833,6 +834,39 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     if mutant.dirties_database:
         verdict["reprovisioned"] = _reprovision()
     return verdict
+
+
+BASELINES: dict[tuple, str | None] = {}
+
+
+def _pytest(root: Path, mutant: Mutant, api_root: Path) -> tuple[int, str]:
+    """The mutant's named cases, run in the copy; (exit code, output)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
+         "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
+        cwd=str(root), capture_output=True, text=True, timeout=240,
+        env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
+             # `infrx` (the pinned contracts package) always comes from the real
+             # checkout; only the owned trees above are the copy's.
+             "PYTHONPATH": str(api_root),
+             # The copy must claim the provisioning checkout's identity or B1's ownership
+             # label correctly makes the live stack foreign, and every layer-2 mutant is
+             # skipped instead of killed.
+             "INFRX_E2_CHECKOUT": harness.working_dir(),
+             "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
+    return result.returncode, result.stdout + result.stderr
+
+
+def _baseline(mutant: Mutant, code: int, output: str) -> str | None:
+    """None when the unmutated cases pass; else why this mutant cannot be judged."""
+    summary = _summary(output)
+    ran = re.search(r"\d+ (passed|failed|errors?)\b", summary)
+    if not ran and summary:
+        return None               # the selector matched nothing: `_verdict` says no-cases
+    if code == 0 and not re.search(r"\d+ (failed|errors?)\b", summary):
+        return None
+    return (f"the unmutated copy is already red on {mutant.select!r} ({summary or 'no '
+            f'summary, exit {code}'}): a failure under the mutant would prove nothing")
 
 
 def _reprovision() -> str:
@@ -919,7 +953,8 @@ def summarise(results: list[dict]) -> dict:
     bad = [r for r in results
            if r not in pending
            and ((r["status"] != "killed" and not r.get("must_survive"))
-                or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases"))]
+                or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases",
+                                   "baseline-red"))]
     controls = [r for r in results if r.get("must_survive") and r["status"] == "SURVIVED"]
     return {"mutants": len(results),
             "killed": sum(1 for r in results if r["status"] == "killed"),

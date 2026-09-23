@@ -919,3 +919,33 @@ def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():
     except subprocess.TimeoutExpired:
         pytest.fail("a timed-out suite raised out of shell(): the gate loses its report")
     assert result["exit"] == 124 and "timed out after 1 s" in result["tail"], result
+
+
+def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
+    """E3B phase 2, review H1 (R83 pristine baseline): the named cases run once on the
+    UNMUTATED copy first. Red there, the mutant is `baseline-red` - a problem, never a kill -
+    and the edit is not even applied; green there, the mutated run is judged as before."""
+    import mutants
+    mutant = mutants.MUTANTS[2]
+    calls = []
+
+    def fake_pytest(results):
+        def run(root, m, api_root):
+            calls.append((root / m.path).read_text().count(m.before))
+            return results[len(calls) - 1]
+        return run
+
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")]))
+    red = mutants.run_one(mutant, stack_available=False)
+    assert red["status"] == "baseline-red" and "already red" in red["why"], red
+    assert calls == [mutant.occurrences], "the baseline must run on the unmutated copy only"
+    summary = mutants.summarise([red])
+    assert (summary["killed"], summary["problems"]) == (0, [mutant.id])
+
+    calls.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(0, ".\n1 passed in 0.1s\n"),
+                                                         (1, "F\n1 failed in 0.1s\n")]))
+    assert mutants.run_one(mutant, stack_available=False)["status"] == "killed"
+    assert calls == [mutant.occurrences, 0], "baseline unmutated, then the mutated run"
