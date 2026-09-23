@@ -1,0 +1,314 @@
+{
+ "verdict": "fix_required",
+ "head": "1a7a256",
+ "reviews": [
+  {
+   "verdict_hint": "fix_required",
+   "findings": [
+    {
+     "id": "DRL-R3-1",
+     "severity": "blocking",
+     "file": "tests/integration/backend/recovery/test_recovery.py",
+     "line": "936-938 (rc10b), 941-956 (rc10c)",
+     "claim_broken": "DRL-1 is only partly closed. rc10b's docstring says rollback.sh 'gives up after READY_S with exit 4', and the new comment at :936 says it is 'polled until READY_S, not tried once (~100 calls at POLL_S=0.01, READY_S=1)'. The cases now pin 'retried at least once'. They do not pin 'polled until READY_S'. The asserts are `len(retries) > 1` plus rc10c's single fail-once stub, so a wait_http that gives up after two tries, or after about 1 s whatever its budget, passes every drill. On a real host (READY_S=120, POLL_S=2) such a script exits 4 when the restored gateway needs more than about 2 probes or 2 s: a drill that passes while rollback.sh would behave otherwise.",
+     "evidence": "Hand mutants on apps/infrx-api/deploy/lib.sh, each anchor asserted once, run on the scratch merge. V1 `local deadline=$((SECONDS + $2))` -> `local deadline=$((SECONDS + 1))` (the budget argument is ignored): rc10b[8001], rc10b[8002] and rc10c give `3 passed, 14 deselected in 1.50s`, and tests/i gives `143 passed in 150.19s`. V2 `until curl ... \"$1\"; do` -> `until curl ... \"$1\" || curl ... \"$1\" || return 1; do` (two tries, then give up): `3 passed, 14 deselected in 0.41s`, and tests/i gives `143 passed in 151.13s`. The H1 shape itself (i3bm104) is killed: rc10c test_recovery.py:954 `assert 4 == 0` and rc10b[8001]/[8002] :938 `assert (1 > 1)`. So the letter of the round-2 minimal fix landed, but the READY_S budget the drill claims is not killable. V1 cannot be killed while every run uses READY_S=1, because the mutant's 1 s equals the test's budget.",
+     "minimal_fix": "In rc10b, run with READY_S=3 (POLL_S=0.01), time the rollback_sh call and assert `elapsed >= 2` (bash SECONDS makes the real give-up land in [2,3] s; V1 lands in [0,1] s and V2 near 0 s). Alternatively add an rc10c variant with READY_S=3 and a stub that fails for more than 1.5 s of polls (for example fails=150) and expects exit 0. Declare V1 or V2 as i3bm mutants killed there. The cost is about 2 s per parameter."
+    },
+    {
+     "id": "RST-R3-1",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/recovery/test_restore.py",
+     "line": "425-428 (DAMAGE['column_acls'])",
+     "claim_broken": "i3bm106's invariant reads 'a column grant is compared by what it grants'. The only witness swaps the grantee and keeps the privilege, so a comparison that projects each ACL item to its grantee alone passes the whole restore suite.",
+     "evidence": "Mutant R9, in pgrestore column_acls: `array(select unnest(a.attacl)::text order by 1)::text` -> `array(select split_part(x::text, '=', 1) from unnest(a.attacl) x order by 1)::text` (grantees only). Result on the full test_restore.py, d3 Supabase: `26 passed, 1 skipped in 45.66s`, so it survives. My scratch attack case (same grantee, privilege changed): `revoke update (full_name) ... from authenticated; grant select (full_name) ... to authenticated`, attacl `{authenticated=w/postgres}` -> `{authenticated=r/postgres}`. The unmutated code names it: `column_acls differ: missing [(... '{authenticated=w/postgres}')], extra [(... '{authenticated=r/postgres}')]`. R9 and i3bm106 both die on it at test_zz_attack.py:25 `assert set() == {'column_acls'}`. A grant-option change (`w` -> `w*`) is also named by production and killed under i3bm106. Production is correct; the gap is in the test.",
+     "minimal_fix": "Add a second bk01f parameter, for example `column_acls_privilege`: `revoke update (full_name) on public.profiles from authenticated; grant select (full_name) on public.profiles to authenticated`, whose family is column_acls. Declare R9 as a mutant it kills. Keep the grantee-swap parameter, which kills a privilege-only projection."
+    },
+    {
+     "id": "DRL-R3-2",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/recovery/test_recovery.py",
+     "line": "rc04a (~251-326)",
+     "claim_broken": "rc04a's wording says 'the wallet reserves exactly the three holds' and 'the SAME store object carries on'. The reserved figure is read from the infrx.wallets summary row (pgtesting hooks.balance), not from infrx.credit_holds. The store survives only because PgJobStore's `connector` opens a fresh connection for every operation (jobstore.py:39-49), so no connection is open at the moment of the kill and nothing about reconnecting is pinned.",
+     "evidence": "pgtesting.py:150-153 balance reads `ledger_total, reserved_total, available from infrx.wallets`. The reconciliation view infrx.wallet_reconciliation (0003:1089, reserved_drift = summary - active holds) is not asserted. I added `select ledger_drift, reserved_drift ... from infrx.wallet_reconciliation` to rc04a in scratch: drift 0/0, `1 passed`, so the invariant holds today and is merely unpinned. The kill is real: pgharness `docker kill` (SIGKILL by default) behind assert_ours, then `docker start` and _wait_ready. The requeue depends only on `rig.clock.advance(DEFAULTS.lease_ttl_s + 1)`, the case's own table-backed clock (infrx_test.clock survives the restart). The fence is triple: the state check, the live-attempt check and the unique index attempts_one_active_per_kind_idx.",
+     "minimal_fix": "Assert zero ledger_drift and reserved_drift from infrx.wallet_reconciliation for ORG_A after the reaper step. Reword 'same store object' as 'a connection-per-operation store; a pooled store (DATABASE_POOL_*, jobstore.py:42 ponytail) is not covered' in the docstring or Limits."
+    },
+    {
+     "id": "IR-R3-1",
+     "severity": "nonblocking",
+     "file": "research/plan/evidence/i/I3B-followup-0737ebe.md",
+     "line": "Integration requests (round 3), R2-1",
+     "claim_broken": "Request 1's stack.py half is written against b0a64e1. E3B2's newer local head e95bce5 (R3-1 item 1, unpushed) adds stack.OWNERS['G2-R1'] and moves G2 into RESIDUAL. On that head the request must also drop G2 (and I2B), or test_stage fails.",
+     "evidence": "I merged 1a7a256 with e95bce5 (clean) and applied R2-A and R2-B only. Layer 0 gave `1 failed, 110 passed`: `AssertionError: ('I2B', {'D2','D3','G1R','M3','W3'})`, and with the coordinator's tasks.json `('I2B', {'D2','D3','G1R','G2','M3','W3'})`. Then I applied the request-1 analog (PENDING = {**OWNERS, D5}, RESIDUAL = {}). With both tasks.json files the result was `111 passed, 31 skipped, 1 xfailed`. stack.OWNERS['G2-R1'] == recoverykit.OWNERS['G2-R1'] is True (byte-equal, one entry), so DRL-2 is merge-compatible. A one-word drift in I3B's text ('G2 is merged' -> 'G2 has merged') is killed by E3B2's test_stage.py:118.",
+     "minimal_fix": "In R2-1, name the head. On e95bce5 or newer, RESIDUAL empties entirely, including G2 and I2B, and PENDING keeps **OWNERS and D5."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "i3bm104 (by hand)",
+     "edit": "lib.sh `until curl -fsS -o /dev/null --max-time 5 \"$1\"; do` -> `... \"$1\" || return 1; do`",
+     "result": "killed",
+     "killed_by": "rc10c test_recovery.py:954 `AssertionError: (4, 'the restored runtime is not ready; ...') assert 4 == 0`; rc10b[8001]/[8002] :938 `assert (1 > 1)`"
+    },
+    {
+     "name": "i3bm105 (by hand)",
+     "edit": "rc03 kit.pending(\"G2-R1\", why= -> kit.pending(\"G2\", why=",
+     "result": "killed",
+     "killed_by": "rc00 test_recovery.py:686 AssertionError (\"PENDING[G2] ...\".startswith('PENDING[G2-R1] ') is False)"
+    },
+    {
+     "name": "i3bm106 (by hand)",
+     "edit": "pgrestore array(select unnest(a.attacl)::text order by 1)::text -> cardinality(a.attacl)::text",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls] test_restore.py:466 `AssertionError: [] assert set() == {'column_acls'}`"
+    },
+    {
+     "name": "i3bm107 (by hand)",
+     "edit": "kill_postgres d._docker(\"kill\", container) -> d._docker(\"inspect\", container)",
+     "result": "killed",
+     "killed_by": "rc04a test_recovery.py:293 `AssertionError: PostgreSQL was not restarted` (start times equal)"
+    },
+    {
+     "name": "i3bm103 (by hand)",
+     "edit": "pgrestore column_acls \"and a.attnum > 0 ... -> \"and false and a.attnum > 0 ...",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls] test_restore.py:466 `assert set() == {'column_acls'}` (a real family drop, not a rename)"
+    },
+    {
+     "name": "full I3B list through E3B2's runner",
+     "edit": "mutants_i3b.py --layer all, private TMPDIR, D=d3 Supabase, on 1a7a256+b0a64e1+req1(stack)+R2-A+R2-B",
+     "result": "{\"mutants\": 100, \"killed\": 98, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; i3bm33 no-cases; 0 baseline-red",
+     "killed_by": "i3bm103/106 bk01f[column_acls], i3bm104 rc10c, i3bm105 rc00, i3bm107 rc04a"
+    },
+    {
+     "name": "V1 (mine)",
+     "edit": "lib.sh local deadline=$((SECONDS + $2)) -> $((SECONDS + 1)) (budget ignored)",
+     "result": "SURVIVED rc10b x2 + rc10c (3 passed) and tests/i (143 passed)",
+     "killed_by": "none (DRL-R3-1)"
+    },
+    {
+     "name": "V2 (mine)",
+     "edit": "lib.sh until curl ..\"$1\"; do -> until curl ..\"$1\" || curl ..\"$1\" || return 1; do (two tries)",
+     "result": "SURVIVED rc10b x2 + rc10c (3 passed) and tests/i (143 passed)",
+     "killed_by": "none (DRL-R3-1)"
+    },
+    {
+     "name": "V3 (mine)",
+     "edit": "lib.sh [ \"$SECONDS\" -lt \"$deadline\" ] || return 1 -> || true (deadline ignored)",
+     "result": "killed",
+     "killed_by": "rc10b[8001]/[8002] subprocess.TimeoutExpired after 60 s (rollback_sh timeout=60), 2 failed in 120.65s"
+    },
+    {
+     "name": "V4 (mine)",
+     "edit": "lib.sh wait_ready && wait_http \"$WORKER_READY\" \"${READY_S:-120}\" -> && curl -fsS -o /dev/null --max-time 5 \"$WORKER_READY\" (8002 one-shot)",
+     "result": "killed",
+     "killed_by": "rc10b[8002] test_recovery.py:938 `assert (1 > 1)` (second site's retry is covered)"
+    },
+    {
+     "name": "V5 (mine)",
+     "edit": "rollback.sh: edge reload (docker inspect caddy && caddy_reload) inserted before wait_ready",
+     "result": "killed",
+     "killed_by": "rc10b x2 :938 (docker calls among retries) and rc10c exact-list `At index 3 diff: 'docker inspect caddy' != 'curl ... 8001/readyz'`"
+    },
+    {
+     "name": "A1 (mine)",
+     "edit": "kill_postgres D path: docker kill + docker start -> time.sleep(2) (restarts nothing)",
+     "result": "killed",
+     "killed_by": "rc04a test_recovery.py:293 `AssertionError: PostgreSQL was not restarted`"
+    },
+    {
+     "name": "A2 (mine)",
+     "edit": "0016 claim: `if j.state <> 'queued' then` -> `if false then` AND live-attempt `and released_at is null) then` -> `and false) then` (fence removed)",
+     "result": "killed",
+     "killed_by": "rc04a in the pytest.raises(NotClaimable) block: psycopg.errors.UniqueViolation attempts_one_active_per_kind_idx (the index is a third fence)"
+    },
+    {
+     "name": "V7 (mine)",
+     "edit": "recoverykit.OWNERS key \"G2-R1\" -> \"_G2-R1\"",
+     "result": "killed",
+     "killed_by": "rc03 recoverykit.py:94 `a pending case must name known unblocking ids, got ('G2-R1',)`; rc00 test_recovery.py:686"
+    },
+    {
+     "name": "V8 (mine, on 1a7a256+e95bce5)",
+     "edit": "recoverykit.OWNERS['G2-R1'] text 'G2 is merged' -> 'G2 has merged'",
+     "result": "killed",
+     "killed_by": "E3B2 test_stage.py:118 (stack.OWNERS[o] == kit_owners[o])"
+    },
+    {
+     "name": "R8 = i3bm106 on attacks",
+     "edit": "cardinality(a.attacl)",
+     "result": "killed by lane bk01f :466 and by my privilege-swap and grant-option attacks (test_zz_attack.py:25)",
+     "killed_by": "bk01f[column_acls]"
+    },
+    {
+     "name": "R2 = i3bm103",
+     "edit": "and false",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls] :466"
+    },
+    {
+     "name": "R9 (mine)",
+     "edit": "pgrestore column_acls projection -> array(select split_part(x::text,'=',1) from unnest(a.attacl) x order by 1)::text (grantees only)",
+     "result": "SURVIVED full test_restore.py (26 passed, 1 skipped); killed only by my same-grantee privilege swap (test_zz_attack.py:25)",
+     "killed_by": "reviewer attack only (RST-R3-1)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared -q infrx-impl /tmp/claude-1000/verify-i3bf-r3; fetch; checkout 1a7a256; merge --no-ff origin/codex/e3b-phase2-gate",
+     "exit": 0,
+     "tail": "origin/codex/e3b-phase2-gate = b0a64e1; clean merge. (infrx-impl's local codex/e3b-phase2-gate moved to e95bce5 at 16:39Z, R3-1 item 1, unpushed; checked separately)"
+    },
+    {
+     "cmd": "apply request 1 stack.py half (PENDING loses G1R/D2/D3/M3/W3, RESIDUAL: dict[str,str] = {}), R2-A (own line), R2-B (private=None for INFRX_I3B_PG=d recovery suites); anchors asserted once; scratch commit 841c493",
+     "exit": 0,
+     "tail": "stack.py +1/-18, mutants.py +4"
+    },
+    {
+     "cmd": "UV_OFFLINE=1 make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "layer 0: pytest -q -rs tests/integration/test_harness.py tests/integration/backend/test_stage.py tests/integration/test_run.py tests/integration/backend/recovery (scratch merge, tasks.json from the merge)",
+     "exit": 0,
+     "tail": "PENDING[G2-R1], PENDING[M1-L2], PENDING[I2B-R4]; 111 passed, 31 skipped, 1 xfailed, 2 warnings in 17.96s"
+    },
+    {
+     "cmd": "TMPDIR=<private> INFRX_I3B_PG=d INFRX_D_TASK=d3 INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey pytest -rs -q tests/integration/backend/recovery",
+     "exit": 0,
+     "tail": "PENDING[G2-R1], [M1-L2], [I2B-R4] + 6 no-infrx-e2-stack skips; 60 passed, 9 skipped, 2 warnings in 66.01s; no d3/i3b container left"
+    },
+    {
+     "cmd": "INFRX_I3B_PG=d INFRX_D_TASK=d3 (plain image) pytest -rs -q test_restore.py, docker events watched",
+     "exit": 0,
+     "tail": "SKIPPED [10] :109 UNSUPPORTED[plain D image]; SKIPPED [10] :449 UNSUPPORTED[plain D image]; SKIPPED [1] no infrx-e2 stack; 6 passed, 21 skipped in 0.40s; no infrx-d3 event in the log (only other lanes' d5/e2r/e3b2 events)"
+    },
+    {
+     "cmd": "cd apps/infrx-api && TMPDIR=<private> pytest -q tests/i (scratch merge)",
+     "exit": 0,
+     "tail": "143 passed in 168.27s (0:02:48)"
+    },
+    {
+     "cmd": "TMPDIR=<private> $D mutants_i3b.py --layer all --report m-all.json (scratch merge, detached)",
+     "exit": 1,
+     "tail": "{\"mutants\": 100, \"killed\": 98, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; i3bc01 SURVIVED (control), i3bm33 no-cases; grep -c baseline = 0"
+    },
+    {
+     "cmd": "Q8: coordinator tasks.json (claude/backend-impl c37b42e) copied into the scratch merge; pytest -q test_stage.py",
+     "exit": 1,
+     "tail": "AssertionError: ({'G2', 'G3'}, set()); 1 failed, 8 passed (E3B2's stack.PENDING on b0a64e1, as the lane says)"
+    },
+    {
+     "cmd": "hand mutants i3bm104/105 (layer 1), i3bm106/103/107 ($D, d3 Supabase) in a separate git worktree, anchor once, revert",
+     "exit": 1,
+     "tail": "each 1 failed: :954 assert 4 == 0 (+ rc10b :938 assert (1 > 1) x2) / :686 / test_restore.py:466 set() == {'column_acls'} / :466 / :293 PostgreSQL was not restarted; baseline rc04a + bk01f[column_acls] 2 passed"
+    },
+    {
+     "cmd": "attack mutants V1/V2 on rc10b+rc10c, then on tests/i",
+     "exit": 0,
+     "tail": "V1: 3 passed / 143 passed; V2: 3 passed / 143 passed (both survive)"
+    },
+    {
+     "cmd": "attack V3 (|| true on deadline) on rc10b",
+     "exit": 1,
+     "tail": "subprocess.TimeoutExpired ... timed out after 60 seconds x2; 2 failed in 120.65s"
+    },
+    {
+     "cmd": "attack V4 (8002 one-shot), V5 (reload before probe) on rc10b/rc10c",
+     "exit": 1,
+     "tail": "V4: rc10b[8002] :938 assert (1 > 1), 1 failed 2 passed; V5: 3 failed (rc10b :938, rc10c exact list at index 3)"
+    },
+    {
+     "cmd": "attacks A1 (sleep, no restart) and A2 (claim fence removed in 0016) on rc04a ($D)",
+     "exit": 1,
+     "tail": "A1: :293 PostgreSQL was not restarted; A2: psycopg.errors.UniqueViolation attempts_one_active_per_kind_idx, 1 failed"
+    },
+    {
+     "cmd": "scratch test_zz_attack.py (same-grantee privilege swap; grant option added) on d3 Supabase, unmutated / under i3bm106 / under R9",
+     "exit": 1,
+     "tail": "unmutated: 2 passed (column_acls named: {authenticated=w/postgres} -> {authenticated=r/postgres} and -> {authenticated=w*/postgres}); i3bm106: 2 failed at :25; R9: attacks 2 failed, lane bk01f[column_acls] 1 passed"
+    },
+    {
+     "cmd": "R9 on the full test_restore.py ($D)",
+     "exit": 0,
+     "tail": "26 passed, 1 skipped in 45.66s (survives)"
+    },
+    {
+     "cmd": "rc04a + reconciliation-drift assertion (scratch)",
+     "exit": 0,
+     "tail": "1 passed, 16 deselected in 8.01s (ledger_drift = reserved_drift = 0)"
+    },
+    {
+     "cmd": "clone 1a7a256 + e95bce5 (clean) + R2-A + R2-B; layer 0",
+     "exit": 1,
+     "tail": "AssertionError: ('I2B', {'D2','D3','G1R','M3','W3'}); 1 failed, 110 passed, 31 skipped, 1 xfailed; stack.OWNERS['G2-R1'] == recoverykit.OWNERS['G2-R1']: True"
+    },
+    {
+     "cmd": "same + request-1 analog (PENDING={**OWNERS, D5}, RESIDUAL={}); layer 0 with own and with coordinator tasks.json",
+     "exit": 0,
+     "tail": "111 passed, 31 skipped, 1 xfailed (both)"
+    },
+    {
+     "cmd": "V7 (G2-R1 key dropped) on rc00/rc03; V8 (OWNERS text drift) on e95 merge test_stage",
+     "exit": 1,
+     "tail": "V7: 2 failed (recoverykit.py:94 refusal; rc00 :686); V8: test_stage.py:118 assert False, 1 failed 8 passed"
+    }
+   ],
+   "fabrication_check": "I re-ran every round-3 count and kill site the lane claims, on 1a7a256 merged with origin/codex/e3b-phase2-gate @ b0a64e1 plus request 1's stack half, R2-A and R2-B, and all of them reproduce:\n- Layer 0: 111/31/1xf, with the same three PENDING ids.\n- Recovery dir on d3 Supabase: 60/9.\n- Plain image: 6/21 (10+10 UNSUPPORTED + bk03), with no d3 container event.\n- tests/i: 143 passed.\n- Full list: byte-for-byte the lane's Q6 summary (100/98/1/1, problems ['i3bm33']), with no baseline-red.\n- By hand: i3bm104 at :954 (`assert 4 == 0`) with rc10b at :938 (`assert (1 > 1)`); i3bm105 at :686; i3bm103 and i3bm106 at test_restore.py:466; i3bm107 at :293 ('PostgreSQL was not restarted').\n- Q8: `({'G2','G3'}, set())` with the coordinator's tasks.json.\n- rc10c asserts the exact command list, so 8001 is issued exactly twice and the reload comes after the 8002 probe. That matches rollback.sh, where wait_ready runs, then `docker inspect caddy`, then caddy_reload.\n- The rc04a kill is a real SIGKILL (pgharness `docker kill`, whose default signal is KILL) guarded by assert_ours.\n\nThe lane's claims are accurate. What is not established is the READY_S budget (V1/V2 survive, DRL-R3-1). One difference in inputs: E3B2's local head has moved to e95bce5 (unpushed, 16:39Z). I merged the named b0a64e1 for the reproduction and checked e95bce5 separately. It is merge-compatible on G2-R1, but request 1's stack half must also drop G2/I2B there.",
+   "cleanup": "Removed:\n- the scratch clones /tmp/claude-1000/verify-i3bf-r3 (including its hand-mutant worktree verify-i3bf-r3-hand) and verify-i3bf-r3-e95;\n- the private TMPDIRs v3tmp, v3tmp-m, v3tmp-h and v3tmp-i, including the d3 lock files the harness put inside them;\n- the mutant helper script, the backup file, the tasks.json copies, the logs and the JSON report.\n\nState after cleanup:\n- `docker ps -a` shows no d3, i3b or verify container. Every d3 container the D harness started was removed at exit.\n- I touched no other lane's container and never used port 55432.\n- /tmp/infrx-d3-postgres-55434.lock was there before I started and is not mine, so I left it.\n- /tmp/pytest-of-rey/pytest-3397..3399 hold empty decoy directories from test_run.py. They are probably from my layer-0 runs, but ownership in that shared directory is ambiguous and pytest rotates it, so I left them.\n- The lane worktree codex-i3bf is unmodified: HEAD 1a7a256, `git status` clean."
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "DRL-R3-1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "936-938 (rc10b), 941-956 (rc10c)",
+   "claim_broken": "DRL-1 is only partly closed. rc10b's docstring says rollback.sh 'gives up after READY_S with exit 4', and the new comment at :936 says it is 'polled until READY_S, not tried once (~100 calls at POLL_S=0.01, READY_S=1)'. The cases now pin 'retried at least once'. They do not pin 'polled until READY_S'. The asserts are `len(retries) > 1` plus rc10c's single fail-once stub, so a wait_http that gives up after two tries, or after about 1 s whatever its budget, passes every drill. On a real host (READY_S=120, POLL_S=2) such a script exits 4 when the restored gateway needs more than about 2 probes or 2 s: a drill that passes while rollback.sh would behave otherwise.",
+   "evidence": "Hand mutants on apps/infrx-api/deploy/lib.sh, each anchor asserted once, run on the scratch merge. V1 `local deadline=$((SECONDS + $2))` -> `local deadline=$((SECONDS + 1))` (the budget argument is ignored): rc10b[8001], rc10b[8002] and rc10c give `3 passed, 14 deselected in 1.50s`, and tests/i gives `143 passed in 150.19s`. V2 `until curl ... \"$1\"; do` -> `until curl ... \"$1\" || curl ... \"$1\" || return 1; do` (two tries, then give up): `3 passed, 14 deselected in 0.41s`, and tests/i gives `143 passed in 151.13s`. The H1 shape itself (i3bm104) is killed: rc10c test_recovery.py:954 `assert 4 == 0` and rc10b[8001]/[8002] :938 `assert (1 > 1)`. So the letter of the round-2 minimal fix landed, but the READY_S budget the drill claims is not killable. V1 cannot be killed while every run uses READY_S=1, because the mutant's 1 s equals the test's budget.",
+   "minimal_fix": "In rc10b, run with READY_S=3 (POLL_S=0.01), time the rollback_sh call and assert `elapsed >= 2` (bash SECONDS makes the real give-up land in [2,3] s; V1 lands in [0,1] s and V2 near 0 s). Alternatively add an rc10c variant with READY_S=3 and a stub that fails for more than 1.5 s of polls (for example fails=150) and expects exit 0. Declare V1 or V2 as i3bm mutants killed there. The cost is about 2 s per parameter.",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute the mechanism. At 1a7a256, rollback_sh (test_recovery.py:814-815) always runs with POLL_S=0.01 and READY_S=1. rc10b asserts only `len(retries) > 1` (:938), and rc10c's stub fails exactly once (fails=1). Nothing measures elapsed time or requires more than two tries.\n\nSmallest experiment: I made a git-archive copy of the codex-i3bf HEAD in scratch and used the lane's venv python. Unmutated, `pytest -q -k \"rc10b or rc10c\" tests/integration/backend/recovery/test_recovery.py` gives `3 passed, 14 deselected in 2.08s`. I then applied V2 to lib.sh wait_http: `until curl ... \"$1\" || curl ... \"$1\" || return 1; do`, which tries twice and gives up. The same command gives `3 passed, 14 deselected in 0.39s`. V2 survives, and so does V1: a hard-coded 1 s budget equals the test's READY_S=1, so no case can tell them apart. The new comment at :937 (\"polled until READY_S ... ~100 calls\") and the rc10b docstring (\"gives up after READY_S\") therefore overstate what the case pins.\n\nWhy nonblocking: the round-2 DRL-1 finding (I3B-followup-confirm-662c07c.json) named exactly `assert len(retries) > 1` plus a fail-once rc10c variant that kills H1 as its minimal fix, and both refuters endorsed it. The lane landed that verbatim, and H1/i3bm104 is killed at :954 and :938. This finding asks for a stronger property: the READY_S budget is honored. That is new scope. Production lib.sh is I2B's code, is correct and did not change. V1 and V2 are contrived regressions. The remaining gap is a test-strength and comment-accuracy issue, and it is cheap to close later: time rc10b with READY_S=3 and assert elapsed >= 2, or at least `len(retries) > 10`, and soften the comment. It does not reopen DRL-1. I started no container, removed the scratch copy, and left the worktree clean.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The survivors are real, but the finding is nonblocking. It does not reopen DRL-1.\n\n**Reproduction.** I made a git-archive copy of 1a7a256 in scratch. No container was needed, because rc10b and rc10c use only PATH stubs. I ran `$PY -m pytest -q -p no:cacheprovider tests/integration/backend/recovery/test_recovery.py -k \"rc10b or rc10c\" | tail -3` three times:\n- Unmutated: `3 passed, 14 deselected in 1.89s`.\n- V1 (lib.sh:28 `local deadline=$((SECONDS + 1))`): `3 passed, 14 deselected in 1.66s`.\n- V2 (lib.sh:29 `until curl … \"$1\" || curl … \"$1\" || return 1; do`): `3 passed, 14 deselected in 0.38s`.\n\nThis follows from the code. rollback_sh always sets READY_S=1 and POLL_S=0.01 (test_recovery.py:814-815), so a wait_http that ignores its budget and uses 1 s behaves exactly like one that honours it. rc10b asserts only `len(retries) > 1` (:938), and rc10c's stub fails once (:952), so a two-try loop satisfies both. The scratch copy's lib.sh was restored and the worktree was not touched.\n\n**Why it is not blocking.**\n1. DRL-1's defect, in the confirm-662c07c JSON, was \"Nothing checks that a probe is retried at all\". Its evidence mutant was H1, one try. Both refuters gave `len(retries) > 1` plus a fail-once case as the minimal fix. Round 3 landed exactly that (rc10b :938, rc10c :941-956), declared H1 as i3bm104, and the verifier confirms it is killed at :954 and :938. So DRL-1 as found is closed.\n2. The rc10b docstring said \"gives up after READY_S\" in round 2 too. Both round-2 refuters accepted the retry-count fix as sufficient against that same sentence. Asking now for timing coverage of the budget moves the goalpost rather than finding a defect in the round-3 fix.\n3. V1 and V2 are artificial edits to I2B's lib.sh, which round 3 left unchanged. The budget argument is I2B's wait_http contract; the verifier's own tests/i run (143 passed under V1) shows the gap is in I2B's suite, not in I3B's rollback composition.\n\n**What remains is a small follow-up.** The comment at :937, \"polled until READY_S\", overclaims what :938 checks. Either reword it to \"retried, not tried once\", or add the ~2 s elapsed check (READY_S=3, assert elapsed >= 2) and declare V1 or V2 as an i3bm mutant. Neither needs to hold up the merge.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "RST-R3-1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_restore.py",
+   "line": "425-428 (DAMAGE['column_acls'])",
+   "claim_broken": "i3bm106's invariant reads 'a column grant is compared by what it grants'. The only witness swaps the grantee and keeps the privilege, so a comparison that projects each ACL item to its grantee alone passes the whole restore suite.",
+   "evidence": "Mutant R9, in pgrestore column_acls: `array(select unnest(a.attacl)::text order by 1)::text` -> `array(select split_part(x::text, '=', 1) from unnest(a.attacl) x order by 1)::text` (grantees only). Result on the full test_restore.py, d3 Supabase: `26 passed, 1 skipped in 45.66s`, so it survives. My scratch attack case (same grantee, privilege changed): `revoke update (full_name) ... from authenticated; grant select (full_name) ... to authenticated`, attacl `{authenticated=w/postgres}` -> `{authenticated=r/postgres}`. The unmutated code names it: `column_acls differ: missing [(... '{authenticated=w/postgres}')], extra [(... '{authenticated=r/postgres}')]`. R9 and i3bm106 both die on it at test_zz_attack.py:25 `assert set() == {'column_acls'}`. A grant-option change (`w` -> `w*`) is also named by production and killed under i3bm106. Production is correct; the gap is in the test.",
+   "minimal_fix": "Add a second bk01f parameter, for example `column_acls_privilege`: `revoke update (full_name) on public.profiles from authenticated; grant select (full_name) on public.profiles to authenticated`, whose family is column_acls. Declare R9 as a mutant it kills. Keep the grantee-swap parameter, which kills a privilege-only projection."
+  },
+  {
+   "id": "DRL-R3-2",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "rc04a (~251-326)",
+   "claim_broken": "rc04a's wording says 'the wallet reserves exactly the three holds' and 'the SAME store object carries on'. The reserved figure is read from the infrx.wallets summary row (pgtesting hooks.balance), not from infrx.credit_holds. The store survives only because PgJobStore's `connector` opens a fresh connection for every operation (jobstore.py:39-49), so no connection is open at the moment of the kill and nothing about reconnecting is pinned.",
+   "evidence": "pgtesting.py:150-153 balance reads `ledger_total, reserved_total, available from infrx.wallets`. The reconciliation view infrx.wallet_reconciliation (0003:1089, reserved_drift = summary - active holds) is not asserted. I added `select ledger_drift, reserved_drift ... from infrx.wallet_reconciliation` to rc04a in scratch: drift 0/0, `1 passed`, so the invariant holds today and is merely unpinned. The kill is real: pgharness `docker kill` (SIGKILL by default) behind assert_ours, then `docker start` and _wait_ready. The requeue depends only on `rig.clock.advance(DEFAULTS.lease_ttl_s + 1)`, the case's own table-backed clock (infrx_test.clock survives the restart). The fence is triple: the state check, the live-attempt check and the unique index attempts_one_active_per_kind_idx.",
+   "minimal_fix": "Assert zero ledger_drift and reserved_drift from infrx.wallet_reconciliation for ORG_A after the reaper step. Reword 'same store object' as 'a connection-per-operation store; a pooled store (DATABASE_POOL_*, jobstore.py:42 ponytail) is not covered' in the docstring or Limits."
+  },
+  {
+   "id": "IR-R3-1",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/i/I3B-followup-0737ebe.md",
+   "line": "Integration requests (round 3), R2-1",
+   "claim_broken": "Request 1's stack.py half is written against b0a64e1. E3B2's newer local head e95bce5 (R3-1 item 1, unpushed) adds stack.OWNERS['G2-R1'] and moves G2 into RESIDUAL. On that head the request must also drop G2 (and I2B), or test_stage fails.",
+   "evidence": "I merged 1a7a256 with e95bce5 (clean) and applied R2-A and R2-B only. Layer 0 gave `1 failed, 110 passed`: `AssertionError: ('I2B', {'D2','D3','G1R','M3','W3'})`, and with the coordinator's tasks.json `('I2B', {'D2','D3','G1R','G2','M3','W3'})`. Then I applied the request-1 analog (PENDING = {**OWNERS, D5}, RESIDUAL = {}). With both tasks.json files the result was `111 passed, 31 skipped, 1 xfailed`. stack.OWNERS['G2-R1'] == recoverykit.OWNERS['G2-R1'] is True (byte-equal, one entry), so DRL-2 is merge-compatible. A one-word drift in I3B's text ('G2 is merged' -> 'G2 has merged') is killed by E3B2's test_stage.py:118.",
+   "minimal_fix": "In R2-1, name the head. On e95bce5 or newer, RESIDUAL empties entirely, including G2 and I2B, and PENDING keeps **OWNERS and D5."
+  }
+ ]
+}

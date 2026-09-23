@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T16:57:52Z",
+  "updated": "2026-09-23T16:59:16Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round 3 HANDED BACK 1a7a256 (DRL-1 rc10c + i3bm104; G2-R1 owner; rc04a live PostgreSQL restart; I3B list 100/98); single verifier running \u2192 merge after E3B2 (IR2-2, R2-A, R2-B, request-1 stack.py)",
+      "phase": "round-3 verifier at 1a7a256 fix_required (DRL-R3-1 READY_S budget unkillable; 3 nonblocking) \u2192 round 4 running \u2192 verifier \u2192 merge after E3B2 (IR2-2 updated: RESIDUAL = {}, PENDING = OWNERS + D5)",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
@@ -54,8 +54,8 @@
       "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "round-3 verifier at 1a7a256 running (single Opus drill verifier + refuters)",
-      "since": "2026-09-23T16:35:30Z"
+      "phase": "verifier fix_required at 1a7a256 (wf_9570bfe1-b82; JSON evidence/i/I3B-followup-verify-1a7a256.json) \u2192 round 4",
+      "since": "2026-09-23T16:59:16Z"
     },
     "F-fakes-followup": {
       "phase": "MERGED a2779d1 after the verifier pass at 0cf5cd6; merged-tree checks running (ffakes-merged-a2779d1.log)",
