@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:09:23Z",
+  "updated": "2026-09-23T11:20:35Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 2 HANDED BACK 80cef22 (impl e57b820); Opus review running; gate exit 1 = I3B's recovery tree (rc10, i3bm57, bk01 restore ACL finding) + a D-port HarnessBusy run",
+      "phase": "phase 2 review fix_required at 80cef22 (4 blocking: dr13 premise unpinned, baseline-red mutants counted killed, I2B pending vs RESIDUAL, e3bm22 dies by import; 1 refuted; 17 nonblocking; rulings R92/R93, P-21) \u2192 fix round running",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
@@ -52,6 +52,10 @@
     "G2": {
       "phase": "fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) \u2192 fix round; confirmation next",
       "since": "2026-09-23T11:05:53Z"
+    },
+    "E3B2": {
+      "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
+      "since": "2026-09-23T11:20:35Z"
     }
   },
   "gates": {
@@ -116,6 +120,12 @@
       "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) \u2014 until then the pilot admits what the engine cannot serve",
       "blocks": "E4B certification; G2's validation ceiling",
       "owner": "W4 decides; G2 applies"
+    },
+    {
+      "id": "P-21",
+      "what": "Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) \u2014 a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes",
+      "blocks": "nothing (lanes retry); reduces HarnessBusy/bind noise",
+      "owner": "user (root approval); coordinator applies"
     }
   ],
   "checkpoints": [

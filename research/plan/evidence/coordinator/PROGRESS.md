@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T11:09:23Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T11:20:35Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 22 done · 6 in progress · 2 remaining (of 30).**
 
@@ -54,6 +54,7 @@ Generated 2026-09-23T11:09:23Z from `tasks.json` (manifest v4) and `progress-sta
 | P-19 (new) | Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md | publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol) | pricing owner / user |
 | P-04-sweep | W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside | ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 ⚠️ / cutover keeps 32 explicitly); W4's first input | W4 (tuning) / W3 (record) |
 | P-20 | The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) — until then the pilot admits what the engine cannot serve | E4B certification; G2's validation ceiling | W4 decides; G2 applies |
+| P-21 | Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) — a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes | nothing (lanes retry); reduces HarnessBusy/bind noise | user (root approval); coordinator applies |
 
 ## ETA (provisional, cadence-based — not a commitment)
 
@@ -65,7 +66,7 @@ Generated 2026-09-23T11:09:23Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E3B: codex-e3b / codex/e3b-backend-gate — phase 2 HANDED BACK 80cef22 (impl e57b820); Opus review running; gate exit 1 = I3B's recovery tree (rc10, i3bm57, bk01 restore ACL finding) + a D-port HarnessBusy run since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges
+- E3B: codex-e3b / codex/e3b-backend-gate — phase 2 review fix_required at 80cef22 (4 blocking: dr13 premise unpinned, baseline-red mutants counted killed, I2B pending vs RESIDUAL, e3bm22 dies by import; 1 refuted; 17 nonblocking; rulings R92/R93, P-21) → fix round running since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges
 - D4: codex-d4 / codex/d4-stream-journal — HANDED BACK a4598b0 (impl ce7659b); Opus review running (3 lenses + refuters); D5 dispatch at the CONFIRMED head since 2026-09-23T05:12:27Z — 0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook
 - G2: codex-g2 / codex/g2-chat-relay — review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) → fix round running since 2026-09-23T05:12:27Z — relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters
 - W4: codex-w4 / codex/w4-measured-tuning — phase A confirmation at b0a44a0: box-safety PASS, decision fix_required on 2 test-coverage gaps (D2 reconciliation clauses; bench retries clauses) + 8 nonblocking → round 3 running; re-confirmation next since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
@@ -73,6 +74,7 @@ Generated 2026-09-23T11:09:23Z from `tasks.json` (manifest v4) and `progress-sta
 - review W4: confirmation fix_required at b0a44a0 (wf_6fb50020-bf6; JSON evidence/w/W4-confirm-b0a44a0.json) → round 3 since 2026-09-23T11:09:23Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) → fix round; confirmation next since 2026-09-23T11:05:53Z
+- review E3B2: fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) → fix round; confirmation next since 2026-09-23T11:20:35Z
 
 ## Checkpoints
 
