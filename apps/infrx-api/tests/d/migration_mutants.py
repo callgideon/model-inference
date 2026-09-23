@@ -2137,6 +2137,13 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "           (v_lease->>'acquired_at')::timestamptz + make_interval(secs => v_ttl)",
        "admission", "append", "a chunk's retention runs from the worker's lease record (R7)"),
     # --- item 2: the global budget --------------------------------------------------------
+    _m("d4_job_ceiling_is_the_whole_reservation_plus_one", JOURNAL, _J_CEILING,
+       "       > j.journal_reserved_bytes + 1 then",
+       "admission", "global_charge", "an append raises the global journal charge (DUR-CAP)"),
+    _m("d4_stored_counted_beside_the_reservation", ADMISSION,
+       "greatest(coalesce(r.amount, 0), j.journal_stored_bytes)",
+       "coalesce(r.amount, 0) + j.journal_stored_bytes",
+       "admission", "global_charge", "reserved and stored bytes are counted twice (02)"),
     # --- item 3: the terminal event -------------------------------------------------------
     # --- item 4: replay -------------------------------------------------------------------
     # --- item 5: pruning and usage --------------------------------------------------------
@@ -2262,6 +2269,7 @@ _CHECKS = {
     "append_empty": checks_journal.check_append_empty,
     "append_fenced": checks_journal.check_append_fenced,
     "append_past_the_instant": checks_journal.check_append_past_the_instant,
+    "global_charge": checks_journal.check_global_charge,
 }
 
 

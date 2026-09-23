@@ -411,3 +411,48 @@ def check_append_past_the_instant(conn) -> str:
                 assert cl.reserved(conn) == before - job["maximum_hold"], "hold not released"
         return "R29 terminalizes in the append, commits, refuses; the batch is not stored"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 2: the budget
+def check_global_charge(conn) -> str:
+    """DUR-CAP without a global lock: with the global budget full of reservations, an append
+    up to its job's ceiling leaves `journal_bytes_charged()` unchanged and the next admission
+    is still refused; one byte past the ceiling is refused without moving it. After the
+    terminalization the job's stored bytes (its output + the terminal event) keep counting -
+    no admission fits - and pruning frees them exactly: never counted twice."""
+    world = ca.World(conn)
+    limits = DEFAULTS.replace(journal_job_reserve_bytes=8192, journal_total_bytes=16384)
+
+    def admitted():
+        request = cl.gateway_request(world)
+        return request, ca.refusal(conn, request, b.idem(request, request.request_id),
+                                   limits=limits)
+
+    def body():
+        assert charged(conn) == 0, "the scenario already holds journal bytes"
+        request, lease = running(conn, world, limits=limits)
+        other, code = admitted()
+        assert code is None, code
+        assert charged(conn) == 16384
+        assert admitted()[1] == "journal_capacity_exhausted", "the full budget admitted"
+        assert append(conn, lease, (event(sized(conn, 8192 - 1024)),))[0] is None
+        assert charged(conn) == 16384, "an append moved the global charge"
+        code, _ = append(conn, lease, (event(sized(conn, 1025)),))
+        assert code == "journal_capacity_exhausted", f"past the reservation: {code}"
+        assert charged(conn) == 16384, "a refused append moved the global charge"
+        assert admitted()[1] == "journal_capacity_exhausted"
+        assert cancel(conn, request)[0] is None
+        stored = cl.row(conn, request.request_id)["journal_stored_bytes"]
+        assert stored == sum(r["bytes"] for r in journal(conn, request.request_id)) > 8192 - 1024
+        assert charged(conn) == 8192 + stored, "terminal: reservation freed, stored counting"
+        assert admitted()[1] == "journal_capacity_exhausted", \
+            "stored unexpired bytes stopped counting before they were pruned"
+        advance(conn, CHUNK_TTL)
+        pruned = len(journal(conn, request.request_id))
+        assert expire(conn) == (None, pruned), "the terminal job's journal was not pruned"
+        assert cl.row(conn, request.request_id)["journal_stored_bytes"] == 0
+        assert charged(conn) == 8192, "pruning did not free the bytes exactly"
+        assert admitted()[1] is None, "freed bytes still refuse an admission"
+        assert charged(conn) == 16384
+        return "appends never move the global charge; stored bytes count until pruned, once"
+    return ca._in_rollback(conn, body)

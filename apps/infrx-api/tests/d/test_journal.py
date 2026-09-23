@@ -60,3 +60,8 @@ def test_append__stale_foreign_expired_and_preparation_leases_store_nothing() ->
 
 def test_append__past_the_generation_instant_append_terminalizes_and_refuses() -> None:
     print(checks_journal.check_append_past_the_instant(_db()))
+
+
+# --- item 2: the global journal budget without a global lock -------------------------------
+def test_append__never_moves_the_global_charge() -> None:
+    print(checks_journal.check_global_charge(_db()))
