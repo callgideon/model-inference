@@ -764,7 +764,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("cache_expiry_removed",
        "PROCESSING_CACHE_TTL_S is a retention obligation: past it the entry is unreadable",
        R, "        if self.clock() - entry.stored_at >= self.ttl_s:", "        if False:",
-       "test_a_cache_entry_expires_and_its_file_goes_with_it"),
+       "test_a_cache_entry_expires_and_its_file_goes_with_it",
+       "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
     _m("cache_file_existence_unchecked",
        "the index is a hint about the disk: an entry pointing at a file that is gone is a "
        "miss, not a path handed to a worker",

@@ -56,6 +56,8 @@ async def _runs(tmp: pathlib.Path, body: bytes, mime: str) -> dict[str, dict]:
         runs[name] = await support.prepared_facts(media, ORG, source, "job-1")
         if name == "memory-1":
             clock.now += DEFAULTS.processing_cache_ttl_s       # the local copy expires
+            # Review P2: expired for real, or the leg below is a cache hit that proves nothing.
+            assert media.cache.get(ORG, runs[name]["ref"]["digest"], "v1") is None
             runs["after-expiry"] = await support.prepared_facts(media, ORG, source, "job-2")
     return runs
 
