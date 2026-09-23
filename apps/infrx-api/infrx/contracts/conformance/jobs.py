@@ -3002,6 +3002,18 @@ async def dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark(f
     await harness.port.append(lease, b.events("a", "b"))
     harness.clock.advance(31)
     assert await harness.port.expire(harness.clock.now()) == 2
+    # "expired" is a watermark and NO chunk left: an empty batch stores nothing, so the
+    # journal stays expired
+    assert await harness.port.append(lease, ()) == (), "an empty batch committed a chunk"
+    try:
+        await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    except errors.JournalExpired:
+        pass
+    except errors.DomainError as other:
+        raise AssertionError(f"an empty batch revived a journal pruned to nothing: "
+                             f"{other.code}") from other
+    else:
+        raise AssertionError("an empty batch revived a journal pruned to nothing")
     chunks = await harness.port.append(lease, b.events("c"))
     assert [(chunk.generation, chunk.sequence) for chunk in chunks] == [(1, 3)], \
         "the journal restarted below its prune watermark"

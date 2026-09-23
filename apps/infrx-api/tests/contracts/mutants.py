@@ -398,6 +398,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return job_id in self.pruned_to",
        "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark",
        "dur_output__a_pruned_prefix_is_an_explicit_replay_gap"),
+    # round 2 (review P2): a present-but-empty chunk list (an empty batch's setdefault) is
+    # still "no chunk left"
+    _m("expired_by_key_presence", "expired is no chunk left, not a missing key (J4)",
+       S, "        return job_id in self.pruned_to and not self.chunks.get(job_id)",
+       "        return job_id in self.pruned_to and job_id not in self.chunks",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
     _m("expired_journal_served", "an expired journal is 410",
        S, 'raise errors.JournalExpired(f"journal for {job_handle} has expired")', "pass",
        "dur_output__an_expired_journal_is_gone_not_regenerated"),
