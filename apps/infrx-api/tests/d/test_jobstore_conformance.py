@@ -53,6 +53,9 @@ PENDING: dict[str, str] = {
     "dur_fence__a_stale_generation_is_rejected": _D5,
     # F cancel-cause: 0016 records only client_cancelled, so the adapter refuses the other
     # two causes (UnsupportedParameter) until D5's 0018 infrx.cancel records them.
+    # R91: PgJobStore.lookup refuses (UnsupportedParameter, param="lookup") until D5.
+    "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing":
+        "D5: the SQL read behind JobStore.lookup (R91)",
     "dur_settle__cancel_records_its_cause_and_settles_by_r21":
         "D5 item 3: 0018's infrx.cancel records client_disconnected/sync_deadline",
     **{name: _D5 for name in (

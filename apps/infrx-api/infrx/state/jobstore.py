@@ -204,6 +204,12 @@ class PgJobStore:
             raise errors.NotFound(f"job {job_handle} is not a CREDIT job")
         return admission_v2_of(doc), _outcome(doc["outcome"])
 
+    async def lookup(self, org_id: str, idem: IdempotencyRef):
+        """R91 (`ports.JobStore.lookup`): the SQL read is D5's. Until then this refuses before
+        any query, typed (`param="lookup"`), and a caller falls back to admitting (whose own
+        replay answer is unchanged)."""
+        raise errors.UnsupportedParameter("JobStore.lookup is D5's (R91)", param="lookup")
+
     # --- preparation (D2 item 2) ----------------------------------------------------
     @staticmethod
     def _answer(doc: dict) -> dict:

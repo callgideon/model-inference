@@ -455,7 +455,9 @@ class FakeJobStore:
                                          request.max_output_tokens).raw(CREDIT)
         return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)
 
-    def _replay(self, idem: IdempotencyRef, now: datetime, *, credit: bool = False):
+    def _replay(self, idem: IdempotencyRef, now: datetime, *, credit: bool | None = False):
+        """The admission `idem` already maps to (`replayed=True`), or None. `credit=None`
+        (`lookup`) answers the job's own regime rather than refusing the other one."""
         if idem.key is None:
             return None
         record = self.idem.get(idem.scope)
@@ -468,6 +470,8 @@ class FakeJobStore:
         if record.payload_hash != idem.payload_hash:
             raise errors.IdempotencyConflict("same idempotency key, different canonical payload")
         job = self.jobs[record.request_id]
+        if credit is None:                      # R91 `lookup`: the job's own regime
+            credit = job.credit is not None
         if (job.credit is not None) is not credit:
             # One key, one regime: a legacy replay of a CREDIT job would hand back a USD
             # admission for money that moved in CREDIT (and the reverse).
@@ -477,6 +481,22 @@ class FakeJobStore:
             return AdmissionV2.model_validate({**job.credit.model_dump(mode="json"),
                                                "replayed": True})
         return self._snapshot(job).model_copy(update={"replayed": True})
+
+    async def lookup(self, org_id: str, idem: IdempotencyRef):
+        """R91: `_replay`, read-only and without admitting: the mapped admission and its
+        outcome, or None (no key, no mapping, or an expired one)."""
+        self.failures.before("lookup")
+        if idem.org_id != org_id:
+            # r1 R10: one organization never reads another's idempotency scope.
+            raise errors.Forbidden("the idempotency scope must name the caller's org")
+        async with self._lock:
+            try:
+                admission = self._replay(idem, self.clock.now(), credit=None)
+            except errors.IdempotencyExpired:
+                return None
+            if admission is None:
+                return None
+            return admission, self.jobs[admission.request_id].outcome
 
     def _check_capacity(self, request: NormalizedRequest) -> None:
         limits = self.limits
