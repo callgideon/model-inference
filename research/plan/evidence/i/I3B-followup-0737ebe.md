@@ -428,6 +428,67 @@ deploy script (lib.sh untouched), D or E file changed. **Migrations: none.** New
 rc10c, rc04a, rc04b (rc04 split). rc10b, rc00, rc03, bk01f[column_acls] and bk03 changed
 (bk03 by refactor only). Artifacts (session scratch, sha256 prefix): `l0-head3.log b51dc00729edc00b` (Q1), `l0-merge3.log 98830782da193fcb` (Q2), `recovery-d3-r3.log 270a3b6ff6d6d2f6` (Q3), **`m-all3.json 137b74b78491762b` (Q6)**, `tests-i3.log c2b703242ed1fb46` (Q7).
 
+## Round 4 — verifier fix round (verification of `1a7a256`)
+
+The round-3 verifier (`research/plan/evidence/i/I3B-followup-verify-1a7a256.json` on
+`claude/backend-impl`) returned **fix_required**, with one blocking finding (DRL-R3-1) and three
+nonblocking ones. Both refuters agreed that DRL-R3-1's mechanism is real, although they rated
+it nonblocking; the coordinator made it blocking. The verifier reproduced every round-3 count
+and kill site. This round fixes all four findings.
+
+| Field | Value |
+|---|---|
+| Base | `1a7a256` (round 3) |
+| Round-4 head | `5af39c0` code; this section is committed on top of it |
+| Verified against | a scratch clone (removed afterwards) of `1a7a256` merged with **`origin/codex/e3b-phase2-gate` @ `5eb7b85`** (pushed; it contains R2-A `d8384ed`, R2-B `dadbd79` and `stack.OWNERS['G2-R1']`). The merge was clean. **IR2-2** is applied on top: the RESIDUAL entries are deleted from `PENDING`, `RESIDUAL = {}` and `stack.OWNERS` is kept. The round-4 commits are then cherry-picked one at a time |
+
+### Findings → fixes
+
+| Finding | Commit | Change | Case (dies at) | Declared mutant → kill (E's runner, scratch merge) |
+|---|---|---|---|---|
+| **DRL-R3-1** (blocking): the READY_S budget was not pinned | `79f1ff0` | rc10b runs rollback.sh with **READY_S=3** (POLL_S=0.01), times the call, and asserts `waited >= 2`. Bash's `SECONDS` counts whole seconds, so the real give-up lands in [2, 3] s. `rollback_sh` gains `ready_s` (default 1, so rc10 and rc10c are unchanged). rc10b's comment now says "retried, not tried once; for the whole READY_S budget". lib.sh is unchanged; the mutants edit only the runner's copy | rc10b[8001] (test_recovery.py:951 at the head) | **i3bm108** `local deadline=$((SECONDS + $2))` → `+ 1)` (V1): `killed`, `test_recovery.py:951: AssertionError`; by hand `gave up after 0.96 s of a 3 s READY_S (62 probes)`. **i3bm109** two tries, then `return 1` (V2): `killed`, `:951`; by hand `gave up after 0.03 s … (2 probes)`. **i3bm104** (H1) is still `killed`, at rc10c `:966` |
+| RST-R3-1: grantees only | `916ab4f` | New bk01f parameter **`column_acls_privilege`**: same grantee, different privilege (`update (full_name)` → `select (full_name)`, both granted to authenticated). `FAMILY` maps it, and `functions_config`, to the family it must name. The grantee-swap parameter stays | bk01f[column_acls_privilege] (test_restore.py:471) | **i3bm110** grantees only (`split_part(x::text, '=', 1)`, R9): `killed`, `:471: AssertionError`. i3bm103 and i3bm106 are still killed by bk01f[column_acls] at `:471` |
+| DRL-R3-2: rc04a's wallet wording | `5af39c0` | After the reaper step rc04a reads `infrx.wallet_reconciliation` for ORG_A and expects `(ledger_drift, reserved_drift, active_holds) == (0, 0, the three holds)`, so the check runs against the holds themselves and not only the summary row. It then runs the reconcile runbook's detector, `pgrestore.drift`, which must return `[]`. The docstring no longer says "the SAME store object carries on": the store survives because its connector opens a connection per operation, and **a pooled store (DATABASE_POOL_*) is not covered** | rc04a (:323-324; :295 is the restart check) | **i3bm111** `pgrestore.drift` filter `ledger_drift <> 0` → `= 0`: `killed`, `test_recovery.py:324: AssertionError`. The drift arithmetic itself is D's SQL (0003's view and the hold RPCs). The runner takes migrations from the checkout, not the copy, so no runner mutant can reach it; the detector is the only I3B-owned edit that can fail this assertion |
+| IR-R3-1: request 1's target head | evidence | See the integration requests below: request 1 is now **IR2-2 against E3B2 ≥ `e95bce5`** (verified on `5eb7b85`). R2-A and R2-B are on E3B2's branch and are dropped from this lane's list | - | - |
+
+Round-4 mutants are i3bm108-i3bm111, **104** in the list. All die by `AssertionError`.
+
+### Round-4 runs
+
+UTC 2026-09-23. `PY`, `D` and the private `TMPDIR` are as in round 3.
+
+| # | Command | Where | Exit | Result (quoted) |
+|---|---|---|---|---|
+| S1 | layer 0 (the four paths), 17:04:50Z | this branch at `5af39c0` | **0** | `95 passed, 32 skipped, 2 warnings in 15.44s`; PENDING `[G2-R1]`, `[I2B-R4]`, `[M1-L2]` (+1 skip: bk01f[column_acls_privilege] needs PostgreSQL) |
+| S2 | same, 17:05:06Z | scratch merge (5eb7b85 + IR2-2) | **0** | `113 passed, 32 skipped, 1 xfailed, 2 warnings in 18.23s` |
+| S3 | same, with the coordinator's `tasks.json` (`claude/backend-impl` @ `7ed6993`: G2, G3, I2B implemented) | scratch merge | **0** | `113 passed, 32 skipped, 1 xfailed, 2 warnings in 17.34s`. Round 3's Q8 failure (`({'G2','G3'}, set())`) is gone on 5eb7b85 + IR2-2 |
+| S4 | `$D $PY -m pytest -rs -v tests/integration/backend/recovery` | scratch merge | 1, then **0** | The first attempt (17:06:03Z) failed: `12 failed, 38 passed, 9 skipped, 11 errors in 13.61s`, every one `could not start infrx-d3-postgres-supabase: … failed to bind host port 127.0.0.1:55434/tcp: address already in use`. `ss` showed `TIME-WAIT 127.0.0.1:55434 → 127.0.0.1:55436`, i.e. another local client had taken 55434 as its ephemeral port (P-21, R2-C). After the socket cleared (17:06:53Z): **`61 passed, 9 skipped, 2 warnings in 63.37s`** (round 3: 60/9). test_restore.py: 27 passed, 1 skipped. rc04a, rc10b×2, rc10c, bk01f[column_acls] and [column_acls_privilege] PASSED. The `Created` d3 container left by the first attempt carried this checkout's label and was replaced by the second; afterwards no d3/i3b container remained |
+| S5 | `--only` i3bm104/108/109 (layer 1); i3bm103/106/110 and i3bm107/111 (layer 2, `$D`), as each landed | scratch merge | **0** | each `killed`, `problems: null`; the kill lines are in the table above |
+| S6 | **the full list**, `$D $PY …/mutants_i3b.py --layer all --report m-all4.json` (17:08:09Z-17:19:21Z) | scratch merge | 1 | **`{"mutants": 104, "killed": 102, "controls_survived": 1, "not_killed": 1, "pending": 0, "problems": ["i3bm33"]}`**, which equals the declared list (104). The only problem is i3bm33 `no-cases` (rc06 needs E2's Valkey), and there are 0 baseline-reds. Death sites: 91 `AssertionError`, 8 `Failed`, 1 `RuntimeError` (i3bm48, pgrestore.py:299), and 2 not visible in the tail (i3bm11/12). Round 4: i3bm108/109 `test_recovery.py:951`, i3bm110 `test_restore.py:471`, i3bm111 `test_recovery.py:324`; earlier ones: i3bm104 `:966`, i3bm105 `:693`, i3bm107 `:295`, i3bm103/106 `test_restore.py:471` |
+| S7 | `cd apps/infrx-api && $PY -m pytest -q -rs tests/i` (17:08:09Z) | scratch merge | **0** | `143 passed in 157.26s (0:02:37)` |
+
+### Integration requests (round 4: this list replaces the earlier ones)
+
+- **Request 1 → IR2-2 (E3B2), on E3B2 ≥ `e95bce5`, verified on `5eb7b85`.** Delete the whole
+  RESIDUAL block from `stack.PENDING` (G2, G1R, D2, D3, M3, W3) and set `RESIDUAL: dict[str, str] =
+  {}`. Keep `stack.OWNERS` (`G2-R1`, byte-equal to `recoverykit.OWNERS['G2-R1']`) and
+  `PENDING = {**OWNERS, "D5": …}`. This is E3B2's own IR2-2. S2 and S3 pass with it, using both
+  the merge's and the coordinator's `tasks.json`. **R2-A and R2-B are done** (`d8384ed`,
+  `dadbd79` on E3B2's branch) and are dropped from this list.
+- **R3-2 (D, pgharness): unchanged.** The port lock should live at a path that does not depend
+  on TMPDIR.
+- **R2-C (coordinator / D, host): unchanged, and hit again in S4.** Reserve the task ports from
+  the ephemeral range, or give pgharness one bounded retry of `docker run` on "address already
+  in use".
+- Merge order is unchanged: E3B2 (with IR2-2) first, then this branch.
+
+### Changes (round 4)
+
+`git diff --stat 1a7a256..5af39c0`: 3 files, +52/−17 (`mutants_i3b.py`, `test_recovery.py`, `test_restore.py`). All files are under
+`tests/integration/backend/recovery/`. No lib.sh, pgrestore, runbook, module, migration, D or
+E file changed. **Migrations: none.** New case: bk01f[column_acls_privilege]; rc10b and rc04a
+gained assertions. Artifacts (session scratch, sha256 prefix): `l0-head4.log e71da9bdb3f44fb6` (S1), `l0-merge4.log bb63bc05fa0a70c6` (S2), `l0-merge4-coord.log 6881a17407cbe698` (S3), `recovery-d3-r4.log 1af578ecf0f312ad` (S4, second attempt), **`m-all4.json c2a4f90f48397f0d` (S6)**, `tests-i4.log 73bb6d9ccf94cc8e` (S7).
+
 ## Verification log
 
 - 2026-09-23: Authored from the runs above; every count is quoted from command output or the
@@ -443,3 +504,9 @@ rc10c, rc04a, rc04b (rc04 split). rc10b, rc00, rc03, bk01f[column_acls] and bk03
   RST-R2-3, DRL-4 and RST-R2-4 are corrected in the text above, with R3-2 to D. Full list on
   the merge: 100 mutants, 98 killed, the control survived, i3bm33 no-cases. Status
   **implemented, not integrated**. Nothing deployed; E2's stack not started.
+- 2026-09-23 (round 4): verification of `1a7a256` answered. DRL-R3-1 is fixed (rc10b times a
+  3 s READY_S; i3bm108/109). RST-R3-1 (column_acls_privilege, i3bm110) and DRL-R3-2
+  (reconciliation drift + detector, i3bm111; docstring reworded) are folded in. The requests
+  are restated against E3B2 `5eb7b85` + IR2-2 (R2-A/R2-B done there). Full list on that merge:
+  104 mutants, 102 killed, the control survived, i3bm33 no-cases. Status **implemented, not
+  integrated**. Nothing deployed; E2's stack not started.
