@@ -301,10 +301,12 @@ def check_fence(conn) -> str:
         assert work["prepared_refs"] == refs, f"load_work lost the prepared refs: {work}"
         assert d3(conn, "terminalize", lease=lease.model_dump(mode="json"),
                   outcome={})[0] == "untyped 0A000", "terminalize's settlement is not D5's stub"
-        # expired (before any deadline): stale, and nothing changes
-        advance(conn, TTL + 1)
+        # expired - exactly at the renewed expires_at, before any deadline: stale, nothing
+        # changes (the reaper requeues at this same instant, FE-2)
+        advance(conn, TTL)
         for fn in ("heartbeat", "load_work"):
-            assert d3(conn, fn, lease=lease.model_dump(mode="json"))[0] == "stale_lease", fn
+            assert d3(conn, fn, lease=lease.model_dump(mode="json"))[0] == "stale_lease", \
+                f"{fn} exactly at the lease's expires_at was not stale_lease"
         assert row(conn, request.request_id)["state"] == "running", \
             "an expired lease inside the deadline terminalized the job"
         # past the generation instant, lease LIVE: terminalized here (R29)

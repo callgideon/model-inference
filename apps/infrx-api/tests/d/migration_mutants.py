@@ -1685,6 +1685,10 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "' lease expired at '",
        "  if false then\n    perform infrx.refuse('stale_lease', v_kind || "
        "' lease expired at '", "admission", "lease_fence", "a lost worker keeps mutating"),
+    _m("d3_fence_expiry_off_by_one", LEASES,
+       "  if v_now >= a.expires_at then", "  if v_now > a.expires_at then",
+       "admission", "lease_fence",
+       "a lease still renews at the instant the reaper may requeue it (FE-2)"),
     _m("d3_fence_serves_a_terminal_job", LEASES,
        "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
        "|| j.request_id || ' is already '",
