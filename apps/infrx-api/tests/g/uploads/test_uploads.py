@@ -302,6 +302,31 @@ def test_media_sec__a_control_body_is_bounded():
         assert response.status_code == 413 and code_of(response) == "request_too_large"
     assert store.uploads == {}
 
+
+def test_media_sec__a_slow_control_body_is_cut_at_the_deadline():
+    """The intake deadline bounds create and complete too: a small body that keeps
+    arriving, too slowly, is `deadline_exceeded` on the app's clock (moved, never slept),
+    and nothing is created or finalized."""
+    app, rt, store, _ = mounted()
+
+    def slow():
+        return clips.Chunks([b"{", b" " * 100, b" " * 100, b"}"],
+                            on_chunk=lambda: setattr(rt.clock, "now", rt.clock.now + 20))
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        return handle, [
+            await client.post(CREATE, content=slow(),
+                              headers=bearer(**{"content-type": "application/json"})),
+            await client.post(complete_path(handle), content=slow(), headers=bearer())]
+
+    handle, answers = run(app, script)
+    for response in answers:
+        assert response.status_code == 504 and code_of(response) == "deadline_exceeded", \
+            response.text
+    assert list(store.uploads) == [handle] and store.uploads[handle].state == "created"
+
+
 # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
 def created_handle(client_answer) -> str:
     assert client_answer.status_code == 201, client_answer.text

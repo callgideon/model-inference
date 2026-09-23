@@ -71,6 +71,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("control_body_unbounded", "create and complete read at most MAX_CONTROL_BYTES",
        U, "max_bytes=MAX_CONTROL_BYTES,", "max_bytes=limits.max_request_bytes,",
        "test_media_sec__a_control_body_is_bounded"),
+    _m("control_deadline_stretched", "create and complete read under the intake deadline",
+       U, "timeout_s=limits.intake_timeout_s, clock=rt.clock)",
+       "timeout_s=limits.intake_timeout_s * 100, clock=rt.clock)",
+       "test_media_sec__a_slow_control_body_is_cut_at_the_deadline"),
     # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -----------
     _m("destination_cap_is_the_request_cap", "the destination reads at most MAX_MEDIA_BYTES",
        U, "max_bytes=limits.max_media_bytes,", "max_bytes=limits.max_request_bytes,",
