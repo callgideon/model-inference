@@ -163,7 +163,8 @@ def test_deploy_failclosed__a_migration_that_ends_the_transaction_stops_the_plan
 def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path,
                                                                          monkeypatch):
     """No history table, a version the repository lacks, a gap, a file outside the
-    grammar, no DSN, or no digest: each is exit 2 before any migration runs."""
+    grammar, a statement that cannot run inside the plan's one transaction, no DSN, or no
+    digest: each is exit 2 before any migration runs."""
     directory = migrations(tmp_path)
     digest = planned_digest(directory, [])
     cases = [Conn(columns=()), Conn(applied=["0001", "0004"]), Conn(applied=["0001", "0003"])]
@@ -175,8 +176,12 @@ def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path
         migrate.pending(local, ["0001", "0004"])
     with pytest.raises(migrate.Refused, match="a gap"):
         migrate.pending(local, ["0001", "0003"])
-    for extra in ({"0004-Bad Name.sql": "select 1;"}, {"0003_other.sql": "select 1;"}):
-        odd = migrations(tmp_path / str(len(extra) + len(next(iter(extra)))), **extra)
+    for i, extra in enumerate(({"0004-Bad Name.sql": "select 1;"},
+                               {"0003_other.sql": "select 1;"},
+                               {"0004_idx.sql": "create unique index\n  concurrently i on a (x);"},
+                               {"0004_vac.sql": "-- tidy up\nVACUUM a;"},
+                               {"0004_sys.sql": "alter system set work_mem = '64MB';"})):
+        odd = migrations(tmp_path / f"odd{i}", **extra)
         conn = Conn()
         assert run(monkeypatch, conn, "plan", "--dir", str(odd)) == 2 and conn.log == []
     assert run(monkeypatch, Conn(), "apply", "--dir", str(directory)) == 2

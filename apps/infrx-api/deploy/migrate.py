@@ -45,6 +45,10 @@ HISTORY = "supabase_migrations.schema_migrations"
 FILENAME = re.compile(r"(\d{4})_([a-z0-9_]+)\.sql")
 # Any constant works; it only has to be the same for every migrator of this database.
 LOCK_KEY = 0x12BD3B
+# Statements PostgreSQL refuses inside a transaction block. `apply` runs the whole plan in
+# one, so such a file is refused at `plan`, before the window, not failed mid-`apply`.
+OUTSIDE_TRANSACTION = re.compile(r"^\s*(vacuum|alter\s+system|(create|drop|reindex)\b[^;]*"
+                                 r"\bconcurrently)\b", re.I | re.M)
 
 
 class Refused(Exception):
@@ -59,7 +63,11 @@ def local_migrations(directory: pathlib.Path) -> list[tuple[str, str, bytes]]:
         match = FILENAME.fullmatch(path.name)
         if not match:
             raise Refused(f"{path.name}: not a NNNN_name.sql migration")
-        found.append((match.group(1), match.group(2), path.read_bytes()))
+        body = path.read_bytes()
+        if OUTSIDE_TRANSACTION.search(body.decode(errors="replace")):
+            raise Refused(f"{path.name}: VACUUM, ALTER SYSTEM or CONCURRENTLY cannot run in "
+                          f"the one transaction `apply` uses; D ships it as its own step")
+        found.append((match.group(1), match.group(2), body))
     versions = [version for version, _, _ in found]
     if len(set(versions)) != len(versions):
         raise Refused("two migration files share a version")
