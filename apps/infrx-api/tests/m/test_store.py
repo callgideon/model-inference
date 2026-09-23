@@ -315,6 +315,24 @@ def test_the_allow_list_the_fetcher_was_given_is_the_one_that_is_used():
     assert asyncio.run(adapter.materialize(b.ORG_A, webm)).mime == "video/webm"
 
 
+def test_a_data_url_is_bounded_by_the_configured_limits_before_it_is_decoded(monkeypatch):
+    """Review S5: the `data:` path gets the adapter's own limits, so a tightened cap refuses
+    on the encoded length - not after a decode of up to the default 64 MiB."""
+    import binascii
+
+    decoded = []
+    real = binascii.a2b_base64
+    monkeypatch.setattr(binascii, "a2b_base64",
+                        lambda *args, **kwargs: decoded.append(1) or real(*args, **kwargs))
+    adapter = staging(limits=SMALL)
+    body = "data:video/mp4;base64," + base64.b64encode(MP4 * 10).decode()   # 280 B > 64
+    with pytest.raises(errors.RequestTooLarge):
+        asyncio.run(adapter.materialize(b.ORG_A, body))
+    assert decoded == [] and adapter.objects.objects == {}
+    asyncio.run(adapter.materialize(b.ORG_A, DATA_URL))                      # non-vacuous
+    assert decoded == [1]
+
+
 def test_a_known_handle_is_staged_as_the_object_the_store_has():
     """Review B4/S03: for a handle the store already has, the size, type, duration and key
     are the *object's* facts, never the request's claims about them."""

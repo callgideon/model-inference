@@ -1169,6 +1169,11 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            refusal.reason = \"header\"",
        "            refusal.reason = \"header\"; refusal.param = None",
        "test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives"),
+    _m("data_urls_ignore_the_configured_limits",
+       "S5: the same limits decide a data: URL, before it is decoded",
+       S, "                decode_data_url, source, self.limits, self.fetcher.allowed_mime)",
+       "                decode_data_url, source, DEFAULTS, self.fetcher.allowed_mime)",
+       "test_a_data_url_is_bounded_by_the_configured_limits_before_it_is_decoded"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",
