@@ -1164,6 +1164,11 @@ MUTANTS: tuple[Mutant, ...] = (
        F, "                        if early is not None and len(body) >= look:",
        "                        if early is not None and len(body) >= look and len(body) <= (16 << 20):",
        "test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk"),
+    _m("early_refusal_drops_param",
+       "S4: an early refusal is the whole-object refusal apart from its reason tag",
+       R, "            refusal.reason = \"header\"",
+       "            refusal.reason = \"header\"; refusal.param = None",
+       "test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",

@@ -920,6 +920,13 @@ def test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives(tmp
     assert getattr(caught.value, "reason", None) == "header"
     assert stream.read < fetch.EARLY_LOOK_BYTES + CHUNK < len(body)
     assert adapter.objects.objects == {} and adapter.refs == {}
+    # Review S4: the same refusal the whole object gets, apart from the operator's tag.
+    with pytest.raises(errors.UnsupportedMedia) as whole:
+        run(_served(tmp_path / "media-first", _streamed(
+            FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(121.0))).materialize(b.ORG_A, URL))
+    early, full = caught.value, whole.value
+    assert {k: v for k, v in vars(early).items() if k != "reason"} == vars(full)
+    assert early.code == full.code and early.args == full.args
 
 
 def test_a_header_that_is_not_complete_yet_is_looked_at_again(tmp_path):
