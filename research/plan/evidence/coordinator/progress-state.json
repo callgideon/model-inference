@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:24:46Z",
+  "updated": "2026-09-23T22:25:11Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "M1-L2": {
       "lane": "codex-objstore / codex/m1l2-object-store",
-      "phase": "verifier PASS at 0b9fc50 (4 nonblocking fixture items being folded in) \u2192 MERGE after cutover",
+      "phase": "FINAL ba26ca4 (verifier pass + V1\u2013V4 folded; 46 mutants; cutover f7d9b03 re-merged) \u2192 merge at step 4 of the unit",
       "since": "2026-09-23T19:57:28Z",
       "note": "compose S3 in namespace e2 if free; else stub"
     },
