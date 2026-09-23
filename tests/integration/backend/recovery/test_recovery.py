@@ -345,10 +345,34 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
     kit.run(body)
 
 
+def _object_store_adapters() -> list[str]:
+    """D3: structural, not a name heuristic - every class defined in an `infrx.media` module
+    that has the port's core operations, other than the Protocol and the in-memory double.
+    ponytail: a module that fails to import (a missing optional dependency) is not seen."""
+    import inspect
+    import pkgutil
+
+    import infrx.media
+    core = ("head", "get", "put_if_absent")
+    found = []
+    for info in pkgutil.iter_modules(infrx.media.__path__, "infrx.media."):
+        try:
+            module = importlib.import_module(info.name)
+        except ImportError:
+            continue
+        for name, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ == module.__name__ \
+                    and cls not in (store.ObjectStore, store.InMemoryObjectStore) \
+                    and all(callable(getattr(cls, op, None)) for op in core):
+                found.append(f"{module.__name__}.{name}")
+    return found
+
+
 def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter():
     """The same drill against E2's MinIO needs an S3-backed `ObjectStore`; `media.store`
-    has only the in-memory one. Fails the day an S3 adapter appears in `infrx.media`."""
-    names = [name for name in dir(store) if "s3" in name.lower() and name != "InMemoryObjectStore"]
+    has only the in-memory one. Fails the day any class in `infrx.media` implements the
+    port (whatever its name) other than the in-memory double."""
+    names = _object_store_adapters()
     if names:
         pytest.fail(f"an S3 object store exists ({names}): pause MinIO under it now")
     kit.pending("M3", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
@@ -527,9 +551,18 @@ def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
     """The same drain driven by SIGTERM to the worker PROCESS, bounded by the unit's
     `TimeoutStopSec`: needs W3's worker entry point (and I2B's unit). Fails the day
     `infrx.worker` grows one."""
+    import importlib.metadata
+    import re
+
     import infrx.worker as worker
-    entry = importlib.util.find_spec("infrx.worker.__main__") or getattr(worker, "main", None)
-    if entry is not None:
+    # D3: a `__main__` module, a `main`, a console script into infrx.worker, or any worker
+    # module that runs as a script.
+    entry = importlib.util.find_spec("infrx.worker.__main__") or getattr(worker, "main", None) \
+        or [ep.value for ep in importlib.metadata.entry_points(group="console_scripts")
+            if ep.value.startswith("infrx.worker")] \
+        or [path.name for path in Path(worker.__file__).parent.glob("*.py")
+            if re.search(r"^if __name__ == .__main__.:", path.read_text(), re.M)]
+    if entry:
         pytest.fail("infrx.worker has a process entry point: SIGTERM it mid-attempt now")
     kit.pending("W3", "I2B", why="no worker process entry point or unit to SIGTERM")
 

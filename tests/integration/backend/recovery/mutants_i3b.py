@@ -189,6 +189,17 @@ MUTANTS += (
                      "(a consistent overcharge in ledger and outcome alike)", STATE,
            "                debit = candidate\n", "                debit = candidate + candidate\n",
            DRILLS, "rc01"),
+    # D3: the PENDING probes are structural - an adapter or entry point of any name flips them
+    Mutant("i3bm39", "D3: rc05b fails once any class implements the ObjectStore port",
+           "apps/infrx-api/infrx/media/store.py", "class InMemoryObjectStore:\n",
+           "class MinioObjectStore:\n    async def head(self, key): ...\n"
+           "    async def get(self, key): ...\n"
+           "    async def put_if_absent(self, key, data, content_type): ...\n\n\n"
+           "class InMemoryObjectStore:\n", DRILLS, "rc05b"),
+    Mutant("i3bm57", "D3: rc08b fails once any worker module runs as a script",
+           "apps/infrx-api/infrx/worker/loop.py", "                           claimed=self.claimed)\n",
+           "                           claimed=self.claimed)\n\n\nif __name__ == \"__main__\":\n"
+           "    pass\n", DRILLS, "rc08b"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
