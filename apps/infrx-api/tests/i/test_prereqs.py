@@ -220,15 +220,11 @@ def test_deploy_failclosed__a_missing_engine_script_is_not_a_pass(tmp_path):
 
 def test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands():
     """The real `models/marlin2b/serve.sh`, not a generated stand-in: it passes neither
-    forbidden flag and binds the engine to loopback, and it is **not** digest-pinned and
-    has no `serving-version.json` beside it, so a pilot install is refused today. Those
-    two refusals are the recorded pending items, owner W3; this case changes in W3's
-    commit (I2B integration request)."""
+    forbidden flag, binds the engine to loopback and is digest-pinned with its
+    `serving-version.json` beside it (W3), so the pilot gate passes."""
     assert REAL_SERVE_SCRIPT.exists(), REAL_SERVE_SCRIPT
     assert preflight.engine_problems(REAL_SERVE_SCRIPT, "dev") == []
-    pilot = preflight.engine_problems(REAL_SERVE_SCRIPT, "pilot")
-    assert len(pilot) == 2, pilot
-    assert "pending on W3" in pilot[0] and pilot[1].startswith("PENDING(W3)"), pilot
+    assert preflight.engine_problems(REAL_SERVE_SCRIPT, "pilot") == []
 
 
 if __name__ == "__main__":
