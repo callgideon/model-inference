@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:57:39Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:59:40Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>15</b><span>done</span></div>
 <div class="tile prog"><b>8</b><span>in progress</span></div>
@@ -99,7 +99,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>D2</code> — codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL</li>
 <li><code>A1</code> — codex-a1 / codex/a1-signup-grant — round 4 needed: RV3-1 delete/move race case + mutant (or narrow docstring); RV3-2/RV3-3 wording — then merge after D2 (JSON evidence/a/A1-confirm-dc3cb9c.json) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight</li>
 <li><code>W3</code> — codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B&#x27;s deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run</li>
-<li><code>I2B</code> — codex-i2b / codex/i2b-deployment — round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
+<li><code>I2B</code> — codex-i2b / codex/i2b-deployment — round 2 handed back d620f14 (RB-1/RB-2 closed); needs an Opus confirmation, then merge with W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
 <li><code>D3</code> — codex-d3 / codex/d3-fenced-leases — fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2&#x27;s head after review of b4b1ec7 since 2026-09-22T22:40:37Z — stacked on D2&#x27;s head; leases, reaper, cancellation</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
