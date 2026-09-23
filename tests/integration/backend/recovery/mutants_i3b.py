@@ -96,6 +96,16 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bm15", "available memory is MemAvailable", HOST,
            'if name in ("MemTotal", "MemAvailable"):', 'if name in ("MemTotal", "MemFree"):',
            OBSERVE, "ob08"),
+    Mutant("i3bm35", "M3: a lost GPU keeps no frozen memory/utilization series", HOST,
+           "        reg.clear(family)                           # a lost GPU keeps no frozen reading",
+           "        pass", OBSERVE, "ob08"),
+    Mutant("i3bm36", "M3: a mount that stops answering keeps no old byte counts", HOST,
+           '    reg.clear("infrx_disk_bytes")', "    pass", OBSERVE, "ob08"),
+    Mutant("i3bm37", "M3: a failed nvidia-smi fabricates no memory reading", HOST,
+           '    reg.set("infrx_gpu_up", 1.0 if parsed else 0.0)\n',
+           '    reg.set("infrx_gpu_up", 1.0 if parsed else 0.0)\n'
+           '    if not parsed:\n        reg.set("infrx_gpu_memory_bytes", 0.0, gpu="0", state="used")\n',
+           OBSERVE, "ob08"),
     # ---------------- wiring helpers
     Mutant("i3bm16", "a reaped inference lease is a requeue, a reaped preparation a redispatch",
            METRICS, 'action="prepare_redispatched" if preparing else "requeued")',

@@ -238,8 +238,15 @@ def test_i3b_ob08_host_gauges_read_the_machine_and_fail_towards_the_alert(tmp_pa
     assert reg.value("infrx_gpu_utilization_ratio", gpu="0") == pytest.approx(0.07)
     for broken in (lambda argv, **_: SimpleNamespace(returncode=9, stdout=""),
                    lambda argv, **_: (_ for _ in ()).throw(FileNotFoundError("nvidia-smi"))):
+        host.collect_gpu(reg, run=smi)
         host.collect_gpu(reg, run=broken)
         assert reg.value("infrx_gpu_up") == 0.0
+        # M3: no frozen reading survives the loss, and none is fabricated (no 0 either)
+        text = reg.render()
+        assert "infrx_gpu_memory_bytes" not in text and "infrx_gpu_utilization_ratio" not in text
+    host.collect_disks(reg, {"media": "/gone"}, statvfs=statvfs)
+    assert reg.value("infrx_disk_free_ratio", mount="media") == 0.0
+    assert reg.value("infrx_disk_bytes", mount="media", state="free") is None
 
 
 # ------------------------------------------------------------------ the wiring helpers

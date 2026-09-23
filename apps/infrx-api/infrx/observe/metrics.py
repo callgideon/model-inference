@@ -221,6 +221,13 @@ class Registry:
             counts[-2] += value
             counts[-1] += 1
 
+    def clear(self, name: str) -> None:
+        """Forget every series of a gauge family that is re-read whole on each scrape, so a
+        GPU or mount that stopped answering does not keep its last value as if current."""
+        self._kind(name, "gauge")
+        with self._lock:
+            self._samples[name].clear()
+
     def observe_phases(self, timings: Mapping[str, float]) -> None:
         """Record one request's phase timings (seconds), keyed by the Server-Timing names."""
         for phase, seconds in timings.items():

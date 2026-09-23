@@ -38,6 +38,7 @@ def _resident(proc: Path) -> int | None:
 
 def collect_disks(reg: Registry, disks: Mapping[str, str], *,
                   statvfs: Callable = os.statvfs) -> None:
+    reg.clear("infrx_disk_bytes")                   # a mount that fails keeps no old bytes
     for mount, path in disks.items():
         try:
             fs = statvfs(path)
@@ -51,6 +52,8 @@ def collect_disks(reg: Registry, disks: Mapping[str, str], *,
 
 
 def collect_gpu(reg: Registry, *, run: Callable = subprocess.run) -> None:
+    for family in ("infrx_gpu_memory_bytes", "infrx_gpu_utilization_ratio"):
+        reg.clear(family)                           # a lost GPU keeps no frozen reading
     try:
         answer = run(NVIDIA_SMI, capture_output=True, text=True, timeout=5)
         rows = [line.split(",") for line in answer.stdout.strip().splitlines()] \
