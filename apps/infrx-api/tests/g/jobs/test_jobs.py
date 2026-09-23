@@ -31,7 +31,7 @@ from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      JobState, OutboxKind, SettlementState, TerminalCause,
-                                     TerminalOutcome)
+                                     TerminalOutcome, Usage)
 from infrx.gateway import pilot
 from infrx.gateway.routes import ingress, jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
@@ -190,6 +190,66 @@ def test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetchi
         first.json()["job_handle"], "succeeded", True)
     assert staged_payloads(world) == staged and list(world.jobs.jobs) == [job.id]
     assert world.failures.count("admit") == 1
+
+
+def refusing_host(fetched: list):
+    """The customer's media host once the URL expired: every fetch is counted and refused."""
+    def serve(request):
+        fetched.append(request.url)
+        return httpx.Response(403)
+    return httpx.MockTransport(serve)
+
+
+def test_dur_admit__an_in_flight_async_replay_prepares_nothing_when_the_host_fails():
+    """Review ADM-R2-B1 (R91, G2 round 3): a video job accepted by `POST /v1/jobs` is running
+    when its 202 is retried under the key, and by then the media host refuses the URL. The
+    retry is 202, replayed, `running` - never a 400 for a live job - with nothing fetched or
+    staged and the bound refs left as they are; the job runs on and settles once."""
+    world = JobsWorld()
+    assert post(world, payload=rs.body(rs.VIDEO), key="clip-5").status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    bound, staged, fetched = world.media.by_job[job.id], staged_payloads(world), []
+    world.media.fetcher.transport = refusing_host(fetched)
+    again = post(world, payload=rs.body(rs.VIDEO), key="clip-5")
+    assert again.status == 202, again.body
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    assert (again.json()["job_handle"], again.json()["state"]) == (world.handle(), "running")
+    assert fetched == [] and staged_payloads(world) == staged
+    assert world.media.by_job[job.id] == bound and world.failures.count("admit") == 1
+    assert job.state is JobState.running and not job.terminal
+    rs.run(world.complete(lease))
+    assert job.outcome.state is JobState.succeeded
+    assert world.jobs.holds[job.id].state is HoldState.settled
+
+
+def test_dur_admit__an_in_flight_credit_replay_is_never_rechecked_or_cancelled():
+    """Review ADM-R2-B1 (G2 round 3's money-B2 on the 202 path): a CREDIT job is running with
+    committed output when the deployment's approved card rotates; the same-key `POST /v1/jobs`
+    is 202, replayed, the same handle - not rechecked against the new card, never cancelled.
+    Nothing is staged or admitted again, and the job runs on to its settlement."""
+    world = JobsWorld(regime=CREDIT)
+    assert post(world, key="credit-5").status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two ", "people"))
+    staged, cancels = staged_payloads(world), world.failures.count("cancel")
+    world.relay.active_rate_card_version = "rc_rotated_since"
+    again = post(world, key="credit-5")
+    assert again.status == 202, again.body
+    assert (again.json()["job_handle"], again.json()["idempotency_replayed"]) == (
+        world.handle(), True)
+    assert job.state is JobState.running and not job.terminal and not world.released(job)
+    assert world.failures.count("cancel") == cancels and world.failures.count("admit") == 1
+    assert staged_payloads(world) == staged
+
+    async def settles():
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(lease, b.outcome(job.id, world, tokens=Usage.of(1200, 5),
+                                                          result_ref=ref))
+
+    rs.run(settles())
+    assert job.outcome.state is JobState.succeeded and world.released(job)
 
 
 def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_async_retry():

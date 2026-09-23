@@ -49,6 +49,8 @@ NO_SURPRISE = "test_api_modes__plain_chat_is_never_a_surprise_202"
 REPLAY_OUTAGE = "test_dur_admit__a_store_outage_answering_a_replay_leaves_the_job_for_the_retry"
 TERMINAL_REPLAY = "test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetching"
 CRASH_REPLAY = "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_async_retry"
+INFLIGHT_403 = "test_dur_admit__an_in_flight_async_replay_prepares_nothing_when_the_host_fails"
+INFLIGHT_CREDIT = "test_dur_admit__an_in_flight_credit_replay_is_never_rechecked_or_cancelled"
 MODES_409 = "test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on"
 STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
 OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
@@ -145,6 +147,14 @@ MUTANTS: tuple[Mutant, ...] = (
        LOST_202, TERMINAL_REPLAY),
     _m("inflight_replay_not_completed", "the retry of an acceptance cut short completes it",
        R, "        elif found[1] is None:", "        elif False:", CRASH_REPLAY),
+    # Review ADM-R2-B1: the same single edits as G2's `inflight_replay_prepares` and
+    # `inflight_replay_rechecked_after_attach` (the G list), here naming the 202 path's cases.
+    _m("inflight_async_replay_prepares", "an in-flight async replay fetches and stages nothing",
+       R, "        if found is None:\n            # Media is fetched and staged only",
+       "        if found is None or found[1] is None:\n            # Media is fetched and staged only",
+       INFLIGHT_403, INFLIGHT_CREDIT),
+    _m("inflight_async_replay_rechecked", "an async replay never rechecks or cancels a running job",
+       R, "        if job.request_id in self.media.by_job:", "        if False:", INFLIGHT_CREDIT),
     _m("mode_left_out_of_the_digest", "R94: a key reused across sync and async is 409",
        N, "    if request.execution_mode is not ExecutionMode.async_:\n        return request.payload_digest",
        "    if True:\n        return request.payload_digest", MODES_409),
