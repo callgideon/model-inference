@@ -166,13 +166,16 @@ def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_pa
     """DEPLOY-FAILCLOSED end to end through the deploy script: a denied secret read, and
     the repository's own pilot today (refused by the composition gate and W3's pending
     pins), both exit 2 with the env file and every unit byte-identical, no unit touched
-    by systemctl, no state directory made, the edge untouched - and no backup left
-    behind: it holds a copy of the previous env file's secrets."""
+    by systemctl, no state directory made, the edge untouched - and no backup of its own
+    left behind (it holds a copy of the previous env file's secrets), while an earlier
+    run's backup is kept."""
     for params in ({**{n: {"value": v} for n, v in support.VALID.items()},
                     "/model-inference/pg_journal_url": {"error": "AccessDeniedException"}},
                    None):
         host = Host(tmp_path / str(params is None), monkeypatch, params)
         host.monolith()
+        earlier = host.file("var/backups/infrx/20260101T000000Z-" + "e" * 40)
+        earlier.mkdir(parents=True)                     # a previous run's: must survive
         before = {p: host.file(p).read_bytes()
                   for p in (ENV, "etc/systemd/system/marlin2b-gateway.service")}
         done = host.run("install.sh", INFRX_MODE="pilot")
@@ -184,7 +187,7 @@ def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_pa
         assert not host.file("var/lib/infrx").exists()
         assert [e for e in host.of("docker") if "caddy" in e] == []
         assert "refusing to install" in done.stderr
-        assert backups(host) == []
+        assert backups(host) == [earlier]
 
 
 def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monkeypatch):
