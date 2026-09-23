@@ -6,6 +6,9 @@ PostgreSQL store with their assertions VERBATIM, so they can turn green there by
 PostgreSQL - integration request). dr05 (stale append) also needs D4's StreamStore
 (`append`/`read_owned`), so it is not here: its D3 half - a stale generation refused by the
 fence every append must call first - is `tests/d/test_lease_races.py`.
+
+D4 adds dr05, dr06, dr08 and dr10 below (verbatim bodies; `h.extra["stream"]` is the real
+`PgStreamStore` on the same database - `pgtesting.make_jobstore_factory`'s `stream` hook).
 """
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import CrashAfterCommit
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import IndexEvent, JobState, OutboxKind, SettlementState
+from infrx.contracts.records import TerminalCause
 
 from . import pgharness, pgstore
 
@@ -166,4 +170,80 @@ def test_e3b_dr09_cancellation_beats_a_late_completion() -> None:
             await h.port.complete(lease, b.outcome(admission.request_id, h))
         assert usage_projections(h, admission.request_id) == 1
         await assert_conserved(h, b.ORG_A, [admission.job_handle])
+    asyncio.run(body())
+
+
+# --- D4: the drills E3B names D4 for (verbatim bodies) --------------------------------
+def test_e3b_dr05_a_stale_generation_cannot_append() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        old = await running(h, admission, "w1")
+        h.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        await h.port.recover()
+        new = await h.port.claim(admission.request_id, "w1")
+        assert new.generation == old.generation + 1
+        stream = h.extra["stream"]
+        with pytest.raises((errors.StaleLease, errors.AlreadyTerminal)):
+            await stream.append(old, b.events("stale"))
+        await stream.append(new, b.events("fresh"))
+        chunks, _cursor = await stream.read_owned(b.ORG_A, admission.job_handle, None)
+        assert {c.generation for c in chunks} == {new.generation}, chunks
+        assert all("stale" not in str(c.payload) for c in chunks)
+    asyncio.run(body())
+
+
+def test_e3b_dr06_a_worker_lost_after_publication_is_never_regenerated() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await running(h, admission)
+        await h.extra["stream"].append(lease, b.events("first"))
+        h.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        produced = await h.port.recover()
+        assert not [item for item in produced if isinstance(item, IndexEvent)]
+        _, outcome = await h.port.get_owned(b.ORG_A, admission.job_handle)
+        assert (outcome.state, outcome.cause) == (JobState.failed,
+                                                  TerminalCause.lost_after_publication)
+        assert outcome.settlement_state is SettlementState.held_unknown and outcome.debit == 0
+        with pytest.raises((errors.StaleLease, errors.AlreadyTerminal)):
+            await h.extra["stream"].append(lease, b.events("late"))
+        await assert_conserved(h, b.ORG_A, [admission.job_handle])
+    asyncio.run(body())
+
+
+def test_e3b_dr08_a_foreign_tenant_cannot_read_cancel_or_see_a_result() -> None:
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await running(h, admission)
+        await h.extra["stream"].append(lease, b.events("private"))
+        handle = admission.job_handle
+        with pytest.raises(errors.NotFound):
+            await h.port.get_owned(b.ORG_B, handle)
+        with pytest.raises(errors.NotFound):
+            await h.extra["stream"].read_owned(b.ORG_B, handle, None)
+        with pytest.raises(errors.NotFound):
+            await h.port.cancel(b.ORG_B, handle)
+        state, outcome = await h.port.get_owned(b.ORG_A, handle)
+        assert (state.state, outcome) == (JobState.running, None)
+        await assert_conserved(h, b.ORG_A, [handle])
+        await assert_conserved(h, b.ORG_B, [])
+    asyncio.run(body())
+
+
+def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole() -> None:
+    h = rig(journal_event_max_bytes=64)
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await running(h, admission)
+        with pytest.raises(errors.JournalWriteFailed):
+            await h.extra["stream"].append(lease, b.events("x" * 200))
+        chunks, _cursor = await h.extra["stream"].read_owned(b.ORG_A, admission.job_handle,
+                                                             None)
+        assert chunks == ()
     asyncio.run(body())
