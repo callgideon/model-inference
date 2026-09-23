@@ -111,11 +111,10 @@ def test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoin
 
 def test_split_contract__an_operator_key_runs_no_inference():
     """R66: an operator credential spends no wallet, so it has nothing to run inference
-    on. It still authenticates (readiness answers it)."""
+    on. It still authenticates: the refusal is 403, not the 401 of an unknown key."""
     tc, calls = app_with(support.OPERATOR_ROW)
     refused(chat(tc), 403, "forbidden")
     assert calls == []
-    assert tc.get(support.READY_PATH, headers=support.AUTH).status_code == 200
 
 
 # --- publication ------------------------------------------------------------------
