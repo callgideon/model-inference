@@ -150,9 +150,14 @@ def main(argv: list[str] | None = None) -> int:
         stored = json.loads(args.state.read_text())
         previous = {(name, tuple(map(tuple, labels))): value for name, labels, value in stored}
     firing += evaluate(rules, samples, previous)
-    if args.state:
+    failed = any(alert["alert"] == "ScrapeFailed" for alert in firing)
+    # A source that failed keeps its previous samples in the state: otherwise the next good
+    # scrape would judge every counter's lifetime total as new and page on nothing. A
+    # failure on the very first run writes no state, so the next run is a first run.
+    if args.state and not (failed and previous is None):
+        kept = {**(previous or {}), **samples} if failed else samples
         args.state.write_text(json.dumps([[name, labels, value]
-                                          for (name, labels), value in samples.items()]))
+                                          for (name, labels), value in kept.items()]))
     for alert in firing:
         print(json.dumps(alert, sort_keys=True))
     return 1 if firing else 0

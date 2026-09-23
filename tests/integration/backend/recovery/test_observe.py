@@ -439,3 +439,33 @@ def test_i3b_ob13_the_evaluator_cli_reports_an_unreadable_source_as_an_alert(tmp
     assert alerts.main([*args, "--source", str(tmp_path / "worker.prom")]) == 1
     fired = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [alert["alert"] for alert in fired] == ["ScrapeFailed"]
+
+
+def test_i3b_ob14_a_scrape_gap_then_recovery_fires_nothing_new(tmp_path, capsys):
+    """M1: a failed scrape keeps that source's previous samples in the state, so when it is
+    back with nothing new, no `increase` rule judges a counter's lifetime total as new - and
+    a failure on the very first run leaves the next run a first run."""
+    reg = _healthy(time.time())
+    reg.inc("infrx_lease_lost_total", 3, kind="inference", detected_by="reaper")
+    reg.inc("infrx_requests_rejected_total", 500, code="rate_limited", tenant=ORG)
+    source = tmp_path / "gateway.prom"
+    source.write_text(reg.render())
+    away = tmp_path / "gone.prom"
+    rules = str(kit.ROOT / "infra" / "alerts" / "alerts.json")
+
+    def run(state):
+        code = alerts.main(["--rules", rules, "--source", str(source), "--state", str(state)])
+        return code, [json.loads(line)["alert"] for line in capsys.readouterr().out.splitlines()]
+
+    state = tmp_path / "state.json"
+    assert run(state) == (0, []) and run(state) == (0, [])
+    source.rename(away)
+    assert run(state) == (1, ["ScrapeFailed"])
+    away.rename(source)
+    assert run(state) == (0, [])                          # back, nothing new: silence
+
+    first = tmp_path / "first.json"
+    source.rename(away)
+    assert run(first) == (1, ["ScrapeFailed"])            # the very first run fails
+    away.rename(source)
+    assert run(first) == (0, [])                          # ... so this one judges nothing
