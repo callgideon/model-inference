@@ -80,6 +80,9 @@ RESIDUAL = {
     "D3": "I3B rc04, as D2",
     "M3": "I3B rc05b names it for an S3-backed ObjectStore, which no task owns yet",
     "W3": "I3B rc08b names it for a worker process entry point (with I2B)",
+    # Review H2: I3B's own vocabulary adds I2B (recoverykit.PENDING); rc08b still names it.
+    "I2B": "I3B rc08b names it for the worker's systemd unit (with W3); rc10's rollback "
+           "drill body is I3B's (the coordinator's ruling e)",
 }
 
 

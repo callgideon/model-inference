@@ -753,6 +753,13 @@ MUTANTS: tuple[Mutant, ...] = (
            "        if red is not None:\n", "        if False:\n",
            "tests/integration/test_run.py", "baseline_red",
            cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
+    Mutant("e3bm27", "E3B2 review H2: a pending id naming a merged task fails the stage",
+           "tests/integration/run.py",
+           '                  if tasks.get(task) in ("implemented", "integrated") and task not '
+           'in residual)\n',
+           "                  if False)\n",
+           "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
+           cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
     Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
            "tests/integration/pgstate.py",
            "    lag = (read_back - returned).total_seconds()\n",

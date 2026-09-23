@@ -487,9 +487,21 @@ def classify(junit_xml: str) -> dict:
 def backend_verdict(cases: dict, exit_code: int) -> str:
     """FAIL beats PENDING beats PASS. A pending case is never a pass, a plain skip at layer 3
     is a case that did not run, and a run that ran nothing proves nothing."""
-    if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,):
+    if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,) \
+            or stale_pending(cases):
         return FAIL
     return PENDING if cases["pending"] else PASS
+
+
+def stale_pending(cases: dict) -> list[str]:
+    """Pending ids that name a task tasks.json marks implemented/integrated and that is not a
+    named `stack.RESIDUAL` (E3B phase 2, review H2): a merged task blocks nothing, whichever
+    vocabulary the skip came through - `stack.pending`, I3B's kit, or a hand-written skip."""
+    tasks = {task["id"]: task["status"] for task in json.loads(
+        (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
+    residual = _backend_stack().RESIDUAL
+    return sorted(task for task in cases["pending"]
+                  if tasks.get(task) in ("implemented", "integrated") and task not in residual)
 
 
 def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:
@@ -500,6 +512,7 @@ def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:
         "passed": len(cases["passed"]), "pending": len(distinct),
         "failed": len(cases["failed"]), "failed_cases": cases["failed"] or None,
         "not_run": cases["skipped"] or None,
+        "stale_pending": stale_pending(cases) or None,
         "detected": sorted(name.split("::")[-1] for name in cases["passed"]
                            if "detects" in name),
         "pending_by_id": {task: len(names) for task, names in sorted(cases["pending"].items())}}

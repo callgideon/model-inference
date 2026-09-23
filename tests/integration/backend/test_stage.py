@@ -76,7 +76,7 @@ def test_the_backend_stage_reports_the_summary_of_what_its_suite_produced(monkey
         return {"exit": 0, "argv": " ".join(argv)}
 
     fake_stack = types.SimpleNamespace(postgrest_up=lambda: "postgrest/test",
-                                       postgrest_down=lambda: [])
+                                       postgrest_down=lambda: [], RESIDUAL=stack.RESIDUAL)
     monkeypatch.setattr(run, "_backend_stack", lambda: fake_stack)
     monkeypatch.setattr(run, "shell", fake_shell)
     report = run.Report()
@@ -106,8 +106,12 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual():
     (`stack.pending` refuses it)."""
     tasks = {task["id"]: task["status"] for task in json.loads(
         (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
-    assert set(stack.PENDING) <= set(tasks), set(stack.PENDING) - set(tasks)
-    merged = {task for task in stack.PENDING if tasks[task] in ("implemented", "integrated")}
+    # Review H2: every vocabulary a counted pending comes through - E3B's and I3B's kit.
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "recovery"))
+    import recoverykit
+    vocabulary = {**stack.PENDING, **recoverykit.PENDING}
+    assert set(vocabulary) <= set(tasks), set(vocabulary) - set(tasks)
+    merged = {task for task in vocabulary if tasks[task] in ("implemented", "integrated")}
     assert merged == set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
     assert all(reason.strip() for reason in stack.RESIDUAL.values())
     import pytest
@@ -120,3 +124,15 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual():
         except pytest.skip.Exception:            # it pended: the refusal is gone
             pass
     assert refused == list(stack.RESIDUAL), refused
+
+
+def test_a_pending_id_naming_a_merged_task_fails_the_stage():
+    """Review H2: whatever vocabulary a `PENDING[..]` skip came through, an id tasks.json
+    marks implemented/integrated that is not a named RESIDUAL fails the stage (D1R merged
+    and is no residual); a RESIDUAL id still counts as pending."""
+    cases = run.classify(XML % '<testcase classname="x" name="stale"><skipped '
+                               'message="PENDING[D1R] a merged task"/></testcase>')
+    assert run.stale_pending(cases) == ["D1R"]
+    status, summary = run.backend_summary(cases, 0)
+    assert (status, summary["stale_pending"]) == (run.FAIL, ["D1R"])
+    assert run.backend_summary(run.classify(XML % ""), 0)[1]["stale_pending"] is None
