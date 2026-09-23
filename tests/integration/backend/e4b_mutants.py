@@ -37,12 +37,26 @@ def _shared():
 shared = _shared()
 Mutant, Outcome, Result = shared.Mutant, shared.Outcome, shared.Result
 
+
+def _compile_python_only(source, filename, mode, *args, **kwargs):
+    """The runner's "a mutant that does not compile is broken" rule is a Python rule; E4B also
+    mutates the Markdown its cases hold to the code (tests/i's same track-local override)."""
+    if str(filename).endswith(".py"):
+        return compile(source, filename, mode, *args, **kwargs)
+    return None
+
+
+shared.compile = _compile_python_only
+
 # What the E4B cases read, relative to the repository root. Directories are copied whole.
 COPIED = ("tests/integration", "models/marlin2b", "apps/infrx-api/infrx",
           "apps/infrx-api/deploy", "apps/infrx-api/uv.lock", "apps/app/supabase/migrations",
           "infra", "research/plan/tasks.json",
-          "research/plan/evidence/w/box/inventory-20260923T0319Z.txt")
-SUITES = ("tests/integration/backend/test_certify.py",)
+          "research/plan/evidence/w/box/inventory-20260923T0319Z.txt",
+          "research/plan/evidence/e/E4B-endpoint.md", "research/plan/evidence/e/E4B-release-decision.md",
+          "apps/infrx-api/client_example.py")
+SUITES = ("tests/integration/backend/test_certify.py",
+          "tests/integration/backend/test_endpoint_doc.py")
 
 
 def _layout(root: pathlib.Path) -> pathlib.Path:
@@ -94,6 +108,13 @@ SOAK = "test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samp
 OVERLOAD = "test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx"
 SCRAPE = "test_e4b_scrape_reads_the_series_the_soak_judges"
 CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge"
+GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
+KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
+ROUTES = "test_e4b_every_mounted_route_has_one_description_and_every_description_a_route"
+CATALOGUE = "test_e4b_the_error_catalogue_is_complete_and_only_public"
+EXAMPLES = "test_e4b_the_examples_call_only_mounted_routes_with_the_headers_the_contract_needs"
+LINKS = "test_e4b_the_release_decision_links_resolve_to_files_and_sections"
+D = "tests/integration/backend/endpoint_doc.py"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -265,6 +286,42 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("soak_at_the_full_rate", "the box soak runs at the declared fraction of the envelope",
        'rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)',
        'rate = soak.get("rate") or supported', CELLS),
+    # --- E4B.c: the endpoint document --------------------------------------------------
+    _m("delete_routes_unread", "every method the modules mount is in the route table",
+       'METHODS = ("get", "post", "put", "delete", "patch")',
+       'METHODS = ("get", "post", "put", "patch")', ROUTES, file=D),
+    _m("route_constant_unresolved", "a path named by a constant is the constant's value",
+       "else getattr(module, arg.id)", "else arg.id", ROUTES, file=D),
+    _m("uploads_module_undocumented", "every router the cutover mounts is documented",
+       '"infrx.gateway.routes.uploads", "infrx.observe.route")', '"infrx.observe.route")',
+       ROUTES, file=D),
+    _m("retry_after_column_blank", "the Retry-After column is RETRY_AFTER_CODES",
+       '"yes" if code in retry else ""', '""', CATALOGUE, file=D),
+    _m("an_error_code_dropped", "every public error code is documented",
+       "for code, (status, kind) in sorted(errors.HTTP_ERRORS.items(),",
+       "for code, (status, kind) in sorted(list(errors.HTTP_ERRORS.items())[1:],",
+       CATALOGUE, file=D),
+    _m("stream_codes_dropped", "the in-stream terminal codes are documented",
+       "for code in sorted(errors.STREAM_CODES))}.", "for code in ())}.", CATALOGUE, file=D),
+    _m("async_example_without_a_key", "a request that creates a job carries Idempotency-Key",
+       "-H 'Idempotency-Key: sop1.k3' \\\\\",", "\\\\\",", EXAMPLES, file=D),
+    _m("example_on_an_unmounted_path", "the examples call mounted routes only",
+       'f"     \\"$BASE{jobs.JOBS_PATH}\\"', 'f"     \\"$BASE/v1/job\\"', EXAMPLES, file=D),
+    _m("key_on_the_command_line", "the key never appears in a command line",
+       'f"curl -sS -H @.auth \\"$BASE{job}\\"                     # JobStatus",',
+       'f"curl -sS -H \\"Authorization: Bearer $INFRX_API_KEY\\" \\"$BASE{job}\\"  # JobStatus",',
+       EXAMPLES, file=D),
+    _m("r94_example_dropped", "the cross-mode conflict (R94) is shown",
+       "   # 409 idempotency_conflict\",", "   # 200\",", EXAMPLES, file=D),
+    _m("regeneration_drops_the_log", "a regeneration keeps the verification log",
+       "DOC.write_text(body + committed_log())", "DOC.write_text(body + LOG)", KEEPS_LOG, file=D),
+    _m("committed_doc_edited_by_hand", "the committed document is the generator's output",
+       "| `rate_limited` | 429 | rate_limit_error | yes |",
+       "| `rate_limited` | 429 | rate_limit_error |  |", GENERATED,
+       file="research/plan/evidence/e/E4B-endpoint.md"),
+    _m("decision_links_a_missing_section", "the decision's runbook links resolve",
+       "infra/runbooks/restart.md#engine)", "infra/runbooks/restart.md#engines)", LINKS,
+       file="research/plan/evidence/e/E4B-release-decision.md"),
 )
 
 
