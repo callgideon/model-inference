@@ -932,6 +932,56 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("replay_reaccepted", "a replay re-runs nothing of acceptance",
        R, "        if admission.replayed:", "        if False:",
        "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement"),
+    # === G2 item 2: the synchronous wait (API-MODES, DUR-OUTPUT) =========================
+    _m("success_before_terminal_commit", "a sync answer only follows the terminal commit",
+       R, "                if outcome is not None:\n                    return outcome",
+       "                if True:\n                    return outcome",
+       "test_api_modes__success_is_answered_only_after_the_terminal_commit"),
+    _m("result_not_read", "the 200 body is the committed result object",
+       R, "        text = await self.results.read_result(job.org_id, outcome.result_ref)",
+       '        text = ""',
+       "test_api_modes__success_is_answered_only_after_the_terminal_commit",
+       "test_api_modes__the_sync_and_sse_matrix_answers_from_committed_state"),
+    _m("sync_disconnect_not_cancelled", "a sync client that leaves cancels its job durably",
+       R, "        if gone.done():\n            await self.cancel(job.org_id, job.handle, quiet=True)\n"
+          "            return None",
+       "        if gone.done():\n            return None",
+       "test_api_modes__a_sync_disconnect_cancels_durably"),
+    _m("sync_wait_orphans_on_cancellation", "a cancelled sync wait still cancels its job",
+       R, "            await self.cancel(job.org_id, job.handle, quiet=True)\n            raise\n"
+          "        if gone.done():",
+       "            raise\n        if gone.done():",
+       "test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job"),
+    _m("cancel_unshielded", "the handler's own cancellation cannot abort the durable cancel",
+       R, "            return await asyncio.shield(task)", "            return await task",
+       "test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job"),
+    _m("timeout_leaves_job_running", "past the bound the gateway cancels the job",
+       R, "        outcome = await self.cancel(job.org_id, job.handle, quiet=True)\n"
+          "        if outcome is None:                     # the cancel is unconfirmed",
+       "        outcome = None\n        if outcome is None:                     # the cancel is unconfirmed",
+       "test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline"),
+    _m("unconfirmed_cancel_claims_a_state", "a cancel that could not be confirmed claims no state",
+       R, "        if outcome is None:                     # the cancel is unconfirmed",
+       "        if False:                     # the cancel is unconfirmed",
+       "test_api_modes__a_timeout_whose_cancel_fails_claims_no_state"),
+    _m("timeout_hides_committed_result", "a timeout racing a committed result returns it (01)",
+       R, "        if outcome.state is JobState.cancelled:\n            raise errors.DeadlineExceeded(",
+       "        if True:\n            raise errors.DeadlineExceeded(",
+       "test_api_modes__a_timeout_that_races_a_committed_result_returns_the_result",
+       "test_api_modes__already_terminal_on_cancel_reads_the_committed_outcome"),
+    _m("server_timing_dropped", "Server-Timing names the phase the gateway measured",
+       R, "        headers = {wire.HEADER_INFERENCE_ID: job.request_id,\n"
+          "                   wire.HEADER_SERVER_TIMING: metrics.server_timing(timings)}",
+       "        headers = {wire.HEADER_INFERENCE_ID: job.request_id}",
+       "test_api_modes__server_timing_and_the_registry_count_what_the_gateway_saw"),
+    _m("rejections_uncounted", "a refusal is counted by code and hashed tenant (I3B 3)",
+       R, '            self._count("infrx_requests_rejected_total", code=refused.code, '
+          'tenant=auth.org_id)', "            pass",
+       "test_api_modes__server_timing_and_the_registry_count_what_the_gateway_saw"),
+    _m("acceptances_uncounted", "an acceptance is counted by mode and hashed tenant (I3B 3)",
+       R, '            self._count("infrx_jobs_accepted_total", mode=request.execution_mode,\n'
+          "                        tenant=auth.org_id)", "            pass",
+       "test_api_modes__server_timing_and_the_registry_count_what_the_gateway_saw"),
 )
 
 

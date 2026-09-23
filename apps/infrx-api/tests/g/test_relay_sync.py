@@ -34,6 +34,7 @@ def test_dur_admit__admission_takes_the_prepared_record_never_the_validation_rec
     reply = rs.run(rs.call(world.app, rs.body(rs.VIDEO)))
     assert reply.status == 200, reply.body
     job = world.only_job()
+    assert len(job.request.media) == 1, job.request.media
     (ref,) = job.request.media
     staged = world.objects.objects[f"payloads/{world.org}/{job.id}.json"][1]
     assert rs.CLIP_URL.encode() not in staged and ref.handle.encode() in staged
@@ -69,12 +70,13 @@ def test_api_modes__a_capability_drift_after_validation_cancels_the_admitted_job
         return await admit(request, idem)
 
     world.jobs.admit_credit = drifted
+    world.during.append(lambda: world.clock.advance(3_600))   # a started stream would end
     reply = rs.run(rs.call(world.app, rs.body(stream=True)))
     assert reply.status == 400 and reply.headers["content-type"] == "application/json"
     assert reply.json()["error"]["code"] == "unsupported_parameter"
     job = world.only_job()
-    assert (job.state, job.outcome.settlement_state) == (JobState.cancelled,
-                                                          SettlementState.released_free)
+    assert job.state is JobState.cancelled
+    assert job.outcome.settlement_state is SettlementState.released_free
     assert world.released(job)
 
 
@@ -83,6 +85,7 @@ def test_api_modes__a_card_this_deployment_did_not_approve_is_refused_and_releas
     `ACTIVE_RATE_CARD_VERSION` is unpriced here (R69) - refused, and the hold released."""
     world = rs.World(regime=CREDIT)
     world.relay.active_rate_card_version = "rc_not_approved_here"
+    world.during.append(lambda: world.clock.advance(3_600))   # a wait would end, not hang
     reply = rs.run(rs.call(world.app, rs.body()))
     assert (reply.status, reply.json()["error"]["code"]) == (400, "invalid_request")
     job = world.only_job()
@@ -165,8 +168,11 @@ def test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job():
     async def body():
         task = asyncio.ensure_future(rs.call(world.app, rs.body()))
         world.during.append(lambda: asyncio.current_task().cancel())
-        while not cancels:
+        for _ in range(200):                     # bounded: a wait that never cancels fails
+            if cancels:
+                break
             await asyncio.sleep(0)
+        assert cancels, "the cancelled wait did not cancel its job"
         task.cancel()                        # the handler is cancelled a second time
         await asyncio.sleep(0)
         release.set()
@@ -192,11 +198,28 @@ def test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline():
     reply = rs.run(rs.call(world.app, rs.body()))
     assert reply.status == 504, reply.body
     error = reply.json()["error"]
-    assert (error["code"], error["infrx"]["state"]) == ("deadline_exceeded", "cancelled")
+    state = (error.get("infrx") or {}).get("state")
+    assert (error["code"], state) == ("deadline_exceeded", "cancelled")
     job = world.only_job()
-    assert (job.state, job.outcome.settlement_state) == (JobState.cancelled,
-                                                          SettlementState.held_unknown)
+    assert job.state is JobState.cancelled
+    assert job.outcome.settlement_state is SettlementState.held_unknown
     assert job.outcome.debit == 0
+
+
+def test_api_modes__a_timeout_whose_cancel_fails_claims_no_state():
+    """02: with the store unreachable the gateway may report the deadline but must not claim
+    a terminal state it could not confirm - no `state` in the envelope."""
+    world = rs.World()
+
+    async def unreachable(org_id, handle):
+        raise ConnectionError("postgresql://infrx:secret@db/infrx is unreachable")
+
+    world.jobs.cancel = unreachable
+    world.during.append(lambda: world.clock.advance(3_600))
+    reply = rs.run(rs.call(world.app, rs.body()))
+    error = reply.json()["error"]
+    assert (reply.status, error["code"]) == (504, "deadline_exceeded")
+    assert "state" not in (error.get("infrx") or {}) and b"secret" not in reply.body
 
 
 def test_api_modes__a_timeout_that_races_a_committed_result_returns_the_result():
@@ -229,7 +252,7 @@ def test_api_modes__server_timing_and_the_registry_count_what_the_gateway_saw():
     world.during.append(world.work)
     reply = rs.run(rs.call(world.app, rs.body()))
     assert reply.status == 200
-    assert reply.headers[wire.HEADER_SERVER_TIMING].startswith("prepare;dur=")
+    assert reply.headers.get(wire.HEADER_SERVER_TIMING, "").startswith("prepare;dur=")
     assert registry.value("infrx_jobs_accepted_total", mode="sync", tenant=world.org) == 1
     assert registry.value("infrx_phase_seconds", phase="prepare") == 1
     refused = rs.run(rs.call(world.app, rs.body(), headers={"prefer": "respond-async"}))
@@ -273,9 +296,9 @@ def test_api_modes__a_replay_of_a_cancelled_job_is_rendered_cancelled_never_fail
     rs.run(rs.call(world.app, rs.body(), key="k-1", leave=leave))
     assert world.only_job().outcome.settlement_state is SettlementState.held_unknown
     reply = rs.run(rs.call(world.app, rs.body(), key="k-1"))
-    assert reply.headers[wire.HEADER_IDEMPOTENCY_REPLAYED] == "true"
+    assert reply.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
     error = reply.json()["error"]
-    assert (reply.status, error["code"], error["infrx"]["state"]) == (409, "state_conflict",
+    assert (reply.status, error["code"], rs.state_of(error)) == (409, "state_conflict",
                                                                       "cancelled")
 
 
@@ -291,7 +314,7 @@ def test_api_modes__a_credit_job_that_expires_unclaimed_is_rendered_expired():
     world.during += [world.prepare, expire]
     reply = rs.run(rs.call(world.app, rs.body()))
     error = reply.json()["error"]
-    assert (reply.status, error["code"], error["infrx"]["state"]) == (504, "deadline_exceeded",
+    assert (reply.status, error["code"], rs.state_of(error)) == (504, "deadline_exceeded",
                                                                       "expired")
     job = world.only_job()
     assert (job.outcome.cause, job.outcome.settlement_state) == (

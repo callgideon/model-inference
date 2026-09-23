@@ -243,7 +243,9 @@ class Relay:
         """Past the bound: cancel, and answer what is committed. A completion that won is
         the answer (01: durable state wins); our own cancel is the synchronous deadline."""
         outcome = await self.cancel(job.org_id, job.handle, quiet=True)
-        if outcome is None or outcome.state is JobState.cancelled:
+        if outcome is None:                     # the cancel is unconfirmed: claim no state
+            raise errors.DeadlineExceeded("the job passed its deadline")
+        if outcome.state is JobState.cancelled:
             raise errors.DeadlineExceeded("the job passed its deadline and was cancelled",
                                           infrx={"state": JobState.cancelled.value})
         return outcome
