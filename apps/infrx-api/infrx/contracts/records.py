@@ -75,6 +75,13 @@ BILLABLE_CAUSES = frozenset({
 })
 PLATFORM_FAILURE_CAUSES = frozenset(set(TerminalCause) - BILLABLE_CAUSES)
 
+# R21 / G2: the causes a caller may give `JobStore.cancel`. The two client causes and
+# the platform's synchronous deadline, and nothing else: every other cause is the
+# store's or the worker's to record, never a canceller's.
+CANCEL_CAUSES = frozenset({
+    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,
+})
+
 # The (cause, state) pair is part of the contract, not two independent fields: a
 # `succeeded` job whose cause is `engine_error` would be a free success, and a
 # `failed` job whose cause is `completed` would lose a settled debit. Any cause

@@ -39,7 +39,8 @@ from .records import (Admission, AuthContext, AuthorRole, Chunk, ConsentSnapshot
                       Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
                       OutboxKind,
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
-                      TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
+                      TerminalCause, TerminalOutcome, TraceEnvelope, TraceLossReason,
+                      TraceMode,
                       TraceOfferResult, Work)
 from .v2.records import AdmissionV2, SettlementV2, WorkV2
 
@@ -124,9 +125,27 @@ class JobStore(Protocol):
         make, and a silent no-op would let a preparation worker believe it still held a
         fence it had lost."""
 
-    async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
+    async def cancel(self, org_id: str, job_handle: str, *,
+                     cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:
         """Durable cancellation of any nonterminal state, serialized against
-        completion; if completion won, the committed outcome is returned."""
+        completion; if completion won, the committed outcome is returned.
+
+        `cause` says who ended the job, and settlement follows it (R21). A caller may
+        pass exactly one of `records.CANCEL_CAUSES`:
+
+        * `client_cancelled` (the default, so every existing caller keeps its meaning):
+          an explicit cancel;
+        * `client_disconnected`: the client went away (a sync or SSE disconnect);
+        * `sync_deadline`: the platform did not answer a synchronous request in time.
+
+        The first two are the client's causes (billable under R21, though a cancel
+        carries no usage, so nothing is charged: unpublished is `released_free`);
+        `sync_deadline` is the platform's own deadline, so it is platform-absorbed
+        (`released_platform_absorbed` unpublished). Published output with no usage is
+        `held_unknown` whatever the cause, released platform-absorbed after the fenced
+        24 h. The state is `cancelled` and the outcome records the given cause. Any other
+        value - every other `TerminalCause` included - is `InvalidRequest`, and nothing
+        changes."""
 
     async def complete(self, lease: Lease, outcome: TerminalOutcome) -> TerminalOutcome:
         """The single terminal settlement: outcome, authoritative usage, ledger,
