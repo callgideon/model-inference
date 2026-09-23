@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T06:50:14Z",
+  "updated": "2026-09-23T08:16:58Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -38,6 +38,12 @@
       "phase": "phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement",
       "since": "2026-09-23T05:40:38Z",
       "note": "base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window"
+    },
+    "I-schema": {
+      "lane": "codex-ischema / codex/i-schema-wirein-names",
+      "phase": "implementing (Opus): the three F2P wire-in names enter deploy/preflight.py TUNABLE + 08 \u00a75/\u00a75.1 rows",
+      "since": "2026-09-23T08:16:58Z",
+      "note": "gate 8892c27 api-test red: tests/i test_packaging config-schema partition + the revert_runtime_before_tree I mutant (baseline); fix lane from the integration head"
     }
   },
   "reviews": {},
