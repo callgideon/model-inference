@@ -1012,6 +1012,21 @@ def test_a_settled_header_is_not_looked_at_again(tmp_path):
     assert answers == [True]
 
 
+def test_an_injected_probe_is_the_only_one_that_decides(tmp_path):
+    """Review H2: the header walk is the built-in probe; with another one injected (M2's
+    drills), the early look does not refuse behind its back. Here the injected probe says
+    60 s, so the header's 121 s is never read as a refusal."""
+    import dataclasses
+
+    body = FTYP + _moov(121.0) + support.box(b"mdat", bytes(2 << 20))
+    stream = _streamed(body)
+    adapter = preparation(tmp_path, transport=support.Transport(support.response(stream=stream)),
+                          probe_fn=lambda data: dataclasses.replace(probe.probe(data),
+                                                                    duration_s=60.0))
+    ref = run(adapter.materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+
+
 def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():
     """At most seven looks up to the 64 MiB cap: an 8 MiB body in 64 KiB chunks is looked
     at four times, at 1, 2, 4 and 8 MiB; a 32 MiB one in 1 MiB chunks six times, the last

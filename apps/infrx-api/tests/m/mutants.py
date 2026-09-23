@@ -1175,6 +1175,11 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "                decode_data_url, source, self.limits, self.fetcher.allowed_mime)",
        "                decode_data_url, source, DEFAULTS, self.fetcher.allowed_mime)",
        "test_a_data_url_is_bounded_by_the_configured_limits_before_it_is_decoded"),
+    _m("injected_probe_bypassed_early",
+       "H2: with an injected probe, the built-in header walk refuses nothing early",
+       R, "        if self.probe is not probing.probe:\n            return False",
+       "        if False:\n            return False",
+       "test_an_injected_probe_is_the_only_one_that_decides"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",

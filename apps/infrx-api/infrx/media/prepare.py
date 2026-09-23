@@ -292,7 +292,11 @@ class MediaPreparation(MediaStaging):
         Anything the header does not settle is left to `facts`, which still probes the
         whole object: this only ever refuses sooner, never accepts. True once a complete
         `moov` passed: the walk stops at the first one, so no later look can change it.
+        An injected probe is the only one that decides (M2's timeout drills), so the
+        built-in header walk - on the loop, one bounded walk per look - stays out of it.
         """
+        if self.probe is not probing.probe:
+            return False
         probed = probing.probe_header(head)
         if probed is None:
             return False
