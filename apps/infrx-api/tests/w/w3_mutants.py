@@ -39,12 +39,14 @@ SWEEP = "test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape
 LABELLED = ("test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refuses_without_a_"
             "container")
 INVENTORY = "test_perf_pilot__the_inventory_refuses_a_missing_container"
+METRICS = "test_perf_pilot__the_concurrency_sweep_counts_its_metrics_exactly"
 PIN_CHECKS = {LAUNCH: serving.check_pinned_launch,
               ONE_SOURCE: serving.check_one_source_per_setting,
               RECORD: serving.check_record_matches_the_code,
               SWEEP: serving.check_the_sweep_survives_a_failed_scrape,
               LABELLED: serving.check_the_sweep_labels_a_failed_run,
-              INVENTORY: serving.check_inventory_refuses_a_missing_container}
+              INVENTORY: serving.check_inventory_refuses_a_missing_container,
+              METRICS: serving.check_the_sweep_counts_its_metrics_exactly}
 DIGEST = "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
 
 PIN_MUTANTS: tuple[Mutant, ...] = (
@@ -99,6 +101,11 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        C, ' || echo "report_exit=$? (no summary rows: every level failed)"', "", LABELLED),
     _m("missing_container_not_refused", "no container is a refused precondition (exit 2)",
        C, ' || {\n  echo "refused: no container $CONTAINER" >&2; exit 2; }', "", LABELLED),
+    _m("waiting_counts_the_by_reason_series", "waiting is the total series, not a prefix",
+       C, "/^vllm:num_requests_waiting[{ ]/{w+=$NF}", "/^vllm:num_requests_waiting/{w+=$NF}",
+       METRICS),
+    _m("zero_peak_prints_empty", "a zero peak prints 0, not an empty field",
+       C, "c, r+0, w+0, k, m }", "c, r, w, k, m }", METRICS),
     _m("inventory_without_its_container", "no container is a failed precondition, exit 2",
        I, '  *) echo "precondition=failed: no container $CONTAINER to inventory (see '
           'container_image)"; exit 2 ;;', "  *) ;;", INVENTORY),

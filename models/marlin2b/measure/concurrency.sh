@@ -45,9 +45,11 @@ echo "image=$(docker inspect --format '{{.Image}}' "$CONTAINER") args=$args"
 
 sample() {   # level -> one tab-separated line per 2 s until killed
   set +e     # a scrape that times out is an empty sample, not the end of the sampling
+  # `[{ ]` ends the metric name: vllm also exports num_requests_waiting_by_reason{...},
+  # which a bare prefix match added to the total (the 2026-09-23 box sweep).
   while :; do
     metrics=$(curl -sS -m 2 "$ENGINE/metrics" 2>/dev/null \
-      | awk '/^vllm:num_requests_running/{r+=$NF} /^vllm:num_requests_waiting/{w+=$NF}
+      | awk '/^vllm:num_requests_running[{ ]/{r+=$NF} /^vllm:num_requests_waiting[{ ]/{w+=$NF}
              /^vllm:(kv_cache_usage_perc|gpu_cache_usage_perc)/{k=$NF} END{printf "%s\t%s\t%s", r, w, k}')
     gpu=$(nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader,nounits | tr -d ' ' | tr ',' '\t')
     printf '%s\t%s\t%s\t%s\n' "$1" "$(date -u +%s)" "$metrics" "$gpu"
@@ -67,7 +69,7 @@ for c in $LEVELS; do
     || echo "level=$c bench_exit=$? (see $out/c$c.log)"
   kill "$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true
   awk -F'\t' -v c="$c" '$1==c { if ($4>w) w=$4; if ($5>k) k=$5; if ($6>m) m=$6; if ($3>r) r=$3 }
-    END { printf "level=%s peak_running=%s peak_waiting=%s peak_kv_usage=%s peak_gpu_mem_mib=%s\n", c, r, w, k, m }' \
+    END { printf "level=%s peak_running=%s peak_waiting=%s peak_kv_usage=%s peak_gpu_mem_mib=%s\n", c, r+0, w+0, k, m }' \
     "$out/samples.tsv"
 done
 

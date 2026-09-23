@@ -213,6 +213,29 @@ def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.
     assert "1" in sampled and "2" in sampled, f"a level went unsampled: {sampled}"
 
 
+def check_the_sweep_counts_its_metrics_exactly(models: pathlib.Path, tmp: pathlib.Path) -> None:
+    """measure/concurrency.sh (the 2026-09-23 box sweep): `vllm:num_requests_waiting` is the
+    total, not a prefix - vLLM also exports `num_requests_waiting_by_reason{...}`, and a
+    prefix match added it in, doubling a nonzero waiting peak. A peak of zero prints `0`,
+    not an empty field that reads like "not sampled"."""
+    stubs = {
+        "docker": 'case "$*" in *Args*) echo \'["/model","--max-num-seqs","32"]\' ;; '
+                  "*Image*) echo sha256:0 ;; esac\n",
+        "curl": "printf 'vllm:num_requests_running{engine=\"0\"} 0.0\\n"
+                "vllm:num_requests_waiting{engine=\"0\"} 1.0\\n"
+                "vllm:num_requests_waiting_by_reason{engine=\"0\",reason=\"capacity\"} 1.0\\n'\n",
+        "nvidia-smi": 'echo "1000, 0"\n',
+        "bench": 'case "$*" in *verify*) echo "verified 72 file(s), 0 missing, 0 error(s)" ;; '
+                 '*--report*) echo "report rows" ;; *) sleep 0.5 ;; esac\n'}
+    done = run_script(models, tmp, "concurrency.sh", stubs, **{**sweep_inputs(tmp), "LEVELS": "1"})
+    assert done.returncode == 0, (done.returncode, done.stderr[-400:])
+    assert "level=1 peak_running=0 peak_waiting=1 " in done.stdout, done.stdout[-600:]
+    (run_dir,) = (tmp / "out").iterdir()
+    waiting = {row.split("\t")[3] for row in
+               (run_dir / "samples.tsv").read_text().splitlines()[1:]}
+    assert waiting == {"1"}, f"waiting samples {waiting}: the by-reason series was counted"
+
+
 def check_the_sweep_labels_a_failed_run(models: pathlib.Path, tmp: pathlib.Path) -> None:
     """measure/concurrency.sh (confirmation PINC-1): an engine that fails every level (bench
     exits 3, so `--report` finds no rows and exits 1) is a labelled run that still reaches
@@ -274,6 +297,10 @@ def test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape(tmp_
 def test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refuses_without_a_container(
         tmp_path):
     check_the_sweep_labels_a_failed_run(MODELS, tmp_path)
+
+
+def test_perf_pilot__the_concurrency_sweep_counts_its_metrics_exactly(tmp_path):
+    check_the_sweep_counts_its_metrics_exactly(MODELS, tmp_path)
 
 
 def test_perf_pilot__the_inventory_refuses_a_missing_container(tmp_path):
