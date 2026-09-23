@@ -151,6 +151,41 @@ def test_race__two_claimers_mint_exactly_one_generation() -> None:
                                       "limits": cl.LIMITS})
 
 
+def test_race__a_rebuild_during_a_claim_never_sees_half_a_claim() -> None:
+    """DUR-OUTBOX x DUR-FENCE: `claim` leases AND leaves `queued` in one transaction. A
+    rebuild snapshot taken while the claim is uncommitted sees the whole pre-claim job
+    (queued, no live attempt) and offers it; the claimer it feeds waits on the job row and
+    is `not_claimable` once the claim commits; a snapshot after the commit never offers it
+    again. No reader ever sees a lease on a queued job or a running job without one."""
+    rig = Rig()
+    job = rig.queued()
+    observer = rig.service()
+
+    def seen():
+        state = rig.job(job)["state"], [(k, g) for k, g, _ in live(rig, job)]
+        offered = job in {e["job_id"] for e in observer.execute(
+            "select infrx.dispatch_snapshot()").fetchone()[0]}
+        return state, offered
+
+    claimer, rival = rig.service(), rig.service()
+    claimer.execute("begin")
+    code, _ = rpc(claimer, "claim", {"job_id": job, "worker_id": "w1", "limits": cl.LIMITS})
+    assert code is None, code
+    assert seen() == (("queued", []), True), "a reader saw half a claim"
+    out: dict = {}
+    thread = threading.Thread(target=lambda: out.setdefault("rival", rpc(rival, "claim", {
+        "job_id": job, "worker_id": "w2", "limits": cl.LIMITS})))
+    thread.start()
+    try:
+        cl.waiting_on_a_lock(rig.owner, rival.info.backend_pid)
+    finally:
+        claimer.execute("commit")
+        thread.join(10)
+    assert out["rival"][0] == "not_claimable", out
+    assert seen() == (("running", [("inference", 1)]), False), \
+        "a committed claim is still offered, or not whole"
+
+
 # --------------------------------------------------------------------- recover vs heartbeat
 def test_race__recover_and_heartbeat_never_both_win() -> None:
     """DUR-FENCE: a heartbeat in flight is never requeued under it (the reaper skips a

@@ -28,6 +28,19 @@ LIMITS = PgJobStore(None)._lease_limits()
 TTL, PREP_TTL = DEFAULTS.lease_ttl_s, DEFAULTS.preparation_lease_ttl_s
 
 
+#: R29/R79: the gateway's clock is not the store's. Every request here is stamped by a
+#: gateway an hour BEHIND the database clock (its deadline stays absolute), and the checks
+#: move the database clock explicitly - so a store that judged a lease, a phase instant or
+#: the reaper on the request's `created_at` instead of `infrx.now()` is an hour off and
+#: fails its named check (D2's checks stamped `created_at = db_now`, which hid exactly that).
+GATEWAY_SKEW = timedelta(hours=1)
+
+
+def gateway_request(world, **kw):
+    request = b.request(world, **kw)
+    return request.model_copy(update={"created_at": request.created_at - GATEWAY_SKEW})
+
+
 def d3(conn, function: str, **args):
     """(code, answer) of one D3 boundary call with the store's limits."""
     return outcome(conn, function, {"limits": LIMITS, **args})
@@ -43,7 +56,7 @@ def dump(lease: Lease, **changes) -> dict:
 
 def queued(conn, world, **kw):
     """Admitted, prepared: (request, queued_at)."""
-    request = b.request(world, **kw)
+    request = gateway_request(world, **kw)
     ca.admit(conn, request, b.idem(request, request.request_id))
     _, answer = claim(conn, request.request_id)
     assert prepare(conn, answer["lease"])[0] is None, "the fixture job did not queue"
@@ -116,7 +129,7 @@ def check_claim_generation(conn) -> str:
     world = ca.World(conn)
 
     def body():
-        request = b.request(world)
+        request = gateway_request(world)
         ca.admit(conn, request, b.idem(request, request.request_id))
         assert d3(conn, "claim", job_id=request.request_id, worker_id="w1")[0] == \
             "not_claimable", "a preparing job was claimable"
@@ -218,7 +231,7 @@ def check_fence(conn) -> str:
         # the live holder may execute; the settlement after the fence is D5's
         code, work = d3(conn, "load_work", lease=lease.model_dump(mode="json"))
         assert code is None and work["request"]["request_id"] == request.request_id, code
-        media = b.request(world)
+        media = gateway_request(world)
         ca.admit(conn, media, b.idem(media, media.request_id))
         _, prep = claim(conn, media.request_id)
         refs = [b.media(b.ORG_A).model_dump(mode="json")]
@@ -270,7 +283,7 @@ def check_preparation_fence(conn) -> str:
     world = ca.World(conn)
 
     def body():
-        request = b.request(world)
+        request = gateway_request(world)
         admitted = ca.admit(conn, request, b.idem(request, request.request_id))
         _, answer = claim(conn, request.request_id)
         prep = lease_of(answer)
@@ -279,7 +292,7 @@ def check_preparation_fence(conn) -> str:
         assert d3(conn, "terminalize", lease=prep.model_dump(mode="json"),
                   outcome={})[0] == "stale_lease", "a preparation lease reached the settlement"
         # R29: the work carries the deadline the store keeps, not the caller's
-        far = b.request(world, deadline_s=10_000)
+        far = gateway_request(world, deadline_s=10_000)
         ca.admit(conn, far, b.idem(far, far.request_id))
         _, far_lease = claim(conn, far.request_id)
         _, far_work = d3(conn, "load_work", lease=far_lease["lease"])
@@ -296,7 +309,7 @@ def check_preparation_fence(conn) -> str:
                 world.clock.now() + timedelta(seconds=PREP_TTL), phase), answer
         assert lease_of(answer).expires_at == phase, "a renewal bought time past the phase"
         for fn in ("heartbeat", "load_work"):
-            job = b.request(world)
+            job = gateway_request(world)
             ca.admit(conn, job, b.idem(job, job.request_id))
             _, answer = claim(conn, job.request_id)
             advance(conn, DEFAULTS.preparation_timeout_s)
@@ -325,7 +338,7 @@ def check_cancel(conn) -> str:
         return row(conn, request.request_id)["job_handle"]
 
     def body():
-        preparing = b.request(world)
+        preparing = gateway_request(world)
         ca.admit(conn, preparing, b.idem(preparing, preparing.request_id))
         waiting = queued(conn, world)
         busy, lease = running(conn, world)
@@ -472,7 +485,7 @@ def check_recover_preparation(conn) -> str:
     world = ca.World(conn)
 
     def body():
-        request = b.request(world)
+        request = gateway_request(world)
         ca.admit(conn, request, b.idem(request, request.request_id))
         for attempt in range(1, DEFAULTS.max_prepublication_retries + 1):
             code, answer = claim(conn, request.request_id, f"p{attempt}")
@@ -496,7 +509,7 @@ def check_recover_preparation(conn) -> str:
             DEFAULTS.max_prepublication_retries + 1, "an exhausted preparation was redispatched"
         assert_released(conn, request.request_id, "preparation retries")
         # the wall-clock bound, whatever the count
-        late = b.request(world)
+        late = gateway_request(world)
         ca.admit(conn, late, b.idem(late, late.request_id))
         advance(conn, DEFAULTS.preparation_timeout_s)
         out = reaped(_recover(conn))
@@ -536,6 +549,9 @@ def check_recover_unknown_release(conn) -> str:
             "a held_unknown settlement was rewritten as never charged"
         advance(conn, DEFAULTS.unknown_usage_reconcile_s - 1)
         assert _recover(conn) == [] and reserved(conn) == held, "released before the window"
+        # R7: the reaper takes no caller time - a caller claiming it is later releases nothing
+        assert call(conn, "recover", {"limits": LIMITS, "now": "2100-01-01T00:00:00Z"}) == [] \
+            and reserved(conn) == held, "a caller's clock released the hold early"
         advance(conn, 1)
         out = reaped(_recover(conn))
         assert (out["settlement_state"], out["reconcile_after"], out["debit"]) == \
@@ -654,6 +670,12 @@ def check_lease_races(connect, database: str) -> str:
                                                        dict(claim_args, worker_id="w2"))))
     assert first[0] is None and second[0] == "not_claimable", (first, second)
     lease = lease_of(first[1])
+    # the claim leased AND left `queued` in one transaction: a rebuild never re-offers it
+    snapshot = service().execute("select infrx.dispatch_snapshot()").fetchone()[0]
+    assert job.request_id not in {e["job_id"] for e in snapshot}, \
+        "a claimed job is still a dispatch candidate"
+    assert (row(owner, job.request_id)["state"], live_attempts(owner, job.request_id)) == \
+        ("running", [("inference", 1, "w1")]), "the claim left half a transition"
     advance(owner, TTL)
     first, second = lockstep(
         owner, (service(), lambda c: rpc(c, "recover", {"limits": LIMITS})),
