@@ -962,6 +962,12 @@ MUTANTS: tuple[Mutant, ...] = (
           "!= self.regime:",
        "        if False:",
        "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict"),
+    _m("regime_default_is_the_relays", "a legacy job's key is a conflict for a CREDIT relay",
+       R, '        if found is not None and getattr(found[0], "accounting_regime", LEGACY) '
+          "!= self.regime:",
+       '        if found is not None and getattr(found[0], "accounting_regime", self.regime) '
+       "!= self.regime:",
+       "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict"),
     # --- money-B2: an acceptance cut short is completed by the same-key retry ---------------
     _m("post_admission_outage_cancels", "a post-admission outage leaves the job for the retry",
        R, "        except errors.DependencyUnavailable:\n            raise\n"

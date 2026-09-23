@@ -114,14 +114,19 @@ def test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked(lo
     assert rs.state_of(again.json()["error"]) == "cancelled" and len(world.jobs.jobs) == 1
 
 
-def test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict():
-    """One key, one regime (the store's own admit rule), also when the lookup answers: a
-    legacy relay asked with a key that names a CREDIT job refuses it as a conflict rather
-    than answering another regime's job."""
-    world = rs.World(regime=CREDIT)
+@pytest.mark.parametrize("first,then", [(CREDIT, rs.LEGACY), (rs.LEGACY, CREDIT)])
+def test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict(first, then):
+    """One key, one regime (the store's own admit rule), also when the lookup answers, in
+    both directions (review r2 money-N2): a relay asked with a key that names a job of the
+    other regime refuses it as a conflict rather than answering another regime's job."""
+    world = rs.World(regime=CREDIT)             # the CREDIT harness serves both regimes
+    world.jobs.grant(world.org, "100")          # the USD wallet a legacy admission holds on
+    world.regime = first
+    world.restart()
     world.during.append(lambda: world.clock.advance(3_600))
     rs.run(rs.call(world.app, rs.body(), key="k-6"))
-    world.regime = rs.LEGACY
+    assert (world.only_job().credit is None) == (first == rs.LEGACY)
+    world.regime = then
     world.restart()
     reply = rs.run(rs.call(world.app, rs.body(), key="k-6"))
     assert (reply.status, reply.json()["error"]["code"]) == (409, "idempotency_conflict")
