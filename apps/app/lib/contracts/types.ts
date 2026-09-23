@@ -10,6 +10,17 @@
 
 import type { Money } from "./money.ts";
 
+/**
+ * Contracts v2 (F2P wire-in, item 9): the whole revision, reached as `v2.X` from this module.
+ *
+ * A namespace rather than a flat re-export, because one name is declared by both revisions with
+ * different values: v1's `ACCOUNTING_REGIMES` below is a usage row's settlement regime
+ * (`legacy_usd` | `pilot`, D1's `settlement_regime`), and `v2.ACCOUNTING_REGIMES` is the CREDIT-era
+ * accounting regime (`legacy_usd` | `credit`, D1R's `accounting_regime`). A console module names
+ * the one it means; it cannot pick up the other by importing the bare name.
+ */
+export * as v2 from "./v2/types.ts";
+
 // ---------------------------------------------------------------------------
 // Vocabulary — string values are frozen by 08 §3.
 // ---------------------------------------------------------------------------
@@ -757,12 +768,26 @@ export const ADMIN_SUSPENSION_FIELDS = [
 // Operator audit trail (R34)
 // ---------------------------------------------------------------------------
 
-/** Every operator write names itself. The list is closed: a new operator write adds a value here. */
+/**
+ * Every operator write names itself. The list is closed: a new operator write adds a value here.
+ *
+ * D1's `infrx.audit_entries.action` vocabulary, value for value and in its order (0003's four, then
+ * 0009's six): the console reads these rows, so a spelling of its own (`grant`, `suspension_set`,
+ * `entitlements_set`, as before the F2P wire-in) would refuse every real entry. The first four are
+ * the writes the console services make; the rest are written by the operator seams (key issue and
+ * revoke, publication, job cancel, reconciliation, adjustment) and are read-only here.
+ */
 export const AUDIT_ACTIONS = [
-  "grant",
-  "suspension_set",
-  "entitlements_set",
+  "admin_grant",
+  "admin_set_suspension",
+  "admin_set_entitlements",
   "calibration_label",
+  "admin_key_issue",
+  "admin_key_revoke",
+  "admin_publish",
+  "admin_job_cancel",
+  "admin_reconcile",
+  "admin_adjust",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

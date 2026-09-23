@@ -30,6 +30,10 @@ from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation,
                        OutboxKind, PriceSnapshot, ReservationKind, SettlementState,
                        TERMINAL_STATES, TerminalCause, TerminalOutcome, Usage, UsageCertainty,
                        Work, states_for_cause)
+from ..v2 import ports as v2ports
+from ..v2.money_units import CREDIT, Credit
+from ..v2.records import (AdmissionV2, AuthContextV2, CredentialAudience, DataAccessPolicyRef,
+                          NormalizedRequestV2, SettlementV2, WorkV2, settle)
 from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
 
 MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
@@ -73,6 +77,9 @@ class _Hold:
     amount: Decimal
     state: HoldState = HoldState.held
     reconcile_after: datetime | None = None
+    # contracts v2: the CREDIT wallet a CREDIT job's hold sits on. None for a legacy job,
+    # whose hold sits on the organization's USD wallet.
+    wallet_id: str | None = None
 
 
 @dataclass
@@ -103,6 +110,11 @@ class _Job:
     # What the winning worker proposed, so its identical retry replays the
     # committed outcome even when the store rewrote the settlement.
     proposal: tuple | None = None
+    # contracts v2 (F2P wire-in): the CREDIT half of a CREDIT-regime job. `admission` still
+    # carries the capacity, budgets, deadlines and outbox (01a §1); the money is here.
+    credit: AdmissionV2 | None = None
+    policy: DataAccessPolicyRef | None = None
+    settlement: SettlementV2 | None = None
 
     @property
     def id(self) -> str:
@@ -207,7 +219,10 @@ class FakeJobStore:
     def __init__(self, clock: FakeClock | None = None, ids: SequentialIds | None = None, *,
                  limits: PilotSettings = DEFAULTS, failures: FailurePlan | None = None,
                  journal: _Journal | None = None,
-                 prices: dict[str, PriceSnapshot] | None = None) -> None:
+                 prices: dict[str, PriceSnapshot] | None = None,
+                 credentials: dict[str, AuthContextV2] | None = None,
+                 wallet_directory: v2ports.WalletDirectory | None = None,
+                 catalog: v2ports.CatalogDirectory | None = None) -> None:
         self.clock = clock or FakeClock()
         self.ids = ids or SequentialIds()
         self.limits = limits
@@ -240,6 +255,15 @@ class FakeJobStore:
         # model is refused (02: "unknown/unpriced models fail closed").
         self.prices: dict[str, PriceSnapshot] = dict(prices or {})
         self.price_for = lambda model_revision, at: self.prices.get(model_revision)
+        # contracts v2 (F2P wire-in): the trusted rows `admit_credit` resolves from. The
+        # key row's audience and identities (06a: `audience` on the key row), the wallet
+        # directory and the catalog - never a request field. A store built without them
+        # serves the legacy regime only.
+        self.credentials: dict[str, AuthContextV2] = dict(credentials or {})
+        self.wallet_directory = wallet_directory
+        self.catalog = catalog
+        # CREDIT wallet totals by wallet id, seeded from the directory's row on first use.
+        self.credit_wallets: dict[str, _Wallet] = {}
         self._lock = asyncio.Lock()
 
     # --- test helpers (not part of the port) ---------------------------------
@@ -270,6 +294,33 @@ class FakeJobStore:
     def wallet(self, org_id: str) -> _Wallet:
         return self.wallets.setdefault(org_id, _Wallet())
 
+    def credit_wallet(self, wallet_id: str) -> _Wallet:
+        """A CREDIT wallet's totals. Never an organization's USD wallet: the two regimes
+        share the arithmetic and nothing else (R64)."""
+        return self.credit_wallets.setdefault(wallet_id, _Wallet())
+
+    def credit_grant(self, wallet_id: str, amount: str | Decimal) -> Decimal:
+        """An audited CREDIT movement into one wallet (signup grant or operator
+        allocation). Positive only, like `grant`."""
+        amount = money_input(amount, "a CREDIT allocation")
+        wallet = self.credit_wallet(wallet_id)
+        wallet.ledger_total = wallet.ledger_total + amount
+        return wallet.ledger_total
+
+    def seed_credit_wallet(self, wallet) -> None:
+        """A wallet row as the directory states it (`WalletRef` totals), as this store's
+        starting state for that wallet."""
+        self.credit_wallets[wallet.wallet_id] = _Wallet(wallet.ledger_total.raw(CREDIT),
+                                                        wallet.reserved_total.raw(CREDIT))
+
+    def register_credential(self, auth: AuthContextV2) -> None:
+        """The key row a CREDIT admission reads its audience and identities from."""
+        self.credentials[auth.key_id] = auth
+
+    def _wallet_of(self, job: _Job) -> _Wallet:
+        return (self.credit_wallet(job.credit.wallet_id) if job.credit is not None
+                else self.wallet(job.request.org_id))
+
     def outbox_kinds(self, aggregate_id: str) -> list[OutboxKind]:
         return [event.kind for event in self.outbox if event.aggregate_id == aggregate_id]
 
@@ -283,6 +334,20 @@ class FakeJobStore:
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
                     caps: tuple[object, ...] = ()) -> Admission:
         """r1 R53: the store derives the hold. See `_derive_hold`."""
+        return await self._admit(request, idem, caps, credit=False)
+
+    async def admit_credit(self, request: NormalizedRequest, idem: IdempotencyRef) -> AdmissionV2:
+        """contracts v2: the same admission transaction in the CREDIT regime.
+
+        `request.model_revision` is what the caller asked for (an alias or an R62 pin). The
+        store resolves the credential's audience from the key row, the wallet through
+        `ports.resolve_wallet` (R66 - the only writer of a CREDIT job's wallet), and the
+        pins and rate card through `ports.pin_admission` (R69/R70), all inside the
+        transaction that takes the hold."""
+        return await self._admit(request, idem, (), credit=True)
+
+    async def _admit(self, request: NormalizedRequest, idem: IdempotencyRef,
+                     caps: tuple[object, ...], *, credit: bool):
         self.failures.before("admit")
         for kind in caps:
             if kind not in tuple(ReservationKind):
@@ -296,7 +361,7 @@ class FakeJobStore:
                 raise errors.NotFound("a request may only carry its own org's media")
         async with self._lock:
             now = self.clock.now()
-            replay = self._replay(idem, now)
+            replay = self._replay(idem, now, credit=credit)
             if replay is not None:
                 return replay
             if request.request_id in self.jobs:
@@ -329,16 +394,53 @@ class FakeJobStore:
             # admission left a job admitted at 2.00 holding a tenth of what it needed, and
             # a perfectly valid in-envelope completion then settled `platform_error` with
             # a zero debit. Deriving both in one transaction makes that unrepresentable.
-            price = self._price(request, now)
-            hold = self._derive_hold(request, price)
-            self._check_balance(request.org_id, hold)
+            # contracts v2: a CREDIT admission takes its card from `_credit_terms` where a
+            # legacy one takes its price from `_price`; the order is the same for both.
+            terms = await self._credit_terms(request) if credit else None
+            price = None if terms else self._price(request, now)
+            hold = self._derive_hold(request, price, terms)
+            self._check_balance(request.org_id, hold, terms)
             self.journal.reserve(request.request_id)
-            admission = self._insert(request, idem, hold, now, price)
+            admission = self._insert(request, idem, hold, now, price, terms)
         self.failures.after_commit("admit")
         return admission
 
+    async def _credit_terms(self, request: NormalizedRequest):
+        """The CREDIT resolution, from trusted rows only: `(pins, card, policy, wallet_id)`.
+
+        Nothing here reads the request beyond the model name the caller asked for and the
+        key it authenticated with; the wallet, the price and the serving revision have no
+        parameter through which a request could name them."""
+        auth = self.credentials.get(request.key_id)
+        if auth is None or self.catalog is None or self.wallet_directory is None:
+            raise errors.InvalidApiKey(f"key {request.key_id} has no CREDIT credential row")
+        if auth.org_id != request.org_id:
+            raise errors.Forbidden("the credential authenticates another organization")
+        if auth.audience is CredentialAudience.consumer:
+            candidate = await self.wallet_directory.consumer_wallet_for_user(auth.user_id)
+        elif auth.audience is CredentialAudience.provider_dev:
+            candidate = await self.wallet_directory.provider_dev_wallet(auth.provider_org_id)
+        else:
+            candidate = None
+        wallet = v2ports.resolve_wallet(auth, candidate)
+        deployment = await self.catalog.resolve(request.model_revision, audience=auth.audience,
+                                                endpoint_id=auth.endpoint_id)
+        serving = card = policy = None
+        if deployment is not None:
+            serving = await self.catalog.serving_revision(deployment.serving_version_id)
+            card = await self.catalog.active_rate_card(deployment.deployment_revision_id)
+            policy = await self.catalog.data_access_policy(deployment.deployment_revision_id)
+        pins, card = v2ports.pin_admission(auth=auth, requested_model=request.model_revision,
+                                           deployment=deployment, serving=serving,
+                                           rate_card=card, policy=policy)
+        if wallet.wallet_id not in self.credit_wallets:
+            self.seed_credit_wallet(wallet)
+        return pins, card, policy, wallet.wallet_id
+
+
     @staticmethod
-    def _derive_hold(request: NormalizedRequest, price: PriceSnapshot) -> Decimal:
+    def _derive_hold(request: NormalizedRequest, price: PriceSnapshot | None,
+                     terms=None) -> Decimal:
         """r1 R53 / 01: the maximum hold, from the admitted snapshot and the request's
         **validated** token ceilings, rounded **up** (§4).
 
@@ -346,9 +448,13 @@ class FakeJobStore:
         put them; passing them again beside it would only create two numbers that can
         disagree. Nothing a caller sends is money.
         """
+        if terms is not None:
+            # A CREDIT hold, from the pinned card: same rounding (up), different unit.
+            return terms[1].maximum_hold(request.max_input_tokens,
+                                         request.max_output_tokens).raw(CREDIT)
         return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)
 
-    def _replay(self, idem: IdempotencyRef, now: datetime) -> Admission | None:
+    def _replay(self, idem: IdempotencyRef, now: datetime, *, credit: bool = False):
         if idem.key is None:
             return None
         record = self.idem.get(idem.scope)
@@ -361,6 +467,14 @@ class FakeJobStore:
         if record.payload_hash != idem.payload_hash:
             raise errors.IdempotencyConflict("same idempotency key, different canonical payload")
         job = self.jobs[record.request_id]
+        if (job.credit is not None) is not credit:
+            # One key, one regime: a legacy replay of a CREDIT job would hand back a USD
+            # admission for money that moved in CREDIT (and the reverse).
+            raise errors.IdempotencyConflict("same idempotency key, different accounting regime")
+        if credit:
+            # Revalidated, never `model_copy(update=)` (R78).
+            return AdmissionV2.model_validate({**job.credit.model_dump(mode="json"),
+                                               "replayed": True})
         return self._snapshot(job).model_copy(update={"replayed": True})
 
     def _check_capacity(self, request: NormalizedRequest) -> None:
@@ -413,15 +527,17 @@ class FakeJobStore:
             return request.model_copy(update={"deadline_at": ceiling})
         return request
 
-    def _check_balance(self, org_id: str, hold: Decimal) -> None:
-        # A *read*: a refused admission must not leave an empty wallet row behind.
-        wallet = self.wallets.get(org_id) or _Wallet()
+    def _check_balance(self, org_id: str, hold: Decimal, terms=None) -> None:
+        # A *read*: a refused admission must not leave an empty wallet row behind. A
+        # CREDIT hold is checked against the resolved CREDIT wallet, never the org's USD.
+        wallet = (self.credit_wallets.get(terms[3]) if terms is not None
+                  else self.wallets.get(org_id)) or _Wallet()
         if hold > wallet.available:
             raise errors.InsufficientCredit(
                 f"maximum hold exceeds available balance for org {org_id}")
 
     def _insert(self, request: NormalizedRequest, idem: IdempotencyRef, hold: Decimal,
-                now: datetime, price: PriceSnapshot) -> Admission:
+                now: datetime, price: PriceSnapshot | None, terms=None):
         handle = self.ids.job_handle()
         reservations = {
             kind: CapacityReservation(request_id=request.request_id, org_id=request.org_id,
@@ -433,16 +549,18 @@ class FakeJobStore:
                                   self.limits.journal_job_reserve_bytes))
         }
         budgets = Budgets.of(self.limits, request.execution_mode)
-        wallet = self.wallet(request.org_id)
+        wallet_id = terms[3] if terms is not None else None
+        wallet = self.credit_wallet(wallet_id) if terms is not None else self.wallet(request.org_id)
         wallet.reserved_total = wallet.reserved_total + hold
-        self.holds[request.request_id] = _Hold(request.request_id, request.org_id, hold)
+        self.holds[request.request_id] = _Hold(request.request_id, request.org_id, hold,
+                                               wallet_id=wallet_id)
 
         event = self._emit(request.request_id, OutboxKind.prepare_dispatch, now,
                            {"job_handle": handle, "request_id": request.request_id})
-        admission = Admission(
+        row = dict(
             request_id=request.request_id, job_handle=handle, org_id=request.org_id,
             key_id=request.key_id, operation=idem.operation, idempotency_key=idem.key,
-            payload_hash=idem.payload_hash, price_snapshot=price,
+            payload_hash=idem.payload_hash,
             maximum_hold=hold, reservations=tuple(reservations.values()),
             state=JobState.preparing, outbox=(event,), admitted_at=now,
             deadline_at=request.deadline_at,
@@ -452,12 +570,29 @@ class FakeJobStore:
             # here, from the database clock and never beyond the absolute deadline.
             preparation_deadline_at=_phase_deadline(now, budgets.preparation_s,
                                                     request.deadline_at))
-        self.jobs[request.request_id] = _Job(request=request, admission=admission,
-                                             state=JobState.preparing, reservations=reservations)
+        if terms is None:
+            admission = Admission(**row, price_snapshot=price)
+        else:
+            # ponytail: v1 `Admission.price_snapshot` is required and a CREDIT job has no
+            # USD price (D1R relaxed `jobs.price_version` NOT NULL), so the lifecycle row is
+            # built without validation from store-computed fields and never leaves the
+            # store - every v1 read of a CREDIT job is refused below. Upgrade: make
+            # `Admission.price_snapshot` optional in a v1 revision (integration request).
+            admission = Admission.model_construct(**row, price_snapshot=None)
+        job = _Job(request=request, admission=admission, state=JobState.preparing,
+                   reservations=reservations)
+        if terms is not None:
+            pins, card, policy, _ = terms
+            job.credit = AdmissionV2(
+                request_id=request.request_id, job_handle=handle, org_id=request.org_id,
+                wallet_id=wallet_id, pins=pins, rate_card=card, maximum_hold=Credit(hold),
+                admitted_at=now)
+            job.policy = policy
+        self.jobs[request.request_id] = job
         self.by_handle[handle] = request.request_id
         if idem.key is not None:
             self.idem[idem.scope] = _Idem(idem.payload_hash, request.request_id)
-        return admission
+        return job.credit if terms is not None else admission
 
     def _price(self, request: NormalizedRequest, now: datetime) -> PriceSnapshot:
         """r1 R45: admission snapshots the price from the **price source**, never from
@@ -488,7 +623,17 @@ class FakeJobStore:
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         self.failures.before("get_owned")
         job = self._owned(org_id, job_handle)
+        if job.credit is not None:
+            raise errors.NotFound(f"job {job_handle} is a CREDIT job: use get_owned_credit")
         return self._snapshot(job), job.outcome
+
+    async def get_owned_credit(self, org_id: str,
+                               job_handle: str) -> tuple[AdmissionV2, TerminalOutcome | None]:
+        self.failures.before("get_owned")
+        job = self._owned(org_id, job_handle)
+        if job.credit is None:
+            raise errors.NotFound(f"job {job_handle} is not a CREDIT job")
+        return job.credit, job.outcome
 
     def _snapshot(self, job: _Job) -> Admission:
         """The admission as it stands now: the state *and* the capacity reservations,
@@ -575,7 +720,8 @@ class FakeJobStore:
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
                        {"job_handle": job.admission.job_handle, "request_id": job.id})
-            admission = self._snapshot(job)
+            # A CREDIT job answers with its CREDIT admission, never the lifecycle row.
+            admission = job.credit if job.credit is not None else self._snapshot(job)
         self.failures.after_commit("prepared")
         return admission
 
@@ -585,11 +731,31 @@ class FakeJobStore:
         request, the media, the price and the budgets."""
         self.failures.before("load_work")
         async with self._lock:
-            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation
-                   else self._fence(lease))
+            job = self._fence_for_work(lease)
+            if job.credit is not None:
+                raise errors.NotFound(f"job {job.id} is a CREDIT job: use load_work_credit")
             return Work(request=job.request, media_refs=job.request.media,
                         prepared_refs=job.prepared,
                         price_snapshot=job.admission.price_snapshot, budgets=job.budgets)
+
+    async def load_work_credit(self, lease: Lease) -> WorkV2:
+        """contracts v2: the fenced work of a CREDIT job, with the **admitted** card and
+        pins, so a worker cannot re-resolve an alias or a rate while the job is in flight."""
+        self.failures.before("load_work")
+        async with self._lock:
+            job = self._fence_for_work(lease)
+            if job.credit is None:
+                raise errors.NotFound(f"job {job.id} is not a CREDIT job")
+            request = NormalizedRequestV2(request=job.request, pins=job.credit.pins,
+                                          wallet_id=job.credit.wallet_id, policy=job.policy)
+            return WorkV2(request=request, media_refs=job.request.media,
+                          prepared_refs=job.prepared, rate_card=job.credit.rate_card,
+                          budgets=job.budgets)
+
+    def _fence_for_work(self, lease: Lease) -> _Job:
+        """The fence `load_work` and `load_work_credit` share: preparation or inference."""
+        return (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation
+                else self._fence(lease))
 
     def _fence_preparation(self, lease: Lease) -> _Job:
         """The preparation half of `_fence`: its own generation counter, and the lease
@@ -804,6 +970,10 @@ class FakeJobStore:
     async def complete(self, lease: Lease, outcome: TerminalOutcome) -> TerminalOutcome:
         """Settlement is the store's authority: the caller's `settlement_state`
         and `debit` are recomputed, never trusted."""
+        return await self._complete(lease, outcome, credit=False)
+
+    async def _complete(self, lease: Lease, outcome: TerminalOutcome, *,
+                        credit: bool) -> TerminalOutcome:
         self.failures.before("complete")
         if outcome.state is JobState.succeeded and not outcome.result_ref:
             # r1 R30: a success the customer cannot fetch is not a success, and it
@@ -817,6 +987,10 @@ class FakeJobStore:
             job = self.jobs.get(lease.job_id)
             if job is None:
                 raise errors.NotFound(f"no job {lease.job_id}")
+            if job.credit is not None and not credit:
+                # A v1 caller would read `settled` with a zero USD debit and never see
+                # the CREDIT charge: the unit-ambiguous reading R64 exists to prevent.
+                raise errors.NotFound(f"job {job.id} is a CREDIT job: use complete_credit")
             if job.terminal:
                 proposal = (outcome.cause, outcome.usage, outcome.result_ref)
                 if proposal in (job.proposal,
@@ -834,6 +1008,20 @@ class FakeJobStore:
         self.failures.after_commit("complete")
         return settled
 
+    async def complete_credit(self, lease: Lease,
+                              outcome: TerminalOutcome) -> tuple[TerminalOutcome, SettlementV2 | None]:
+        """contracts v2: `complete` for a CREDIT job, answering the money half too.
+
+        The settlement is `v2.settle` at the **admitted** card (R68), and exists exactly
+        when the outcome is `settled`. The v1 `TerminalOutcome.debit` of a CREDIT job is
+        always zero: that field is USD, and a CREDIT charge in it would be a unit read from
+        a field (R64)."""
+        job = self.jobs.get(lease.job_id)
+        if job is not None and job.credit is None:
+            raise errors.NotFound(f"job {lease.job_id} is not a CREDIT job")
+        settled = await self._complete(lease, outcome, credit=True)
+        return settled, self.jobs[lease.job_id].settlement
+
     def _terminalize(self, job: _Job, cause: TerminalCause, usage: Usage | None,
                      result_ref: str | None, state: JobState) -> TerminalOutcome:
         if state not in TERMINAL_STATES:
@@ -847,7 +1035,7 @@ class FakeJobStore:
             raise errors.InvalidRequest("a present usage must be authoritative")
         now = self.clock.now()
         hold = self.holds[job.id]
-        wallet = self.wallet(job.request.org_id)
+        wallet = self._wallet_of(job)
         if self.stream is not None:
             # r1 R39: every capacity check a settling transaction can fail on happens
             # **before** any wallet, outcome or reservation mutation. The terminal
@@ -891,8 +1079,11 @@ class FakeJobStore:
                           else SettlementState.released_platform_absorbed)
             self._release_hold(wallet, hold)
         else:
-            candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,
-                                                           usage.completion_tokens)
+            candidate = (job.credit.rate_card.debit(usage.prompt_tokens,
+                                                    usage.completion_tokens).raw(CREDIT)
+                         if job.credit is not None
+                         else job.admission.price_snapshot.debit(usage.prompt_tokens,
+                                                                 usage.completion_tokens))
             if over_envelope or candidate > hold.amount:
                 # A protocol violation beyond the reserved envelope is a platform
                 # failure to reconcile, never an unreserved customer debit.
@@ -909,6 +1100,10 @@ class FakeJobStore:
                 wallet.ledger_total = wallet.ledger_total - debit
                 hold.state = HoldState.settled
                 settlement = SettlementState.settled
+                if job.credit is not None:
+                    # The money half, at the admitted card (R68). The v1 field stays USD.
+                    job.settlement = settle(job.credit, usage, now)
+                    debit = money.ZERO
 
         job.state = state
         job.lease = None                            # terminalization fences execution
@@ -1050,7 +1245,8 @@ class FakeJobStore:
             fenced = job.lease is None                       # terminalization cleared it
             if not (job.terminal and fenced and now >= hold.reconcile_after):
                 continue
-            self._release_hold(self.wallet(hold.org_id), hold)
+            self._release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id
+                               else self.wallet(hold.org_id), hold)
             job.outcome = job.outcome.model_copy(update={
                 "settlement_state": SettlementState.released_platform_absorbed,
                 "reconcile_after": None})

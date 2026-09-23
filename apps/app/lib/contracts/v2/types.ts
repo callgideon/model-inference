@@ -27,6 +27,11 @@ import {
   totalUsd,
   unitOfRegime,
 } from "./money-units.ts";
+import type { UsageRow } from "../types.ts";
+
+// The v2 namespace is the whole revision: `lib/contracts/types.ts` re-exports this module
+// as `v2` (F2P wire-in, item 9), so the unit vocabulary travels with the DTOs.
+export * from "./money-units.ts";
 
 // ---------------------------------------------------------------------------
 // Vocabulary — mirrors of the v2 StrEnums, string values frozen.
@@ -173,8 +178,9 @@ export type UsageRecordV2 = {
   accounting_regime: AccountingRegime;
   unit: "CREDIT" | "USD";
   charged_amount: string;
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  outcome: string;
+  /** Absent on a pre-cutover row that recorded none; a CREDIT row always carries both. */
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  outcome?: string;
   rate_card_version?: string;
   serving_version_id?: string;
   deployment_revision_id?: string;
@@ -287,6 +293,23 @@ export function unitOfRow(row: Pick<UsageRecordV2, "accounting_regime">): MoneyU
   return unitOfRegime(row.accounting_regime);
 }
 
+/**
+ * The comparison key of a contract instant (F2P wire-in; 01a §7). The checks below order
+ * instants as strings, which is exact only for one spelling: `Z`, and fractional seconds padded
+ * to one width. `12:00:00Z` sorts *after* `12:00:00.5Z` as text, and `+00:00` sorts anywhere, so a
+ * raw comparison of mixed spellings can call a revoked grant current. Every instant is therefore
+ * reduced to `YYYY-MM-DDTHH:MM:SS.ffffffZ`, and anything that is not the contract's `Z` form
+ * (an offset, a lowercase `z`, more than microseconds, no zone) is refused rather than compared.
+ * Normalizing an offset form belongs to C, which accepts both (R59 (9)).
+ */
+const CONTRACT_INSTANT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?Z$/;
+
+export function instantKey(value: string): string {
+  const match = typeof value === "string" ? CONTRACT_INSTANT.exec(value) : null;
+  if (match === null) throw new TypeError(`not a contract instant (UTC, Z): ${String(value)}`);
+  return `${match[1]}.${(match[2] ?? "").padEnd(6, "0")}Z`;
+}
+
 /** Default deny: an unknown capability, another provider or a revoked membership. */
 export function membershipPermits(
   membership: ProviderMembership | null,
@@ -296,8 +319,9 @@ export function membershipPermits(
 ): boolean {
   if (membership === null) return false;
   if (membership.provider_org_id !== providerOrgId) return false;
-  if (membership.granted_at > now) return false;
-  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;
+  const at = instantKey(now);
+  if (instantKey(membership.granted_at) > at) return false;
+  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;
   return ROLE_CAPABILITIES[membership.role].includes(capability);
 }
 
@@ -313,9 +337,10 @@ export function grantPermits(
   },
 ): boolean {
   if (grant === null) return false;
-  if (options.now < grant.effective_at) return false;
-  if (grant.revoked_at !== undefined && options.now >= grant.revoked_at) return false;
-  if (grant.expires_at !== undefined && options.now >= grant.expires_at) return false;
+  const at = instantKey(options.now);
+  if (at < instantKey(grant.effective_at)) return false;
+  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;
+  if (grant.expires_at !== undefined && at >= instantKey(grant.expires_at)) return false;
   return (
     grant.recipient_provider_org_id === options.providerOrgId &&
     grant.model_ids.includes(options.modelId) &&
@@ -337,6 +362,39 @@ export function mayReadCustomerContent(
     membershipPermits(membership, "manage_dev_deployment", options.now, options.providerOrgId) &&
     grantPermits(grant, options)
   );
+}
+
+/**
+ * A v1 console usage row read as the v2 DTO: the console half of the v1 read projection (F2P
+ * wire-in, item 10; the Python half, `project_v1_usage`, runs against D1R's real 0001-0005 rows).
+ * Both v1 regimes (`legacy_usd` and `pilot`) are pre-cutover USD history, so the v2 regime is
+ * `legacy_usd` and the unit USD. A NULL stays absent - no usage without recorded tokens, no
+ * outcome without a settlement state - and nothing CREDIT-shaped is filled in.
+ */
+export function projectV1UsageRow(row: UsageRow, orgId: string): UsageRecordV2 {
+  const record: UsageRecordV2 = {
+    schema_version: 2,
+    request_id: row.request_id,
+    org_id: orgId,
+    accounting_regime: "legacy_usd",
+    unit: "USD",
+    charged_amount: parseAmount(row.cost, "USD"),
+    settled_at: row.created_at,
+  };
+  if ((row.prompt_tokens === null) !== (row.completion_tokens === null)) {
+    // Half a usage report: dropping the recorded count would lose history, completing it
+    // would invent the other. Python's `project_v1_usage` refuses it the same way.
+    throw new TypeError(`usage row ${row.request_id} records only one token count`);
+  }
+  if (row.prompt_tokens !== null && row.completion_tokens !== null) {
+    record.usage = {
+      prompt_tokens: row.prompt_tokens,
+      completion_tokens: row.completion_tokens,
+      total_tokens: row.prompt_tokens + row.completion_tokens,
+    };
+  }
+  if (row.settlement_state !== null) record.outcome = row.settlement_state;
+  return record;
 }
 
 /** A consumer wallet is the only one with a signup entitlement. */

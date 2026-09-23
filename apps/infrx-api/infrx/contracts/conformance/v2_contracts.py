@@ -13,7 +13,7 @@ case that publishes a rate card or revokes a grant cannot leak into the next one
 Green against the fakes means implemented; only green against D1R's psycopg
 directories means integrated.
 
-Every case here is killable: `tests/contracts/v2/mutants_v2.py` declares a
+Every case here is killable: `tests/contracts/mutants.py` (the one list) declares a
 single-edit defect in `contracts/v2/*.py` for each invariant claimed below, and
 the runner requires the *named* case to fail.
 """
@@ -557,7 +557,11 @@ async def credit_rate__a_rate_published_after_acceptance_does_not_move_the_job(f
     replay = admission.model_copy(update={"replayed": True})
     assert v2.settle(replay, usage, harness.now + timedelta(seconds=31)).charged == \
         settlement.charged
-    # a freshly admitted request does see the new rate
+    # a freshly admitted request does see the new rate - and pins the card it resolved,
+    # checked on the pins before an AdmissionV2 is built from them (whose validator would
+    # otherwise be what notices a pin that disagrees with its card)
+    pins, card = await _pin(harness, _consumer_auth(), v2fix.REQUESTED_MODEL)
+    assert pins.rate_card_version == card.rate_card_version == "rc_marlin2b_2026_10"
     fresh = await _admit(harness)
     assert fresh.pins.rate_card_version == "rc_marlin2b_2026_10"
     assert fresh.maximum_hold > admission.maximum_hold
@@ -842,6 +846,289 @@ def cases() -> list[Callable]:
     ]
 
 
+# --- the CREDIT regime of the JobStore (F2P wire-in, items 3-4) -------------------
+# `ports.CreditJobStore`, driven through a port `Harness` like v1's JobStore suite. D2/D5
+# run these against PostgreSQL. Required hooks (read directly, like v1's `grant`/`balance`):
+# `credit_balance(wallet_id) -> {"ledger", "reserved", "available"}` (Decimal),
+# `credit_grant(wallet_id, amount)` (an audited allocation), `register_credential(auth)`
+# (a key row), `publish_rate_card(card)` (an operator publishing a card), and v1's
+# `balance(org_id)` for the organization's USD wallet.
+def _credit_request(harness, *, provider: bool = False, model: str | None = None, **kw):
+    from . import builders as b
+    if provider:
+        return b.request(harness, org_id=IDS.provider_org, key_id=IDS.provider_dev_key,
+                         model_revision=model or v2fix.DEV_REQUESTED_MODEL, **kw)
+    return b.request(harness, org_id=IDS.consumer_org, key_id=IDS.consumer_key,
+                     model_revision=model or v2fix.REQUESTED_MODEL, **kw)
+
+
+def _card(**changes) -> v2.RateCardSnapshot:
+    """The fixture card with named changes, revalidated (R78: never `model_copy(update=)`)."""
+    base = v2fix.BUILDERS["rate_card_marlin.json"]().model_dump(mode="json")
+    return v2.RateCardSnapshot.model_validate({**base, **changes})
+
+
+async def _refused(call, error):
+    try:
+        await call
+    except error:
+        return
+    raise AssertionError(f"expected {error.__name__}")
+
+
+async def _legacy_job(harness):
+    """A legacy (USD) job admitted through v1 `admit` beside the CREDIT ones."""
+    from . import builders as b
+    harness.extra["grant"](b.ORG_A, "25.00")
+    request = b.request(harness, org_id=b.ORG_A, key_id=b.KEY_A)
+    return request, await harness.port.admit(request, b.idem(request, "legacy-1"), ())
+
+
+async def _credit_run(harness, request, admission):
+    """Prepare and claim a CREDIT job: a live inference lease."""
+    port = harness.port
+    lease = await port.claim_preparation(request.request_id, "prep-a")
+    prepared = await port.prepared(lease)
+    assert prepared == admission, "prepared answered a CREDIT job with something else"
+    return await port.claim(request.request_id, "worker-a")
+
+
+async def credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit(factory):
+    """CREDIT-IDENTITY/CREDIT-RATE/CREDIT-UNITS at admission: the wallet is the
+    credential's own (R66), the pins and card are the catalog's (R69), the hold is the
+    card's ceiling-rounded maximum on that CREDIT wallet, and the organization's USD
+    wallet is untouched. A v1 read of the job is `not_found`, and so is a CREDIT read of a
+    legacy job."""
+    harness = factory()
+    request = _credit_request(harness)
+    before = harness.extra["credit_balance"](IDS.consumer_wallet)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    card = v2fix.BUILDERS["rate_card_marlin.json"]()
+    assert isinstance(admission, v2.AdmissionV2) and admission.replayed is False
+    assert admission.wallet_id == IDS.consumer_wallet
+    assert admission.pins == v2fix.BUILDERS["admission_pins.json"]()
+    assert admission.rate_card == card
+    hold = card.maximum_hold(request.max_input_tokens, request.max_output_tokens)
+    assert admission.maximum_hold == hold
+    after = harness.extra["credit_balance"](IDS.consumer_wallet)
+    assert after["reserved"] == before["reserved"] + hold.raw(mu.CREDIT)
+    assert after["ledger"] == before["ledger"]
+    assert harness.extra["balance"](IDS.consumer_org)["reserved"] == 0, \
+        "a CREDIT hold landed on the organization's USD wallet"
+    owned, outcome = await harness.port.get_owned_credit(IDS.consumer_org, admission.job_handle)
+    assert owned == admission and outcome is None
+    await _refused(harness.port.get_owned(IDS.consumer_org, admission.job_handle),
+                   errors.NotFound)
+    # And the other direction: a CREDIT read of a legacy job is `not_found` too.
+    from . import builders as b
+    _legacy, legacy = await _legacy_job(harness)
+    await _refused(harness.port.get_owned_credit(b.ORG_A, legacy.job_handle), errors.NotFound)
+
+
+async def credit_admit__refusals_leave_no_job_and_no_hold(factory):
+    """CREDIT-IDENTITY/R69/R70 in the transaction: a consumer key cannot reach a private
+    dev model and an unknown model is `not_found`; an unpriced model is
+    `invalid_request`; an operator key spends no wallet (`forbidden`); an unfunded
+    provider dev wallet is `insufficient_credit` until an operator allocates to it; a key
+    row naming another organization than the request is `forbidden`. No refusal leaves a
+    job or a hold behind."""
+    from . import builders as b
+    harness = factory()
+    port = harness.port
+    reserved = harness.extra["credit_balance"](IDS.consumer_wallet)["reserved"]
+    for request, error in (
+            (_credit_request(harness, model=v2fix.DEV_REQUESTED_MODEL), errors.NotFound),
+            (_credit_request(harness, model="nemostation/unknown@2026-09-01"), errors.NotFound),
+            (_credit_request(harness, provider=True), errors.InvalidRequest)):
+        await _refused(port.admit_credit(request, b_idem(request)), error)
+    operator_key = harness.ids.uuid()
+    harness.extra["register_credential"](v2.AuthContextV2(
+        audience=v2.CredentialAudience.operator, org_id=IDS.consumer_org, key_id=operator_key,
+        principal="operator@platform", role=v1.Role.operator, entitlement_version=1))
+    operator = b.request(harness, org_id=IDS.consumer_org, key_id=operator_key,
+                         model_revision=v2fix.REQUESTED_MODEL)
+    await _refused(port.admit_credit(operator, b_idem(operator)), errors.Forbidden)
+    # A key row authenticating one organization never admits for another, even though the
+    # wallet it resolves is its own: the job would be owned by an org the key cannot speak for.
+    elsewhere = harness.ids.uuid()
+    consumer = v2fix.BUILDERS["auth_context_consumer.json"]().model_dump(mode="json")
+    harness.extra["register_credential"](v2.AuthContextV2.model_validate(
+        {**consumer, "key_id": elsewhere}))
+    stolen = b.request(harness, org_id=b.ORG_B, key_id=elsewhere,
+                       model_revision=v2fix.REQUESTED_MODEL)
+    await _refused(port.admit_credit(stolen, b_idem(stolen)), errors.Forbidden)
+    # The dev deployment gets an approved internal card; the provider's dev wallet is
+    # still zero, so the hold does not fit until an audited allocation funds it.
+    harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_dev_internal",
+                                             deployment_revision_id=IDS.dev_deployment))
+    dev = _credit_request(harness, provider=True)
+    await _refused(port.admit_credit(dev, b_idem(dev)), errors.InsufficientCredit)
+    assert harness.extra["active_jobs"]() == []
+    assert harness.extra["credit_balance"](IDS.consumer_wallet)["reserved"] == reserved
+    assert harness.extra["credit_balance"](IDS.provider_dev_wallet)["reserved"] == 0
+    harness.extra["credit_grant"](IDS.provider_dev_wallet, "100")
+    admitted = await port.admit_credit(dev, b_idem(dev))
+    assert admitted.wallet_id == IDS.provider_dev_wallet
+    assert admitted.pins.rate_card_version == "rc_marlin2b_dev_internal"
+    assert harness.extra["credit_balance"](IDS.consumer_wallet)["reserved"] == reserved, \
+        "a provider dev admission touched the consumer wallet"
+
+
+async def credit_admit__a_replay_is_pinned_and_never_crosses_regimes(factory):
+    """CREDIT-RATE/DUR-ADMIT: a replay after a rate change answers the admitted card
+    and hold, marked replayed; the same key through the legacy `admit` is an
+    idempotency conflict, never a USD admission of CREDIT money."""
+    harness = factory()
+    request = _credit_request(harness)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_2026_10",
+                                             input_rate_per_million="800.00000000",
+                                             output_rate_per_million="2400.00000000"))
+    replay = await harness.port.admit_credit(request, b_idem(request))
+    assert replay.replayed is True
+    assert replay.model_dump(exclude={"replayed"}) == admission.model_dump(exclude={"replayed"})
+    await _refused(harness.port.admit(request, b_idem(request)), errors.IdempotencyConflict)
+
+
+async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory):
+    """CREDIT-RATE/CREDIT-SPEND at settlement (R68): a rate published while the job
+    ran does not reach it; the charge is the admitted card's half-up debit, taken from
+    the CREDIT wallet with the hold released in the same transaction; the v1 debit
+    field stays zero and the USD wallet does not move. The worker's view carries the
+    admitted card and the resolved wallet. v1 `complete` of the CREDIT lease, and
+    `load_work_credit` / `complete_credit` of a legacy lease, are `not_found`."""
+    from . import builders as b
+    harness = factory()
+    request = _credit_request(harness)
+    before = harness.extra["credit_balance"](IDS.consumer_wallet)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_2026_10",
+                                             input_rate_per_million="4000.00000000",
+                                             output_rate_per_million="12000.00000000"))
+    lease = await _credit_run(harness, request, admission)
+    work = await harness.port.load_work_credit(lease)
+    assert work.rate_card == admission.rate_card and work.request.pins == admission.pins
+    assert work.request.wallet_id == admission.wallet_id and work.request.request == request
+    await _refused(harness.port.load_work(lease), errors.NotFound)
+    await _refused(harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))), errors.NotFound)
+    outcome, settlement = await harness.port.complete_credit(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340)))
+    # And after settlement too: a v1 replay of the terminal job would read `settled` with a
+    # zero USD debit, the unit-ambiguous answer R64 exists to prevent.
+    await _refused(harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))), errors.NotFound)
+    expected = admission.rate_card.debit(1200, 340)
+    assert outcome.settlement_state is v1.SettlementState.settled
+    assert outcome.debit == money.ZERO, "a CREDIT charge was written into the USD field"
+    assert settlement is not None and settlement.charged == expected
+    assert settlement.rate_card_version == v2fix.RATE_CARD_VERSION
+    assert settlement.wallet_id == IDS.consumer_wallet
+    after = harness.extra["credit_balance"](IDS.consumer_wallet)
+    assert after["ledger"] == before["ledger"] - expected.raw(mu.CREDIT)
+    assert after["reserved"] == before["reserved"]
+    usd = harness.extra["balance"](IDS.consumer_org)
+    assert usd["ledger"] == 0 and usd["reserved"] == 0
+    # A legacy job's lease never settles through the CREDIT door.
+    legacy_request, _legacy = await _legacy_job(harness)
+    await harness.port.prepared(await harness.port.claim_preparation(legacy_request.request_id,
+                                                                     "prep-b"))
+    legacy_lease = await harness.port.claim(legacy_request.request_id, "worker-b")
+    await _refused(harness.port.load_work_credit(legacy_lease), errors.NotFound)
+    await _refused(harness.port.complete_credit(
+        legacy_lease, b.outcome(legacy_request.request_id, harness, tokens=b.usage(1200, 340))),
+        errors.NotFound)
+
+
+async def credit_settle__a_free_outcome_moves_no_credit(factory):
+    """CREDIT-SPEND: a free cause (invalid media) settles nothing: no settlement
+    record, the hold released, the ledger unchanged."""
+    from . import builders as b
+    harness = factory()
+    request = _credit_request(harness)
+    before = harness.extra["credit_balance"](IDS.consumer_wallet)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    lease = await _credit_run(harness, request, admission)
+    outcome, settlement = await harness.port.complete_credit(
+        lease, b.outcome(request.request_id, harness, cause=v1.TerminalCause.invalid_media,
+                         state=v1.JobState.failed, tokens=None, result_ref=None))
+    assert outcome.settlement_state is v1.SettlementState.released_free
+    assert settlement is None
+    assert harness.extra["credit_balance"](IDS.consumer_wallet) == before
+
+
+async def credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet(factory):
+    """CREDIT-SPEND / DUR-SETTLE: published output with no authoritative usage holds the
+    CREDIT hold (`held_unknown`, no settlement). A `recover()` one second before the fenced
+    24 h releases nothing; after it the reaper releases each hold on **its own** CREDIT
+    wallet as platform-absorbed - a consumer and a provider dev hold in the same pass -
+    never on the organization's USD wallet, and never as a charge."""
+    from . import builders as b
+    from .harness import hook
+    from ..limits import DEFAULTS
+    harness = factory()
+    publish = hook(harness, "publish")
+    balance = harness.extra["credit_balance"]
+    harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_dev_internal",
+                                             deployment_revision_id=IDS.dev_deployment))
+    harness.extra["credit_grant"](IDS.provider_dev_wallet, "100")
+    wallets = (IDS.consumer_wallet, IDS.provider_dev_wallet)
+    before = {w: balance(w) for w in wallets}
+    admitted = []
+    for provider, worker in ((False, "a"), (True, "b")):
+        request = _credit_request(harness, provider=provider)
+        admission = await harness.port.admit_credit(request, b_idem(request, f"unknown-{worker}"))
+        port = harness.port
+        await port.prepared(await port.claim_preparation(request.request_id, f"prep-{worker}"))
+        lease = await port.claim(request.request_id, f"worker-{worker}")
+        await publish(lease)
+        outcome, settlement = await port.complete_credit(
+            lease, b.outcome(request.request_id, harness, cause=v1.TerminalCause.client_disconnected,
+                             state=v1.JobState.failed, tokens=None, result_ref=None))
+        assert outcome.settlement_state is v1.SettlementState.held_unknown and settlement is None
+        admitted.append(admission)
+    assert [a.wallet_id for a in admitted] == list(wallets)
+    held = {w: balance(w) for w in wallets}
+    for w, admission in zip(wallets, admitted):
+        assert held[w]["reserved"] == before[w]["reserved"] + admission.maximum_hold.raw(mu.CREDIT)
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s - 1)
+    await harness.port.recover()
+    assert {w: balance(w) for w in wallets} == held, "a CREDIT hold was released before 24 h"
+    harness.clock.advance(2)
+    await harness.port.recover()
+    for w in wallets:
+        assert balance(w) == before[w], \
+            f"the reconcile did not return the CREDIT hold on {w} to that wallet, or charged it"
+    usd = harness.extra["balance"](IDS.consumer_org)
+    assert usd["ledger"] == 0 and usd["reserved"] == 0, "the reconcile moved the USD wallet"
+    for org, admission in zip((IDS.consumer_org, IDS.provider_org), admitted):
+        _, final = await harness.port.get_owned_credit(org, admission.job_handle)
+        assert final.settlement_state is v1.SettlementState.released_platform_absorbed
+
+
+def b_idem(request, key: str = "credit-1"):
+    from . import builders as b
+    return b.idem(request, key)
+
+
+def credit_jobstore_cases() -> list[Callable]:
+    """The `ports.CreditJobStore` suite, in oracle order."""
+    return [
+        credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit,
+        credit_admit__refusals_leave_no_job_and_no_hold,
+        credit_admit__a_replay_is_pinned_and_never_crosses_regimes,
+        credit_settle__at_the_admitted_card_on_the_credit_wallet_only,
+        credit_settle__a_free_outcome_moves_no_credit,
+        credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet,
+    ]
+
+
+def run_credit_jobstore_conformance(factory) -> int:
+    """Run every CREDIT JobStore case against `factory() -> Harness`; raises on failure."""
+    from . import run_cases
+    return run_cases(credit_jobstore_cases(), factory)
+
+
 def run_v2_conformance(factory: Callable[[], V2Harness] = fake_v2_harness) -> int:
     """Run every case against `factory`; return how many ran. Raises on failure."""
     ran = 0
@@ -851,4 +1138,5 @@ def run_v2_conformance(factory: Callable[[], V2Harness] = fake_v2_harness) -> in
     return ran
 
 
-__all__ = ["cases", "run_v2_conformance", "fake_v2_harness", "V2Harness"]
+__all__ = ["cases", "credit_jobstore_cases", "run_credit_jobstore_conformance",
+           "run_v2_conformance", "fake_v2_harness", "V2Harness"]
