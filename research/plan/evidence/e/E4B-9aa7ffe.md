@@ -522,3 +522,17 @@ window (V3; the runner does not check either).
 M1-L2's s3 line; `E4B-endpoint.md` is regenerated (`endpoint_doc.py --write`) after the
 cutover merges, and its Model notes then name the measured pin by themselves (V6).
 
+### Round-3 runs (UTC 2026-09-23, at `99c795c`, a clean tree)
+
+| # | Command | Exit | Tail |
+|---|---|---|---|
+| R3-1 | `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_endpoint_doc.py tests/integration/backend/test_certify.py` | **0** | **`39 passed in 1.29s`** (`r3-certify-doc.log e495c6ff27079b22`) |
+| R3-2 | `INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py` | **0** | **`140 passed in 339.72s`** = 138 mutants over 39 named cases, killed, + 2 list checks (`r3-list.log c2f4dbeb47a8e6d8`) |
+| R3-3 | layer 0 from the repo root: `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration` | **0** | **`197 passed, 99 skipped, 2 warnings in 35.90s`**, no FAILED/ERROR line (`r3-layer0.log f9d2aecefe78548c`) |
+
+No certify stack run this round (not asked; the round-2 run at `5afe3d9` stands). The session
+scratch area holding rounds 1-2's raw logs was emptied between rounds by something outside this
+lane; their sha256 prefixes above are as recorded when they were written.
+
+- 2026-09-23 (round 3): the verifier's V1-V6 folded in (`81207fd`…`7bf43a0`, amendment 4);
+  runs R3-1…R3-3 quoted from their logs. Nothing earlier was rewritten.
