@@ -2,7 +2,7 @@
 """G4U: the owned-upload routes over M3's store - MEDIA-SEC (bounds, projection,
 enablement) and DUR-RLS (the route half: identity from the key, tenant scope).
 
-    uv run --frozen pytest -q tests/g/test_uploads.py
+    uv run --frozen pytest -q tests/g/uploads/test_uploads.py
 
 What the store guarantees is M3's and proven in `tests/m/test_uploads.py`; these cases
 prove the HTTP translation of its answers and what only the route can hold. No network,
@@ -26,8 +26,8 @@ from infrx.gateway.routes import intake, uploads, validate
 from infrx.media import fetch, store as objects
 from infrx.media import uploads as media
 
-from ..m import support as clips
-from . import support
+from ...m import support as clips
+from .. import support
 
 CLIP = clips.mp4(seconds=10.0)
 DIGEST = fetch.digest_of(CLIP)

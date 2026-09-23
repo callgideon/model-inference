@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """R32/R40/R83 for G4U: one single-edit defect per invariant `test_uploads.py` claims.
 
-G4U's own list, beside `tests/g/mutants.py` rather than in it (the G2 lane edits that one
-in parallel), on the same shared runner: one mutant at a time in a throwaway copy, the
-named cases run there, a pristine baseline first, and only an assertion or a typed
-`DomainError` counts as a kill unless the mutant declares its death in `dies_by`.
+G4U's own list, in its own directory rather than in `tests/g/mutants.py`: the G2 lane
+edits that file in parallel, and its coverage rule claims every `tests/g/test_*.py` case
+(the `tests/g/ops` precedent). Same shared runner: one mutant at a time in a throwaway
+copy, the named cases run there, a pristine baseline first, and only an assertion or a
+typed `DomainError` counts as a kill unless the mutant declares its death in `dies_by`.
 
-    uv run --frozen pytest -q tests/g/test_uploads_mutants.py
-    uv run --frozen python -m tests.g.uploads_mutants --list
+    uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py
+    uv run --frozen python -m tests.g.uploads.uploads_mutants --list
 """
 from __future__ import annotations
 
 import pathlib
 import re
 
-from ..contracts import mutants as shared
-from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
+from ...contracts import mutants as shared
+from ...contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
-API_DIR = pathlib.Path(__file__).resolve().parents[2]
-SUITE_FILE = "tests/g/test_uploads.py"
+API_DIR = pathlib.Path(__file__).resolve().parents[3]
+SUITE_FILE = "tests/g/uploads/test_uploads.py"
 U = "gateway/routes/uploads.py"
 
 

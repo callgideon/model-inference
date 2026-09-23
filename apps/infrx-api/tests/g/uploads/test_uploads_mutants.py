@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """R32/R40/R83: every invariant `test_uploads.py` claims is killable by a named case.
 
-    uv run --frozen pytest -q tests/g/test_uploads_mutants.py
-    INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_uploads_mutants.py
+    uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py
+    INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from ..contracts import mutants as shared
+from ...contracts import mutants as shared
 from . import uploads_mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
