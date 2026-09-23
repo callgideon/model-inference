@@ -24,7 +24,10 @@ from . import checks_admission as ca
 from . import checks_credit as cc
 from .checks_dispatch import advance, call, claim, kinds, outcome, prepare
 
-LIMITS = PgJobStore(None)._lease_limits()
+#: The store's lease limits plus the two TTLs D5's `terminalize` also takes (what
+#: `PgJobStore._terminalize` sends); the other boundaries ignore them.
+LIMITS = {**PgJobStore(None)._lease_limits(), "result_ttl_s": DEFAULTS.result_ttl_s,
+          "idempotency_ttl_s": DEFAULTS.idempotency_ttl_s}
 TTL, PREP_TTL = DEFAULTS.lease_ttl_s, DEFAULTS.preparation_lease_ttl_s
 
 
@@ -44,6 +47,15 @@ def gateway_request(world, **kw):
 def d3(conn, function: str, **args):
     """(code, answer) of one D3 boundary call with the store's limits."""
     return outcome(conn, function, {"limits": LIMITS, **args})
+
+
+def proposal(job_id, cause: str = "engine_error", state: str = "failed") -> dict:
+    """A worker's well-formed proposal for `job_id` (D5's `terminalize` refuses a malformed
+    one, or one for another job, before its fence): a free engine failure by default, so a
+    fence that holds settles nothing billable."""
+    return {"job_id": str(job_id), "state": state, "cause": cause, "usage": None,
+            "result_ref": None, "settlement_state": "released_free", "debit": "0.00000000",
+            "settled_at": "2026-09-20T12:00:00+00:00", "reconcile_after": None}
 
 
 def lease_of(answer) -> Lease:
@@ -142,6 +154,13 @@ def outcomes(produced: list) -> dict:
     """A sweep's outcomes by job id, as an assertion (every item must be one)."""
     assert all("outcome" in item for item in produced), f"not only outcomes: {produced}"
     return {item["outcome"]["job_id"]: item["outcome"] for item in produced}
+
+
+def releases(produced: list) -> dict:
+    """A sweep's 24 h releases by job id (D5, I3B request 5: reported as `released`, never
+    as a new terminal `outcome`), as an assertion."""
+    assert all("released" in item for item in produced), f"not only releases: {produced}"
+    return {item["released"]["job_id"]: item["released"] for item in produced}
 
 
 def reaped(produced: list, key: str = "outcome") -> dict:
@@ -304,7 +323,7 @@ def check_fence(conn) -> str:
                   "a foreign worker": dump(lease, worker_id="w2"),
                   "a stale generation": dump(lease, generation=2)}
         for fn in ("heartbeat", "load_work", "terminalize"):
-            extra = {"outcome": {}} if fn == "terminalize" else {}
+            extra = {"outcome": proposal(request.request_id)} if fn == "terminalize" else {}
             for label, token in forged.items():
                 code, _ = d3(conn, fn, lease=token, **extra)
                 assert code == "stale_lease", f"{fn} with {label}: {code}"
@@ -332,8 +351,12 @@ def check_fence(conn) -> str:
         _, took = d3(conn, "claim", job_id=media.request_id, worker_id="wm")
         code, work = d3(conn, "load_work", lease=took["lease"])
         assert work["prepared_refs"] == refs, f"load_work lost the prepared refs: {work}"
+        # D5: a proposal naming another job is refused before the fence; nothing changes
         assert d3(conn, "terminalize", lease=lease.model_dump(mode="json"),
-                  outcome={})[0] == "untyped 0A000", "terminalize's settlement is not D5's stub"
+                  outcome=proposal(idle.request_id))[0] == "invalid_request", \
+            "terminalize settled a job with another job's proposal"
+        assert row(conn, request.request_id)["state"] == "running", \
+            "a refused proposal moved the job"
         # one microsecond before the renewed expires_at the lease is still live and renews
         # (confirmation FC-1: the live side of the instant FE-2 pins)
         advance(conn, TTL - 1e-6)
@@ -356,7 +379,7 @@ def check_fence(conn) -> str:
                          " where job_id = %s", (job.request_id,))
             before = reserved(conn)
             advance(conn, DEFAULTS.generation_timeout_s)
-            extra = {"outcome": {}} if fn == "terminalize" else {}
+            extra = {"outcome": proposal(job.request_id)} if fn == "terminalize" else {}
             code, _ = d3(conn, fn, lease=live.model_dump(mode="json"), **extra)
             assert code == "already_terminal", f"{fn} past the generation deadline: {code}"
             done = row(conn, job.request_id)
@@ -392,7 +415,8 @@ def check_preparation_fence(conn) -> str:
         code, work = d3(conn, "load_work", lease=prep.model_dump(mode="json"))
         assert code is None and work["prepared_refs"] == [], (code, work)
         assert d3(conn, "terminalize", lease=prep.model_dump(mode="json"),
-                  outcome={})[0] == "stale_lease", "a preparation lease reached the settlement"
+                  outcome=proposal(request.request_id))[0] == "stale_lease", \
+            "a preparation lease reached the settlement"
         # R29: the work carries the deadline the store keeps, not the caller's
         far = gateway_request(world, deadline_s=10_000)
         ca.admit(conn, far, b.idem(far, far.request_id))
@@ -744,7 +768,7 @@ def check_recover_unknown_release(conn) -> str:
         assert call(conn, "recover", {"limits": LIMITS, "now": "2100-01-01T00:00:00Z"}) == [] \
             and reserved(conn) == held, "a caller's clock released the hold early"
         advance(conn, 1)
-        released = outcomes(_recover(conn))
+        released = releases(_recover(conn))
         assert set(released) == {request.request_id, credit.request_id}, released
         out = released[request.request_id]
         assert (out["settlement_state"], out["reconcile_after"], out["debit"]) == \
@@ -896,7 +920,7 @@ def check_lease_races(connect, database: str) -> str:
     advance(owner, DEFAULTS.generation_timeout_s)
     first, second = lockstep(
         owner, (service(), lambda c: rpc(c, "terminalize", {
-            "lease": again["lease"], "outcome": {}, "limits": LIMITS})),
+            "lease": again["lease"], "outcome": proposal(job.request_id), "limits": LIMITS})),
         (service(), lambda c: rpc(c, "cancel", {
             "org_id": b.ORG_A, "job_handle": row(owner, job.request_id)["job_handle"],
             "limits": LIMITS})))

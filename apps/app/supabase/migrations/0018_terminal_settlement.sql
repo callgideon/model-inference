@@ -311,7 +311,12 @@ begin
   v_reconcile_s := infrx.lease_limit(p_args, 'unknown_usage_reconcile_s');
   v_result_ttl_s := infrx.lease_limit(p_args, 'result_ttl_s');
   v_idem_ttl_s := infrx.lease_limit(p_args, 'idempotency_ttl_s');
-  v_proposal := jsonb_build_object('cause', v_cause, 'usage', u, 'result_ref', v_ref);
+  -- The proposal as `(cause, usage, result_ref)`, the usage without its record version, so
+  -- it compares with the committed triple (`usage_doc`).
+  v_proposal := jsonb_build_object('cause', v_cause, 'usage',
+                                   case when jsonb_typeof(u) = 'object'
+                                        then u - 'schema_version' else u end,
+                                   'result_ref', v_ref);
   -- 1. The regime, then the identical-proposal replay: the winner's retry answers the
   -- committed outcome even when the store rewrote it (a fence would refuse a terminal job).
   select * into j from infrx.jobs where request_id = (o->>'job_id')::uuid for update;

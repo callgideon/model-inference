@@ -27,17 +27,9 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 
-_D5 = "D5: needs JobStore.complete's settlement (D3's fence runs first and holds)"
-
-#: Each of these settles a job through `complete` before its journal step; D4 writes the
-#: terminal event of every OTHER terminalization, and D5's settlement will get its own from
-#: the same 0017 trigger.
-PENDING: dict[str, str] = {name: _D5 for name in (
-    "dur_output__a_worker_cannot_forge_a_terminal_event",
-    "dur_output__an_expired_journal_is_gone_not_regenerated",
-    "dur_cap__stored_unexpired_bytes_keep_counting",
-    "dur_output__the_terminal_event_is_written_once_with_the_settlement",
-    "dur_settle__the_terminal_event_belongs_to_the_settling_transaction")}
+#: D5: the five cases that settled through `complete` before their journal step pass - the
+#: settlement gets its one terminal event from 0017's trigger. Nothing is pending.
+PENDING: dict[str, str] = {}
 
 CASES = streamstore_cases()
 factory = pgtesting.make_streamstore_factory(pgstore.fresh_database, pgharness.dsn)

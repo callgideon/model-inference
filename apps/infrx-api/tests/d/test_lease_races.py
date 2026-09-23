@@ -276,13 +276,14 @@ def test_race__cancel_and_complete_have_one_terminal_outcome() -> None:
     """DUR-SETTLE/DUR-FENCE: cancel and complete's fenced terminalization (R29, past the
     generation deadline) serialize on the job row. Whichever commits first is the outcome;
     the other answers it (cancel) or is refused `already_terminal` (complete). The hold is
-    released once and one usage projection exists. A complete whose fence holds (the D5
-    settlement raises) leaves nothing, and a cancel after it wins."""
+    released once and one usage projection exists. A complete whose fence holds settles
+    (D5), and a cancel after it answers that outcome."""
     rig = Rig()
     baseline = rig.reserved()
 
     def settle(lease):
-        return lambda c: rpc(c, "terminalize", lease_args(lease, outcome={}))
+        return lambda c: rpc(c, "terminalize", lease_args(lease,
+                                                          outcome=cl.proposal(lease.job_id)))
 
     def cancel(job):
         return lambda c: rpc(c, "cancel", {"org_id": b.ORG_A, "job_handle": rig.handle(job),
@@ -301,12 +302,10 @@ def test_race__cancel_and_complete_have_one_terminal_outcome() -> None:
                              (rig.service(), settle(other)))
     assert first[1]["cause"] == "client_cancelled" and second[0] == "already_terminal", \
         (first, second)
-    # a complete whose fence holds: the settlement (D5) raises, and the error aborts its
-    # transaction at once (locks included) - nothing of it remains, the cancel then wins
+    # a complete whose fence holds settles (D5): the cancel after it answers that outcome
     held = rig.running()
-    assert settle(held)(rig.service())[0] == "untyped 0A000"
-    assert rig.job(held.job_id)["state"] == "running" and rig.projections(held.job_id) == 0
-    assert cancel(held.job_id)(rig.service())[1]["cause"] == "client_cancelled"
+    assert settle(held)(rig.service())[0] is None
+    assert cancel(held.job_id)(rig.service())[1]["cause"] == "engine_error"
     for job in (lease.job_id, other.job_id, held.job_id):
         assert rig.projections(job) == 1, f"{job}: two terminal projections"
     assert rig.reserved() == baseline, "a hold was released twice or not at all"

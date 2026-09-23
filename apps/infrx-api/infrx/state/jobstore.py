@@ -102,7 +102,7 @@ def _limits(limits: PilotSettings) -> dict[str, Any]:
 def _outcome(doc: dict | None) -> TerminalOutcome | None:
     if not doc:
         return None
-    return TerminalOutcome.model_validate({k: doc[k] for k in _OUTCOME_FIELDS})
+    return TerminalOutcome.model_validate({k: doc[k] for k in _OUTCOME_FIELDS if k in doc})
 
 
 def _settlement(doc: dict, outcome: TerminalOutcome) -> SettlementV2 | None:
