@@ -575,17 +575,18 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", beta_keys),
               "auth.uid() is read from request.jwt.claim.sub, so whoever sets that claim IS "
               "the tenant: it must only ever be set from a verified JWT, never from input"),
-    ] + access_rows() + write_rows()
+    ] + access_rows() + write_rows() + journal_rows()
 
 
 # --------------------------------------------------------------------- access completeness
 #
 # E3B phase 2, item 7 (E2R handback: "the pilot tables ... and the 0005 console views and RPCs
 # have no matrix rows here"). Every relation and every SECURITY DEFINER function in `infrx` and
-# `public` - measured on the migrated database, 0001-0016 - with the API roles that may reach
+# `public` - measured on the migrated database, 0001-0017 - with the API roles that may reach
 # it; each of anon/authenticated/service_role gets a row, so a grant that appears (or goes)
 # fails the row, and an object with no entry fails `test_services`' completeness case. D4's
-# 0017 objects join from D4's handback (integration request 8), through the coordinator.
+# 0017 (D4 request 8) adds no relation: its functions are rows below, and its watermark
+# columns, their CHECK and the terminal-event trigger on `infrx.jobs` are `journal_rows()`.
 #
 # A relation row: `select 1 from <it> limit 0` as the role - the grant alone (schema usage,
 # table/view privilege), independent of the rows and of RLS. A function row:
@@ -701,12 +702,8 @@ FUNCTIONS = {
     "infrx.deployment_revisions_guard()": SERVICE,
     "infrx.dispatch_pending(jsonb)": SERVICE,
     "infrx.dispatch_snapshot()": SERVICE,
-    # D4's 0017 (D4 request 8, measured on the migrated stack at the D4 merge)
-    "infrx.expire_journal(jsonb)": SERVICE,
-    "infrx.journal_terminal_event()": NOBODY,
-    "infrx.journal_usage()": SERVICE,
-    "infrx.read_journal(jsonb)": SERVICE,
     "infrx.ensure_wallet()": NOBODY,
+    "infrx.expire_journal(jsonb)": SERVICE,                       # 0017 (D4)
     "infrx.extend_model_limits()": SERVICE,
     "infrx.fail_dispatch(jsonb)": SERVICE,
     "infrx.fence_lease(jsonb,text[],double precision)": NOBODY,
@@ -725,6 +722,8 @@ FUNCTIONS = {
     "infrx.jobs_guard()": NOBODY,
     "infrx.jobs_no_delete_when_terminal()": NOBODY,
     "infrx.jobs_pins_guard()": SERVICE,
+    "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
+    "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
     "infrx.journal_bytes_charged()": NOBODY,
     "infrx.key_by_hash(text)": SERVICE,
     "infrx.ledger_moves_wallet()": NOBODY,
@@ -739,6 +738,7 @@ FUNCTIONS = {
     "infrx.put_result(jsonb)": SERVICE,
     "infrx.quarantine_hold_credit(uuid,timestamp with time zone)": NOBODY,
     "infrx.quarantine_hold_legacy_usd(uuid,timestamp with time zone)": NOBODY,
+    "infrx.read_journal(jsonb)": SERVICE,                         # 0017 (D4)
     "infrx.read_result(uuid,text)": SERVICE,
     "infrx.record_signup_denial(uuid,text)": NOBODY,
     "infrx.record_submission(jsonb)": SERVICE,
@@ -770,6 +770,46 @@ FUNCTIONS = {
     "public.is_org_member(uuid)": BROWSER,
     "public.is_org_owner(uuid)": BROWSER,
 }
+
+# SECURITY INVOKER functions a row pins although the completeness case does not list them:
+# 0017's `chunk_doc`, callable only from the SECURITY DEFINER bodies (revoked from everyone).
+INVOKER_FUNCTIONS = {"infrx.chunk_doc(infrx.stream_chunks)": NOBODY}
+
+# 0017's two watermark columns on `infrx.jobs`, as `pg_get_*def` renders them (measured at
+# the D4 merge): one cursor or none, each part >= 1; and the trigger that writes the terminal
+# journal event in the settling transaction, enabled.
+JOURNAL_CHECK = ("CHECK ((((journal_pruned_generation IS NULL) = (journal_pruned_sequence IS "
+                 "NULL)) AND COALESCE(((journal_pruned_generation >= 1) AND "
+                 "(journal_pruned_sequence >= 1)), true)))")
+JOURNAL_TRIGGER = ("CREATE TRIGGER jobs_terminal_journal_event AFTER UPDATE OF settled_at ON "
+                   "infrx.jobs FOR EACH ROW WHEN (((old.settled_at IS NULL) AND "
+                   "(new.settled_at IS NOT NULL) AND (new.journal_reserved_bytes > 0))) "
+                   "EXECUTE FUNCTION infrx.journal_terminal_event()")
+
+
+def journal_rows() -> list[Check]:
+    """D4's 0017 objects on `infrx.jobs` (D4 request 8): the watermark columns per API role
+    (service_role reads them through 0004's table grant; a browser role never reaches the
+    schema), their CHECK and the terminal-event trigger, each pinned to its definition."""
+    rows = [
+        Check("E3B-RLS-0017-watermark-check", "postgres", None,
+              "select pg_get_constraintdef(oid) from pg_constraint where conrelid = "
+              "'infrx.jobs'::regclass and conname = 'jobs_journal_watermark_is_one_cursor'",
+              ("value", JOURNAL_CHECK), "the prune watermark is one cursor or none (0017)"),
+        Check("E3B-RLS-0017-terminal-trigger", "postgres", None,
+              "select pg_get_triggerdef(oid) from pg_trigger where tgrelid = "
+              "'infrx.jobs'::regclass and tgname = 'jobs_terminal_journal_event' "
+              "and tgenabled = 'O'",
+              ("value", JOURNAL_TRIGGER), "the settling UPDATE writes the terminal event (0017)")]
+    for role in API_ROLES:
+        sql = "select journal_pruned_generation, journal_pruned_sequence from infrx.jobs limit 0"
+        rows.append(Check(
+            f"E3B-RLS-0017-watermark-columns-{role}", role, None, sql,
+            ("rows", 0) if role == "service_role" else ("error", PERMISSION_DENIED),
+            f"{role} {'reads' if role == 'service_role' else 'never reaches'} the watermark",
+            message_contains=None if role == "service_role"
+            else "permission denied for schema infrx"))
+    return rows
 
 
 # Review F2 (refuted as a gate hole - D's check_privileges enforces write grants verb by
@@ -828,7 +868,7 @@ def access_rows() -> list[Check]:
                               ("error", PERMISSION_DENIED),
                               f"{role} holds no privilege on {relation}",
                               message_contains=f"permission denied for {cause}"))
-    for function, allowed in FUNCTIONS.items():
+    for function, allowed in {**FUNCTIONS, **INVOKER_FUNCTIONS}.items():
         for role in API_ROLES:
             barrier = function.startswith("infrx.") and role != "service_role"
             rows.append(Check(

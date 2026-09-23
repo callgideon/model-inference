@@ -831,6 +831,12 @@ MUTANTS: tuple[Mutant, ...] = (
            ":\n",
            "tests/integration/test_run.py", "copied_infrx",
            cases=("test_a_suite_under_the_api_tree_runs_against_a_copied_infrx",)),
+    Mutant("e3bm38", "E3B2 (b): 0017's terminal-event trigger row requires it ENABLED",
+           "tests/integration/pgstate.py",
+           "              \"and tgenabled = 'O'\",\n",
+           "              \"\",\n",
+           "tests/integration/test_services.py", "live_grant_inversion", layer=2,
+           cases=("test_a_live_grant_inversion_fails_its_matrix_row",)),
 )
 
 

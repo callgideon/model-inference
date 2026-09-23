@@ -215,22 +215,29 @@ def test_the_role_matrix_has_a_row_for_every_relation_and_security_definer_funct
 def test_a_live_grant_inversion_fails_its_matrix_row():
     """E3B phase 2 item 7: the rows are live. `anon` given the schema and `infrx.jobs`,
     `service_role` stripped of `infrx.admit`, and `authenticated` given table-level INSERT on
-    `public.api_keys` (review F2), inside a transaction that is rolled back: each row must come
-    back failed, and pass again once it is."""
+    `public.api_keys` (review F2), and D4's 0017 objects - `chunk_doc` executable by
+    service_role, the watermark CHECK dropped, the terminal-event trigger disabled - inside a
+    transaction that is rolled back: each row must come back failed, and pass again once it is."""
     fixtures = stack_or_skip()
     rows = {check.case: check for check in pgstate.role_matrix(fixtures)}
     watched = (rows["E3B-RLS-infrx.jobs-anon"], rows["E3B-RLS-infrx.admit(jsonb)-service_role"],
                # Review F2: a table-level write widening fails its write row too.
-               rows["E3B-RLS-W-public.api_keys-authenticated"])
+               rows["E3B-RLS-W-public.api_keys-authenticated"],
+               rows["E3B-RLS-infrx.chunk_doc(infrx.stream_chunks)-service_role"],
+               rows["E3B-RLS-0017-watermark-check"], rows["E3B-RLS-0017-terminal-trigger"])
     with connect() as conn:
         with conn.transaction(force_rollback=True):
             conn.execute("grant usage on schema infrx to anon; "
                          "grant select on infrx.jobs to anon; "
                          "revoke execute on function infrx.admit(jsonb) from service_role; "
-                         "grant insert on public.api_keys to authenticated")
+                         "grant insert on public.api_keys to authenticated; "
+                         "grant execute on function infrx.chunk_doc(infrx.stream_chunks) "
+                         "to service_role; alter table infrx.jobs drop constraint "
+                         "jobs_journal_watermark_is_one_cursor; alter table infrx.jobs "
+                         "disable trigger jobs_terminal_journal_event")
             inverted = [pgstate.run_check(conn, row, fixtures)["passed"] for row in watched]
         restored = [pgstate.run_check(conn, row, fixtures)["passed"] for row in watched]
-    assert (inverted, restored) == ([False] * 3, [True] * 3)
+    assert (inverted, restored) == ([False] * 6, [True] * 6)
 
 
 def test_a_check_that_should_fail_does_fail():
