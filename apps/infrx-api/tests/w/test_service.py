@@ -298,11 +298,15 @@ def test_ops_recover__a_drain_records_what_finished_inside_its_bound():
         default.loop.drain = recording
 
         async def start_then_stop():
-            # a stop before the pool's task has even run once (a SIGTERM during start-up)
+            # a stop before the pool's task has even run once (a SIGTERM during start-up):
+            # stop() returns only once that pool has stopped too (review SC-1 / R7)
             await default.start()
             await default.stop()
-        done, _ = await asyncio.wait({asyncio.create_task(start_then_stop())}, timeout=5)
+            return default._pool.done(), (await default.readiness())["loop"]
+        stopping = asyncio.create_task(start_then_stop())
+        done, _ = await asyncio.wait({stopping}, timeout=5)
         assert done and bounds == [world.limits.generation_timeout_s]
+        assert stopping.result() == (True, "stopped"), stopping.result()
     run(case())
 
 

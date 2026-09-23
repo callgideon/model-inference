@@ -250,6 +250,9 @@ PY_MUTANTS: tuple[Mutant, ...] = (
     _m("stop_ignores_its_bound", "an attempt that fits the bound is waited for",
        V, "        report = await self.loop.drain(bound)",
        "        report = await self.loop.drain(0.0)", ENDED, SIGTERM),
+    _m("stop_does_not_await_the_pool", "stop() returns once the pool it stopped has stopped",
+       V, "        if self._pool is not None:\n"
+          "            await asyncio.gather(self._pool, return_exceptions=True)\n", "", ENDED),
     _m("default_bound_is_not_the_budget", "unset, the bound is the generation budget",
        V, "bound = self.loop.limits.generation_timeout_s if self.drain_s is None",
        "bound = 30.0 if self.drain_s is None", ENDED),
