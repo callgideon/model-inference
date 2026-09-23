@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:09:07Z",
+  "updated": "2026-09-23T22:22:23Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -102,6 +102,10 @@
     "E3B-phase3": {
       "phase": "review at 4ac1419 running (journey/money + honesty lenses + refuters)",
       "since": "2026-09-23T22:05:47Z"
+    },
+    "merge-plan": {
+      "phase": "MERGED 58e6fdb: scripts 1\u20139 + replay; gating unit D5\u2192phase 3\u2192cutover\u2192M1-L2 on all four verdicts; then M pilot \u2192 E4B \u2192 checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) \u2192 ff main",
+      "since": "2026-09-23T22:22:23Z"
     }
   },
   "gates": {

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T22:09:07Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T22:22:23Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -86,6 +86,7 @@ Generated 2026-09-23T22:09:07Z from `tasks.json` (manifest v4) and `progress-sta
 - review E4B: verifier at 7b5dbd7 running since 2026-09-23T21:58:02Z
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
 - review E3B-phase3: review at 4ac1419 running (journey/money + honesty lenses + refuters) since 2026-09-23T22:05:47Z
+- review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
 
 ## Checkpoints
 
