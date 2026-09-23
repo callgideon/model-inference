@@ -979,3 +979,18 @@ def test_a_leaked_server_log_is_litter_in_every_namespace(monkeypatch, tmp_path)
     ours.mkdir()
     assert {log, ours} <= mutants._temp_litter()
     assert (tmp_path / "someone-else.log") not in mutants._temp_litter()
+
+
+def test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run(monkeypatch):
+    """Review H6: the other half of e3bm24's claim - a timed-out `make api-test` (exit 124
+    with the passes it printed before the budget ran out) fails the suites stage and the run."""
+    def fake_shell(argv, **_):
+        timed_out = "api-test" in argv
+        return {"argv": " ".join(argv), "exit": 124 if timed_out else 0,
+                "counts": {"passed": 5}, "seconds": 1.0, "tail": ""}
+    monkeypatch.setattr(runner, "shell", fake_shell)
+    report = runner.Report()
+    runner.suites(report, own_only=False)
+    stage = report.stages[-1]
+    assert (stage["status"], report.exit_code) == (runner.FAIL, 1), stage
+    assert stage["detail"]["nonzero_exit"] == ["make api-test"], stage["detail"]

@@ -798,6 +798,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "    lag = (read_back - wall).total_seconds()\n",
            "tests/integration/test_services.py", "shared_clock", layer=2,
            cases=("test_the_shared_clock_moves_the_function_every_durable_decision_reads",)),
+    Mutant("e3bm33", "E3B2 review H6: a timed-out suite fails the suites stage and the run",
+           "tests/integration/run.py",
+           '    failed = [run["argv"] for run in runs if run["exit"] != 0]\n',
+           '    failed = [run["argv"] for run in runs if run["exit"] not in (0, 124)]\n',
+           "tests/integration/test_run.py", "timed_out_fails_the_suites",
+           cases=("test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run",)),
 )
 
 
