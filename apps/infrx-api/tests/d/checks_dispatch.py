@@ -305,6 +305,7 @@ def check_outbox_gc(conn) -> str:
         advance(conn, 1)
         conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
         live = _admitted(conn, world)
+        waiting = _admitted(conn, world)       # live, its prepare_dispatch NOT acknowledged
         dead = _admitted(conn, world)
         conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
                      (dead.request_id,))
@@ -346,6 +347,9 @@ def check_outbox_gc(conn) -> str:
         counts = [call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1})["expired"]
                   for _ in range(4)]
         assert counts == [1, 1, 1, 0], counts
+        # OB-2: a LIVE job's undelivered dispatch row survived every call above
+        assert rows(waiting.request_id) == [("prepare_dispatch", False, "")], \
+            f"GC expired or deleted a live job's pending dispatch: {rows(waiting.request_id)}"
         return "terminal dispatch rows expired; acknowledged rows past retention deleted, bounded"
     return ca._in_rollback(conn, body)
 
