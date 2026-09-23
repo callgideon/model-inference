@@ -41,6 +41,31 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("runtime_slots_ignored", "uploads share the runtime's large-body bound with chat",
        U, 'getattr(rt, "large_bodies", None)', "None",
        "test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots"),
+    # --- item 2: POST /v1/uploads ---------------------------------------------------
+    _m("tenant_is_the_key_id", "the upload's org is the key row's org",
+       U, "        created = await store.create_upload(context.org_id, body)",
+       "        created = await store.create_upload(context.key_id, body)",
+       "test_dur_rls__each_audience_creates_in_its_own_org"),
+    _m("operator_owns_uploads", "an operator credential creates, writes and completes nothing",
+       U, "        if context.audience not in CALLABLE:", "        if False:",
+       "test_dur_rls__an_operator_key_owns_no_upload"),
+    _m("create_reads_before_identity", "identity is resolved before the create body is read",
+       U, "        context = await tenant(request)\n        intake.check_content_type(request)\n"
+          "        body = await control_body(request)\n",
+       "        intake.check_content_type(request)\n        body = await control_body(request)\n"
+       "        context = await tenant(request)\n",
+       "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer_an_upload"),
+    _m("tenant_from_the_body", "an org named in the body is refused, never honoured",
+       U, "        created = await store.create_upload(context.org_id, body)",
+       '        created = await store.create_upload(body.pop("org_id", context.org_id), body)',
+       "test_dur_rls__the_body_names_no_org_and_nothing_the_contract_lacks"),
+    _m("ticket_not_rendered_through_the_wire_model", "the ticket is the frozen wire form",
+       U, '        return JSONResponse(wire.UploadCreated.model_validate(created).model_dump(mode="json"),',
+       "        return JSONResponse(created,",
+       "test_media_sec__no_store_field_outside_the_frozen_ticket_leaves"),
+    _m("created_is_not_201", "a created upload is 201 (the section 7 default)",
+       U, "status_code=201,", "status_code=200,",
+       "test_media_sec__the_ticket_carries_exactly_the_frozen_fields"),
 )
 
 
