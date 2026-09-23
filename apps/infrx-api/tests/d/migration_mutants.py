@@ -1703,6 +1703,11 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  if v_now >= a.expires_at then", "  if v_now > a.expires_at then",
        "admission", "lease_fence",
        "a lease still renews at the instant the reaper may requeue it (FE-2)"),
+    _m("d3_fence_expires_a_microsecond_early", LEASES,
+       "  if v_now >= a.expires_at then",
+       "  if v_now >= a.expires_at - interval '1 microsecond' then",
+       "admission", "lease_fence",
+       "a live lease is refused before its expiry instant (confirmation FC-1)"),
     _m("d3_fence_serves_a_terminal_job", LEASES,
        "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
        "|| j.request_id || ' is already '",

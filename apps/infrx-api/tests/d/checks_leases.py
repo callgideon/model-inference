@@ -325,6 +325,13 @@ def check_fence(conn) -> str:
         assert work["prepared_refs"] == refs, f"load_work lost the prepared refs: {work}"
         assert d3(conn, "terminalize", lease=lease.model_dump(mode="json"),
                   outcome={})[0] == "untyped 0A000", "terminalize's settlement is not D5's stub"
+        # one microsecond before the renewed expires_at the lease is still live and renews
+        # (confirmation FC-1: the live side of the instant FE-2 pins)
+        advance(conn, TTL - 1e-6)
+        now = world.clock.now()
+        code, answer = d3(conn, "heartbeat", lease=lease.model_dump(mode="json"))
+        assert code is None and lease_of(answer).expires_at == now + timedelta(seconds=TTL), \
+            f"a heartbeat 1 us before the lease's expires_at did not renew: {code}"
         # expired - exactly at the renewed expires_at, before any deadline: stale, nothing
         # changes (the reaper requeues at this same instant, FE-2)
         advance(conn, TTL)
