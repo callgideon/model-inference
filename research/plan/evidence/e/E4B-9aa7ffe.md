@@ -329,3 +329,40 @@ and by layer 0. They need no stack; `test_e4b_mutants.py` runs a 3-mutant subset
   `report.json`. The stack run (command 8) was not started: another lane held the e2
   namespace, and the rule is to stop. This lane created, started or removed no container,
   touched no other lane's resource, and used no hosted project, AWS, pilot box, GPU or secret.
+
+## Addendum - the stack run (command 9), after the e2 namespace cleared
+
+`infrx-e2-s3` (the `codex-objstore` lane's) was gone at 20:56:32Z (`docker ps -a`, volumes and
+networks: no `infrx-e2*`; ports 55500-55590 free). The full runner then ran once, detached,
+on a clean tree at the evidence commit:
+
+| # | Command | At | Exit | Tail |
+|---|---|---|---|---|
+| 9 | `INFRX_E2_NAMESPACE=e2 apps/infrx-api/.venv/bin/python tests/integration/backend/certify.py --workdir $SC/stack/work --report $SC/stack/report.json` (20:56:38Z → 20:59:02Z, 143.4 s) | `37da3b3` | **1** | the table below; **report sha256 `84643e5bce3cc35ed9884b4873c7a8c06f12c5b8f88679e1e9f1f5d453406ad3`** (log `5aa8ede4ed90529a`), `git_head` = `git_head_end` = `37da3b3…`, both `dirty: false`, `namespace "e2"` |
+
+| Entry | Status | Owners | Detail (quoted from `report.json`) |
+|---|---|---|---|
+| `e4b.b.preconditions` | **FAIL** | - | the same two `next-server` pids as command 7 |
+| `e4b.b.config-pin` | **FAIL** | - | B1, as command 7 |
+| `preflight` / `services` / `migrate` | PASS | - | docker 29.6.2, the four digest-pinned images; `infrx-e2-{clickhouse,postgres,s3,valkey}`, PostgreSQL 17.6, Valkey 8.1.10; migrations by sha256 |
+| `rls` | PASS | - | **`696` cases**, `failed: null`, roles anon/authenticated/postgres/service_role |
+| `backend` | PENDING | - | `postgrest/13.0.4`; **`passed 154, pending 17, failed 0`**, `not_run: null`, `stale_pending: null`; pytest exit 0, `154 passed, 17 skipped` in 85.8 s; `pending_by_id {D5: 13, G2-R1: 12, I2B-R4: 1, M1-L2: 1}`; `detected` = E3B's db03-db11 (incl. db08b) and I3B's bk01b/bk01c/bk01d (13 live defects reported by their unchanged cases) |
+| `backend-teardown` | PASS | - | `infrx-e3b-postgrest` removed |
+| **`e4b.a.protocol`** | PENDING | `D5`, `G2-R1` | `passed 87, failed null, not_run null, pending_by_id {G2-R1: 11, D5: 12}` - the 9 journeys, the dataset-resume journey, dr11 and dr07/dr07c |
+| **`e4b.b.recovery`** | PENDING | `D5`, `G2-R1`, `I2B-R4`, `M1-L2` | `passed 67, failed null, not_run null`; one case each: rc03 (`G2-R1`), rc04b (`D5`), rc08b (`I2B-R4`), rc05b (`M1-L2`) |
+| `teardown` | PASS | - | the four `infrx-e2-*` removed, `still_named_ours_but_not_ours: []` |
+| `e4b.a.sop-parity` | PASS | - | `fake-engine, not a measurement`; 9 clips |
+| `e4b.a.dataset-resume` | PENDING | `BOX` | 12 items; SIGINT after 4 accepted (`exit 130`, 5 attempts), resume `exit 0` with 8 attempts; `client_problems: null` |
+| `e4b.b.envelope` / `soak` / `overload` | PENDING | `BOX` | as command 7 (`0/11`, `0/19`, not run) |
+
+**What this supersedes in the text above** (kept as written): command 8's "not run" and
+Limits 2 - the stack half ran at `37da3b3` (the same code as `9aa7ffe`: `37da3b3` only adds
+this report and the decision's column), with **no failed case**; the requirement-coverage
+rows BACKEND-JOURNEY and OPS-RECOVER now read "PENDING on D5/G2-R1 (+ I2B-R4, M1-L2) with
+0 failures"; **integration request 1 is withdrawn** (it stays true that two lanes were given
+one namespace). The two FAILs of the local report are measured findings, not runner defects:
+the dev host's App (request 2) and B1 (request 3). After the run, `docker ps -a | grep -c
+'infrx-e2-\|infrx-e3b-postgrest'` → `0`.
+
+- 2026-09-23 (addendum): command 9 quoted from `report.json` and `certify.log`; nothing
+  earlier in this file was rewritten.

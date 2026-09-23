@@ -47,13 +47,14 @@ authoritative**: recompute at the release SHA.
 ## 3. Certification checklist
 
 Local = the dev host, the E2 stack, the runner's fake vLLM (every number `fake-engine, not a
-measurement`), from the `--no-stack` report at `9aa7ffe` (sha256 `5c840cd3…13a32`, evidence
-`E4B-9aa7ffe.md` command 7). Box = the box protocol in the implementation evidence. A box row passes only
+measurement`), from the full local report at `37da3b3` (sha256 `84643e5b…406ad3`, evidence
+`E4B-9aa7ffe.md` command 9; the `--no-stack` report at `9aa7ffe`, command 7, agrees on every
+shared entry). Box = the box protocol in the implementation evidence. A box row passes only
 from the box report.
 
 | Check | Oracle | Local | Box |
 |---|---|---|---|
-| `e4b.a.protocol` — the gate's stack suite (preflight, services, migrate, rls, backend minus `recovery/`) | BACKEND-JOURNEY, DUR-*, MEDIA-SEC, API-* | not run at `9aa7ffe`: another lane held the e2 namespace (evidence command 8) | SHA-bound: the dev-host report at the release SHA |
+| `e4b.a.protocol` — the gate's stack suite (preflight, services, migrate, rls, backend minus `recovery/`) | BACKEND-JOURNEY, DUR-*, MEDIA-SEC, API-* | PENDING[D5, G2-R1] at `37da3b3`: 87 passed, 0 failed (rls 696 cases PASS) | SHA-bound: the dev-host report at the release SHA |
 | `e4b.a.sop-parity` | MARLIN-SOP, MEDIA-PARITY | PASS, 9 clips (fake engine) | ⚠️ TO BE MEASURED: paired with W4's E0 `parity.jsonl` |
 | `e4b.a.dataset-resume` | MARLIN-SOP, BACKEND-JOURNEY | PENDING[BOX]; the client half holds (SIGINT after 4 of 12, resume sent 8) | ⚠️ TO BE MEASURED: needs the metered route (G2-R1) and the ledger adapters (D5) |
 | `e4b.b.preconditions` | BACKEND-DEPLOY | **FAIL**: two `next-server` processes of the App run on the dev host | ⚠️ TO BE MEASURED |
@@ -61,7 +62,7 @@ from the box report.
 | `e4b.b.envelope` | PERF-ENVELOPE | PENDING[BOX]: failures 0/11, p95s unknown (12 samples, by design), cap unjudgeable on an engine | ⚠️ TO BE MEASURED: ladder 0.5/1/2 req/s × 120 |
 | `e4b.b.soak` | PERF-ENVELOPE, BACKEND-OBSERVE | PENDING[BOX]: failures 0/19, no `/metrics` on the fake engine | ⚠️ TO BE MEASURED: ½ supported rate × 4 h |
 | `e4b.b.overload` | PERF-ENVELOPE | PENDING[BOX] by construction (an engine has no admission) | ⚠️ TO BE MEASURED: 32-request burst from one key |
-| `e4b.b.recovery` / `e4b.b.recovery-box` | OPS-RECOVER | not run at `9aa7ffe` (the stack run, as `e4b.a.protocol`) | ⚠️ TO BE MEASURED: the runbook drills of §6, run by the coordinator |
+| `e4b.b.recovery` / `e4b.b.recovery-box` | OPS-RECOVER | PENDING[D5, G2-R1, I2B-R4, M1-L2] at `37da3b3`: 67 passed, 0 failed | ⚠️ TO BE MEASURED: the runbook drills of §6, run by the coordinator |
 
 ## 4. Measured limits, SLOs, cost and quality — coverage
 
@@ -142,3 +143,6 @@ none is an SLO.
 - 2026-09-23 (E4B, evidence commit): §3's local column filled from the `--no-stack` report at
   `9aa7ffe` (sha256 `5c840cd3e222966b740be39e7517afe097d47dc5e9505319a523eaf6fc013a32`); the
   stack rows were not run (another lane held e2). The overload row names `BOX` since `6c437a6`.
+- 2026-09-23 (E4B, addendum): the stack rows filled from the full local report at `37da3b3`
+  (sha256 `84643e5bce3cc35ed9884b4873c7a8c06f12c5b8f88679e1e9f1f5d453406ad3`), once the e2
+  namespace was free.
