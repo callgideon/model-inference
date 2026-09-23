@@ -208,7 +208,12 @@ def check_claim_generation(conn) -> str:
         assert code is None and lease_of(answer).generation == 2, (code, answer)
         # R20: with less time left than the budgets, both instants are the deadline
         tight = queued(conn, world, deadline_s=30)
-        code, answer = d3(conn, "claim", job_id=tight.request_id, worker_id="w1")
+        try:
+            code, answer = None, call(conn, "claim", {"job_id": tight.request_id,
+                                                      "worker_id": "w1", "limits": LIMITS})
+        except psycopg.errors.CheckViolation as refused:    # the schema holds R20 as well
+            raise AssertionError("the tight claim's unclamped instant was refused by "
+                                 f"{refused.diag.constraint_name}") from None
         edge = row(conn, tight.request_id)["deadline_at"]
         assert code is None and (lease_of(answer).generation_deadline_at,
                                  lease_of(answer).first_token_deadline_at) == (edge, edge), \
@@ -273,6 +278,18 @@ def check_fence(conn) -> str:
 
     def body():
         request, lease = running(conn, world)
+        # a token naming no live attempt fences out: one with no generation or owner (a
+        # queued job), and the preparation lease that already handed its job over (H-2:
+        # first, so a fence that stops looking for the attempt dies here, for this reason)
+        idle = gateway_request(world)
+        ca.admit(conn, idle, b.idem(idle, idle.request_id))
+        _, spent = claim(conn, idle.request_id)
+        prepare(conn, spent["lease"])
+        assert d3(conn, "load_work", lease={"job_id": idle.request_id,
+                                            "kind": "inference"})[0] == "stale_lease", \
+            "a lease with no live attempt behind it loaded the work"
+        assert d3(conn, "load_work", lease=spent["lease"])[0] == "stale_lease", \
+            "a spent preparation lease loaded the work of the job it handed over"
         forged = {"a preparation token": dump(lease, kind=LeaseKind.preparation,
                                               first_token_deadline_at=None),
                   "a foreign worker": dump(lease, worker_id="w2"),
@@ -284,11 +301,6 @@ def check_fence(conn) -> str:
                 assert code == "stale_lease", f"{fn} with {label}: {code}"
         assert row(conn, request.request_id)["state"] == "running", \
             "a forged lease moved the job"
-        # a token naming no live attempt (a queued job, no generation or owner) fences out
-        idle = queued(conn, world)
-        assert d3(conn, "load_work", lease={"job_id": idle.request_id,
-                                            "kind": "inference"})[0] == "stale_lease", \
-            "a lease with no live attempt behind it loaded the work"
         # the stored lease renews; a forged record's deadlines are ignored
         advance(conn, 40)
         now = world.clock.now()

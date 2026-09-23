@@ -1659,6 +1659,11 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  -- A live attempt of this kind exists exactly while the job is in the phase it fences.\n"
        "  if false then",
        "admission", "lease_fence", "a token with no attempt behind it loads the work"),
+    _m("d3_fence_serves_a_released_attempt", LEASES,
+       "   where job_id = j.request_id and kind = v_kind and released_at is null;",
+       "   where job_id = j.request_id and kind = v_kind;",
+       "admission", "lease_fence",
+       "a preparation worker that already handed its job over still loads its work (H-2)"),
     _m("d3_fence_ignores_the_generation", LEASES,
        "  if a.generation is distinct from (p_lease->>'generation')::int then", "  if false then",
        "admission", "lease_fence", "a superseded generation mutates the new holder's job"),
@@ -1759,7 +1764,10 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "          least(v_now + make_interval(secs => j.budget_first_token_s), "
        "v_generation_deadline))",
        "          v_now + make_interval(secs => j.budget_first_token_s))",
-       "admission", "claim_generation", "a first-token wait outlives the generation (R20)"),
+       "admission", "claim_generation",
+       "a job with less time left than the first-token budget is unclaimable: the attempts "
+       "CHECK (first token <= generation, R20) refuses the unclamped instant",
+       expects_detail="attempts_check1"),
     _m("d3_claim_leases_without_running", LEASES,
        "  update infrx.jobs set state = 'running', queued_at = null,",
        "  update infrx.jobs set queued_at = null,",
