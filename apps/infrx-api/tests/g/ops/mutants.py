@@ -37,6 +37,8 @@ S = "infrx/operations/service.py"
 C = "infrx/operations/cli.py"
 X = "client_example.py"
 F = "tests/g/ops/fakes.py"           # the port contract D5 must match
+V2FIX = "infrx/contracts/v2/fixtures.py"     # the release's pins (E4B certification)
+MEASURED = "test_api_ops__the_published_release_pins_the_measured_image_and_engine_options"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -45,6 +47,14 @@ def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
 
 
 MUTANTS: tuple[Mutant, ...] = (
+    # --- the published release's measured pins (E4B certification, CUTOVER item 6) ---------
+    _m("release_image_placeholder_restored", "the release names W3's digest-pinned image",
+       V2FIX, '    "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"',
+       '    "vllm/vllm-openai:nightly"', MEASURED),
+    _m("release_engine_options_placeholder_restored",
+       "the release carries the digest of the engine options W3 launches",
+       V2FIX, '    "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147"',
+       '    "sha256:" + "44" * 32', MEASURED),
     # --- G6B.a: who may operate, and on whose behalf ---------------------------
     _m("operator_audience_unchecked", "only an operator-audience key row opens an operator session",
        S, "        if auth.audience is not CredentialAudience.operator:", "        if False:",

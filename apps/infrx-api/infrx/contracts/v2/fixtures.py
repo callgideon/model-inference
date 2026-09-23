@@ -79,8 +79,10 @@ T1 = datetime(2026, 9, 22, 12, 0, 0, tzinfo=timezone.utc)
 # (§1.3), plus the chat template's sha256 (§1.3, needs no gate) and the HF commit
 # (§2.6). `digest_source` records that these are SERVED BYTES: the repository is
 # gated, so the registry `.lfs.oid` equality is still ⚠️ and W3/I2B confirms it on
-# the serving host. The runtime image has no digest at all yet, because `serve.sh`
-# pins the moving tag `vllm/vllm-openai:nightly` — W3 pulls by digest and fills it.
+# the serving host. The runtime image and the engine options are W3's measured pins
+# (`models/marlin2b/serving-version.json`: `runtime_image.ref`, `engine_options_digest`;
+# `tests/g/ops/test_publication.py` holds them equal to that file). `runtime_image_digest`
+# stays unset on this revision: recording it is a new serving version's (R76).
 MODEL_REPO = "NemoStation/Marlin-2B"
 MODEL_COMMIT = "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965"
 SHARD_DIGESTS = (
@@ -90,10 +92,12 @@ SHARD_DIGESTS = (
 TOKENIZER_DIGEST = "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
 CHAT_TEMPLATE_DIGEST = \
     "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
-RUNTIME_IMAGE_REF = "vllm/vllm-openai:nightly"
-# The validated engine options of the profile, hashed by the operator that approved
-# them. Placeholder shape until W3 records the options it actually launched with.
-ENGINE_OPTIONS_DIGEST = "sha256:" + "44" * 32
+RUNTIME_IMAGE_REF = \
+    "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
+# The validated engine options of the profile: sha256 of serve.sh's flags as W3 launches
+# them (serving-version.json `engine_options_digest`).
+ENGINE_OPTIONS_DIGEST = \
+    "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147"
 PAYLOAD_DIGEST = "sha256:" + "55" * 32
 
 # r1 R62: the consumer-facing model identifier keeps its v1 form
