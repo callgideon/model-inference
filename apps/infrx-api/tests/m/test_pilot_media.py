@@ -276,9 +276,11 @@ def attach(gateway, body=CLIP, org_id=b.ORG_A, admit=None):
     return prepared.request_id, refs
 
 
-def second_process_resolves(tmp_path, durable, admit=None):
+def second_process_resolves(tmp_path, durable, pg=None):
     gateway, worker = two_processes(tmp_path, durable)
-    job_id, refs = attach(gateway, admit=admit)
+    if pg is not None:
+        gateway.harness = pg                  # requests on the database's clock and ids
+    job_id, refs = attach(gateway, admit=pg and admitted_on(pg))
     prepared = run(gateway.prepare(job_id, "v1"))
     assert worker.by_job == {} and worker.cache.entries == {}          # nothing in memory
     assert run(worker.attached(job_id)) == refs
@@ -385,9 +387,7 @@ def test_mpilot_pg__a_second_process_resolves_the_attach_and_the_local_file(tmp_
     """Gap 2 on the real record: attached in one process, read in another from D2's
     `staged_media`/`job_media` rows."""
     harness, durable = postgres()
-    gateway, _ = two_processes(tmp_path, durable)
-    gateway.harness = harness                     # requests on the database's clock and ids
-    second_process_resolves(tmp_path, durable, admit=admitted_on(harness))
+    second_process_resolves(tmp_path, durable, pg=harness)
 
 
 def test_mpilot_pg__each_job_reads_back_its_own_refs_in_order(tmp_path):
@@ -427,3 +427,10 @@ def test_mpilot_pg__an_attach_is_write_once_and_tenant_bound(tmp_path):
     assert run(durable.get(job_id)) == refs
     run(durable.put(job_id, refs))                                   # the same is a no-op
     assert run(durable.get(job_id)) == refs
+    # a handle already recorded is bound only for the content it was recorded with
+    forged = refs[0].model_copy(update={"digest": fetch.digest_of(b"other content")})
+    job = b.request(harness)
+    admitted_on(harness)(job)
+    with pytest.raises(errors.Conflict):
+        run(durable.put(job.request_id, (forged,)))
+    assert run(durable.get(job.request_id)) is None
