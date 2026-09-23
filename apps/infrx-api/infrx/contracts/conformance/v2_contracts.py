@@ -1014,6 +1014,10 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
         lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))), errors.NotFound)
     outcome, settlement = await harness.port.complete_credit(
         lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340)))
+    # And after settlement too: a v1 replay of the terminal job would read `settled` with a
+    # zero USD debit, the unit-ambiguous answer R64 exists to prevent.
+    await _refused(harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))), errors.NotFound)
     expected = admission.rate_card.debit(1200, 340)
     assert outcome.settlement_state is v1.SettlementState.settled
     assert outcome.debit == money.ZERO, "a CREDIT charge was written into the USD field"
