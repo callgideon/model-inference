@@ -160,7 +160,7 @@ The list is now **42 mutants** (17 need S3), all killed on MinIO. The runner pas
 | V3 CreateBucket without the flag unpinned | `0808aa2` | `test_no_bucket_is_created_without_local_credentials` (Stubber: nothing queued without the flag, one CreateBucket with it) | `own_v_bucket_created_without_flag` |
 | V4 the timeout refusal's text unpinned | `e430b7d` | the bounded-wait case passes `S3_ENDPOINT_URL` and asserts neither the bucket nor the endpoint host is named | `own_v_timeout_refusal_names_bucket` |
 
-Runs on the private MinIO (`127.0.0.1:55661`, `INFRX_M_S3_LOCAL_CREDS=1`): `tests/m/test_s3.py` `40 passed in 13.46s` (no endpoint: `24 passed, 16 skipped`); `INFRX_MUTANTS=all tests/m/test_s3_mutants.py` `47 passed in 231.83s` (**46 mutants**, 18 need S3, plus the list check). An unmutated run leaves the bucket empty (counted: 0 objects after `40 passed`); the only leftovers after the full mutant list (3 objects) are written by mutated copies by design - `s3_key_without_the_prefix` writes outside any prefix, the two cleanup mutants leak their case's object - and the box never runs mutants.
+Runs on the private MinIO (`127.0.0.1:55661`, `INFRX_M_S3_LOCAL_CREDS=1`): `tests/m/test_s3.py` `40 passed in 13.46s` (no endpoint: `25 passed, 15 skipped in 4.14s`); `INFRX_MUTANTS=all tests/m/test_s3_mutants.py` `47 passed in 231.83s` (**46 mutants**, 18 need S3, plus the list check). An unmutated run leaves the bucket empty (counted: 0 objects after `40 passed`); the only leftovers after the full mutant list (3 objects) are written by mutated copies by design - `s3_key_without_the_prefix` writes outside any prefix, the two cleanup mutants leak their case's object - and the box never runs mutants.
 
 ## Limits
 
