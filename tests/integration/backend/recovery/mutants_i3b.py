@@ -211,6 +211,14 @@ MUTANTS += (
            "apps/infrx-api/infrx/worker/loop.py", "from __future__ import annotations\n",
            "from __future__ import annotations\n\nif __name__ == \"__main__\":\n"
            "    pass\n", DRILLS, "rc08b"),
+    # DR-4: the pending ids are honest - refused when unknown, pinned per drill
+    Mutant("i3bm99", "DR-4: kit.pending refuses an id outside the vocabulary", KIT,
+           "    unknown = [task for task in ids if task not in PENDING]\n",
+           "    unknown = []\n", DRILLS, "rc00"),
+    Mutant("i3bm100", "DR-4: rc05b pends on its owner (M1-L2), not on another known id", DRILLS,
+           'kit.pending("M1-L2", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
+    Mutant("i3bm101", "DR-4: rc03 fails the day the ingress is mounted", DRILLS,
+           "    if stack.ingress_is_mounted():\n", "    if False:\n", DRILLS, "rc00"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),

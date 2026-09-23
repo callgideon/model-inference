@@ -577,6 +577,39 @@ def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
                              "SIGTERM")
 
 
+def _outcome(call) -> str:
+    """What a pending drill did, as text: its skip reason, its failure, or its refusal."""
+    try:
+        call()
+    except pytest.skip.Exception as skipped:
+        return str(skipped)
+    except pytest.fail.Exception as failed:
+        return f"failed: {failed}"
+    except AssertionError as refused:
+        return f"refused: {refused}"
+    return "returned"
+
+
+def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is_refused(
+        monkeypatch):
+    """DR-4: a pending count is only honest if the id is. `kit.pending` refuses an id outside
+    the vocabulary (and none at all); each pending drill pends on exactly the id pinned here,
+    so a swapped or misspelt owner fails instead of being counted; and rc03's probe fails the
+    day the ingress is mounted. Layer 0 (rc04 needs E2's stack: its ids come from
+    `stack.stubbed`)."""
+    assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
+    assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
+    pinned = {test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route: "G2",
+              test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter:
+                  "M1-L2",
+              test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
+    for case, owner in pinned.items():
+        assert _outcome(case).startswith(f"PENDING[{owner}] "), (case.__name__, _outcome(case))
+    monkeypatch.setattr(stack, "ingress_is_mounted", lambda: True)
+    assert _outcome(test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route) \
+        .startswith("failed: the pilot ingress is mounted")
+
+
 def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepted_job(
         valkey_world):
     """OPS-RECOVER (host restart), the box's single points of failure at once: the worker
