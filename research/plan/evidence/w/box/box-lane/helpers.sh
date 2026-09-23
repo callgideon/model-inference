@@ -42,3 +42,22 @@ waitlog() {  # $1 = remote log, $2 = regex that ends the wait, $3 = max minutes;
   done
   echo "no match after $3 min"; printf '%s\n' "$o" | tail -20; return 1
 }
+getrun() {  # $1 = tar base name, $2 = expected sha256, $3 = destination dir in the worktree
+  local S=/tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/box
+  local t=$S/$1.tar.gz x=$S/x-$1
+  env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 s3 cp "s3://llm-bootcamp-641134885443/w4/$1.tar.gz" "$t" --only-show-errors || return 1
+  [ "$(sha256sum < "$t" | cut -d' ' -f1)" = "$2" ] || { echo "sha256 mismatch for $1"; return 1; }
+  rm -rf "$x"; mkdir -p "$x"; tar -C "$x" -xzf "$t" || return 1
+  echo "fetched $1 sha256=$2 into $x"; find "$x" -maxdepth 2 | head; du -sh "$x"
+}
+waitfor() {  # $1 = remote log, $2 = end regex, $3 = max polls (150 s apart); prints progress lines
+  local i id o
+  for i in $(seq 1 "$3"); do
+    id=$(ssm "grep -E '^(start=|cell=|level=|restored=|refused|args_diff|image_diff|capability_exit|parity_exit|candidate=|restore:|clip=|bench_exit|reference done|served done|done utc)' $1 | tail -40") || { sleep 30; continue; }
+    printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$id" "poll $1" >> "$LOG"
+    sleep 6; o=$(out "$id" 2>/dev/null)
+    if printf '%s' "$o" | grep -Eq "$2"; then echo "END $(date -u +%H:%M:%SZ) ($id)"; printf '%s\n' "$o" | cut -c1-400; return 0; fi
+    [ "$i" -lt "$3" ] && sleep 144
+  done
+  echo "NOT YET $(date -u +%H:%M:%SZ) ($id)"; printf '%s\n' "$o" | tail -12 | cut -c1-300; return 1
+}

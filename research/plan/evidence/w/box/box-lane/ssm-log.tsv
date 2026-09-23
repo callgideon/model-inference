@@ -10,3 +10,20 @@
 2026-09-23T19:48:10Z	5edbdf04-f94a-429b-a3ca-26defebd841f	step5 poll e0.log
 2026-09-23T19:49:47Z	3db6f720-cf22-4225-a3a1-18ca137977f7	step5 poll e0.log
 2026-09-23T19:51:43Z	231afdd9-9b8a-424d-aad5-3af8ab919f30	poll /opt/dlami/nvme/w4-logs/e0.log (watch)
+2026-09-23T19:53:53Z	3ce37b01-59b7-4fc5-a8e0-1d74a42a2186	step5 poll e0.log
+2026-09-23T19:54:09Z	ad00189e-2f37-4d62-96a9-00a2f54927b5	poll /opt/dlami/nvme/w4-logs/e0.log (watch)
+2026-09-23T19:55:05Z	88024f82-3830-4c20-b6fc-fe37995e1166	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T19:57:38Z	9ad9db5f-e61e-424a-875e-c94fa4d3ef48	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:00:11Z	fdbda6fb-a290-4033-95ad-c3e227e8a8a4	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:01:29Z	fd0965ec-925c-4c64-be50-f6dca541cd8f	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:04:02Z	e251af6a-8ac0-4009-9f3f-60448b4ffa9b	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:06:35Z	878a4308-1263-479c-9ebc-c9d0ab671f4a	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:08:21Z	89a8cef3-fa4c-4e95-b9bf-57f8d67cbea2	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:10:53Z	5c1e9b82-3adc-47bb-bf9b-f80040df6b3d	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:13:26Z	c29d99a0-5e50-46db-8a60-95d1c3500838	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:15:10Z	6b11e577-00f7-4347-928b-e85ec15d21a4	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:17:43Z	34227a60-e075-4770-88a5-953f7160fac0	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:20:16Z	105d1de2-4b40-473b-9880-f459ec3df29c	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:21:29Z	344a5a8d-f039-4a4e-86c0-b5584af19131	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:24:02Z	102afb43-a9c6-4cd5-8f09-f7d37de228c6	poll /opt/dlami/nvme/w4-logs/e0.log
+2026-09-23T20:24:17Z	95e7c8c3-3a0c-4d6a-ae2f-223856076459	step5 fetch E0: tar w4-e0-20260923T194748Z + e0.log to s3 w4/
