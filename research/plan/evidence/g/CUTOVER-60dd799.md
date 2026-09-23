@@ -13,8 +13,8 @@
 | Field | Value |
 |---|---|
 | Base SHA | `a0711ac` = integration head `7c52627` + D5's branch `c67e4f5` (terminalize, `PgCatalogDirectory`, G6B adapters, `PgJobStore.lookup`) |
-| Implementation SHA | `f7d9b03` (items `88e1cfd..f7d9b03`, including the merge `f11f1f6` of `origin/codex/m1l2-object-store` @ `e1bb54f`); this report is committed on top |
-| Branch / worktree | `codex/cutover-mount` / `.claude/worktrees/codex-cutover`; nothing pushed |
+| Implementation SHA | `60dd799` (items `88e1cfd..60dd799`, including the merge `f11f1f6` of `origin/codex/m1l2-object-store` @ `e1bb54f`). `92269a6` on top is the coordinator's save of this report's draft at the Opus session limit (evidence only). This report is committed on top of that as the lane's final head |
+| Branch / worktree | `codex/cutover-mount` / `.claude/worktrees/codex-cutover`. This lane pushed nothing; the coordinator pushed its save `92269a6` |
 | G2's cutover diff | the inline text of `G2-e5e7d3a.md` "integration_requests" 1, sha256 `bae3449513c283b09f6ad90c9164334f08405801462a979b352d2b7fc36c46b4` (the round-2 hash of that text), `git apply` clean at `a0711ac`; its hunks are in `88e1cfd` (code and tests) and `43fe900` (deploy files) |
 
 | Commit | What |
@@ -31,6 +31,7 @@
 | `351d084` | item 6: the published release pins W3's measured image and engine options |
 | `9fd3457` | item 7: `infrx_build_info{revision, image} 1` on /metrics from the installed release; /metrics mounted |
 | `f7d9b03` | item 8: the operator tool's `build_operations()` on D5's PostgreSQL adapters |
+| `60dd799` | item 7 fix: I2B's `preflight_refusal_ignored` re-anchored on install.sh's preflight line, which `9fd3457` extended with `--release "$sha"` (the full I list at `f7d9b03` reported it misdeclared, anchor 0 times) |
 
 ## What changed
 
@@ -98,7 +99,8 @@
   - M1-L2's `bucket_problems` asks the bucket from the host on `apply`'s pilot path. It is
     kept, and was not touched here. `validate_runtime` already requires `DATABASE_URL` in
     pilot.
-  - No manifest key was added. The adapters' settings already have entries:
+  - Item 4 added no manifest key (item 7 adds `INFRX_RELEASE_SHA`). The adapters' settings
+    already have entries:
     `DATABASE_URL` (MANIFEST, pilot, SSM), `DATABASE_POOL_*`, `S3_MEDIA_BUCKET`,
     `S3_MEDIA_PREFIX` and `S3_ENDPOINT_URL` (TUNABLE).
 - **08 §5/§5.1.** Rows updated or added:
@@ -162,7 +164,9 @@
 
 Each kill below is quoted from a by-name run of the list's own runner, at the item's commit
 or later: `python -m tests.g.mutants <names>`, `python tests/i/mutants.py <names>` or
-`python -m tests.g.ops.mutants <names>`. The full-list runs are under "Runs".
+`python -m tests.g.ops.mutants <names>`. The rows for items 6, 7 and 8 quote the by-name
+reruns on the final code (`92269a6`, code identical to `60dd799`). The full-list runs are
+under "Runs".
 
 | Item | Commit | Cases | Mutants and kill text |
 |---|---|---|---|
@@ -173,9 +177,9 @@ or later: `python -m tests.g.mutants <names>`, `python tests/i/mutants.py <names
 | 3 edge | `6cb8ebe` | `tests/i/test_packaging.py::test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered` | I list: `edge_strips_a_contract_response_header` `1 failed, 21 deselected`; `edge_strips_last_event_id` `1 failed, 21 deselected`; `edge_buffers_events` `1 failed, 21 deselected`; `edge_hides_jobs` `1 failed, 21 deselected`; `edge_hides_uploads` `1 failed, 21 deselected` |
 | 4 preflight + 08 | `eef1262`, `c6f4d0e` | `tests/i/test_prereqs.py::test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve` | I list: `credit_without_card_installs` `1 failed, 15 deselected`; `unknown_regime_installs` `1 failed, 15 deselected` (the three `compose_*` mutants of `eef1262` were retired with the check) |
 | subsets | `b4eba9d`, `c6f4d0e`, `9fd3457` | — | the default (`make api-test`) subsets gain G `composition_root_drops_jobs`, `objects_from_settings_in_memory`, `build_info_not_required_in_pilot`, and I `unit_runs_the_retired_shim`, `edge_strips_a_contract_response_header`, `edge_buffers_events`, `edge_hides_jobs`, `credit_without_card_installs`, `release_not_required_in_pilot` |
-| 6 release pins | `351d084` | `tests/g/ops/test_publication.py::test_api_ops__the_published_release_pins_the_measured_image_and_engine_options` | G6B list: `release_image_placeholder_restored` `1 failed, 40 deselected`; `release_engine_options_placeholder_restored` `1 failed, 40 deselected` |
+| 6 release pins | `351d084` | `tests/g/ops/test_publication.py::test_api_ops__the_published_release_pins_the_measured_image_and_engine_options` | G6B list: `release_image_placeholder_restored` `1 failed, 41 deselected`; `release_engine_options_placeholder_restored` `1 failed, 41 deselected` (40 deselected at `351d084`, before item 8's case) |
 | 7 build info | `9fd3457` | `tests/g/test_startup.py::test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as` (the gauge with both labels on loopback /metrics, a public peer 404, a pilot without either setting refused naming it, a malformed one refused, dev without both: no gauge); `tests/i/test_install.py::test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys` | G list: `composition_root_drops_metrics` `2 failed, 20 deselected`; `build_info_not_set_at_startup` `1 failed, 21 deselected`; `build_info_gauge_omitted` `1 failed, 21 deselected`; `build_info_revision_from_git` `1 failed, 21 deselected`; `build_info_not_required_in_pilot` `1 failed, 21 deselected`; `release_sha_shape_unchecked` `1 failed, 21 deselected`; `build_image_shape_unchecked` `1 failed, 21 deselected` (and the four ROUTERS-line mutants re-anchored, each `1 failed, 21 deselected`). I list: `release_not_required_in_pilot`, `release_shape_unchecked` `1 failed, 42 deselected`, `release_not_supplied` `1 failed, 42 deselected`, `install_passes_no_release` `1 failed, 42 deselected` (`4/4 killed`) |
-| 8 build_operations | `f7d9b03` | `tests/g/ops/test_cli.py::test_api_ops__the_operator_tool_builds_the_postgres_adapters_from_the_environment`; `tests/d/test_operations_pg.py` (d3: `13 passed in 6.96s`) | G6B list: `operations_without_a_database` `1 failed, 41 deselected`; `operations_dsn_ignored` `1 failed, 41 deselected` |
+| 8 build_operations | `f7d9b03` | `tests/g/ops/test_cli.py::test_api_ops__the_operator_tool_builds_the_postgres_adapters_from_the_environment`; `tests/d/test_operations_pg.py` (d3: `13 passed in 6.96s`) | G6B list: `operations_without_a_database` `1 failed, 41 deselected`; `operations_dsn_ignored` `1 failed, 41 deselected` (with item 6's two: `4/4 killed`) |
 | 5 evidence | this file | — | — |
 
 Test changes that carry G2's diff, adjusted to the tree at `a0711ac`:
@@ -189,7 +193,43 @@ Test changes that carry G2's diff, adjusted to the tree at `a0711ac`:
 
 ## Runs
 
-RUNS_PLACEHOLDER
+Logs are in the session scratchpad (`$S` = `/tmp/claude-1000/…/scratchpad`). Environment
+for every run: `INFRX_D_TASK=d3` (PostgreSQL 55434), `INFRX_D2_VALKEY_PORT=55464`,
+`INFRX_D2_VALKEY_CONTAINER=infrx-cutover-valkey`, `INFRX_Q_VALKEY_PORT=55492`, AWS
+credentials disabled.
+
+**Which code each run saw.** `f7d9b03..92269a6` changes two files:
+`apps/infrx-api/tests/i/mutants.py` (`60dd799`, one I mutant's anchor) and this report.
+
+**On the final code (`92269a6`, same code as `60dd799`), `$S/cut4/`:**
+
+| Run | Tail | Exit |
+|---|---|---|
+| layer 0, repo root: `INFRX_E2_NAMESPACE=e3b2 apps/infrx-api/.venv/bin/python -m pytest -q -rfEs tests/integration` (no stack) | `17 failed, 149 passed, 86 skipped, 2 warnings in 24.28s`. The 17 are the 15 of Limits 6 plus rc05b and the harness migration set (Limits 6). The anchor guard `test_run.py::test_every_mutant_anchor_occurs_as_declared_on_the_checkout` passes (`1 passed, 50 deselected` by name) | 1 |
+| G by-name, items 1/7 (`python -m tests.g.mutants` with 11 names) | `11/11 killed` | 0 |
+| G6B by-name, items 6/8 (`python -m tests.g.ops.mutants` with 4 names) | `4/4 killed` | 0 |
+| tests/g whole; tests/i; tests/contracts (quick); tests/d focused on d3 (jobstore, streamstore and CREDIT conformance, catalog, operations, composition); I by-name (items 2/7); `INFRX_MUTANTS=all` for the G, G6B, G3 jobs, G4U uploads, I and M S3 lists; `make api-test` | **still running at handback** (`$S/cut4/streamA.out`, `streamB.out`, one log per run). Not quoted here | — |
+
+**At `f7d9b03`, from the lane's first session (`$S/final.log`, `$S/mut3-*.log`), all with `INFRX_MUTANTS=all`:**
+
+| Run | Tail | Exit |
+|---|---|---|
+| G list `tests/g/test_mutants.py` | `329 passed in 1101.26s (0:18:21)` | 0 |
+| G6B list `tests/g/ops/test_mutants.py` | `72 passed in 158.76s (0:02:38)` | 0 |
+| G3 list `tests/g/jobs/test_jobs_mutants.py` | `85 passed in 239.23s (0:03:59)` | 0 |
+| G4U list `tests/g/uploads/test_uploads_mutants.py` | `42 passed in 98.16s (0:01:38)` | 0 |
+| I list `tests/i/test_mutants.py` | `1 failed, 203 passed in 417.23s (0:06:57)`. The one is `preflight_refusal_ignored` misdeclared, "anchor appears 0 times in deploy/install.sh". `60dd799` fixes it, and the by-name rerun then killed it (`1 failed, 10 deselected`) | 1 |
+| M1-L2 list `tests/m/test_s3_mutants.py` | `14 passed, 14 skipped in 51.81s` (skip: "no S3-compatible endpoint", Limits 1) | 0 |
+| `make api-test` (`PYTEST_ADDOPTS="-rfEs -p no:cacheprovider"`), 22:45:25–23:14:33Z | `23 failed, 3497 passed, 14 skipped, 5 xfailed, 2 warnings in 1743.41s (0:29:03)`. The 23 are the pre-existing `test_cancel_cause.py::test_dur_settle__before_0018…` and its pristine-baseline fallout in `tests/contracts/test_mutants.py`: 19 subset mutants and 3 runner self-tests. That is the same 23 that M1-L2 reports at `eae07a9`. `60dd799`'s file was edited 22 s after this run started. It changes only the anchor of `preflight_refusal_ignored`, which is not in I's default `SUBSET` | 2 |
+
+**Earlier, quoted by the lane's first session:** tests/d focused on d3 at `351d084` (21:56Z,
+`$S/tests-d-d3-final.log`): `159 passed, 5 xfailed, 2 warnings in 117.31s`, exit 0. Image
+checks at `351d084` (`$S/image-checks-final.log`): the image has no `/app/gateway.py`, and
+ROUTERS is `['health', 'models', 'ingress', 'uploads', 'jobs']` (before item 7 added
+metrics). The factory with a pilot env and no bucket refuses: "requires S3_MEDIA_BUCKET",
+exit 1. With a bucket and no network it refuses: "S3_MEDIA_BUCKET did not answer HeadBucket
+(EndpointConnectionError)", exit 1. With no mode: "requires INFRX_MODE", exit 1. The
+in-image pilot probe reports only `PENDING(W3)`, exit 2.
 
 ## Limits
 
@@ -221,7 +261,17 @@ RUNS_PLACEHOLDER
    "fail the day `ingress` enters `ROUTERS`". There were 12 `PENDING[G2-R1…]` skips at
    `a0711ac` and there are 0 now. Those 12 cases, plus dr17, rc00 and `test_stage`'s
    held-cutover case, are the 15 new layer-0 failures. They belong to the E3B phase-3 lane
-   (see Integration requests).
+   (see Integration requests). Layer 0 fails 17 in all. The other 2 are not the cutover's,
+   and nothing under `tests/integration` was edited on this branch:
+   - `test_recovery.py::test_i3b_rc05b_…_pending_on_the_s3_adapter` fails with "an S3 object
+     store exists (['infrx.media.s3.S3ObjectStore']): pause MinIO under it now". Its
+     `PENDING[M1-L2]` lifted when M1-L2's adapter (`7760bcf`) came in with the merge `f11f1f6`.
+     rc00 pins rc05b as `PENDING[M1-L2]` as well as rc03 as `PENDING[G2-R1]`, so rc00 fails
+     until both drill bodies are written.
+   - `test_harness.py::test_the_migration_set_is_the_console_one_and_is_read_in_filename_order`
+     fails with "Left contains one more item: '0018_terminal_settlement.sql'". D5 added 0018
+     (`e96449e`, in the base `a0711ac`). The harness's migration list gains it at the merge,
+     as it gained 0017 at D4's (`e2a52b2`).
 7. **Dev installs.** Preflight no longer checks the composition, and M1-L2's bucket check
    runs only on the pilot path. So a dev env with no reachable bucket installs, and its unit
    then refuses to start.
@@ -250,6 +300,14 @@ RUNS_PLACEHOLDER
 - **I3B rc03.** The gateway-restart drill needs a process `create_app` can start. On the
   stack that means the E2 `s3` service's bucket (`S3_MEDIA_BUCKET`, `S3_ENDPOINT_URL`), or
   an injected object store.
+- **I3B rc05b (observed, not the cutover's; nothing new for the E3B phase-3 lane beyond
+  it).** M1-L2's `S3ObjectStore` lifts rc05b's `PENDING[M1-L2]` at layer 0 (Limits 6). Its
+  MinIO-outage body is due from the owner of I3B's drills. rc00 pins both rc03 and rc05b,
+  so it passes only when both bodies are written.
+- **Coordinator: the harness migration list += `0018_terminal_settlement.sql`**
+  (`tests/integration/test_harness.py`, D5's migration; Limits 6). This is the merge-time
+  step that `e2a52b2` did for 0017.
+- **W: none.**
 - **I (I2B), `deploy/rehearse.sh`.** The rehearsal was not run here. Read against the cutover,
   three of its steps no longer hold:
   - Step 1 deploys dev and expects the gateway to start. A dev env now needs a bucket that
@@ -297,3 +355,11 @@ RUNS_PLACEHOLDER
 - 2026-09-23: Written at implementation SHA `f7d9b03` from the runs quoted above. Every count
   is copied from command output. Only fakes, the d3 task-local PostgreSQL and locally built
   images were used. Nothing is deployed or live-verified.
+- 2026-09-23 (resumed after the Opus session limit): The report was renamed to the
+  implementation SHA `60dd799`. `60dd799` and the coordinator's save `92269a6` were
+  recorded. Items 6–8 were updated with by-name reruns on the final code. Runs were filled
+  in from logs, and each is marked with the code it saw. Layer 0's two failures that are not
+  the cutover's were attributed (rc05b, harness migration set). Integration requests were
+  added for rc05b, the 0018 harness entry and W (none). The final-code rerun of the focused
+  suites, the full mutant lists and `make api-test` was still running at handback. Nothing
+  here quotes it.
