@@ -136,3 +136,21 @@ def test_a_pending_id_naming_a_merged_task_fails_the_stage():
     status, summary = run.backend_summary(cases, 0)
     assert (status, summary["stale_pending"]) == (run.FAIL, ["D1R"])
     assert run.backend_summary(run.classify(XML % ""), 0)[1]["stale_pending"] is None
+
+
+def test_a_live_defect_is_refused_outside_this_processs_clones(monkeypatch):
+    """Review F6: `stack.defect` edits only a clone this process made - never the template,
+    E2's database or another process's clone - and refuses before it connects anywhere."""
+    import contextlib
+    import types
+
+    import psycopg
+    import pytest
+    reached = []                      # a connection the guard should have prevented
+    monkeypatch.setattr(psycopg, "connect", lambda dsn, **kw: reached.append(dsn) or
+                        contextlib.nullcontext(types.SimpleNamespace(execute=lambda *a: None)))
+    for name in (stack.TEMPLATE, stack.harness.PG_DATABASE, f"{stack.harness.PG_DATABASE}_1_1"):
+        monkeypatch.setattr(stack, "current_database", lambda name=name: name)
+        with pytest.raises(AssertionError, match="refusing a defect"):
+            stack.defect("select 1")
+    assert reached == [], f"a defect reached {reached}"
