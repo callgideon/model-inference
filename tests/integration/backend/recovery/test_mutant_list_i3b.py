@@ -25,4 +25,6 @@ def test_i3b_mutant_list_is_well_formed():
         assert source.count(mutant.before) == mutant.occurrences, mutant.id
         assert mutant.before != mutant.after, mutant.id
         cases = re.findall(r"^def (test_\w+)", (ROOT / mutant.suite).read_text(), re.M)
-        assert any(mutant.select in case for case in cases), (mutant.id, mutant.select)
+        # `bk01f and policies`: the case is the first word, the rest a parametrization id.
+        case_name = mutant.select.split(" and ")[0]
+        assert any(case_name in case for case in cases), (mutant.id, mutant.select)

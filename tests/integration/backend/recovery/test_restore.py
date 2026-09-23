@@ -12,7 +12,8 @@ ARE that rehearsal, on the pinned `supabase/postgres` 17.6 image (hosted runs 17
   table, plus the privileges, policies, functions, triggers, constraints, indexes and
   default privileges the tenant boundary depends on - and the detectors report zero drift.
   bk01b/bk01c/bk01d prove the check catches a lost trigger, widened privileges and a
-  damaged backup; bk01e refuses a non-empty target and the backup's own source before any
+  damaged backup; bk01f damages one catalog family (or one row) of a good restore at a
+  time and the check names exactly that family; bk01e refuses a non-empty target and the backup's own source before any
   write.
 * bk02 - a database shaped like hosted today (0001-0002, four users, two keys, one usage
   row, no ledger): back it up, restore it, apply 0003-0009 to the RESTORED copy, and prove
@@ -259,6 +260,61 @@ def test_i3b_bk01e_b_a_backup_is_never_restored_onto_its_own_source(tmp_path):
         with pytest.raises(RuntimeError, match="the backup's own source"):
             pg.restore(conninfo(source), backup)
         assert _write_state(source) == before
+
+
+# RS-2: one damage per catalog family (and row content), applied to a copy of a GOOD
+# restore; the check must name that family and no other. Each family is a single-edit
+# mutant in mutants_i3b.py (i3bm60-64) that only its own parameter kills.
+DAMAGE = {
+    "policies": "drop policy {policy}",
+    "columns": "alter table public.api_keys alter column name set default 'i3b'",
+    "functions": "revoke execute on function infrx.now() from service_role",
+    "indexes": "drop index public.org_members_user_id_idx",
+    # MEASURED: `public`'s defaults already grant anon ALL (the template's, restored as
+    # the source had them), so the same grant there is a no-op; 0004 narrowed `infrx`'s.
+    "default_acls": "alter default privileges for role postgres in schema infrx "
+                    "grant all on tables to anon",
+    "rows": "update public.models set limits = limits || '{{\"i3b\": 1}}' "
+            "where id = (select min(id) from public.models)",
+}
+
+
+def _family(problem: str) -> str:
+    return "rows" if problem.startswith("rows of ") else problem.split(" differ", 1)[0]
+
+
+@pytest.fixture(scope="module")
+def good_restore(tmp_path_factory):
+    """One good restore of E2's database, checked equal, reused as the template of every
+    damaged copy (a template copy takes a second; a restore takes a minute under load)."""
+    with pytest.MonkeyPatch.context() as env, scratch("infrx_i3b_good") as (good,):
+        env.setenv("PGPASSWORD", harness.PG_PASSWORD)    # module scope: before `_password`
+        backup_and_restore(harness.PG_DATABASE, good, tmp_path_factory.mktemp("f") / "backup")
+        source = fingerprint(harness.PG_DATABASE)
+        assert pg.compare(source, fingerprint(good)) == []
+        yield good, source
+
+
+@pytest.mark.parametrize("family", DAMAGE)
+def test_i3b_bk01f_the_check_names_each_damaged_family(good_restore, family):
+    """RS-2 - "checked, not merely listed" per family: after a good restore, one damage to
+    one family (a dropped policy, a column default, a revoked function grant, a dropped
+    index, a widened default privilege, one changed row) and `compare` names exactly that
+    family."""
+    good, source = good_restore
+    damaged = "infrx_i3b_damaged"
+    _admin(f"drop database if exists {damaged} with (force)",
+           f"create database {damaged} template {good} owner {harness.PG_USER}")
+    try:
+        with connect(damaged) as conn:
+            policy = conn.execute(
+                "select format('%I on %I.%I', policyname, schemaname, tablename) "
+                "from pg_policies where schemaname = 'public' order by 1 limit 1").fetchone()[0]
+            conn.execute(DAMAGE[family].format(policy=policy))
+        problems = pg.compare(source, fingerprint(damaged))
+        assert {_family(problem) for problem in problems} == {family}, problems
+    finally:
+        _admin(f"drop database if exists {damaged} with (force)")
 
 
 def _resum(backup: Path) -> None:
