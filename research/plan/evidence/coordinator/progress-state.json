@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T08:39:54Z",
+  "updated": "2026-09-23T09:08:05Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,12 +35,19 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A HANDED BACK db12a5a (impl ecacd50); Opus review running; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window)",
+      "phase": "phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) \u2192 fix round running; then confirmation workflow",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     }
   },
-  "reviews": {},
+  "reviews": {
+    "W4": {
+      "workflow": "wf_3f14adfb-37c",
+      "head": "db12a5a",
+      "verdict": "fix_required",
+      "json": "research/plan/evidence/w/W4-review-db12a5a.json"
+    }
+  },
   "gates": {
     "BACKEND-LOCAL": {
       "requires": "E3B",
