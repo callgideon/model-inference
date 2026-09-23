@@ -140,8 +140,9 @@ $$;
 
 -- ============================================ the money, one body per unit ===
 -- Both read the job row the settling UPDATE just wrote, move its hold by its settlement
--- state, insert the debit (settled only) and the one pilot usage row, every timestamp the
--- job's `settled_at` (= infrx.now(); the `created_at` defaults are now(), D1).
+-- state, insert the debit (settled only) and the one pilot usage row (USD: every outcome;
+-- CREDIT: an outcome with usage), every timestamp the job's `settled_at` (= infrx.now();
+-- the `created_at` defaults are now(), D1).
 create or replace function infrx.settle_legacy_usd(p_id uuid, p_debit numeric)
 returns void language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
@@ -205,6 +206,11 @@ begin
       from infrx.credit_wallets w where w.wallet_id = j.wallet_id;
   else
     perform infrx.release_hold_credit(j.request_id);
+  end if;
+  -- A CREDIT usage record carries its usage (06a UsageRecordV2): an outcome nobody metered
+  -- (free, unknown) has its job row and projections, and no usage row.
+  if j.usage_prompt_tokens is null then
+    return;
   end if;
   insert into public.usage_events (id, org_id, api_key_id, model_id, status, stream,
     prompt_tokens, completion_tokens, created_at, settlement_regime, outcome, job_state,
@@ -619,7 +625,7 @@ end $$;
 -- `replayed`, and appends nothing; the same id for another movement is a conflict. A
 -- frozen (retired) wallet accepts an adjustment (0015 guards only holds and signup grants).
 -- Args `{wallet_id, kind, amount, operation_id, actor, reason, at}` (`at` is the caller's
--- clock: audit data only, R7); answers `{entry, replayed}`.
+-- clock: audit data only, R7); answers `{entry, replayed}` (the entry's amount as text).
 create or replace function infrx.grant_credit(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
@@ -666,7 +672,8 @@ begin
       perform infrx.refuse('idempotency_conflict', 'operation ' || v_op
                            || ' recorded another movement');
     end if;
-    return jsonb_build_object('entry', to_jsonb(l), 'replayed', true);
+    return jsonb_build_object('entry', to_jsonb(l) || jsonb_build_object('amount',
+                              l.amount::text), 'replayed', true);
   end if;
   if v_kind = 'operator_allocation' and w.kind <> 'provider_dev' then
     perform infrx.refuse('invalid_request', 'an operator allocation funds a provider_dev '
@@ -694,7 +701,8 @@ begin
                             'amount', l.amount::text, 'operation_id', l.operation_id,
                             'requested_at', p_args->>'at'),
          'grant_credit:' || v_op;
-  return jsonb_build_object('entry', to_jsonb(l), 'replayed', false);
+  return jsonb_build_object('entry', to_jsonb(l) || jsonb_build_object('amount',
+                            l.amount::text), 'replayed', false);
 end $$;
 
 -- The 24 h rule as an operator operation (G6B request 6; 02): a job whose usage is unknown
