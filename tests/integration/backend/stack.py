@@ -57,12 +57,10 @@ PENDING = {
     "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
           "mounts the metered ingress in gateway.app.ROUTERS",
     "G3": "explicit async job routes: create, status, cancel, replay",
-    "G4U": "owned upload HTTP adapter",
     "D4": "persistent stream journal in PostgreSQL: infrx.append, replay, PgStreamStore (0017)",
     "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
           "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
           "Registry/AccountView and G1R's CatalogDirectory",
-    "F2P": "wire-in merged (CreditJobStore port + credit fake)",
     # RESIDUAL (merged; I3B's cases only - see RESIDUAL)
     "G1R": "pilot ingress mounted in gateway.app.ROUTERS (cutover from the legacy chat "
            "route) with consumer/provider audiences",

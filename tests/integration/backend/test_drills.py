@@ -40,7 +40,8 @@ import harness                                          # noqa: E402
 
 from infrx.contracts import errors                      # noqa: E402
 from infrx.contracts.conformance import builders as b   # noqa: E402
-from infrx.contracts.fakes.factories import jobstore_factory  # noqa: E402
+from infrx.contracts.fakes.factories import (credit_jobstore_factory,  # noqa: E402
+                                             jobstore_factory)
 from infrx.contracts.fakes.support import CrashAfterCommit  # noqa: E402
 from infrx.contracts.limits import DEFAULTS             # noqa: E402
 from infrx.contracts.records import (ExecutionMode, IndexEvent, JobState,  # noqa: E402
@@ -55,7 +56,7 @@ BACKENDS = ("fake", "postgres")
 DEFECT = None
 
 
-def rig(backend: str, *rpcs: str, **limits):
+def rig(backend: str, *rpcs: str, credit: bool = False, **limits):
     """The store a drill runs on. `rpcs` are the store functions the drill drives: on
     `postgres` the drill is PENDING, on the task each stub names, only while one of THOSE is
     an `infrx.unimplemented` stub (item 1) - a D6 stub it never calls cannot hold it back."""
@@ -69,7 +70,7 @@ def rig(backend: str, *rpcs: str, **limits):
         if DEFECT is not None:
             DEFECT()
     else:
-        h = jobstore_factory(limits=settings)
+        h = (credit_jobstore_factory if credit else jobstore_factory)(limits=settings)
     h.extra["grant"](b.ORG_A, GRANT)
     h.extra["grant"](b.ORG_B, GRANT)
     return h
@@ -407,11 +408,13 @@ def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole(backend)
 
 # ------------------------------------------------------------------ CREDIT admission (item 3)
 #
-# PgJobStore.admit_credit on the real store, over the PROVISIONAL Marlin seed (P-01: its
-# card is a label here, never a price). Individuals come from `auth.users` and A1's grant.
-# The `[fake]` twins wait for the wire-in's credit fake; settlement waits for D5.
+# `admit_credit` on both stores (review F3: the F2P wire-in merged, so the `[fake]` twins run
+# on `credit_jobstore_factory`). On PostgreSQL: the PROVISIONAL Marlin seed (P-01: its card
+# is a label here, never a price) and individuals from `auth.users` plus A1's grant. On the
+# fake: the v2 fixture consumer plus consumers registered the fake's own way. The bodies are
+# one; `credit_rig` is the only place the two stores differ. Settlement waits for D5.
 
-def credit_request(h, person, model=stack.CREDIT_ALIAS, **kw):
+def credit_request(h, person, model, **kw):
     return b.request(h, org_id=person.org_id, key_id=person.key_id, model_revision=model, **kw)
 
 
@@ -462,40 +465,16 @@ def assert_credit_conserved(person) -> None:
     assert wallet["available"] >= 0, wallet
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(backend):
-    """CREDIT-SPEND / DUR-ADMIT (R66, R78, R79): the admission's answer is lost after its
-    commit; the retry is the SAME job with ONE hold, on the individual's own CREDIT wallet,
-    pinned to the listing it resolved - and the organization's legacy USD books do not
-    move."""
-    if backend == "fake":
-        stack.pending("F2P", why="the CREDIT fake store (credit_jobstore_factory) is the "
-                                 "wire-in's, on codex/f2p-wirein")
-    h = rig(backend, *ADMIT)
-    alpha = stack.credit_world()["alpha"]
-
-    async def body():
-        usd = h.extra["balance"](alpha.org_id)
-        request = credit_request(h, alpha)
-        idem = b.idem(request, "c1")
-        h.failures.crash_after_commit("admit_credit")
-        with pytest.raises(CrashAfterCommit):
-            await h.port.admit_credit(request, idem)
-        again = await h.port.admit_credit(request, idem)
-        assert again.replayed and again.request_id == request.request_id
-        assert (again.org_id, again.wallet_id) == (alpha.org_id, alpha.wallet_id)
-        assert (again.pins.requested_model, again.pins.rate_card_version) == (
-            stack.CREDIT_ALIAS, stack.SEED_CARD)
-        hold = Decimal(str(again.maximum_hold))
-        held = holds_of(request.request_id)
-        assert held == {"credit": [(alpha.wallet_id, "held", hold)],
-                        "usd": 0}, f"the hold is not one hold on the CREDIT wallet: {held}"
-        assert credit_wallet(alpha)["reserved"] == hold > 0
-        assert h.extra["balance"](alpha.org_id) == usd, "the legacy USD books moved"
-        assert h.extra["outbox_kinds"](request.request_id) == [OutboxKind.prepare_dispatch]
-        assert (await h.port.get_owned_credit(alpha.org_id, again.job_handle))[1] is None
-        assert_credit_conserved(alpha)
-    run(body)
+def _pg_provider_key(person) -> str:
+    """A provider_dev key filed in the person's personal org by the person (D2 MC-1)."""
+    key = stack._uuid(f"{person.name}/provider-dev-key")
+    with stack.connect() as conn:
+        conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, "
+                     "key_hash, audience, provider_org_id, endpoint_id) values (%s, %s, %s, "
+                     "'p', 'sk-infrx-e3b2prov', %s, 'provider_dev', %s, %s)",
+                     (key, person.org_id, person.user_id, f"hash-{key}",
+                      stack.SEED_PROVIDER_ORG, stack.SEED_DEV_ENDPOINT))
+    return key
 
 
 def _unpriced_listing() -> None:
@@ -517,6 +496,109 @@ def _unpriced_listing() -> None:
                       stack.SEED_SERVING))
 
 
+def credit_rig(h, backend, names=("alpha",)):
+    """The CREDIT world a drill needs, per store: its people (verified individuals, each with
+    a consumer key in its own org and a funded CREDIT wallet), the alias and card the store
+    resolves, the private dev model, the failure point of `admit_credit`, and the reads."""
+    from types import SimpleNamespace
+    if backend == "postgres":
+        return SimpleNamespace(
+            people=stack.credit_world(names), alias=stack.CREDIT_ALIAS, card=stack.SEED_CARD,
+            private_model=stack.SEED_DEV_DEPLOYMENT, crash="admit_credit",
+            wallet=credit_wallet, holds=holds_of, footprint=footprint,
+            conserved=assert_credit_conserved, provider_key=_pg_provider_key,
+            unprice=_unpriced_listing)
+    from infrx.contracts.records import HoldState, Role
+    from infrx.contracts.v2 import fixtures as v2fix, records as v2
+    ids, port = v2fix.IDS, h.port
+    people = {}
+    for name in names:              # fresh consumers (the fixture one carries a reserve)
+        person = stack.Individual(name, stack._uuid(f"{name}/user"), stack._uuid(f"{name}/org"),
+                                  stack._uuid(f"{name}/credit-key"),
+                                  stack._uuid(f"{name}/wallet"))
+        wallet = v2.WalletRef(wallet_id=person.wallet_id, kind=v2.WalletKind.consumer,
+                              owner_user_id=person.user_id, personal_org_id=person.org_id,
+                              ledger_total=str(stack.SIGNUP_GRANT))
+        port.wallet_directory.by_user[person.user_id] = wallet
+        port.seed_credit_wallet(wallet)
+        h.extra["register_credential"](v2.AuthContextV2(
+            audience=v2.CredentialAudience.consumer, org_id=person.org_id,
+            key_id=person.key_id, principal=person.key_id, role=Role.owner,
+            entitlement_version=1, user_id=person.user_id))
+        people[name] = person
+    balance = lambda person: h.extra["credit_balance"](person.wallet_id)   # noqa: E731
+    initial = {name: balance(person)["ledger"] for name, person in people.items()}
+
+    def holds(request_id):
+        hold = port.holds.get(request_id)
+        if hold is None:
+            return {"credit": [], "usd": 0}
+        if hold.wallet_id is None:
+            return {"credit": [], "usd": 1}
+        return {"credit": [(hold.wallet_id, hold.state.value, hold.amount)], "usd": 0}
+
+    def conserved(person):
+        held = sum((hold.amount for hold in port.holds.values()
+                    if hold.wallet_id == person.wallet_id and hold.state is HoldState.held),
+                   Decimal(0))
+        wallet = balance(person)
+        assert wallet["ledger"] == initial[person.name], (wallet, initial[person.name])
+        assert wallet["reserved"] == held, (wallet, held)
+        assert wallet["available"] >= 0, wallet
+
+    def fake_footprint():
+        return (len(port.jobs), len(port.holds), len(h.extra["outbox"]()),
+                h.extra["journal_bytes"](), tuple(balance(p)["reserved"] for p in people.values()))
+
+    def provider_key(person):
+        key = stack._uuid(f"{person.name}/provider-dev-key")
+        h.extra["register_credential"](v2.AuthContextV2(
+            audience=v2.CredentialAudience.provider_dev, org_id=person.org_id, key_id=key,
+            principal=key, role=Role.member, entitlement_version=1, user_id=person.user_id,
+            provider_org_id=ids.provider_org, endpoint_id=ids.dev_endpoint))
+        return key
+
+    return SimpleNamespace(
+        people=people, alias=v2fix.REQUESTED_MODEL, card=v2fix.RATE_CARD_VERSION,
+        private_model=v2fix.DEV_REQUESTED_MODEL, crash="admit", wallet=balance, holds=holds,
+        footprint=fake_footprint, conserved=conserved, provider_key=provider_key,
+        unprice=lambda: port.catalog.rate_cards.pop(ids.prod_deployment))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(backend):
+    """CREDIT-SPEND / DUR-ADMIT (R66, R78, R79): the admission's answer is lost after its
+    commit; the retry is the SAME job with ONE hold, on the individual's own CREDIT wallet,
+    pinned to the listing it resolved - and the organization's legacy USD books do not
+    move."""
+    h = rig(backend, *ADMIT, credit=True)
+    world = credit_rig(h, backend)
+    alpha = world.people["alpha"]
+
+    async def body():
+        usd = h.extra["balance"](alpha.org_id)
+        request = credit_request(h, alpha, world.alias)
+        idem = b.idem(request, "c1")
+        h.failures.crash_after_commit(world.crash)
+        with pytest.raises(CrashAfterCommit):
+            await h.port.admit_credit(request, idem)
+        again = await h.port.admit_credit(request, idem)
+        assert again.replayed and again.request_id == request.request_id
+        assert (again.org_id, again.wallet_id) == (alpha.org_id, alpha.wallet_id)
+        assert (again.pins.requested_model, again.pins.rate_card_version) == (
+            world.alias, world.card)
+        hold = Decimal(str(again.maximum_hold))
+        held = world.holds(request.request_id)
+        assert held == {"credit": [(alpha.wallet_id, "held", hold)],
+                        "usd": 0}, f"the hold is not one hold on the CREDIT wallet: {held}"
+        assert world.wallet(alpha)["reserved"] == hold > 0
+        assert h.extra["balance"](alpha.org_id) == usd, "the legacy USD books moved"
+        assert h.extra["outbox_kinds"](request.request_id) == [OutboxKind.prepare_dispatch]
+        assert (await h.port.get_owned_credit(alpha.org_id, again.job_handle))[1] is None
+        world.conserved(alpha)
+    run(body)
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
     """DUR-ADMIT / DUR-CAP / CREDIT-SPEND (R66, R69, R70): a private dev deployment and a
@@ -524,42 +606,38 @@ def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
     key `invalid_api_key`, a full key `capacity_exhausted`, an unpriced listing
     `invalid_request` - each typed, each leaving no job, hold of either unit, reservation,
     outbox row or mapping; every wallet conserved on its own."""
-    if backend == "fake":
-        stack.pending("F2P", why="the CREDIT fake store (credit_jobstore_factory) is the "
-                                 "wire-in's, on codex/f2p-wirein")
-    h = rig(backend, *ADMIT, max_active_jobs_per_key=1)
-    world = stack.credit_world(("alpha", "beta", "gamma"))
-    alpha, beta, gamma = world["alpha"], world["beta"], world["gamma"]
-    provider_key = stack._uuid("alpha/provider-dev-key")
-    with stack.connect() as conn:
-        conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, "
-                     "key_hash, audience, provider_org_id, endpoint_id) values (%s, %s, %s, "
-                     "'p', 'sk-infrx-e3b2prov', %s, 'provider_dev', %s, %s)",
-                     (provider_key, alpha.org_id, alpha.user_id, f"hash-{provider_key}",
-                      stack.SEED_PROVIDER_ORG, stack.SEED_DEV_ENDPOINT))
+    h = rig(backend, *ADMIT, credit=True, max_active_jobs_per_key=1)
+    world = credit_rig(h, backend, ("alpha", "beta", "gamma"))
+    alpha, beta, gamma = (world.people[name] for name in ("alpha", "beta", "gamma"))
+    provider_key = world.provider_key(alpha)
 
     async def refused(expected, request):
-        mark = footprint()
+        mark = world.footprint()
         with pytest.raises(expected):
             await h.port.admit_credit(request, b.idem(request, str(uuid.uuid4())))
-        assert footprint() == mark, f"{expected.__name__}: the refusal left rows behind"
+        assert world.footprint() == mark, f"{expected}: the refusal left rows behind"
 
     async def body():
-        usd = {person.name: h.extra["balance"](person.org_id) for person in world.values()}
-        await refused(errors.NotFound, credit_request(h, alpha, stack.SEED_DEV_DEPLOYMENT))
-        await refused(errors.NotFound, b.request(h, org_id=alpha.org_id, key_id=provider_key,
-                                                 model_revision=stack.CREDIT_ALIAS))
+        usd = {person.name: h.extra["balance"](person.org_id)
+               for person in world.people.values()}
+        await refused(errors.NotFound, credit_request(h, alpha, world.private_model))
+        # D2 MC-1 on the real store. The contract fake admits a provider_dev key to the
+        # public listing (it has no MC-1 rule) and refuses only for the unfunded dev wallet
+        # - integration request #6; this pin flips the day the fake gains the rule.
+        await refused(errors.NotFound if backend == "postgres" else errors.InsufficientCredit,
+                      b.request(h, org_id=alpha.org_id, key_id=provider_key,
+                                model_revision=world.alias))
         h.extra["revoke_key"](beta.key_id)
-        await refused(errors.InvalidApiKey, credit_request(h, beta))
-        first = credit_request(h, alpha)
+        await refused(errors.InvalidApiKey, credit_request(h, beta, world.alias))
+        first = credit_request(h, alpha, world.alias)
         kept = await h.port.admit_credit(first, b.idem(first, "kept"))    # the key's one slot
-        await refused(errors.CapacityExhausted, credit_request(h, alpha))
-        _unpriced_listing()
-        await refused(errors.InvalidRequest, credit_request(h, gamma))
-        assert credit_wallet(alpha)["reserved"] == Decimal(str(kept.maximum_hold))
-        assert (credit_wallet(beta)["reserved"], credit_wallet(gamma)["reserved"]) == (0, 0)
-        for person in world.values():
-            assert_credit_conserved(person)
+        await refused(errors.CapacityExhausted, credit_request(h, alpha, world.alias))
+        world.unprice()
+        await refused(errors.InvalidRequest, credit_request(h, gamma, world.alias))
+        assert world.wallet(alpha)["reserved"] == Decimal(str(kept.maximum_hold))
+        assert (world.wallet(beta)["reserved"], world.wallet(gamma)["reserved"]) == (0, 0)
+        for person in world.people.values():
+            world.conserved(person)
             assert h.extra["balance"](person.org_id) == usd[person.name]
     run(body)
 

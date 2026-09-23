@@ -7,14 +7,13 @@ PostgREST service are real and run today. A pending case is a skip that names it
 
 The matrix (18 §E3B.a, 04 BACKEND-JOURNEY): inputs text / video by URL / video by upload,
 modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell (E3B phase
-2: only unmerged tasks; G1R, G6B, D2, D3, W3, Q3 and M3 have merged):
+2: only unmerged tasks; G1R, G6B, D2, D3, W3, Q3, M3, F2P and G4U have merged):
 
-* every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with) and F2P
-  (the wire-in's CreditJobStore port the metered route admits through);
+* every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with);
 * sync: G2 (the relay and the cutover that mounts the ingress); SSE: G2 + D4 (persistent
   journal replay); async: G2 + G3 (the job routes);
-* video by URL: nothing more (M2's fetch/probe/persist is merged);
-* video by upload: G4U (M3's uploads are merged; the HTTP adapter is not).
+* video by URL and by upload: nothing more (M2's fetch/probe/persist, M3's uploads and
+  G4U's upload routes are merged; the routes are mounted by G2's cutover).
 """
 from __future__ import annotations
 
@@ -27,9 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stack                                            # noqa: E402
 
-COMMON = ("D5", "F2P")
+COMMON = ("D5",)
 BY_MODE = {"sync": ("G2",), "sse": ("G2", "D4"), "async": ("G2", "G3")}
-BY_INPUT = {"text": (), "video_url": (), "video_upload": ("G4U",)}
+BY_INPUT = {"text": (), "video_url": (), "video_upload": ()}
 
 
 def unblocking(input_kind: str, mode: str) -> tuple[str, ...]:
@@ -53,7 +52,7 @@ def test_backend_journey__dataset_client_resume():
     """04 BACKEND-JOURNEY: resume a bounded dataset client; no duplicate accepted items or
     charges after an interrupted run (E1B's bench client is the client)."""
     if not stack.ingress_is_mounted():
-        stack.pending("G2", "G3", "D5", "F2P",
+        stack.pending("G2", "G3", "D5",
                       why="resume needs idempotent explicit jobs on the metered endpoint")
     pytest.fail("the pilot ingress is mounted: write the dataset-resume journey body now")
 
