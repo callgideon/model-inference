@@ -89,24 +89,35 @@ def check_media_objects(conn) -> str:
     observed value, so a re-use between the collector's read and its delete wins."""
     def body():
         ref = "media/a/v1/source"
-        first, = conn.execute("select infrx.touch_media_object(%s, %s)",
-                              (ref, b.ORG_A)).fetchone()
+        # an unknown ref: not_found, and nothing is created (update-only, SEC-4)
+        why = cc.attempt(conn, "select infrx.touch_media_object(%s, %s)", (ref, b.ORG_A))
+        assert why is not None and why.startswith("P0002"), f"an unknown object was touched: {why}"
+        assert conn.execute("select count(*) from infrx.media_objects where storage_ref = %s",
+                            (ref,)).fetchone()[0] == 0, "a touch created an object row"
+        conn.execute("insert into infrx.media_objects (storage_ref, org_id) values (%s, %s)",
+                     (ref, b.ORG_A))
+        first, = conn.execute("select last_used_at from infrx.media_objects where "
+                              "storage_ref = %s", (ref,)).fetchone()
+        conn.execute("select infrx_test.advance(30)")
         why = cc.attempt(conn, "select infrx.touch_media_object(%s, %s)", (ref, b.ORG_B))
         assert why is not None and why.startswith("P0002"), \
             f"another organization stamped the object: {why!r}"
-        conn.execute("select infrx_test.advance(60)")
+        unchanged, = conn.execute("select last_used_at from infrx.media_objects where "
+                                  "storage_ref = %s", (ref,)).fetchone()
+        assert unchanged == first, "another organization's touch moved last_used_at"
+        conn.execute("select infrx_test.advance(30)")
         second, = conn.execute("select infrx.touch_media_object(%s, %s)",
                                (ref, b.ORG_A)).fetchone()
-        assert second > first, 'failed: second > first'
+        assert second > first, "the owner's touch did not move last_used_at"
         stale, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                               (ref, first)).fetchone()
         assert stale is False, "an object used after the collector looked was deleted"
         idle, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                              (ref, second)).fetchone()
-        assert idle is True, 'failed: idle is True'
+        assert idle is True, "an idle object was not deleted"
         assert conn.execute("select count(*) from infrx.media_objects where storage_ref = %s",
-                            (ref,)).fetchone()[0] == 0, 'failed: conn.execute("select count(*) from infrx.media_objects where storage_ref = %s", (ref,)).fetchone()[0] == 0'
-        return "tenant-checked touch; conditional delete loses to a re-use"
+                            (ref,)).fetchone()[0] == 0, "the idle object row survived"
+        return "update-only, tenant-checked touch; conditional delete loses to a re-use"
     return ca._in_rollback(conn, body)
 
 

@@ -99,17 +99,19 @@ create table if not exists infrx.media_objects (
 );
 create index if not exists media_objects_last_used_idx on infrx.media_objects (last_used_at);
 
--- A use of an object: insert it or move `last_used_at` forward, for its OWN organization.
+-- A use of an EXISTING object of the caller's own organization: `last_used_at` moves
+-- forward. Update-only (review SEC-4): an unknown ref and another organization's ref are
+-- the same `not_found`, and neither creates a row, so a touch can neither plant state for
+-- another tenant nor tell whether its object exists. The object row itself is written by
+-- M's adapter (service_role INSERT) when it stores the object.
 create or replace function infrx.touch_media_object(p_storage_ref text, p_org uuid)
 returns timestamptz language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   v_at timestamptz;
 begin
-  insert into infrx.media_objects (storage_ref, org_id, last_used_at)
-  values (p_storage_ref, p_org, infrx.now())
-  on conflict (storage_ref) do update set last_used_at = greatest(
-      infrx.media_objects.last_used_at, excluded.last_used_at)
-    where infrx.media_objects.org_id = excluded.org_id
+  update infrx.media_objects set last_used_at = greatest(last_used_at, infrx.now())
+   where storage_ref = p_storage_ref
+     and org_id = p_org
   returning last_used_at into v_at;
   if v_at is null then
     raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';

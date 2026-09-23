@@ -383,7 +383,8 @@ def check_results_and_prompt_tokens(conn) -> str:
         body_, = conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref)).fetchone()
         assert body_ == "a clip of a cat", 'failed: body_ == "a clip of a cat"'
         for org, bad in ((b.ORG_B, ref), (b.ORG_A, "infrx-result:../../etc"),
-                         (b.ORG_A, f"infrx-result:{b.ORG_A}")):
+                         (b.ORG_A, f"infrx-result:{b.ORG_A}"),
+                         (b.ORG_A, "infrx-result:" + "-" * 36)):
             try:
                 with conn.transaction():
                     conn.execute("select infrx.read_result(%s, %s)", (org, bad))
