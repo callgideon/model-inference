@@ -67,6 +67,7 @@ OBSERVER = "test_api_modes__an_observer_that_leaves_never_cancels_the_job"
 UNSTARTED = "test_api_modes__an_unstarted_job_streams_its_identity_then_waits"
 OBSERVER_FAILS = "test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job"
 OBSERVER_STOPPED = "test_api_modes__an_observer_stopped_from_outside_never_cancels_the_job"
+CREDIT_EVENTS = "test_api_modes__a_credit_job_replays_its_events_in_its_committed_phase"
 DELETE = "test_dur_fence__delete_cancels_durably_and_answers_the_committed_outcome"
 RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
 MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
@@ -287,7 +288,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # === item 6: the async matrix (API-MODES) ===========================================
     _m("expired_job_served_as_running", "a terminal job reports its committed state (CREDIT)",
        J, "        if outcome is not None:\n            return outcome.state",
-       "        if False:\n            return outcome.state", EXPIRED_Q),
+       "        if False:\n            return outcome.state", EXPIRED_Q, CREDIT_EVENTS),
     # === item 7: the client example's async flow ========================================
     _m("poll_ignores_retry_after", "the client polls at the 202's Retry-After",
        X, '        await SLEEP(min(wait, MAX_RETRY_AFTER_S) if wait is not None else cfg["poll_s"])',

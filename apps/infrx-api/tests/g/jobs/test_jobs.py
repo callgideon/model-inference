@@ -747,6 +747,23 @@ def test_api_modes__an_observer_that_leaves_never_cancels_the_job():
     assert world.jobs.holds[job.id].state is HoldState.settled
 
 
+def test_api_modes__a_credit_job_replays_its_events_in_its_committed_phase():
+    """CREDIT, where the admission carries no lifecycle state: the events of a terminal job
+    name the committed outcome's state in the identity frame (not the admitted `preparing`),
+    replay the committed output, and end on the outcome - an error frame and `[DONE]`."""
+    world = JobsWorld(regime=CREDIT)
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    assert delete(world).json()["state"] == "cancelled"
+    reply = events(world)
+    assert reply.status == 200
+    assert reply.data()[0] == {"job_handle": world.handle(), "request_id": job.id,
+                               "phase": "cancelled"}
+    assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
+    assert "infrx.error" in reply.events()
+
 def test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job():
     """The other ways an observer ends: its send fails after the identity frame (a peer gone
     without a disconnect message), or a prune lands between the pre-header probe and the pump's
