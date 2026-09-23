@@ -176,7 +176,9 @@ class Relay:
                    wire.HEADER_SERVER_TIMING: metrics.server_timing(timings)}
         if admission.replayed:
             # Nothing is re-admitted or regenerated: the answer attaches to the same job's
-            # wait or stream, and a terminal job answers its committed result.
+            # wait or stream, and a terminal job answers its committed result - in stream
+            # mode from its journal, so past the journal's TTL a stream replay answers
+            # `journal_expired` then `[DONE]` (review r2 stream-C2-4; sync recovers it).
             headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"
         if found is None:
             # A fresh admission: the rechecks, then the staged refs bound to the job.

@@ -194,6 +194,28 @@ def test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels():
     assert world.only_job().state is JobState.cancelled
 
 
+def test_api_stream__a_replay_past_the_journal_ttl_answers_journal_expired_not_the_result():
+    """Review r2 stream-C2-4, documented: a stream-mode replay re-reads the job's journal,
+    so once the journal passed its TTL a key-recovered stream of a succeeded job answers
+    `journal_expired` and `[DONE]`, not the committed result (sync, or G3's result route,
+    recovers that). The relay's cancel of the terminal job answers the committed outcome:
+    the job stays succeeded and its settlement is untouched."""
+    world = rs.World(limits=rs.DEFAULTS.replace(journal_chunk_ttl_s=5.0))
+    world.during.append(world.work)
+    first = stream(world, key="k-ttl")
+    assert first.text() and first.data()[-1] == "[DONE]"
+    job = world.only_job()
+    wallet = world.jobs.wallet(world.org)
+    settled = (job.outcome, wallet.ledger_total, wallet.reserved_total)
+    world.clock.advance(6)
+    assert rs.run(world.stream.expire()) > 0
+    again = stream(world, key="k-ttl")
+    codes = [item["error"]["code"] for item in again.data() if isinstance(item, dict)
+             and "error" in item]
+    assert codes == ["journal_expired"] and again.data()[-1] == "[DONE]", again.data()
+    assert world.only_job() is job and job.outcome.state is JobState.succeeded
+    assert (job.outcome, wallet.ledger_total, wallet.reserved_total) == settled
+
 def test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_stream():
     """D3's terminalizations write no terminal journal event until D4's trigger: the relay
     ends on the outcome `get_owned` answers once the journal holds nothing more. A job
