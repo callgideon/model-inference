@@ -44,6 +44,7 @@ malformed payloads a review of the adapter found unhandled):
 | `split_json` | one JSON object spread over two `data:` lines |
 | `engine_error_pre_headers` | HTTP 500 with a streamed, oversized error body |
 | `engine_error_post_headers` | 200, one delta, then an SSE error object |
+| `engine_error_before_content` | 200, the role chunk, then an SSE error object and no visible delta: vLLM refusing an item it cannot encode (the 2026-09-23 box sweep) |
 | `abrupt_exit` | 200, one delta, then the connection dies (`httpx.ReadError`) |
 | `read_timeout` | 200, one delta, then `httpx.ReadTimeout` |
 | `transport_error` / `connect_timeout` | refused / timed out before any response |
@@ -84,6 +85,14 @@ KEEPALIVE_S = 7.0
 SLOW_DELTA_S = 7.0
 ERROR_BODY_CHUNK = 64 * 1024
 ERROR_BODY_CHUNKS = 32              # 2 MiB: an adapter that reads it whole is unbounded
+
+
+# The engine's own text for the sweep's refusal (vllm/v1/engine/input_processor.py:512-519
+# at the pinned build, with the counts the 2026-09-23 box run reported).
+ENCODER_REFUSAL = ("The decoder prompt contains a(n) video item with 21504 embedding tokens, "
+                   "which exceeds the pre-allocated encoder cache size 16384. Please reduce "
+                   "the input size or increase the encoder cache size by setting "
+                   "--limit-mm-per-prompt at startup.")
 
 
 def sse(obj: dict) -> bytes:
@@ -329,6 +338,12 @@ class FakeUpstream:
                 return
             if self.fault == "role_first":
                 yield sse(chunk("", role=True))
+            if self.fault == "engine_error_before_content":
+                yield sse(chunk("", role=True))
+                yield sse({"error": {"message": ENCODER_REFUSAL, "type": "BadRequestError",
+                                     "code": 400}})
+                self.completed = True
+                return
             if self.fault == "prefill_stall":
                 async for frame in self._keepalives():
                     yield frame

@@ -74,12 +74,14 @@ def smart_resize(n, height, width, max_pixels, min_pixels=4096, factor=32, tempo
     return h_bar, w_bar
 
 
-def video_tokens(duration_s: float, width: int, height: int) -> int:
+def video_tokens(duration_s: float, width: int, height: int, sampled: int | None = None) -> int:
     """One video item's embedding tokens as vLLM counts them (qwen3_vl.py:936-998):
-    grid_t x grid_h x grid_w / merge^2, with patch 16, merge 2, temporal patch 2."""
+    grid_t x grid_h x grid_w / merge^2, with patch 16, merge 2, temporal patch 2, for the
+    `sampled` frames the processor took (default: the budget's own count)."""
     count = frames(duration_s)
-    h_bar, w_bar = smart_resize(count, height, width, count * PX_PER_FRAME)
-    return math.ceil(count / 2) * (h_bar // 16) * (w_bar // 16) // 4
+    sampled = sampled or count
+    h_bar, w_bar = smart_resize(sampled, height, width, count * PX_PER_FRAME)
+    return math.ceil(sampled / 2) * (h_bar // 16) * (w_bar // 16) // 4
 
 
 def worst_tokens(duration_s: float) -> int:
