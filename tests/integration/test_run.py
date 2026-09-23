@@ -901,6 +901,11 @@ def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
     monkeypatch.setattr(mutants, "run_one", lambda mutant, **_: seen.append(mutant.id)
                         or {"id": mutant.id, "status": "killed"})
     runner.mutation(runner.Report(), layer="1")
+    # Review H3: on the case's own path, never through the code under test's sys.path side
+    # effect, so a stage that skips I3B's list dies at the subset assertion below.
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
     import mutants_i3b
     assert {m.id for m in mutants_i3b.MUTANTS if m.layer == 1} <= set(seen), seen
     copied = tuple(f"{tree}/" for tree in (*mutants.OWNED_TREES, mutants.API_TREE))
