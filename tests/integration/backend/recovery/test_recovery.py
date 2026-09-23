@@ -550,16 +550,15 @@ def test_i3b_rc08_a_drain_releases_in_flight_work_to_the_store_and_keeps_the_que
 def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
     """The same drain driven by SIGTERM to the worker PROCESS, bounded by the unit's
     `TimeoutStopSec`: needs W3's worker entry point (and I2B's unit). Fails the day
-    `infrx.worker` grows one."""
-    import importlib.metadata
+    `infrx.worker` grows one, in any of the shapes a process can start from here: an
+    `infrx.worker.__main__` module (`python -m infrx.worker`), a `main` attribute of the
+    package, or a worker module with an `if __name__ == "__main__":` guard. A console
+    script is not a shape: `infrx-api` is never installed (`[tool.uv] package = false`), so
+    no entry point of it can exist in the environment."""
     import re
 
     import infrx.worker as worker
-    # D3: a `__main__` module, a `main`, a console script into infrx.worker, or any worker
-    # module that runs as a script.
     entry = importlib.util.find_spec("infrx.worker.__main__") or getattr(worker, "main", None) \
-        or [ep.value for ep in importlib.metadata.entry_points(group="console_scripts")
-            if ep.value.startswith("infrx.worker")] \
         or [path.name for path in Path(worker.__file__).parent.glob("*.py")
             if re.search(r"^if __name__ == .__main__.:", path.read_text(), re.M)]
     if entry:
