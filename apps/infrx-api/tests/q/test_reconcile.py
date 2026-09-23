@@ -383,7 +383,7 @@ def test_q3_reconcile__a_dead_candidate_is_removed(adapter):
     w = rig.world(adapter)
 
     async def body():
-        cancelled, running, live = [await rig.admit(w) for _ in range(3)]
+        cancelled, running, live = await rig.admit_in_order(w, 3)     # FIFO below
         await w.rec.drain()
         await w.jobs.cancel(rig.ORG_A, w.jobs.jobs[cancelled].admission.job_handle)
         held = await w.index.claim_candidate("prep", kind=rig.PREP)      # FIFO: cancelled
