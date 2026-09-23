@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:11:46Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:13:49Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>14</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -98,7 +98,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>D2</code> — codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL</li>
 <li><code>A1</code> — codex-a1 / codex/a1-signup-grant — re-confirmation of round 2 at d8a3e84; merge after D2 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight</li>
 <li><code>W3</code> — codex-w3 / codex/w3-drain-pin — confirmation review of fix round at d80c04d; box measurements pending since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run</li>
-<li><code>I2B</code> — codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
+<li><code>I2B</code> — codex-i2b / codex/i2b-deployment — confirmation review of fix round at 0653c8a; merge with/after W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
 <li><code>Q3</code> — codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery</li>
 <li><code>D3</code> — codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2&#x27;s head; leases, reaper, cancellation</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
