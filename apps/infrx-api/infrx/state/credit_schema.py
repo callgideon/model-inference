@@ -63,8 +63,8 @@ SEAMS.update({
 # --- D3 (0016): fenced leases, recovery and cancellation. Same conventions as D2's. Each
 # takes one job row FOR UPDATE, then (when it terminalizes) that job's hold, then its
 # wallet - never a wallet before a job row; `recover` takes job rows SKIP LOCKED, one at a
-# time, so it never waits on one while holding a wallet. `terminalize` is D3's fenced
-# prefix only: past the fence it is D5's stub (0A000).
+# time, so it never waits on one while holding a wallet. `terminalize`'s settlement after
+# the fence is D5's (0018).
 SEAMS.update({
     "infrx.claim(jsonb)": (_SERVICE, ()),                 # 06 boundary, body D3
     "infrx.heartbeat(jsonb)": (_SERVICE, ()),             # 06 boundary, body D3
@@ -84,8 +84,21 @@ SEAMS.update({
     "infrx.journal_usage()": (_SERVICE, ()),
 })
 
+# --- D5 (0018): the settling transaction, the cancel cause, WorkV2's D half and the
+# operator money. `terminalize` takes the job row (the fence, and the replay's read before
+# it), then the job's idempotency row, then its hold, then its wallet - never the admission
+# scope lock; `grant_credit` takes only the wallet; `reconcile` takes the job row, then (in
+# `release_aged_unknown`) its hold and wallet. The money bodies are one per unit (R64).
+SEAMS.update({
+    "infrx.grant_credit(jsonb)": (_SERVICE, ()),         # 06 boundary, body D5
+    "infrx.reconcile(jsonb)": (_SERVICE, ()),
+    "infrx.load_work_credit(jsonb)": (_SERVICE, ()),
+})
+
 #: The admission lock order (0011). Every D writer takes these in this order; a grant
-#: takes only the last; settlement (D5) takes the wallet without the scope lock.
+#: takes only the last; settlement (D5, 0018) takes the idempotency row (the tombstone) and
+#: the wallet - after its job row and hold, which admission never locks - and never the
+#: scope lock.
 LOCK_ORDER = ("pg_advisory_xact_lock(infrx.admission_lock_key())  -- capacity scope",
               "infrx.idempotency (org_id, operation, key)  FOR UPDATE",
               "public.organizations (id)  FOR SHARE",

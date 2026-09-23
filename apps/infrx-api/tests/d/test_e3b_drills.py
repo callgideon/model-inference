@@ -7,6 +7,7 @@ PostgreSQL - integration request).
 
 D4 adds dr05, dr06, dr08 and dr10 below (verbatim bodies; `h.extra["stream"]` is the real
 `PgStreamStore` on the same database - `pgtesting.make_jobstore_factory`'s `stream` hook).
+D5 adds dr07 (the settlement); dr06, dr07 and dr09 all pass.
 """
 from __future__ import annotations
 
@@ -244,4 +245,34 @@ def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole() -> Non
         chunks, _cursor = await h.extra["stream"].read_owned(b.ORG_A, admission.job_handle,
                                                              None)
         assert chunks == ()
+    asyncio.run(body())
+
+
+# D5 adds dr07 (verbatim body from `tests/integration/backend/test_drills.py` on the E3B
+# branch, `codex/e3b-backend-gate` 5e2417b; the rig's `complete` stages the builders' result
+# text through `put_result` first, as a worker does - `pgtesting.WorkerResults`).
+def test_e3b_dr07_a_duplicate_settlement_settles_once() -> None:
+    """DUR-SETTLE / CREDIT-SPEND: the settling commit's answer is lost; the identical retry
+    replays the committed outcome, a different proposal is refused, a late cancel returns
+    the same outcome - one usage projection, one debit, conservation exact."""
+    h = rig()
+
+    async def body():
+        _, admission = await admit(h)
+        lease = await running(h, admission)
+        await h.extra["stream"].append(lease, b.events("answer"))
+        proposal = b.outcome(admission.request_id, h)
+        h.failures.crash_after_commit("complete")
+        with pytest.raises(CrashAfterCommit):
+            await h.port.complete(lease, proposal)
+        first = (await h.port.get_owned(b.ORG_A, admission.job_handle))[1]
+        assert first.settlement_state is SettlementState.settled and first.debit > 0
+        assert await h.port.complete(lease, proposal) == first
+        with pytest.raises(errors.AlreadyTerminal):
+            await h.port.complete(lease, b.outcome(admission.request_id, h,
+                                                   tokens=b.usage(1, 1)))
+        assert await h.port.cancel(b.ORG_A, admission.job_handle) == first
+        assert (await h.port.get_owned(b.ORG_A, admission.job_handle))[1] == first
+        assert usage_projections(h, admission.request_id) == 1
+        await assert_conserved(h, b.ORG_A, [admission.job_handle])
     asyncio.run(body())

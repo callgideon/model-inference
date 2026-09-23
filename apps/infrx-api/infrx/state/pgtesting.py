@@ -297,9 +297,125 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
         plan = FailurePlan()
         extra = hooks(conn, store, stream)
         extra["store"] = store
+        extra["database"] = name
         extra["stream"] = FailingJobStore(stream, plan)
         return Harness(port=FailingJobStore(store, plan), clock=clock, ids=SequentialIds(),
                        failures=plan, extra=extra)
+
+    return factory
+
+
+def seed_credit_world(conn, seed_sql: str) -> None:
+    """The v2 fixture world as rows, on top of `seed` (the CREDIT conformance suite's
+    trusted rows, `contracts/fakes/factories.credit_jobstore_factory`): the operator's Marlin
+    seed (`seed_sql`, the v2 fixtures verbatim), CREDIT admission and the signup grant ON,
+    the consumer individual with the fixture's personal organization and wallet (+10000
+    through A1's grant), the provider's workspace organization and its zero dev wallet, and
+    the two fixture key rows (consumer; provider_dev scoped to the dev endpoint)."""
+    from ..contracts.v2 import fixtures as v2fix
+    ids = v2fix.IDS
+    assert_test_database(conn)
+    conn.execute(seed_sql)
+    for flag in ("credit_admission", "signup_grant"):
+        conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'rig', "
+                     "reason = 'conformance' where name = %s", (flag,))
+    # The fixture's personal organization id: the signup trigger would mint its own, so it
+    # is stepped around for this one insert (test database only) and the rows written.
+    _without_trigger(conn, "auth.users", "on_auth_user_created",
+                     "insert into auth.users (id, email) values (%s, 'consumer@example.com')",
+                     (ids.consumer_user,))
+    conn.execute("insert into public.profiles (id, email) values (%s, 'consumer@example.com')",
+                 (ids.consumer_user,))
+    conn.execute("insert into public.organizations (id, name, slug, created_by) values "
+                 "(%s, 'consumer', 'consumer-fixture', %s)", (ids.consumer_org, ids.consumer_user))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'owner')",
+                 (ids.consumer_org, ids.consumer_user))
+    conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_user_id, "
+                 "personal_org_id) values (%s, 'consumer', %s, %s)",
+                 (ids.consumer_wallet, ids.consumer_user, ids.consumer_org))
+    conn.execute("select * from infrx.grant_signup_credit(%s, 'conformance/verified')",
+                 (ids.consumer_user,))
+    conn.execute("insert into public.organizations (id, name, slug) values (%s, 'provider', "
+                 "'provider-fixture')", (ids.provider_org,))
+    conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_provider_org_id) "
+                 "values (%s, 'provider_dev', %s) on conflict do nothing",
+                 (ids.provider_dev_wallet, ids.provider_org))
+    for name in ("auth_context_consumer.json", "auth_context_provider_dev.json"):
+        register_credential(conn, v2fix.BUILDERS[name]())
+
+
+def register_credential(conn, auth) -> None:
+    """The key row a CREDIT admission reads its audience and identities from (0009): a
+    provider_dev row carries its provider and endpoint and no individual."""
+    provider = auth.audience.value == "provider_dev"
+    conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash, "
+                 "audience, user_id, provider_org_id, endpoint_id) values (%s, %s, %s, 'k', "
+                 "'sk-infrx-conform', %s, %s, %s, %s, %s)",
+                 (auth.key_id, auth.org_id, None if provider else auth.user_id,
+                  f"hash-{auth.key_id}", auth.audience.value, None if provider else auth.user_id,
+                  auth.provider_org_id, auth.endpoint_id))
+
+
+def credit_hooks(conn) -> dict[str, Callable]:
+    """The CREDIT suite's required hooks (`credit_jobstore_cases`), over rows."""
+    def credit_balance(wallet_id: str) -> dict:
+        row = conn.execute("select ledger_total, reserved_total, available from "
+                           "infrx.credit_wallets where wallet_id = %s", (wallet_id,)).fetchone()
+        return {"ledger": row[0], "reserved": row[1], "available": row[2]}
+
+    def credit_grant(wallet_id: str, amount) -> Decimal:
+        """An audited operator movement through D5's `grant_credit` (an allocation to a
+        provider_dev wallet, an adjustment to a consumer one)."""
+        import uuid
+        from psycopg.types.json import Jsonb
+        kind, = conn.execute("select kind from infrx.credit_wallets where wallet_id = %s",
+                             (wallet_id,)).fetchone()
+        conn.execute("select infrx.grant_credit(%s)", (Jsonb({
+            "wallet_id": wallet_id, "amount": money.format_money(money.parse(amount)),
+            "kind": "operator_allocation" if kind == "provider_dev" else "operator_adjustment",
+            "operation_id": str(uuid.uuid4()), "actor": "conformance", "reason": "funding",
+            "at": None}),))
+        return credit_balance(wallet_id)["ledger"]
+
+    def publish_rate_card(card) -> None:
+        """An operator publishing an approved card; a card for a public deployment also gets
+        the catalog listing that points new admissions at it (0007: a new version)."""
+        conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                     "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                     "output_rate_per_million, effective_at, approved_by, provisional) values "
+                     "(%s, %s, %s, %s, %s, %s, %s, %s, false)",
+                     (card.rate_card_version, card.model_id, card.deployment_revision_id,
+                      card.serving_version_id, card.input_rate_per_million.raw("CREDIT"),
+                      card.output_rate_per_million.raw("CREDIT"), card.effective_at,
+                      card.approved_by))
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) select l.public_model_id, l.version + 1, "
+                     "l.model_id, l.deployment_revision_id, l.serving_version_id, %s, "
+                     "infrx.now(), 'conformance' from infrx.catalog_listings l where "
+                     "l.deployment_revision_id = %s order by l.version desc limit 1",
+                     (card.rate_card_version, card.deployment_revision_id))
+
+    return {"credit_balance": credit_balance, "credit_grant": credit_grant,
+            "register_credential": lambda auth: register_credential(conn, auth),
+            "publish_rate_card": publish_rate_card}
+
+
+def make_credit_jobstore_factory(fresh_database: Callable[[], str],
+                                 dsn_for: Callable[[str], str], seed_sql: str,
+                                 **kw: Any) -> Callable[..., Harness]:
+    """The v1 rig in the CREDIT regime: the same `PgJobStore` (and its hooks) on a database
+    that also carries `seed_credit_world`, plus `credit_hooks`."""
+    import psycopg
+    jobs_factory = make_jobstore_factory(fresh_database, dsn_for, **kw)
+
+    def factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+        harness = jobs_factory(limits)
+        conn = psycopg.connect(dsn_for(harness.extra["database"]), autocommit=True)
+        seed_credit_world(conn, seed_sql)
+        harness.extra.update(credit_hooks(conn))
+        harness.extra["credit_conn"] = conn
+        return harness
 
     return factory
 
@@ -318,5 +434,6 @@ def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callabl
     return factory
 
 
-__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "WorkerResults", "hooks",
-           "make_jobstore_factory", "make_streamstore_factory", "seed"]
+__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "WorkerResults", "credit_hooks",
+           "hooks", "make_credit_jobstore_factory", "make_jobstore_factory",
+           "make_streamstore_factory", "register_credential", "seed", "seed_credit_world"]
