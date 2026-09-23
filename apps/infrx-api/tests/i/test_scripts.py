@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tarfile
@@ -50,6 +51,8 @@ elif name == "systemctl":
 elif name == "docker":
     if args[0] == "image":
         print(spec["image"])
+    elif args[0] == "exec" and spec["reload_fails"]:
+        raise SystemExit(1)
     elif args[0] == "inspect":
         if spec["caddy_image"] is None:
             raise SystemExit(1)
@@ -94,7 +97,7 @@ class Host:
 
     def behave(self, **changes):
         spec = {"head": SHA, "dirty": "", "curl_fails": [], "systemctl": {},
-                "image": IMAGE, "caddy_image": None}
+                "image": IMAGE, "caddy_image": None, "reload_fails": False}
         spec.update(changes)
         (self.bin / "behaviour.json").write_text(json.dumps(spec))
 
@@ -223,8 +226,8 @@ def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkey
 def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
         tmp_path, monkeypatch):
     """Pilot order (infra/README.md §7): the index and the engine, then the runtime, then
-    the gateway's and the worker's /readyz, and only then the edge - validated with the
-    pinned Caddy before it is served, with the maintenance site installed beside it."""
+    the gateway's and the worker's /readyz, and only then the edge - both sites, normal
+    and maintenance, validated with the pinned Caddy before either is served."""
     host = Host(tmp_path, monkeypatch)
     done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
     assert done.returncode == 0, done.stderr
@@ -241,8 +244,10 @@ def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
     edge = [i for i, e in enumerate(events) if e.startswith("docker") and "caddy" in e]
     assert edge and min(edge) > ready
     validates = [e for e in host.of("docker") if "caddy validate" in e]
-    assert len(validates) == 1, validates
-    assert "--network none" in validates[0] and "caddy@sha256:" in validates[0]
+    mounted = sorted(re.search(r"-v \S+/(Caddyfile\S*):/etc/caddy/Caddyfile:ro", e).group(1)
+                     for e in validates)
+    assert mounted == ["Caddyfile", "Caddyfile.maintenance"], validates
+    assert all("--network none" in e and "caddy@sha256:" in e for e in validates)
     served = [e for e in host.of("docker") if e.startswith("docker run -d --name caddy")]
     assert len(served) == 1 and "caddy@sha256:" in served[0] and "--network host" in served[0]
     assert host.file("etc/caddy/Caddyfile").read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
@@ -282,10 +287,17 @@ def _pilot_host(tmp_path, monkeypatch) -> Host:
 def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
                                                                        monkeypatch):
     """pause: the active site becomes maintenance (so a Caddy restart keeps it) and is
-    reloaded **before** the runtime stops; resume opens the edge only
-    after /readyz, and a runtime that is not ready keeps maintenance (exit 4)."""
+    reloaded **before** the runtime stops - a reload that fails stops nothing and says the
+    edge is still open (exit 4); resume opens the edge only after /readyz, and a runtime
+    that is not ready keeps maintenance (exit 4)."""
     host = _pilot_host(tmp_path, monkeypatch)
     active = host.file("etc/caddy/Caddyfile")
+    host.behave(caddy_image="running", reload_fails=True)
+    done = host.run("drain.sh", "pause")
+    assert done.returncode == 4 and "still OPEN" in done.stderr
+    assert host.of("systemctl") == []
+    host.behave(caddy_image="running")
+    host.clear()
     assert host.run("drain.sh", "pause").returncode == 0
     assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
     assert host.events == [

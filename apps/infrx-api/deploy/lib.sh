@@ -55,14 +55,18 @@ wait_ready() {
   else wait_http http://127.0.0.1:8001/health "${READY_S:-120}"; fi
 }
 
-# Validate the site with the pinned Caddy, install both sites, and serve the normal one:
+# Validate both sites with the pinned Caddy, install them, and serve the normal one:
 # reload a running edge of the pinned image, or (re)create it. Host network (the box's
 # layout); the directory, not the file, is mounted, so a rename of the active site is
 # visible to a reload. INFRX_SITE is the rehearsal's address; unset on the box.
 edge_install() {
-  local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"})
-  docker run --rm --network none "${site[@]}" -v "$src/Caddyfile:/etc/caddy/Caddyfile:ro" \
-    "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"}) f
+  # Both sites: a maintenance site that does not parse would only surface at drain.sh
+  # pause, whose failed reload leaves the edge open.
+  for f in Caddyfile Caddyfile.maintenance; do
+    docker run --rm --network none "${site[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro" \
+      "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  done
   mkdir -p "$CADDY_DIR/infrx"
   put "$src/Caddyfile" "$CADDY_DIR/infrx/Caddyfile"
   put "$src/Caddyfile.maintenance" "$CADDY_DIR/infrx/Caddyfile.maintenance"

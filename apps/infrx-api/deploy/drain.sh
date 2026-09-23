@@ -21,7 +21,8 @@ case "${1:-}" in
   pause)
     [ -f "$CADDY_DIR/infrx/Caddyfile.maintenance" ] \
       || die "no maintenance site installed (install.sh installs it in pilot mode)" 2
-    caddy_site Caddyfile.maintenance
+    caddy_site Caddyfile.maintenance \
+      || die "the edge did not reload into maintenance: it is still OPEN and admitting; nothing was stopped" 4
     # One call: systemd stops them in reverse start order (the worker is After= the
     # engine and the index, the gateway After= those), each within its TimeoutStopSec.
     systemctl stop $runtime_units
