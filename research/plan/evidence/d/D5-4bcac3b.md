@@ -207,7 +207,7 @@ The task-local environment in every PostgreSQL run is `INFRX_D_TASK=d5 INFRX_D2_
 | 24 | the same, track-first | `c67e4f5` (= `4bcac3b` + evidence) | 19:50:27Z → 20:09:28Z | 1 | `23 failed, 2759 passed, 2 warnings in 1132.05s (0:18:52)`: the same 23, so the order changes nothing | `d5-order-track-first.log` |
 | 25 | full D sweep, Supabase, at the implementation SHA | `4bcac3b` | 20:09:28Z → 20:43:30Z | 1 | `2 failed, 1022 passed, 5 xfailed in 2039.94s (0:33:59)`. The 5 XFAIL are the partitions, and every D5, D1–D4 and A1 mutant was killed. The 2 failures are `test_pgharness.py::test_a_second_concurrent_run_is_refused_and_alters_nothing` and `…::test_a_run_killed_mid_provision_is_cleaned_up_by_the_next_one`: `could not start infrx-d5-dharness-postgres: … failed to bind host port 127.0.0.1:55476/tcp: address already in use`. Another process held the decoy port during the run (the review lanes were running then); it was free again at 20:44Z. Re-run in the fix round | `d5-sweep-supabase-final.log` |
 
-`make integration` was not run: no file under `tests/integration` was touched.
+`make integration` was not run by D5. The reason given here in round 1 ("no file under `tests/integration` was touched") was insufficient: D5's merge flips E3B/I3B tripwires. See integration request 1 (corrected in the fix round); the owner is the E3B phase-3 lane.
 
 ### Mutant kills (rows 20-21)
 
@@ -379,11 +379,17 @@ def settlement_rows() -> list[Check]:
 
 ## Integration requests
 
-1. **Coordinator (merge).**
-   - `tests/integration/test_harness.py` expects the migration list to end at `0018_terminal_settlement.sql`; add that line with the merge.
-   - `make api-mutants` += `tests/d/test_code_mutants_d5.py`.
-   - `TASK_PORTS["d5"]` is already present (postgres 55436, valkey 55467); nothing to add.
-   - `make integration` is not needed for this task: no file under `tests/integration` was edited.
+1. **Coordinator (merge). Restated in the fix round (review H-N7, CF-6, CF-5/H-B1).** D5 merges **together with the E3B phase-3 lane** (`codex/e3b-phase3-bodies`, stacked on D5's `c67e4f5`), never alone. That lane has already applied every merge-time item below as its own commits, so the coordinator applies none of them again:
+   - `tests/integration/test_harness.py`: the migration list ends at `0018_terminal_settlement.sql` (after `0017_stream_journal.sql`). Applied: phase-3 `54d3955`.
+   - Makefile `api-mutants` += `tests/d/test_code_mutants_d5.py`. `tests/d/test_migration_mutants.py` already carries `D5_MUTANTS`. Applied: phase-3 `eb08901`. `TASK_PORTS["d5"]` is present (postgres 55436, valkey 55467).
+   - **The partition conflict** in `tests/d/test_jobstore_conformance.py` (review CF-6): take D5's file whole, so `RAISES` names the F2 case only. The integration head's `75cd7bb` (cancel cause) and `f52308a` (R91 lookup) entries go with their PENDING lines, because both cases are strict on PostgreSQL since 0018. `test_the_pending_list_names_only_real_cases` (`set(RAISES) == set(PENDING)`) refuses a naive union. **Already resolved on this branch**, in merge `c807bb5`. The later merge `493c4ac` (`0bdb61a`: plan, evidence and results only) had no conflict.
+   - **`make integration`: the round-1 line "not needed for this task: no file under `tests/integration` was edited" was WRONG** (review CF-5/H-B1). D5 edits no file there. But 0018 replaces `terminalize`'s `infrx.unimplemented(…, 'D5')` stub, and the integration head's E3B/I3B tripwires are written to fail at that moment. They are, each with the phase-3 commit that answers it:
+     - `tests/integration/backend/test_drills.py` `test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction` (`pytest.fail("terminalize is implemented: write the CREDIT settlement drill body now")`). Its body on `PgJobStore`, with live drills db12/db13 and mutants e3bm59/e3bm60: `934b8d8`.
+     - `tests/integration/backend/recovery/test_recovery.py` `test_i3b_rc04b_settlement_across_a_database_loss_is_pending_on_terminalize`. Its body, with e3bm61: `39f839d`.
+     - `tests/integration/mutants.py` `e3bm15` (killed by the dr07c tripwire). Re-pointed at a layer-1 stub-probe case: `934b8d8`.
+     - `tests/integration/backend/stack.py` `PENDING["D5"]`, and `tests/integration/backend/test_journey.py` `COMMON = ("D5",)` plus `stack.pending("G2-R1", "D5", …)`. Once tasks.json marks D5 merged, `test_stage`'s `test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual` would refuse them. D5 leaves the vocabulary in `934b8d8`; G2-R1 goes in `3037a83`.
+     - The 0018 `pgstate` rows (integration request 8; "pgstate rows for 0018" above): 7 definer and 3 invoker functions, the settled-usage CHECK, the settlement guard, and the three columns per API role. Applied: phase-3 `54d3955`, with row SQL fixed in `edd7a79`. The fix round adds no function, column, CHECK or trigger to 0018; it changes only the bodies of `grant_credit` and `reconcile`. So the rows are unchanged.
+   - `make integration` (layers 0–3) is the phase-3 lane's gate on the merged tree, not D5's. A trial merge of this branch (`493c4ac`) with `origin/codex/e3b-phase3-bodies` `1fa825b`, made on a scratch clone, has **no conflict**. No file under `tests/integration` anchors on 0018 text (grep: only `test_harness.py`'s list line and `pgstate.py`'s function rows name it). That trial tree was not run.
 2. **Coordinator / F (contracts): apply WITH the D5 merge. Otherwise `make api-test` and every contracts mutant are red.**
    - The cancel-cause lane's `tests/contracts/test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record` pins the pre-0018 Python refusal that item 3 deletes. It fails on this branch (quoted).
    - Because the contracts runner's pristine baseline runs the whole list's targets, **every** contracts mutant becomes `broken_runner` (quoted: `debit_rounds_up`, `settles_any_cause`, `the_charge_rounds_up`).
