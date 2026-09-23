@@ -147,7 +147,8 @@ def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
     assert "INFRX_SET=[ENGINE_MAX_NUM_SEQS=16 ]" in done.stdout
     done = cutover(MIGRATION_DIGEST="a" * 64)
     assert done.returncode == 0 and "install INFRX_SET=" in done.stdout
-    for statement in (None, "nothing-pendng", "x", "A" * 64):
+    for statement in (None, "nothing-pendng", "x", "A" * 64, "a" * 63, "a" * 65,
+                      "nothing-pending-x"):
         done = cutover(**({} if statement is None else {"MIGRATION_DIGEST": statement}))
         assert done.returncode != 0 and "install" not in done.stdout, statement
 
