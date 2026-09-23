@@ -60,26 +60,89 @@ def test_backend_journey__dataset_client_resume():
 
 # ------------------------------------------------------------------ provisioning fixture
 
-def test_two_tenants_are_provisioned_with_their_own_resolved_wallets_and_pins():
-    """The fixture the journeys use (v2 fakes until G6B): distinct users, orgs and keys;
-    each wallet is resolved FROM the credential (R66) and the other tenant's wallet is
-    refused rather than used; both pin the same published deployment and rate card."""
-    from infrx.contracts import errors
-    from infrx.contracts.fakes.factories import jobstore_factory
-    from infrx.contracts.v2 import ports
+def test_two_tenants_are_provisioned_with_their_own_resolved_wallets_and_pins(caplog):
+    """API-OPS (R66, R71, R72, R85): the fixture the journeys use, through G6B's `Operations`
+    on the real store - distinct users, orgs and keys; A1's real grant (10,000 CREDIT) read
+    back through `tenant(secret).balance()`; each wallet RESOLVED from the credential and the
+    other tenant's refused; an operator key spends no wallet; both pin the same published
+    deployment; a replayed grant under another idempotency key is the same grant; no secret
+    reaches a log line or an argv."""
+    import logging
 
-    h = jobstore_factory()
-    alpha, beta = stack.provision_two_tenants(h.port, grant="5")
+    from infrx.contracts import errors
+    from infrx.contracts.v2 import ports
+    from infrx.operations import cli
+
+    caplog.set_level(logging.DEBUG)
+    world = stack.provision_two_tenants()
+    alpha, beta = world.alpha, world.beta
     assert len({alpha.user_id, beta.user_id}) == len({alpha.org_id, beta.org_id}) == 2
-    assert alpha.wallet.owner_user_id == alpha.user_id
-    assert alpha.wallet.personal_org_id == alpha.org_id
+    assert alpha.key_id != beta.key_id
+    assert (alpha.wallet.owner_user_id, alpha.wallet.personal_org_id) == (alpha.user_id,
+                                                                          alpha.org_id)
     with pytest.raises(errors.Forbidden):
         ports.resolve_wallet(alpha.auth, beta.wallet)
     assert alpha.pins == beta.pins
-    assert alpha.provisioned_by == "v2-fakes (G6B pending)"
-    for tenant in (alpha, beta):
-        balance = h.extra["balance"](tenant.org_id)
-        assert (balance["ledger"], balance["reserved"]) == (5, 0), balance
+    assert "real: IdentityDirectory=PgSignup" in alpha.provisioned_by
+    assert "fake: TenantStore, AuditLog, Registry, AccountView" in alpha.provisioned_by
+
+    async def checks():
+        for tenant in (alpha, beta):
+            balance = await (await world.ops.tenant(tenant.secret)).balance()
+            assert (str(balance.ledger_total), str(balance.reserved_total)) == (
+                "10000.00000000", "0.00000000"), balance
+        with pytest.raises(errors.Forbidden):
+            await world.ops.tenant(world.operator_secret)
+        return await assert_grant_replays(world, "alpha")
+    stack.asyncio.run(checks())
+    secrets = (alpha.secret, beta.secret, world.operator_secret)
+    assert all(secrets) and not any(secret in caplog.text for secret in secrets)
+    assert not any(secret in repr(tenant) for tenant in (alpha, beta) for secret in secrets)
+    for secret in secrets:
+        with pytest.raises(SystemExit, match="refusing a key on the command line"):
+            cli.refuse_secret_argv(["grant", "--user", alpha.user_id, secret])
+
+
+async def assert_grant_replays(world, name):
+    """R71: a second grant for the same individual under ANOTHER idempotency key reaches the
+    database (the operator's audit dedupe cannot answer it) and is the same grant."""
+    tenant = getattr(world, name)
+    operator = await world.ops.operator(world.operator_secret)
+    again = await operator.grant_initial(tenant.user_id, idempotency_key=f"e3b2-regrant-{name}",
+                                         reason="E3B2 replay drill")
+    balance = await (await world.ops.tenant(tenant.secret)).balance()
+    first = world.grants[name]
+    assert (again["replayed"], again["ledger_operation_id"], str(balance.ledger_total)) == (
+        True, first["ledger_operation_id"], "10000.00000000"), f"R71: not one grant: {again}"
+
+
+def _signup_grant_not_unique() -> None:
+    """The grant's uniqueness dropped, all four layers of it: the entitlement's key, the
+    one-signup-grant-per-wallet ledger index, the replay answer of `claim_signup_grant` and
+    the once-only guard of `grant_signup_credit`."""
+    claim = stack.function_source("public.claim_signup_grant", "uuid, text, uuid")
+    grant = stack.function_source("infrx.grant_signup_credit", "uuid, text, text, uuid")
+    replay = ("if exists (select 1 from infrx.signup_entitlements e\n"
+              "             where e.user_id = p_user_id and e.entitlement = "
+              "'initial_signup_grant') then")
+    once = ("if not exists (select 1 from infrx.signup_entitlements e\n"
+            "                 where e.user_id = p_user_id and e.entitlement = "
+            "'initial_signup_grant') then")
+    assert claim.count(replay) == 1 and grant.count(once) == 1, "0006/0015 moved: stale drill"
+    stack.defect("alter table infrx.signup_entitlements "
+                 "drop constraint signup_entitlements_pkey")
+    stack.defect("drop index infrx.credit_ledger_one_signup_grant_per_wallet")
+    stack.defect(claim.replace(replay, "if false then"))
+    stack.defect(grant.replace(once, "if true then"))
+
+
+def test_e3b_db09_detects_a_signup_grant_that_is_not_unique():
+    """Intentional defect on the REAL store (API-OPS, R71): with the grant's uniqueness
+    dropped on the provisioning clone, the replay case must report a second grant."""
+    world = stack.provision_two_tenants()
+    _signup_grant_not_unique()
+    with pytest.raises(AssertionError, match="R71: not one grant"):
+        stack.asyncio.run(assert_grant_replays(world, "alpha"))
 
 
 def test_an_unknown_pending_id_is_refused():

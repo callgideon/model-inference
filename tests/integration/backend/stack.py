@@ -1,25 +1,28 @@
-"""E3B phase 1: what the backend gate adds on top of E2's layer-2 stack.
+"""E3B: what the backend gate adds on top of E2's layer-2 stack.
 
-E2's `infrx-e2` stack already runs PostgreSQL (migrations 0001-0005), Valkey (the selected
-queue mode, driven through Q2's `ValkeyScheduler`) and S3-compatible storage. The backend
-profile adds the one service it lacks, a pinned **PostgREST** (`backend/compose.yaml`,
-project `infrx-e3b`), attached to E2's network. Nothing here starts a GPU, a Next.js app or
-anything hosted.
+E2's stack (`harness.PROJECT`, `infrx-e2` by default, `infrx-e3b2` for this lane) runs
+PostgreSQL (every migration), Valkey (the selected queue mode, driven through Q2's
+`ValkeyScheduler`) and S3-compatible storage. The backend profile adds the one service it
+lacks, a pinned **PostgREST** (`backend/compose.yaml`, project `PROJECT` below), attached to
+E2's network. Nothing here starts a GPU, a Next.js app or anything hosted.
 
-Three things live here, each small:
+What lives here, each small:
 
-* `PENDING` - the only vocabulary a pending case may use. A case that cannot run today skips
-  with `PENDING[<ids>]`, every id must be a task or P-input of `research/plan`, and
-  `run.py --layer 3` counts those skips as pending, never as passes.
-* `provision_two_tenants` - the two-tenant fixture. **G6B call site**: today it is built on
-  the contracts-v2 fakes (`conformance/v2_fakes.py`) plus the v1 fake JobStore's grant hook;
-  when G6B's operator adapter merges, this one function is what switches to it.
-* `postgrest_*` - lifecycle of `infrx-e3b-postgrest`, ownership by label exactly like E2's.
+* `PENDING`/`RESIDUAL` - the only vocabulary a pending case may use. A case that cannot run
+  today skips with `PENDING[<ids>]`, and `run.py --layer 3` counts those skips as pending,
+  never as passes. `stubbed()` is the per-drill probe of which store functions are stubs.
+* `pg_jobstore()` - the real PostgreSQL JobStore rig (phase 2): `pgtesting`'s factory over a
+  migrated, seeded template on this stack, cloned per call; `defect()` edits a clone only.
+* `credit_world()` / `provision_two_tenants()` - CREDIT individuals through `auth.users` and
+  A1's grant; the two journey tenants through G6B's `Operations` (real ports named in
+  `REAL_PORTS`, G6B's stand-ins for the rest).
+* `postgrest_*` - lifecycle of the PostgREST container, ownership by label exactly like E2's.
 """
 from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import importlib.util
 import itertools
 import json
@@ -27,7 +30,7 @@ import os
 import re
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
@@ -329,11 +332,21 @@ class Tenant:
     user_id: str
     org_id: str
     key_id: str
-    auth: object          # contracts.v2 AuthContextV2 (consumer audience)
+    auth: object          # contracts.v2 AuthContextV2 (consumer audience), from the key row
     auth_v1: object       # contracts v1 AuthContext for the v1 JobStore ports
     wallet: object        # contracts.v2 WalletRef, RESOLVED from the auth context
     pins: object          # contracts.v2 AdmissionPins for the published Marlin deployment
     provisioned_by: str
+    secret: str | None = field(default=None, repr=False)     # revealed once, never logged
+
+
+@dataclass(frozen=True)
+class Provisioned:
+    alpha: Tenant
+    beta: Tenant
+    ops: object                                              # infrx.operations Operations
+    operator_secret: str = field(repr=False)
+    grants: dict = field(default_factory=dict)               # name -> grant_initial result
 
 
 def _uuid(name: str) -> str:
@@ -342,58 +355,132 @@ def _uuid(name: str) -> str:
                          version=4))
 
 
-def provision_two_tenants(jobs=None, *, grant: str = "5") -> tuple[Tenant, Tenant]:
-    """Two consumer tenants, each with a user, a personal org, a scoped key, a wallet
-    resolved from the credential (R66) and admission pins for the public Marlin deployment.
+class _Pool:
+    """What `PgSignup` needs of a psycopg pool - `connection()` - as `service_role` (0004:
+    BYPASSRLS is not inherited, so the role is SET, as PostgREST does). One connection per
+    use. ponytail: no pooling; a drill makes a handful of calls."""
 
-    G6B CALL SITE. The operator adapter does not exist on this base, so identities come
-    from the v2 fakes and are recorded as `provisioned_by = "v2-fakes (G6B pending)"`. The
-    replacement is this function only; the journeys never build a tenant any other way.
+    def __init__(self, dsn: str) -> None:
+        self.dsn = dsn
 
-    `jobs` is a v1 fake JobStore (or, later, the real one): the grant goes through its
-    `grant` hook, the one way a test gives an org balance - never a direct wallet edit.
-    `grant` is in the v1 pilot regime's USD-shaped numbers; CREDIT is D1R's (R64/R65: no
-    conversion exists, so none is attempted here).
-    """
+    @contextlib.asynccontextmanager
+    async def connection(self):
+        import psycopg
+        conn = await psycopg.AsyncConnection.connect(self.dsn, autocommit=True)
+        try:
+            await conn.execute("set role service_role")
+            yield conn
+        finally:
+            await conn.close()
+
+
+class _PgWallets:
+    """`WalletDirectory` as a read of `infrx.credit_wallets` on the real store, so a balance
+    is the one A1's grant actually wrote. Test-local: no product adapter exists on base."""
+
+    def __init__(self, pool: _Pool) -> None:
+        self.pool = pool
+
+    async def consumer_wallet_for_user(self, user_id: str):
+        from infrx.contracts.v2 import records as v2
+        async with self.pool.connection() as conn:
+            row = await (await conn.execute(
+                "select wallet_id::text, personal_org_id::text, ledger_total::text, "
+                "reserved_total::text from infrx.credit_wallets "
+                "where owner_user_id = %s and kind = 'consumer'", (user_id,))).fetchone()
+        return None if row is None else v2.WalletRef(
+            wallet_id=row[0], kind=v2.WalletKind.consumer, owner_user_id=user_id,
+            personal_org_id=row[1], ledger_total=row[2], reserved_total=row[3])
+
+    async def provider_dev_wallet(self, provider_org_id: str):
+        return None
+
+
+def g6b_fakes():
+    """G6B's own stand-ins (`apps/infrx-api/tests/g/ops/fakes.py`) for the ports with no
+    PostgreSQL adapter on base: TenantStore, AuditLog, Registry, AccountView (D5)."""
+    if "e3b2_g6b_fakes" not in sys.modules:           # dataclasses resolve through it
+        spec = importlib.util.spec_from_file_location(
+            "e3b2_g6b_fakes", harness.API_ROOT / "tests" / "g" / "ops" / "fakes.py")
+        sys.modules[spec.name] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sys.modules[spec.name])
+    return sys.modules["e3b2_g6b_fakes"]
+
+
+# Which of G6B's ports are real here; `provisioned_by` repeats it on every tenant.
+REAL_PORTS = ("IdentityDirectory=PgSignup (A1, 0015)", "Ledger.grant_initial=PgSignup",
+              "WalletDirectory=credit_wallets read (test-local)", "JobStore=PgJobStore")
+FAKE_PORTS = ("TenantStore", "AuditLog", "Registry", "AccountView", "CatalogDirectory")
+
+
+def provision_two_tenants() -> Provisioned:
+    """Two consumer tenants through G6B's `Operations` (G6B handback: "E3B.a provisions its two
+    tenants through this CLI" - the CLI has no adapter wired, so its service layer is used),
+    on a fresh clone of this stack's store. Per tenant: a verified individual seeded through
+    `auth.users` (0001's trigger makes the personal organization), then as the operator
+    `grant_initial` under an idempotency key (A1's real grant: 10,000 CREDIT, once) and
+    `issue_key` (a consumer key; G6B refuses a key before a metered wallet exists, so the
+    grant comes first), then `tenant(secret)`: the balance, the wallet resolved from the
+    credential (R66) and the pins a request would be admitted at.
+
+    Real: REAL_PORTS. Fake (G6B's own stand-ins, no PostgreSQL adapter on base, D5):
+    FAKE_PORTS. The operator key is bootstrapped into the fake TenantStore with a secret
+    minted now: the service cannot mint an operator key, by design."""
+    from datetime import datetime, timezone
+
     from infrx.contracts import records as v1
-    from infrx.contracts.conformance import v2_fakes
+    from infrx.contracts.records import Role
     from infrx.contracts.v2 import fixtures as v2fix, ports, records as v2
+    from infrx.contracts.conformance.v2_fakes import fake_v2_harness
+    from infrx.operations import service
+    from infrx.operations.ports import KeyRow
+    from infrx.state.signup import PgSignup
 
-    directory = v2_fakes.fake_v2_harness()
-    tenants = []
-    for name in ("alpha", "beta"):
-        user_id, org_id, key_id = (_uuid(f"{name}/user"), _uuid(f"{name}/org"),
-                                   _uuid(f"{name}/key"))
-        directory.wallets.by_user[user_id] = v2.WalletRef(
-            wallet_id=_uuid(f"{name}/wallet"), kind=v2.WalletKind.consumer,
-            owner_user_id=user_id, personal_org_id=org_id)
-        auth = v2.AuthContextV2(audience=v2.CredentialAudience.consumer, org_id=org_id,
-                                key_id=key_id, principal=key_id, role=v1.Role.owner,
-                                entitlement_version=1, user_id=user_id)
+    h = pg_jobstore()
+    with connect() as conn:
+        enable(conn, "signup_grant")
+        users = {name: seed_individual(conn, name) for name in ("alpha", "beta")}
+    fakes, catalog = g6b_fakes(), fake_v2_harness().catalog
+    pool = _Pool(harness.pg_dsn(current_database()))
+    signup = PgSignup(pool)
+    clock = lambda: datetime.now(timezone.utc)                  # noqa: E731
+    operator_secret = service.new_secret()
+    operator_key = _uuid("operator/key")
+    tenants = fakes.FakeTenants({operator_key: KeyRow(
+        key_id=operator_key, org_id=_uuid("operator/org"),
+        audience=v2.CredentialAudience.operator, key_hash=service.hash_key(operator_secret),
+        prefix=operator_secret[:service.PREFIX_CHARS], name="e3b2 bootstrap operator",
+        role=Role.operator, created_at=clock())})
+    ops = service.Operations(identities=signup, tenants=tenants, ledger=signup,
+                             audit=fakes.FakeAudit(), registry=fakes.FakeRegistry(catalog),
+                             wallets=_PgWallets(pool), catalog=catalog,
+                             jobs=h.extra["store"], accounts=fakes.FakeAccounts(), clock=clock)
+    label = f"G6B Operations; real: {', '.join(REAL_PORTS)}; fake: {', '.join(FAKE_PORTS)}"
 
-        async def resolve(auth=auth):
-            wallet = ports.resolve_wallet(
-                auth, await directory.wallets.consumer_wallet_for_user(auth.user_id))
-            deployment = await directory.catalog.resolve(
-                v2fix.REQUESTED_MODEL, audience=auth.audience, endpoint_id=auth.endpoint_id)
-            pins, _card = ports.pin_admission(
-                auth=auth, requested_model=v2fix.REQUESTED_MODEL, deployment=deployment,
-                serving=await directory.catalog.serving_revision(deployment.serving_version_id),
-                rate_card=await directory.catalog.active_rate_card(
-                    deployment.deployment_revision_id),
-                policy=await directory.catalog.data_access_policy(
-                    deployment.deployment_revision_id))
-            return wallet, pins
+    async def provision():
+        operator = await ops.operator(operator_secret)
+        made, grants = [], {}
+        for name, (user_id, _org) in users.items():
+            grants[name] = await operator.grant_initial(
+                user_id, idempotency_key=f"e3b2-grant-{name}", reason="E3B2 local drill")
+            issued = await operator.issue_key(user_id, f"{name} journey key",
+                                              idempotency_key=f"e3b2-key-{name}",
+                                              reason="E3B2 local drill")
+            session = await ops.tenant(issued.secret)
+            wallet = ports.resolve_wallet(session.auth,
+                                          await ops.wallets.consumer_wallet_for_user(user_id))
+            pins, _card = await session.quote(v2fix.REQUESTED_MODEL)
+            made.append(Tenant(
+                name=name, user_id=user_id, org_id=issued.org_id, key_id=issued.key_id,
+                auth=session.auth,
+                auth_v1=v1.AuthContext(org_id=issued.org_id, key_id=issued.key_id,
+                                       principal=issued.key_id, role=v1.Role.owner,
+                                       entitlement_version=1),
+                wallet=wallet, pins=pins, provisioned_by=label, secret=issued.secret))
+        return made, grants
 
-        wallet, pins = asyncio.run(resolve())
-        if jobs is not None:
-            jobs.grant(org_id, grant)
-        tenants.append(Tenant(
-            name=name, user_id=user_id, org_id=org_id, key_id=key_id, auth=auth,
-            auth_v1=v1.AuthContext(org_id=org_id, key_id=key_id, principal=key_id,
-                                   role=v1.Role.owner, entitlement_version=1),
-            wallet=wallet, pins=pins, provisioned_by="v2-fakes (G6B pending)"))
-    return tenants[0], tenants[1]
+    (alpha, beta), grants = asyncio.run(provision())
+    return Provisioned(alpha, beta, ops, operator_secret, grants)
 
 
 # ------------------------------------------------------------------ PostgREST
