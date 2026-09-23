@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T01:47:51Z",
+  "updated": "2026-09-23T01:52:56Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -65,7 +65,7 @@
     },
     "I3B": {
       "lane": "codex-i3b / codex/i3b-recovery-observe",
-      "phase": "independent review (3-lens workflow) at 48d3bb2",
+      "phase": "fix round (RS-1 restore target guard, RS-2 per-family killable checks) after review of 48d3bb2",
       "since": "2026-09-22T22:40:37Z",
       "note": "metrics/alerts, local recovery drills, runbooks; early start"
     },
