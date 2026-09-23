@@ -24,24 +24,49 @@ create schema if not exists infrx_test;
 
 create table if not exists infrx_test.clock (
   id boolean primary key default true check (id),
-  offset_s interval not null default interval '0'
+  offset_s interval not null default interval '0',
+  -- D2: a frozen instant. NULL (the default) is the wall clock plus the offset; a value
+  -- makes `infrx.now()` exactly `frozen_at + offset_s` in every session and transaction,
+  -- so a conformance case can compare the store's instants with `harness.clock` exactly.
+  frozen_at timestamptz
 );
 insert into infrx_test.clock (id) values (true) on conflict (id) do nothing;
 
 -- `advance(seconds)` matches `FakeClock.advance`; `set_offset` is the absolute form.
+-- plpgsql, one statement each: `update ... returning infrx.now()` would read the clock in
+-- the UPDATE's own snapshot, i.e. before the change it just made.
 create or replace function infrx_test.advance(p_seconds double precision)
-returns timestamptz language sql as $$
-  update infrx_test.clock set offset_s = offset_s + make_interval(secs => p_seconds)
-  where id returning infrx.now();
-$$;
+returns timestamptz language plpgsql as $$
+begin
+  update infrx_test.clock set offset_s = offset_s + make_interval(secs => p_seconds) where id;
+  return infrx.now();
+end $$;
 
 create or replace function infrx_test.set_offset(p_seconds double precision)
-returns timestamptz language sql as $$
-  update infrx_test.clock set offset_s = make_interval(secs => p_seconds)
-  where id returning infrx.now();
-$$;
+returns timestamptz language plpgsql as $$
+begin
+  update infrx_test.clock set offset_s = make_interval(secs => p_seconds) where id;
+  return infrx.now();
+end $$;
+
+-- `freeze(at)` stops the clock at `at` (offset reset); `unfreeze()` returns to the wall.
+create or replace function infrx_test.freeze(p_at timestamptz)
+returns timestamptz language plpgsql as $$
+begin
+  update infrx_test.clock set frozen_at = p_at, offset_s = interval '0' where id;
+  return infrx.now();
+end $$;
+
+create or replace function infrx_test.unfreeze()
+returns timestamptz language plpgsql as $$
+begin
+  update infrx_test.clock set frozen_at = null where id;
+  return infrx.now();
+end $$;
 
 grant usage on schema infrx_test to service_role;
 grant select, update on infrx_test.clock to service_role;
 grant execute on function infrx_test.advance(double precision) to service_role;
 grant execute on function infrx_test.set_offset(double precision) to service_role;
+grant execute on function infrx_test.freeze(timestamptz) to service_role;
+grant execute on function infrx_test.unfreeze() to service_role;

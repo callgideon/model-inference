@@ -17,6 +17,12 @@
 -- Feature enablement is separate from application (item 5): this file creates the flags
 -- with CREDIT admission and the signup grant OFF. Until an operator enables them the
 -- CREDIT paths refuse with SQLSTATE 55000 ("maintenance") - never an unmetered success.
+--
+-- D2 amendment 2026-09-22 (in place: 0006-0009 are applied to no hosted project; D1R review
+-- follow-up (a)): `jobs_admission_guard` makes R70 a database invariant - a consumer
+-- wallet spends only on a deployment that is public AND active - and checks a provider_dev
+-- job's organization and key against the deployment's provider. Its CREDIT half is its own
+-- function, so no body reads a USD and a CREDIT relation together (R64/R65).
 
 -- ============================================================== feature flags ===
 create table if not exists infrx.feature_flags (
@@ -279,29 +285,53 @@ create or replace trigger jobs_pins_guard before update on infrx.jobs
 
 -- Admission is honoured only in an enabled regime (maintenance refusal otherwise), and a
 -- CREDIT job spends only a wallet its admission may reach (R66): an individual's wallet
--- through their personal organization, or a provider's dev wallet on that provider's own
--- dev deployment. The registry relations are 0007's; plpgsql resolves them at call time.
-create or replace function infrx.jobs_admission_guard() returns trigger
+-- through their personal organization on a public, active deployment (R70), or a
+-- provider's dev wallet on that provider's own dev deployment, through that provider's
+-- provider_dev key. The registry relations and `api_keys.audience` are 0007's and 0009's;
+-- plpgsql resolves them at call time.
+create or replace function infrx.jobs_credit_admission_guard(j infrx.jobs) returns void
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   w infrx.credit_wallets%rowtype;
 begin
-  if new.accounting_regime = 'legacy_usd' then
-    perform infrx.require_feature('legacy_usd_admission');
-    return new;
-  end if;
   perform infrx.require_feature('credit_admission');
-  select * into w from infrx.credit_wallets where wallet_id = new.wallet_id;
-  if w.kind = 'consumer' and w.personal_org_id is distinct from new.org_id then
-    raise exception 'job %: wallet % is not funded through organization %',
-      new.request_id, new.wallet_id, new.org_id using errcode = '23514';
+  select * into w from infrx.credit_wallets where wallet_id = j.wallet_id;
+  if w.kind = 'consumer' then
+    if w.personal_org_id is distinct from j.org_id then
+      raise exception 'job %: wallet % is not funded through organization %',
+        j.request_id, j.wallet_id, j.org_id using errcode = '23514';
+    end if;
+    if not exists (select 1 from infrx.deployment_revisions d
+                   where d.deployment_revision_id = j.deployment_revision_id
+                     and d.visibility = 'public' and d.state = 'active') then
+      raise exception 'job %: a consumer wallet spends only on a public, active deployment',
+        j.request_id using errcode = '23514';
+    end if;
+  elsif w.kind = 'provider_dev' then
+    if not exists (select 1 from infrx.deployment_revisions d
+                   where d.deployment_revision_id = j.deployment_revision_id
+                     and d.provider_org_id = w.owner_provider_org_id
+                     and d.environment = 'dev') then
+      raise exception 'job %: a provider_dev wallet funds only its own dev deployments',
+        j.request_id using errcode = '23514';
+    end if;
+    if not exists (select 1 from public.api_keys k
+                   where k.id = j.key_id and k.org_id = j.org_id
+                     and k.audience = 'provider_dev'
+                     and k.provider_org_id = w.owner_provider_org_id) then
+      raise exception 'job %: a provider_dev job is admitted through its provider''s own '
+        'provider_dev key', j.request_id using errcode = '23514';
+    end if;
   end if;
-  if w.kind = 'provider_dev' and not exists (
-       select 1 from infrx.deployment_revisions d
-       where d.deployment_revision_id = new.deployment_revision_id
-         and d.provider_org_id = w.owner_provider_org_id and d.environment = 'dev') then
-    raise exception 'job %: a provider_dev wallet funds only its own dev deployments',
-      new.request_id using errcode = '23514';
+end $$;
+
+create or replace function infrx.jobs_admission_guard() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  if new.accounting_regime = 'credit' then
+    perform infrx.jobs_credit_admission_guard(new);
+  else
+    perform infrx.require_feature('legacy_usd_admission');
   end if;
   return new;
 end $$;
@@ -452,6 +482,8 @@ revoke all on function infrx.credit_wallets_guard() from public, anon, authentic
 revoke all on function infrx.credit_ledger_moves_wallet() from public, anon, authenticated;
 revoke all on function infrx.jobs_pins_guard() from public, anon, authenticated;
 revoke all on function infrx.jobs_admission_guard() from public, anon, authenticated;
+revoke all on function infrx.jobs_credit_admission_guard(infrx.jobs)
+  from public, anon, authenticated, service_role;
 revoke all on function infrx.credit_wallet_holds_moves_wallet()
   from public, anon, authenticated;
 

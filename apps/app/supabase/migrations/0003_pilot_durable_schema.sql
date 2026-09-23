@@ -15,6 +15,12 @@
 -- Money is numeric(20,8) everywhere (08 §4/R11: scale 1e-8, |value| < 10^12).
 -- Timestamps are taken from `infrx.now()` (R7: the database clock, movable only in a
 -- task-local test database - see infrx/state/test_clock.sql).
+--
+-- D2 amendment 2026-09-22 (in place; 0003 is applied to no hosted project - hosted carries 0001-0002
+-- only, D1R evidence Limits 1): `infrx.now()` also honours a test-only FROZEN instant
+-- (`infrx_test.clock.frozen_at`), behind the same two barriers as the offset. The
+-- conformance cases compare instants exactly (R29's clamp is `min(caller, db_now +
+-- budgets)`), which a clock that keeps moving between two statements cannot satisfy.
 
 create schema if not exists infrx;
 
@@ -27,16 +33,18 @@ create or replace function infrx.now() returns timestamptz
 language plpgsql stable security definer set search_path = infrx, public, pg_temp as $$
 declare
   v_offset interval := interval '0';
+  v_frozen timestamptz;
 begin
   -- Production short-circuits here: no subtransaction, no lookup, just now().
   if current_database() like 'infrx@_%' escape '@' then
     begin
-      select coalesce(max(offset_s), interval '0') into v_offset from infrx_test.clock;
-    exception when undefined_table or invalid_schema_name then
+      select coalesce(max(offset_s), interval '0'), max(frozen_at)
+        into v_offset, v_frozen from infrx_test.clock;
+    exception when undefined_table or invalid_schema_name or undefined_column then
       v_offset := interval '0';
     end;
   end if;
-  return now() + v_offset;
+  return coalesce(v_frozen, now()) + v_offset;
 end $$;
 
 comment on function infrx.now() is

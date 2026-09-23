@@ -25,7 +25,8 @@ from infrx.state import migrations
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Outcome
-from . import checks, checks_credit, pgharness
+from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_media,
+               pgharness)
 
 SCHEMA = "0003_pilot_durable_schema.sql"
 ROLES = "0004_pilot_roles_and_rpcs.sql"
@@ -35,6 +36,12 @@ CREDIT = "0006_credit_accounting.sql"
 REGISTRY = "0007_provider_registry.sql"
 SURFACE = "0008_credit_read_surface.sql"
 OPS = "0009_operator_seams.sql"
+# D2
+MEDIA = "0010_media_uploads.sql"
+ADMISSION = "0011_admission.sql"
+DISPATCH = "0012_dispatch_outbox.sql"
+GC = "0013_outbox_gc.sql"
+RESULTS = "0014_job_results.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -830,13 +837,36 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "     or new.rate_card_version is distinct from old.rate_card_version\n", "",
        "credit", "credit_admission", "a queued job moves to a newly published rate (R78)"),
     _m("d1r_wallet_not_the_admissions", CREDIT,
-       "  if w.kind = 'consumer' and w.personal_org_id is distinct from new.org_id then",
-       "  if false then", "credit", "credit_admission",
+       "    if w.personal_org_id is distinct from j.org_id then",
+       "    if false then", "credit", "credit_admission",
        "one organization's request spends another individual's wallet (R66)"),
     _m("d1r_dev_budget_pays_for_prod", CREDIT,
-       "  if w.kind = 'provider_dev' and not exists (",
-       "  if false and not exists (", "credit", "credit_admission",
-       "internal preview credit pays for public production traffic"),
+       "                     and d.environment = 'dev') then",
+       "                     and d.environment = 'dev') and false then", "credit",
+       "credit_admission", "internal preview credit pays for public production traffic"),
+    # D2 (D1R review (a)): R70 and the provider_dev key are database invariants.
+    # D1R review (b): a unit-mixing body and a narrowed CREDIT column.
+    _m("d2_usd_statement_reads_credit", SURFACE,
+       "  from public.credit_ledger l where l.org_id = p_org;",
+       "  from public.credit_ledger l where l.org_id = p_org\n"
+       "    and not exists (select 1 from infrx.credit_wallets);",
+       "credit", "no_unit_conversion",
+       "a USD statement consults CREDIT wallets - the first step to a combined total"),
+    _m("d2_credit_ledger_rounds_to_cents", CREDIT,
+       "  amount numeric(20,8) not null check (amount <> 0),",
+       "  amount numeric(20,2) not null check (amount <> 0),",
+       "credit", "money_unit_cases", "every CREDIT ledger amount is rounded to 1e-2"),
+    _m("d2_consumer_spends_on_a_private_deployment", CREDIT,
+       "                     and d.visibility = 'public' and d.state = 'active') then",
+       "                     and true) then", "credit", "credit_admission",
+       "a consumer wallet pays for a private dev or retired deployment (R70)"),
+    # (Equivalent, so not listed: dropping `k.audience = 'provider_dev'` alone - 0009's
+    # `api_keys_audience_identity` lets only a provider_dev key carry a provider_org_id,
+    # so the provider match below already refuses a consumer or operator key.)
+    _m("d2_provider_job_through_another_providers_key", CREDIT,
+       "\n                     and k.provider_org_id = w.owner_provider_org_id) then",
+       ") then", "credit", "credit_admission",
+       "one provider's preview key spends another provider's budget (M5)"),
     _m("d1r_credit_admission_ignores_flag", CREDIT,
        "  perform infrx.require_feature('credit_admission');\n  select * into w",
        "  select * into w", "credit", "fail_closed",
@@ -1151,16 +1181,481 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D1R_MUTANTS
 
 
-def _mutate(directory: Path, mutant: Mutant) -> None:
+#: D2 (0010-0014, scenario "admission": every migration, the frozen clock and
+#: `checks_admission.seed_admission`). One per claimed invariant.
+_DEADLINE_BLOCK = ("  if v_now >= j.preparation_deadline_at then\n"
+                   "    perform infrx.terminalize_unstarted(j.request_id, 'preparation_failed');\n"
+                   "    return jsonb_build_object('refusal', jsonb_build_object('code', "
+                   "'already_terminal',\n"
+                   "      'detail', 'job ' || j.request_id || ' passed its preparation deadline'));\n"
+                   "  end if;\n")
+D2_MUTANTS: tuple[Mutant, ...] = (
+    # --- 0011: admission --------------------------------------------------------------
+    _m("d2_replay_ignores_the_payload", ADMISSION,
+       "  if i.payload_digest <> p_idem->>'payload_hash' then", "  if false then",
+       "admission", "admission_idempotency", "a changed body replays another request's job"),
+    _m("d2_tombstone_expires_a_tick_late", ADMISSION,
+       "  if v_expires is not null and p_now >= v_expires then",
+       "  if v_expires is not null and p_now > v_expires then",
+       "admission", "admission_idempotency", "a key replays past its 24 h tombstone"),
+    _m("d2_tombstone_runs_from_admission", ADMISSION,
+       "  select coalesce(i.expires_at, j.settled_at + make_interval(secs => p_ttl_s))",
+       "  select coalesce(i.expires_at, j.admitted_at + make_interval(secs => p_ttl_s))",
+       "admission", "admission_idempotency",
+       "a long job's retry mints a second billable job (01: active mappings never expire)"),
+    _m("d2_readmits_a_request_uuid", ADMISSION,
+       "  if exists (select 1 from infrx.jobs where request_id = (r->>'request_id')::uuid) then",
+       "  if false then", "admission", "admission_idempotency",
+       "R6: a retry without its key is a 500, not a typed 409", occurrences=2),
+    _m("d2_revoked_key_admitted", ADMISSION,
+       "   where k.id = v_key and k.org_id = v_org and k.revoked_at is null",
+       "   where k.id = v_key and k.org_id = v_org",
+       "admission", "admission_refusals", "a revoked key buys one more billable job"),
+    _m("d2_foreign_key_admitted", ADMISSION,
+       "   where k.id = v_key and k.org_id = v_org and k.revoked_at is null",
+       "   where k.id = v_key and k.revoked_at is null",
+       "admission", "admission_refusals", "another organization's key admits into this one"),
+    _m("d2_suspension_ignored", ADMISSION, "  if v_suspended then", "  if false then",
+       "admission", "admission_refusals", "a suspended organization keeps admitting (R33)"),
+    _m("d2_entitlement_ignored", ADMISSION,
+       "  if not infrx.is_entitled(v_org, p_model) then", "  if false then",
+       "admission", "admission_refusals", "a withdrawn model keeps being served (R10)"),
+    _m("d2_deadline_at_the_store_clock_admitted", ADMISSION,
+       "  if v_deadline is null or v_deadline <= p_now then",
+       "  if v_deadline is null or v_deadline < p_now then",
+       "admission", "admission_refusals", "a job nothing may ever run is accepted (R29)"),
+    _m("d2_r29_ceiling_on_gateway_clock", ADMISSION,
+       "  v_ceiling := p_now + make_interval(",
+       "  v_ceiling := (p_request->>'created_at')::timestamptz + make_interval(",
+       "admission", "admission_accepts",
+       "a gateway clock running ahead buys a horizon the store cannot keep (R29, R-3)"),
+    _m("d2_r29_refusal_on_gateway_clock", ADMISSION,
+       "  if v_deadline is null or v_deadline <= p_now then",
+       "  if v_deadline is null or v_deadline <= (p_request->>'created_at')::timestamptz then",
+       "admission", "admission_refusals",
+       "a deadline already past on the store clock is admitted because the gateway says not"),
+    _m("d2_deadline_not_clamped", ADMISSION,
+       "  v_deadline := least(v_deadline, v_ceiling);", "  v_deadline := v_deadline;",
+       "admission", "admission_accepts",
+       "a caller's far horizon pins a hold and capacity for as long as it likes (R79)"),
+    _m("d2_output_ceiling_unbounded", ADMISSION,
+       "  if v_out is null or v_out < 1 or v_out > (p_limits->>'max_output_tokens')::int then",
+       "  if v_out is null or v_out < 1 then",
+       "admission", "admission_refusals", "a request past MAX_OUTPUT_TOKENS is admitted (R55)"),
+    _m("d2_zero_input_ceiling_admitted", ADMISSION,
+       "  if v_in is null or v_in < 1 then", "  if v_in is null then",
+       "admission", "admission_refusals", "a zero input ceiling reaches the table as a 500"),
+    _m("d2_context_unbounded", ADMISSION,
+       "  if v_in + v_out > (p_limits->>'max_context_tokens')::int then", "  if false then",
+       "admission", "admission_refusals", "a reserved envelope the model cannot keep (R55)"),
+    _m("d2_total_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs')::int then", "  if false then",
+       "admission", "admission_capacity", "the platform-wide cap is oversubscribed"),
+    _m("d2_org_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs_per_org')::int then", "  if false then",
+       "admission", "admission_capacity", "one organization takes every slot"),
+    _m("d2_key_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs_per_key')::int then", "  if false then",
+       "admission", "admission_capacity", "one key takes every slot"),
+    _m("d2_preparation_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_preparing_jobs')::int then", "  if false then",
+       "admission", "admission_capacity", "preparation is oversubscribed (R1)"),
+    _m("d2_journal_budget_unbounded", ADMISSION,
+       "  if infrx.journal_bytes_charged() + v_reserve > (p_limits->>'journal_total_bytes')"
+       "::bigint then", "  if false then",
+       "admission", "admission_capacity", "the journal disk is oversubscribed"),
+    _m("d2_admission_takes_another_tenants_media", ADMISSION,
+       "             where (m->>'org_id')::uuid is distinct from v_org) then",
+       "             where false) then",
+       "admission", "admission_refusals", "a request carries another tenant's media (R55)"),
+    _m("d2_withdrawn_price_still_charged", ADMISSION,
+       "     and (pv.effective_to is null or pv.effective_to > v_now)", "",
+       "admission", "admission_refusals", "a withdrawn price keeps admitting (R45)"),
+    _m("d2_hold_rounds_to_nearest", ADMISSION,
+       "  select (ceil((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
+       "  select (round((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
+       "admission", "admission_accepts", "a hold smaller than the reserved envelope (R53, §4)"),
+    _m("d2_usd_balance_unchecked", ADMISSION,
+       "  if v_hold > coalesce(v_available, 0) then", "  if false then",
+       "admission", "admission_refusals", "a hold past the available balance (DUR-CAP)"),
+    _m("d2_usd_hold_reserves_nothing", ADMISSION,
+       "  update infrx.wallets set reserved_total = reserved_total + v_hold, "
+       "revision = revision + 1,",
+       "  update infrx.wallets set reserved_total = reserved_total + 0, "
+       "revision = revision + 1,",
+       "admission", "admission_accepts", "two jobs reserve the same credit"),
+    _m("d2_usd_hold_row_missing", ADMISSION,
+       "  values (j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now);",
+       "  select j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now where false;",
+       "admission", "admission_accepts", "an acceptance without its hold (DUR-ADMIT)"),
+    _m("d2_admission_without_prepare_dispatch", ADMISSION,
+       "  values (gen_random_uuid(), v_id, v_org, 'prepare_dispatch',",
+       "  values (gen_random_uuid(), v_id, v_org, 'inference_dispatch',",
+       "admission", "admission_accepts", "an accepted job nothing ever dispatches"),
+    _m("d2_admission_without_mapping", ADMISSION,
+       "  if p_idem->>'key' is not null then\n    insert into infrx.idempotency",
+       "  if false then\n    insert into infrx.idempotency",
+       "admission", "admission_accepts", "a retried request becomes a second billable job"),
+    _m("d2_credit_wallet_reached_through_any_org", ADMISSION,
+       "  if w.personal_org_id is distinct from (r->>'org_id')::uuid then", "  if false then",
+       "admission", "admission_refusals",
+       "an individual's wallet is spent through another organization (R66)"),
+    _m("d2_zero_credit_hold_written", ADMISSION,
+       "  if v_hold <= 0 then\n    perform infrx.refuse('invalid_request', 'a zero hold would",
+       "  if false then\n    perform infrx.refuse('invalid_request', 'a zero hold would",
+       "admission", "admission_refusals", "a zero hold meters nothing (D1R review (d))"),
+    # --- review SEC-3: nobody executes a helper -------------------------------------------
+    _m("helpers_executable_by_service_role", ADMISSION,
+       "    execute format('revoke all on function %s from public, anon, authenticated, "
+       "service_role',", "    execute format('revoke all on function %s from public, anon, "
+       "authenticated',", "admission", "d2_function_privileges",
+       "the platform role can call admit_credit with a caller-chosen regime or skip admit's "
+       "checks by calling a helper"),
+    _m("dispatch_helpers_executable_by_service_role", DISPATCH,
+       "    execute format('revoke all on function %s from public, anon, authenticated, "
+       "service_role',", "    execute format('revoke all on function %s from public, anon, "
+       "authenticated',", "admission", "d2_function_privileges",
+       "the platform role can terminalize or release holds outside any fence"),
+    _m("credit_guard_executable_by_service_role", CREDIT,
+       "revoke all on function infrx.jobs_credit_admission_guard(infrx.jobs)\n"
+       "  from public, anon, authenticated, service_role;",
+       "revoke all on function infrx.jobs_credit_admission_guard(infrx.jobs)\n"
+       "  from public, anon, authenticated;", "admission", "d2_function_privileges",
+       "the platform role probes wallets through the admission guard"),
+    # --- the review's fold-ins (M2-M7) ------------------------------------------------
+    _m("d2_usd_hold_checked_against_the_ledger", ADMISSION,
+       "  select w.available into v_available from infrx.wallets w",
+       "  select w.ledger_total into v_available from infrx.wallets w",
+       "admission", "admission_refusals",
+       "two holds reserve the same USD credit (DUR-CAP: available, not the ledger)"),
+    _m("d2_zero_usd_hold_written", ADMISSION,
+       "  if v_hold <= 0 then\n    perform infrx.refuse('invalid_request', 'a zero USD hold",
+       "  if false then\n    perform infrx.refuse('invalid_request', 'a zero USD hold",
+       "admission", "admission_refusals", "a zero USD hold meters nothing (M3)"),
+    _m("d2_usd_operator_key_admitted", ADMISSION, "  if v_audience = 'operator' then",
+       "  if false then", "admission", "admission_refusals",
+       "an operator credential buys USD inference (M4)"),
+    _m("d2_usd_provider_key_admitted", ADMISSION, "  if v_audience <> 'consumer' then",
+       "  if false then", "admission", "admission_refusals",
+       "a provider preview key buys public USD inference (M4)"),
+    _m("d2_wallet_of_the_keys_creator", ADMISSION,
+       "  select a.audience, coalesce(a.user_id, a.created_by) as user_id into k",
+       "  select a.audience, coalesce(a.created_by, a.user_id) as user_id into k",
+       "admission", "admission_accepts", "a key's creator pays for its individual (M6, R66)"),
+    _m("d2_replay_across_regimes", ADMISSION,
+       "  if v_regime is distinct from p_regime then", "  if false then",
+       "admission", "admission_idempotency", "a CREDIT caller is answered a USD job (M7)"),
+    _m("d2_usd_hold_equal_to_available_refused", ADMISSION,
+       "  if v_hold > coalesce(v_available, 0) then", "  if v_hold >= coalesce(v_available, 0) then",
+       "admission", "admission_accepts", "the last affordable USD request is refused (MC-3)"),
+    _m("d2_usd_hold_loosened_one_unit", ADMISSION,
+       "  if v_hold > coalesce(v_available, 0) then",
+       "  if v_hold > coalesce(v_available, 0) + 0.00000001 then",
+       "admission", "admission_refusals",
+       "a USD hold one unit past the available balance is admitted (MC-3b)"),
+    _m("d2_credit_hold_equal_to_available_refused", ADMISSION,
+       "  if v_hold > w.available then", "  if v_hold >= w.available then",
+       "admission", "admission_accepts", "the last affordable CREDIT request is refused (MC-3)"),
+    _m("d2_credit_provider_key_admitted", ADMISSION, "  if k.audience <> 'consumer' then",
+       "  if false then", "admission", "admission_refusals",
+       "a provider_dev key spends its creator's consumer wallet on public inference (MC-1)"),
+    _m("d2_operator_key_spends_a_wallet", ADMISSION,
+       "  if k.audience = 'operator' then", "  if false then",
+       "admission", "admission_refusals", "an operator credential spends a wallet (R66)"),
+    _m("d2_credit_ceilings_past_the_deployment", ADMISSION,
+       "  if (r->>'max_input_tokens')::int > pin.max_input_tokens\n"
+       "     or (r->>'max_output_tokens')::int > pin.max_output_tokens then",
+       "  if false then", "admission", "admission_refusals",
+       "a request past the deployment's validated limits is admitted"),
+    _m("d2_idempotency_scope_of_another_org", ADMISSION,
+       "  if p_args->'idem'->>'org_id' is distinct from p_args->'request'->>'org_id' then",
+       "  if false then", "admission", "admission_refusals",
+       "one tenant's scope answers another's request (R10)"),
+    _m("d2_admitted_request_rewritable", ADMISSION,
+       "  if new.request_record is distinct from old.request_record\n     or ",
+       "  if ", "admission", "admission_accepts",
+       "the request a worker loads is not the one that was priced (R53)"),
+    _m("d2_admission_lock_dropped", ADMISSION,
+       "  perform pg_advisory_xact_lock(infrx.admission_lock_key());\n", "",
+       "admission", "admission_concurrency",
+       "concurrent admissions count capacity from stale snapshots and oversubscribe"),
+    # --- 0012: preparation and the relay --------------------------------------------
+    _m("d2_claim_preparation_unlocked", DISPATCH,
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid for update;",
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid;",
+       "admission", "preparation_claim_race",
+       "two workers race one preparing job to a duplicate-key error (OB-6b)"),
+    _m("d2_prepare_any_generation", DISPATCH,
+       "  if a.generation is distinct from (l->>'generation')::int then", "  if false then",
+       "admission", "prepare_transition", "a superseded preparation worker queues the job"),
+    _m("d2_prepare_any_worker", DISPATCH,
+       "  if a.worker_id is distinct from l->>'worker_id' then", "  if false then",
+       "admission", "prepare_transition", "a foreign worker queues the job"),
+    _m("d2_prepare_any_kind", DISPATCH,
+       "  if l->>'kind' is distinct from 'preparation' then", "  if false then",
+       "admission", "prepare_transition", "an inference token fences preparation (R46)"),
+    _m("d2_prepare_on_an_expired_lease", DISPATCH,
+       "  if v_now >= a.expires_at then\n    perform infrx.refuse('stale_lease', "
+       "'preparation lease expired at '",
+       "  if false then\n    perform infrx.refuse('stale_lease', 'preparation lease expired at '",
+       "admission", "prepare_transition", "a lost preparation worker still queues the job"),
+    _m("d2_prepare_stores_another_tenants_media", DISPATCH,
+       "             where (m->>'org_id')::uuid is distinct from j.org_id) then",
+       "             where false) then", "admission", "prepare_transition",
+       "another tenant's prepared content is filed under this job (R10)"),
+    _m("d2_late_prepared_not_terminalized", DISPATCH,
+       _DEADLINE_BLOCK + "  if v_now >= a.expires_at then",
+       _DEADLINE_BLOCK.replace("  if v_now >= j", "  if false and v_now >= j", 1)
+       + "  if v_now >= a.expires_at then", "admission", "preparation_deadline",
+       "a late preparation worker leaves the job preparing with its hold (R29/R55)"),
+    _m("d2_late_claim_not_terminalized", DISPATCH,
+       _DEADLINE_BLOCK + "  select * into a from infrx.attempts",
+       _DEADLINE_BLOCK.replace("  if v_now >= j", "  if false and v_now >= j", 1)
+       + "  select * into a from infrx.attempts", "admission", "preparation_deadline",
+       "a job past its preparation phase is claimed again (R29)"),
+    _m("d2_two_live_preparation_leases", DISPATCH,
+       "  if found and v_now < a.expires_at then", "  if false then",
+       "admission", "prepare_transition", "two preparation workers own one job"),
+    _m("d2_unbounded_preparation_retries", DISPATCH,
+       "  if j.preparation_attempts > (p_args->'limits'->>'max_prepublication_retries')::int "
+       "then", "  if false then", "admission", "preparation_deadline",
+       "a job is retried for ever below its deadline (R46)"),
+    _m("d2_terminalize_keeps_the_usd_reservation", DISPATCH,
+       "    update infrx.wallets set reserved_total = reserved_total - h.amount,",
+       "    update infrx.wallets set reserved_total = reserved_total - 0,",
+       "admission", "preparation_deadline", "a failed job's credit stays reserved for ever"),
+    _m("d2_terminalize_keeps_the_credit_hold", DISPATCH,
+       "   where request_id = p_request_id and state in ('held', 'unknown');",
+       "   where request_id = p_request_id and false;",
+       "admission", "credit_terminalization", "a failed CREDIT job's hold is never released"),
+    _m("d2_terminalize_keeps_reservations", DISPATCH,
+       "   where request_id = p_request_id and active;", "   where request_id = p_request_id "
+       "and false;", "admission", "preparation_deadline", "a dead job pins capacity"),
+    _m("d2_prepare_keeps_the_preparation_unit", DISPATCH,
+       "   where request_id = j.request_id and kind = 'preparation' and active;",
+       "   where request_id = j.request_id and false;",
+       "admission", "prepare_transition", "a queued job still blocks preparation (R1)"),
+    _m("d2_prepare_without_inference_dispatch", DISPATCH,
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'inference_dispatch',",
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'usage_projection',",
+       "admission", "prepare_transition", "a queued job no worker ever hears of"),
+    _m("d2_queue_deadline_past_the_budget", DISPATCH,
+       "queue_deadline_at = least(v_now + make_interval(secs => v_remaining),",
+       "queue_deadline_at = greatest(v_now + make_interval(secs => v_remaining),",
+       "admission", "prepare_transition", "a job waits past its queue budget (R38)"),
+    _m("d2_redelivered_inside_the_window", DISPATCH,
+       "       and (o.claimed_at is null or o.claimed_at <= v_now - make_interval(",
+       "       and (true or o.claimed_at <= v_now - make_interval(",
+       "admission", "dispatch_relay", "every pump re-sends what it just sent"),
+    _m("d2_superseded_rows_dispatched", DISPATCH,
+       "    if infrx.dispatch_wanted((r.ev).kind, (r.job).state) then", "    if true then",
+       "admission", "dispatch_relay", "a stale prepare_dispatch reaches a preparation pool"),
+    _m("d2_acknowledgment_not_recorded", DISPATCH,
+       "    update infrx.outbox set acknowledged_at = infrx.now()\n     where event_id in",
+       "    update infrx.outbox set acknowledged_at = null\n     where event_id in",
+       "admission", "dispatch_relay", "an acknowledged row is delivered for ever"),
+    _m("d2_pending_for_no_worker", DISPATCH,
+       "  if p_args->>'worker_id' is null or length(btrim(p_args->>'worker_id')) = 0 then\n"
+       "    perform infrx.refuse('invalid_request', 'a worker id is required');\n"
+       "  end if;\n  for r in",
+       "  if false then\n"
+       "    perform infrx.refuse('invalid_request', 'a worker id is required');\n"
+       "  end if;\n  for r in",
+       "admission", "dispatch_details",
+       "a row claimed by no worker is never acknowledged and redelivered for ever (OB-8)"),
+    _m("d2_ack_after_reopen_lands", DISPATCH,
+       "       and claimed_at is not null\n       and claimed_by = p_args->>'worker_id'\n", "",
+       "admission", "dispatch_relay",
+       "a relay's late ack after a rebuild's reopen strands the job (OB-1b)"),
+    _m("d2_ack_by_another_relay", DISPATCH,
+       "       and claimed_by = p_args->>'worker_id'\n", "",
+       "admission", "dispatch_relay", "a relay acknowledges a row another relay holds"),
+    _m("d2_reopen_keeps_claimed_at", DISPATCH,
+       "    update infrx.outbox o set acknowledged_at = null, claimed_at = null, claimed_by = null",
+       "    update infrx.outbox o set acknowledged_at = null, claimed_by = null",
+       "admission", "dispatch_relay", "a reopened row keeps a stale claim (OB-6b)"),
+    _m("d2_reopen_ignores_since", DISPATCH,
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz\n"
+       "            or o.claimed_at >= (p_args->>'since')::timestamptz)",
+       "       and true", "admission", "dispatch_relay",
+       "every rebuild re-sends the whole delivered history"),
+    _m("d2_reopen_revives_superseded_rows", DISPATCH,
+       "       and infrx.dispatch_wanted(o.kind, j.state)\n"
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz",
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz",
+       "admission", "dispatch_relay", "a stale prepare_dispatch is re-sent after a rebuild"),
+    # --- review OB-4..OB-6 ------------------------------------------------------------
+    _m("d2r_pending_unbounded", DISPATCH,
+       "     limit greatest(1, least(coalesce((p_args->>'limit')::int, 100), 1000))\n", "",
+       "admission", "dispatch_details", "one relay read locks every pending row"),
+    _m("d2r_pending_no_order", DISPATCH,
+       "     order by o.available_at, o.event_id\n     limit greatest(",
+       "     limit greatest(", "admission", "dispatch_details",
+       "a backlog is dispatched in no particular order (the oldest can starve)"),
+    _m("d2r_pending_delivers_future_rows", DISPATCH,
+       "     where o.acknowledged_at is null and o.available_at <= v_now",
+       "     where o.acknowledged_at is null", "admission", "dispatch_details",
+       "a delayed dispatch runs before its time"),
+    _m("d2r_ack_any_kind", DISPATCH,
+       "       and kind in ('prepare_dispatch', 'inference_dispatch')\n"
+       "       and acknowledged_at is null\n       and claimed_at is not null\n",
+       "       and acknowledged_at is null\n       and claimed_at is not null\n",
+       "admission", "dispatch_details", "the relay acknowledges a projection it never sent"),
+    _m("d2r_release_releases_nothing", DISPATCH,
+       "    update infrx.outbox set claimed_at = null, claimed_by = null\n     where event_id in",
+       "    update infrx.outbox set claimed_by = null\n     where event_id in",
+       "admission", "dispatch_details", "rows deferred by a full index wait a whole window"),
+    _m("d2r_fail_acknowledges", DISPATCH,
+       "    update infrx.outbox set last_error = left(coalesce(p_args->>'error', 'unknown'), 500)",
+       "    update infrx.outbox set last_error = left(coalesce(p_args->>'error', 'unknown'), "
+       "500), acknowledged_at = infrx.now()",
+       "admission", "dispatch_details", "a row the index refused is marked delivered"),
+    _m("d2r_snapshot_oldest_event", DISPATCH,
+       "                 order by x.created_at desc, x.event_id desc limit 1) o on true",
+       "                 order by x.created_at, x.event_id limit 1) o on true",
+       "admission", "dispatch_details", "a rebuild indexes a superseded event id"),
+    _m("d2r_index_event_attempt_swapped", DISPATCH,
+       "    'attempt', case o.kind when 'prepare_dispatch' then j.preparation_attempts\n"
+       "                           else j.attempts end);",
+       "    'attempt', case o.kind when 'prepare_dispatch' then j.attempts\n"
+       "                           else j.preparation_attempts end);",
+       "admission", "dispatch_details", "a candidate carries the other phase's retry count"),
+    _m("d2r_snapshot_indexes_an_inference_leased_job", DISPATCH,
+       "                     where a.job_id = j.request_id\n"
+       "                       and a.released_at is null and a.expires_at > infrx.now());",
+       "                     where a.job_id = j.request_id and a.kind = 'preparation'\n"
+       "                       and a.released_at is null and a.expires_at > infrx.now());",
+       "admission", "dispatch_details", "a running job is handed to a second worker (OB-5)"),
+    _m("d2_snapshot_indexes_a_leased_job", DISPATCH,
+       "                       and a.released_at is null and a.expires_at > infrx.now());",
+       "                       and false);", "admission", "dispatch_relay",
+       "a rebuild hands a job being prepared to a second pool member"),
+    # --- 0013: GC ---------------------------------------------------------------------
+    _m("d2_gc_deletes_a_live_jobs_rows", GC,
+       "                       and (j.settled_at is null\n", "                       and (false\n",
+       "admission", "outbox_gc", "a live job loses the event id its rebuild relies on"),
+    _m("d2_gc_deletes_inside_the_retention", GC,
+       "       and o.acknowledged_at < v_now - make_interval(secs => v_retention)",
+       "       and o.acknowledged_at <= v_now - make_interval(secs => v_retention)",
+       "admission", "outbox_gc", "rows are deleted at the retention instant, not after it"),
+    _m("d2_gc_expires_a_live_job", GC,
+       "       and j.settled_at is not null\n", "       and true\n",
+       "admission", "outbox_gc", "a live job's undelivered dispatch is acknowledged away"),
+    _m("d2_gc_deletes_inside_the_tombstone", GC,
+       "or j.settled_at > v_now - make_interval(secs => v_tombstone)", "or false",
+       "admission", "outbox_gc",
+       "a replay inside the tombstone answers an admission whose events are gone (OB-3)"),
+    _m("d2r_gc_delete_unbounded", GC,
+       "     order by o.acknowledged_at, o.event_id\n     limit v_limit\n",
+       "     order by o.acknowledged_at, o.event_id\n",
+       "admission", "outbox_gc", "one GC call deletes the whole acknowledged history"),
+    _m("d2_gc_deletes_callbacks", GC, "       and o.kind <> 'callback_delivery'",
+       "       and true", "admission", "outbox_gc", "callback deliveries cascade away"),
+    _m("d2_gc_unbounded", GC,
+       "     limit v_limit\n     for update of o skip locked),\n  acked as",
+       "     for update of o skip locked),\n  acked as",
+       "admission", "outbox_gc", "one GC call locks the whole outbox"),
+    _m("d2_gc_expires_projections", GC,
+       "       and o.kind in ('prepare_dispatch', 'inference_dispatch')\n"
+       "       and j.settled_at is not null",
+       "       and true\n       and j.settled_at is not null",
+       "admission", "outbox_gc", "an unconsumed usage projection is acknowledged away"),
+    # --- 0014 and the prompt count --------------------------------------------------
+    _m("d2_result_rewritable", RESULTS, "  if r.digest <> v_digest then", "  if false then",
+       "admission", "results_and_prompt_tokens",
+       "a second writer's answer silently stands for the stored one"),
+    _m("d2_result_read_across_tenants", RESULTS,
+       "     and r.request_id = substr(p_ref, 14)::uuid and r.org_id = p_org;",
+       "     and r.request_id = substr(p_ref, 14)::uuid;",
+       "admission", "results_and_prompt_tokens", "a tenant reads another tenant's answer"),
+    _m("d2_prompt_past_the_ceiling", DISPATCH,
+       "     or (p_args->>'prompt_tokens')::int > j.max_input_tokens then",
+       "     or false then", "admission", "results_and_prompt_tokens",
+       "a prompt past the hold's input envelope reaches the table as a 500"),
+    # --- 0010: M3's tables --------------------------------------------------------------
+    _m("d2_upload_handle_any_shape", MEDIA,
+       "  handle text primary key check (handle ~ '^upl_[A-Za-z0-9_-]{22,64}$'),",
+       "  handle text primary key,", "admission", "media_uploads",
+       "a guessable or foreign-kind handle names an upload"),
+    _m("d2_upload_facts_before_finalize", MEDIA,
+       "    (state = 'finalized' or num_nonnulls(digest, bytes, mime, duration_s, storage_ref,\n"
+       "                                         profile_version) = 0)),",
+       "    true),", "admission", "media_uploads",
+       "an unfinalized upload already names content"),
+    _m("d2_finalized_upload_rewritable", MEDIA,
+       "  if old.state <> 'created' and row(new.*) is distinct from row(old.*) then",
+       "  if false then", "admission", "media_uploads",
+       "a finalized upload's content changes under the refs that name it"),
+    _m("d2_finalized_upload_deleted_early", MEDIA,
+       "    if old.state = 'finalized' and infrx.now() < old.expires_at then",
+       "    if false then", "admission", "media_uploads",
+       "a live upload record vanishes and its handle stops resolving (R82)"),
+    _m("d2_media_touch_any_tenant", MEDIA,
+       "   where storage_ref = p_storage_ref\n     and org_id = p_org\n",
+       "   where storage_ref = p_storage_ref\n",
+       "admission", "media_objects", "another tenant keeps an object alive"),
+    _m("d2_media_touch_answers_like_a_miss", MEDIA,
+       "  if v_at is null then\n    raise exception 'not_found: object %'",
+       "  if false then\n    raise exception 'not_found: object %'",
+       "admission", "media_objects", "a touch of a missing object reports success (SEC-4)"),
+    _m("d2_media_touch_reveals_existence", MEDIA,
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002', "
+       "hint = (select case when count(*) > 0 then 'stored' else '' end "
+       "from infrx.media_objects where storage_ref = p_storage_ref);",
+       "admission", "media_objects",
+       "a foreign touch tells a tenant another tenant's object exists (MC-2)"),
+    _m("d2_media_touch_raises_from_another_line", MEDIA,
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "    if exists (select 1 from infrx.media_objects where storage_ref = p_storage_ref) "
+       "then\n      raise exception 'not_found: object %', p_storage_ref using errcode = "
+       "'P0002';\n    end if;\n"
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "admission", "media_objects",
+       "a foreign touch is told apart from a miss by the RAISE's line (MC-2b)"),
+    _m("d2_result_ref_shape_loose", RESULTS,
+       "   where p_ref ~ '^infrx-result:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
+       "[0-9a-f]{12}$'",
+       "   where p_ref ~ '^infrx-result:[0-9a-f-]{36}$'",
+       "admission", "results_and_prompt_tokens",
+       "a malformed reference is a 500 instead of not_found (SEC-5)"),
+    _m("d2_media_delete_ignores_last_use", MEDIA,
+       "                 where storage_ref = p_storage_ref and last_used_at = p_observed",
+       "                 where storage_ref = p_storage_ref",
+       "admission", "media_objects", "the collector deletes an object a stage just re-used"),
+    _m("d2_media_objects_truncatable", MEDIA,
+       "grant select, insert, update, delete on infrx.media_objects to service_role;",
+       "grant all on infrx.media_objects to service_role;",
+       "admission", "media_privileges", "the platform role can TRUNCATE the object index"),
+    _m("d2_media_uploads_without_rls", MEDIA,
+       "alter table infrx.media_uploads enable row level security;\n", "",
+       "admission", "media_privileges", "a future exposure of infrx leaks every upload"),
+)
+MUTANTS = MUTANTS + D2_MUTANTS
+
+
+#: R83: an anchor that appears zero or twice is `misdeclared` - an edit landing on
+#: whichever line came first is not the declared defect (D2 review H4).
+MISDECLARED = "misdeclared"
+
+
+def anchor_count(mutant: Mutant) -> int:
+    source = migrations.DIR / mutant.file if mutant.file != SEED else migrations.SEED_MARLIN
+    return source.read_text().count(mutant.old)
+
+
+def _mutate(directory: Path, mutant: Mutant) -> str | None:
+    """Apply the edit to a copy; the reason it cannot be applied, or None."""
     for path in (*migrations.migrations(), migrations.SEED_MARLIN):
         shutil.copy(path, directory / path.name)
     target = directory / mutant.file
     text = target.read_text()
     found = text.count(mutant.old)
-    assert found == mutant.occurrences, (
-        f"mutant {mutant.name}: its target appears {found} times in {mutant.file}, "
-        f"expected {mutant.occurrences}")
+    if found != mutant.occurrences:
+        return (f"its anchor appears {found} times in {mutant.file}, expected "
+                f"{mutant.occurrences}")
     target.write_text(text.replace(mutant.old, mutant.new))
+    return None
 
 
 #: The runner self-test (R40/B10): a mutant that deliberately breaks the SQL must be
@@ -1207,12 +1702,35 @@ _CHECKS = {
     "operator_seams": checks_credit.check_operator_seams,
     "seed_is_the_fixtures": checks_credit.check_seed_is_the_fixtures,
     "credit_plans": checks_credit.check_credit_plans,       # scenario "credit_volume"
+    # D1R review (b): the two unit checks, each with its own mutant.
+    "no_unit_conversion": checks_credit.check_no_unit_conversion,
+    "money_unit_cases": checks_credit.check_money_unit_cases,
     # D1R, scenario "upgrade05": need the captured state (see `_upgrade05_check`).
     "legacy_schema_unchanged": None,
     "old_regime_preserved": None,
     "legacy_read_path": None,
     "flag_defaults": None,
     "rerun": None,
+    # D2, scenario "admission" (all migrations + frozen clock + seed_admission).
+    "admission_accepts": checks_admission.check_admission_accepts,
+    "admission_refusals": checks_admission.check_admission_refusals,
+    "admission_capacity": checks_admission.check_admission_capacity,
+    "admission_idempotency": checks_admission.check_admission_idempotency,
+    "admission_concurrency": lambda conn: checks_admission.check_admission_concurrency(
+        pgharness.connect, MUT_DB),
+    "prepare_transition": checks_dispatch.check_prepare_transition,
+    "preparation_deadline": checks_dispatch.check_preparation_deadline_terminalizes,
+    "credit_terminalization": checks_dispatch.check_credit_job_terminalization_releases_credit,
+    "dispatch_relay": checks_dispatch.check_dispatch_relay,
+    "dispatch_details": checks_dispatch.check_dispatch_details,
+    "preparation_claim_race": lambda conn: checks_dispatch.check_preparation_claim_race(
+        pgharness.connect, MUT_DB),
+    "d2_function_privileges": checks_admission.check_d2_function_privileges,
+    "outbox_gc": checks_dispatch.check_outbox_gc,
+    "results_and_prompt_tokens": checks_dispatch.check_results_and_prompt_tokens,
+    "media_uploads": checks_media.check_media_uploads,
+    "media_objects": checks_media.check_media_objects,
+    "media_privileges": checks_media.check_media_privileges,
 }
 
 
@@ -1241,9 +1759,11 @@ def kill(mutant: Mutant) -> tuple[str, str]:
     pgharness.ensure()
     with TemporaryDirectory(prefix=f"infrx-d1-{mutant.name}-") as tmp:
         directory = Path(tmp)
-        _mutate(directory, mutant)
+        refused = _mutate(directory, mutant)
+        if refused is not None:
+            return MISDECLARED, refused
         files = migrations.sql_for(shim=pgharness.NEEDS_SHIM, directory=directory)
-        if mutant.scenario in ("credit", "upgrade05", "credit_volume"):
+        if mutant.scenario in ("credit", "upgrade05", "credit_volume", "admission"):
             seed, migrations.SEED_MARLIN = migrations.SEED_MARLIN, directory / SEED
             try:
                 return _kill_d1r(mutant, files)
@@ -1297,6 +1817,13 @@ def _kill_d1r(mutant: Mutant, files) -> tuple[str, str]:
         pgharness.apply(MUT_DB, files)
     except (AssertionError, psycopg.Error) as broken:
         return APPLY_ERROR, _first_line(broken)
+    if mutant.scenario == "admission":
+        try:
+            with pgharness.connect(MUT_DB) as conn:
+                checks_admission.seed_admission(conn)
+                return _run(_CHECKS[mutant.check], conn)
+        except (AssertionError, psycopg.Error) as during_setup:
+            return SETUP_ERROR, _first_line(during_setup)
     try:
         with pgharness.connect(MUT_DB) as conn:
             checks.seed_fixtures(conn)
@@ -1320,4 +1847,7 @@ def _run(check, *args) -> tuple[str, str]:
     return (KILLED if result.killed else SURVIVED), result.detail
 
 def _first_line(error: BaseException) -> str:
-    return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"
+    # An `AssertionError()` with no message is still a failure to report, not a crash of
+    # the runner reading it (D2 review H3).
+    lines = str(error).strip().splitlines()
+    return f"{type(error).__name__}: {(lines[0] if lines else '(no message)')[:160]}"
