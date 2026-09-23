@@ -62,7 +62,7 @@ def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
                   dies_by=tuple(dies_by))
 
 
-REGIME = "test_deploy_failclosed__pilot_refuses_a_regime_card_or_object_store_it_cannot_serve"
+REGIME = "test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve"
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -217,19 +217,13 @@ MUTANTS: tuple[Mutant, ...] = (
        'return (f"{key.env}: {value} contains a newline, NUL, quote or backslash; "',
        "test_deploy_failclosed__a_value_cannot_write_a_second_variable"),
     # --- prerequisites (brief item 4) --------------------------------------------------
-    # the cutover (CUTOVER item 4): the regime, the card and what create_app composes
-    _m("compose_check_skipped", "the probe refuses what create_app cannot compose",
-       P, "    if validated is not None:\n        try:\n            # The cutover",
-       "    if False:\n        try:\n            # The cutover", REGIME),
-    _m("compose_refusal_only_a_warning", "a pilot that cannot compose is refused",
-       P, '            composed = problems if mode == "pilot" else warnings',
-       "            composed = warnings", REGIME),
-    _m("compose_refusal_in_dev", "dev is permissive: a composition gap is a warning",
-       P, '            composed = problems if mode == "pilot" else warnings',
-       "            composed = problems", REGIME),
+    # the cutover (CUTOVER item 4): the regime and the card, the runtime's own check
     _m("credit_without_card_installs", "a CREDIT pilot needs an approved card",
        "infrx/config.py", "    if deployment.accounting_regime == CREDIT_REGIME \\\n",
        "    if False \\\n", REGIME),
+    _m("unknown_regime_installs", "an ACCOUNTING_REGIME the runtime does not know is refused",
+       "infrx/config.py", "    if deployment.accounting_regime not in ACCOUNTING_REGIMES:",
+       "    if False:", REGIME),
     _m("python_pin_lowered", "the pin is 3.12.4 exactly, not whatever is installed",
        P, "REQUIRED_PYTHON = (3, 12, 4)", "REQUIRED_PYTHON = (3, 12, 0)",
        "test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough"),

@@ -113,8 +113,7 @@ def test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough(tmp_path,
     assert any("99.0.0 or newer" in warning for warning in dev["warnings"])
 
     monkeypatch.setattr(preflight, "REQUIRED_PYTHON", sys.version_info[:3])
-    # (a dev file with no object store still warns that it does not compose - the cutover)
-    assert not any("or newer" in w for w in preflight.probe(staged, "dev")["warnings"])
+    assert preflight.probe(staged, "dev")["warnings"] == []
 
 
 def test_deploy_failclosed__the_mode_checked_is_the_mode_written(tmp_path):
@@ -234,41 +233,35 @@ if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
 
 
-# --- the cutover: the regime, the card and what `create_app` composes (G2 R2-1) --------
+# --- the cutover: the regime and the card (G2 R2-1) -----------------------------------
 PILOT_ENV = ("INFRX_MODE=pilot\nDATABASE_URL=postgresql://infrx@127.0.0.1:5432/infrx\n"
              "SUPABASE_URL=https://fake.supabase.co\nSUPABASE_SERVICE_ROLE_KEY=svc-role-secret\n")
 
 
-def test_deploy_failclosed__pilot_refuses_a_regime_card_or_object_store_it_cannot_serve(
-        tmp_path):
-    """The probe's verdict over the staged bytes, in pilot: an ACCOUNTING_REGIME the runtime
-    does not know, a CREDIT regime with no approved card or a padded one, and - since the
-    cutover - a configuration `create_app` cannot compose (no object store: S3_MEDIA_BUCKET
-    unset, or set with no S3 adapter, M1 limit 2) each refuse the install before anything is
-    replaced, naming the setting and never a value. A valid CREDIT regime and card pass the
-    runtime's own check; in dev the missing store is a warning (dev is permissive)."""
+def test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve(tmp_path):
+    """G2 R2-1: `ACCOUNTING_REGIME` and `ACTIVE_RATE_CARD_VERSION` are settable (TUNABLE), and
+    the probe's verdict over the staged bytes - the runtime's own `validate_runtime` - refuses,
+    in pilot, a regime the runtime does not know, a CREDIT regime with no approved card, and a
+    padded card, naming the setting and never a value; a valid CREDIT regime and card pass.
+    (The bucket is asked from the host by `apply`'s `bucket_problems`, M1-L2: the probe runs
+    with no network.)"""
     staged = tmp_path / "staged.env"
 
-    def verdict(extra, mode="pilot"):
-        staged.write_text(PILOT_ENV.replace("INFRX_MODE=pilot", f"INFRX_MODE={mode}") + extra)
-        return preflight.probe(staged, mode)
+    def verdict(extra):
+        staged.write_text(PILOT_ENV + extra)
+        return preflight.probe(staged, "pilot")
 
-    card = "ACCOUNTING_REGIME=credit\nACTIVE_RATE_CARD_VERSION=rc_marlin2b_2026_09_provisional\n"
     refusals = {"ACCOUNTING_REGIME=usd_legacy\n": "ACCOUNTING_REGIME must be one of",
                 "ACCOUNTING_REGIME=credit\n": "requires ACTIVE_RATE_CARD_VERSION",
                 "ACCOUNTING_REGIME=credit\nACTIVE_RATE_CARD_VERSION= rc_padded\n":
-                    "ACTIVE_RATE_CARD_VERSION must not",
-                "": "requires S3_MEDIA_BUCKET",
-                card + "S3_MEDIA_BUCKET=infrx-media-bucket\n": "S3_MEDIA_BUCKET is set"}
+                    "ACTIVE_RATE_CARD_VERSION must not"}
     for extra, named in refusals.items():
         result = verdict(extra)
         text = " ".join(result["problems"])
         assert result["ok"] is False and named in text, (extra, result["problems"])
-        for value in ("svc-role-secret", "usd_legacy", "rc_padded", "infrx-media-bucket"):
+        for value in ("svc-role-secret", "usd_legacy", "rc_padded"):
             assert value not in text, value
-    valid = verdict(card + "S3_MEDIA_BUCKET=infrx-media-bucket\n")
+    valid = verdict("ACCOUNTING_REGIME=credit\n"
+                    "ACTIVE_RATE_CARD_VERSION=rc_marlin2b_2026_09_provisional\n")
     assert valid["validated_mode"] == "pilot"                  # the runtime's check passes
     assert not any("does not start" in problem for problem in valid["problems"]), valid
-    dev = verdict("", mode="dev")
-    assert dev["ok"] is True
-    assert any("requires S3_MEDIA_BUCKET" in warning for warning in dev["warnings"])

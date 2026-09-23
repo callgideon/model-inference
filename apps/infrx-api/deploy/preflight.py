@@ -598,18 +598,6 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
         # `RuntimeMisconfigured` names setting names and no values (r1 R44).
         problems.append(f"the staged configuration does not start: {failure}")
         validated = None
-    if validated is not None:
-        try:
-            # The cutover: what `create_app` composes from these bytes, short of connecting
-            # (`adapters_from_env` opens nothing). An adapter it cannot build - today the
-            # object store: S3_MEDIA_BUCKET has no adapter yet (M1 limit 2) - is refused
-            # here, before the file is replaced and the unit restarted into that refusal.
-            from infrx.gateway.pilot import adapters_from_env
-            adapters_from_env(from_env(staged_env))
-        except Exception as failure:       # noqa: BLE001 - RuntimeMisconfigured and friends
-            # a refusal in pilot; dev/test are explicitly permissive (infra/README.md §5)
-            composed = problems if mode == "pilot" else warnings
-            composed.append(f"the staged configuration does not compose: {failure}")
     if mode == "pilot" and ingress not in composition.ROUTERS:
         problems.append("INFRX_MODE=pilot requires the pilot routers to be composed in "
                         "infrx/gateway/app.py ROUTERS (the G2 cutover); refusing to "
