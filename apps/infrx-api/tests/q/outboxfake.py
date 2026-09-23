@@ -1,12 +1,13 @@
 """D2's dispatch outbox, in memory, until D2 merges.
 
-`0012_dispatch_outbox.sql` at codex-d2 `30d614d` (D2 round 2, after OB-1b) defines the
-dispatch functions `PgJobStore` wraps; this is each one, row for row, over the contract
+`0012_dispatch_outbox.sql` at codex-d2 `a7c7a79` (D2 round 3, after OB-1b and OB-8)
+defines the dispatch functions `PgJobStore` wraps; this is each one, row for row, over the contract
 `FakeJobStore`'s jobs and outbox list, keeping the columns the SQL writes (`claimed_at`,
 `claimed_by`, `acknowledged_at`, `last_error`), so a Q3 case runs against the same rows
 PostgreSQL will hand it:
 
-* `dispatch_pending` - unacknowledged dispatch rows, `available_at <= now`, not claimed
+* `dispatch_pending` - refuses a read with no worker id (`invalid_request`, OB-8);
+  unacknowledged dispatch rows, `available_at <= now`, not claimed
   within `redelivery_s`, ordered by `(available_at, event_id)`, `limit` clamped to
   [1, 1000] BEFORE the row filter; each is claimed for `worker_id` if its job still wants
   it (`dispatch_wanted`) and acknowledged as `superseded` otherwise.
@@ -34,6 +35,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from infrx.contracts import errors
 from infrx.contracts.records import DISPATCH_KINDS, IndexEvent, JobState, OutboxKind
 
 
@@ -77,8 +79,10 @@ class FakeDispatchOutbox:
                 if kinds.get(event_id) in DISPATCH_KINDS
                 and event_id not in self.acknowledged]
 
-    async def dispatch_pending(self, *, limit: int = 100, worker_id: str = "relay",
+    async def dispatch_pending(self, *, worker_id: str, limit: int = 100,
                                redelivery_s: float = 30.0) -> tuple[IndexEvent, ...]:
+        if worker_id is None or not str(worker_id).strip():
+            raise errors.InvalidRequest("a worker id is required")
         now = self.jobs.clock.now()
         due = now - timedelta(seconds=redelivery_s)
         rows = sorted((row for row in self.jobs.outbox

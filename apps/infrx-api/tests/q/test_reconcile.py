@@ -217,6 +217,14 @@ def test_q3_relay__two_default_relays_claim_under_different_worker_ids():
     assert first.worker_id != second.worker_id
 
 
+def test_q3_relay__a_blank_worker_id_is_refused_by_the_store(adapter):
+    """D2 OB-8 (a7c7a79): a row claimed by nobody could never be acknowledged."""
+    w = rig.world(adapter)
+    w.rec.worker_id = " "
+    with pytest.raises(errors.InvalidRequest):
+        run(w.rec.drain)
+
+
 class AfterEnqueue:
     """An index that runs `action` once, right after the first `enqueue` lands."""
 

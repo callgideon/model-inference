@@ -357,6 +357,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "                 ]",
        "test_q3_drain__an_acknowledgment_behind_another_relays_rebuild_fence_is_refused",
        file=OUTBOX_FAKE),
+    # D2 OB-8 (a7c7a79): a read with no worker id is refused.
+    _m("the_store_takes_a_read_with_no_worker_id",
+       "a blank worker id is refused (a row claimed by nobody is never acknowledged)",
+       "        if worker_id is None or not str(worker_id).strip():",
+       "        if False:",
+       "test_q3_relay__a_blank_worker_id_is_refused_by_the_store",
+       file=OUTBOX_FAKE),
     # FID-3: the two `dispatch_pending` rules only the SIGKILL drill used to reach.
     _m("the_store_leaves_a_superseded_row_pending",
        "a row whose job moved on is acknowledged by the store as superseded",
