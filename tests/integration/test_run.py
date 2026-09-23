@@ -1017,6 +1017,9 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     parsed = runner.shell([sys.executable, "-c", "print('SKIPPED [3] tests/d/x.py:110: "
                            "missing optional hook stream')"], cwd=harness.REPO_ROOT)
     assert parsed["skips"] == ["missing optional hook stream"], parsed
+    named = runner.shell([sys.executable, "-c", "print('FAILED tests/a.py::t1 - boom'); "
+                          "print('ERROR tests/b.py::t2')"], cwd=harness.REPO_ROOT)
+    assert named["failures"] == ["tests/a.py::t1", "tests/b.py::t2"], named
 
     def stage(skips):
         def fake_shell(argv, **kw):

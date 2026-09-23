@@ -200,6 +200,9 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
             "counts": counts(output),
             # `-rs` reasons, when the run was asked for them (review F6-findings).
             "skips": sorted(set(re.findall(r"^SKIPPED \[\d+\] \S+?:\d+: (.*)$", output, re.M))),
+            # Every red case by id, not only the 12-line tail (the round-2 gate's suites stage
+            # reported '4 failed' while its tail named three).
+            "failures": re.findall(r"^(?:FAILED|ERROR) (\S+)", output, re.M),
             "named": None if needle is None else (needle.lower() in output.lower()),
             "tail": "\n".join(output.strip().splitlines()[-12:])}
 
@@ -429,7 +432,7 @@ def suites(report: Report, *, own_only: bool) -> None:
                          for reason in run.get("skips", ())
                          if not any(known in reason for known in KNOWN_API_SKIPS)})
     report.add("suites", FAIL if (failed or silent or unexpected) else PASS,
-               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips")}
+               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips", "failures")}
                          for run in runs],
                 "nonzero_exit": failed or None,
                 "reported_no_tests": silent or None,
