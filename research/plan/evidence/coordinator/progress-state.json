@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:02:17Z",
+  "updated": "2026-09-23T22:05:47Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "E3B-phase3": {
       "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
-      "phase": "cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands",
+      "phase": "HANDED BACK 4ac1419 (all bodies; gate exit 3 = pending only M3-U1 \u00d73 + I2B-R4; api-test 3497 on the merged tree); one-round review running \u2192 merge with D5 (after cutover + objstore); M pilot-media merge closes M3-U1/U2",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e3b2 / 56732"
     },
@@ -98,6 +98,10 @@
     "W4-phaseB": {
       "phase": "MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted \u2192 B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md",
       "since": "2026-09-23T22:02:17Z"
+    },
+    "E3B-phase3": {
+      "phase": "review at 4ac1419 running (journey/money + honesty lenses + refuters)",
+      "since": "2026-09-23T22:05:47Z"
     }
   },
   "gates": {
