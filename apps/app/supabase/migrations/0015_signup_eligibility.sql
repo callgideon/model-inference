@@ -69,6 +69,10 @@ create or replace trigger retired_individuals_immutable before update or delete
 create or replace function infrx.personal_org_binding_guard() returns trigger
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 begin
+  -- Waits for a claim binding this org (its FOR NO KEY UPDATE below), so the wallet check
+  -- sees a wallet committed meanwhile; and a claim waits for this membership change.
+  perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id])
+     for share;
   if exists (select 1 from infrx.credit_wallets w
              where w.kind = 'consumer'
                and w.personal_org_id = any (array[old.org_id, new.org_id])) then
@@ -198,6 +202,10 @@ begin
       if v_claimant is distinct from p_user_id then
         v_status := 'identity_reused';
       else
+        -- Serialises against membership changes (the binding guard's FOR SHARE): 0006
+        -- counts the members after any racing change commits, and none lands after.
+        perform 1 from public.organizations o where o.created_by = p_user_id
+           for no key update;
         return query select case when g.replayed then 'replayed' else 'granted' end,
                             g.user_id, g.wallet_id, g.ledger_operation_id, g.amount,
                             g.granted_at

@@ -239,9 +239,10 @@ def check_eligibility(conn) -> str:
 # =============================================================================
 def check_binding(conn) -> str:
     """CREDIT-IDENTITY: once a personal org funds a wallet, nobody joins it and its owner
-    is neither removed, demoted nor moved; joining another organization or gaining and
-    losing a provider role issues no grant and changes no wallet; another individual's
-    wallet cannot be spent through one's own organization or read in a session."""
+    is neither removed, demoted nor moved - also when the membership change races the
+    claim, in either order; joining another organization or gaining and losing a provider
+    role issues no grant and changes no wallet; another individual's wallet cannot be
+    spent through one's own organization or read in a session."""
     gotrue_columns(conn)
     b, w, p = uid(2, 1), uid(2, 2), uid(2, 3)
     for user, email in ((b, "b2@example.com"), (w, "w2@example.com"), (p, "p2@example.com")):
@@ -259,6 +260,21 @@ def check_binding(conn) -> str:
          f"update public.org_members set org_id = '{checks.ORG_A}' where org_id = '{ob}'"),
     ):
         refused(conn, label, sql, "23514")
+    # A membership change racing the claim (A holds its transaction open, B waits for A).
+    c1, c2 = uid(2, 4), uid(2, 5)
+    individual(conn, c1, "c1b2@example.com")
+    individual(conn, c2, "c2b2@example.com")
+    join = "insert into public.org_members (org_id, user_id, role) values (%s, %s, 'member')"
+    oc1, oc2 = personal_org(conn, c1), personal_org(conn, c2)
+    joined = _behind(pgharness.connect, conn.info.dbname, lambda a: claim(a, c1),
+                     lambda b: attempt(b, join, (oc1, w)))
+    assert (joined.get("got") or "").startswith("23514") and one(
+        conn, "select count(*) from public.org_members where org_id = %s", (oc1,)) == 1, \
+        f"a member joined a personal org while the claim bound it: {joined}"
+    held = _behind(pgharness.connect, conn.info.dbname, lambda a: a.execute(join, (oc2, w)),
+                   lambda b: claim(b, c2))
+    assert "error" not in held and held["got"][0] == "rollout_hold" and \
+        wallet_of(conn, c2) is None, f"a claim bound an org a member was joining: {held}"
     # Joining another (non-personal) organization is allowed and changes nothing.
     conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, "
                  "'member')", (checks.ORG_A, b))
@@ -288,7 +304,8 @@ def check_binding(conn) -> str:
         "control: the owner's own organization could not admit"
     seen = _rows_as(conn, checks._jwt(w), "select wallet_id from public.console_credit_wallets")
     assert seen == [(uuid.UUID(wallet_of(conn, w)),)], f"W's session sees: {seen}"
-    return "binding: 4 membership changes refused, 2 memberships no regrant, cross-user refused"
+    return ("binding: 4 membership changes refused, a join racing the claim refused / held "
+            "(both orders), 2 memberships no regrant, cross-user refused")
 
 
 def _rows_as(conn, session: str, sql: str) -> list:

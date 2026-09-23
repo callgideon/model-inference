@@ -95,6 +95,16 @@ MIGRATION_MUTANTS = (
        "               and w.personal_org_id = any (array[old.org_id, new.org_id])) then",
        "               and w.personal_org_id = any (array[new.org_id])) then",
        "signup_binding", "the wallet owner is removed from the org their wallet funds"),
+    _m("a1_binding_guard_unlocked",
+       "  perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id])\n"
+       "     for share;\n",
+       "",
+       "signup_binding", "a member joining while the claim binds the org shares the wallet"),
+    _m("a1_claim_binding_unlocked",
+       "        perform 1 from public.organizations o where o.created_by = p_user_id\n"
+       "           for no key update;\n",
+       "",
+       "signup_binding", "a claim binds a personal org a member is joining concurrently"),
     _m("a1_claim_callable_by_browsers",
        "grant execute on function public.claim_signup_grant(uuid, text, uuid) to service_role;",
        "grant execute on function public.claim_signup_grant(uuid, text, uuid) "
