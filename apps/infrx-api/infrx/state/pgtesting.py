@@ -298,6 +298,7 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
         extra = hooks(conn, store, stream)
         extra["store"] = store
         extra["database"] = name
+        extra["conn"] = conn                                 # the owner's rows (test reads)
         extra["stream"] = FailingJobStore(stream, plan)
         return Harness(port=FailingJobStore(store, plan), clock=clock, ids=SequentialIds(),
                        failures=plan, extra=extra)
@@ -420,6 +421,87 @@ def make_credit_jobstore_factory(fresh_database: Callable[[], str],
     return factory
 
 
+class JobsView:
+    """TEST RIG (Q3 PostgreSQL mode, D3 request 5): the store-side read of a job the Q3 cases
+    make of the fake's `jobs[job_id]` - `state`, `terminal`, `attempts` (prepublication
+    requeues), the live inference `lease` (its `expires_at`) and `admission.job_handle` -
+    over the rows."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def __getitem__(self, job_id: str) -> SimpleNamespace:
+        from ..contracts.records import JobState
+        row = self._conn.execute(
+            "select j.state, j.job_handle, j.settled_at is not null, (select a.expires_at from "
+            "infrx.attempts a where a.job_id = j.request_id and a.kind = 'inference' and "
+            "a.released_at is null), j.attempts from infrx.jobs j where j.request_id = %s",
+            (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        state, handle, terminal, expires, attempts = row
+        return SimpleNamespace(state=JobState(state), terminal=terminal, attempts=attempts,
+                               admission=SimpleNamespace(job_handle=handle),
+                               lease=None if expires is None
+                               else SimpleNamespace(expires_at=expires))
+
+
+class PgDispatchOutbox:
+    """TEST RIG (Q3 PostgreSQL mode): D2's dispatch outbox as the real `PgJobStore` serves it,
+    plus the store-side reads and faults Q3's cases use on `outboxfake.FakeDispatchOutbox` -
+    `unacknowledged()`, `last_error`, `deliveries`, `snapshots` and `ack_faults` ("before":
+    the acknowledgment never commits; "after": it commits and the reply is lost, raised as
+    `lost`, the caller's `OutboxLost`)."""
+
+    def __init__(self, store: PgJobStore, conn, *, lost: type[Exception] = ConnectionError):
+        self.store, self._conn, self._lost = store, conn, lost
+        self.ack_faults: list[str] = []
+        self.deliveries: dict[str, int] = {}
+        self.snapshots = 0
+
+    async def dispatch_pending(self, **kw):
+        events = await self.store.dispatch_pending(**kw)
+        for event in events:
+            self.deliveries[str(event.event_id)] = self.deliveries.get(str(event.event_id), 0) + 1
+        return events
+
+    async def acknowledge_dispatch(self, event_ids, *, worker_id: str) -> int:
+        fault = self.ack_faults.pop(0) if self.ack_faults else None
+        if fault == "before":
+            raise self._lost("acknowledgment lost before commit")
+        done = await self.store.acknowledge_dispatch(event_ids, worker_id=worker_id)
+        if fault == "after":
+            raise self._lost("acknowledgment committed, reply lost")
+        return done
+
+    async def dispatch_snapshot(self):
+        self.snapshots += 1
+        return await self.store.dispatch_snapshot()
+
+    async def release_dispatch(self, event_ids) -> int:
+        return await self.store.release_dispatch(event_ids)
+
+    async def record_dispatch_error(self, event_id, error: str) -> int:
+        return await self.store.record_dispatch_error(event_id, error)
+
+    async def db_now(self):
+        return await self.store.db_now()
+
+    async def reopen_dispatch(self, since) -> int:
+        return await self.store.reopen_dispatch(since)
+
+    def unacknowledged(self) -> list[str]:
+        return [e for e, in self._conn.execute(
+            "select event_id::text from infrx.outbox where kind in ('prepare_dispatch', "
+            "'inference_dispatch') and acknowledged_at is null "
+            "order by available_at, event_id").fetchall()]
+
+    @property
+    def last_error(self) -> dict[str, str]:
+        return dict(self._conn.execute("select event_id::text, last_error from infrx.outbox "
+                                       "where last_error is not null").fetchall())
+
+
 def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],
                              **kw: Any) -> Callable[..., Harness]:
     """The same rig with the `PgStreamStore` as the port and the JobStore as `jobs`, one
@@ -434,6 +516,7 @@ def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callabl
     return factory
 
 
-__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "WorkerResults", "credit_hooks",
+__all__ = ["CrashAfterCommit", "FailingJobStore", "JobsView", "PgClock", "PgDispatchOutbox",
+           "WorkerResults", "credit_hooks",
            "hooks", "make_credit_jobstore_factory", "make_jobstore_factory",
            "make_streamstore_factory", "register_credential", "seed", "seed_credit_world"]
