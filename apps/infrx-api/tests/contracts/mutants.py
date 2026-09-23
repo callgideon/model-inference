@@ -2058,6 +2058,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled,\n})",
        "dur_settle__cancel_records_its_cause_and_settles_by_r21",
        "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    # Item 3: the PostgreSQL adapter until D5's 0018 (D5 retires this with the refusal).
+    _m("pg_cancel_records_an_unsupported_cause", "before 0018 no cause but client_cancelled reaches 0016",
+       "state/jobstore.py", "        if cause != TerminalCause.client_cancelled:", "        if False:",
+       "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"),
 )
 
 

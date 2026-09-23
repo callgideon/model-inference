@@ -19,7 +19,7 @@ from typing import Any, Awaitable, Callable
 from ..contracts import errors, ids
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
-                                 MediaRef, NormalizedRequest, ReservationKind,
+                                 MediaRef, NormalizedRequest, ReservationKind, TerminalCause,
                                  TerminalOutcome, Work)
 from ..contracts.v2.records import AdmissionV2
 
@@ -352,9 +352,18 @@ class PgJobStore:
                             budgets=admission["budgets"],
                             prompt_tokens=admission["prepared_prompt_tokens"])
 
-    async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
+    async def cancel(self, org_id: str, job_handle: str, *,
+                     cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:
         """Terminalizes and releases the hold and capacity in one transaction; a job that is
-        already terminal answers its committed outcome (completion won)."""
+        already terminal answers its committed outcome (completion won).
+
+        Until D5's 0018, `infrx.cancel` (0016) records `client_cancelled` whatever it is
+        sent, so every other cause is refused HERE, before any SQL, with
+        `UnsupportedParameter` (an `InvalidRequest`, `param="cause"`): nothing is written and
+        nothing records the wrong cause. D5 removes the refusal and sends `cause`."""
+        if cause != TerminalCause.client_cancelled:
+            raise errors.UnsupportedParameter(f"cause {cause!r} needs migration 0018 (D5)",
+                                              param="cause")
         return _outcome(await self._call("cancel", {"org_id": org_id, "job_handle": job_handle,
                                                     "limits": self._lease_limits()}))
 
