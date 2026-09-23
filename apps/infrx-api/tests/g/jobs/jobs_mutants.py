@@ -47,6 +47,8 @@ DETACHED = "test_api_modes__a_detached_202_never_cancels_its_job"
 CREDIT_202 = "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
 NO_SURPRISE = "test_api_modes__plain_chat_is_never_a_surprise_202"
 REPLAY_OUTAGE = "test_dur_admit__a_store_outage_answering_a_replay_leaves_the_job_for_the_retry"
+TERMINAL_REPLAY = "test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetching"
+CRASH_REPLAY = "test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_async_retry"
 STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
 OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
@@ -128,9 +130,15 @@ MUTANTS: tuple[Mutant, ...] = (
           "job.handle))",
        "            admission, outcome = await self.relay._owned(job.org_id, job.handle)",
        REPLAY_OUTAGE),
-    _m("replay_readmits", "a retry with the same key is the same job, one hold",
+    _m("lookup_skipped", "R91: a keyed request is answered from the lookup before preparation",
+       R, "        found = await self._lookup(auth.org_id, idem)", "        found = None",
+       LOST_202, TERMINAL_REPLAY),
+    _m("inflight_replay_not_completed", "the retry of an acceptance cut short completes it",
+       R, "        if found is None or found[1] is None:\n            # A fresh admission",
+       "        if found is None:\n            # A fresh admission", CRASH_REPLAY),
+    _m("replay_readmits", "a key the lookup missed is still one job: admission replays it",
        ST, "            replay = self._replay(idem, now, credit=credit)",
-       "            replay = None", LOST_202, TWICE),
+       "            replay = None", TWICE),
     _m("changed_payload_replayed", "a changed payload under the key is 409, never a replay",
        ST, "        if record.payload_hash != idem.payload_hash:", "        if False:", CHANGED),
     _m("expired_mapping_readmits", "an expired mapping is 410, never a new billable job",

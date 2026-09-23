@@ -143,6 +143,7 @@ def test_dur_admit__a_lost_202_retried_with_its_key_answers_the_same_job():
     job = world.only_job()
     reserved = world.jobs.wallet(world.org).reserved_total
     lease = rs.run(world.lease())                                  # the job runs meanwhile
+    lookups = world.failures.count("lookup")
     again = post(world, key="order-7")
     assert again.status == 202, again.body
     assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
@@ -157,9 +158,58 @@ def test_dur_admit__a_lost_202_retried_with_its_key_answers_the_same_job():
     assert list(world.jobs.jobs) == [job.id] and list(world.jobs.holds) == [job.id]
     assert world.jobs.wallet(world.org).reserved_total == reserved
     assert world.jobs.outbox_kinds(job.id).count(OutboxKind.prepare_dispatch) == 1
+    # R91: the retry is answered from the store's lookup, never admitted a second time.
+    assert world.failures.count("lookup") == lookups + 1
+    assert world.failures.count("admit") == 1
     rs.run(world.complete(lease))
     assert job.outcome.state is JobState.succeeded
     assert world.jobs.holds[job.id].state is HoldState.settled
+
+
+def staged_payloads(world) -> list[str]:
+    return [key for key in world.objects.objects if key.startswith("payloads/")]
+
+
+def test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetching():
+    """R91 on the 202 path: a video job settled, its 202 long lost; by the retry the media host
+    refuses the URL. The retry is answered from the store's lookup - 202, replayed, the
+    committed `succeeded` - and nothing is fetched, staged or admitted again."""
+    world = JobsWorld()
+    first = post(world, payload=rs.body(rs.VIDEO), key="clip-1")
+    assert first.status == 202
+    rs.run(world.work())
+    job = world.only_job()
+    staged = staged_payloads(world)
+    world.media.fetcher.transport = httpx.MockTransport(lambda request: httpx.Response(403))
+    again = post(world, payload=rs.body(rs.VIDEO), key="clip-1")
+    assert again.status == 202, again.body
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    body = again.json()
+    assert (body["job_handle"], body["state"], body["idempotency_replayed"]) == (
+        first.json()["job_handle"], "succeeded", True)
+    assert staged_payloads(world) == staged and list(world.jobs.jobs) == [job.id]
+    assert world.failures.count("admit") == 1
+
+
+def test_dur_admit__a_crash_after_the_admission_commit_is_completed_by_the_async_retry():
+    """DUR-ADMIT, kill after commit and before the ack: the admission committed, the process
+    died before the staged refs were bound and before any 202. The same-key retry finds the
+    job in flight (R91 lookup), completes its acceptance (the idempotent attach) and answers
+    202 for that job - which then runs to its end, one job and one hold."""
+    world = JobsWorld()
+    world.failures.crash_after_commit("admit")
+    first = post(world, payload=rs.body(rs.VIDEO), key="clip-9")
+    assert refusal(first) == (503, "dependency_unavailable")
+    job = world.only_job()
+    assert job.outcome is None and job.id not in world.media.by_job
+    again = post(world, payload=rs.body(rs.VIDEO), key="clip-9")
+    assert again.status == 202, again.body
+    assert again.json()["job_handle"] == job.admission.job_handle
+    assert again.json()["idempotency_replayed"] is True
+    assert len(world.media.by_job.get(job.id, ())) == 1
+    rs.run(world.work())
+    assert list(world.jobs.jobs) == [job.id] and list(world.jobs.holds) == [job.id]
+    assert job.outcome.state is JobState.succeeded
 
 
 def test_dur_admit__a_store_outage_answering_a_replay_leaves_the_job_for_the_retry():
@@ -210,15 +260,28 @@ def test_dur_admit__an_expired_mapping_is_410_and_never_a_new_billable_job():
 
 
 def test_dur_admit__two_concurrent_submissions_with_one_key_admit_once():
-    """Two `POST /v1/jobs` with one key at once: both are 202 for the same job, exactly one
-    of them a replay, and the store holds one job and one hold."""
+    """Two `POST /v1/jobs` with one key at once, both past the R91 lookup before either is
+    admitted (the lookup can miss a mapping being written): the admitting transaction is what
+    decides - both are 202 for the same job, exactly one a replay, one job and one hold."""
     world = JobsWorld()
+    lookup, missed, together = world.jobs.lookup, [], asyncio.Event()
+
+    async def in_step(org_id, idem):
+        found = await lookup(org_id, idem)
+        missed.append(found)
+        if len(missed) == 2:
+            together.set()
+        await together.wait()
+        return found
+
+    world.jobs.lookup = in_step
 
     async def both():
         return await asyncio.gather(send(world.app, "POST", JOBS, body=rs.body(), key="twice"),
                                     send(world.app, "POST", JOBS, body=rs.body(), key="twice"))
 
     replies = rs.run(both())
+    assert missed == [None, None]
     assert [r.status for r in replies] == [202, 202]
     assert len(world.jobs.jobs) == 1
     job = world.only_job()
