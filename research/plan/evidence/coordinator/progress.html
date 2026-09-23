@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:38:32Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:43:23Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>14</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -97,7 +97,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge</li>
 <li><code>D2</code> — codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL</li>
-<li><code>A1</code> — codex-a1 / codex/a1-signup-grant — round 3 (RV2-1 membership/claim race) after re-confirmation of d8a3e84 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight</li>
+<li><code>A1</code> — codex-a1 / codex/a1-signup-grant — re-confirmation of round 3 at dc3cb9c; merge after D2 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight</li>
 <li><code>W3</code> — codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B&#x27;s deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run</li>
 <li><code>I2B</code> — codex-i2b / codex/i2b-deployment — round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run</li>
 <li><code>Q3</code> — codex-q3 / codex/q3-outbox-reconciler — confirmation PASS at 1ba884b; nonblocking fold-in then merge since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery</li>

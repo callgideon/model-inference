@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:38:32Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:43:23Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
 
@@ -67,7 +67,7 @@ Generated 2026-09-23T03:38:32Z from `tasks.json` (manifest v4) and `progress-sta
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
-- A1: codex-a1 / codex/a1-signup-grant — round 3 (RV2-1 membership/claim race) after re-confirmation of d8a3e84 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
+- A1: codex-a1 / codex/a1-signup-grant — re-confirmation of round 3 at dc3cb9c; merge after D2 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation PASS at 1ba884b; nonblocking fold-in then merge since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
