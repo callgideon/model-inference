@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from infrx.contracts import errors
 from infrx.contracts.conformance import MissingHook, jobstore_cases
 
 from . import pgharness, pgstore
@@ -89,11 +90,18 @@ RACY: dict[str, str] = {
 CASES = jobstore_cases()
 
 
+#: D4 review H2: the exception each pending case must die of - D5's `complete` for `_D5`,
+#: the refused key for the F2 case - so a regression before that step fails, never xfails.
+RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey}
+
+
 def _param(case):
     reason = PENDING.get(case.__name__)
-    marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
+    raises = RAISES.get(case.__name__, NotImplementedError)
+    marks = [pytest.mark.xfail(strict=True, reason=reason, raises=raises)] if reason else []
     if case.__name__ in RACY:
-        marks = [pytest.mark.xfail(strict=False, reason=RACY[case.__name__])]
+        marks = [pytest.mark.xfail(strict=False, reason=RACY[case.__name__],
+                                   raises=NotImplementedError)]
     return pytest.param(case, id=case.__name__, marks=marks)
 
 

@@ -3,9 +3,7 @@
 (`tests/integration/backend/test_drills.py` on the E3B branch), run here against the real
 PostgreSQL store with their assertions VERBATIM, so they can turn green there by swapping
 `rig("postgres", …)` for this rig (`infrx.state.pgtesting.make_jobstore_factory` on E2's
-PostgreSQL - integration request). dr05 (stale append) also needs D4's StreamStore
-(`append`/`read_owned`), so it is not here: its D3 half - a stale generation refused by the
-fence every append must call first - is `tests/d/test_lease_races.py`.
+PostgreSQL - integration request).
 
 D4 adds dr05, dr06, dr08 and dr10 below (verbatim bodies; `h.extra["stream"]` is the real
 `PgStreamStore` on the same database - `pgtesting.make_jobstore_factory`'s `stream` hook).

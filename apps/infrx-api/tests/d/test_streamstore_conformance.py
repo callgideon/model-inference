@@ -45,7 +45,10 @@ factory = pgtesting.make_streamstore_factory(pgstore.fresh_database, pgharness.d
 
 def _param(case):
     reason = PENDING.get(case.__name__)
-    marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
+    # review H2: each pending case must fail FOR its stated reason (D5's complete), so a
+    # regression in the half that runs before `complete` is a failure, never an xfail
+    marks = [pytest.mark.xfail(strict=True, reason=reason, raises=NotImplementedError)] \
+        if reason else []
     return pytest.param(case, id=case.__name__, marks=marks)
 
 
