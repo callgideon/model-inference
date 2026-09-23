@@ -837,6 +837,16 @@ MUTANTS: tuple[Mutant, ...] = (
            "              \"\",\n",
            "tests/integration/test_services.py", "live_grant_inversion", layer=2,
            cases=("test_a_live_grant_inversion_fails_its_matrix_row",)),
+    Mutant("e3bm39", "E3B2 (a): a mutant run never sweeps another run's infrx-e2-* temp files",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           "    if mutant.dirties" "_database:\n",
+           "    for stray in Path(tempfile.gettempdir()).glob('infrx-e2-*'):\n"
+           "        shutil.rmtree(stray) if stray.is_dir() else stray.unlink()\n"
+           "    if mutant.dirties" "_database:\n",
+           "tests/integration/test_run.py", "litter_private",
+           cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
+                  "files",)),
 )
 
 

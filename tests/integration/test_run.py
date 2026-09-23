@@ -969,25 +969,31 @@ def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_fi
         monkeypatch, tmp_path):
     """E3B phase 2 (the coordinator, from I3B's lane: the name-based sweep deleted another
     lane's LIVE mutant copy). A mutant's run gets a private TMPDIR inside its own copy, with
-    the state file pointed back at ours; what it leaks goes with the copy, and a foreign
-    `<project>-*` directory created in the shared temp directory during the run survives."""
+    the state file pointed back at ours; what it leaks goes with the copy, and whatever another
+    run keeps in the shared temp directory during the run survives - a `<project>-*` copy, and
+    E2's literal `infrx-e2-*` names in every namespace (a live copy and a fake-vLLM log)."""
     import tempfile
 
     import mutants
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))       # the "shared" /tmp here
-    foreign = tmp_path / f"{harness.PROJECT}-e2m54-another-lane"
+    foreign = (tmp_path / f"{harness.PROJECT}-e2m54-another-lane",
+               tmp_path / "infrx-e2-i3bm57-another-lane")
+    foreign_log = tmp_path / "infrx-e2-fake-vllm-another-lane.log"
     seen = {}
 
     def fake_pytest(root, mutant, api_root, tmpdir):
         seen["tmpdir"] = tmpdir
-        foreign.mkdir(exist_ok=True)                   # someone else's live copy, mid-run
+        for copy in foreign:                           # someone else's live copies, mid-run
+            copy.mkdir(exist_ok=True)
+        foreign_log.write_text("theirs")
         (Path(tmpdir or tempfile.gettempdir()) / "infrx-e2-fake-vllm-leak.log").write_text("x")
         return 0, ".\n1 passed in 0.1s\n"
 
     monkeypatch.setattr(mutants, "BASELINES", {})
     monkeypatch.setattr(mutants, "_pytest", fake_pytest)
     mutants.run_one(mutants.MUTANTS[2], stack_available=False)   # a tests/integration suite
-    assert foreign.is_dir(), "another run's live copy was deleted"
+    assert all(copy.is_dir() for copy in foreign) and foreign_log.exists(), \
+        "another run's live copy or log was deleted"
     assert not (tmp_path / "infrx-e2-fake-vllm-leak.log").exists(), \
         "the mutant's litter landed in the shared temp directory"
     assert seen["tmpdir"] is not None and not Path(seen["tmpdir"]).exists(), seen
