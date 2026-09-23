@@ -159,7 +159,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if found is None or found[1] is None:\n            # Media is fetched and staged only",
        INFLIGHT_403, INFLIGHT_CREDIT),
     _m("inflight_async_replay_rechecked", "an async replay never rechecks or cancels a running job",
-       R, "        if await self.media.attached(job.request_id) is not None:", "        if False:", INFLIGHT_CREDIT),
+       R, "        if await _dependency(self.media.attached(job.request_id)) is not None:", "        if False:", INFLIGHT_CREDIT),
     _m("mode_left_out_of_the_digest", "R94: a key reused across sync and async is 409",
        N, "    if request.execution_mode is not ExecutionMode.async_:\n        return request.payload_digest",
        "    if True:\n        return request.payload_digest", MODES_409, DIGEST),
