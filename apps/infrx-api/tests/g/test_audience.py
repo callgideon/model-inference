@@ -75,6 +75,10 @@ UNUSABLE = (("no audience", {k: v for k, v in CONSUMER.items() if k != "audience
             ("a consumer key naming nobody", {**LEGACY_CONSUMER, "created_by": None},
              errors.InvalidApiKey),
             ("a provider key with no endpoint", {**PROVIDER, "endpoint_id": None},
+             errors.InternalError),
+            # 0009's CHECK forbids it; if a row ever carries it, it is refused, not scrubbed.
+            ("a consumer key with a provider scope", {**CONSUMER, "provider_org_id": IDS.provider_org,
+                                                      "endpoint_id": IDS.dev_endpoint},
              errors.InternalError))
 
 
