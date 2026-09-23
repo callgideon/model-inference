@@ -2,15 +2,14 @@
 """D3: the Python half of the lease operations, with NO database - what the adapter (not
 the SQL) decides: which limits it sends (the store's, never a caller's), that a refusal
 after a committed terminalization is raised as its type (R39), how `load_work` builds the
-work (and refuses a CREDIT job it cannot carry), that `complete` fails closed after the
-fence, and how a `recover` sweep is read. `tests/d/code_mutants_d3.py` runs here, so it
+work (and refuses a CREDIT job it cannot carry), what `complete` sends, and how a `recover`
+sweep is read. `tests/d/code_mutants_d3.py` runs here, so it
 needs no Docker; the SQL is `test_leases.py` / `test_lease_races.py`.
 """
 from __future__ import annotations
 
 import asyncio
 
-import psycopg
 import pytest
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
@@ -95,21 +94,20 @@ def test_load_work__the_admitted_work_with_the_prompt_count() -> None:
 
 
 def test_load_work__a_credit_job_is_refused_not_invented() -> None:
+    """D5: `not_found`, as the fake answers - a CREDIT job's door is `load_work_credit`."""
     _, _, doc = _work_doc("credit")
     doc["admission"]["price_snapshot"] = None
     store, _ = _store(doc)
-    _refused(errors.InvalidRequest, store.load_work(LEASE))
+    _refused(errors.NotFound, store.load_work(LEASE))
 
 
-def test_complete__fails_closed_after_the_fence_and_raises_the_fences_refusals() -> None:
-    """A lease that holds reaches D5's stub (0A000): NotImplementedError, never a success.
-    A fence refusal is its own type, never swallowed into that."""
-    store, conn = _store(psycopg.errors.FeatureNotSupported("D5"),
-                         _db_error("P0001", "stale_lease: generation 1 != 2"))
+def test_complete__sends_the_proposal_and_raises_the_fences_refusals() -> None:
+    """The proposal goes to the store as it is (the store recomputes the settlement); a
+    fence refusal is its own type. D5's settlement cases are tests/d/test_settle_units.py."""
+    store, conn = _store(_db_error("P0001", "stale_lease: generation 1 != 2"))
     outcome = TerminalOutcome(**OUTCOME)
-    _refused(NotImplementedError, store.complete(LEASE, outcome))
-    assert _args(conn)["outcome"] == outcome.model_dump(mode="json")
     _refused(errors.StaleLease, store.complete(LEASE, outcome))
+    assert _args(conn)["outcome"] == outcome.model_dump(mode="json")
 
 
 def test_recover__outcomes_events_and_the_unsettleable_backlog() -> None:

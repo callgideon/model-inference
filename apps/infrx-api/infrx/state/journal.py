@@ -66,13 +66,14 @@ class PgStreamStore:
         transaction; the chunks returned are the committed rows. A refusal that followed a
         committed R29 terminalization (and its terminal event) is raised here (R39).
 
-        A payload jsonb cannot store (a NUL character, NaN, an infinity) is refused
-        `journal_write_failed` before anything is sent, the whole batch with it - typed, as
-        R25 refuses an oversize event, instead of a raw database error the worker cannot
-        classify. (The fake stores such payloads: recorded delta, coordinator request.)"""
+        A payload jsonb cannot store (a NUL character, a lone UTF-16 surrogate, NaN, an
+        infinity) is refused `journal_write_failed` before anything is sent, the whole batch
+        with it - typed, as R25 refuses an oversize event, instead of a raw database error the
+        worker cannot classify. (The fake stores such payloads: recorded delta, coordinator request.)"""
         if not all(_journalable(event.payload) for event in events):
-            raise errors.JournalWriteFailed("an event carries a NUL character or a non-finite "
-                                            "number, which the journal cannot store")
+            raise errors.JournalWriteFailed("an event carries a NUL character, a lone UTF-16 "
+                                            "surrogate or a non-finite number, which the "
+                                            "journal cannot store")
         answer = await self._db._call("append", self._append_args(lease, events))
         rows = PgJobStore._answer(answer)["chunks"]
         return tuple(Chunk.model_validate(row) for row in rows)
