@@ -760,6 +760,13 @@ MUTANTS: tuple[Mutant, ...] = (
            "                  if False)\n",
            "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
            cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
+    Mutant("e3bm28", "E3B2 review F3: the fake CREDIT admission holds on the CREDIT wallet",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "                                               wallet_id=wallet_id)\n",
+           "                                               wallet_id=None)\n",
+           "tests/integration/backend/test_drills.py", "dr01c and fake",
+           cases=("test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_"
+                  "hold[fake]",)),
     Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
            "tests/integration/pgstate.py",
            "    lag = (read_back - returned).total_seconds()\n",
