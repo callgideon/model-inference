@@ -1,0 +1,287 @@
+{
+  "verdict": "fix_required",
+  "head": "ba95e42",
+  "reviews": [
+    {
+      "lens": "decision",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every tail above is from runs in this session, all on a git-archive scratch copy of ba95e42. The W4 list gave 106 passed and --list gave 104, matching the lane's claim. test_w4 gave 15 and the W3 list 87, also matching; my timings differ from the lane's (95 s vs 112 s, 1328 s vs 1269 s). I did not rerun `pytest tests/w` (179 passed), so that claim is not reproduced here. The diff b0a44a0..ba95e42 matches the evidence: decide.py only gains the base-levels elif and the '(not taken)' suffix. DEC-R2-1 and DEC-R2-2 were closed with tests only, as the evidence says. The printed 'setting=16 (not taken)' line reproduces exactly. None of the run involved the pilot box, Docker, the network, AWS, or secrets. candidate.sh ran only against the stub box. The codex-w4 worktree is unchanged: HEAD is ba95e42 and git status is clean.",
+      "cleanup": "I removed /tmp/claude-1000/reconfirm-w4-rc3 (scratch plus .venv), /tmp/claude-1000/reconfirm-w4-rc3-hand (the hand-mutant copy) and /tmp/claude-1000/reconfirm-w4-rc3-logs. `ls` confirms they are gone. The codex-w4 worktree was never written.",
+      "mutants": [
+        {
+          "name": "R2-M1_drop_failed (round-2 survivor)",
+          "edit": "decide.py: drop `and counted[\"failed\"] == row.get(\"failed\")`",
+          "result": "killed",
+          "killed_by": "test_engine_opt__a_passing_candidate_is_adopted...: AssertionError at test_w4.py:296 ('failed_miscounted', overload_masking state 'pass', expected 'fail'). It fails for the invariant's reason, not a crash"
+        },
+        {
+          "name": "R2-M3_drop_accepted (round-2 survivor)",
+          "edit": "decide.py: drop `and counted[\"accepted\"] == row.get(\"accepted\")`",
+          "result": "killed",
+          "killed_by": "PASSING: AssertionError at test_w4.py:296 ('accepted_miscounted', overload_masking 'pass')"
+        },
+        {
+          "name": "R2-M2_tally_true (round-2 survivor)",
+          "edit": "decide.py: `tally == row.get(\"requests\")` -> `True`",
+          "result": "killed",
+          "killed_by": "PASSING: AssertionError at test_w4.py:296 ('requests_miscounted', overload_masking 'pass')"
+        },
+        {
+          "name": "R2-M4_drop_bench_retried (round-2 survivor)",
+          "edit": "decide.py: drop `+ ((row.get(\"denominators\") or {}).get(\"retried_requests\") or 0)`",
+          "result": "killed",
+          "killed_by": "PASSING: AssertionError at test_w4.py:296 ('bench_retried', overload_masking 'pass')"
+        },
+        {
+          "name": "R2-M5_drop_not_none (round-2 survivor)",
+          "edit": "decide.py: drop `and (row.get(\"denominators\") or {}).get(\"retried_requests\") is not None`",
+          "result": "killed",
+          "killed_by": "PASSING: AssertionError at test_w4.py:296 ('bench_retries_unrecorded', overload_masking 'pass', expected 'unknown')"
+        },
+        {
+          "name": "O1_tally_vs_attempts",
+          "edit": "decide.py: `tally == row.get(\"requests\")` -> `tally == row.get(\"attempts\")`",
+          "result": "survived (near-equivalent: bench.py makes requests == attempts when there are no retries; see DEC-R3-N3)",
+          "killed_by": ""
+        },
+        {
+          "name": "O2_accepted_as_accepted+failed_sum",
+          "edit": "decide.py: accepted clause -> `counted[accepted]+counted[failed] == bench accepted+failed`",
+          "result": "survived (equivalent: the failed clause is still present, so the sum check implies the accepted check)",
+          "killed_by": ""
+        },
+        {
+          "name": "O3_missing_retries_read_as_fail (unknown/fail inverted)",
+          "edit": "decide.py: `.get(\"retried_requests\") or 0` -> `.get(\"retried_requests\", 1) or 0`",
+          "result": "killed",
+          "killed_by": "PASSING: test_w4.py:296 ('bench_retries_unrecorded', state 'fail', expected 'unknown')"
+        },
+        {
+          "name": "O4_baseline_check_candidate_only",
+          "edit": "decide.py: `elif missing or set(base.levels) != set(LEVELS):` -> `elif missing:`",
+          "result": "killed",
+          "killed_by": "PASSING: test_w4.py:296 ('baseline_level_missing', usage_drift 'pass' 60 clips)"
+        },
+        {
+          "name": "O5_baseline_check_drops_candidate",
+          "edit": "decide.py: `elif missing or set(base.levels) != set(LEVELS):` -> `elif set(base.levels) != set(LEVELS):`",
+          "result": "SURVIVED (12/12 decide cases pass): DEC-R3-1",
+          "killed_by": ""
+        },
+        {
+          "name": "O6_not_taken_always",
+          "edit": "decide.py: `taken = \"\" if ... == PASS else \" (not taken)\"` -> `taken = \" (not taken)\"`",
+          "result": "SURVIVED: DEC-R3-N1",
+          "killed_by": ""
+        },
+        {
+          "name": "O7_not_taken_inverted",
+          "edit": "decide.py: `== PASS else` -> `!= PASS else`",
+          "result": "killed",
+          "killed_by": "test_engine_opt__the_set_aside_reproduces_the_recorded_c16_only_when_named: AssertionError at test_w4.py:175 (printed 'setting=16' without '(not taken)')"
+        },
+        {
+          "name": "O8_ready_s_accepts_00",
+          "edit": "candidate.sh: `^[1-9][0-9]*$` -> `^([0-9][0-9]+|[1-9])$`",
+          "result": "SURVIVED (3 ops_recover cases pass): DEC-R3-N4",
+          "killed_by": ""
+        },
+        {
+          "name": "O9_flock_ignored",
+          "edit": "candidate.sh: `flock -n 9 || refuse` -> `flock -n 9 || true || refuse`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__..._refuses_in_flight_work_and_unlisted_flags: test_w4.py:888 ('second-run', exit 0)"
+        },
+        {
+          "name": "O10_flock_on_wrong_fd",
+          "edit": "candidate.sh: `flock -n 9 || refuse` -> `flock -n 8 2>/dev/null; true || refuse`",
+          "result": "killed (under set -e the script exits 65; the returncode assertions fire, so this is not a Python crash)",
+          "killed_by": "RESTORES test_w4.py:805 (65), REFUSES :888 ('second-run', 65), RECORDS :907"
+        },
+        {
+          "name": "O11_health_path_metrics (stub curl, a path other than /health)",
+          "edit": "candidate.sh wait_ready: `$ENGINE/health` -> `$ENGINE/metrics`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__the_candidate_run_restores_the_engine_it_found: test_w4.py:844 ('unhealthy' variant expected restored=no)"
+        },
+        {
+          "name": "O12_sampler_fd9_inherited",
+          "edit": "candidate.sh:206 drop `9>&-` from the host_sampler launch",
+          "result": "SURVIVED: DEC-R3-N2",
+          "killed_by": ""
+        },
+        {
+          "name": "O13_image_by_config_image (round-2 R11)",
+          "edit": "candidate.sh: pre_image/post_image `{{.Image}}` -> `{{.Config.Image}}`",
+          "result": "killed (BX-N4 stub fidelity now effective)",
+          "killed_by": "RESTORES test_w4.py:844 ('image' variant), RECORDS"
+        },
+        {
+          "name": "S1_stub_curl_no_trailing_slash + health on :8001",
+          "edit": "test stub: `startswith(\"http://127.0.0.1:8000/\")` -> `startswith(\"http://127.0.0.1:8000\")`; candidate.sh polls http://127.0.0.1:8001/health",
+          "result": "killed: the slash is not needed to catch port 8001",
+          "killed_by": "RESTORES test_w4.py:805, RECORDS :907"
+        },
+        {
+          "name": "S2_stub_curl_no_trailing_slash + health on :80001",
+          "edit": "same stub weakening; candidate.sh polls http://127.0.0.1:80001/health",
+          "result": "survived under the weakened stub. This is a control: it shows the trailing slash in the real stub is what rejects a port-prefix URL. No finding",
+          "killed_by": ""
+        },
+        {
+          "name": "S3_fd_table_of_parent (pristine code)",
+          "edit": "test stub docker: `/proc/self/fd` -> `/proc/%d/fd % os.getppid()`",
+          "result": "the pristine case fails (parent candidate.sh holds fd 9: '0 1 2 255 9'). This shows the check can tell the holder apart, and /proc/self is the engine's own table",
+          "killed_by": "RESTORES test_w4.py:808"
+        },
+        {
+          "name": "S4_wrong_fd_table + lock_fd_inherited",
+          "edit": "test stub docker: `/proc/self/fd` -> `/proc/self/task`; candidate.sh drops `9>&-` on the engine launch",
+          "result": "survived under the wrong table. This is a control: the BX-N3 kill depends on the stub reading /proc/self/fd, which it does",
+          "killed_by": ""
+        },
+        {
+          "name": "W4 list (12 round-3 mutants among 104)",
+          "edit": "as registered in w4_mutants.py",
+          "result": "all killed: 106 passed (104 mutants + 2 list checks)",
+          "killed_by": "named cases per list"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-w4 archive ba95e42 | tar -x -C /tmp/claude-1000/reconfirm-w4-rc3 && make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0 (offline pinned sync)"
+        },
+        {
+          "cmd": "(apps/infrx-api) uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "15 passed in 95.00s (0:01:35)"
+        },
+        {
+          "cmd": "(apps/infrx-api) INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4_mutants.py",
+          "exit": 0,
+          "tail": "106 passed in 1328.66s (0:22:08)"
+        },
+        {
+          "cmd": "(apps/infrx-api) uv run --frozen python -m tests.w.w4_mutants --list | tail -1",
+          "exit": 0,
+          "tail": "104 mutants over 15 named cases"
+        },
+        {
+          "cmd": "(apps/infrx-api) INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w3_mutants.py",
+          "exit": 0,
+          "tail": "87 passed in 326.94s (0:05:26)"
+        },
+        {
+          "cmd": "decide.py research/plan/evidence/w/box/sweep-20260923T050411Z",
+          "exit": 0,
+          "tail": "w3_rule c*=None threshold=2.1384 setting=None (not taken); criterion w3_rule=unknown (not restarted [1..32]); verdict: no setting adopted - failed: ['error_rate']; unknown: ['w3_rule', ...]"
+        },
+        {
+          "cmd": "decide.py sweep-20260923T050411Z --set-aside c012,c025,c038,c051",
+          "exit": 0,
+          "tail": "w3_rule c*=16 threshold=2.1384 setting=16 (not taken); criterion w3_rule=unknown; verdict: no setting adopted - failed: []; unknown: ['w3_rule', 'severe_tail', 'oom', 'memory_growth', 'cancellation', ...]"
+        },
+        {
+          "cmd": "python (test_w4 helpers): passing_pair restarted",
+          "exit": 0,
+          "tail": "adopt ENGINE_MAX_NUM_SEQS=16 (WORKER_CONCURRENCY=16); w3_rule pass, usage_drift pass (60 clips), starvation pass, tail pass"
+        },
+        {
+          "cmd": "python: passing_pair, c=8 engine_state=warm on both sides / candidate only",
+          "exit": 0,
+          "tail": "no setting adopted - unknown: ['w3_rule','severe_tail','short_job_starvation','usage_drift','output_drift'] (both sides: 'cells not on a freshly started engine: c=[8]'; candidate only: 'cells at different states or profiles, not compared: c=[8]')"
+        },
+        {
+          "cmd": "python: passing_pair, baseline c=32 relabelled 3 / baseline c=16 row deleted",
+          "exit": 0,
+          "tail": "no setting adopted - unknown: ['short_job_starvation','usage_drift','output_drift']; w3_rule pass; usage_drift 'not all six levels on both sides: ...'"
+        },
+        {
+          "cmd": "python: passing_pair, candidate c=32 bench row deleted, real vs O5",
+          "exit": 0,
+          "tail": "real: usage_drift unknown ('not all six levels on both sides'); O5: usage_drift pass (60 clips), output_drift pass; both 'no setting adopted' (w3_rule unknown)"
+        },
+        {
+          "cmd": "hand.py (decide mutants R2-M1..M5, O1..O7) -k 'engine_opt or perf_envelope or media_parity'",
+          "exit": 0,
+          "tail": "pristine 12 passed; R2-M1..M5, O3, O4, O7 each '1 failed, 11 passed'; O1, O2, O5, O6 '12 passed'"
+        },
+        {
+          "cmd": "hand.py (script/stub mutants O8..O13, S1..S4) -k ops_recover",
+          "exit": 0,
+          "tail": "O8 3 passed; O9 1 failed; O10 3 failed; O11 1 failed; O12 3 passed; O13 2 failed; S1 2 failed; S2 3 passed; S3 1 failed (pristine, parent table has fd 9); S4 3 passed"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "DEC-R3-1",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "439-441 (criteria: `elif missing or set(base.levels) != set(LEVELS):`); tests/w/test_w4.py level_missing case; w4_mutants.py baseline_levels_unchecked",
+      "claim_broken": "Amendment 2 in W4-protocol.md and the DEC-R2-4 row say the paired criteria are `unknown` unless BOTH the candidate and the baseline have all six levels. No case can kill the candidate half (`missing or`). The only registered mutant, baseline_levels_unchecked, turns the whole elif into False, so the one case that kills it is baseline_level_missing, which damages only the baseline. This is the same whole-expression pattern that hid the uncovered clauses in DEC-R2-1.",
+      "evidence": "I made hand mutant O5, which changes the line to `elif set(base.levels) != set(LEVELS):` so only the baseline is checked. The decide cases (-k 'engine_opt or perf_envelope or media_parity') still give 12 passed, so O5 SURVIVED. I then deleted the candidate's c=32 bench row from passing_pair. The real code reports usage_drift unknown ('not all six levels on both sides: candidate [1, 2, 4, 8, 16], baseline [1, 2, 4, 8, 16, 32]'), and output_drift is also unknown. O5 reports usage_drift pass ('60 clips') and output_drift pass. The verdict is 'no setting adopted' either way, because w3_rule is unknown whenever the candidate is missing a level. So this changes the reported criteria but not the adopt decision. I rate it blocking only because the rubric counts a new claimed invariant without a killable test as blocking.",
+      "minimal_fix": "In the passing case's level_missing block (candidate c=1 relabelled to 3), also assert rep['criteria']['usage_drift']['state'] == 'unknown' and that its detail contains 'not all six levels'. Register a clause-level mutant, e.g. paired_levels_candidate_unchecked: `elif missing or set(base.levels) != set(LEVELS):` -> `elif set(base.levels) != set(LEVELS):` on PASSING.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at ba95e42. The candidate half of the check (`missing or`) was added in round 3 (9490e7c) as part of DEC-R2-4. The W4-protocol.md amendment 2 (line 229) and the DEC-R2-4 row in the W4-ecacd50.md evidence both say \"both the candidate and the baseline\". Only one mutant is registered: baseline_levels_unchecked, which replaces the whole elif with False. The only DEC-R2-4 case, baseline_level_missing, damages only the baseline. The existing level_missing case removes a candidate level, but it asserts only w3_rule, which the earlier `missing` branch already sets to unknown.\n\nThe experiment used a scratch copy made by git archive of ba95e42. I applied O5, which changes line 439 to `elif set(base.levels) != set(LEVELS):`. Then I ran pytest tests/w/test_w4.py -k 'engine_opt or perf_envelope or media_parity' and got 12 passed, 3 deselected. Those 12 are every test that loads decide.py. The 3 deselected are ops_recover tests, and the only other file that loads decide is w4_mutants.py, so the mutant survives.\n\nWhat the mutant does in practice: with a candidate level missing, the paired criteria are computed from the levels both runs share instead of being reported unknown. The adopt verdict does not change, because w3_rule is already unknown whenever the candidate is missing a level. So this is a reporting error, not a decision-rule error. It is still a newly claimed invariant that no test can kill, which the rubric counts as blocking. The proposed fix is sound: in level_missing, assert that usage_drift is unknown with the detail 'not all six levels', and register a clause-level mutant that drops `missing or`.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect at ba95e42. decide.py:439 (`elif missing or set(base.levels) != set(LEVELS):`) is new in 9490e7c. `git log -L` shows both of its clauses arrive together in round 3. W4-protocol.md amendment 2 and evidence W4-ecacd50.md:590 (DEC-R2-4) both state the invariant: the paired criteria are `unknown` unless BOTH the candidate and the baseline have all six levels.\n\nThe only registered mutant is baseline_levels_unchecked, which replaces the whole line with `elif False:`. The baseline_level_missing case kills it. The level_missing case changes the candidate's c=1 to 3 but asserts only on w3_rule. So nothing tests the candidate's `missing or` clause on the paired criteria.\n\nExperiment: I took a scratch `git archive` of ba95e42 and applied O5 (`elif set(base.levels) != set(LEVELS):`). All 15 tests in tests/w/test_w4.py pass, and it is the only test file that uses decide.py. O5 survives.\n\nTracing the code gives the same result. With the candidate at c=1 relabelled to 3, the common levels are {2,4,8,16,32}. Their profiles match and every level is marked restarted, so no earlier elif catches it. Only the `missing` clause blocks the paired verdicts.\n\nImpact is small. w3_rule is already `unknown` whenever the candidate is missing a level, so the adopt/no-adopt verdict cannot change. Only the reported usage_drift, output_drift and short_job_starvation states are wrong. Under the stated rubric this is still blocking: a newly stated invariant (the candidate half of DEC-R2-4) has no killable test. That is the same whole-expression mutant pattern that DEC-R2-1 was sent back for. The fix is small: in level_missing, assert that usage_drift is `unknown` with 'not all six levels', and register a mutant that removes only the candidate clause.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "DEC-R3-N1",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "492 (print_report `taken = ...`)",
+      "claim_broken": "The DEC-R2-5 row says the line reads 'setting=16 (not taken)' when w3_rule is not pass, which implies there is no suffix when the rule passes. Only the not-taken half is checked.",
+      "evidence": "Hand mutant O6 sets `taken = \" (not taken)\"` unconditionally, and it SURVIVED all 12 decide cases. Under O6 an adopted setting would print '(not taken)'. The separate verdict line still says 'adopt', so this is a reporting error only. The inverse mutant O7 (`!= PASS`) is killed by the set-aside case at test_w4.py:175.",
+      "minimal_fix": "Check the passing_pair report's printed line once, e.g. main([cand, --baseline, base, --set-aside FOUR]) contains 'setting=16\\n' or does not contain '(not taken)'.",
+      "lens": "decision"
+    },
+    {
+      "id": "DEC-R3-N2",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "206 (`host_sampler > ... 9>&- &`)",
+      "claim_broken": "Round 2's BX-N3 covered fd 9 for both the candidate engine and the host sampler. Round 3's check records /proc/self/fd only in the stub docker `run`, so the sampler's `9>&-` is still unkillable.",
+      "evidence": "Hand mutant O12 removes `9>&-` from the host_sampler launch, and it SURVIVED all 3 ops_recover cases. The effect is real but narrow. restore() never kills the sampler, so if candidate.sh is interrupted mid-level (INT/TERM runs the trap and then restore), an orphaned sampler that kept fd 9 would keep holding the lock, and the next run would be refused.",
+      "minimal_fix": "Have the stub docker's `stats` branch append /proc/self/fd to run-fds as well, or record it to a separate file, and assert fd 9 is absent there too.",
+      "lens": "decision"
+    },
+    {
+      "id": "DEC-R3-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "392-394 (requests_miscounted)",
+      "claim_broken": "The invariant is 'accepted + rejected + failed + cancelled = requests'. The case (rejected=1) makes the tally differ from both requests and attempts, so which field the tally is compared against is not pinned.",
+      "evidence": "Hand mutant O1, `tally == row.get(\"attempts\")`, SURVIVED all 12 decide cases. It is near-equivalent: bench.py sets requests=len(finals) and attempts=len(rows), and these are equal when there are no retries, and retries already fail overload masking. A divergence needs an internally inconsistent bench row.",
+      "minimal_fix": "Optional: add a variant with attempts = requests + 1, a raw row added, and the tally equal to attempts, which must still fail overload masking.",
+      "lens": "decision"
+    },
+    {
+      "id": "DEC-R3-N4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/candidate.sh",
+      "line": "61 (READY_S regex)",
+      "claim_broken": "READY_S rejects '0' (ready-s-zero), but '00' has no case.",
+      "evidence": "Hand mutant O8, `^([0-9][0-9]+|[1-9])$`, which accepts '00' and '05' but rejects '0', SURVIVED the 3 ops_recover cases. The real regex rejects '00'. This mutant is contrived, and the risk is low.",
+      "minimal_fix": "Optional: add a 'ready-s-00' refusal case (READY_S='00').",
+      "lens": "decision"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:10:26Z",
+  "updated": "2026-09-23T12:12:43Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "round 3 HANDED BACK ba95e42 (both coverage gaps + all 8 nonblocking closed; W4 list 106 = 104 mutants); re-confirmation (decision lens) running \u2192 merge",
+      "phase": "re-confirmation at ba95e42: 1 clause-level coverage gap (candidate half of the paired-levels check) + 4 tiny nonblocking \u2192 round 4 (tests only) running; then a single-verifier check and merge",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     },
@@ -48,8 +48,8 @@
   },
   "reviews": {
     "W4": {
-      "phase": "re-confirmation at ba95e42 running (round 2 fix_required at b0a44a0)",
-      "since": "2026-09-23T11:42:37Z"
+      "phase": "re-confirmation fix_required at ba95e42 (wf_884c29c8-5ee; JSON evidence/w/W4-reconfirm-ba95e42.json) \u2192 round 4",
+      "since": "2026-09-23T12:12:43Z"
     },
     "G4U": {
       "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
