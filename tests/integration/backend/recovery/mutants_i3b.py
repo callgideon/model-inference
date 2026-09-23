@@ -202,9 +202,11 @@ MUTANTS += (
            "    async def get(self, key): ...\n"
            "    async def put_if_absent(self, key, data, content_type): ...\n\n\n"
            "class InMemoryObjectStore:\n", DRILLS, "rc05b"),
+    # Anchored on the future import, not on loop.py's last line: W3's merge (65e2c99) changed
+    # that line and made this mutant stale; a module-level guard anywhere is the shape.
     Mutant("i3bm57", "D3: rc08b fails once any worker module runs as a script",
-           "apps/infrx-api/infrx/worker/loop.py", "                           claimed=self.claimed)\n",
-           "                           claimed=self.claimed)\n\n\nif __name__ == \"__main__\":\n"
+           "apps/infrx-api/infrx/worker/loop.py", "from __future__ import annotations\n",
+           "from __future__ import annotations\n\nif __name__ == \"__main__\":\n"
            "    pass\n", DRILLS, "rc08b"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
