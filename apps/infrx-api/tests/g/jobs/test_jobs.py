@@ -698,6 +698,58 @@ def test_api_modes__an_observer_that_leaves_never_cancels_the_job():
     assert world.jobs.holds[job.id].state is HoldState.settled
 
 
+def test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job():
+    """The other ways an observer ends: its send fails after the identity frame (a peer gone
+    without a disconnect message), or a prune lands between the pre-header probe and the pump's
+    first read (a `replay_gap` frame after the headers). Neither cancels: the job is still
+    running and its worker completes it."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    bodies = []
+
+    def peer_gone(message):
+        if message["type"] == "http.response.body":
+            bodies.append(message)
+            if len(bodies) == 2:
+                raise OSError("connection reset by peer")
+
+    failed = events(world, on_send=peer_gone)
+    assert failed.status == 200 and len(bodies) >= 2
+    assert job.state is JobState.running and not job.terminal
+    world.failures.fail("read_owned", on_call=world.failures.count("read_owned") + 2,
+                        error=errors.ReplayGap("pruned between the probe and the pump"))
+    gap = events(world)
+    assert gap.status == 200
+    assert [item["error"]["code"] for item in gap.data()
+            if isinstance(item, dict) and "error" in item] == ["replay_gap"]
+    assert job.state is JobState.running and not job.terminal
+    rs.run(world.complete(lease))
+    assert job.outcome.cause is TerminalCause.completed
+
+
+def test_api_modes__an_observer_stopped_from_outside_never_cancels_the_job():
+    """The observer's task is cancelled while the pump waits (the process stopping): the
+    cancellation propagates, no cancel is issued, and the job runs on."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    world.during.append(lambda: asyncio.current_task().cancel())
+
+    async def observe():
+        with pytest.raises(asyncio.CancelledError):
+            await send(world.app, "GET", job_path(world.handle(), "/events"))
+        await asyncio.gather(*world.relay._cancels)
+
+    rs.run(observe())
+    assert job.state is JobState.running and not job.terminal
+    rs.run(world.complete(lease))
+    assert job.outcome.cause is TerminalCause.completed
+
 def test_api_modes__an_unstarted_job_streams_its_identity_then_waits():
     """A job with nothing committed yet: the identity frame (its admitted phase) first, then
     keepalive comments while it waits, then the committed output as the worker produces it,

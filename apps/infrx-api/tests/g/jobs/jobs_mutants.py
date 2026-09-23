@@ -63,6 +63,8 @@ CURSOR = "test_api_modes__a_malformed_or_forged_cursor_is_400_before_any_read"
 GAP = "test_api_modes__a_replay_gap_or_an_expired_journal_is_an_explicit_410"
 OBSERVER = "test_api_modes__an_observer_that_leaves_never_cancels_the_job"
 UNSTARTED = "test_api_modes__an_unstarted_job_streams_its_identity_then_waits"
+OBSERVER_FAILS = "test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job"
+OBSERVER_STOPPED = "test_api_modes__an_observer_stopped_from_outside_never_cancels_the_job"
 DELETE = "test_dur_fence__delete_cancels_durably_and_answers_the_committed_outcome"
 RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
 MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
@@ -232,6 +234,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("observer_disconnect_cancels", "an observer that leaves detaches, never cancels",
        J, "                                  cancel_on_gone=False)",
        "                                  cancel_on_gone=True)", OBSERVER),
+    _m("events_error_cancels", "an observer whose stream fails never cancels the job",
+       J, "        except Exception as failure:\n",
+       "        except Exception as failure:\n"
+       "            await self.relay.cancel(self.job.org_id, self.job.handle, quiet=True)\n",
+       OBSERVER_FAILS),
+    _m("events_outside_cancel_cancels", "an observer stopped from outside never cancels the job",
+       J, "        finally:\n            gone.cancel()\n",
+       "        except BaseException:\n"
+       "            await self.relay.cancel(self.job.org_id, self.job.handle, quiet=True)\n"
+       "            raise\n        finally:\n            gone.cancel()\n", OBSERVER_STOPPED),
     _m("detach_check_removed", "the pump returns without a cancel for an observer",
        R, "            if gone.done() and not cancel_on_gone:\n                return\n", "",
        OBSERVER),
