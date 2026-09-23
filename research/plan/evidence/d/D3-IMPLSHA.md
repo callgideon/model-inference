@@ -80,7 +80,29 @@ gateway's" is observable - R29/R79/R7).
 
 All from `apps/infrx-api` unless a `make` target. UTC times from the run logs.
 
-RUNS_PLACEHOLDER
+Code under test: `684313e` (the implementation head; `fd90ae0` added only this report's
+draft). The final runs used **D3's own R48 port** (`infrx-d3-postgres[-supabase]`, 55434), as
+the coordinator allowed while 55432 was busy - the same harness code with `local_services("d1")`
+mapped to `"d3"` by a scratch launcher (`scratchpad/d3pytest.py`, not committed). Earlier runs
+of `e6fbff1` on the shared 55432 harness (plain) gave `308 passed, 3 skipped, 24 xfailed, 1 xpassed`
+(tests/d) and `331 passed` (all migration mutants); of `684313e` on 55432, `309 passed, 3 skipped,
+25 xfailed` and `337 passed` - the RACY case went XFAIL there.
+
+| Command | UTC | Exit | Tail |
+|---|---|---|---|
+| `INFRX_MUTANTS=all pytest -q -rs tests/d` (plain image) | 2026-09-23T00:45:20Z-01:20:24Z | 0 | `SKIPPED [3] tests/d/test_jobstore_conformance.py:110: missing optional hook 'stream' (not a pass)` / `532 passed, 3 skipped, 24 xfailed, 1 xpassed in 2083.78s (0:34:43)` |
+| `INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all pytest -q -rs tests/d` | 2026-09-23T01:20:24Z-01:51:50Z | 0 | `SKIPPED [3] ... missing optional hook 'stream' (not a pass)` / `532 passed, 3 skipped, 24 xfailed, 1 xpassed in 1884.54s (0:31:24)` |
+| `pytest -q tests/d/test_lease_units.py tests/d/test_code_mutants_d3.py tests/d/test_adapter_units.py tests/d/test_code_mutants.py` (no Docker) | 2026-09-22T23:28:47Z | 0 | `58 passed in 66.59s` |
+| `make api-env` | 2026-09-22 | 0 | pinned env synced |
+| `make check` / `make api-test` / `make api-mutants` | 2026-09-23T00:08Z | 2 | `ERROR tests/w/test_loop_mutants.py - TypeError: Mutant.__init__() got an unexpected keyword argument 'allowed_errors'` - collection error on the base (Limit 7), not D3's |
+| `pytest -q --ignore=tests/d --ignore=tests/w/test_loop_mutants.py` (legacy-first) | 2026-09-22T23:30:33Z | 1 | `6 failed, 2334 passed` - base failures listed in Limit 7 |
+| same, track-first order | 2026-09-22T23:39:18Z | 1 | `6 failed, 2334 passed` - same base failures |
+| `make console-test` / `console-lint` / `console-typecheck` | 2026-09-23T00:08Z | 0 / 0 / 0 | `# tests 283 # pass 283 # fail 0`; lint `0 errors, 2 warnings` |
+| `make console-mutants` | 2026-09-23T00:11Z | 0 | `160 killed`, `40/40`, `64 killed`, `104 killed`, `23/23` |
+| `make bench-test` | 2026-09-23T00:11Z | 0 | `67 passed in 7.66s` |
+
+`INFRX_MUTANTS=all` inside `tests/d` runs every D migration mutant (335: D1 82, D1R 115, D2 68,
+D3 70), D2's 19 and D3's 10 code mutants, and the runner self-test - all killed on both images.
 
 ### The conformance partition (exported v1 JobStore suite, real store)
 
@@ -115,7 +137,20 @@ xfail); the cancel/complete race became the one non-strict case.
 
 ### Mutation (R32/R40/R83)
 
-MUTANTS_PLACEHOLDER
+* **Migration (SQL), D3: 70 mutants, 70 killed on both images** (scenario `admission`, each
+  by its named `checks_leases` check; the concurrency ones by `check_lease_races`). First run
+  was 62/64: `d3_service_operations_callable_by_browsers` survived because the explicit revoke
+  is redundant with default privileges (the mutant is now the widened grant) and
+  `d3_held_unknown_may_become_settled` because a CHECK refused `settled` before the guard did
+  (the probe is now `released_free`; renamed `d3_held_unknown_may_be_rewritten`).
+* **The clock skew is what kills**: with `GATEWAY_SKEW = 0`, `d3_heartbeat_deadline_from_created_at`
+  survives; with the committed one hour it is killed (dev-port run, quoted:
+  `0:00:00 d3_heartbeat_deadline_from_created_at survived` / `1:00:00 ... killed`).
+* **Code (adapter)**: `code_mutants_d3.py` 10/10 killed through the shared runner (R83);
+  D2's 19 still killed.
+* **D1R `d1r_grant_race_arbitrates_one_index`**: killed 5/5 on repeat by the deterministic
+  personal-org collision (`killed by grant_race -> AssertionError: a personal-org-only collision
+  answered '23505', not the typed rollout hold (55000)`).
 
 ## Failure drill
 
@@ -138,6 +173,23 @@ change) with SIGINT; its container was removed by the harness's exit handler (ch
 Run logs are in this session's scratch directory (not committed; no secrets, prompts or
 URLs in them): `scratchpad/d3/final2.log`, `scratchpad/d3/make*.log`,
 `scratchpad/d3/mut-dev2.log`. The numbers quoted here are copied from them.
+
+## Dependence on D2's fix round (not on this base)
+
+D3 is coded and tested against `8728aec`. Items of D2's in-progress fix round that interact:
+
+* **either-lease `dispatch_snapshot`** (exclude jobs under a live preparation OR inference
+  lease): D3 does not need it for correctness - `claim` moves `queued -> running` in the same
+  transaction as the lease, so a running job is never a snapshot candidate on this base
+  (`test_race__a_rebuild_during_a_claim_never_sees_half_a_claim`). After the merge the same
+  test must still pass; it asserts only what both versions promise.
+* **`reopen_dispatch` fence**: if D2 adds an operation that re-emits a dispatch for a job, it
+  must take the job row `FOR UPDATE` (D3's lock order: job row, then hold, then wallet) and
+  refuse a job with a live attempt of either kind, or it races `claim`/`recover` exactly like
+  the mutants `d3_claim_without_the_row_lock` / `d3_fence_without_the_row_lock` show. D3's
+  `recover` is the only D3 writer of dispatch rows (requeue and preparation redispatch).
+* After the merge, re-run `tests/d` with `INFRX_MUTANTS=all` on both images: D3's checks use
+  D2's `claim_preparation`/`prepare`/`admit` as fixtures.
 
 ## Changes (paths)
 
