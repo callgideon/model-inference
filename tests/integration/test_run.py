@@ -1009,3 +1009,28 @@ def test_the_report_names_its_tree_its_namespace_and_each_stages_duration():
     assert payload["git_head"]["sha"] == head and isinstance(payload["git_head"]["dirty"], bool)
     assert payload["namespace"] == harness.NAMESPACE
     assert isinstance(payload["stages"][0]["seconds"], float)
+
+
+def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
+    """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
+    known, attributed set fails the stage - a skip is never a pass."""
+    parsed = runner.shell([sys.executable, "-c", "print('SKIPPED [3] tests/d/x.py:110: "
+                           "missing optional hook stream')"], cwd=harness.REPO_ROOT)
+    assert parsed["skips"] == ["missing optional hook stream"], parsed
+
+    def stage(skips):
+        def fake_shell(argv, **kw):
+            if "api-test" in argv:
+                assert kw.get("env", {}).get("PYTEST_ADDOPTS") == "-rs", kw
+            return {"argv": " ".join(argv), "exit": 0, "counts": {"passed": 5},
+                    "skips": skips if "api-test" in argv else [], "seconds": 1.0, "tail": ""}
+        monkeypatch.setattr(runner, "shell", fake_shell)
+        report = runner.Report()
+        runner.suites(report, own_only=False)
+        return report.stages[-1]
+    known = stage(["missing optional hook 'stream' (not a pass)"])
+    assert (known["status"], known["detail"]["unexpected_skips"]) == (runner.PASS, None)
+    other = stage(["task-local PostgreSQL unavailable: docker is not installed"])
+    assert other["status"] == runner.FAIL
+    assert other["detail"]["unexpected_skips"] == [
+        "task-local PostgreSQL unavailable: docker is not installed"]

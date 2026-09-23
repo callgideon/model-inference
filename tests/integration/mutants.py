@@ -174,8 +174,8 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_an_undetected_canary_fails_the_run",)),
     Mutant("e2m69", "E2R item 4: a suite that reported no tests at all fails the run",
            "tests/integration/run.py",
-           '    report.add("suites", FAIL if (failed or silent) else PASS,',
-           '    report.add("suites", FAIL if failed else PASS,',
+           '    report.add("suites", FAIL if (failed or silent or unexpected) else PASS,',
+           '    report.add("suites", FAIL if (failed or unexpected) else PASS,',
            "tests/integration/test_run.py", "reports_no_tests",
            cases=("test_a_suite_that_reports_no_tests_at_all_fails_the_run",)),
     Mutant("e2m35", "r1 B2: a failing suite fails the run",
@@ -810,6 +810,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '    return {"sha": None,\n',
            "tests/integration/test_run.py", "names_its_tree",
            cases=("test_the_report_names_its_tree_its_namespace_and_each_stages_duration",)),
+    Mutant("e3bm35", "E3B2 review F6-findings: an unattributed api-test skip fails the stage",
+           "tests/integration/run.py",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent) else PASS,\n",
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
 )
 
 

@@ -198,6 +198,8 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
     return {"argv": " ".join(argv), "cwd": str(cwd.relative_to(harness.REPO_ROOT) or "."),
             "exit": code, "seconds": round(time.monotonic() - started, 1),
             "counts": counts(output),
+            # `-rs` reasons, when the run was asked for them (review F6-findings).
+            "skips": sorted(set(re.findall(r"^SKIPPED \[\d+\] \S+?:\d+: (.*)$", output, re.M))),
             "named": None if needle is None else (needle.lower() in output.lower()),
             "tail": "\n".join(output.strip().splitlines()[-12:])}
 
@@ -394,6 +396,11 @@ def engine(report: Report) -> None:
             LIVE_SERVERS.remove(server)
 
 
+# The skips `make api-test` may report, each attributed: D4's pgtesting `stream` hook
+# (tests/d/test_jobstore_conformance.py). Remove an entry the day its cause lands.
+KNOWN_API_SKIPS = ("missing optional hook 'stream'",)
+
+
 def suites(report: Report, *, own_only: bool) -> None:
     """Cross-module discovery, measured. The canonical targets are the root Makefile's
     (08 §7); this suite has none yet, so it is invoked directly and `make integration` is
@@ -403,8 +410,10 @@ def suites(report: Report, *, own_only: bool) -> None:
                   env={"INFRX_E2_CANARY": "off"})]
     if not own_only:
         for target in ("api-test", "console-test", "bench-test"):
-            # E3B phase 2: the D suite alone has grown past 30 min on a shared host.
-            runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0))
+            # E3B phase 2: the D suite alone has grown past 30 min on a shared host. `-rs`
+            # makes pytest name every skip, so an unexpected one fails the stage (below).
+            runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0,
+                              env={"PYTEST_ADDOPTS": "-rs"}))
     failed = [run["argv"] for run in runs if run["exit"] != 0]
     # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
     # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose
@@ -414,10 +423,17 @@ def suites(report: Report, *, own_only: bool) -> None:
     # is that cross-module discovery is measured rather than assumed.
     silent = [run["argv"] for run in runs
               if not run["counts"].get("passed") and not run["counts"].get("node_pass")]
-    report.add("suites", FAIL if (failed or silent) else PASS,
-               {"runs": [{k: run[k] for k in ("argv", "exit", "counts")} for run in runs],
+    # Review F6-findings: a skip is not a pass. `make api-test`'s skips must be the known,
+    # attributed ones (today D4's missing StreamStore hook); any other reason fails the stage.
+    unexpected = sorted({reason for run in runs if run["argv"] == "make api-test"
+                         for reason in run.get("skips", ())
+                         if not any(known in reason for known in KNOWN_API_SKIPS)})
+    report.add("suites", FAIL if (failed or silent or unexpected) else PASS,
+               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips")}
+                         for run in runs],
                 "nonzero_exit": failed or None,
-                "reported_no_tests": silent or None}, runs=runs)
+                "reported_no_tests": silent or None,
+                "unexpected_skips": unexpected or None}, runs=runs)
 
 
 def mutation(report: Report, *, layer: str) -> None:
