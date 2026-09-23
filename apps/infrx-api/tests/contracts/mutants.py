@@ -1821,6 +1821,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "                         or settle(self.jobs[lease.job_id].credit, Usage.of(0, 0),\n"
        "                                   settled.settled_at))",
        "credit_settle__a_free_outcome_moves_no_credit"),
+    _m("credit_reconcile_releases_on_the_usd_wallet",
+       "the 24 h reconcile releases a CREDIT hold on its CREDIT wallet (F2P review M-1)",
+       S, "            self._release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id\n"
+          "                               else self.wallet(hold.org_id), hold)",
+       "            self._release_hold(self.wallet(hold.org_id), hold)",
+       "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"),
     # coordinator addition (D2 handback): `Work.prompt_tokens`
     _m("work_prompt_tokens_unbounded", "Work.prompt_tokens never exceeds max_input_tokens",
        R, "        if self.prompt_tokens is not None and self.prompt_tokens > self.request.max_input_tokens:",

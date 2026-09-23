@@ -1018,6 +1018,37 @@ async def credit_settle__a_free_outcome_moves_no_credit(factory):
     assert harness.extra["credit_balance"](IDS.consumer_wallet) == before
 
 
+async def credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet(factory):
+    """CREDIT-SPEND / DUR-SETTLE: published output with no authoritative usage holds the
+    CREDIT hold (`held_unknown`, no settlement); after the fenced 24 h the reaper
+    releases it on that CREDIT wallet as platform-absorbed - never on the organization's
+    USD wallet, and never as a charge."""
+    from . import builders as b
+    from .harness import hook
+    from ..limits import DEFAULTS
+    harness = factory()
+    publish = hook(harness, "publish")
+    request = _credit_request(harness)
+    before = harness.extra["credit_balance"](IDS.consumer_wallet)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    lease = await _credit_run(harness, request, admission)
+    await publish(lease)
+    outcome, settlement = await harness.port.complete_credit(
+        lease, b.outcome(request.request_id, harness, cause=v1.TerminalCause.client_disconnected,
+                         state=v1.JobState.failed, tokens=None, result_ref=None))
+    assert outcome.settlement_state is v1.SettlementState.held_unknown and settlement is None
+    held = harness.extra["credit_balance"](IDS.consumer_wallet)
+    assert held["reserved"] == before["reserved"] + admission.maximum_hold.raw(mu.CREDIT)
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+    await harness.port.recover()
+    assert harness.extra["credit_balance"](IDS.consumer_wallet) == before, \
+        "the reconcile did not return the CREDIT hold, or charged it"
+    usd = harness.extra["balance"](IDS.consumer_org)
+    assert usd["ledger"] == 0 and usd["reserved"] == 0, "the reconcile moved the USD wallet"
+    _, final = await harness.port.get_owned_credit(IDS.consumer_org, admission.job_handle)
+    assert final.settlement_state is v1.SettlementState.released_platform_absorbed
+
+
 def b_idem(request, key: str = "credit-1"):
     from . import builders as b
     return b.idem(request, key)
@@ -1031,6 +1062,7 @@ def credit_jobstore_cases() -> list[Callable]:
         credit_admit__a_replay_is_pinned_and_never_crosses_regimes,
         credit_settle__at_the_admitted_card_on_the_credit_wallet_only,
         credit_settle__a_free_outcome_moves_no_credit,
+        credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet,
     ]
 
 
