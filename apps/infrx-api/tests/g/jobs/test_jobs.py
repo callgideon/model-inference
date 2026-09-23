@@ -359,3 +359,91 @@ def test_dur_rls__an_operator_key_owns_no_job():
         reply = rs.run(send(world.app, method, job_path(handle, tail)))
         assert refusal(reply) == (404, "not_found"), (method, tail, reply.body)
     assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
+
+
+# --- item 3: result --------------------------------------------------------------------
+def result(world, handle=None, **kw):
+    return get(world, job_path(handle or world.handle(), "/result"), **kw)
+
+
+def test_api_modes__the_result_is_served_only_after_the_terminal_commit():
+    """While the job runs - even with output published - the result is 409 `result_pending`.
+    After the settling commit it is `JobResult` (job_result.json's fields): the committed
+    result object in the chat shape, the settled usage, `completed_at` the settlement."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    assert refusal(result(world)) == (409, "result_pending")
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    assert refusal(result(world)) == (409, "result_pending")
+    world.clock.advance(9)
+    rs.run(world.complete(lease))
+    reply = result(world)
+    assert reply.status == 200 and reply.headers.get(wire.HEADER_INFERENCE_ID) == job.id
+    body = reply.json()
+    assert set(body) == set(fixtures.load("job_result.json"))
+    served = wire.JobResult.model_validate(body)
+    outcome = job.outcome
+    assert (served.state, served.cause, served.completed_at) == (
+        JobState.succeeded, outcome.cause, outcome.settled_at)
+    assert served.usage == served.response.usage == wire.ChatUsage.of(outcome.usage)
+    response = served.response
+    assert response.choices[0].message.content == world.results[job.id]
+    assert (response.id, response.model, response.created) == (
+        f"chatcmpl-{job.id}", job.request.model_revision,
+        int(job.admission.admitted_at.timestamp()))
+
+
+def test_api_modes__a_failed_cancelled_or_expired_job_is_a_result_not_an_error():
+    """01: "failure" is a result. A failed, a cancelled and a queue-expired job each answer
+    200 `JobResult` with the committed state and cause and no response - never an error
+    envelope - and none is billed."""
+    world = JobsWorld()
+    handles = {name: post(world, key=name).json()["job_handle"]
+               for name in ("failed", "cancelled", "expired")}
+    ids = {name: world.jobs.by_handle[handle] for name, handle in handles.items()}
+
+    async def run_all():
+        await world.prepare(ids["failed"])
+        await world.runner(world.upstream("engine_error_pre_headers")).run(ids["failed"])
+        await world.prepare(ids["expired"])
+
+    rs.run(run_all())
+    assert rs.run(send(world.app, "DELETE", job_path(handles["cancelled"]))).status == 200
+    world.clock.advance(world.limits.queue_wait_async_s + 1)
+    rs.run(world.jobs.recover())
+    expected = {"failed": ("failed", "engine_error"), "cancelled": ("cancelled",
+                                                                    "client_cancelled"),
+                "expired": ("expired", "queue_wait_expired")}
+    for name, handle in handles.items():
+        reply = result(world, handle)
+        assert reply.status == 200, (name, reply.body)
+        body = reply.json()
+        assert (body["state"], body["cause"]) == expected[name], name
+        assert "response" not in body and "error" not in body, name
+        job = world.jobs.jobs[ids[name]]
+        assert wire.JobResult.model_validate(body).completed_at == job.outcome.settled_at
+        assert job.outcome.debit == 0 and world.jobs.holds[job.id].state is HoldState.released
+
+
+def test_api_modes__result_expiry_is_judged_on_the_store_clock():
+    """R29/R79: with the gateway's clock an hour ahead - past the result's TTL by its own
+    reckoning - the result is still served, because the store's clock is not past it. Once the
+    store's clock passes `settled_at + result_ttl_s` the result is 410 `result_expired`."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    rs.run(world.work())
+    job = world.only_job()
+    world.clock.advance(world.limits.result_ttl_s - 1_800)
+    world.skew_s = 3_600.0
+    assert world.relay._now() > job.outcome.settled_at + timedelta(
+        seconds=world.limits.result_ttl_s)
+    served = result(world)
+    assert served.status == 200 and served.json()["response"]["choices"]
+    assert status(world).json()["result_available"] is True
+    world.clock.advance(1_801)
+    assert refusal(result(world)) == (410, "result_expired")
+    assert status(world).json()["result_available"] is False
+    assert job.outcome.state is JobState.succeeded and world.jobs.holds[job.id].state \
+        is HoldState.settled

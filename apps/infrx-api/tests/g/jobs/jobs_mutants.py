@@ -50,6 +50,9 @@ OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
 ONE_404 = "test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404"
 OPERATOR = "test_dur_rls__an_operator_key_owns_no_job"
+RESULT = "test_api_modes__the_result_is_served_only_after_the_terminal_commit"
+FAILURES = "test_api_modes__a_failed_cancelled_or_expired_job_is_a_result_not_an_error"
+STORE_CLOCK = "test_api_modes__result_expiry_is_judged_on_the_store_clock"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -130,6 +133,31 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unknown_usage_served_as_result", "no chat result is rendered without authoritative usage",
        J, "                or outcome.usage is None or not outcome.result_ref):",
        "                or not outcome.result_ref):", NO_USAGE),
+    # === item 3: result (API-MODES) =====================================================
+    _m("pending_code_wrong", "a job not yet terminal has no result: 409 result_pending",
+       J, '            raise errors.ResultPending("the job is not terminal")',
+       '            raise errors.StateConflict("the job is not terminal")', RESULT),
+    _m("result_not_read", "the result body is the committed result object",
+       J, "            text = await relay.results.read_result(org, outcome.result_ref)",
+       '            text = ""', RESULT),
+    _m("completed_at_is_created", "completed_at is the store's settlement instant",
+       J, "            completed_at=outcome.settled_at), admission)",
+       "            completed_at=admission.admitted_at), admission)", RESULT),
+    _m("failure_rendered_as_error", "a failed/cancelled/expired job is a 200 result, not an error",
+       J, "        if outcome is None:\n            raise errors.ResultPending",
+       "        if outcome is None or outcome.state is not JobState.succeeded:\n"
+       "            raise errors.ResultPending", FAILURES),
+    _m("expired_result_served", "a result past its TTL is 410 result_expired",
+       J, "            if await relay.jobs.db_now() >= expires:", "            if False:",
+       STORE_CLOCK),
+    _m("result_ttl_on_gateway_clock", "the result TTL is judged on the store clock (R29/R79)",
+       J, "            if await relay.jobs.db_now() >= expires:",
+       "            if relay._now() >= expires:", STORE_CLOCK),
+    _m("status_ttl_on_gateway_clock", "status availability is judged on the store clock",
+       J, "        return _answer(jobs.status_of(admission, outcome, await relay.jobs.db_now()), "
+          "admission)\n\n    @app.get(RESULT_PATH)",
+       "        return _answer(jobs.status_of(admission, outcome, relay._now()), "
+       "admission)\n\n    @app.get(RESULT_PATH)", STORE_CLOCK),
 )
 
 
