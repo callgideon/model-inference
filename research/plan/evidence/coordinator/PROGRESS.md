@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T01:10:25Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T01:14:41Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
@@ -73,7 +73,7 @@ Generated 2026-09-23T01:10:25Z from `tasks.json` (manifest v4) and `progress-sta
 - G1R: codex-g1r / codex/g1r-audience-ingress — independent review (3-lens workflow) at d50afa5 since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
 - D3: codex-d3 / codex/d3-fenced-leases — implementing since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 - I3B: codex-i3b / codex/i3b-recovery-observe — independent review (3-lens workflow) at 48d3bb2 since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
-- M4: codex-m4 / codex/m4-media-optimize — implementing since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
+- M4: codex-m4 / codex/m4-media-optimize — independent review (3-lens workflow) at 2e323be since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
 
 ## Checkpoints
 
