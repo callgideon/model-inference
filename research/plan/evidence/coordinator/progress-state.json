@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T09:08:35Z",
+  "updated": "2026-09-23T09:18:41Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,9 +29,9 @@
     },
     "G4U": {
       "lane": "codex-g4u / codex/g4u-upload-adapter",
-      "phase": "implementing (upload routes over M3's MediaUploads; new files only)",
+      "phase": "HANDED BACK f3c8055 (impl a3cb5c2); Opus review running",
       "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; fakes only; brief G4U.md"
+      "note": "routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)"
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
