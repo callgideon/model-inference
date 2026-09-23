@@ -33,6 +33,11 @@ def _db():
     return _state["conn"]
 
 
+# --- item 5a: the drift detector is a real assertion ------------------------------------
+def test_dur_settle__assert_no_drift_fails_on_an_induced_drift() -> None:
+    print(checks_settle.check_drift_detected(_db()))
+
+
 # --- item 1: the legacy USD settling transaction --------------------------------------
 def test_dur_settle__one_winner_exact_decimals_then_replay() -> None:
     print(checks_settle.check_settle_exact(_db()))

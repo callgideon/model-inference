@@ -54,6 +54,33 @@ def assert_no_drift(conn, what: str = "") -> None:
         f"{what}: the wallet summary drifted from its ledger and holds: USD {usd} CREDIT {credit}"
 
 
+def check_drift_detected(conn) -> str:
+    """Review H-N1, the positive control: `assert_no_drift` FAILS on drift - a wallet total
+    written past its ledger (USD, 0003's detector) and past its ledger and holds (CREDIT,
+    0006's), each named in the assertion. Written as the owner with the wallets' own
+    guards off, inside a transaction that is rolled back."""
+    def body():
+        assert_no_drift(conn, "the seeded scenario")
+        org = cc.personal_org(conn, cc.CONSUMER_1)
+        wallet = cc.wallet_of(conn, cc.CONSUMER_1)
+        for table, key, value in (("infrx.wallets", "org_id", org),
+                                  ("infrx.credit_wallets", "wallet_id", wallet)):
+            conn.execute(f"alter table {table} disable trigger user")
+            conn.execute(f"update {table} set ledger_total = ledger_total + 1 "
+                         f"where {key} = %s", (value,))
+            conn.execute(f"alter table {table} enable trigger user")
+        try:
+            assert_no_drift(conn, "induced")
+        except AssertionError as caught:
+            message = str(caught)
+        else:
+            raise AssertionError("assert_no_drift passed a wallet written past its ledger")
+        assert f"USD [(UUID('{org}')" in message and f"CREDIT [(UUID('{wallet}')" in message, \
+            message
+        return "both detectors report an induced drift"
+    return ca._in_rollback(conn, body)
+
+
 # --------------------------------------------------------------------- driving
 def propose(job_id, cause: str = "completed", state: str = "succeeded",
             usage: tuple[int, int] | None = None, ref: str | None = None) -> dict:
