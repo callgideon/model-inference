@@ -255,8 +255,10 @@ def validate_runtime(settings):
             and not _configured(pilot.active_rate_card_version):
         raise RuntimeMisconfigured(mode, ("ACTIVE_RATE_CARD_VERSION",))
     # And the card is exact text at startup too (`validate_pilot` is not on this path): a
-    # padded name is a card nobody published.
-    if pilot.active_rate_card_version != pilot.active_rate_card_version.strip():
+    # padded name is a card nobody published, in either regime. Whitespace-only is unset
+    # (the module rule): the CREDIT check above refuses it as missing, legacy never reads it.
+    if _configured(pilot.active_rate_card_version) \
+            and pilot.active_rate_card_version != pilot.active_rate_card_version.strip():
         raise RuntimeMisconfigured(
             mode, detail="ACTIVE_RATE_CARD_VERSION must not carry surrounding whitespace")
     if mode == MODE_UNSET:

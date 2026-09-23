@@ -587,6 +587,15 @@ def test_a_credit_deployment_needs_an_approved_rate_card():
         with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
             _app({**env, "ACTIVE_RATE_CARD_VERSION": " rc_marlin2b_2026_09_provisional "})
     assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
+    # F2P confirmation CONF-N2: whitespace-only is unset in every regime, so a legacy
+    # deployment starts; a padded card is refused in every regime (the rule is the text's).
+    try:
+        started = _app({"ACCOUNTING_REGIME": "legacy_usd", "ACTIVE_RATE_CARD_VERSION": "  "})
+    except config.RuntimeMisconfigured as refused:
+        raise AssertionError(f"a whitespace-only card was read as a card: {refused}") from None
+    assert started is not None
+    with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
+        _app({"ACCOUNTING_REGIME": "legacy_usd", "ACTIVE_RATE_CARD_VERSION": " rc_x "})
 
 
 def test_the_allocation_ceiling_is_a_credit_amount_defaulting_to_nothing():
