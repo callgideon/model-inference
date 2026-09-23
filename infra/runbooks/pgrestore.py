@@ -250,6 +250,14 @@ CATALOG = {
     "columns": "select table_schema || '.' || table_name, column_name, data_type, is_nullable, "
                "coalesce(column_default, '') from information_schema.columns "
                "where table_schema = any(%(s)s) order by 1, 2",
+    # RST-3: column privileges (0001's `grant update (full_name, avatar_url) on
+    # public.profiles to authenticated`). A column has no owner default: NULL is no grant.
+    "column_acls": "select n.nspname || '.' || c.relname, a.attname, "
+                   "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a "
+                   "join pg_class c on c.oid = a.attrelid "
+                   "join pg_namespace n on n.oid = c.relnamespace where n.nspname = any(%(s)s) "
+                   "and a.attnum > 0 and not a.attisdropped and a.attacl is not null "
+                   "order by 1, 2",
     "policies": "select schemaname || '.' || tablename, policyname, cmd, roles::text, "
                 "coalesce(qual, ''), coalesce(with_check, '') from pg_policies "
                 "where schemaname = any(%(s)s) order by 1, 2",
