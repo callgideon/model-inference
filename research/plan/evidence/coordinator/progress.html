@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T22:44:29Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T22:51:25Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>27</b><span>done</span></div>
 <div class="tile prog"><b>3</b><span>in progress</span></div>
@@ -101,7 +101,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>CUTOVER</code> — codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3</li>
 <li><code>E3B-phase3</code> — codex-e3b3 / codex/e3b-phase3-bodies — review fix_required at 4ac1419 (J2 embedded-worker cells must pend on M3-U2; J1 footprint; H-B1 canonical gate) → ONE fix round running → single verifier → merge in the D5 unit since 2026-09-23T19:29:02Z — namespace e3b2 / 56732</li>
 <li><code>M1-L2</code> — codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub</li>
-<li><code>M-pilot-media</code> — codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head</li>
+<li><code>M-pilot-media</code> — codex-mpilot / codex/m-pilot-media — HANDED BACK 8b91648 (upload refs on the real staging; durable attach via 0003 tables + disk cache lookup; 21 mutants; make api-test 3474 + the 23 pre-existing); one-round review running → merge at step 5 since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
 <li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
@@ -117,6 +117,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>W4-phaseB</code> — MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z</li>
 <li>review <code>E3B-phase3</code> — fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) → fix round since 2026-09-23T22:44:29Z</li>
 <li>review <code>merge-plan</code> — MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z</li>
+<li>review <code>M-pilot-media</code> — review at 8b91648 running (parity on d4 + honesty + refuters) since 2026-09-23T22:51:25Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>

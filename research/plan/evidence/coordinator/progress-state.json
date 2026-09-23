@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:44:29Z",
+  "updated": "2026-09-23T22:51:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "M-pilot-media": {
       "lane": "codex-mpilot / codex/m-pilot-media",
-      "phase": "dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2)",
+      "phase": "HANDED BACK 8b91648 (upload refs on the real staging; durable attach via 0003 tables + disk cache lookup; 21 mutants; make api-test 3474 + the 23 pre-existing); one-round review running \u2192 merge at step 5",
       "since": "2026-09-23T20:11:55Z",
       "note": "d4 ports, Q 55494; merges on top of the cutover head"
     }
@@ -106,6 +106,10 @@
     "merge-plan": {
       "phase": "MERGED 58e6fdb: scripts 1\u20139 + replay; gating unit D5\u2192phase 3\u2192cutover\u2192M1-L2 on all four verdicts; then M pilot \u2192 E4B \u2192 checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) \u2192 ff main",
       "since": "2026-09-23T22:22:23Z"
+    },
+    "M-pilot-media": {
+      "phase": "review at 8b91648 running (parity on d4 + honesty + refuters)",
+      "since": "2026-09-23T22:51:25Z"
     }
   },
   "gates": {
