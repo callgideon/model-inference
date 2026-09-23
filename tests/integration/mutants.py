@@ -981,12 +981,7 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py", "dr17", layer=2,
            cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
                   "routers",)),
-    Mutant("e3bm63", "E3B3: the video_upload cells pend on their owner reference (M3-U1), "
-                     "never on a merged task",
-           "tests/integration/backend/test_journey.py",
-           'stack.pending("M3-U1", why=', 'stack.pending("G4U", why=',
-           "tests/integration/backend/test_stage.py", "owner_reference",
-           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
+    # e3bm63 (the M3-U1 key) retired with M3-U1: the video_upload cells run (e3bm75).
     Mutant("e3bm64", "E3B3 journeys: a same-key replay is answered as a replay "
                      "(Idempotency-Replayed)",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
@@ -1067,12 +1062,15 @@ MUTANTS: tuple[Mutant, ...] = (
            "        pass\n",
            "tests/integration/test_run.py", "s3_cases_on_this_stacks_minio",
            cases=("test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio",)),
-    Mutant("e3bm73", "E3B3 review H-N1: the M3-U1 pending fails the day its blocker is gone",
+    # e3bm73 (M3-U1's structural probe, review H-N1) retired with M3-U1.
+    Mutant("e3bm75", "E3B3 (M3-U1 retired): a chat naming a finalized infrx-upload: reference "
+                     "is prepared from the store on the mounted gateway (M's gap 1), not a 400",
+           "apps/infrx-api/infrx/media/uploads.py",
+           "        if not source.startswith(UPLOAD_REF_SCHEME):\n",
+           "        if True:\n",
            "tests/integration/backend/test_journey.py",
-           "        if not stack.upload_refs_refused():\n",
-           "        if False:\n",
-           "tests/integration/backend/test_stage.py", "owner_reference",
-           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
+           "backend_journey and video_upload and sync", layer=2,
+           cases=("test_backend_journey[video_upload-sync]",)),
 )
 
 

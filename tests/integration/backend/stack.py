@@ -57,62 +57,17 @@ if importlib.util.find_spec("infrx") is None:
 # `test_stage.py` holds all of them to tasks.json.
 #
 # E3B's own owner references (R3-1): work no task schedules, named by what it is and who
-# owns it - never stale, never a task. E3B phase 3: `G2-R1` (the held cutover) is retired, the
-# cutover mounted the ingress; `M3-U1` is the coordinator's ruling (the M lane
-# `codex/m-pilot-media` fixes it, and its merge retires the reference).
-OWNERS = {"M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
-                   "finalized infrx-upload:upl_… refs from the object store as the contract "
-                   "fake does; today it accepts only http(s)/data: sources"}
+# owns it - never stale, never a task. E3B phase 3: `G2-R1` (the held cutover) retired with
+# the mount; `M3-U1` (upload refs refused by the real staging) and `M3-U2` (media prepared in
+# one process unreadable in another) retired with M's pilot-media merge - every journey cell
+# runs. A new one is added only with a case that names it (test_stage holds both ways).
+OWNERS: dict[str, str] = {}
 # E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
 # no id here; the cases that pended on it (dr07c, dr07[postgres], every journey) run.
 PENDING = {**OWNERS}
 # Merged tasks still in the vocabulary, and why. Integration request #2 asks I3B to rename
 # its blockers; E3B's own cases may not name these (`pending()` refuses them).
 RESIDUAL: dict[str, str] = {}
-
-
-def upload_refs_refused() -> bool:
-    """M3-U1's structural probe (review H-N1), in process, no stack: M's REAL media store
-    (`MediaUploads` over the in-memory object store) finalizes an upload of M's synthetic clip,
-    then prepares a chat that names it. True while the staging still refuses the reference as
-    "a media source must be an http(s) or data: URL"; False the day it resolves it - and then
-    the video_upload cells must run, not pend. Anything else is raised."""
-    import hashlib
-
-    from infrx.contracts import errors
-    from infrx.contracts.conformance import builders as b
-    from infrx.contracts.fakes.support import FakeClock, SequentialIds
-    from infrx.media.store import InMemoryObjectStore
-    from infrx.media.uploads import MediaUploads
-    spec = importlib.util.spec_from_file_location(
-        "e3b3_probe_m_support", harness.API_ROOT / "tests" / "m" / "support.py")
-    support = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(support)
-    clip = support.mp4(seconds=10.0)
-
-    class Rig:
-        clock, ids = FakeClock(), SequentialIds()
-
-    async def probe() -> bool:
-        media = MediaUploads(InMemoryObjectStore())
-        ticket = await media.create_upload(b.ORG_A, {
-            "bytes": len(clip), "digest": "sha256:" + hashlib.sha256(clip).hexdigest(),
-            "accepted_mime": ["video/mp4"]})
-        handle = ticket["upload_handle"] if isinstance(ticket, dict) else ticket.upload_handle
-        await media.put_upload(b.ORG_A, handle, clip, "video/mp4")
-        await media.finalize_upload(b.ORG_A, handle)
-        request = b.request(Rig, org_id=b.ORG_A).model_copy(update={"messages": (
-            {"role": "user", "content": [
-                {"type": "text", "text": "What happens?"},
-                {"type": "video_url", "video_url": {"url": f"infrx-upload:{handle}"}}]},)})
-        try:
-            await media.prepare_request(b.ORG_A, request)
-        except errors.InvalidRequest as refused:
-            if "a media source must be an http(s) or data: URL" in str(refused):
-                return True
-            raise
-        return False
-    return asyncio.run(probe())
 
 
 def pending(*ids: str, why: str):

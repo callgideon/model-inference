@@ -16,8 +16,8 @@ CREDIT debit at the admitted card x usage (half up), the hold settled, reserved 
 prior value, one usage projection, the job pinned as `quote()` pinned it, the USD books
 unmoved, both tenants' wallets conserved.
 
-Pending: the three `video_upload` cells, on the owner reference `M3-U1` (stack.OWNERS): the
-real media staging refuses an `infrx-upload:` reference today.
+Nothing pends: the `video_upload` cells run since M's pilot-media merge (the real staging
+resolves a finalized `infrx-upload:` reference at admission; `M3-U1` retired).
 """
 from __future__ import annotations
 
@@ -228,13 +228,6 @@ def test_backend_journey(trip, input_kind, mode):
     """Two tenants call the mounted gateway: the mode's contract, the same-mode replay, the
     R94 cross-mode conflict that writes nothing, the other tenant's 404s, the settlement
     once at the admitted card, the USD books unmoved, both wallets conserved."""
-    if input_kind == "video_upload" and "M3-U1" in stack.OWNERS:
-        # review H-N1: the pending fails the day its blocker is gone (a structural probe).
-        if not stack.upload_refs_refused():
-            pytest.fail("M3-U1 is fixed: M's real staging resolves an infrx-upload: reference - "
-                        "delete stack.OWNERS['M3-U1'] and run the video_upload cells")
-        stack.pending("M3-U1", why="the real media staging refuses a chat naming a finalized "
-                                   "infrx-upload: reference (MediaStaging.materialize)")
     alpha, beta = trip.world.alpha, trip.world.beta
     before = {tenant.name: (trip.wallet(tenant), trip.usd(tenant)) for tenant in (alpha, beta)}
     messages = messages_for(trip, alpha, input_kind)
