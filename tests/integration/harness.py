@@ -107,7 +107,10 @@ def s3_endpoint() -> str:
 # Where `run.py` leaves what the layer-2 tests need to find the stack it provisioned:
 # the seed and the fixture ids. Outside the repository on purpose - it is run state, not
 # source, and it must never be committed or read by anything but this task.
-STATE_FILE = Path(os.environ.get("TMPDIR", "/tmp")) / f"{PROJECT}-state.json"
+# `INFRX_E2_STATE_FILE` is set by one caller, `mutants.py`, which gives each mutant's run a
+# private TMPDIR (E3B phase 2) and still has to point it at the stack this run provisioned.
+STATE_FILE = Path(os.environ["INFRX_E2_STATE_FILE"]) if os.environ.get("INFRX_E2_STATE_FILE") \
+    else Path(os.environ.get("TMPDIR", "/tmp")) / f"{PROJECT}-state.json"
 
 
 def save_state(state: dict) -> Path:

@@ -944,7 +944,7 @@ def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
     calls = []
 
     def fake_pytest(results):
-        def run(root, m, api_root):
+        def run(root, m, api_root, tmpdir):
             calls.append((root / m.path).read_text().count(m.before))
             return results[len(calls) - 1]
         return run
@@ -965,20 +965,32 @@ def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
     assert calls == [mutant.occurrences, 0], "baseline unmutated, then the mutated run"
 
 
-def test_a_leaked_server_log_is_litter_in_every_namespace(monkeypatch, tmp_path):
-    """Review H4: `fake_vllm` names its log `infrx-e2-fake-vllm-*` whatever the namespace, so
-    the mutant runner's sweep must find it by that name too, not only by `harness.PROJECT`."""
+def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_files(
+        monkeypatch, tmp_path):
+    """E3B phase 2 (the coordinator, from I3B's lane: the name-based sweep deleted another
+    lane's LIVE mutant copy). A mutant's run gets a private TMPDIR inside its own copy, with
+    the state file pointed back at ours; what it leaks goes with the copy, and a foreign
+    `<project>-*` directory created in the shared temp directory during the run survives."""
     import tempfile
 
     import mutants
-    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
-    monkeypatch.setattr(harness, "PROJECT", "infrx-e3b2")       # a non-default namespace
-    log = tmp_path / "infrx-e2-fake-vllm-abc.log"
-    ours = tmp_path / f"{harness.PROJECT}-e2m54-xyz"
-    log.write_text("x")
-    ours.mkdir()
-    assert {log, ours} <= mutants._temp_litter()
-    assert (tmp_path / "someone-else.log") not in mutants._temp_litter()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))       # the "shared" /tmp here
+    foreign = tmp_path / f"{harness.PROJECT}-e2m54-another-lane"
+    seen = {}
+
+    def fake_pytest(root, mutant, api_root, tmpdir):
+        seen["tmpdir"] = tmpdir
+        foreign.mkdir(exist_ok=True)                   # someone else's live copy, mid-run
+        (Path(tmpdir or tempfile.gettempdir()) / "infrx-e2-fake-vllm-leak.log").write_text("x")
+        return 0, ".\n1 passed in 0.1s\n"
+
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest)
+    mutants.run_one(mutants.MUTANTS[2], stack_available=False)   # a tests/integration suite
+    assert foreign.is_dir(), "another run's live copy was deleted"
+    assert not (tmp_path / "infrx-e2-fake-vllm-leak.log").exists(), \
+        "the mutant's litter landed in the shared temp directory"
+    assert seen["tmpdir"] is not None and not Path(seen["tmpdir"]).exists(), seen
 
 
 def test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run(monkeypatch):
@@ -1047,7 +1059,7 @@ def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):
     import mutants
     seen = []
     monkeypatch.setattr(mutants, "BASELINES", {})
-    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root: seen.append(
+    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root, tmpdir: seen.append(
         (api_root, (api_root / "infrx").is_dir())) or (0, ".\n1 passed in 0.1s\n"))
     mutant = next(m for m in mutants.MUTANTS if m.id == "e2m64")
     mutants.run_one(mutant, stack_available=False)

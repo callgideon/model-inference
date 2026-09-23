@@ -779,12 +779,13 @@ MUTANTS: tuple[Mutant, ...] = (
            "    if False:\n",
            "tests/integration/backend/test_stage.py", "refused_outside",
            cases=("test_a_live_defect_is_refused_outside_this_processs_clones",)),
-    Mutant("e3bm31", "E3B2 review H4: a leaked fake-vLLM log is swept in every namespace",
+    Mutant("e3bm31", "E3B2: a mutant run's litter stays in its private TMPDIR",
            "tests/integration/mutants.py",
-           '                              *root.glob("infrx-e2-fake-vllm-*"))\n',
-           "                              )\n",
-           "tests/integration/test_run.py", "leaked_server_log",
-           cases=("test_a_leaked_server_log_is_litter_in_every_namespace",)),
+           '        private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"\n',
+           "        private = None\n",
+           "tests/integration/test_run.py", "litter_private",
+           cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
+                  "files",)),
     Mutant("e3bm32", "E3B2 review H5: a timed-out suite takes its whole process group down",
            "tests/integration/run.py",
            "        os.killpg(process.pid, signal.SIGKILL)\n        stdout, stderr = "
@@ -847,28 +848,22 @@ def _copy_trees(destination: Path) -> None:
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
-def _temp_litter() -> set:
-    """Files in the temp directory carrying our prefix, minus the state file, which is ours."""
-    root = Path(tempfile.gettempdir())
-    # Review H4: fake_vllm's log keeps E2's literal prefix in every namespace (it cannot import
-    # the harness: W3's runner copies it alone), so it is swept by that name as well.
-    return {path for path in (*root.glob(f"{harness.PROJECT}-*"),
-                              *root.glob("infrx-e2-fake-vllm-*"))
-            if path != harness.STATE_FILE}
-
-
 def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     if mutant.layer == 2 and not stack_available:
         return {"id": mutant.id, "status": "pending", "why": "layer 2: no live stack",
                 "invariant": mutant.invariant}
     # A mutant is broken code by construction, so it may leak what the real code cannot: e2m54
     # reintroduces the leaked server log, and every server the copy starts then leaves a file
-    # behind, not only the one the guarded case watches. Anything new under our own prefix is
-    # removed afterwards - never anything that was there before, and never the state file.
-    litter_before = _temp_litter()
+    # behind. E3B phase 2: the run gets a PRIVATE TMPDIR inside its own copy, so whatever it
+    # leaks goes with the copy - nothing in the shared temp directory is ever swept (sweeping
+    # it by name deleted another lane's live mutant copy). One exception: suites under
+    # apps/infrx-api (tests/d) keep the shared TMPDIR, because their port lock lives there.
     with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
+        private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"
+        if private is not None:
+            private.mkdir()
         # E3B: a defect in module code is injected into a copy of `infrx`, which the suite
         # then imports through PYTHONPATH instead of the checkout's.
         api_root = harness.API_ROOT
@@ -892,22 +887,13 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
         # (suite, selector, copy kind) in this process.
         key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)
         if key not in BASELINES:
-            BASELINES[key] = _baseline(mutant, *_pytest(root, mutant, api_root))
+            BASELINES[key] = _baseline(mutant, *_pytest(root, mutant, api_root, private))
         red = BASELINES[key]
         if red is not None:
             return {"id": mutant.id, "status": "baseline-red", "invariant": mutant.invariant,
                     "must_survive": mutant.must_survive, "why": red}
         target.write_text(source.replace(mutant.before, mutant.after, mutant.occurrences))
-        verdict = _verdict(mutant, *_pytest(root, mutant, api_root))
-    litter = sorted(str(path) for path in _temp_litter() - litter_before)
-    for path in litter:
-        pathlib_path = Path(path)
-        if pathlib_path.is_dir():
-            shutil.rmtree(pathlib_path, ignore_errors=True)
-        else:
-            pathlib_path.unlink(missing_ok=True)
-    if litter:
-        verdict["temp_litter_removed"] = litter
+        verdict = _verdict(mutant, *_pytest(root, mutant, api_root, private))
     if mutant.dirties_database:
         verdict["reprovisioned"] = _reprovision()
     return verdict
@@ -916,8 +902,12 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
 BASELINES: dict[tuple, str | None] = {}
 
 
-def _pytest(root: Path, mutant: Mutant, api_root: Path) -> tuple[int, str]:
-    """The mutant's named cases, run in the copy; (exit code, output)."""
+def _pytest(root: Path, mutant: Mutant, api_root: Path,
+            tmpdir: Path | None) -> tuple[int, str]:
+    """The mutant's named cases, run in the copy; (exit code, output). `tmpdir` is the run's
+    private temp directory (None: the shared one), with the state file pointed back at ours."""
+    private = {} if tmpdir is None else {"TMPDIR": str(tmpdir),
+                                         "INFRX_E2_STATE_FILE": str(harness.STATE_FILE)}
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
          "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
@@ -930,7 +920,7 @@ def _pytest(root: Path, mutant: Mutant, api_root: Path) -> tuple[int, str]:
              # label correctly makes the live stack foreign, and every layer-2 mutant is
              # skipped instead of killed.
              "INFRX_E2_CHECKOUT": harness.working_dir(),
-             "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
+             "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1", **private})
     return result.returncode, result.stdout + result.stderr
 
 
