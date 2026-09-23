@@ -130,6 +130,14 @@ def _in_rollback(conn, body):
         return result
 
 
+def gateway_skewed(request, db_now, *, created_s: float, deadline_s: float):
+    """The same request as a gateway whose clock is `created_s` off the store's would send
+    it: `created_at = db_now + created_s`, `deadline_at = db_now + deadline_s`."""
+    return request.model_copy(update={
+        "created_at": db_now + timedelta(seconds=created_s),
+        "deadline_at": db_now + timedelta(seconds=deadline_s)})
+
+
 def credit_request(world, key: str, org: str, model: str = PIN, **kw):
     return b.request(world, org_id=org, key_id=key, model_revision=model, **kw)
 
@@ -191,6 +199,15 @@ def check_admission_accepts(conn) -> str:
         kept, = conn.execute("select deadline_at from infrx.jobs where request_id = %s",
                              (far.request_id,)).fetchone()
         assert kept == now + timedelta(seconds=horizon), f"not clamped: {kept}"
+        # ...and measured on the STORE clock, never the gateway's: a request whose own
+        # clock runs an hour ahead (created_at = db_now + 1 h, deadline 2 h after that)
+        # keeps db_now + horizon, not created_at + horizon (R29/R79, audit R-3).
+        skewed = gateway_skewed(b.request(world), now, created_s=3600, deadline_s=3600 + 7200)
+        admit(conn, skewed, b.idem(skewed, "accept-skewed"))
+        kept, = conn.execute("select deadline_at from infrx.jobs where request_id = %s",
+                             (skewed.request_id,)).fetchone()
+        assert kept == now + timedelta(seconds=horizon), \
+            f"the clamp used the gateway clock: {kept} != db_now + {horizon}s"
         # the hold rounds UP (ceiling_8) on a rate whose exact cost has more digits
         conn.execute("insert into infrx.price_versions (price_version, model_revision, "
                      "input_rate_per_million, output_rate_per_million, token_rules_version, "
@@ -273,6 +290,11 @@ def check_admission_refusals(conn) -> str:
          "invalid_request"),
         ("a deadline equal to the store clock", lambda: req(deadline_s=0), None,
          "legacy_usd", None, "invalid_request"),
+        # R29 on the STORE clock: a gateway an hour behind sends a deadline that is still
+        # in ITS future but already past on the store's - refused.
+        ("a deadline elapsed on the store clock, not the gateway's",
+         lambda: gateway_skewed(req(), world.clock.now(), created_s=-3600, deadline_s=-1),
+         None, "legacy_usd", None, "invalid_request"),
         ("a revoked key", req, None, "legacy_usd", "revoked", "invalid_api_key"),
         ("another organization's key", lambda: req(key_id=b.KEY_B), None, "legacy_usd",
          None, "invalid_api_key"),
@@ -347,6 +369,13 @@ def check_admission_refusals(conn) -> str:
                 raise_rollback()
             seen.append(label)
         assert footprint(conn) == before, 'failed: footprint(conn) == before'
+        # the control: a gateway an hour AHEAD sends a deadline 300 s out on the store's
+        # clock (already "past" on its own) - admitted, because only the store clock counts
+        with conn.transaction():
+            ahead = gateway_skewed(req(), world.clock.now(), created_s=3600, deadline_s=300)
+            got = refusal(conn, ahead, b.idem(ahead, "ahead"))
+            assert got is None, f"a deadline 300 s out on the store clock was refused: {got}"
+            raise_rollback()
         return f"{len(seen)} refusals typed, each leaving no job/hold/reservation/dispatch"
     return _in_rollback(conn, body)
 
