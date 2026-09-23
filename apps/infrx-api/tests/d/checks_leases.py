@@ -644,7 +644,8 @@ def check_recover_unknown_release(conn) -> str:
     """02/R21: an unknown-usage hold is released platform-absorbed by the reaper only at
     `reconcile_after` on the database clock (not a second before), once, with its usage
     projection; the ledger never moves; the terminal settlement changes only along
-    held_unknown -> released_platform_absorbed (the 0003 guard amendment). A CREDIT job
+    held_unknown -> released_platform_absorbed (the 0003 guard amendment; from `settled`
+    or `released_free` it is refused, MY-2). A CREDIT job
     lost after publication beside it: its CREDIT hold is `unknown` and reserved through the
     window, released once at it, the CREDIT ledger unchanged (review FE-1/MY-1)."""
     world = ca.World(conn)
@@ -708,6 +709,19 @@ def check_recover_unknown_release(conn) -> str:
             "a released hold was released again"
         for to in ("settled", "held_unknown", "released_free"):
             assert refused(request.request_id, to), f"a terminal settlement moved to {to}"
+        # MY-2, the guard's source side: only held_unknown may become platform-absorbed -
+        # never known usage (a settled row, simulated: D5 settles) nor a free release
+        cancelled = queued(conn, world)
+        d3(conn, "cancel", org_id=cancelled.org_id,
+           job_handle=row(conn, cancelled.request_id)["job_handle"])
+        settled, _ = running(conn, world)
+        conn.execute("update infrx.jobs set state = 'succeeded', outcome_cause = 'completed', "
+                     "settlement_state = 'settled', usage_certainty = 'authoritative', "
+                     "result_ref = 'infrx-result:' || request_id, settled_at = infrx.now() "
+                     "where request_id = %s", (settled.request_id,))
+        for job, source in ((settled, "settled"), (cancelled, "released_free")):
+            assert refused(job.request_id, "released_platform_absorbed"), \
+                f"{source} -> released_platform_absorbed allowed"
         return "unknown usage released platform-absorbed at the window, never debited"
     return ca._in_rollback(conn, body)
 
