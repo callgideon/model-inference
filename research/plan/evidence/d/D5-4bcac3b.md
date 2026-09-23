@@ -440,7 +440,10 @@ Further deltas and proposals (the coordinator rules; no D edit is pending on the
 - **G3 contract proposals (addendum 4).**
   - `get_owned_credit` should return `state`, `deadline_at` and `max_output_tokens`. All three are columns of `infrx.jobs`; `job_admission` can add them at no cost.
   - `db_now()` on the `JobStore` port: `select infrx.now()`.
-  - `result_expires_at` is now STORED at settlement (`settled_at + result_ttl_s`, D2 limit 9), so G3 can drop its route-side TTL.
+  - `result_expires_at` is STORED at settlement (`settled_at + result_ttl_s`, D2 limit 9), **but no read returns it yet** (review N7/CF-7/H-N3). The round-1 wording, "so G3 can drop its route-side TTL", was wrong, so G3 request (c) stays open. It was not implemented in the fix round because it is a contract change: `TerminalOutcome` (`infrx/contracts/records.py`, frozen, F's) has no such field, and the owned read returns that record. The exact proposal, for F and the coordinator:
+    - 0018's `job_admission` outcome document gains `result_expires_at` (one line; `PgJobStore._outcome` keeps only the record's fields);
+    - `TerminalOutcome` gains `result_expires_at: Timestamp | None`, set by the fake's settlement as `settled_at + result_ttl_s`;
+    - G3's `result_expiry` then reads it. Until then, G3 keeps its route-side TTL, which equals the stored value by construction: the same `limits.result_ttl_s` over the same `settled_at`.
   - Mapping retention is confirmed: an active job's idempotency mapping never expires, and a terminal one's expires `idempotency_ttl_s` (24 h by default) after its terminal state (`check_lookup`).
 - **Ruling candidates.**
   - (i) A negative `operator_adjustment` is recorded as a store-made compensating entry under R11: audited `admin_adjust` with a reason, never below reserved (brief open input iv).
@@ -472,6 +475,7 @@ Further deltas and proposals (the coordinator rules; no D edit is pending on the
 10. **`service_role` can UPDATE the new `jobs` columns before settlement** through the earlier table-level grant, as it can every `jobs` column. The gateway reaches them only through the SECURITY DEFINER functions, and the guard freezes them once settled.
 11. **The 906d963 Supabase sweep had 11 failures**, in the conformance rig and a service test, not in 0018: 8 CREDIT cases (`InsufficientPrivilege: must be owner of table users`, D2's trigger bypass on `auth.users`) and 3 operations-service tests (`UndefinedColumn: email_confirmed_at`, since the bare image has no GoTrue columns). Both are fixed at `4bcac3b` (see its row).
     - Commit-message correction: `4bcac3b` says "(8 CREDIT cases, 2 service/partial-publication, 1 setup)". The three non-CREDIT failures are `test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1`, `…__the_operations_service_runs_on_the_postgres_adapters` and `…__a_partial_publication_is_unreachable_and_rerunnable`.
+12. **`result_expires_at` is stored but not readable** (fix round; review N7/CF-7/H-N3). G3 request (c) stays open. It is a contract change for F/coordinator, and the proposal is under "Further deltas".
 
 ## Handback
 
