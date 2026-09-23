@@ -5,10 +5,11 @@ parametrised over the store it runs on:
 
 * `fake`     - the merged contract fakes. Runs today; proves the drill and its assertions
                (a fake-only result is *implemented*, never *integrated*).
-* `postgres` - the real PostgreSQL JobStore (`infrx.state.pgtesting` on this stack's
-               PostgreSQL, E3B phase 2). A drill names the store functions it drives and is
-               PENDING - on the task the stub names - only while one of THOSE is still an
-               `infrx.unimplemented` stub (D4's `append`, D5's settlement).
+* `postgres` - the real PostgreSQL JobStore and, since D4, its `PgStreamStore` journal
+               (`infrx.state.pgtesting` on this stack's PostgreSQL, E3B phase 2). A drill
+               names the store functions it drives and is PENDING - on the task the stub
+               names - only while one of THOSE is still an `infrx.unimplemented` stub
+               (D5's settlement).
 
 Where a real store does exist it is used directly: Q2's `ValkeyScheduler` on E2's Valkey
 (queue loss and rebuild, index saturation), migrations 0001-0005 on E2's PostgreSQL (the
@@ -686,7 +687,7 @@ def test_e3b_db06_detects_a_missing_durable_acceptance_on_the_real_store(monkeyp
 
 async def _stale_generation_accepted(h) -> list[str]:
     """dr04's requeue with the SAME worker id on both generations (dr05's shape, without
-    D4's append): generation 1's lease must be refused by the fence every execution
+    its append): generation 1's lease must be refused by the fence every execution
     mutation runs first. Returns what was accepted (empty = fenced)."""
     _, admission = await admit(h)
     old = await running(h, admission, "w1")
@@ -715,6 +716,15 @@ def test_e3b_db07_detects_a_stale_fence_on_the_real_store(monkeypatch):
     monkeypatch.setattr(sys.modules[__name__], "DEFECT", _fence_ignores_generation)
     h = rig("postgres", *drives)
     assert run(lambda: _stale_generation_accepted(h)) == ["heartbeat of generation 1"]
+
+
+def test_e3b_db11_detects_a_stale_append_on_the_real_journal(monkeypatch):
+    """Intentional defect on the REAL journal (DUR-FENCE append, D4's 0017): `append` fences
+    first, so with `fence_lease`'s generation check removed generation 1's append is stored,
+    and dr05's own `pytest.raises` must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _fence_ignores_generation)
+    with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+        test_e3b_dr05_a_stale_generation_cannot_append("postgres")
 
 
 def _credit_hold_on_the_usd_books():
