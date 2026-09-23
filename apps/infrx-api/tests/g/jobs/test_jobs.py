@@ -1255,18 +1255,21 @@ def test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers():
     lone.__module__ = jobs_router.__name__
     with pytest.raises(RuntimeMisconfigured):
         ingress.assert_route_table(partial)
-    shadowed, _ = rs.support.cutover_app()
 
-    @shadowed.get("/v1/{rest:path}")                   # registered before the jobs router
     async def catch_all():
         return {}
 
-    rt = shadowed.state.runtime
-    rt.relay = world.relay
-    rt.ingress = rs.support.deps(accept=world.relay.accept, catalog=world.catalog)
-    jobs_router.register(shadowed, rt)
-    with pytest.raises(RuntimeMisconfigured):
-        ingress.assert_route_table(shadowed)
+    # A pattern route registered before the jobs router serves a jobs path without being "at"
+    # it: a GET catch-all under /v1, and a DELETE-only one under /v1/jobs (review stream-C2).
+    for pattern, method in (("/v1/{rest:path}", "GET"), (JOBS + "/{rest:path}", "DELETE")):
+        shadowed, _ = rs.support.cutover_app()
+        shadowed.add_api_route(pattern, catch_all, methods=[method])
+        rt = shadowed.state.runtime
+        rt.relay = world.relay
+        rt.ingress = rs.support.deps(accept=world.relay.accept, catalog=world.catalog)
+        jobs_router.register(shadowed, rt)
+        with pytest.raises(RuntimeMisconfigured):
+            ingress.assert_route_table(shadowed)
 
 
 class Journal(FakeStreamStore):

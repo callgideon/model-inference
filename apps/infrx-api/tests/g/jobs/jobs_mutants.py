@@ -348,6 +348,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("jobs_route_shadow_tolerated", "each jobs route is the one Starlette picks (review N2)",
        N, "                          or any(module != JOBS_MODULE for module in picked)):",
        "                          or False):", TABLE),
+    _m("jobs_route_shadow_checked_partially", "every jobs route, DELETE and the sub-resources "
+       "included, is the one Starlette picks (review stream-C2)",
+       N, '    picked = [_picked(app, method, path.replace("{handle}", SAMPLE_JOB_HANDLE))\n'
+          "              for method, path in JOBS_ROUTES]",
+       '    picked = [_picked(app, method, path.replace("{handle}", SAMPLE_JOB_HANDLE))\n'
+       "              for method, path in JOBS_ROUTES[:2]]", TABLE),
     _m("jobs_routes_unnamed", "the route table names the jobs router as their handler",
        J, "        endpoint.__module__ = __name__", "        pass", TABLE),
 )
