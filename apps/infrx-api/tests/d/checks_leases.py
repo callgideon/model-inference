@@ -247,6 +247,15 @@ def check_claim_generation(conn) -> str:
             "not_claimable", "a job with a live preparation lease was claimed as well"
         assert [k for k, _, _ in live_attempts(conn, torn.request_id)] == ["preparation"], \
             "a job ended with two live attempts of different kinds"
+        # ... and one that still carries a live INFERENCE attempt (a running job forced back
+        # to queued): the same refusal, not the unique index's 23505 (confirmation FC-3)
+        torn, _ = running(conn, world, worker="w-torn")
+        conn.execute("update infrx.jobs set state = 'queued' where request_id = %s",
+                     (torn.request_id,))
+        code, _ = d3(conn, "claim", job_id=torn.request_id, worker_id="w2")
+        assert code == "not_claimable", f"a job with a live inference lease was claimed: {code}"
+        assert live_attempts(conn, torn.request_id) == [("inference", 1, "w-torn")], \
+            f"the live inference attempt changed: {live_attempts(conn, torn.request_id)}"
         # MY-3: a queued CREDIT job is never leased (its work has no v1 loader)
         org = cc.personal_org(conn, cc.CONSUMER_1)
         credit = ca.credit_request(world, ca.C1_KEY, org)

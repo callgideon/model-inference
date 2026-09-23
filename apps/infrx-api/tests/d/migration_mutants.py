@@ -1739,6 +1739,13 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  if false then",
        "admission", "claim_generation",
        "a job ends with two live attempts of different kinds (FE-4)"),
+    _m("d3_claim_beside_a_live_preparation_only", LEASES,
+       "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
+       "                and released_at is null) then",
+       "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
+       "                and released_at is null and kind = 'preparation') then",
+       "admission", "claim_generation",
+       "a claim beside a live inference attempt dies on the unique index, untyped (FC-3)"),
     _m("d3_claim_leases_a_credit_job", LEASES,
        "  if j.accounting_regime = 'credit' then\n    perform infrx.refuse('not_claimable'",
        "  if false then\n    perform infrx.refuse('not_claimable'",
