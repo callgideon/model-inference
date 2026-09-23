@@ -1262,6 +1262,22 @@ MUTANTS: tuple[Mutant, ...] = (
        P, "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed",
        "            pass",
        "test_f_base__shutdown_drains_the_relays_durable_cancels"),
+    _m("drain_after_pool_close", "the relay's cancels drain before the pool closes (r2 C2-1)",
+       P, "        if lifetime.relay is not None:\n"
+          "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed\n"
+          "        if lifetime.pool is not None:\n"
+          "            await lifetime.pool.close()",
+       "        if lifetime.pool is not None:\n"
+       "            await lifetime.pool.close()\n"
+       "        if lifetime.relay is not None:\n"
+       "            await lifetime.relay.drain(DRAIN_S)     # before the pool it needs is closed",
+       "test_f_base__shutdown_drains_the_relays_durable_cancels",
+       "test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last"),
+    _m("drain_waits_one", "shutdown waits for every cancel in flight (r2 C2-3)",
+       R, "            await asyncio.wait(set(self._cancels), timeout=timeout_s)",
+       "            await asyncio.wait(set(self._cancels), timeout=timeout_s,\n"
+       "                               return_when=asyncio.FIRST_COMPLETED)",
+       "test_f_base__shutdown_drains_the_relays_durable_cancels"),
     _m("pool_configure_dropped", "the built pool carries the configure hook (review C1)",
        P, "        configure=configure_connection(deployment.database_pool_statement_timeout_ms))",
        "        configure=None)",
