@@ -1,0 +1,110 @@
+# E4B certification protocol — predeclared before any E4B number
+
+Task E4B (`research/plan/18-marlin-backend-first.md` §E4B, slices E4B.a/E4B.b). This file is the
+**pre-registration** of the release-candidate certification: the checks, the matrix cells,
+their shapes at each scale and every criterion that decides a check are fixed **here**, and
+committed before the runner that executes them (`tests/integration/backend/certify.py`). Git
+order is the proof. A criterion is never edited after an E4B result exists; a change is an
+amendment appended to the log at the end, with the reason.
+
+The one source of the numbers is `certify.py`: §5's table quotes `certify.CRITERIA` and
+`certify.MATRIX`, and `tests/integration/backend/test_certify.py` holds the two equal. Most
+criteria are imported, not restated: W4's `measure/decide.py` constants, E1B's sample rule and
+`research/production-api/01-requirements-and-traffic-model.md` §2.3. **Nothing here is a
+target or an SLO**: every latency, rate and soak row is **provisional (P-18)** until a
+workload owner supplies one.
+
+## 1. Identity
+
+| Axis | Value |
+|---|---|
+| Release under test | the git SHA the runner runs at, dirty flag at start and end, plus the hashes `certify.py` computes into its report (`hashes`): serving version, `serve.sh`, the engine-options digest recomputed from the pinned flags, runtime image and model digests, contract limits, migrations, the `deploy/` tree, alert rules, the lockfile, and the published Marlin release record |
+| Target `local` | the E2 compose stack (`INFRX_E2_NAMESPACE`, default `e2`) and the runner's own fake vLLM (`tests/integration/fake_vllm.py`). **Every number from it is labelled `fake-engine, not a measurement`** |
+| Target `box` | the pilot box (P-04 target) inside the coordinator's maintenance window: `--target <gateway /v1 URL> --engine-url <engine URL> --metrics-url <gateway /metrics> --inventory <inventory.sh output> --box`. Numbers are `meas.` |
+| Corpora | licensed `models/marlin2b/corpus/manifest.json` (envelope, soak, overload); `models/marlin2b/corpus-synth/manifest.json` (`sop-synth-v1`, dataset resume); W4's parity set (`measure/parity.py` `PARITY_SET`) |
+| Seed | `20260922` (E1B's frozen seed); the dataset version is `e4b-<short sha>-<UTC>`, so a second run never replays the first run's items |
+
+## 2. Preconditions
+
+Checked by the runner (`e4b.b.preconditions`); a failed precondition is a FAIL of that check,
+and the other checks still run and are recorded.
+
+1. **App and Lab stopped.** No Next.js server of this repository (a `next-server` or `next
+   start|dev` process whose working directory is inside the repository's main checkout or one
+   of its worktrees) runs on the runner host. The backend is certified with both applications
+   stopped (18 §Deliverable).
+2. **Box only:** `E4B_WINDOW_OK=1`, the coordinator's statement that a logged maintenance
+   window is open (W4's `W4_ENGINE_RESTART_OK` rule: the runner cannot stop new traffic).
+3. **Box only:** the engine is idle: `vllm:num_requests_running` and
+   `vllm:num_requests_waiting` are both 0 on `<engine-url>/metrics` (W4 `candidate.sh`).
+4. **Box only:** every parity clip is in the corpus cache (`parity.py --check`, W4
+   precondition 3).
+
+The measurement checkout at the release SHA (W4 precondition 2) and the inventory file
+(`measure/inventory.sh`, W3) are the coordinator's inputs; the runner records their hashes.
+
+## 3. E4B.a checks
+
+| Check | What runs | Passes when |
+|---|---|---|
+| `e4b.a.protocol` | the phase-2 gate's stages on the E2 stack (preflight, services, migrate, rls, backend), exactly as `run.py --layer 3` runs them; this check is the backend suite **outside** `recovery/` | every stage passes and every backend case outside `recovery/` passes; a pending case pends with its typed ids |
+| `e4b.a.sop-parity` | `measure/parity.py` at c = 1 on the parity set against the engine, paired by `decide.parity_verdict` with a baseline: local = a second run on the same fake engine; box = `--parity-baseline` (W4's E0 `parity.jsonl`, or the previous certified release's) | `decide.parity_verdict` is `pass` |
+| `e4b.a.dataset-resume` | `bench.py` over `sop-synth-v1` items with `Idempotency-Key: sop1.<item_key>`, **SIGINT after `interrupt_after` accepted rows**, then `bench.py --resume <raw>` | client: the first run was really interrupted, every item terminal after the resume, no terminal item re-sent, each item one key; server (metered target only): one usage record and no remaining hold per accepted item, one Inference-Id per item across both runs, every record in CREDIT, Σ charged = ledger delta, reserved back to its value before the run |
+
+## 4. E4B.b matrix
+
+| Cell | Driver | Passes when |
+|---|---|---|
+| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused |
+| `e4b.b.soak` | `bench.py` open loop at `soak.rate` for `soak.seconds`, the target's `/metrics` scraped every `soak.sample_s` | failure rate below `max_failure_rate`; growth (second half's maximum over the first half's, `decide.growth`) of `infrx_process_resident_bytes` ≤ `max_host_growth_mib` and of used GPU memory ≤ `max_gpu_growth_mib`; `infrx_reconciliation_drift` and `infrx_unsettleable_jobs` 0 at the end; latency p50 of the last third ≤ `soak_latency_drift` × the first third's |
+| `e4b.b.overload` | `bench.py --burst <burst>`: `burst` requests from one key at one instant | at least one accepted; at least one refused; **every** refusal is a 429 carrying a numeric `Retry-After` and one of `overload_codes`; no 5xx and no platform-caused failure |
+| `e4b.b.recovery` | I3B's `rc*`/`bk*` drills: local = the backend suite's `recovery/` cases on the E2 stack; box = I3B's runbook drills, executed by the coordinator from the E4B box protocol | every drill passes, or pends on a typed owner |
+| `e4b.b.config-pin` | the tree against the settings W3/W4/M4 declared (`certify.DECLARED`); the published Marlin release record against the serving version; box: the deployed engine (`--inventory`) against the pin | every value equal. A difference is a FAIL naming the evidence it would invalidate: re-measure and re-declare, never ship silently ("reject any optimization that invalidates earlier evidence") |
+
+## 5. Criteria and cell shapes (`certify.CRITERIA`, `certify.MATRIX`)
+
+| Id | Value | Source |
+|---|---|---|
+| `max_failure_rate` | 0.01 | `decide.MAX_FAILURE_RATE`; E1B §4 error rate, provisional (P-18) |
+| `p95_min_accepted` | 60 | `decide.P95_MIN_ACCEPTED`; E1B sample sufficiency (method) |
+| `ttft_p95_short_s` | 6.0 | 01 §2.3 interactive TTFT p95 for clips ≤ 30 s at ≤ 720p; a proposal, provisional (P-18) |
+| `short_clip_max_s` | 30.0 | 01 §2.3 (the clip class the TTFT row names) |
+| `short_clip_max_edge_px` | 1280 | 01 §2.3 "≤ 720p" read as the long edge of 1280×720 |
+| `e2e_p95_s_per_clip_minute` | 45.0 | 01 §2.3 interactive end-to-end p95; provisional (P-18) |
+| `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion) |
+| `max_gpu_growth_mib` | 256 | `decide.MAX_GPU_GROWTH_MIB` |
+| `soak_latency_drift` | 1.5 | E4B engineering criterion, provisional (P-18) |
+| `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72` |
+| `engine_ceiling_s` | 82 | `decide.ceiling_s(<encoder budget of the pinned flags>)`: 16,384 tokens today (W4 P-20 record) |
+| `overload_codes` | capacity_exhausted, journal_capacity_exhausted, rate_limited | `errors.RETRY_AFTER_CODES` minus `dependency_unavailable` (a dependency, not overload) |
+
+| Scale | Envelope rates (req/s) × requests | Soak rate × seconds, sample every | Overload burst | Dataset items / interrupt after / rate |
+|---|---|---|---|---|
+| `tiny` (local) | 4.0 × 12 | 2.0 × 10, 1 s | 32 | 12 / 4 / 4.0 |
+| `box` | 0.5, 1.0, 2.0 × 120 each | half the highest passing envelope rate × 14400 (E1B's provisional 4 h floor), 30 s | 32 (4 × `max_active_jobs_per_key`) | 24 / 8 / 1.0 |
+
+The `tiny` scale proves the runner end to end and cannot support a p95 (12 samples): its
+latency rows are `unknown` by construction, so a local run never passes the envelope.
+
+## 6. What invalidates a result
+
+E1B §5 in full, plus:
+
+1. any number from the `local` target quoted without `fake-engine, not a measurement`;
+2. a config-pin difference (§4) left unresolved: the measured envelope then belongs to another
+   serving configuration;
+3. a report whose `git_head` and `git_head_end` differ, or either is dirty;
+4. a box run without the §2 preconditions.
+
+## 7. What this protocol does not decide
+
+**BACKEND-READY.** It needs the box half (P-04), P-20 resolved, the pending owners of the local
+run closed, and the coordinator's decision recorded in
+`research/plan/evidence/e/E4B-release-decision.md`. Cost per video-hour (P-19), accuracy
+(P-07) and an availability target (P-18) are outside it.
+
+## Verification log
+
+- 2026-09-23 (E4B): Protocol predeclared before `certify.py` existed and before any E4B run.
+  No GPU, box, AWS or hosted service was used; the only numbers quoted are constants of
+  `decide.py`, E1B and 01 §2.3, each with its source.
