@@ -52,7 +52,11 @@ def test_i3b_rb02_restore_runs_the_drilled_tool_with_the_pinned_client():
 
 
 def test_i3b_rb03_the_maintenance_statement_is_the_one_bk04_runs():
-    assert test_restore.MAINTENANCE % "false" in (RUNBOOKS / "rollback.md").read_text()
+    text = (RUNBOOKS / "rollback.md").read_text()
+    assert test_restore.MAINTENANCE % "false" in text
+    # as bk04 runs it: under service_role (0006's policy), not as the pooler's postgres
+    assert text.index("set role service_role;") < text.index(test_restore.MAINTENANCE % "false")
+    assert "reset role;" in text
 
 
 def test_i3b_rb04_every_bash_step_parses():

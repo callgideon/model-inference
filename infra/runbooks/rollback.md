@@ -46,11 +46,14 @@ until the apply the only way to stop admission is to stop the gateway.
 the one table that role may update), through the pooler:
 
 ```sql
+-- the pooler login is `postgres` (BYPASSRLS): become the role bk04 drills first
+set role service_role;
 -- enter maintenance
 update infrx.feature_flags set enabled = false, updated_by = 'i3b-drill', reason = 'maintenance drill' where name in ('legacy_usd_admission', 'credit_admission');
 -- check: raises SQLSTATE 55000 while in maintenance
 select infrx.require_feature('credit_admission');
 -- leave maintenance: the same statement with `enabled = true`
+reset role;
 ```
 
 Write your own name and reason into `updated_by`/`reason` (the drill's literals above are
@@ -73,3 +76,6 @@ ledger, journal or job tables to roll back code.
 
 - 2026-09-22 (I3B.c): Maintenance statement drilled verbatim by `bk04` on the pinned image;
   rollout rollback pending I2B's scripts (`rc10`). Nothing run on hosted or the box.
+- 2026-09-23 (I3B fix round, RS-6): the SQL block runs under `set role service_role` like
+  bk04's `set local role`, instead of as the pooler's `postgres` login (which succeeded by
+  BYPASSRLS, not by 0006's policy); rb03 pins it.
