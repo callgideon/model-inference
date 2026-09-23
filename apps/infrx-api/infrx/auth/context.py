@@ -8,8 +8,8 @@ Two rules this module exists to enforce:
   key nor Supabase (the `O-FAILOPEN` hazard: an install run that loses a
   parameter read publishes an open gateway). The new ingress cannot build an
   `AuthContext` out of that, and it does not invent one: no row is `401`, in
-  every mode. The permissive F1 path stays reachable only through the legacy
-  `gateway:app` entry point, which G1's cutover retires.
+  every mode. The permissive F1 path was reachable only through the legacy
+  `gateway:app` entry point, which the cutover retired.
 * **Belt and braces with `config.validate_runtime` (r1 R44/R51).** Building a
   resolver in `pilot` mode against a shared key, or without an identity source,
   raises `config.RuntimeMisconfigured` - the same typed startup error, naming

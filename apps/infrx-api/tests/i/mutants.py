@@ -282,8 +282,22 @@ MUTANTS: tuple[Mutant, ...] = (
 U = "deploy/"
 CADDY, MAINT = "deploy/Caddyfile", "deploy/Caddyfile.maintenance"
 PACK = "test_backend_deploy__"
+FACTORY = "the_gateway_runs_the_factory_from_what_the_image_copies"
 MUTANTS += (
     # the runtime image and its probe
+    # the cutover (CUTOVER item 2): the factory, and nothing of the retired shim
+    _m("unit_runs_the_retired_shim", "the gateway unit runs the create_app factory",
+       U + "marlin2b-gateway.service",
+       "${INFRX_IMAGE} uvicorn --factory infrx.gateway.app:create_app --host",
+       "${INFRX_IMAGE} uvicorn gateway:app --host", PACK + FACTORY),
+    _m("image_copies_the_retired_shim", "the image copies only what exists in its context",
+       U + "Dockerfile", "COPY infrx ./infrx\n", "COPY gateway.py ./\nCOPY infrx ./infrx\n",
+       PACK + FACTORY),
+    _m("image_compiles_the_retired_shim", "the image compiles only what it copied",
+       U + "Dockerfile", "RUN python -m compileall -q infrx deploy",
+       "RUN python -m compileall -q infrx gateway.py deploy", PACK + FACTORY),
+    _m("context_drops_the_package", "the build context lets in what the image copies",
+       U + "Dockerfile.dockerignore", "!infrx/\n", "", PACK + FACTORY),
     _m("image_not_required_in_pilot", "a pilot runs only the pinned runtime image",
        P, 'Key("INFRX_IMAGE", "runtime image pin (built image id)", "image_id",\n'
           '        required_in=("pilot",)),',
@@ -807,7 +821,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     api = root / COPY_ROOT
     api.mkdir(parents=True)
     ignore = shutil.ignore_patterns("__pycache__", ".venv")
-    for name in ("infrx", "tests", "deploy"):
+    for name in ("infrx", "tests", "deploy", "openrouter"):   # openrouter: the image copies it
         shutil.copytree(API_DIR / name, api / name, ignore=ignore)
     engine = root / "models" / "marlin2b"
     engine.mkdir(parents=True)
@@ -816,7 +830,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copy2(REPO / "models" / "marlin2b" / "serving-version.json", engine / "serving-version.json")
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
-    shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
+    for name in ("pyproject.toml", "uv.lock"):
+        shutil.copy2(API_DIR / name, api / name)
     return api
 
 

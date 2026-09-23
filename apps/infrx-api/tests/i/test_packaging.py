@@ -76,6 +76,32 @@ def test_backend_deploy__every_image_is_pinned_by_digest():
     assert not preflight.SHAPES[image_key.shape]("infrx-runtime:latest")
 
 
+def test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies():
+    """The cutover (G2 request 1, R48): the gateway unit runs `uvicorn --factory
+    infrx.gateway.app:create_app`, a callable of the code the image copies; the retired
+    `gateway.py` shim is gone, and every path the Dockerfile copies or compiles exists and
+    is let into the build context by `Dockerfile.dockerignore`."""
+    import importlib
+
+    argv = docker_run("marlin2b-gateway.service")
+    command = argv[argv.index("${INFRX_IMAGE}") + 1:]
+    assert command[:3] == ["uvicorn", "--factory", "infrx.gateway.app:create_app"], command
+    module, _, name = command[2].partition(":")
+    assert callable(getattr(importlib.import_module(module), name))
+    assert not (support.API_DIR / "gateway.py").exists()
+    docker = (DEPLOY / "Dockerfile").read_text()
+    copied = [source for line in re.findall(r"^COPY (?!--)(.+)$", docker, re.M)
+              for source in line.split()[:-1]]
+    compiled = re.search(r"^RUN python -m compileall -q (.+)$", docker, re.M).group(1).split()
+    allowed = {line[1:].rstrip("/") for line
+               in (DEPLOY / "Dockerfile.dockerignore").read_text().splitlines()
+               if line.startswith("!")}
+    for source in copied:
+        assert (support.API_DIR / source).exists() and source in allowed, source
+    for path in compiled:
+        assert any(path == source or source.startswith(path + "/") for source in copied), path
+
+
 def test_backend_deploy__the_image_runs_nothing_as_root():
     """The Dockerfile's last word is an unprivileged user, and the pilot probe refuses an
     image whose interpreter runs as uid 0 - checked where it runs, not where it is built."""

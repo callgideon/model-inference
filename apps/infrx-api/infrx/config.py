@@ -1,8 +1,8 @@
 """Gateway configuration: one mutable dataclass, and the only os.environ read.
 
 Field names mirror the original gateway module's globals (UPSTREAM -> upstream,
-MAX_VIDEO_MB -> max_video_mb, ...) so the legacy shim in gateway.py forwards
-assignments straight here, and so a config change is one place, not two.
+MAX_VIDEO_MB -> max_video_mb, ...), which the legacy `gateway.py` shim forwarded here
+until the cutover retired it, so a config change is one place, not two.
 
 `Settings`/`from_env` are the F1 gateway's own configuration and keep their exact
 defaults. The pilot settings of contracts v1 (08 §5) are a separate object:
