@@ -764,7 +764,9 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
     """The acceptance. A drain loop, a reconcile loop, two preparation and two inference
     workers run concurrently over real Valkey while jobs keep arriving; one inference
     worker holds its lease across the kill. Valkey is SIGKILLed mid-run and comes back
-    empty. Every loop survives the outage by retrying. At the end every accepted job is
+    empty. Every loop that touches the server during the outage feels it and retries
+    (the printout lists every worker; the lease-holding one waits on the kill and may
+    feel nothing), and every loop outlives it. At the end every accepted job is
     terminal, no job ever held a second lease, and every dispatch row is acknowledged."""
     _need_valkey()
     import valkey.exceptions
@@ -775,7 +777,7 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
 
     async def body():
         stop, killed = asyncio.Event(), asyncio.Event()
-        felt: dict[str, int] = {}
+        felt = dict.fromkeys(("prep-1", "prep-2", "gpu-1", "gpu-slow"), 0)   # HON-1
 
         async def forever(name, step):
             while not stop.is_set():
@@ -783,7 +785,7 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
                     if not await step():
                         await asyncio.sleep(0.002)
                 except transient:
-                    felt[name] = felt.get(name, 0) + 1
+                    felt[name] += 1
                     await asyncio.sleep(0.01)
 
         async def slow_gpu():
@@ -821,7 +823,8 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
         print(f"\nworkers that felt the outage: {felt}; relay errors "
               f"{w.rec.metrics['errors']}, rebuilds {w.rec.metrics['rebuilds']}; "
               f"leases {sum(w.leases.values())}")
-        assert felt and w.rec.metrics["errors"], "the kill did not happen under traffic"
+        assert any(felt.values()) and w.rec.metrics["errors"], \
+            "the kill did not happen under traffic"
         rig.settled(w)
         assert sorted(w.leases) == sorted(w.admitted)
         assert all(w.jobs.jobs[job].state is rig.JobState.succeeded for job in w.admitted)
