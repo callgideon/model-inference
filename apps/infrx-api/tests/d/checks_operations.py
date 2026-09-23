@@ -134,6 +134,13 @@ def check_allocation(conn) -> str:
         code, answer = grant(conn, cc.PROVIDER_WALLET, "100.00000000", kind="operator_allocation")
         assert code is None and answer["entry"]["kind"] == "operator_allocation", (code, answer)
         assert wallet(conn, cc.PROVIDER_WALLET)[0] == before[0] + 100
+        # review N4: exact CREDIT text round-trips at full precision - 12 integer digits and
+        # 8 places, the entry's amount text and the wallet total both exact
+        big = "123456789012.12345678"
+        code, answer = grant(conn, cc.PROVIDER_WALLET, big, kind="operator_allocation")
+        assert code is None and answer["entry"]["amount"] == big, (code, answer)
+        assert wallet(conn, cc.PROVIDER_WALLET)[0] == before[0] + 100 + Decimal(big), \
+            wallet(conn, cc.PROVIDER_WALLET)
         for wid, kind, amount, label in (
                 (consumer, "operator_allocation", "5.00000000", "an allocation to a consumer"),
                 (cc.PROVIDER_WALLET, "operator_allocation", "-5.00000000",
@@ -146,7 +153,7 @@ def check_allocation(conn) -> str:
             code, _ = grant(conn, wid, amount, kind=kind)
             want = "not_found" if label == "no such wallet" else "invalid_request"
             assert code == want, f"{label}: {code}"
-        assert rows(conn, "infrx.credit_ledger") == ledger + 1, "a refused movement wrote"
+        assert rows(conn, "infrx.credit_ledger") == ledger + 2, "a refused movement wrote"
         assert_no_drift(conn, "allocations")
         return "allocation to provider_dev only; adjustment to consumer only"
     return ca._in_rollback(conn, body)

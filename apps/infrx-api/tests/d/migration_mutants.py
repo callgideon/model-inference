@@ -2601,6 +2601,10 @@ D5_MUTANTS: tuple[Mutant, ...] = (
     _m("d5_allocation_to_consumer_wallet", SETTLE,
        "  if v_kind = 'operator_allocation' and w.kind <> 'provider_dev' then", "  if false then",
        "admission", "allocation", "consumer credit minted by allocation (0006 kind rule, 500)"),
+    _m("d5_amount_through_float", SETTLE, "  v_amount := v_text::numeric;",
+       "  v_amount := v_text::float8::numeric;", "admission", "allocation",
+       "a full-precision operator amount is rounded through binary floating point "
+       "(review N4)"),
     _m("d5_amount_not_bounded", SETTLE,
        "     or v_text !~ '^-?[0-9]{1,12}(\\.[0-9]{1,8})?$' then", "     or false then",
        "admission", "adjust", "an over-scale or exponent amount reaches the ledger (R11)"),
