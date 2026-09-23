@@ -1,0 +1,161 @@
+# Rollout — phase 2: the Marlin pilot on the box (checklist)
+
+**Coordinator-run, in this order, after checkpoint 2.** Written by the ROLLOUT-PREP lane,
+which ran nothing against the box and applied nothing to hosted; its read-only hosted
+inventory, backup, restore rehearsal and dry-runs are in
+`research/plan/evidence/i/ROLLOUT-PREP-*.md`. The box scripts are I2B's
+([../rollout/README.md](../rollout/README.md), steps under `infra/rollout/steps/`, sent by
+`infra/rollout/ssm.sh`); this page fixes the order for this release, adds the hosted backup,
+the release route, the settings the merged lanes introduced, the real-bucket check and the
+rollback triggers. Rules: [README.md](README.md) (log before you act; names, never values).
+
+```bash
+# coordinator host, repository root checked out at the release; every AWS call like this
+aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws --region us-east-1 "$@"; }
+export RELEASE=${RELEASE:?the checkpoint-2 commit, 40 hex}
+PY=apps/infrx-api/.venv/bin/python
+HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscgsymzdykendbrc dbname=postgres sslmode=require"
+```
+
+## 0. Before the window
+
+| # | Check | Pass |
+|---|---|---|
+| P1 | Gates G1-G4 and G6 of [../rollout/README.md](../rollout/README.md) at `RELEASE` | as there |
+| P2 | G5 `apps/infrx-api/deploy/rehearse.sh` | `REHEARSAL PASSED`. On the cutover tree its dev deploy cannot start: `create_app` needs `S3_MEDIA_BUCKET` (answering HeadBucket), `DATABASE_URL` and Valkey in every mode (owner: I / cutover lane) |
+| P3 | The in-image pilot probe (G3) on `RELEASE` | `"ok": true`. At the cutover + M1-L2 merge its only refusal was `PENDING(W3): infrx.worker.__main__` - the worker composition root (I2B-R4), on no branch yet: **install refuses (exit 2) until it lands** |
+| P4 | SSM holds every manifest key (§1) | `/model-inference/pg_journal_url` was **absent** at prep time (a coordinator input: the session-pooler DSN of the login role D's 0004 note names) |
+| P5 | Two G6B keys for the smoke: one scoped, one revoked | pasted at W12 with `read -rs`, never typed |
+| P6 | Deployment lock taken; session-record entry: purpose, cost (none beyond the running box), rollback (this page §3) | recorded |
+
+## 1. Settings for this release
+
+`preflight.py` writes the env file; secrets come from SSM (`--param-prefix /model-inference`),
+tunables only through `INFRX_SET`. `ENGINE_MAX_NUM_SEQS` travels on its own: 50-install puts
+it into `INFRX_SET` itself (default 32, the old box value), and a name given twice is refused.
+
+| Name | Value | Source |
+|---|---|---|
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | SSM `supabase_url`, `supabase_service_role_key` | present |
+| `DATABASE_URL` | SSM `pg_journal_url` | **missing** (P4) |
+| `GATEWAY_API_KEY` | never (R51: forbidden in pilot, not read) | - |
+| `INFRX_IMAGE`, `INFRX_RELEASE_SHA` | written by install.sh/preflight from the build and `RELEASE` | cutover lane |
+| `S3_MEDIA_BUCKET` | `llm-bootcamp-641134885443` (prefix default `infrx/`, `S3_ENDPOINT_URL` unset) | session-02, 2026-09-23T20:59Z; the instance role already permits |
+| `MAX_VIDEO_SECONDS` | `82` (code default 120) | P-20, W4 phase B |
+| `ENGINE_MAX_NUM_SEQS` | `8` (the box unit runs 32 until the release's serve.sh replaces it) | W3/W4 pin |
+| `WORKER_CONCURRENCY` | `8` (08 §5 default 10) | W3/W4 pin |
+| `ACCOUNTING_REGIME` | default `legacy_usd`, not set: no `credit` deployment before the worker change (D5 IR 5) | D5 |
+
+```bash
+INSTALL_ARGS=(RELEASE="$RELEASE" ENGINE_MAX_NUM_SEQS=8
+  INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8")
+```
+
+## 2. The window
+
+Each row: what runs, what proves it, and the way back. Box rows are
+`infra/rollout/ssm.sh infra/rollout/steps/<step> NAME=VALUE…`; record every command id.
+
+| # | Where | Step | Verify | Rollback |
+|---|---|---|---|---|
+| W1 | host → box | **Release to the box** (outside the window): `apps/infrx-api/deploy/release-bundle.sh "$RELEASE"` then `infra/rollout/ssm.sh <out>/$RELEASE.fetch.sh`; then `20-prepull.sh RELEASE=$RELEASE` (its `git fetch origin` works too: origin is anonymously readable) | `sha256sum -c` OK; `release … is in …`; the engine digest pulled | `git update-ref -d refs/infrx/releases/$RELEASE` on the box; nothing else changed |
+| W2 | host | Root-volume snapshot ([../rollout/README.md](../rollout/README.md) step 1) **[cost]** | snapshot id `completed` | - |
+| W3 | box | `10-inventory.sh` (read-only) | output recorded | - |
+| W4 | box | **Save the live edge**: `25-save-edge.sh` - the box lane's pattern, `/opt/dlami/nvme/w4-logs/Caddyfile.live-<utc>` | path + sha256 recorded | - |
+| W5 | box | **Maintenance edge, then drain**: `30-pause.sh RELEASE=$RELEASE` (the release's edge + `drain.sh pause`) | public `/health` 503 + `Retry-After`; the monolith stopped | `drain.sh resume` from `/root/infrx-deploy-$RELEASE/apps/infrx-api/deploy`, then `93-restore-edge.sh SAVED=… SAVED_SHA256=…` |
+| W6 | host | **Hosted backup, fresh, and its restore check** (block below) - after the drain, so nothing writes between it and W7 | `"equal": true`; `SHA256SUMS` recorded; the copy's `migrate.py plan` digest | read-only: nothing to undo. Check red → stop: `91-abort.sh`, `93-restore-edge.sh` |
+| W7 | host | **Hosted migrations** (block below): `plan`, which must print the copy's digest, then `apply --expect` | `nothing pending`; flags and drift as on the copy | exit 2/3: nothing changed → `91-abort.sh` + `93-restore-edge.sh`. Exit 4, or a problem after commit: [restore.md A8](restore.md#a8-then-and-only-then-the-hosted-apply) (maintenance, never a hand edit) |
+| W8 | box | `40-checkout.sh RELEASE=$RELEASE` - from here to W10 no engine restart | HEAD = `RELEASE` | `91-abort.sh` returns the previous checkout |
+| W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready | `passed`, no failure; `test/m1l2/` empty afterwards | red → `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
+| W10 | box | **Install**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST=<W7 digest>` - image, preflight (SSM + host HeadBucket), units, engine restart (start-to-ready meas. 168-181 s on this box, `ENGINE_READY_S` 900), gateway + worker `/readyz`, **then the edge goes live** | exit 0, `deployed …`, backup dir recorded | exit 2 → R1; exit 4 → R2 |
+| W11 | box | `60-verify-local.sh` | units active, `/readyz` 200, least privilege as applied, `INFRX_MODE=pilot`, no `GATEWAY_API_KEY` | R2 |
+| W12 | host | **Smoke**: `read -rs INFRX_TEST_KEY; read -rs INFRX_REVOKED_KEY; export INFRX_TEST_KEY INFRX_REVOKED_KEY` then `infra/rollout/verify-external.sh` (+ `LEGACY_KEY` as step 10 there) | `failures: 0`, `PENDING` lines are not passes | before any pilot request was accepted: R2; after: R3 |
+| W13 | host | Record `RELEASE`, image id, engine digest, snapshot, backup dir, `SHA256SUMS`, migration digest, command ids; release the lock | - | - |
+
+### W6 — the fresh hosted backup and its restore check
+
+`restore.md` A1-A6 with one addition, measured by this lane: the pinned image's template has
+only its own `auth.users`, while hosted's auth schema is GoTrue's (`auth.identities` and 80+
+migrations), so a restore into the bare template fails at `auth.identities`. GoTrue
+`v2.197.0` - whose migration head `20260831180000` is hosted's - migrates the template first.
+Port 55697 is this lane's; any free loopback port works.
+
+```bash
+BACKUP="$HOME/infrx-backups/hosted-$(date -u +%Y%m%dT%H%M%SZ)"
+read -r PGPASSWORD < <(aws ssm get-parameter --name /INFRX-SUPABASE-PROD/db_password \
+                        --with-decryption --query Parameter.Value --output text); export PGPASSWORD
+$PY infra/runbooks/pgrestore.py dump --conninfo "$HOSTED" --out "$BACKUP"     # prints SHA256SUMS
+IMAGE=$($PY -c 'import runpy; print(runpy.run_path("infra/runbooks/pgrestore.py")["IMAGE"])')
+GOTRUE=supabase/gotrue@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+LOCALPW=infrx-rollout-local                    # a throwaway local literal, as restore.md A4
+docker run -d --name infrx-rollout-restore -p 127.0.0.1:55697:5432 -e POSTGRES_PASSWORD="$LOCALPW" "$IMAGE"
+until $PY -c "import psycopg; psycopg.connect('host=127.0.0.1 port=55697 user=postgres password=$LOCALPW dbname=postgres connect_timeout=3').close()" 2>/dev/null; do sleep 1; done
+sb() { docker exec infrx-rollout-restore psql -q -U supabase_admin -d "$1" -v ON_ERROR_STOP=1 -c "$2"; }
+sb postgres "alter role supabase_auth_admin with password '$LOCALPW'"
+docker run --rm --network host -e GOTRUE_DB_DRIVER=postgres \
+  -e DATABASE_URL="postgres://supabase_auth_admin:$LOCALPW@127.0.0.1:55697/postgres?sslmode=disable" \
+  -e GOTRUE_JWT_SECRET=rehearsal-only-literal-not-a-secret-0000 -e GOTRUE_SITE_URL=http://localhost \
+  -e API_EXTERNAL_URL=http://localhost "$GOTRUE" auth migrate 2>&1 | tail -1
+for _ in 1 2 3 4 5; do                          # pg_cron reattaches to the template within ms
+  sb template1 "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()" >/dev/null
+  sb template1 "create database infrx_rollout_copy template postgres owner postgres" && break; sleep 0.3
+done
+LOCAL="host=127.0.0.1 port=55697 user=postgres password=$LOCALPW dbname=infrx_rollout_copy sslmode=disable"
+$PY infra/runbooks/pgrestore.py restore --conninfo "$LOCAL" --from "$BACKUP"
+$PY infra/runbooks/pgrestore.py check --source "$HOSTED" --target "$LOCAL"   # exit 0, "equal": true
+# The apply, on the copy first. The backup has no supabase_migrations schema: its rows are the
+# `applied:` line hosted's own plan prints (today 0001 init, 0002 seed_models).
+docker exec infrx-rollout-restore psql -q -U postgres -d infrx_rollout_copy -v ON_ERROR_STOP=1 \
+  -c "create schema supabase_migrations" \
+  -c "create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text)" \
+  -c "insert into supabase_migrations.schema_migrations (version, name) values ('0001', 'init'), ('0002', 'seed_models')"
+export MIGRATE_DATABASE_URL="postgresql://postgres:$LOCALPW@127.0.0.1:55697/infrx_rollout_copy"
+COPY_DIGEST=$($PY apps/infrx-api/deploy/migrate.py plan | sed -n 's/^plan digest: //p'); echo "$COPY_DIGEST"
+$PY apps/infrx-api/deploy/migrate.py apply --expect "$COPY_DIGEST"
+docker exec -i infrx-rollout-restore psql -U postgres -d infrx_rollout_copy -v ON_ERROR_STOP=1 <<'SQL'
+select name, enabled from infrx.feature_flags order by name;
+select count(*) as drift_rows from infrx.wallet_reconciliation where ledger_drift <> 0 or reserved_drift <> 0;
+SQL
+unset MIGRATE_DATABASE_URL
+docker rm -f infrx-rollout-restore >/dev/null
+```
+
+Pass: `check` exit 0 with `"equal": true`; `apply` prints every pending version; flags
+`credit_admission` f, `legacy_usd_admission` t, `signup_grant` f; `drift_rows` 0. Retention of
+`$BACKUP`: [restore.md A9](restore.md#a9-clean-up).
+
+### W7 — the hosted apply
+
+`PGPASSWORD` is still exported from W6; libpq reads it, so the DSN carries no secret.
+README step 6 runs the same `migrate.py` inside `infrx-runtime:$RELEASE`; either is the file at
+`RELEASE`.
+
+```bash
+export MIGRATE_DATABASE_URL="$HOSTED"
+$PY apps/infrx-api/deploy/migrate.py plan        # "applied: 0001 init, 0002 seed_models", digest == $COPY_DIGEST
+$PY apps/infrx-api/deploy/migrate.py apply --expect "$COPY_DIGEST"
+$PY apps/infrx-api/deploy/migrate.py plan        # nothing pending
+unset MIGRATE_DATABASE_URL PGPASSWORD
+```
+
+At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files**, digest
+`4524cbc0…`, the same digest as the restored copy's; a changed 0018 changes it.
+
+## 3. Rollback triggers
+
+| Trigger | Action |
+|---|---|
+| W6 check not equal, or the copy's apply fails | Stop before any hosted write: `91-abort.sh`, `93-restore-edge.sh` |
+| W7 plan digest ≠ `$COPY_DIGEST`, or `apply` exit 2/3 | Nothing changed: the same abort |
+| W7 `apply` exit 4, or anything wrong after it committed | Maintenance stays; [restore.md A8](restore.md#a8-then-and-only-then-the-hosted-apply). The migrations are additive: the monolith's own statements ran on the migrated copy (W6), so the abort path above still serves |
+| W9 red (bucket, role, AWS semantics) | Nothing installed: the same abort |
+| W10 exit 2 (preflight refused: a missing key, P3/P4) | R1 of [../rollout/README.md](../rollout/README.md): `91-abort.sh`, then `93-restore-edge.sh` |
+| W10 exit 4, W11 or W12 red, **no pilot request accepted** | R2: `90-revert.sh` (runs `rollback.sh` on install.sh's backup, engine first), after the read-only zero count of pilot jobs/ledger rows since W10 |
+| Pilot requests were accepted and it must stop | R3: `95-maintenance.sh`; `rollback.sh` refuses the unmetered monolith |
+| The host itself | R4: root-volume swap to the W2 snapshot ([restore.md](restore.md#box-snapshot)) |
+
+## Verification log
+
+- 2026-09-23 (ROLLOUT-PREP): written; W1's script and the W6 block were run by the lane
+  (backup, GoTrue-migrated template, restore, check equal, copy apply of 0003-0018), W7's
+  `plan` read-only against hosted. Nothing ran against the box; no hosted write.

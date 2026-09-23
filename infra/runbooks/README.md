@@ -9,6 +9,7 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
 |---|---|---|---|
 | [restart.md](restart.md) — engine, worker, gateway, host, drain, saturation | ComponentDown, GpuUnavailable, PlatformFailureRate, LeaseLost, ReaperTerminalized, HostMemoryLow, InflightSaturated, RejectionsHigh, JournalSlow | `test_i3b_rc01`, `rc02`, `rc08`, `rc09` | pending coordinator |
 | [restore.md](restore.md) — hosted Supabase backup/restore, box snapshot | — (planned, and before every hosted migration) | `test_i3b_bk01`, `bk01b`, `bk01c`, `bk02`, `bk03` | pending coordinator — **the hosted project has no backup today** |
+| [rollout.md](rollout.md) — phase-2 checklist: order, hosted backup, settings, triggers | — | W6 block run by ROLLOUT-PREP (backup, restore check, copy apply) | pending coordinator |
 | [rollback.md](rollback.md) — rollout rollback, maintenance switch | — | `test_i3b_bk04`; `rc10` pending I2B | pending I2B + coordinator |
 | [disk.md](disk.md) — disk exhaustion, slow preparation | DiskAlmostFull, DiskFilling, PreparationSlow | `test_i3b_rc07` | pending coordinator |
 | [index-loss.md](index-loss.md) — queue index loss, stall, saturation | QueueStalled, QueueSaturated, ComponentDown (index) | `test_i3b_rc06`, `rc09`; E3B `dr13` | pending coordinator |
@@ -71,3 +72,5 @@ ships.
 - 2026-09-22 (I3B.c): Index written with the six runbooks. Every procedure is drilled
   locally (test ids above) on E2's stack; no step has been run on the box or on hosted
   Supabase. Recovery windows remain ⚠️ until the coordinator's drills.
+- 2026-09-23 (ROLLOUT-PREP): rollout.md indexed (the phase-2 order; its W6 block was run once
+  against hosted, read-only, and restored into a local copy).

@@ -46,9 +46,11 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
     it acts on - the cutover also without the migration digest step 6 applied - and
     contains nothing shaped like a credential or an inline parameter value: secrets are
     read on the box by preflight.py, from SSM, and never travel."""
-    assert [p.name for p in STEPS] == ["10-inventory.sh", "20-prepull.sh", "30-pause.sh",
-                                       "40-checkout.sh", "50-install.sh", "60-verify-local.sh",
-                                       "90-revert.sh", "91-abort.sh", "95-maintenance.sh"]
+    assert [p.name for p in STEPS] == ["10-inventory.sh", "20-prepull.sh", "25-save-edge.sh",
+                                       "30-pause.sh", "40-checkout.sh", "45-s3-check.sh",
+                                       "50-install.sh",
+                                       "60-verify-local.sh", "90-revert.sh", "91-abort.sh",
+                                       "93-restore-edge.sh", "95-maintenance.sh"]
     for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh"]:
         text = path.read_text()
         done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
