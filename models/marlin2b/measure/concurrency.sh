@@ -7,8 +7,10 @@
 # KV usage and the GPU's memory sampled every 2 s alongside. This is the one script that
 # is NOT read-only: it loads the engine (it restarts nothing and changes no setting).
 #
-# Preconditions it checks and refuses on, rather than measuring the wrong thing:
-#   * the engine runs with --max-num-seqs 32, so the sweep, not the engine, is the cap;
+# Preconditions it checks and refuses on (exit 2, a `refused:` line), rather than measuring
+# the wrong thing:
+#   * the container exists, and its engine runs with --max-num-seqs 32, so the sweep, not
+#     the engine, is the cap;
 #   * REPO holds bench.py and CORPUS_CACHE holds the built corpus (corpus/build.py verify).
 # It records, and does not refuse on, whether the image is the pin (inventory.sh answers
 # that; a cell on another image is labelled, not published as the pinned version).
@@ -28,7 +30,8 @@ out=${OUT:-/opt/dlami/nvme/w3-measure}/$run_id
 bench=$REPO/models/marlin2b/bench.py
 manifest=$REPO/models/marlin2b/corpus/manifest.json
 
-args=$(docker inspect --format '{{json .Args}}' "$CONTAINER")
+args=$(docker inspect --format '{{json .Args}}' "$CONTAINER") || {
+  echo "refused: no container $CONTAINER" >&2; exit 2; }
 case "$args" in
   *'"--max-num-seqs","32"'*) ;;
   *) echo "refused: the engine is not running with --max-num-seqs 32 ($args)" >&2; exit 2 ;;
@@ -69,7 +72,7 @@ for c in $LEVELS; do
 done
 
 echo "### report"
-"$PY" "$bench" --report "$out/bench.jsonl"
+"$PY" "$bench" --report "$out/bench.jsonl" || echo "report_exit=$? (no summary rows: every level failed)"
 echo "### kv capacity at start-up (engine log)"
 # no match (a rotated log) is a missing line, not a failed sweep
 docker logs "$CONTAINER" 2>&1 | grep -E -i 'GPU KV cache size|Maximum concurrency' | tail -4 || true

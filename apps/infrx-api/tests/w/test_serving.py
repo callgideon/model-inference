@@ -165,16 +165,22 @@ def check_record_matches_the_code(models: pathlib.Path, tmp: pathlib.Path) -> No
         assert source in {member.value for member in DigestSource}, source
 
 
-def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.Path) -> None:
-    """measure/concurrency.sh (review PIN-4): one `/metrics` scrape that fails - a 2 s
-    timeout at c = 32 is plausible - is an empty sample; the sampler goes on, and so does
-    the sweep (every level, the report). An engine log without the KV lines (rotated) is a
-    missing line, not a failed sweep."""
+def sweep_inputs(tmp: pathlib.Path) -> dict[str, str]:
+    """A checkout with bench.py and a corpus manifest, and a built corpus, for concurrency.sh."""
     repo = tmp / "repo" / "models" / "marlin2b"
     (repo / "corpus").mkdir(parents=True, exist_ok=True)
     (repo / "bench.py").write_text("")
     (repo / "corpus" / "manifest.json").write_text("{}")
     (tmp / "corpus-cache").mkdir(exist_ok=True)
+    return {"REPO": str(tmp / "repo"), "CORPUS_CACHE": str(tmp / "corpus-cache"),
+            "PY": str(tmp / "bin" / "bench"), "OUT": str(tmp / "out"), "LEVELS": "1 2"}
+
+
+def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.Path) -> None:
+    """measure/concurrency.sh (review PIN-4): one `/metrics` scrape that fails - a 2 s
+    timeout at c = 32 is plausible - is an empty sample; the sampler goes on, and so does
+    the sweep (every level, the report). An engine log without the KV lines (rotated) is a
+    missing line, not a failed sweep."""
     stubs = {
         "docker": 'case "$*" in *Args*) echo \'["/model","--max-num-seqs","32"]\' ;; '
                   "*Image*) echo sha256:0 ;; esac\n",
@@ -184,9 +190,8 @@ def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.
                 "printf 'vllm:num_requests_running 1\\nvllm:num_requests_waiting 0\\n'\n",
         "nvidia-smi": 'echo "1000, 50"\n',
         "bench": 'case "$*" in *--report*) echo "report rows" ;; *) sleep 1.5 ;; esac\n'}
-    done = run_script(models, tmp, "concurrency.sh", stubs, REPO=str(tmp / "repo"),
-                      CORPUS_CACHE=str(tmp / "corpus-cache"), PY=str(tmp / "bin" / "bench"),
-                      OUT=str(tmp / "out"), LEVELS="1 2", CURL_CALLS=str(tmp / "curl-calls"))
+    done = run_script(models, tmp, "concurrency.sh", stubs, **sweep_inputs(tmp),
+                      CURL_CALLS=str(tmp / "curl-calls"))
     assert done.returncode == 0, (done.returncode, done.stderr[-400:])
     for line in ("level=1 peak_", "level=2 peak_", "### report", "report rows", "artifacts="):
         assert line in done.stdout, (line, done.stdout[-600:])
@@ -194,6 +199,29 @@ def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.
     sampled = [row.split("\t")[0] for row in
                (run_dir / "samples.tsv").read_text().splitlines()[1:]]
     assert "1" in sampled and "2" in sampled, f"a level went unsampled: {sampled}"
+
+
+def check_the_sweep_labels_a_failed_run(models: pathlib.Path, tmp: pathlib.Path) -> None:
+    """measure/concurrency.sh (confirmation PINC-1): an engine that fails every level (bench
+    exits 3, so `--report` finds no rows and exits 1) is a labelled run that still reaches
+    `artifacts=`; no container is a `refused:` precondition, exit 2, nothing written."""
+    stubs = {
+        "docker": 'case "$*" in *Args*) echo \'["/model","--max-num-seqs","32"]\' ;; '
+                  "*Image*) echo sha256:0 ;; esac\n",
+        "curl": "printf 'vllm:num_requests_running 0\\n'\n",
+        "nvidia-smi": 'echo "1000, 0"\n',
+        "bench": 'case "$*" in *--report*) exit 1 ;; *) exit 3 ;; esac\n'}
+    done = run_script(models, tmp, "concurrency.sh", stubs, **sweep_inputs(tmp))
+    assert done.returncode == 0, (done.returncode, done.stderr[-400:])
+    for line in ("level=1 bench_exit=3", "level=2 bench_exit=3", "report_exit=1", "artifacts="):
+        assert line in done.stdout, (line, done.stdout[-600:])
+    stubs["docker"] = 'echo "Error: No such object: marlin2b-8000" >&2; exit 1\n'
+    gone = tmp / "gone"
+    gone.mkdir()
+    done = run_script(models, gone, "concurrency.sh", stubs, **sweep_inputs(gone))
+    assert done.returncode == 2 and "refused: no container" in done.stderr, (
+        done.returncode, done.stderr[-400:])
+    assert not (gone / "out").exists(), "a refused sweep wrote a run directory"
 
 
 def check_inventory_refuses_a_missing_container(models: pathlib.Path, tmp: pathlib.Path) -> None:
@@ -229,6 +257,11 @@ def test_perf_pilot__the_serving_record_matches_the_code_it_pins(tmp_path):
 
 def test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape(tmp_path):
     check_the_sweep_survives_a_failed_scrape(MODELS, tmp_path)
+
+
+def test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refuses_without_a_container(
+        tmp_path):
+    check_the_sweep_labels_a_failed_run(MODELS, tmp_path)
 
 
 def test_perf_pilot__the_inventory_refuses_a_missing_container(tmp_path):

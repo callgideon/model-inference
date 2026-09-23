@@ -36,11 +36,14 @@ LAUNCH = "test_perf_pilot__the_engine_starts_pinned_on_loopback_with_the_recorde
 ONE_SOURCE = "test_perf_pilot__a_pinned_setting_has_one_source"
 RECORD = "test_perf_pilot__the_serving_record_matches_the_code_it_pins"
 SWEEP = "test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape"
+LABELLED = ("test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refuses_without_a_"
+            "container")
 INVENTORY = "test_perf_pilot__the_inventory_refuses_a_missing_container"
 PIN_CHECKS = {LAUNCH: serving.check_pinned_launch,
               ONE_SOURCE: serving.check_one_source_per_setting,
               RECORD: serving.check_record_matches_the_code,
               SWEEP: serving.check_the_sweep_survives_a_failed_scrape,
+              LABELLED: serving.check_the_sweep_labels_a_failed_run,
               INVENTORY: serving.check_inventory_refuses_a_missing_container}
 DIGEST = "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
 
@@ -89,6 +92,10 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        C, "  set +e     # a scrape that times out", "  :     # a scrape that times out", SWEEP),
     _m("sweep_fails_on_a_rotated_log", "no KV line in the engine log does not fail the sweep",
        C, "| tail -4 || true\n", "| tail -4\n", SWEEP),
+    _m("report_failure_ends_the_sweep", "a report with no rows is labelled; the sweep ends",
+       C, ' || echo "report_exit=$? (no summary rows: every level failed)"', "", LABELLED),
+    _m("missing_container_not_refused", "no container is a refused precondition (exit 2)",
+       C, ' || {\n  echo "refused: no container $CONTAINER" >&2; exit 2; }', "", LABELLED),
     _m("inventory_without_its_container", "no container is a failed precondition, exit 2",
        I, '  *) echo "precondition=failed: no container $CONTAINER to inventory (see '
           'container_image)"; exit 2 ;;', "  *) ;;", INVENTORY),
