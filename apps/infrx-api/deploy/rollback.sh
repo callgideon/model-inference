@@ -3,8 +3,13 @@
 #
 #   sudo ./apps/infrx-api/deploy/rollback.sh /var/backups/infrx/<UTC>-<sha>
 #
+#   sudo ENGINE=restart ./apps/infrx-api/deploy/rollback.sh <backup>   # runbook R2
+#
 # This is the unit-and-configuration revert. The whole-host revert is the root-volume
 # EBS snapshot taken before the rollout (runbook, a coordinator AWS operation).
+# ENGINE=restart also restarts the engine onto its restored unit, and does so BEFORE the
+# runtime: the restored gateway's /health asks the engine, so a gateway restarted in
+# front of an engine that is down (step 8 failing on the engine) never becomes ready.
 #
 # infra/README.md §8 and §5.1 decide what a rollback may return to. Once a host serves
 # INFRX_MODE=pilot it has admitted metered work, and a runtime without a pilot mode (the
@@ -40,9 +45,14 @@ while read -r path; do
   rm -f "${ROOT:-}/$path"
 done < "$backup/absent"
 systemctl daemon-reload
+if [ "${ENGINE:-}" = restart ]; then
+  systemctl restart marlin2b-vllm && wait_http http://127.0.0.1:8000/health "${ENGINE_READY_S:-900}" \
+    || die "the restored engine did not come up; the edge stays as it was (maintenance in the runbook): fix the engine, then drain.sh resume" 4
+fi
 case "$restored" in pilot) units=$RUNTIME_UNITS_pilot ;; *) units=$RUNTIME_UNITS_dev ;; esac
 systemctl restart $units
-wait_ready "${restored:-legacy}" || die "the restored runtime is not ready" 4
+wait_ready "${restored:-legacy}" \
+  || die "the restored runtime is not ready; the edge stays as it was: fix it, then drain.sh resume" 4
 # The edge serves whatever site the backup had (none on a pre-pilot host).
 if [ -f "$CADDY_DIR/Caddyfile" ] && docker inspect caddy >/dev/null 2>&1; then
   caddy_reload

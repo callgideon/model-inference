@@ -46,7 +46,12 @@ if name == "git":
     elif args[-2:] == ["status", "--porcelain"]:
         print(spec["dirty"], end="")
 elif name == "curl":
-    raise SystemExit(0 if args[-1] not in spec["curl_fails"] else 22)
+    if args[-1] in spec["curl_fails"]:
+        raise SystemExit(22)
+    # the monolith's /health asks the engine: down until the engine has been restarted
+    if (spec["health_needs_engine"] and args[-1] == "http://127.0.0.1:8001/health"
+            and "systemctl restart marlin2b-vllm\\n" not in (here / "events.log").read_text()):
+        raise SystemExit(22)
 elif name == "systemctl":
     raise SystemExit(spec["systemctl"].get(args[0], 0))
 elif name == "docker":
@@ -98,7 +103,8 @@ class Host:
 
     def behave(self, **changes):
         spec = {"head": SHA, "dirty": "", "curl_fails": [], "systemctl": {},
-                "image": IMAGE, "caddy_image": None, "reload_fails": False}
+                "image": IMAGE, "caddy_image": None, "reload_fails": False,
+                "health_needs_engine": False}
         spec.update(changes)
         (self.bin / "behaviour.json").write_text(json.dumps(spec))
 
@@ -379,21 +385,32 @@ def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runti
     assert host.file(ENV).read_text() == MONOLITH_ENV
 
 
+def _runbook() -> tuple[str, str]:
+    """30-pause's edge lines and 90-revert's lines from rollback.sh on, as bash that runs
+    against the Host sandbox with `d` = this checkout's deploy directory."""
+    steps = support.REPO / "infra" / "rollout" / "steps"
+    pause = (steps / "30-pause.sh").read_text()
+    pause = pause[pause.index('( . "$d/lib.sh"'):pause.index('echo "paused')]
+    revert = (steps / "90-revert.sh").read_text()
+    revert = revert[revert.rindex("\n", 0, revert.index('"$d/rollback.sh"')) + 1:]
+    return (f'set -euo pipefail; d="{DEPLOY}"\n{pause}',
+            f'set -euo pipefail; d="{DEPLOY}"; previous=before\n{revert}')
+
+
+R2 = {"ROLLBACK_TO_UNMETERED": "no-pilot-request-was-accepted"}
+
+
 def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp_path,
                                                                               monkeypatch):
     """Runbook R2, in runbook order, with the steps' own lines: 30-pause makes maintenance
     the active site, so step 8's backup holds it and rollback.sh restores it - the edge
     would stay 503 for good. 90-revert therefore ends with `drain.sh resume`, after the
     engine restart: the normal site comes back once the restored runtime is ready."""
-    steps = support.REPO / "infra" / "rollout" / "steps"
-    pause = (steps / "30-pause.sh").read_text()
-    pause = pause[pause.index('( . "$d/lib.sh"'):pause.index('echo "paused')]
-    revert = (steps / "90-revert.sh").read_text()
-    revert = revert[revert.index('"$d/rollback.sh"'):]
+    pause, revert = _runbook()
     host = Host(tmp_path, monkeypatch)
     host.monolith()
     active = host.file("etc/caddy/Caddyfile")
-    done = host.shell(f'set -euo pipefail; d="{DEPLOY}"\n{pause}')             # step 5
+    done = host.shell(pause)                                                    # step 5
     assert done.returncode == 0, done.stderr
     assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
     host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8001/readyz"])
@@ -402,8 +419,7 @@ def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp
     [backup] = backups(host)
     host.behave(caddy_image="running")
     host.clear()
-    done = host.shell(f'set -euo pipefail; d="{DEPLOY}"; previous=before\n{revert}',
-                      BACKUP=str(backup), ROLLBACK_TO_UNMETERED="no-pilot-request-was-accepted")
+    done = host.shell(revert, BACKUP=str(backup), **R2)
     assert done.returncode == 0, done.stderr
     assert host.file(ENV).read_text() == MONOLITH_ENV
     assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
@@ -411,3 +427,39 @@ def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp
     engine = events.index("systemctl restart marlin2b-vllm")
     assert events[-1].startswith("docker exec caddy caddy reload"), events
     assert events[-2].endswith("http://127.0.0.1:8001/health") and len(events) - 2 > engine
+
+
+def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp_path,
+                                                                             monkeypatch):
+    """Step 8 can fail on the engine itself ("the engine is not healthy"), and the restored
+    monolith's /health asks the engine: a gateway restarted first never becomes ready. So
+    R2 has rollback.sh restart the engine onto its restored unit and wait for it, then the
+    gateway, then the edge. An engine that does not come up stops the revert there - exit
+    4, the gateway untouched, the edge in maintenance, and the message says what next."""
+    pause, revert = _runbook()
+    host = Host(tmp_path, monkeypatch)
+    host.monolith()
+    active = host.file("etc/caddy/Caddyfile")
+    assert host.shell(pause).returncode == 0
+    host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8000/health"])
+    done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
+    assert done.returncode == 4 and "engine is not healthy" in done.stderr
+    [backup] = backups(host)
+
+    host.behave(caddy_image="running", health_needs_engine=True, systemctl={"restart": 1})
+    host.clear()
+    done = host.shell(revert, BACKUP=str(backup), **R2)
+    assert done.returncode == 4 and "fix the engine, then drain.sh resume" in done.stderr
+    assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
+    assert not [e for e in host.events
+                if e.startswith("systemctl restart marlin2b-gateway") or "caddy reload" in e]
+
+    host.behave(caddy_image="running", health_needs_engine=True)
+    host.clear()
+    done = host.shell(revert, BACKUP=str(backup), **R2)
+    assert done.returncode == 0, done.stderr
+    assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
+    events = host.events
+    assert (events.index("systemctl restart marlin2b-vllm")
+            < events.index("curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8000/health")
+            < events.index("systemctl restart marlin2b-gateway")), events
