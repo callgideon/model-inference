@@ -7,11 +7,11 @@ PostgREST service are real and run today. A pending case is a skip that names it
 
 The matrix (18 §E3B.a, 04 BACKEND-JOURNEY): inputs text / video by URL / video by upload,
 modes sync / SSE / explicit async, each for two tenants. Unblocking ids per cell (E3B phase
-2: only unmerged tasks; G1R, G6B, D2, D3, W3, Q3, M3, F2P and G4U have merged):
+2: only unmerged tasks; G1R, G6B, D2, D3, D4, W3, Q3, M3, F2P and G4U have merged):
 
 * every cell: D5 (settlement, and the PostgreSQL adapters the pilot composes with);
-* sync: G2 (the relay and the cutover that mounts the ingress); SSE: G2 + D4 (persistent
-  journal replay); async: G2 + G3 (the job routes);
+* sync and SSE: G2 (the relay and the cutover that mounts the ingress; D4's persistent
+  journal merged); async: G2 + G3 (the job routes);
 * video by URL and by upload: nothing more (M2's fetch/probe/persist, M3's uploads and
   G4U's upload routes are merged; the routes are mounted by G2's cutover).
 """
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import stack                                            # noqa: E402
 
 COMMON = ("D5",)
-BY_MODE = {"sync": ("G2",), "sse": ("G2", "D4"), "async": ("G2", "G3")}
+BY_MODE = {"sync": ("G2",), "sse": ("G2",), "async": ("G2", "G3")}
 BY_INPUT = {"text": (), "video_url": (), "video_upload": ()}
 
 

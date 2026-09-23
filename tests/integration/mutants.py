@@ -692,8 +692,10 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py",
            "        if stubs:\n            stack.pending(",
            "        if False:\n            stack.pending(",
-           "tests/integration/backend/test_drills.py", "dr05 and postgres", layer=2,
-           cases=("test_e3b_dr05_a_stale_generation_cannot_append[postgres]",)),
+           # D4 merged: `append` is no stub, so the drill still held back by one is dr07c
+           # (D5's `terminalize`), which fails by name the moment it runs.
+           "tests/integration/backend/test_drills.py", "dr07c", layer=2,
+           cases=("test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction",)),
     Mutant("e3bm16", "E3B2 item 1c: an E3B case cannot name a merged task as its blocker",
            "tests/integration/backend/stack.py",
            "    unknown = [task for task in ids if task not in PENDING or task in RESIDUAL]\n",

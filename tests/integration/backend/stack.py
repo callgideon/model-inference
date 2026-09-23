@@ -57,7 +57,6 @@ PENDING = {
     "G2": "synchronous chat, the persistent SSE relay and the cutover composition that "
           "mounts the metered ingress in gateway.app.ROUTERS",
     "G3": "explicit async job routes: create, status, cancel, replay",
-    "D4": "persistent stream journal in PostgreSQL: infrx.append, replay, PgStreamStore (0017)",
     "D5": "terminal settlement (infrx.terminalize after the fence), grant_credit, operator "
           "adjust/reconcile, and the PostgreSQL adapters of G6B's TenantStore/AuditLog/"
           "Registry/AccountView and G1R's CatalogDirectory",
@@ -213,15 +212,6 @@ def current_database() -> str:
     return _made[-1]
 
 
-class _NoStream:
-    """Stands in for the `stream` hook until D4's PgStreamStore gives pgtesting one: a drill
-    that reaches it although its `append` is no stub FAILS by name, never by KeyError."""
-
-    def __getattr__(self, name):
-        import pytest
-        pytest.fail(f"stream.{name}: no PostgreSQL StreamStore on this base (D4's hook)")
-
-
 def pg_jobstore(limits=None):
     """A fresh real-store conformance Harness (`pgtesting`), on this stack."""
     global _factory
@@ -232,9 +222,7 @@ def pg_jobstore(limits=None):
         from infrx.state import pgtesting
         _template()
         _factory = pgtesting.make_jobstore_factory(fresh_database, harness.pg_dsn)
-    h = _factory(limits=limits)
-    h.extra.setdefault("stream", _NoStream())
-    return h
+    return _factory(limits=limits)        # D4: pgtesting's `stream` is PgStreamStore
 
 
 def defect(sql: str) -> None:

@@ -701,6 +701,11 @@ FUNCTIONS = {
     "infrx.deployment_revisions_guard()": SERVICE,
     "infrx.dispatch_pending(jsonb)": SERVICE,
     "infrx.dispatch_snapshot()": SERVICE,
+    # D4's 0017 (D4 request 8, measured on the migrated stack at the D4 merge)
+    "infrx.expire_journal(jsonb)": SERVICE,
+    "infrx.journal_terminal_event()": NOBODY,
+    "infrx.journal_usage()": SERVICE,
+    "infrx.read_journal(jsonb)": SERVICE,
     "infrx.ensure_wallet()": NOBODY,
     "infrx.extend_model_limits()": SERVICE,
     "infrx.fail_dispatch(jsonb)": SERVICE,
