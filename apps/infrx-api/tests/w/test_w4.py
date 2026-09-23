@@ -134,6 +134,8 @@ def check_set_aside(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert decide.c_star(run.levels) == (16, round(0.9 * top, 4)), decide.c_star(run.levels)
     rep = decide.report(run)
     assert rep["setting"] == 16 and rep["set_aside"] == list(FOUR), rep
+    # the rule's value alone adopts nothing: this run has no engine logs, parity or baseline
+    assert rep["verdict"].startswith("no setting adopted"), rep["verdict"]
     printed = io.StringIO()
     with redirect_stdout(printed):
         decide.main([str(repo / SWEEP), "--set-aside", ",".join(FOUR)])
