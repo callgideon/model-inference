@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:20:35Z",
+  "updated": "2026-09-23T11:22:39Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -38,6 +38,12 @@
       "phase": "implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only)",
       "since": "2026-09-23T10:09:50Z",
       "note": "POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/"
+    },
+    "I3B-followup": {
+      "lane": "codex-i3bf / codex/i3b-followup",
+      "phase": "implementing (Opus): R92 restore ACL normalisation, i3bm57 re-anchor, rc10 body, pending honesty (rc03\u2192G2, rc04 stubbed, rc05b/rc08b ids, skip message, _copy_with_infra)",
+      "since": "2026-09-23T11:22:39Z",
+      "note": "from E3B2 request 2 + review rulings; D task d3, Q port 55497"
     }
   },
   "reviews": {

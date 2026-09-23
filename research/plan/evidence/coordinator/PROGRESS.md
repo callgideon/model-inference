@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T11:20:35Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T11:22:39Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 22 done · 6 in progress · 2 remaining (of 30).**
 
@@ -71,6 +71,7 @@ Generated 2026-09-23T11:20:35Z from `tasks.json` (manifest v4) and `progress-sta
 - G2: codex-g2 / codex/g2-chat-relay — review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) → fix round running since 2026-09-23T05:12:27Z — relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters
 - W4: codex-w4 / codex/w4-measured-tuning — phase A confirmation at b0a44a0: box-safety PASS, decision fix_required on 2 test-coverage gaps (D2 reconciliation clauses; bench retries clauses) + 8 nonblocking → round 3 running; re-confirmation next since 2026-09-23T05:40:38Z — protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge
 - G3: codex-g3 / codex/g3-jobs — implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only) since 2026-09-23T10:09:50Z — POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/
+- I3B-followup: codex-i3bf / codex/i3b-followup — implementing (Opus): R92 restore ACL normalisation, i3bm57 re-anchor, rc10 body, pending honesty (rc03→G2, rc04 stubbed, rc05b/rc08b ids, skip message, _copy_with_infra) since 2026-09-23T11:22:39Z — from E3B2 request 2 + review rulings; D task d3, Q port 55497
 - review W4: confirmation fix_required at b0a44a0 (wf_6fb50020-bf6; JSON evidence/w/W4-confirm-b0a44a0.json) → round 3 since 2026-09-23T11:09:23Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) → fix round; confirmation next since 2026-09-23T11:05:53Z
