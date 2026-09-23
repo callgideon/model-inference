@@ -21,7 +21,8 @@ from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeJobStore, FakeStreamStore
 from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import ChunkEventType, EngineEvent, ExecutionMode
+from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, JobState,
+                                     SettlementState, TerminalCause, TerminalOutcome, Usage)
 from infrx.media.fetch import MediaFetcher
 from infrx.media.probe import Probed
 from infrx.media.store import InMemoryObjectStore
@@ -86,6 +87,9 @@ class World:
             self.jobs.catalog = self.catalog          # one catalog for ingress and store
             self.row, self.org = CONSUMER_ROW, IDS.consumer_org
             self.card = self.catalog.rate_cards[IDS.prod_deployment].rate_card_version
+            # The fixture wallet starts with other holds on it; a case compares with these.
+            self.seeded = {wallet_id: wallet.reserved_total
+                           for wallet_id, wallet in self.jobs.credit_wallets.items()}
         else:
             self.clock, self.ids = FakeClock(), SequentialIds()
             self.jobs = FakeJobStore(self.clock, self.ids, limits=self.limits,
@@ -137,6 +141,11 @@ class World:
         return self.results[job_id]
 
     # --- the store, from outside ---------------------------------------------
+    def released(self, job) -> bool:
+        """A CREDIT job's hold is off its wallet: the reserved total is back to the seed."""
+        wallet_id = job.credit.wallet_id
+        return self.jobs.credit_wallet(wallet_id).reserved_total == self.seeded[wallet_id]
+
     def only_job(self):
         (job,) = self.jobs.jobs.values()
         return job
@@ -171,6 +180,14 @@ class World:
         between two commits (the real runner writes a whole answer in one turn)."""
         job_id = await self.prepare()
         return await self.jobs.claim(job_id, worker_id)
+
+    async def complete(self, lease, text: str = "Two people unload boxes."):
+        """Settle a hand-driven lease as W2 does: the result object, then `complete`."""
+        ref = await self.put_result(lease.job_id, text)
+        return await self.jobs.complete(lease, TerminalOutcome(
+            job_id=lease.job_id, state=JobState.succeeded, cause=TerminalCause.completed,
+            usage=Usage.of(1200, 5), result_ref=ref,
+            settlement_state=SettlementState.released_free, settled_at=self.clock.now()))
 
     async def commit(self, lease, *texts: str):
         return await self.stream.append(lease, tuple(
@@ -211,9 +228,9 @@ class Reply:
         return start[0]["status"] if start else None
 
     @property
-    def headers(self) -> dict[str, str]:
+    def headers(self) -> httpx.Headers:
         start = [m for m in self.messages if m["type"] == "http.response.start"]
-        return {k.decode(): v.decode() for k, v in start[0]["headers"]} if start else {}
+        return httpx.Headers(start[0]["headers"] if start else [])
 
     @property
     def body(self) -> bytes:
