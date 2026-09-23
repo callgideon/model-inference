@@ -504,6 +504,27 @@ def test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent():
     stub.assert_no_pending_responses()
 
 
+def test_only_a_whole_object_sha256_is_a_digest():
+    """Review A7: HeadObject's checksum is the object's digest only when it is 32 bytes of
+    strict base64 of the whole object. A composite checksum (a multipart upload's, marked
+    COMPOSITE or written `...=-N`), a short one, or none is NO_DIGEST - present, equal to no
+    digest - never a value that merely decodes."""
+    import base64 as b64
+    import hashlib
+    whole = b64.b64encode(hashlib.sha256(b"x").digest()).decode()
+    objects, stub = stubbed()
+    answers = (({"ChecksumSHA256": whole, "ChecksumType": "FULL_OBJECT"}, digest_of(b"x")),
+               ({"ChecksumSHA256": whole}, digest_of(b"x")),
+               ({"ChecksumSHA256": whole + "-3"}, NO_DIGEST),
+               ({"ChecksumSHA256": whole, "ChecksumType": "COMPOSITE"}, NO_DIGEST),
+               ({"ChecksumSHA256": b64.b64encode(b"sixteen bytes!!!").decode()}, NO_DIGEST),
+               ({}, NO_DIGEST))
+    for response, _ in answers:
+        stub.add_response("head_object", response)
+    assert [run(objects.head(SOURCE)) for _ in answers] == [digest for _, digest in answers]
+    stub.assert_no_pending_responses()
+
+
 def test_a_404_on_a_write_or_a_listing_is_an_error_not_absence():
     """Review A3: "absent" is an answer only a one-object read (and delete) has. A write
     answered 404 was not written and did not find anything there; a listing answered 404

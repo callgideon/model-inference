@@ -62,6 +62,7 @@ TWO_ATTEMPTS = "test_a_failing_call_is_tried_twice_and_no_more"
 INSTALL_WAIT = "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
 BUILT_IN_CODE = "test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse"
 PAGES = "test_a_listing_past_one_page_names_every_key"
+WHOLE_DIGEST = "test_only_a_whole_object_sha256_is_a_digest"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -102,7 +103,8 @@ MUTANTS: tuple[Mutant, ...] = (
        S3, 'IfNoneMatch="*",\n            ChecksumSHA256=base64.b64encode(hashlib.sha256(data).digest()).decode())',
        'IfNoneMatch="*")', ROUND_TRIP, WRITE_ONCE, COLLECTOR, s3=True),
     _m("s3_unchecksummed_object_is_absent", "an object without our checksum is present",
-       S3, "if checksum else NO_DIGEST", "if checksum else None", NO_CHECKSUM, s3=True),
+       S3, "if len(raw) == 32 else NO_DIGEST", "if len(raw) == 32 else None",
+       NO_CHECKSUM, WHOLE_DIGEST, s3=True),
     _m("s3_size_over_by_one", "describe reports the stored size, not one more",
        S3, '(head["ContentLength"], ', '(head["ContentLength"] + 1, ',
        ROUND_TRIP, WRITE_ONCE, SIZE_BOUND, s3=True),
@@ -185,6 +187,14 @@ MUTANTS: tuple[Mutant, ...] = (
            '            Bucket=self.bucket, Prefix=self.prefix + prefix)',
        "        pages = [self.client.list_objects_v2(\n"
        "            Bucket=self.bucket, Prefix=self.prefix + prefix)]", PAGES, s3=True),
+    # === review A7: only a whole-object SHA-256 is a digest ===============================
+    _m("own_composite_checksum_is_a_digest", "a COMPOSITE checksum is no object's digest",
+       S3, '    if head.get("ChecksumType", "FULL_OBJECT") != "FULL_OBJECT":', "    if False:",
+       WHOLE_DIGEST),
+    _m("own_checksum_decoded_leniently", "a checksum is strict base64 (`...=-N` is not one)",
+       S3, '"", validate=True)', '"")', WHOLE_DIGEST),
+    _m("own_checksum_length_unchecked", "a digest is 32 bytes, nothing shorter",
+       S3, "if len(raw) == 32 else NO_DIGEST", "if True else NO_DIGEST", WHOLE_DIGEST),
 )
 
 

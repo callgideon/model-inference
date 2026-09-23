@@ -8,7 +8,8 @@ The same answers as `InMemoryObjectStore`, one S3 call each:
 * `put_if_absent` is PutObject with `If-None-Match: *`: write-once is the server's atomic
   answer (412 = something is there), never a HEAD and then a PUT;
 * `head` is the digest **S3 measured**: the PutObject carries `x-amz-checksum-sha256`,
-  which the server checks against the bytes it received and HeadObject returns;
+  which the server checks against the bytes it received and HeadObject returns - and only
+  a whole-object SHA-256 is a digest (`whole_object_digest`);
 * absent is None, and only a 404 on a one-object read (`head`, `get`, `describe`) or on
   `delete` is absent; `put_if_absent` and `keys` have no "absent" answer, so a 404 there is
   an error. A denied, throttled or unreachable store raises `DependencyUnavailable`: a
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import hashlib
 
 from ..config import S3_PREFIX_RE
@@ -32,8 +34,23 @@ from ..contracts import errors
 MISSING = ("404", "NoSuchKey")
 #: Attempts per S3 call, the first one included.
 ATTEMPTS = 2
-#: `head` of an object stored without our checksum: present, and no digest's match.
+#: `head` of an object that carries no whole-object SHA-256 to compare (none, a multipart
+#: upload's composite checksum, anything malformed): present - never None - and equal to
+#: no digest, so it is neither overwritten nor taken for any content.
 NO_DIGEST = "sha256:"
+
+
+def whole_object_digest(head: dict) -> str:
+    """`sha256:<hex>` of the whole object as S3 verified it on write, or NO_DIGEST. A
+    composite checksum (`ChecksumType: COMPOSITE`, or the `...=-N` form) is a checksum of
+    part checksums: it decodes, but it is no object's SHA-256."""
+    if head.get("ChecksumType", "FULL_OBJECT") != "FULL_OBJECT":
+        return NO_DIGEST
+    try:
+        raw = base64.b64decode(head.get("ChecksumSHA256") or "", validate=True)
+    except binascii.Error:
+        return NO_DIGEST
+    return "sha256:" + raw.hex() if len(raw) == 32 else NO_DIGEST
 
 
 def reason(failure: BaseException) -> str:
@@ -98,10 +115,7 @@ class S3ObjectStore:
 
     async def head(self, key: str) -> str | None:
         head = await self._s3(self._head_object, key, absent_ok=True)
-        if head is None:
-            return None
-        checksum = head.get("ChecksumSHA256")
-        return "sha256:" + base64.b64decode(checksum).hex() if checksum else NO_DIGEST
+        return None if head is None else whole_object_digest(head)
 
     def _get(self, key: str) -> bytes:
         return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()
