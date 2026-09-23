@@ -876,6 +876,14 @@ async def _refused(call, error):
     raise AssertionError(f"expected {error.__name__}")
 
 
+async def _legacy_job(harness):
+    """A legacy (USD) job admitted through v1 `admit` beside the CREDIT ones."""
+    from . import builders as b
+    harness.extra["grant"](b.ORG_A, "25.00")
+    request = b.request(harness, org_id=b.ORG_A, key_id=b.KEY_A)
+    return request, await harness.port.admit(request, b.idem(request, "legacy-1"), ())
+
+
 async def _credit_run(harness, request, admission):
     """Prepare and claim a CREDIT job: a live inference lease."""
     port = harness.port
@@ -889,7 +897,8 @@ async def credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit
     """CREDIT-IDENTITY/CREDIT-RATE/CREDIT-UNITS at admission: the wallet is the
     credential's own (R66), the pins and card are the catalog's (R69), the hold is the
     card's ceiling-rounded maximum on that CREDIT wallet, and the organization's USD
-    wallet is untouched. A v1 read of the job is `not_found`."""
+    wallet is untouched. A v1 read of the job is `not_found`, and so is a CREDIT read of a
+    legacy job."""
     harness = factory()
     request = _credit_request(harness)
     before = harness.extra["credit_balance"](IDS.consumer_wallet)
@@ -910,14 +919,19 @@ async def credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit
     assert owned == admission and outcome is None
     await _refused(harness.port.get_owned(IDS.consumer_org, admission.job_handle),
                    errors.NotFound)
+    # And the other direction: a CREDIT read of a legacy job is `not_found` too.
+    from . import builders as b
+    _legacy, legacy = await _legacy_job(harness)
+    await _refused(harness.port.get_owned_credit(b.ORG_A, legacy.job_handle), errors.NotFound)
 
 
 async def credit_admit__refusals_leave_no_job_and_no_hold(factory):
     """CREDIT-IDENTITY/R69/R70 in the transaction: a consumer key cannot reach a private
     dev model and an unknown model is `not_found`; an unpriced model is
     `invalid_request`; an operator key spends no wallet (`forbidden`); an unfunded
-    provider dev wallet is `insufficient_credit` until an operator allocates to it. No
-    refusal leaves a job or a hold behind."""
+    provider dev wallet is `insufficient_credit` until an operator allocates to it; a key
+    row naming another organization than the request is `forbidden`. No refusal leaves a
+    job or a hold behind."""
     from . import builders as b
     harness = factory()
     port = harness.port
@@ -934,6 +948,15 @@ async def credit_admit__refusals_leave_no_job_and_no_hold(factory):
     operator = b.request(harness, org_id=IDS.consumer_org, key_id=operator_key,
                          model_revision=v2fix.REQUESTED_MODEL)
     await _refused(port.admit_credit(operator, b_idem(operator)), errors.Forbidden)
+    # A key row authenticating one organization never admits for another, even though the
+    # wallet it resolves is its own: the job would be owned by an org the key cannot speak for.
+    elsewhere = harness.ids.uuid()
+    consumer = v2fix.BUILDERS["auth_context_consumer.json"]().model_dump(mode="json")
+    harness.extra["register_credential"](v2.AuthContextV2.model_validate(
+        {**consumer, "key_id": elsewhere}))
+    stolen = b.request(harness, org_id=b.ORG_B, key_id=elsewhere,
+                       model_revision=v2fix.REQUESTED_MODEL)
+    await _refused(port.admit_credit(stolen, b_idem(stolen)), errors.Forbidden)
     # The dev deployment gets an approved internal card; the provider's dev wallet is
     # still zero, so the hold does not fit until an audited allocation funds it.
     harness.extra["publish_rate_card"](_card(rate_card_version="rc_marlin2b_dev_internal",
@@ -972,7 +995,7 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
     ran does not reach it; the charge is the admitted card's half-up debit, taken from
     the CREDIT wallet with the hold released in the same transaction; the v1 debit
     field stays zero and the USD wallet does not move. The worker's view carries the
-    admitted card and the resolved wallet."""
+    admitted card and the resolved wallet. A legacy job's lease is `not_found` here."""
     from . import builders as b
     harness = factory()
     request = _credit_request(harness)
@@ -999,6 +1022,14 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
     assert after["reserved"] == before["reserved"]
     usd = harness.extra["balance"](IDS.consumer_org)
     assert usd["ledger"] == 0 and usd["reserved"] == 0
+    # A legacy job's lease never settles through the CREDIT door.
+    legacy_request, _legacy = await _legacy_job(harness)
+    await harness.port.prepared(await harness.port.claim_preparation(legacy_request.request_id,
+                                                                     "prep-b"))
+    legacy_lease = await harness.port.claim(legacy_request.request_id, "worker-b")
+    await _refused(harness.port.complete_credit(
+        legacy_lease, b.outcome(legacy_request.request_id, harness, tokens=b.usage(1200, 340))),
+        errors.NotFound)
 
 
 async def credit_settle__a_free_outcome_moves_no_credit(factory):

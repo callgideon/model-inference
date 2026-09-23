@@ -1784,6 +1784,19 @@ MUTANTS: tuple[Mutant, ...] = (
           '            raise errors.NotFound(f"job {job_handle} is a CREDIT job: use get_owned_credit")',
        "        if False:\n            pass",
        "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("get_owned_credit_serves_a_legacy_job", "a CREDIT read of a legacy job is not_found (review M-2)",
+       S, "        if job.credit is None:\n"
+          '            raise errors.NotFound(f"job {job_handle} is not a CREDIT job")',
+       "        if False:\n            pass",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("complete_credit_serves_a_legacy_job", "a legacy lease never settles as CREDIT (review M-2)",
+       S, "        if job is not None and job.credit is None:\n"
+          '            raise errors.NotFound(f"job {lease.job_id} is not a CREDIT job")',
+       "        if False:\n            pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credential_org_mismatch_ignored", "a key row admits only for its own organization (review M-2)",
+       S, "        if auth.org_id != request.org_id:", "        if False:",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
     _m("credit_wallet_by_organization", "the wallet comes from resolve_wallet, never the org (R66)",
        S, "        wallet = v2ports.resolve_wallet(auth, candidate)",
        "        wallet = next((w for w in self.wallet_directory.by_user.values()\n"
