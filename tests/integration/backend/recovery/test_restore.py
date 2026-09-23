@@ -26,11 +26,12 @@ ARE that rehearsal, on the pinned `supabase/postgres` 17.6 image (hosted runs 17
   write nothing; flags back on, admission is accepted again.
 
 Scratch databases are `infrx_i3b_*` inside E2's PostgreSQL container, created from its
-template and dropped at the end of each case; `infrx_e2` is only ever read (`pg_dump`).
+template and dropped at the end of each case; `harness.PG_DATABASE` is only ever read
+(`pg_dump`).
 
 `INFRX_I3B_PG=d` runs the same cases on the D harness instead (`tests/d/pgharness.py`: one
 task-local container on `INFRX_D_TASK`'s port, `INFRX_D1_IMAGE`'s image, removed at exit), with
-its task database migrated and seeded the way `run.py` builds `infrx_e2` as the source. No
+its task database migrated and seeded the way `run.py` builds E2's as the source. No
 compose stack; bk03 (a SIGKILL of E2's compose service) still needs E2's.
 """
 from __future__ import annotations
@@ -103,8 +104,9 @@ def needs_pg() -> None:
 
 
 def source_db() -> str:
-    """The populated database the bk01 cases dump: `infrx_e2`, which `run.py` migrated and
-    seeded; on the D harness its task database, built the same way once per process."""
+    """The populated database the bk01 cases dump: `harness.PG_DATABASE`, which `run.py`
+    migrated and seeded; on the D harness its task database, built the same way once per
+    process."""
     global _d_source
     if not ON_D:
         return harness.PG_DATABASE

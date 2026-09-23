@@ -5,18 +5,18 @@
     apps/infrx-api/.venv/bin/python tests/integration/backend/recovery/mutants_i3b.py
     apps/infrx-api/.venv/bin/python tests/integration/backend/recovery/mutants_i3b.py --layer all
 
-E's runner (`tests/integration/mutants.py`) does the work - temporary copy, one edit, the
-kill is a pytest *failure* on the named selector and never an error - so this file is only
-the list. Two additions, both local: the copy also carries `infra/` (the alert rules and
-runbooks are claims too), and a layer-3 mutant needs E2's live stack (`run.py --layer 3
---keep`), otherwise it is reported pending, never killed.
+E's runner (`tests/integration/mutants.py`) does the work - temporary copy (with `infra/`:
+the alert rules and runbooks are claims too), one edit, the kill is a pytest *failure* on the
+named selector and never an error - and runs this list in its mutation stage
+(`mutants.all_mutants()`), so this file is the list plus a thin CLI. A layer-2 mutant needs
+E2's live stack (`run.py --layer 3 --keep`), or `INFRX_I3B_PG=d` for the ones whose case runs
+on the D harness; otherwise it is reported pending, never killed.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -347,15 +347,7 @@ MUTANTS += (
 )
 
 
-def _copy_with_infra(destination: Path, _copy=mutants._copy_trees) -> None:
-    """E's owned trees plus `infra/`, so a mutated rule or runbook is the one read."""
-    _copy(destination)
-    shutil.copytree(harness.REPO_ROOT / "infra", destination / "infra",
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-
-
 def run(selected, *, stack_available: bool) -> dict:
-    mutants._copy_trees = _copy_with_infra
     results = []
     # INFRX_I3B_PG=d: the PostgreSQL cases (test_restore, rc10) run on the D harness, so a
     # layer-2 mutant naming one of them can run without E2's stack (the others: no-cases).

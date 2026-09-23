@@ -13,12 +13,12 @@ What is real in each drill, and what stands in for a component that is missing:
 |---|---|---|
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
-| rc03 gateway restart | - | PENDING G1R, G2 (route); the store half is E3B dr01 |
-| rc04 database loss | - | PENDING D2, D3 here; the PostgreSQL half is `test_restore.py` bk03 |
-| rc05 object store | M2's preparation; an outage in front of the object store | PENDING M3 for MinIO |
+| rc03 gateway restart | - | PENDING G2 (the relay, and the cutover that mounts it); the store half is E3B dr01 |
+| rc04 database loss | - | PENDING on the owner of whichever of admit/claim/terminalize is still a stub (D5 today); the PostgreSQL half is `test_restore.py` bk03 |
+| rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
-| rc08 drain | W2's drain over real Valkey | PENDING W3 for the process's SIGTERM path |
+| rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
 | rc10 rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
@@ -238,21 +238,26 @@ def test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route():
     """OPS-RECOVER (gateway restart): a restart between durable acceptance and the answer
     must replay the same accepted identity, and a restart mid-stream must leave the job to
     the worker. The store half is E3B's dr01 (crash after commit, idempotent retry); the
-    route half needs the mounted pilot ingress, and fails the day it is mounted."""
+    route half waits on G2's relay and the cutover that mounts it, and fails the day the
+    ingress is mounted."""
     if stack.ingress_is_mounted():
         pytest.fail("the pilot ingress is mounted: write the gateway restart drill body now")
-    kit.pending("G1R", "G2", why="no metered route is mounted to restart under load")
+    kit.pending("G2", why="no metered route is mounted to restart under load")
 
 
 def test_i3b_rc04_a_database_loss_under_the_job_store_is_pending_on_its_adapter():
     """OPS-RECOVER (DB interruption) with the product's store: admission, claim and settle
-    across a PostgreSQL restart. Needs the PostgreSQL JobStore; the RPCs are still stubs,
-    and the day they are not this fails. What the database itself guarantees across a
-    SIGKILL is measured now, in `test_restore.py` bk03."""
-    stubs = stack.unimplemented_rpcs()
-    if stubs == 0:
-        pytest.fail("the D RPCs are implemented: drive the DB loss through the real adapter")
-    kit.pending("D2", "D3", why=f"{stubs} infrx RPCs are still infrx.unimplemented stubs")
+    across a PostgreSQL restart, through PgJobStore. It pends while one of the functions it
+    drives is an `infrx.unimplemented` stub, on the task that stub names (E3B's per-drill
+    probe, measured on the stack), and fails the day none is. What the database itself
+    guarantees across a SIGKILL is measured now, in `test_restore.py` bk03."""
+    kit.needs_stack()
+    stubs = stack.stubbed(("admit", "claim", "terminalize"))
+    if not stubs:
+        pytest.fail("admission, claim and settlement are implemented: drive the DB loss "
+                    "through PgJobStore now")
+    kit.pending(*sorted(set(stubs.values())),
+                why=f"{sorted(stubs)} are still infrx.unimplemented stubs")
 
 
 # ------------------------------------------------------------------ media: object store, disk
@@ -379,7 +384,7 @@ def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter(
     names = _object_store_adapters()
     if names:
         pytest.fail(f"an S3 object store exists ({names}): pause MinIO under it now")
-    kit.pending("M3", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
+    kit.pending("M1-L2", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
 
 
 @contextlib.contextmanager
@@ -553,7 +558,8 @@ def test_i3b_rc08_a_drain_releases_in_flight_work_to_the_store_and_keeps_the_que
 
 def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
     """The same drain driven by SIGTERM to the worker PROCESS, bounded by the unit's
-    `TimeoutStopSec`: needs W3's worker entry point (and I2B's unit). Fails the day
+    `TimeoutStopSec`: W3's WorkerService and I2B's unit exist; the composition root the
+    unit starts (`python -m infrx.worker`, I2B request 4) does not. Fails the day
     `infrx.worker` grows one, in any of the shapes a process can start from here: an
     `infrx.worker.__main__` module (`python -m infrx.worker`), a `main` attribute of the
     package, or a worker module with an `if __name__ == "__main__":` guard. A console
@@ -567,7 +573,8 @@ def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
             if re.search(r"^if __name__ == .__main__.:", path.read_text(), re.M)]
     if entry:
         pytest.fail("infrx.worker has a process entry point: SIGTERM it mid-attempt now")
-    kit.pending("W3", "I2B", why="no worker process entry point or unit to SIGTERM")
+    kit.pending("I2B-R4", why="no worker process entry point (python -m infrx.worker) to "
+                             "SIGTERM")
 
 
 def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepted_job(
