@@ -13,7 +13,7 @@ What is real in each drill, and what stands in for a component that is missing:
 |---|---|---|
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
-| rc03 gateway restart | the mounted gateway PROCESS (E3B's `pilotbox`), SIGKILLed mid-answer and restarted, beside a worker process that survives it | text only: a worker process cannot resolve media another process prepared (M3-U2); the store half is E3B dr01 |
+| rc03 gateway restart | the mounted gateway PROCESS (E3B's `pilotbox`), SIGKILLed mid-answer and restarted, beside a worker process that survives it | text (E3B's journeys run video on the same two processes); the store half is E3B dr01 |
 | rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim; rc04b: settlement across the kill (D5's terminalize, E3B phase 3) | the database's own boundary is `test_restore.py` bk03 |
 | rc05 object store | M2's preparation; an outage in front of the object store; rc05b: M1-L2's S3ObjectStore on E2's MinIO, partitioned from the stack's network | - |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
@@ -248,7 +248,7 @@ def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its
 
     import pilotbox
     kit.needs_stack()
-    with pilotbox.journey(tmp_path, embedded=False) as trip:
+    with pilotbox.journey(tmp_path) as trip:
         alpha = trip.world.alpha
         before = trip.wallet(alpha)
         text = "Two people unload boxes from a van onto a trolley. " * 6

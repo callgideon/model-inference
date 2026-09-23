@@ -23,24 +23,19 @@ compose yet is INJECTED, each named here and in the evidence:
   a journey can prove a replay or a key conflict fetched, staged and admitted nothing.
 
 and, in the same process, **M's preparation worker, emulated**: no process claims a
-preparation lease in the product yet, and the staged refs it prepares are bound in THIS
-process (`MediaUploads.by_job`, G3 request (b)2). A `WorkerLoop` on the preparation kind
-claims each `prepare_dispatch` candidate, waits for the relay's attach, and reports
-`prepared` with `media.prepare(job)` and the fake engine's prompt count.
+preparation lease in the product yet. A `WorkerLoop` on the preparation kind claims each
+`prepare_dispatch` candidate, waits for the relay's attach (this process's copy; M's
+`PgAttachments` records it durably too), and reports `prepared` with `media.prepare(job)`
+and the fake engine's prompt count.
 
-**worker** - W3's `WorkerService` over W2's `WorkerLoop`/`AttemptRunner` and W's
+**worker** - ALWAYS a process of its own (review J2; M's pilot-media merge made it
+possible for video): W3's `WorkerService` over W2's `WorkerLoop`/`AttemptRunner` and W's
 `VllmEngine` against E2's fake vLLM (`INFRX_E3B_ENGINE_URL`), on the same clone, journal
-and index: what I2B-R4's `python -m infrx.worker` would compose, which does not exist yet.
-Its one emulated seam is W request 5 (D5): W's runner speaks the v1 port, and a CREDIT
+and index, with `local_uri` from a `MediaPreparation` of its own over the object store
+built from settings and the shared `PROCESSING_CACHE_DIR` (M: the cache is found on disk by
+content hash): what I2B-R4's `python -m infrx.worker` would compose, which does not exist
+yet. Its one emulated seam is W request 5 (D5): W's runner speaks the v1 port, and a CREDIT
 job's doors are `load_work_credit`/`complete_credit` - `CreditWork` routes the two calls.
-
-Where the worker runs is the one choice the current code forces. A video job's prepared
-ref resolves to a file only through the processing cache's index (`ProcessingCache.entries`)
-and M's attach (`MediaUploads.by_job`), and both live in the process that prepared it. So
-`INFRX_E3B_EMBED_WORKER=1` (the journeys) runs the worker INSIDE the gateway process, over
-the gateway's own stores and `media_store.local_uri`; without it (rc03: a gateway restart
-must leave the job to a worker that survives it) the worker is a process of its own, and
-serves text only.
 """
 from __future__ import annotations
 
@@ -64,9 +59,9 @@ import harness                                          # noqa: E402
 if importlib.util.find_spec("infrx") is None:
     harness.api_on_path()
 
-PORT_ENV, INDEX_ENV, ENGINE_ENV, EMBED_ENV, CALLS_ENV = (
+PORT_ENV, INDEX_ENV, ENGINE_ENV, CALLS_ENV = (
     "INFRX_E3B_GATEWAY_PORT", "INFRX_E3B_INDEX_NAMESPACE", "INFRX_E3B_ENGINE_URL",
-    "INFRX_E3B_EMBED_WORKER", "INFRX_E3B_CALLS")
+    "INFRX_E3B_CALLS")
 MEDIA_HOST = "media.e3b3.example"
 PUBLIC_ADDRESS = "93.184.216.34"          # what MEDIA_HOST resolves to (G2's own choice)
 # The fake engine counts every prompt as this many tokens; the emulated preparation reports
@@ -200,16 +195,9 @@ async def gateway() -> None:
     preparation = WorkerLoop(scheduler=queue, runner=Prepare(rt), worker_id="e3b3-prep",
                              kind=OutboxKind.prepare_dispatch, limits=settings.pilot)
     preparing = asyncio.create_task(preparation.run(concurrency=2, stop_when_idle=False))
-    embedded = None
-    if os.environ.get(EMBED_ENV) == "1":
-        embedded = worker_service(settings.pilot, rt.relay.jobs, rt.relay.stream, queue,
-                                  rt.media_store.local_uri, drain_s=5.0)
-        await embedded.start()
     try:
         await serving
     finally:
-        if embedded is not None:
-            await embedded.stop()
         preparation.draining = True
         preparing.cancel()
         await asyncio.gather(preparing, return_exceptions=True)
@@ -242,7 +230,7 @@ class CreditWork:
         return settled
 
 
-def worker_service(pilot, store, stream, queue, local_uri, *, drain_s=None):
+def worker_service(pilot, store, stream, queue, local_uri):
     """W3's service over W2's loop and runner and W's engine, on the given store."""
     import httpx
 
@@ -258,21 +246,23 @@ def worker_service(pilot, store, stream, queue, local_uri, *, drain_s=None):
                            put_result=store.put_result, limits=pilot)
     return WorkerService(loop=WorkerLoop(scheduler=queue, runner=runner,
                                          worker_id="e3b3-worker", limits=pilot),
-                         jobs=jobs, engine=engine, concurrency=4, health_port=None,
-                         drain_s=drain_s)
+                         jobs=jobs, engine=engine, concurrency=4, health_port=None)
 
 
 async def worker() -> None:
     from infrx.config import from_env
+    from infrx.gateway import pilot as composition
     from infrx.media.prepare import MediaPreparation, ProcessingCache
-    from infrx.media.store import InMemoryObjectStore
     from infrx.state.jobstore import PgJobStore, connector
     from infrx.state.journal import PgStreamStore
-    pilot = from_env().pilot
+    settings = from_env()
+    pilot = settings.pilot
     connect = connector(pilot.database_url)
-    # Its own processing cache index is empty (process-local): text only (module docstring).
-    media = MediaPreparation(InMemoryObjectStore(), limits=pilot, cache=ProcessingCache(
-        pilot.processing_cache_dir, ttl_s=pilot.processing_cache_ttl_s))
+    # M's pilot-media lane: its cache index starts empty, and `local_uri` finds a file the
+    # gateway's preparation wrote by the ref's content hash on the shared directory.
+    media = MediaPreparation(composition.object_store(settings), limits=pilot,
+                             cache=ProcessingCache(pilot.processing_cache_dir,
+                                                   ttl_s=pilot.processing_cache_ttl_s))
     service = worker_service(pilot, PgJobStore(connect, limits=pilot),
                              PgStreamStore(connect, limits=pilot), index(pilot),
                              media.local_uri)
@@ -364,8 +354,7 @@ class PilotBox:
 
 
 @contextlib.contextmanager
-def pilot_box(database: str, workdir: Path, rest_url: str, engine_url: str, *,
-              embedded: bool = True):
+def pilot_box(database: str, workdir: Path, rest_url: str, engine_url: str):
     """The gateway and the worker over `database`, until the block ends. The clone's test
     clock (frozen by the conformance rig) is handed back to the wall first: two processes
     and a database agree on "now" only as they do on the pilot box."""
@@ -376,12 +365,11 @@ def pilot_box(database: str, workdir: Path, rest_url: str, engine_url: str, *,
     import stack
     with psycopg.connect(harness.pg_dsn(database), autocommit=True) as conn:
         conn.execute("select infrx_test.unfreeze(), infrx_test.set_offset(0)")
-    env = {**stack.pilot_env(database, workdir, rest_url), EMBED_ENV: "1" if embedded else "0"}
+    env = stack.pilot_env(database, workdir, rest_url)
     box = PilotBox(env, engine_url, workdir, stack.GATEWAY_PORT,
                    f"{harness.VALKEY_PREFIX}{{e3b3-{uuid.uuid4().hex}}}")
     try:
-        if not embedded:
-            box.start("worker")
+        box.start("worker")
         box.start("gateway")
         yield box
     finally:
@@ -530,7 +518,7 @@ def frame_data(frame: str):
 
 
 @contextlib.contextmanager
-def journey(workdir: Path, *, embedded: bool = True):
+def journey(workdir: Path):
     """Two tenants provisioned on a fresh clone, PostgREST over it, E2's fake engine and the
     pilot box - the whole stack a journey calls, torn down afterwards."""
     import fake_vllm
@@ -538,8 +526,7 @@ def journey(workdir: Path, *, embedded: bool = True):
     world = stack.provision_two_tenants()
     engine = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
     with stack.journey_postgrest(world.database) as rest, engine:
-        with pilot_box(world.database, workdir, rest, engine.base_url,
-                       embedded=embedded) as box:
+        with pilot_box(world.database, workdir, rest, engine.base_url) as box:
             yield Journey(world, box, engine)
 
 
