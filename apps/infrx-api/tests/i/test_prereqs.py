@@ -50,13 +50,14 @@ def test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys():
 
 
 def test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer():
-    """F2.2 item 14 stays open on purpose. `validate_runtime` still maps an unset
-    `INFRX_MODE` to legacy behaviour - G2 inverts that, and G's `unset_mode_refuses`
-    mutant keeps guarding it until then - but no install run can produce an unset mode,
-    because `INFRX_MODE` is a required manifest key and `""` is not a valid mode."""
-    from infrx.config import Settings, validate_runtime
+    """F2.2 item 14, closed at the G2 cutover: `validate_runtime` refuses an unset
+    `INFRX_MODE` (G's `unset_mode_starts_legacy` mutant guards it), and no install run can
+    produce one either, because `INFRX_MODE` is a required manifest key and `""` is not a
+    valid mode."""
+    from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 
-    assert validate_runtime(Settings()) == "legacy"
+    with pytest.raises(RuntimeMisconfigured, match="INFRX_MODE"):
+        validate_runtime(Settings())
     mode_key = next(key for key in preflight.MANIFEST if key.env == "INFRX_MODE")
     assert mode_key.required_in == preflight.MODES
     assert preflight.shape_problem(mode_key, "") is not None

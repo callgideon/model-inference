@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """`M-FAILCLOSED`: what `pilot` refuses to start without, what health says, and what
-the composition root still does today.
+the composition root does since the G2 cutover.
 
 `O-FAILOPEN` is the hazard these cases exist for: an install run that loses a
 parameter read must not be able to publish an ingress that authenticates nobody and
 meters nothing. Two independent refusals cover it - `config.validate_runtime` at the
 composition root, and this router refusing to register - and the last group pins
-that the legacy entry point is still exactly what F1 left behind.
+that the composition root serves chat through the metered ingress alone.
 """
 import asyncio
 
@@ -16,7 +16,10 @@ from fastapi.testclient import TestClient
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
-from infrx.gateway.routes import chat, health, ingress, models
+from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+from infrx.scheduling.memory import MemoryScheduler
+
+from . import relay_support
 
 from . import support
 
@@ -113,14 +116,56 @@ def test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500():
     assert "postgresql" not in response.text
 
 
-# --- the composition root, unchanged until the cutover ----------------------------
-def test_f_base__the_composition_root_still_mounts_only_the_legacy_routers():
-    """G1 adds modules; it mounts none. The cutover integration request replaces
-    `chat` with `ingress` here and nowhere else (r1 R44)."""
-    assert composition.ROUTERS == (health, models, chat)
-    paths = {route.path for route in support.legacy_app().routes if hasattr(route, "path")}
-    assert {"/v1/chat/completions", "/health", "/v1/models"} <= paths
-    assert ingress.HEALTH_PATH not in paths and ingress.READY_PATH not in paths
+# --- the composition root, since the G2 cutover ------------------------------------
+def pilot_app(config=None, routers=None):
+    """`create_app` as the cutover composes it, over the contract fakes for its adapters
+    (`routers`, if given, is `ROUTERS` while it runs)."""
+    from unittest import mock
+
+    world = relay_support.World()
+    world.stream.usage = lambda: asyncio.sleep(0, {})
+    with mock.patch.object(composition, "ROUTERS", routers or composition.ROUTERS):
+        return composition.create_app(
+            config if config is not None else support.settings(), client=support.upstream(),
+            sb=support.supabase(), clock=world.now_s, catalog=world.catalog,
+            stream=world.stream, objects=world.objects, jobs=world.jobs,
+            index=MemoryScheduler(world.clock.now))
+
+
+UPLOAD_ROUTES = {("POST", "/v1/uploads"), ("PUT", "/v1/uploads/{handle}"),
+                 ("POST", "/v1/uploads/{handle}/complete")}
+
+
+def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only():
+    """The cutover (r1 R44): `ROUTERS` is (health, models, ingress, uploads, jobs) - `health`
+    stays, Caddy proxies the public `/health` to it; uploads and jobs after the ingress, over
+    the store and relay its composition made (G3/G4U request (a)) - the one chat handler is
+    the ingress's, every upload and jobs route is its own router's, and nothing FastAPI would
+    publish by itself (docs, schema, slash redirects) is served."""
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs)
+    app = pilot_app()
+    rt = app.state.runtime
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    assert {"/v1/chat/completions", "/health", "/v1/models", ingress.HEALTH_PATH,
+            ingress.READY_PATH} <= paths
+    assert not paths & {"/docs", "/redoc", "/openapi.json"}
+    assert app.router.redirect_slashes is False
+    (route,) = [r for r in app.routes if getattr(r, "path", "") == support.CHAT_PATH]
+    assert route.endpoint.__module__ == ingress.__name__
+    served = {(method, route.path): route.endpoint.__module__ for route in app.routes
+              for method in (getattr(route, "methods", None) or ())}
+    assert {served.get(key) for key in UPLOAD_ROUTES} == {uploads.__name__}
+    assert {served.get(key) for key in ingress.JOBS_ROUTES} == {jobs.__name__}
+    assert rt.relay.on_async is not None            # jobs' 202 hook, on the pilot's relay
+    ingress.assert_route_table(app)
+
+
+def test_f_base__the_route_table_is_asserted_after_every_router_mounted():
+    """G1R C4 at the composition root: `create_app` checks what the route table serves after
+    the router loop, so a router list that puts another chat handler first - the legacy one,
+    in a mode `validate_runtime`'s module check does not guard - refuses to start."""
+    with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
+        pilot_app(support.settings("dev"), routers=(chat,) + composition.ROUTERS)
 
 
 def test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route():
@@ -132,42 +177,27 @@ def test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route():
     from unittest import mock
 
     config = support.settings()                     # a complete pilot configuration
-    with pytest.raises(RuntimeMisconfigured) as raised:
-        composition.create_app(config, client=support.upstream(), sb=support.supabase())
-    message = str(raised.value)
-    assert "legacy route" in message
-    assert "service-role" not in message and "infrx_g1" not in message
-    with support.as_cutover():
-        assert validate_runtime(config) == "pilot"
-    for routers in ((health, models, chat, ingress), (health, models)):
+    assert validate_runtime(config) == "pilot"      # the composition root is the cutover's
+    assert pilot_app(config).state.runtime.mode == "pilot"
+    for routers in ((health, models, chat), (health, models, chat, ingress), (health, models)):
         with mock.patch.object(composition, "ROUTERS", routers):
-            with pytest.raises(RuntimeMisconfigured):
+            with pytest.raises(RuntimeMisconfigured) as raised:
                 validate_runtime(config)
+            message = str(raised.value)
+            assert "legacy route" in message
+            assert "service-role" not in message and "infrx_g1" not in message
     assert validate_runtime(support.settings("dev")) == "dev"
-    assert validate_runtime(Settings()) == "legacy"
 
 
-def test_f_base__an_unset_mode_is_still_legacy_behaviour():
-    """R44's unset branch: `create_app()` with no `INFRX_MODE` logs `legacy` and
-    changes nothing, and the legacy chat route still answers without a key. G1 flips
-    this to a refusal at cutover, with I2's installer."""
-    assert validate_runtime(Settings()) == "legacy"
-    app = support.legacy_app()
-    assert app.state.runtime.mode == "legacy"
-    response = TestClient(app).post("/v1/chat/completions", json=support.BODY)
-    assert response.status_code == 200, response.text
-
-
-def test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route():
-    """Mounted next to the legacy route, the legacy route keeps its path: the cutover
-    is a change to `ROUTERS`, not something a track can do by also registering."""
-    app = support.legacy_app()
-    rt = app.state.runtime
-    rt.mode = "dev"
-    ingress.register(app, rt, support.deps(checks=BOTH_OK))
-    tc = TestClient(app)
-    assert tc.post("/v1/chat/completions", json=support.BODY).status_code == 200   # legacy
-    assert tc.get(support.HEALTH_PATH).json() == {"status": "ok"}                  # new routes live
+def test_f_base__an_unset_mode_refuses_to_start():
+    """R44's unset branch, inverted at the cutover (F2.2 carryover 14): the legacy F1
+    entry point is retired, so no `INFRX_MODE` is a startup refusal naming the setting, and
+    the installer never writes one (I0)."""
+    with pytest.raises(RuntimeMisconfigured) as raised:
+        validate_runtime(Settings())
+    assert raised.value.missing == ("INFRX_MODE",)
+    with pytest.raises(RuntimeMisconfigured, match="INFRX_MODE"):
+        pilot_app(Settings(usage_log=support.USAGE_LOG))
 
 
 # --- what FastAPI would answer by itself (review r1 item 7) ------------------------
@@ -233,8 +263,8 @@ def test_f_base__register_reads_its_deps_from_the_runtime():
 def test_f_base__the_ingress_refuses_to_start_without_a_catalog():
     """G1R: a model name means only what the trusted catalog says. With no catalog the
     ingress could only guess (the old served-map fallback copied the name through), so
-    it refuses to register, in every mode."""
-    for mode in ("pilot", "dev", "test", ""):             # "" = unset, legacy
+    it refuses to register, in every mode (an unset one refuses before, since the cutover)."""
+    for mode in ("pilot", "dev", "test"):
         with pytest.raises(RuntimeMisconfigured) as raised:
             support.cutover_app(support.settings(mode), ingress_deps=support.deps(catalog=None))
         assert "catalog" in str(raised.value)

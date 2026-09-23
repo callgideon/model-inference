@@ -13,13 +13,18 @@ from ..auth.keys import Auth
 from ..config import from_env, validate_runtime
 from ..media.video import Media
 from ..usage import Usage
-from .routes import chat, health, models
+from . import pilot
+from .routes import health, ingress, jobs, models, uploads
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
 # a module exposing `register(app, rt)`; the coordinator adds it here on an integration
 # request, which is why the list is a literal rather than a discovery walk - an
 # import-time scan would let a half-finished track mount itself on the public gateway.
-ROUTERS = (health, models, chat)
+# G2 cutover: the metered ingress in place of the legacy chat route. `health` stays: Caddy
+# proxies the public `/health` to it (deploy/Caddyfile), and the edge hides what it echoes.
+# G4U uploads and G3 jobs come after the ingress, over the media store and the relay its
+# composition put on `rt` (G3 request (a), G4U request (a)).
+ROUTERS = (health, models, ingress, uploads, jobs)
 
 
 def upstream_client(settings):
@@ -51,20 +56,26 @@ class Runtime:
         self.app = None
 
 
-def create_app(settings=None, client=None, sb=None, clock=time.time):
+def create_app(settings=None, client=None, sb=None, clock=time.time, **adapters):
     """The FastAPI app. `settings` defaults to the process environment; the
-    upstream and Supabase clients and the clock are injectable for tests.
+    upstream and Supabase clients and the clock are injectable for tests, and so are the
+    pilot's adapters (`pilot.build_ingress_deps`: catalog, stream, objects, jobs, index).
+    Each one not injected is built from settings (`pilot.adapters_from_env`, G2 R2-1).
 
     r1 R44: one coordinator-owned hook, `config.validate_runtime`, decides whether this
-    configuration may serve at all. With `INFRX_MODE` unset it logs `legacy` and changes
-    nothing, so the F1 entry point keeps its behaviour; `pilot` without authentication or
-    metering, and any unrecognised mode, refuse to start.
+    configuration may serve at all: an unset `INFRX_MODE`, `pilot` without authentication or
+    metering, and any unrecognised mode refuse to start. The G2 cutover: `rt.ingress` is the
+    pilot composition, the route table serves `/v1/chat/completions` from the ingress alone,
+    and nothing FastAPI would publish by itself (docs, schema, slash redirects) is served.
     """
     rt = Runtime(from_env() if settings is None else settings, client, sb, clock)
     rt.mode = validate_runtime(rt.settings)
-    app = FastAPI()
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=pilot.lifespan)
+    app.router.redirect_slashes = False
     app.state.runtime = rt
     rt.app = app
+    rt.ingress = pilot.build_ingress_deps(rt, **pilot.adapters_from_env(rt.settings, **adapters))
     for module in ROUTERS:
         module.register(app, rt)
+    ingress.assert_route_table(app)
     return app

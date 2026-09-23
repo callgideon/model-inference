@@ -171,23 +171,37 @@ def test_bounds_a_zero_would_disable_are_refused(name):
 
 
 # --- r1 R44: the runtime mode, through the composition root ---------------------
-# These build apps with `create_app()` and injected settings. They never import the
-# legacy `gateway` shim: it mutates process state at import and directories collect
-# before the top-level legacy files, so importing it here would reorder the suite (R48).
+# These build apps with `create_app()` and injected settings. Since the G2 cutover the
+# app is the pilot composition, so its adapters are injected too (`_adapters`).
 def _app(env, **clients):
     from infrx.gateway.app import create_app
-    return create_app(config.from_env(env), client=object(), sb=object(), **clients)
+    return create_app(config.from_env(env), client=object(), sb=object(), **_adapters(),
+                      **clients)
+
+
+def _adapters():
+    """The pilot composition's adapters as the contract fakes (G2 cutover): a test opens no
+    PostgreSQL pool and no Valkey client, and no durable object store has an adapter yet."""
+    import asyncio
+
+    from infrx.contracts.conformance.v2_fakes import fake_v2_harness
+    from infrx.contracts.fakes.factories import credit_jobstore_factory
+    from infrx.media.store import InMemoryObjectStore
+    from infrx.scheduling.memory import MemoryScheduler
+    harness = credit_jobstore_factory()
+    catalog = fake_v2_harness().catalog
+    catalog.move_alias(config.from_env({}).model_id,
+                       catalog.aliases["nemostation/marlin-2b@2026-09-01"])
+    stream = harness.extra["stream"]
+    stream.usage = lambda: asyncio.sleep(0, {})       # D4's journal readiness answer
+    return {"catalog": catalog, "stream": stream, "objects": InMemoryObjectStore(),
+            "jobs": harness.port, "index": MemoryScheduler(harness.clock.now)}
 
 
 def _validated_as_cutover(env):
-    """G1R / E3B dr17: `pilot` refuses while `app.ROUTERS` composes the legacy chat route,
-    and no pilot app can be built before G2 wires `rt.ingress`, so a complete pilot
-    configuration is validated as the cutover will compose it."""
-    from unittest import mock
-    from infrx.gateway import app as composition_root
-    from infrx.gateway.routes import health, ingress, models
-    with mock.patch.object(composition_root, "ROUTERS", (health, models, ingress)):
-        return config.validate_runtime(config.from_env(env))
+    """G1R / E3B dr17: `pilot` refuses while `app.ROUTERS` composes the legacy chat route;
+    since the cutover the composition root is the pilot's, so this is the plain hook."""
+    return config.validate_runtime(config.from_env(env))
 
 
 AUTHENTICATED = {"SUPABASE_URL": "https://example.supabase.co",
@@ -195,19 +209,16 @@ AUTHENTICATED = {"SUPABASE_URL": "https://example.supabase.co",
 METERED = {"DATABASE_URL": "postgresql:///x"}
 
 
-def test_an_unset_mode_is_the_legacy_f1_behaviour():
-    """R44: while `INFRX_MODE` is unset the app starts exactly as F1's did, and says so.
-
-    F1 preserved behaviour by rule, so the legacy entry point cannot start refusing;
-    G1 replaces this branch with "unset -> refuse" at cutover.
-    """
+def test_an_unset_mode_refuses_to_start():
+    """R44 / F2.2 carryover 14, inverted at the G2 cutover: the legacy F1 entry point is
+    retired, so an unset `INFRX_MODE` is a refusal naming the setting, before anything
+    mounts - the installer always writes a mode (I0)."""
     assert config.runtime_mode(config.from_env({})) == ""
-    assert config.validate_runtime(config.from_env({})) == "legacy"
-    app = _app({})
-    assert app.state.runtime.mode == "legacy"
-    # and the F1 routes are mounted, i.e. "legacy" is the whole app, not a stub
-    paths = {route.path for route in app.routes}
-    assert {"/health", "/v1/models", "/v1/chat/completions"} <= paths
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        config.validate_runtime(config.from_env({}))
+    assert caught.value.missing == ("INFRX_MODE",)
+    with pytest.raises(config.RuntimeMisconfigured, match="INFRX_MODE"):
+        _app({})
 
 
 def test_pilot_refuses_to_start_unauthenticated_or_unmetered():
@@ -239,9 +250,12 @@ def test_a_pilot_startup_error_never_echoes_a_value():
 def test_pilot_starts_with_authentication_and_metering():
     env = {"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED}
     assert _validated_as_cutover(env) == "pilot"
-    # ...and never on today's composition, which serves chat through the legacy route.
-    with pytest.raises(config.RuntimeMisconfigured, match="legacy route"):
-        _app(env)
+    # ...and on the composition root itself, which serves chat through the metered ingress.
+    app = _app(env)
+    assert app.state.runtime.mode == "pilot"
+    served = [route.endpoint.__module__ for route in app.routes
+              if getattr(route, "path", "") == "/v1/chat/completions"]
+    assert served == ["infrx.gateway.routes.ingress"]
 
 
 def test_pilot_refuses_the_shared_legacy_key(caplog):
@@ -316,7 +330,7 @@ def test_the_router_list_is_fixed_and_uses_the_register_protocol():
     half-finished track mount itself on the public gateway."""
     from infrx.gateway import app as composition_root
     assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
-        ["health", "models", "chat"]
+        ["health", "models", "ingress", "uploads", "jobs"]
     for module in composition_root.ROUTERS:
         assert callable(getattr(module, "register"))
 
@@ -600,8 +614,11 @@ def test_a_credit_deployment_needs_an_approved_rate_card():
         corrected = {**env, "ACTIVE_RATE_CARD_VERSION": "rc_marlin2b_2026_09_provisional"}
         if mode == "pilot":
             assert _validated_as_cutover(corrected) == "pilot"
-        else:
+        elif mode:
             assert _app(corrected)
+        else:                   # the card passes; an unset mode is refused since the cutover
+            with pytest.raises(config.RuntimeMisconfigured, match="requires INFRX_MODE"):
+                _app(corrected)
         # F2P review M-6/CFG-2: whitespace is not a card (refused as missing), and a padded
         # name is refused at startup rather than served (`validate_pilot` is off this path).
         with pytest.raises(config.RuntimeMisconfigured, match="requires ACTIVE_RATE_CARD_VERSION"):
@@ -611,11 +628,12 @@ def test_a_credit_deployment_needs_an_approved_rate_card():
                        " rc_marlin2b_2026_09_provisional"):
             with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
                 _app({**env, "ACTIVE_RATE_CARD_VERSION": padded})
-    assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
+    assert _app({"INFRX_MODE": "dev", "ACCOUNTING_REGIME": "legacy_usd"}) is not None
     # F2P confirmation CONF-N2: whitespace-only is unset in every regime, so a legacy
     # deployment starts; a padded card is refused in every regime (the rule is the text's).
     try:
-        started = _app({"ACCOUNTING_REGIME": "legacy_usd", "ACTIVE_RATE_CARD_VERSION": "  "})
+        started = _app({"INFRX_MODE": "dev", "ACCOUNTING_REGIME": "legacy_usd",
+                        "ACTIVE_RATE_CARD_VERSION": "  "})
     except config.RuntimeMisconfigured as refused:
         raise AssertionError(f"a whitespace-only card was read as a card: {refused}") from None
     assert started is not None
@@ -667,8 +685,11 @@ def test_a_bad_deployment_value_refuses_before_anything_mounts(mode, setting):
     # about the value and not about the mode (pilot: as the cutover composes it).
     if mode == "pilot":
         assert _validated_as_cutover({**env, setting: "64"}) == "pilot"
-    else:
+    elif mode:
         assert _app({**env, setting: "64"}) is not None
+    else:                       # the value passes; an unset mode is refused since the cutover
+        with pytest.raises(config.RuntimeMisconfigured, match="requires INFRX_MODE"):
+            _app({**env, setting: "64"})
 
 
 def test_a_zero_index_cap_refuses_to_start():

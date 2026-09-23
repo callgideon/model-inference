@@ -143,12 +143,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("composition_gate_removed", "pilot is refused while the pilot routers are absent",
        P, '    if mode == "pilot" and ingress not in composition.ROUTERS:',
        "    if False:",
-       "test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed"),
+       "test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_is_composed"),
     _m("probe_verdict_ignored", "a runtime refusal stops the install",
        P, '        if not verdict["ok"]:\n            report(verdict["problems"])\n'
           "            return REFUSED",
        '        if not verdict["ok"]:\n            report(verdict["problems"])',
-       "test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed",
        "test_deploy_failclosed__the_probe_that_says_nothing_is_a_refusal"),
     _m("unparsable_verdict_passes", "a probe that answers nothing is not a pass",
        P, '        return {"ok": False, "python": None, "mode": cfg.mode, "warnings": [],',
@@ -271,13 +270,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "infrx/contracts/limits.py", 'MODES = ("dev", "test", "pilot")',
        'MODES = ("dev", "test", "pilot", "prod")',
        "test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys"),
-    _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour (F2.2 item 14)",
-       "infrx/config.py", '        return "legacy"',
-       '        raise RuntimeMisconfigured(mode, detail="INFRX_MODE must be set")',
-       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer",
-       # the defect IS the raise: `validate_runtime(Settings())` refusing instead of
-       # answering "legacy" (the shared rule makes that kill mode explicit)
-       dies_by=("RuntimeMisconfigured",)),
+    _m("unset_mode_starts_legacy", "an unset INFRX_MODE refuses to start (F2.2 item 14)",
+       "infrx/config.py", '        raise RuntimeMisconfigured(mode, ("INFRX_MODE",))',
+       '        return "legacy"',
+       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer"),
 )
 
 
