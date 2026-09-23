@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T15:05:00Z",
+  "updated": "2026-09-23T15:33:16Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "round 3 running on 3194578+ (G2 r3 76ba3bb merged, R3-1 re-anchored); confirmation fix_required at cb096fb (4 blocking) being answered \u2192 re-confirmation \u2192 merge after G2",
+      "phase": "round 3 HANDED BACK 9133efe (G2 r3 merged clean; B1/B2/B3/C1 + N1/N3/C2/C3/C4 closed; G3 list 79 mutants; tests/g 559); re-confirmation running \u2192 MERGE after G2",
       "since": "2026-09-23T10:09:50Z",
       "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
     },
@@ -68,8 +68,8 @@
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "confirmation fix_required at cb096fb (wf_e024f4f2-8dc; 10 agents; JSON evidence/g/G3-confirm-cb096fb.json) \u2192 round 3 on the G2 r3 merge",
-      "since": "2026-09-23T14:52:04Z"
+      "phase": "round-3 confirmation at 9133efe running (admission + stream lenses + refuters)",
+      "since": "2026-09-23T15:33:16Z"
     },
     "I3B-followup": {
       "phase": "fix_required at d99da09 (wf_cb972a2c-da6 restore lens + wf_28258566-66d drill lens; JSON evidence/i/I3B-followup-review-d99da09.json) \u2192 fix round",
