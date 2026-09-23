@@ -58,6 +58,10 @@ CURSOR = "test_api_modes__a_malformed_or_forged_cursor_is_400_before_any_read"
 GAP = "test_api_modes__a_replay_gap_or_an_expired_journal_is_an_explicit_410"
 OBSERVER = "test_api_modes__an_observer_that_leaves_never_cancels_the_job"
 UNSTARTED = "test_api_modes__an_unstarted_job_streams_its_identity_then_waits"
+DELETE = "test_dur_fence__delete_cancels_durably_and_answers_the_committed_outcome"
+RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
+MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
+BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -199,6 +203,24 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("detach_check_removed", "the pump returns without a cancel for an observer",
        R, "            if gone.done() and not cancel_on_gone:\n                return\n", "",
        OBSERVER),
+    # === item 5: DELETE (API-MODES, DUR-FENCE) ==========================================
+    _m("delete_cause_disconnected", "an explicit DELETE is client_cancelled (R21)",
+       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
+       "        outcome = await relay.cancel(org, handle, "
+       "cause=TerminalCause.client_disconnected)", DELETE, MIDWAY),
+    _m("delete_cancels_nothing", "DELETE requests durable cancellation",
+       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
+       "        outcome = (await relay._owned(org, handle))[1]", DELETE),
+    _m("delete_unshielded", "the DELETE's cancel survives the handler's own cancellation",
+       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
+       "        outcome = await relay.jobs.cancel(org, handle, "
+       "cause=TerminalCause.client_cancelled)", MIDWAY),
+    _m("cancel_resettles_a_completed_job", "a DELETE after completion answers it, one settlement",
+       ST, "            if job.terminal:\n                # Completion won the race",
+       "            if False:\n                # Completion won the race", RACE),
+    _m("delete_body_accepted", "a DELETE that declares a body is 400 and cancels nothing",
+       J, '        if request.headers.get("content-length", "0") != "0" \\',
+       "        if False \\", BODY),
 )
 
 

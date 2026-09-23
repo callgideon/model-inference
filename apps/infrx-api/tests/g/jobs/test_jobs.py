@@ -19,7 +19,7 @@ from datetime import timedelta
 
 import pytest
 
-from infrx.contracts import fixtures, wire
+from infrx.contracts import errors, fixtures, wire
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      JobState, OutboxKind, SettlementState, TerminalCause,
                                      TerminalOutcome)
@@ -577,3 +577,116 @@ def test_api_modes__an_unstarted_job_streams_its_identity_then_waits():
                                      if "chat.completion.chunk" in f][0]
     assert reply.text() == world.results[job.id] and reply.data()[-1] == "[DONE]"
     assert job.outcome.state is JobState.succeeded
+
+
+# --- item 5: DELETE --------------------------------------------------------------------
+def delete(world, handle=None, **kw):
+    return rs.run(send(world.app, "DELETE", job_path(handle or world.handle()), **kw))
+
+
+def test_dur_fence__delete_cancels_durably_and_answers_the_committed_outcome():
+    """An explicit DELETE cancels in the store with the client's cause (R21: an explicit
+    cancel is `client_cancelled`, never `client_disconnected`) and answers the committed
+    `JobStatus`; the worker's next fenced write is refused. A second DELETE answers the same
+    committed outcome - no conflict, no second settlement."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    first = delete(world)
+    assert first.status == 200, first.body
+    body = first.json()
+    assert (body["state"], body.get("cause"), body["result_available"]) == (
+        "cancelled", "client_cancelled", False)
+    assert set(body) <= set(fixtures.load("job_status.json")) | {"usage_certainty"}
+    outcome = job.outcome
+    assert (job.state, outcome.cause) == (JobState.cancelled, TerminalCause.client_cancelled)
+    assert outcome.settlement_state is SettlementState.held_unknown and outcome.debit == 0
+    with pytest.raises(errors.AlreadyTerminal):
+        rs.run(world.commit(lease, " unload"))
+    again = delete(world)
+    assert again.status == 200 and again.json() == body
+    assert job.outcome is outcome
+    assert world.jobs.outbox_kinds(job.id).count(OutboxKind.usage_projection) == 1
+
+
+@pytest.mark.parametrize("first", ["completion", "delete"])
+def test_dur_fence__a_delete_racing_a_completion_settles_once(first):
+    """D3's serialization, both orders: whichever commits first is the job's one outcome.
+    Completion first - DELETE answers `succeeded` (never an error) and the debit stands.
+    DELETE first - the worker's completion is refused and nothing is billed. Either way one
+    settlement and one usage projection."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    if first == "completion":
+        rs.run(world.complete(lease))
+        ledger = world.jobs.wallet(world.org).ledger_total
+        reply = delete(world)
+        assert reply.status == 200 and (reply.json()["state"], reply.json().get("cause")) == (
+            "succeeded", "completed")
+        assert job.outcome.settlement_state is SettlementState.settled and job.outcome.debit > 0
+        assert world.jobs.wallet(world.org).ledger_total == ledger
+    else:
+        ledger = world.jobs.wallet(world.org).ledger_total
+        reply = delete(world)
+        assert reply.status == 200 and reply.json()["state"] == "cancelled"
+        with pytest.raises(errors.AlreadyTerminal):
+            rs.run(world.complete(lease))
+        assert job.outcome.state is JobState.cancelled and job.outcome.debit == 0
+        assert world.jobs.wallet(world.org).ledger_total == ledger
+    assert world.jobs.outbox_kinds(job.id).count(OutboxKind.usage_projection) == 1
+    assert delete(world).json() == reply.json()
+
+
+def test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job():
+    """The DELETE handler is cancelled (the client or the process goes) while the store's
+    cancel is in flight: the cancel is shielded, so it still commits."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    handle = world.handle()
+    release, cancels = asyncio.Event(), []
+    cancel = world.jobs.cancel
+
+    async def slow_cancel(org_id, job_handle, **cause):
+        cancels.append(job_handle)
+        await release.wait()
+        return await cancel(org_id, job_handle, **cause)
+
+    world.jobs.cancel = slow_cancel
+
+    async def body():
+        task = asyncio.ensure_future(send(world.app, "DELETE", job_path(handle)))
+        for _ in range(200):                  # bounded: a DELETE that never cancels fails
+            if cancels:
+                break
+            await asyncio.sleep(0)
+        assert cancels, "the DELETE never reached the store"
+        task.cancel()
+        await asyncio.sleep(0)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0)
+        await asyncio.gather(*world.relay._cancels)
+
+    rs.run(body())
+    assert job.state is JobState.cancelled
+    assert job.outcome.cause is TerminalCause.client_cancelled
+
+
+def test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing():
+    """A DELETE carries no body: one that declares one (a length, or chunked) is 400, decided
+    from the headers without reading it, and the job runs on."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    for headers in ({"content-length": "2"}, {"transfer-encoding": "chunked"}):
+        reply = delete(world, body={}, headers=headers)
+        assert refusal(reply) == (400, "invalid_request"), headers
+    assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
+    assert delete(world, headers={"content-length": "0"}).json()["state"] == "cancelled"
