@@ -357,7 +357,9 @@ def probe_header(data) -> Probed | None:
             if size == 1:
                 size = _u(data, at + 8, 8)
             if kind == b"moov":
-                return probe(data[:at + size])
+                # Still arriving is "nothing yet", found without copying the prefix: a moov
+                # declared tens of MiB long would otherwise be copied and walked every look.
+                return probe(data[:at + size]) if at + size <= len(data) else None
             if size < BOX_HEADER:          # "to the end of the file": no header after it
                 return None
             at += size

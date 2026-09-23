@@ -944,6 +944,15 @@ def test_a_media_first_clip_over_the_cap_is_refused_once_it_has_arrived(tmp_path
     assert adapter.objects.objects == {}
 
 
+def test_a_media_first_clip_within_the_cap_is_read_to_the_end_and_accepted(tmp_path):
+    """Every look at a media-first download ends inside a box header (the `mdat` runs past
+    the prefix); that truncation is "nothing yet", never a refusal of a good clip."""
+    body = FTYP + support.box(b"mdat", bytes(4 << 20)) + _moov(60.0)
+    stream = _streamed(body)
+    ref = run(_served(tmp_path, stream).materialize(b.ORG_A, URL))
+    assert ref.duration_s == 60.0 and stream.read == len(body)
+
+
 def test_the_header_scan_stops_where_the_probe_would(monkeypatch):
     """The early walk reads at most MAX_ELEMENTS box headers, like the probe. The answer
     would be None either way (the probe refuses a file with that many boxes); the bound is
@@ -956,6 +965,17 @@ def test_the_header_scan_stops_where_the_probe_would(monkeypatch):
     many = FTYP + support.box(b"free") * (4 * probe.MAX_ELEMENTS) + moov
     assert probe.probe_header(many) is None
     assert len(reads) <= probe.MAX_ELEMENTS
+
+
+def test_a_header_still_arriving_is_not_probed(monkeypatch):
+    """A `moov` not yet complete is answered from its box header alone: the prefix is not
+    copied and walked at every look for a `moov` that declares tens of MiB."""
+    probed = []
+    monkeypatch.setattr(probe, "probe", lambda data: probed.append(len(data)))
+    moov = _moov(121.0)
+    assert probe.probe_header(FTYP + moov[:-1]) is None and probed == []
+    probe.probe_header(FTYP + moov)
+    assert probed == [len(FTYP + moov)]                                  # non-vacuous
 
 
 def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():

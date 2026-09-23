@@ -711,7 +711,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "is sized for (review R24)",
        R, "        if probed.duration_s > self.max_duration_s:",
        "        if probed.duration_s >= self.max_duration_s:",
-       "test_a_clip_exactly_at_the_cap_is_accepted"),
+       "test_a_clip_exactly_at_the_cap_is_accepted",
+       # M4: the same inclusive bound when the cap is read from a download's header
+       "test_a_header_that_is_not_complete_yet_is_looked_at_again"),
     _m("prepared_artifact_not_persisted",
        "the prepared artifact is durable before anything downstream is told the job is "
        "prepared; the local cache is a copy, not the record",
@@ -1131,7 +1133,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "an incomplete or unprobeable header is 'nothing yet', never a refusal",
        P, "    except errors.UnsupportedMedia:        # truncated",
        "    except ValueError:        # truncated",
-       "test_a_header_that_is_not_complete_yet_is_looked_at_again"),
+       "test_a_media_first_clip_within_the_cap_is_read_to_the_end_and_accepted"),
+    _m("incomplete_header_probed", "a moov still arriving is not copied and probed",
+       P, "if at + size <= len(data) else None", "if True else None",
+       "test_a_header_still_arriving_is_not_probed"),
     _m("header_scan_unbounded", "the early walk stops after MAX_ELEMENTS boxes, as the probe does",
        P, "        for _ in range(MAX_ELEMENTS):\n            size, kind",
        "        while True:\n            size, kind",
