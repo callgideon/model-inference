@@ -21,7 +21,7 @@ workload owner supplies one.
 | Release under test | the git SHA the runner runs at, dirty flag at start and end, plus the hashes `certify.py` computes into its report (`hashes`): serving version, `serve.sh`, the engine-options digest recomputed from the pinned flags, runtime image and model digests, contract limits, migrations, the `deploy/` tree, alert rules, the lockfile, and the published Marlin release record |
 | Target `local` | the E2 compose stack (`INFRX_E2_NAMESPACE`, default `e2`) and the runner's own fake vLLM (`tests/integration/fake_vllm.py`). **Every number from it is labelled `fake-engine, not a measurement`** |
 | Target `box` | the pilot box (P-04 target) inside the coordinator's maintenance window: `--target <gateway /v1 URL> --engine-url <engine URL> --metrics-url <gateway /metrics> --inventory <inventory.sh output> --box`. Numbers are `meas.` |
-| Corpora | licensed `models/marlin2b/corpus/manifest.json` (envelope, soak, overload); `models/marlin2b/corpus-synth/manifest.json` (`sop-synth-v1`, dataset resume); W4's parity set (`measure/parity.py` `PARITY_SET`) |
+| Corpora | licensed `models/marlin2b/corpus/manifest.json`, `--subset full` at the `box` scale and `--subset fast` at `tiny` (envelope, soak, overload, dataset resume; amendment 1); W4's parity set (`measure/parity.py` `PARITY_SET`, which includes `sop-synth-v1`'s three 120 s clips) |
 | Seed | `20260922` (E1B's frozen seed); the dataset version is `e4b-<short sha>-<UTC>`, so a second run never replays the first run's items |
 
 ## 2. Preconditions
@@ -49,7 +49,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 |---|---|---|
 | `e4b.a.protocol` | the phase-2 gate's stages on the E2 stack (preflight, services, migrate, rls, backend), exactly as `run.py --layer 3` runs them; this check is the backend suite **outside** `recovery/` | every stage passes and every backend case outside `recovery/` passes; a pending case pends with its typed ids |
 | `e4b.a.sop-parity` | `measure/parity.py` at c = 1 on the parity set against the engine, paired by `decide.parity_verdict` with a baseline: local = a second run on the same fake engine; box = `--parity-baseline` (W4's E0 `parity.jsonl`, or the previous certified release's) | `decide.parity_verdict` is `pass` |
-| `e4b.a.dataset-resume` | `bench.py` over `sop-synth-v1` items with `Idempotency-Key: sop1.<item_key>`, **SIGINT after `interrupt_after` accepted rows**, then `bench.py --resume <raw>` | client: the first run was really interrupted, every item terminal after the resume, no terminal item re-sent, each item one key; server (metered target only): one usage record and no remaining hold per accepted item, one Inference-Id per item across both runs, every record in CREDIT, Σ charged = ledger delta, reserved back to its value before the run |
+| `e4b.a.dataset-resume` | `bench.py` over licensed-corpus items with `Idempotency-Key: sop1.<item_key>`, **SIGINT after `interrupt_after` accepted rows**, then `bench.py --resume <raw>` | client: the first run was really interrupted, every item terminal after the resume, no terminal item re-sent, each item one key; server (metered target only): one usage record and no remaining hold per accepted item, one Inference-Id per item across both runs, every record in CREDIT, Σ charged = ledger delta, reserved back to its value before the run |
 
 ## 4. E4B.b matrix
 
@@ -108,3 +108,8 @@ run closed, and the coordinator's decision recorded in
 - 2026-09-23 (E4B): Protocol predeclared before `certify.py` existed and before any E4B run.
   No GPU, box, AWS or hosted service was used; the only numbers quoted are constants of
   `decide.py`, E1B and 01 §2.3, each with its source.
+- 2026-09-23 (E4B), **amendment 1**, before any E4B run: the dataset resume uses the licensed
+  corpus, not `sop-synth-v1`. Reason: `bench.load_corpus` selects clips by their `subset`
+  field, which `corpus-synth/manifest.json` does not carry, so bench.py cannot schedule
+  `sop-synth-v1` items. `sop-synth-v1` stays in the certification through W4's parity set.
+  The `tiny` scale reads `--subset fast`, the `box` scale `--subset full`.
