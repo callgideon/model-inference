@@ -1006,6 +1006,27 @@ def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_fi
     assert seen["tmpdir"] is not None and not Path(seen["tmpdir"]).exists(), seen
 
 
+def test_a_d_mode_recovery_run_keeps_the_parents_tmpdir_for_the_pgharness_lock(monkeypatch):
+    """I3B R2-B (DR-2): in D mode (INFRX_I3B_PG=d) a recovery suite drives D's pgharness,
+    whose port lock is `gettempdir()/<container>-<port>.lock`. Its mutant run therefore gets
+    NO private TMPDIR, so the child's lock lands in the parent's tempdir with every other run
+    of this TMPDIR; any other suite, or a recovery suite outside D mode, keeps its private one."""
+    import dataclasses
+
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root, tmpdir: seen.append(
+        tmpdir) or (0, ".\n1 passed in 0.1s\n"))
+    template = mutants.MUTANTS[2]                          # any layer-1 tests/integration one
+    recovery = dataclasses.replace(template, suite="tests/integration/backend/recovery/x.py")
+    for mode, mutant in (("d", recovery), ("", recovery), ("d", template)):
+        monkeypatch.setenv("INFRX_I3B_PG", mode)
+        monkeypatch.setattr(mutants, "BASELINES", {})
+        mutants.run_one(mutant, stack_available=False)
+    assert seen[0] is None and seen[1] is None, "D mode: the parent's TMPDIR, baseline too"
+    assert all(tmpdir is not None for tmpdir in seen[2:]), seen
+
+
 def test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run(monkeypatch):
     """Review H6: the other half of e3bm24's claim - a timed-out `make api-test` (exit 124
     with the passes it printed before the budget ran out) fails the suites stage and the run."""

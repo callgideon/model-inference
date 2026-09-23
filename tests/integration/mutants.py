@@ -867,6 +867,12 @@ MUTANTS: tuple[Mutant, ...] = (
            'OWNED_TREES += ("apps/infrx-api/' 'deploy",)\n', "",
            "tests/integration/test_run.py", "every_list_through_one_runner",
            cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm43", "E3B2 (I3B R2-B): a D-mode recovery run keeps the parent's TMPDIR (lock)",
+           "tests/integration/mutants.py",
+           '        if (os.environ.get("INFRX_I3B_PG") == "d"\n',
+           "        if (False\n",
+           "tests/integration/test_run.py", "d_mode_recovery",
+           cases=("test_a_d_mode_recovery_run_keeps_the_parents_tmpdir_for_the_pgharness_lock",)),
 )
 
 
@@ -900,6 +906,14 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
         root = Path(tmp)
         _copy_trees(root)
         private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"
+        # I3B's D mode (INFRX_I3B_PG=d): its restore and rc10 cases run D's pgharness, whose
+        # port lock lives in the shared TMPDIR too - a private one gives each run its own lock
+        # on the one shared port, and a second run removes the first's container (DR-2).
+        # ponytail: this shares the lock only among runs with the SAME TMPDIR (I3B DRL-4);
+        # a TMPDIR-independent lock path is D's (I3B request R3-2).
+        if (os.environ.get("INFRX_I3B_PG") == "d"
+                and mutant.suite.startswith("tests/integration/backend/recovery/")):
+            private = None
         if private is not None:
             private.mkdir()
         # E3B: a defect in module code is injected into a copy of `infrx`, which the suite
