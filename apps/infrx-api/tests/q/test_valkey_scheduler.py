@@ -374,8 +374,11 @@ def test_q2_config__the_url_comes_from_the_settings_and_an_unset_one_is_refused(
     """`VALKEY_URL` (`08` §6) has one reader. An unset URL is a typed refusal rather than
     a client pointed at localhost by a default nobody chose - the failure mode that puts a
     pilot's index somewhere nobody is looking."""
-    with pytest.raises(errors.InvalidRequest) as caught:
+    # R83: caught broadly and then asserted, so a client that refuses in its own words
+    # (the valkey package's ValueError) fails this assertion instead of crashing the case
+    with pytest.raises(Exception) as caught:
         valkey_module.connect(DEFAULTS)                       # valkey_url is "" by default
+    assert isinstance(caught.value, errors.InvalidRequest), repr(caught.value)
     assert caught.value.code == "invalid_request"
     configured = valkey_module.connect(DEFAULTS.replace(valkey_url=vkharness.URL))
     assert configured is not None
@@ -595,7 +598,9 @@ def test_q2_kind__preparation_and_inference_are_separately_fair():
             assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
         assert set(await port.tags()) == {(PREPARE.value, ORG_A), (INFER.value, ORG_A)}
         for _ in range(4):
-            await port.acknowledge(await port.claim_candidate("prep-a", kind=PREPARE))
+            taken = await port.claim_candidate("prep-a", kind=PREPARE)
+            assert taken is not None, "a flow still holding work lost its candidates"
+            await port.acknowledge(taken)
         assert (await port.tags())[(PREPARE.value, ORG_A)] == 4.0
         assert (await port.tags())[(INFER.value, ORG_A)] == 0.0
         assert await port.virtual_times() == {PREPARE.value: 3.0, INFER.value: 0.0}

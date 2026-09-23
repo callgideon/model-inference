@@ -1,6 +1,6 @@
-"""A disposable task-local Valkey for Q2's Layer-2 tests (08 §8).
+"""A disposable task-local Valkey for the Q Layer-2 tests (08 §8).
 
-Container `infrx-q2-valkey` on host port 55461, image pinned by the digest E2's
+Container `infrx-<task>-valkey` on its R63 host port (q3: 55462), image pinned by the digest E2's
 `tests/integration/compose.yaml` uses, bound to the loopback interface. Nothing here
 touches a container this module did not create: the removal hook is registered **only**
 when this process started the container, so a mutation subprocess that finds it already
@@ -9,7 +9,7 @@ running leaves it alone.
 A missing Docker, a missing `valkey` package or an unreachable server is a *skip naming
 the reason*, never a pass.
 
-    docker run -d --name infrx-q2-valkey -p 127.0.0.1:55461:6379 \\
+    docker run -d --name infrx-q3-valkey -p 127.0.0.1:55462:6379 \\
       valkey/valkey@sha256:d2e18f… valkey-server --save '' --appendonly no
 """
 from __future__ import annotations
@@ -29,12 +29,17 @@ from infrx.contracts import tasklocal
 from infrx.contracts.limits import DEFAULTS
 from infrx.scheduling.valkey import ValkeyScheduler
 
-# The name and port come from `08` §8's table. Until R63 adds `"q2"` to `TASK_PORTS`,
-# `local_services` would fall back to track Q's 56379, so the brief's 55461 stands in.
-_SERVICE = tasklocal.local_services("q2")["valkey"]
-CONTAINER = _SERVICE.container
-PORT = int(os.environ.get("INFRX_Q2_VALKEY_PORT",
-                          _SERVICE.host_port if "q2" in tasklocal.TASK_PORTS else 55461))
+# The name and port come from `08` §8's table (R63): the Q lane that is running owns one
+# task-local server, and every Q suite in its worktree (Q2's adapter cases included) runs
+# on it. Q3 is the active lane, so `infrx-q3-valkey` on 55462.
+TASK = "q3"
+_SERVICE = tasklocal.local_services(TASK)["valkey"]
+PORT = int(os.environ.get("INFRX_Q_VALKEY_PORT", _SERVICE.host_port))
+# Another port is another server, so another container - still in this lane's namespace,
+# and never the default one a run on R63's port owns (review HON-3). `tests/q/mutants.py`
+# writes the port into every mutant copy, whose environment the shared runner fixes.
+CONTAINER = (_SERVICE.container if PORT == _SERVICE.host_port
+             else f"{_SERVICE.container}-{PORT}")
 # valkey/valkey:8.1-alpine, the digest in tests/integration/compose.yaml (E2). Pinned so
 # a rerun cannot silently move to another server version.
 IMAGE = ("valkey/valkey@sha256:"
@@ -94,7 +99,7 @@ def ensure() -> None:
     _started = True
 
 
-def _wait_ready(timeout_s: float = 30.0) -> None:
+def _wait_ready(timeout_s: float = 90.0) -> None:       # generous: a loaded host is slow
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         # docker's proxy accepts TCP before the server does, so wait for a PONG
@@ -107,6 +112,18 @@ def _wait_ready(timeout_s: float = 30.0) -> None:
             pass
         time.sleep(0.1)
     raise RuntimeError(f"{CONTAINER} did not accept connections within {timeout_s}s")
+
+
+def kill_and_restart() -> None:
+    """SIGKILL the task-local server and start it again. It runs with `--save ''
+    --appendonly no`, so it comes back empty: the index is lost, exactly what DUR-OUTBOX
+    drills. Only ever this lane's own container (R63)."""
+    ensure()
+    for step in (("kill", "--signal", "KILL", CONTAINER), ("start", CONTAINER)):
+        done = _docker(*step, check=False)
+        if done.returncode != 0:
+            raise RuntimeError(f"docker {step[0]} {CONTAINER}: {done.stderr.strip()}")
+    _wait_ready()
 
 
 def remove() -> None:

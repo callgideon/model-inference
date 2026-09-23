@@ -53,8 +53,8 @@ from ..contracts.records import DISPATCH_KINDS, IndexEvent, OutboxKind
 
 # `research/production-api/03` §2.5: host-memory bounds, not admission capacity
 # (llm-d's `maxRequests: 200` / `maxBytes: 10Gi` scaled to one gateway process).
-# They are constructor arguments because `PilotSettings` has no field for them yet;
-# the coordinator request is in the Q1 evidence report.
+# The fallback while `PilotSettings` has no field for them (Q1's coordinator request; F2P's
+# wire-in adds `max_index_items`/`max_index_bytes`, read in `__init__`).
 MAX_INDEX_ITEMS = 500
 MAX_INDEX_BYTES = 268_435_456                     # 256 MiB
 
@@ -113,8 +113,8 @@ class MemoryScheduler:
     def __init__(self, now: Callable[[], datetime], *, limits: PilotSettings = DEFAULTS,
                  weights: Mapping[str, float] | None = None,
                  cost: Callable[[IndexEvent], float] = _one_second,
-                 max_items: int = MAX_INDEX_ITEMS,
-                 max_bytes: int = MAX_INDEX_BYTES) -> None:
+                 max_items: int | None = None,
+                 max_bytes: int | None = None) -> None:
         self._now = now
         self.limits = limits
         self._weights = dict(weights or {})
@@ -125,8 +125,13 @@ class MemoryScheduler:
             if not (weight > 0) or weight == float("inf"):
                 raise ValueError(f"weight for {org_id} must be finite and positive: {weight!r}")
         self._cost = cost
-        self._max_items = max_items
-        self._max_bytes = max_bytes
+        # Q3 item 5: the caps come from the settings once F2P's wire-in gives
+        # `PilotSettings` the fields, from these constants until then, and from an explicit
+        # argument always - the same resolution as the Valkey adapter.
+        self._max_items = int(max_items if max_items is not None
+                              else getattr(limits, "max_index_items", MAX_INDEX_ITEMS))
+        self._max_bytes = int(max_bytes if max_bytes is not None
+                              else getattr(limits, "max_index_bytes", MAX_INDEX_BYTES))
         self._entries: dict[str, _Entry] = {}     # event_id -> entry (pending + in flight)
         self._flows: dict[tuple[str, str], _Flow] = {}    # (kind, org_id) -> flow
         self.acknowledged: set[str] = set()
@@ -302,6 +307,11 @@ class MemoryScheduler:
     def depth(self) -> int:
         """Pending plus in flight, as the fake reports it."""
         return len(self._entries)
+
+    async def members(self) -> dict[str, str]:
+        """Q3: every indexed candidate, pending or in flight, as `event_id -> job_id` -
+        what the reconciler compares with PostgreSQL's dispatch snapshot."""
+        return {event_id: entry.event.job_id for event_id, entry in self._entries.items()}
 
     def stats(self) -> dict[str, object]:
         """Index depth, bytes and waiting age.

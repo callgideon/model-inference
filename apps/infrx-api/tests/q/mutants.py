@@ -352,14 +352,32 @@ MUTANTS: tuple[Mutant, ...] = (
 #: stricter rule, now a runner option: a mutant may not claim coverage from a case that
 #: cannot see it (the r2 review found exactly that - a service-time fixture whose
 #: preparation cost hid the defect its second case was named for).
-RUNNER = Runner(name="q", targets=("tests/q",), require_every_case=True)
+_PORT_LINE = 'PORT = int(os.environ.get("INFRX_Q_VALKEY_PORT", _SERVICE.host_port))'
+
+
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """The shared runner's default copy, with this process's Valkey port written into
+    the copy's harness. The runner hands every mutant subprocess a fixed environment, so
+    an `INFRX_Q_VALKEY_PORT` override would not reach it: the copy would look for the
+    default port's server, and start one there (review HON-3)."""
+    from . import vkharness
+    api = shared._copy(root, Runner(name="q"))
+    harness = api / "tests" / "q" / "vkharness.py"
+    text = harness.read_text()
+    assert text.count(_PORT_LINE) == 1, "vkharness no longer reads its port this way"
+    harness.write_text(text.replace(_PORT_LINE, f"PORT = {vkharness.PORT}"))
+    return api
+
+
+RUNNER = Runner(name="q", targets=("tests/q",), require_every_case=True, layout=_layout)
 
 
 def run_mutant(mutant: Mutant, *, paths: str = "tests/q") -> Result:
     """Apply one mutant to a throwaway copy and run the cases it names under `paths`
     (`tests/q` by default; Q2's Valkey list aims the same runner at its own file)."""
     runner = RUNNER if paths == "tests/q" else Runner(name="q", targets=(paths,),
-                                                      require_every_case=True)
+                                                      require_every_case=True,
+                                                      layout=_layout)
     return shared.run_mutant(mutant, runner)
 
 

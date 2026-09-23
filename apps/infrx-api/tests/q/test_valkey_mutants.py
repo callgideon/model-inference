@@ -35,6 +35,15 @@ SUBSET = ("the_scores_are_formatted_with_lua_default_precision",
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _one_server_for_the_whole_list():
+    """Start the task-local server once, in this process, so every mutant subprocess finds
+    it running. Otherwise the first subprocess of each run starts it and removes it at
+    exit, and the next one starts it again - a docker run and a readiness wait per mutant,
+    which is where the list failed under host load."""
+    vkharness.ensure()
+
+
 def test_the_list_is_well_formed():
     """Every mutant names an invariant and at least one case, and every anchor exists
     exactly once - two identical lines would mutate the wrong one and prove nothing."""
