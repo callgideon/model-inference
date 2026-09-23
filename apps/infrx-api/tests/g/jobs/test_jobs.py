@@ -488,6 +488,25 @@ def test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404():
     assert world.failures.count("read_owned") == journal_reads     # no journal was read
 
 
+def test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503():
+    """Every handle route's store read - the owned row (status, result, events, DELETE) and
+    the events' pre-header journal probe - that fails for want of the database is a
+    retryable 503 with `Retry-After`, the driver's text in no answer, and nothing is changed."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    outage = ConnectionError("connection to postgresql://infrx:secret@db:5432 refused")
+    for operation, method, tail in (("get_owned", "GET", ""), ("get_owned", "GET", "/result"),
+                                    ("get_owned", "GET", "/events"), ("get_owned", "DELETE", ""),
+                                    ("read_owned", "GET", "/events")):
+        world.failures.fail(operation, on_call=world.failures.count(operation) + 1,
+                            error=outage)
+        reply = rs.run(send(world.app, method, job_path(world.handle(), tail)))
+        assert refusal(reply) == (503, "dependency_unavailable"), (operation, method, tail)
+        assert reply.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in reply.body
+    assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
+    assert status(world).status == 200
+
 def test_dur_rls__an_operator_key_owns_no_job():
     """R33 / R66: an operator credential of the very organization owns no job - every handle
     route answers 404, and nothing is read out or cancelled."""

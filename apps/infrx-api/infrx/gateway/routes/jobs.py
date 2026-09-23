@@ -89,6 +89,15 @@ class Jobs:
             HEADER_LOCATION: f"{JOBS_PATH}/{job.handle}",
             wire.HEADER_RETRY_AFTER: str(POLL_AFTER_S)})
 
+    async def owned(self, org: str, handle: str):
+        """The owned row and outcome. A store that cannot answer is a retryable 503, never a
+        500 (review S4), the same as at acceptance."""
+        return await _dependency(self.relay._owned(org, handle))
+
+    async def now(self) -> datetime:
+        """The store clock (R29/R79), or a retryable 503."""
+        return await _dependency(self.relay.jobs.db_now())
+
     async def owner(self, request: Request) -> tuple[str, str]:
         """The caller's organization and a well-formed handle, before any store read. A key
         that owns no job and a malformed handle are the 404 an unknown or foreign handle gets
@@ -258,21 +267,21 @@ def register(app, rt):
     @guarded
     async def job_status(request: Request, request_id: str):
         org, handle = await jobs.owner(request)
-        admission, outcome = await relay._owned(org, handle)
-        return _answer(jobs.status_of(admission, outcome, await relay.jobs.db_now()), admission)
+        admission, outcome = await jobs.owned(org, handle)
+        return _answer(jobs.status_of(admission, outcome, await jobs.now()), admission)
 
     @app.get(RESULT_PATH)
     @guarded
     async def job_result(request: Request, request_id: str):
         org, handle = await jobs.owner(request)
-        admission, outcome = await relay._owned(org, handle)
+        admission, outcome = await jobs.owned(org, handle)
         if outcome is None:
             raise errors.ResultPending("the job is not terminal")
         expires, response = jobs.result_expiry(outcome), None
         if expires is not None:
-            if await relay.jobs.db_now() >= expires:
+            if await jobs.now() >= expires:
                 raise errors.ResultExpired("the result passed its retention")
-            text = await relay.results.read_result(org, outcome.result_ref)
+            text = await _dependency(relay.results.read_result(org, outcome.result_ref))
             response = jobs.response_of(admission, outcome, text)
         return _answer(wire.JobResult(
             job_handle=admission.job_handle, request_id=admission.request_id,
@@ -286,10 +295,10 @@ def register(app, rt):
         org, handle = await jobs.owner(request)
         last = request.headers.get(wire.HEADER_LAST_EVENT_ID)
         cursor = Cursor.parse(last) if last is not None else None        # 400 before any read
-        admission, outcome = await relay._owned(org, handle)
+        admission, outcome = await jobs.owned(org, handle)
         # A gap, an expired journal or a cursor the journal never issued is a status, so it
         # is asked before the headers; the pump then reads from the same cursor.
-        await relay.stream.read_owned(org, handle, cursor, 1)
+        await _dependency(relay.stream.read_owned(org, handle, cursor, 1))
         return _Events(relay, jobs.job_of(admission), cursor, jobs.state_of(admission, outcome))
 
     @app.delete(JOB_PATH)
@@ -300,12 +309,12 @@ def register(app, rt):
         if request.headers.get("content-length", "0") != "0" \
                 or "transfer-encoding" in request.headers:
             raise errors.InvalidRequest("DELETE /v1/jobs/{handle} takes no body")
-        admission, _ = await relay._owned(org, handle)
+        admission, _ = await jobs.owned(org, handle)
         # Never a 200 without the committed cancel: an outage is a retryable 503 (the job is
         # untouched), and the retried DELETE answers what is committed then.
         outcome = await _dependency(
             relay.cancel(org, handle, cause=TerminalCause.client_cancelled))
-        return _answer(jobs.status_of(admission, outcome, await relay.jobs.db_now()), admission)
+        return _answer(jobs.status_of(admission, outcome, await jobs.now()), admission)
 
     # The guard's wrapper is defined in `intake`; the route table names this module
     # (`ingress.assert_route_table`).

@@ -55,6 +55,7 @@ OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
 ONE_404 = "test_dur_rls__a_malformed_unknown_or_foreign_handle_is_one_404"
 OPERATOR = "test_dur_rls__an_operator_key_owns_no_job"
+READ_OUTAGE = "test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503"
 RESULT = "test_api_modes__the_result_is_served_only_after_the_terminal_commit"
 FAILURES = "test_api_modes__a_failed_cancelled_or_expired_job_is_a_result_not_an_error"
 STORE_CLOCK = "test_api_modes__result_expiry_is_judged_on_the_store_clock"
@@ -162,6 +163,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("status_leaks_foreign", "a foreign handle is the unknown handle's 404 (the store's check)",
        ST, "        if job is None or job.request.org_id != org_id:", "        if job is None:",
        ONE_404),
+    _m("owned_read_outage_is_a_500", "an owned read the store cannot answer is a retryable 503",
+       J, "        return await _dependency(self.relay._owned(org, handle))",
+       "        return await self.relay._owned(org, handle)", READ_OUTAGE),
+    _m("probe_outage_is_a_500", "the events' journal probe failing is a retryable 503",
+       J, "        await _dependency(relay.stream.read_owned(org, handle, cursor, 1))\n",
+       "        await relay.stream.read_owned(org, handle, cursor, 1)\n", READ_OUTAGE),
     _m("status_state_invented", "a job not yet terminal reports its committed state",
        J, "        return admission.state", "        return JobState.preparing", STATUS),
     _m("updated_at_is_created", "updated_at is the settlement instant once terminal",
@@ -181,7 +188,7 @@ MUTANTS: tuple[Mutant, ...] = (
        J, '            raise errors.ResultPending("the job is not terminal")',
        '            raise errors.StateConflict("the job is not terminal")', RESULT),
     _m("result_not_read", "the result body is the committed result object",
-       J, "            text = await relay.results.read_result(org, outcome.result_ref)",
+       J, "            text = await _dependency(relay.results.read_result(org, outcome.result_ref))",
        '            text = ""', RESULT, MATRIX),
     _m("completed_at_is_created", "completed_at is the store's settlement instant",
        J, "            completed_at=outcome.settled_at), admission)",
@@ -191,13 +198,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if outcome is None or outcome.state is not JobState.succeeded:\n"
        "            raise errors.ResultPending", FAILURES),
     _m("expired_result_served", "a result past its TTL is 410 result_expired",
-       J, "            if await relay.jobs.db_now() >= expires:", "            if False:",
+       J, "            if await jobs.now() >= expires:", "            if False:",
        STORE_CLOCK),
     _m("result_ttl_on_gateway_clock", "the result TTL is judged on the store clock (R29/R79)",
-       J, "            if await relay.jobs.db_now() >= expires:",
+       J, "            if await jobs.now() >= expires:",
        "            if relay._now() >= expires:", STORE_CLOCK),
     _m("status_ttl_on_gateway_clock", "status availability is judged on the store clock",
-       J, "        return _answer(jobs.status_of(admission, outcome, await relay.jobs.db_now()), "
+       J, "        return _answer(jobs.status_of(admission, outcome, await jobs.now()), "
           "admission)\n\n    @app.get(RESULT_PATH)",
        "        return _answer(jobs.status_of(admission, outcome, relay._now()), "
        "admission)\n\n    @app.get(RESULT_PATH)", STORE_CLOCK),
@@ -211,7 +218,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "        cursor = None", CURSOR),
     _m("journal_checked_after_headers", "a forged cursor, a gap or an expired journal is a "
        "status, asked before any SSE header",
-       J, "        await relay.stream.read_owned(org, handle, cursor, 1)\n", "", CURSOR, GAP),
+       J, "        await _dependency(relay.stream.read_owned(org, handle, cursor, 1))\n", "",
+       CURSOR, GAP),
     _m("gap_silent", "a pruned cursor is 410 replay_gap, never an empty page (the store's)",
        ST, '            raise errors.ReplayGap(f"events up to {pruned_to} are no longer retained")',
        "            pass", GAP),
