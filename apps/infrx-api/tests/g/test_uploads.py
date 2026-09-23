@@ -457,3 +457,77 @@ def test_dur_rls__another_orgs_upload_is_the_unknown_handles_404():
         assert theirs.status_code == 404 and refusal(theirs) == refusal(nobodys)
     assert untouched == ("created", False)
     assert [response.status_code for response in owner] == [204, 200]
+
+
+# --- item 4: POST /v1/uploads/{handle}/complete ------------------------------------
+def test_media_sec__completion_projects_the_ref():
+    """R47: the answer is the frozen projection - the handle, the state and the facts the
+    caller can verify - never the ref: no object key, no org. A retry of a completed
+    upload answers the identical body."""
+    fixture = json.loads((FIXTURES / "upload_completed.json").read_text())
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client, bytes=len(CLIP), digest=DIGEST,
+                                             accepted_mime=["video/mp4"]))
+        assert (await put(client, handle)).status_code == 204
+        return handle, await complete(client, handle), await complete(client, handle)
+
+    handle, done, retry = run(app, script)
+    assert done.status_code == 200, done.text
+    assert done.headers.get("inference-id")
+    body = done.json()
+    assert set(body) == set(fixture) and set(body["media"]) == set(fixture["media"])
+    assert (body["upload_handle"], body["state"]) == (handle, "finalized")
+    assert (body["media"]["digest"], body["media"]["bytes"]) == (DIGEST, len(CLIP))
+    ref = store.refs[(ORG_A, handle)]
+    assert ref.storage_ref not in done.text and ORG_A not in done.text
+    assert retry.status_code == 200 and retry.content == done.content
+
+
+def test_media_sec__completion_takes_no_fields():
+    """R17: the constraints were fixed at create, so completion takes an empty body or
+    `{}` and nothing else - a field is 400 and the upload stays completable."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        assert (await put(client, handle)).status_code == 204
+        refused = [await complete(client, handle, body=fields) for fields in
+                   ({"max_bytes": 1}, {"digest": DIGEST}, {"accepted_mime": ["video/webm"]})]
+        state = store.uploads[handle].state
+        return refused, state, await complete(client, handle, body={})
+
+    refused, state, done = run(app, script)
+    for response in refused:
+        assert response.status_code == 400 and code_of(response) == "invalid_request"
+    assert state == "created"
+    assert done.status_code == 200, done.text
+
+
+def test_media_sec__completion_refusals_leave_in_the_envelope():
+    """M3's completion answers over HTTP: before any bytes arrive it is 400 and the upload
+    stays completable; bytes that do not match the declared digest are
+    `unsupported_media` and stay refused (409 on a retry); bytes over the cap that arrived behind the
+    destination are 413 without being downloaded."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        early = created_handle(await create(client))
+        before = await complete(client, early)
+        assert (await put(client, early)).status_code == 204
+        later = await complete(client, early)
+        mismatch = created_handle(await create(client, digest=fetch.digest_of(b"other")))
+        assert (await put(client, mismatch)).status_code == 204
+        refused = [await complete(client, mismatch), await complete(client, mismatch)]
+        oversize = created_handle(await create(client, max_bytes=len(CLIP)))
+        store.objects.seed(store.upload_key(ORG_A, oversize), CLIP + b"\x00" * 64)
+        return before, later, refused, await complete(client, oversize)
+
+    before, later, (refused, again), oversize = run(app, script)
+    assert before.status_code == 400 and code_of(before) == "invalid_request"
+    assert later.status_code == 200, later.text
+    assert refused.status_code == 400 and code_of(refused) == "unsupported_media"
+    # Refused stays refused: the retry is not a second chance at the digest (M3 aborts).
+    assert again.status_code == 409 and code_of(again) == "state_conflict", again.text
+    assert oversize.status_code == 413 and code_of(oversize) == "request_too_large"

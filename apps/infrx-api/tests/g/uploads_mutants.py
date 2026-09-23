@@ -107,6 +107,27 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "await store.put_upload(context.org_id, handle, data, mime)",
        "await store.put_upload(context.key_id, handle, data, mime)",
        "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
+    # --- item 4: POST /v1/uploads/{handle}/complete ---------------------------------
+    _m("completion_renders_the_ref", "completion answers the projection, never the ref (R47)",
+       U, '        return JSONResponse(completed.model_dump(mode="json"),',
+       '        return JSONResponse(ref.model_dump(mode="json"),',
+       "test_media_sec__completion_projects_the_ref"),
+    _m("completion_fields_ignored", "completion takes no fields (R17)",
+       U, "        if await control_body(request) != {}:",
+       "        if await control_body(request) is None:",
+       "test_media_sec__completion_takes_no_fields"),
+    _m("completion_unguarded", "the store's completion refusals leave as the envelope",
+       U, "    @guarded\n    async def complete_upload(", "    async def complete_upload(",
+       "test_media_sec__completion_refusals_leave_in_the_envelope"),
+    _m("completion_reads_before_identity", "identity is resolved before completion reads a body",
+       U, "        context = await tenant(request)\n        handle = handle_of(request)\n"
+          "        if await control_body",
+       "        handle = handle_of(request)\n        if await control_body",
+       "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer_an_upload"),
+    _m("completion_under_another_id", "completion is scoped by the key's org",
+       U, "        ref = await store.finalize_upload(context.org_id, handle)",
+       "        ref = await store.finalize_upload(context.key_id, handle)",
+       "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
 )
 
 
