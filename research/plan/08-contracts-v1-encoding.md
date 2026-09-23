@@ -108,6 +108,8 @@ Names reuse the older spec where the meaning is unchanged. All are read only in 
 | `TRACE_FSYNC_INTERVAL_S` | 2 | `JUDGE_MODE` / `JUDGE_LIVE_BUDGET_USD` | `dry_run` / `0` |
 | `VALKEY_URL` | unset ⇒ memory scheduler | `CLICKHOUSE_URL`, `S3_MEDIA_BUCKET`, `S3_TRACE_BUCKET` | unset |
 | `PROCESSING_CACHE_DIR` | unset ⇒ no local processing cache; set, an absolute path (R61 (2)) | | |
+| `MAX_INDEX_ITEMS` / `MAX_INDEX_BYTES` | 500 / 268435456 (Q1's scheduler index caps; moved from §5.1 by the F2P wire-in, Q2 request 3; zero refuses startup) | `ACTIVE_RATE_CARD_VERSION` | unset ⇒ no CREDIT rate card approved; set, exact text (padded refuses startup); required when `ACCOUNTING_REGIME=credit` (`validate_runtime`) |
+| `PROVIDER_DEV_ALLOCATION_CEILING_CREDIT` | 0 (a `Credit` amount, never negative; the most one audited operator allocation may move into a provider dev wallet; not enforced until the allocation port exists ⚠️ TO BE VERIFIED, P-08) | | |
 
 ### 5.1 Deployment configuration (added by F2R item 7)
 
@@ -118,7 +120,6 @@ Read by the same rules as the table above with one deliberate difference: an **e
 | Name | Default | Notes |
 |---|---|---|
 | `TRACE_SPOOL_SEGMENT_BYTES` | 16777216 | one spool segment; T1 keeps a local default, T2 reads this ⚠️ TO BE VERIFIED against a real spool |
-| `MAX_INDEX_ITEMS` / `MAX_INDEX_BYTES` | 500 / 268435456 | Q1's scheduler index caps (today module constants in `scheduling/memory.py`) |
 | `CONSOLE_CURSOR_SECRET` | unset | signs C's keyset cursors; **the console runtime's requirement, not this gateway's** — set, it must be ≥ 16 characters in any mode; unset, the gateway still starts, because a process that serves no console page has nothing to sign. C2 requires it, and the G2/I2 deployment checklist must write it |
 | `DATABASE_POOL_MIN_SIZE` / `DATABASE_POOL_MAX_SIZE` | 1 / 10 | min may not exceed max ⚠️ TO BE VERIFIED — D2 owns the measured numbers |
 | `DATABASE_POOL_CONNECT_TIMEOUT_S` | 5 | ⚠️ TO BE VERIFIED |
@@ -127,6 +128,7 @@ Read by the same rules as the table above with one deliberate difference: an **e
 | `MAX_TEXT_CODEPOINTS` / `MAX_URL_CHARS` | 131072 / 8192 | same |
 | `MAX_NUMBER_DIGITS` | 20 | bounded number parsing (`gateway/routes/intake.py`) |
 | `LARGE_BODY_LIMIT` / `LARGE_BODY_THRESHOLD_BYTES` | 2 / 1048576 | one `LargeBodies` per process |
+| `ACCOUNTING_REGIME` | `legacy_usd` | the regime new admissions are written in and the gateway dispatches on, `legacy_usd` or `credit` (any other value refuses startup, `validate_deployment`); `credit` also needs `ACTIVE_RATE_CARD_VERSION` (§5). F2P wire-in; D1R's database flags gate the same switch inside the transaction |
 
 The four `DATABASE_POOL_*` names spell the prefix in full; `11 §F2R` item 7 wrote them as `DATABASE_POOL_MIN_SIZE/MAX_SIZE/CONNECT_TIMEOUT_S/STATEMENT_TIMEOUT_MS`, which this reads as one shared prefix rather than four different ones. The G1/Q1 constants are **not yet reads of these settings**: `validate.py`, `intake.py` and `scheduling/memory.py` belong to other tracks, so the wiring is an integration request, and `tests/contracts/test_config_and_imports.py::test_the_g1_and_q1_constants_match_the_deployment_defaults` pins the constants against these defaults so the two cannot drift while it is open.
 
@@ -281,3 +283,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-09-22: Ruling R84 added at the D2 handback (D2 amended 0003/0006/0008/0009 in place with header notes; allowed while unapplied anywhere hosted).
 - 2026-09-23: Ruling R85 added at the A1 merge (R-A1 as proposed in `evidence/a/A1-38aea7f.md`, restated through review rounds 2–4; 0010–0014 are D2's migrations, 0015 A1's).
 - 2026-09-23: Ruling R86 added at the cancel-cause merge (G1R integration request 10 as proposed in `evidence/g/G1R-6905d13.md`, with the S4 provider_dev refusal and the requested-name rule stated as G1R implemented them). Next free ruling R87.
+- 2026-09-23: §5/§5.1 rows for the F2P wire-in names ACCOUNTING_REGIME, ACTIVE_RATE_CARD_VERSION, PROVIDER_DEV_ALLOCATION_CEILING_CREDIT added at the coordinator's schema fix; MAX_INDEX_ITEMS/MAX_INDEX_BYTES moved from §5.1 to §5 (PilotSettings since the wire-in).
