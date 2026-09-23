@@ -42,6 +42,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("runtime_slots_ignored", "uploads share the runtime's large-body bound with chat",
        U, 'getattr(rt, "large_bodies", None)', "None",
        "test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots"),
+    _m("ingress_pool_ignored", "without a runtime pool, uploads share the ingress's pool",
+       U, '             or getattr(getattr(rt, "ingress", None), "large_bodies", None)\n', "",
+       "test_media_sec__without_a_runtime_pool_uploads_count_against_the_ingress_pool"),
     # --- item 2: POST /v1/uploads ---------------------------------------------------
     _m("tenant_is_the_key_id", "the upload's org is the key row's org",
        U, "        created = await store.create_upload(context.org_id, body)",

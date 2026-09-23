@@ -22,7 +22,7 @@ from fastapi import FastAPI
 
 from infrx.contracts import errors
 from infrx.contracts.fakes.support import FakeClock
-from infrx.gateway.routes import intake, uploads, validate
+from infrx.gateway.routes import ingress, intake, uploads, validate
 from infrx.media import fetch, store as objects
 from infrx.media import uploads as media
 
@@ -82,16 +82,22 @@ def media_store(limits):
     return adapter
 
 
-def mounted(*, with_store=True, slots=None, on_runtime=False, **pilot):
+def mounted(*, with_store=True, slots=None, on_runtime=False, on_ingress=False, **pilot):
     """(app, runtime, store, slots) with only the upload router mounted - it stands alone
-    until the coordinator composes it."""
+    until the coordinator composes it. `on_runtime` puts the store and slots on the
+    runtime; `on_ingress` puts the slots only on the ingress's deps, as a composition that
+    sets `IngressDeps.large_bodies` alone would."""
     clock = Clock()
     rt = support.runtime(support.settings(**pilot), sb=identities(), clock=clock)
     store = media_store(rt.settings.pilot) if with_store else None
     slots = slots if slots is not None else intake.LargeBodies(limit=1, threshold=64)
     app = FastAPI()
-    if on_runtime:
-        rt.media_store, rt.large_bodies = store, slots
+    if on_runtime or on_ingress:
+        rt.media_store = store
+        if on_ingress:
+            rt.ingress = ingress.IngressDeps(large_bodies=slots)
+        else:
+            rt.large_bodies = slots
         uploads.register(app, rt)
     else:
         uploads.register(app, rt, store=store, large_bodies=slots)
@@ -171,6 +177,22 @@ def test_media_sec__the_routes_mount_over_the_runtime_store_and_its_shared_slots
 
     handle, refused = run(app, script)
     assert handle in store.uploads
+    assert refused.status_code == 429 and code_of(refused) == "capacity_exhausted"
+    held.release()
+    assert slots.in_flight == 0
+
+
+def test_media_sec__without_a_runtime_pool_uploads_count_against_the_ingress_pool():
+    """A composition that sets only `IngressDeps.large_bodies` still has one bound: the
+    router falls back to the ingress's pool before it would mint a second one."""
+    app, _, _, slots = mounted(on_ingress=True)
+    held = slots.slot()
+    held.account(slots.threshold + 1)
+
+    async def script(client):
+        return await put(client, created_handle(await create(client)))
+
+    refused = run(app, script)
     assert refused.status_code == 429 and code_of(refused) == "capacity_exhausted"
     held.release()
     assert slots.in_flight == 0

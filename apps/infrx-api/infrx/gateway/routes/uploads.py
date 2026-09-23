@@ -46,13 +46,16 @@ MAX_CONTROL_BYTES = 4096
 
 def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_request_id):
     """Mount the three upload routes over `store` (default `rt.media_store`). Without a
-    store nothing is mounted and `None` is returned. `large_bodies` (default
-    `rt.large_bodies`) must be the one the chat ingress uses, so both share the bound."""
+    store nothing is mounted and `None` is returned. `large_bodies` must be the pool the
+    chat ingress uses, so both share the bound: default `rt.large_bodies`, else the
+    ingress's own (`rt.ingress.large_bodies`), and only then a new one."""
     install_error_handlers(app, new_request_id)
     store = store if store is not None else getattr(rt, "media_store", None)
     if store is None:
         return None
-    slots = large_bodies or getattr(rt, "large_bodies", None) or intake.LargeBodies()
+    slots = (large_bodies or getattr(rt, "large_bodies", None)
+             or getattr(getattr(rt, "ingress", None), "large_bodies", None)
+             or intake.LargeBodies())
     # Built at mount, like the ingress's: in `pilot` a shared legacy key refuses here (R51).
     auth = AuthResolver(rt)
     limits = rt.settings.pilot
