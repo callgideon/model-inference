@@ -447,6 +447,30 @@ def test_media_sec__a_slow_upload_is_cut_at_the_deadline():
     assert slots.in_flight == 0
 
 
+def test_media_sec__a_hung_store_is_cut_at_the_deadline():
+    """The store call runs under the intake deadline too, so a store that does not take
+    the bytes in time is `deadline_exceeded` and gives the shared slot back, rather than
+    pinning it for as long as the store hangs. The fake store is slow in real time (1 s
+    against a 0.2 s deadline): `asyncio.wait_for` has no injectable clock."""
+    app, _, store, slots = mounted(intake_timeout_s=0.2)
+    stored = store.put_upload
+
+    async def slow(*args):
+        await asyncio.sleep(1.0)
+        return await stored(*args)
+
+    store.put_upload = slow
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        return handle, await put(client, handle)
+
+    handle, response = run(app, script)
+    assert response.status_code == 504 and code_of(response) == "deadline_exceeded", \
+        response.text
+    assert store.upload_key(ORG_A, handle) not in store.objects.objects
+    assert slots.in_flight == 0
+
 def test_media_sec__large_uploads_hold_a_shared_slot_until_stored():
     """The per-process large-body bound (`LargeBodies`): with every slot taken a large PUT
     is 429 with retry guidance before its body is read; otherwise it holds one slot until

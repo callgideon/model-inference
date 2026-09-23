@@ -25,6 +25,8 @@ exists).
 """
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
@@ -131,7 +133,12 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
             data = await intake.read_body(request, max_bytes=limits.max_media_bytes,
                                           timeout_s=limits.intake_timeout_s, clock=rt.clock,
                                           large=slot)
-            await store.put_upload(context.org_id, handle, data, mime)
+            # The store gets the same deadline: a hung object store must not pin a slot
+            # this process shares with chat.
+            await asyncio.wait_for(store.put_upload(context.org_id, handle, data, mime),
+                                   limits.intake_timeout_s)
+        except TimeoutError:
+            raise errors.DeadlineExceeded("the store did not take the bytes in time") from None
         finally:
             # Every exit, refusals included; held until the store has the bytes, because
             # until then they are this process's to hold.

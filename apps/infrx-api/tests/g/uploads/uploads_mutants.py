@@ -129,9 +129,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__a_slow_upload_is_cut_at_the_deadline"),
     # The brief's order: the slot goes back before the store call, which still runs.
     _m("slot_released_before_the_store", "the slot is held until the store has the bytes",
-       U, "large=slot)\n            await store.put_upload(",
-       "large=slot)\n            slot.release()\n            await store.put_upload(",
+       U, "large=slot)\n", "large=slot)\n            slot.release()\n",
        "test_media_sec__large_uploads_hold_a_shared_slot_until_stored"),
+    _m("store_call_undeadlined", "the store call is under the intake deadline too",
+       U, "            await asyncio.wait_for(store.put_upload(context.org_id, handle, data, mime),\n"
+          "                                   limits.intake_timeout_s)",
+       "            await store.put_upload(context.org_id, handle, data, mime)",
+       "test_media_sec__a_hung_store_is_cut_at_the_deadline"),
     _m("handle_grammar_unchecked", "a malformed handle is not_found before any byte",
        U, "        if not ids.UPLOAD_HANDLE_RE.fullmatch(handle):", "        if False:",
        "test_media_sec__a_malformed_handle_is_not_found_before_any_byte"),
@@ -146,8 +150,8 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "Response(status_code=204,", "Response(status_code=200,",
        "test_media_sec__the_destination_is_write_once_over_http"),
     _m("destination_under_another_id", "the destination is scoped by the key's org",
-       U, "await store.put_upload(context.org_id, handle, data, mime)",
-       "await store.put_upload(context.key_id, handle, data, mime)",
+       U, "store.put_upload(context.org_id, handle, data, mime)",
+       "store.put_upload(context.key_id, handle, data, mime)",
        "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404"),
     # --- item 4: POST /v1/uploads/{handle}/complete ---------------------------------
     _m("completion_renders_the_ref", "completion answers the projection, never the ref (R47)",
