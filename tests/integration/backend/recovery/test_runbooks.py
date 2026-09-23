@@ -57,6 +57,7 @@ def test_i3b_rb03_the_maintenance_statement_is_the_one_bk04_runs():
     text = (RUNBOOKS / "rollback.md").read_text()
     assert test_restore.MAINTENANCE % "false" in text
     # as bk04 runs it: under service_role (0006's policy), not as the pooler's postgres
+    assert "set role service_role;" in text
     assert text.index("set role service_role;") < text.index(test_restore.MAINTENANCE % "false")
     assert "reset role;" in text
 

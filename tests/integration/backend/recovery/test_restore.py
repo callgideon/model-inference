@@ -379,6 +379,10 @@ def test_i3b_bk01e_c_every_spelling_of_the_source_is_the_source(monkeypatch, spe
     conninfo, env = SPELLINGS[spelling]
     for name, value in env.items():
         monkeypatch.setenv(name, value)
+
+    def contacted(conninfo):                   # past the identity check: it did not match
+        raise AssertionError(f"the source spelled {spelling!r} was not recognised")
+    monkeypatch.setattr(pg, "connect", contacted)
     with pytest.raises(RuntimeError, match="the backup's own source"):
         pg.refuse_live_target(conninfo, meta)
     for other in (SOURCE.replace("dbname=infrx_i3b_src", "dbname=infrx_i3b_copy"),
