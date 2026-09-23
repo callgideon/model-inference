@@ -1107,6 +1107,33 @@ def test_the_report_names_its_tree_its_namespace_and_each_stages_duration():
     assert isinstance(payload["stages"][0]["seconds"], float)
 
 
+def test_the_report_records_the_tree_at_the_start_and_at_the_end(monkeypatch, tmp_path):
+    """Confirmation G-B2: `dirty` is measured, not assumed, and at BOTH ends of the run - a
+    file present when the run starts and gone by its end leaves the start dirty."""
+    import json as _json
+    import subprocess
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
+                        *args], check=True, capture_output=True)
+    git("init", "-q")
+    (tmp_path / "tracked").write_text("x")
+    git("add", "tracked")
+    git("commit", "-q", "-m", "t")
+    head = subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    monkeypatch.setattr(harness, "REPO_ROOT", tmp_path)
+    stray = tmp_path / "untracked"
+    stray.write_text("edited during the run")
+    report = runner.Report()                                  # starts on a dirty tree
+    stray.unlink()                                            # ... restored before the end
+    payload = _json.loads(report.as_json())
+    assert payload["git_head"] == {"sha": head, "dirty": True}, payload["git_head"]
+    assert payload["git_head_end"] == {"sha": head, "dirty": False}, payload["git_head_end"]
+    clean = _json.loads(runner.Report().as_json())
+    assert clean["git_head"] == clean["git_head_end"] == {"sha": head, "dirty": False}
+
+
 def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
     known, attributed set fails the stage - a skip is never a pass."""

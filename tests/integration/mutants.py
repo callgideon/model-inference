@@ -891,6 +891,18 @@ MUTANTS: tuple[Mutant, ...] = (
            '"no-cases"))]\n',
            "tests/integration/test_run.py", "baseline_red",
            cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
+    Mutant("e3bm47", "E3B2 round 3 (G-B2): a report's dirty flag is measured, not constant",
+           "tests/integration/run.py",
+           '            "dirty": bool(git("status", "--porcelain"))}\n',
+           '            "dirty": False}\n',
+           "tests/integration/test_run.py", "start_and_at_the_end",
+           cases=("test_the_report_records_the_tree_at_the_start_and_at_the_end",)),
+    Mutant("e3bm48", "E3B2 round 3 (G-B2): the tree is recorded at the START of the run too",
+           "tests/integration/run.py",
+           '        return json.dumps({"git_head": self.head, "git_head_end": git_head(),\n',
+           '        return json.dumps({"git_head": git_head(), "git_head_end": git_head(),\n',
+           "tests/integration/test_run.py", "start_and_at_the_end",
+           cases=("test_the_report_records_the_tree_at_the_start_and_at_the_end",)),
 )
 
 

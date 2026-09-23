@@ -97,6 +97,9 @@ class Report:
         self.stages: list[dict] = []
         self.started = datetime.now(timezone.utc)
         self._last = time.monotonic()
+        # Confirmation G-B2: the tree as the run STARTS - a tree edited during the run and
+        # restored before its end must not read clean; `as_json` records the end as well.
+        self.head = git_head()
 
     def add(self, stage: str, status: str, detail: object = None, **extra) -> dict:
         # Review H7: how long each stage took (since the previous stage ended).
@@ -119,8 +122,11 @@ class Report:
         return 0
 
     def as_json(self) -> str:
-        # Review H7: which tree and which namespace a report is evidence for.
-        return json.dumps({"git_head": git_head(), "namespace": harness.NAMESPACE,
+        # Review H7: which tree and which namespace a report is evidence for - at the start
+        # and at the end of the run (G-B2); the report is evidence for one clean tree only
+        # when both say so.
+        return json.dumps({"git_head": self.head, "git_head_end": git_head(),
+                           "namespace": harness.NAMESPACE,
                            "started": self.started.isoformat(timespec="seconds"),
                            "seconds": round((datetime.now(timezone.utc)
                                              - self.started).total_seconds(), 1),
