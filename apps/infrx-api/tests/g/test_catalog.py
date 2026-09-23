@@ -90,7 +90,8 @@ def test_split_contract__a_consumer_key_cannot_reach_a_private_dev_endpoint():
 def test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint():
     """Its own ready private endpoint, and nothing else: not the production listing
     (that would spend a provider dev wallet on a consumer model), not another endpoint,
-    not another provider's."""
+    not another provider's - the last two even when the catalog hands the dev row to
+    anyone, so the answer does not rest on the fake's own endpoint filter."""
     tc, calls = app_with(support.PROVIDER_ROW, with_preview_card())
     assert chat(tc, model=support.DEV_MODEL).status_code == 202
     auth = calls[0][0]
@@ -98,8 +99,8 @@ def test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoin
         CredentialAudience.provider_dev, IDS.provider_org, IDS.dev_endpoint)
     refused(chat(tc, model=support.MODEL_REVISION), 404, "not_found")      # production
     for scope in ({"endpoint_id": IDS.prod_endpoint},
-                  {"provider_org_id": IDS.rival_provider_org}):
-        tc, calls = app_with({**support.PROVIDER_ROW, **scope}, with_preview_card())
+                  {"org_id": IDS.rival_provider_org, "provider_org_id": IDS.rival_provider_org}):
+        tc, calls = app_with({**support.PROVIDER_ROW, **scope}, leaky(with_preview_card()))
         refused(chat(tc, model=support.DEV_MODEL), 404, "not_found")
         assert calls == []
 
