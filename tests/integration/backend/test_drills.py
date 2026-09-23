@@ -1085,13 +1085,9 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     """Forced fallback to legacy unmetered ingress (R51): a pilot configured with the shared
     gateway key (R51's forbidden setting) - the legacy path that bypasses per-tenant metering - refuses to
     start, naming the setting and not its value."""
-    from unittest import mock
     from infrx.config import RuntimeMisconfigured, validate_runtime
-    from infrx.gateway import app as composition
-    from infrx.gateway.routes import health, ingress, models
-    # G1R: a complete pilot configuration validates only as the cutover composes it.
-    with mock.patch.object(composition, "ROUTERS", (health, models, ingress)):
-        assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
+    # A complete pilot configuration validates, as the cutover composes it (dr17).
+    assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
     with pytest.raises(RuntimeMisconfigured) as refused:
         validate_runtime(_pilot_settings(tmp_path, legacy_key="shared-legacy-key"))
     # assembled from parts: tests/integration's production-pointer guard scans this file
@@ -1099,22 +1095,36 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     assert "shared-legacy-key" not in str(refused.value)
 
 
-def test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route(tmp_path):
-    """Forced fallback to legacy unmetered ingress: in `pilot` mode `/v1/chat/completions`
-    must be the metered ingress, never the legacy F1 chat route (no durable admission, no
-    hold). Before the cutover the composition root mounts the legacy route, and G1R (merged)
-    makes `create_app` refuse pilot mode for it; after the cutover the route is the ingress.
-    Anything else is a failure - G1R is merged, so it is no longer a pending id."""
-    from infrx.config import RuntimeMisconfigured
-    from infrx.gateway.app import create_app
-    try:
-        app = create_app(_pilot_settings(tmp_path))
-    except RuntimeMisconfigured as refused:
-        # G1R: pilot refuses to start while chat would be served by the legacy route.
-        assert "legacy route" in str(refused)
-        return
-    served = {route.path: route.endpoint.__module__ for route in app.routes
-              if getattr(route, "path", "") == "/v1/chat/completions"}
-    if served and all(module.endswith(".ingress") for module in served.values()):
-        return
-    pytest.fail(f"pilot mode serves /v1/chat/completions from {served}")
+def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_routers(tmp_path):
+    """Forced fallback to legacy unmetered ingress, after the cutover: the pilot composition
+    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs)` - the
+    metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
+    uploads - and no route is the legacy F1 chat module (no durable admission, no hold). The
+    composition's own module check refuses a second chat handler, the legacy one included.
+
+    `create_app` builds every adapter from the pilot environment except the object store,
+    INJECTED (M1's InMemoryObjectStore): `S3_MEDIA_BUCKET` composes nothing until an S3
+    adapter exists (M1-L2), and the cutover refuses to start rather than stage into process
+    memory. The startup probes (the price source, the journal) answer from the clone."""
+    from infrx.config import RuntimeMisconfigured, from_env
+    from infrx.gateway import app as composition
+    from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+    from infrx.media.store import InMemoryObjectStore
+    h = stack.pg_jobstore()
+    app = composition.create_app(from_env(stack.pilot_env(h.extra["database"], tmp_path)),
+                                 objects=InMemoryObjectStore())
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs), composition.ROUTERS
+    assert app.state.runtime.mode == "pilot"
+    served = {(method, route.path): route.endpoint.__module__ for route in app.routes
+              for method in (getattr(route, "methods", None) or ())
+              if getattr(route, "endpoint", None) is not None}
+    assert served[("POST", "/v1/chat/completions")] == ingress.__name__, served
+    assert {path: module for (method, path), module in served.items()
+            if path.startswith("/v1/jobs")} == {path: jobs.__name__ for _, path in
+                                                ingress.JOBS_ROUTES}, served
+    assert {module for (_, path), module in served.items()
+            if path.startswith("/v1/uploads")} == {uploads.__name__}, served
+    assert chat.__name__ not in served.values(), served
+    chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
+    with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
+        ingress.assert_route_table(app)

@@ -982,6 +982,14 @@ MUTANTS: tuple[Mutant, ...] = (
            '_OUTCOME_FIELDS = ("job_id", "state", "cause", "result_ref", ',
            "tests/integration/backend/recovery/test_recovery.py", "rc04b", layer=2,
            cases=("test_i3b_rc04b_settlement_across_a_database_loss",)),
+    Mutant("e3bm62", "E3B3 dr17: the pilot mounts G4U's uploads router beside the ingress and "
+                     "G3's jobs router",
+           "apps/infrx-api/infrx/gateway/app.py",
+           "ROUTERS = (health, models, ingress, uploads, jobs)",
+           "ROUTERS = (health, models, ingress, jobs)",
+           "tests/integration/backend/test_drills.py", "dr17", layer=2,
+           cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
+                  "routers",)),
 )
 
 

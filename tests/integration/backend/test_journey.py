@@ -86,7 +86,8 @@ def test_two_tenants_are_provisioned_with_their_own_resolved_wallets_and_pins(ca
         ports.resolve_wallet(alpha.auth, beta.wallet)
     assert alpha.pins == beta.pins
     assert "real: IdentityDirectory=PgSignup" in alpha.provisioned_by
-    assert "fake: TenantStore, AuditLog, Registry, AccountView" in alpha.provisioned_by
+    assert "TenantStore=PgTenantStore" in alpha.provisioned_by   # E3B3: D5's adapters, no fake
+    assert "fake" not in alpha.provisioned_by
 
     async def checks():
         for tenant in (alpha, beta):

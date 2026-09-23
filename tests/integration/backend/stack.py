@@ -14,8 +14,8 @@ What lives here, each small:
 * `pg_jobstore()` - the real PostgreSQL JobStore rig (phase 2): `pgtesting`'s factory over a
   migrated, seeded template on this stack, cloned per call; `defect()` edits a clone only.
 * `credit_world()` / `provision_two_tenants()` - CREDIT individuals through `auth.users` and
-  A1's grant; the two journey tenants through G6B's `Operations` (real ports named in
-  `REAL_PORTS`, G6B's stand-ins for the rest).
+  A1's grant; the two journey tenants through G6B's `Operations` on D5's PostgreSQL adapters
+  (every port real, `REAL_PORTS`).
 * `postgrest_*` - lifecycle of the PostgREST container, ownership by label exactly like E2's.
 """
 from __future__ import annotations
@@ -323,6 +323,7 @@ class Provisioned:
     ops: object                                              # infrx.operations Operations
     operator_secret: str = field(repr=False)
     grants: dict = field(default_factory=dict)               # name -> grant_initial result
+    database: str = ""                                       # the clone they live in
 
 
 def _uuid(name: str) -> str:
@@ -331,107 +332,64 @@ def _uuid(name: str) -> str:
                          version=4))
 
 
-class _Pool:
-    """What `PgSignup` needs of a psycopg pool - `connection()` - as `service_role` (0004:
-    BYPASSRLS is not inherited, so the role is SET, as PostgREST does). One connection per
-    use. ponytail: no pooling; a drill makes a handful of calls."""
-
-    def __init__(self, dsn: str) -> None:
-        self.dsn = dsn
-
-    @contextlib.asynccontextmanager
-    async def connection(self):
-        import psycopg
-        conn = await psycopg.AsyncConnection.connect(self.dsn, autocommit=True)
-        try:
-            await conn.execute("set role service_role")
-            yield conn
-        finally:
-            await conn.close()
+# Which of G6B's ports are real here; `provisioned_by` repeats it on every tenant. E3B phase 3:
+# every one - D5's PostgreSQL adapters (`infrx/state/operations.py`, `PgCatalogDirectory`),
+# composed exactly as D5's `cli.build_operations` diff does (D5 integration request 4).
+REAL_PORTS = ("IdentityDirectory=PgSignup (A1, 0015)", "Ledger=PgLedger (A1 + D5)",
+              "TenantStore=PgTenantStore", "AuditLog=PgAuditLog", "Registry=PgRegistry",
+              "AccountView=PgAccountView", "WalletDirectory=PgWalletDirectory",
+              "CatalogDirectory=PgCatalogDirectory", "JobStore=PgJobStore")
 
 
-class _PgWallets:
-    """`WalletDirectory` as a read of `infrx.credit_wallets` on the real store, so a balance
-    is the one A1's grant actually wrote. Test-local: no product adapter exists on base."""
+def operations(database: str):
+    """G6B's `Operations` on D5's PostgreSQL adapters over `database`, one fresh
+    `service_role` connection per operation (`jobstore.connector`)."""
+    from datetime import datetime, timezone
 
-    def __init__(self, pool: _Pool) -> None:
-        self.pool = pool
-
-    async def consumer_wallet_for_user(self, user_id: str):
-        from infrx.contracts.v2 import records as v2
-        async with self.pool.connection() as conn:
-            row = await (await conn.execute(
-                "select wallet_id::text, personal_org_id::text, ledger_total::text, "
-                "reserved_total::text from infrx.credit_wallets "
-                "where owner_user_id = %s and kind = 'consumer'", (user_id,))).fetchone()
-        return None if row is None else v2.WalletRef(
-            wallet_id=row[0], kind=v2.WalletKind.consumer, owner_user_id=user_id,
-            personal_org_id=row[1], ledger_total=row[2], reserved_total=row[3])
-
-    async def provider_dev_wallet(self, provider_org_id: str):
-        return None
-
-
-def g6b_fakes():
-    """G6B's own stand-ins (`apps/infrx-api/tests/g/ops/fakes.py`) for the ports with no
-    PostgreSQL adapter on base: TenantStore, AuditLog, Registry, AccountView (D5)."""
-    if "e3b2_g6b_fakes" not in sys.modules:           # dataclasses resolve through it
-        spec = importlib.util.spec_from_file_location(
-            "e3b2_g6b_fakes", harness.API_ROOT / "tests" / "g" / "ops" / "fakes.py")
-        sys.modules[spec.name] = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(sys.modules[spec.name])
-    return sys.modules["e3b2_g6b_fakes"]
-
-
-# Which of G6B's ports are real here; `provisioned_by` repeats it on every tenant.
-REAL_PORTS = ("IdentityDirectory=PgSignup (A1, 0015)", "Ledger.grant_initial=PgSignup",
-              "WalletDirectory=credit_wallets read (test-local)", "JobStore=PgJobStore")
-FAKE_PORTS = ("TenantStore", "AuditLog", "Registry", "AccountView", "CatalogDirectory")
+    from infrx.operations import service
+    from infrx.state import operations as pg
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.jobstore import PgJobStore, connector
+    connect = connector(harness.pg_dsn(database))
+    return service.Operations(
+        identities=pg.PgSignup(pg._Db(connect)), tenants=pg.PgTenantStore(connect),
+        ledger=pg.PgLedger(connect), audit=pg.PgAuditLog(connect),
+        registry=pg.PgRegistry(connect), wallets=pg.PgWalletDirectory(connect),
+        catalog=PgCatalogDirectory(connect), jobs=PgJobStore(connect),
+        accounts=pg.PgAccountView(connect), clock=lambda: datetime.now(timezone.utc))
 
 
 def provision_two_tenants() -> Provisioned:
     """Two consumer tenants through G6B's `Operations` (G6B handback: "E3B.a provisions its two
-    tenants through this CLI" - the CLI has no adapter wired, so its service layer is used),
-    on a fresh clone of this stack's store. Per tenant: a verified individual seeded through
+    tenants through this CLI" - its service layer, composed as `cli.build_operations` does), on
+    a fresh clone of this stack's store. Per tenant: a verified individual seeded through
     `auth.users` (0001's trigger makes the personal organization), then as the operator
     `grant_initial` under an idempotency key (A1's real grant: 10,000 CREDIT, once) and
-    `issue_key` (a consumer key; G6B refuses a key before a metered wallet exists, so the
-    grant comes first), then `tenant(secret)`: the balance, the wallet resolved from the
-    credential (R66) and the pins a request would be admitted at.
+    `issue_key` (a consumer key row in `public.api_keys`; G6B refuses a key before a metered
+    wallet exists, so the grant comes first), then `tenant(secret)`: the balance, the wallet
+    resolved from the credential (R66) and the pins a request would be admitted at.
 
-    Real: REAL_PORTS. Fake (G6B's own stand-ins, no PostgreSQL adapter on base, D5):
-    FAKE_PORTS. The operator key is bootstrapped into the fake TenantStore with a secret
-    minted now: the service cannot mint an operator key, by design."""
-    from datetime import datetime, timezone
-
+    Every port is real (REAL_PORTS). The operator key is bootstrapped with 0009's
+    `bootstrap_operator_key` and a secret minted now: the service cannot mint one, by design.
+    CREDIT admission is switched on, so the clone serves the journeys as it stands."""
     from infrx.contracts import records as v1
-    from infrx.contracts.records import Role
-    from infrx.contracts.v2 import fixtures as v2fix, ports, records as v2
-    from infrx.contracts.conformance.v2_fakes import fake_v2_harness
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.v2 import fixtures as v2fix, ports
     from infrx.operations import service
-    from infrx.operations.ports import KeyRow
-    from infrx.state.signup import PgSignup
 
     h = pg_jobstore()
-    with connect() as conn:
-        enable(conn, "signup_grant")
-        users = {name: seed_individual(conn, name) for name in ("alpha", "beta")}
-    fakes, catalog = g6b_fakes(), fake_v2_harness().catalog
-    pool = _Pool(harness.pg_dsn(current_database()))
-    signup = PgSignup(pool)
-    clock = lambda: datetime.now(timezone.utc)                  # noqa: E731
     operator_secret = service.new_secret()
-    operator_key = _uuid("operator/key")
-    tenants = fakes.FakeTenants({operator_key: KeyRow(
-        key_id=operator_key, org_id=_uuid("operator/org"),
-        audience=v2.CredentialAudience.operator, key_hash=service.hash_key(operator_secret),
-        prefix=operator_secret[:service.PREFIX_CHARS], name="e3b2 bootstrap operator",
-        role=Role.operator, created_at=clock())})
-    ops = service.Operations(identities=signup, tenants=tenants, ledger=signup,
-                             audit=fakes.FakeAudit(), registry=fakes.FakeRegistry(catalog),
-                             wallets=_PgWallets(pool), catalog=catalog,
-                             jobs=h.extra["store"], accounts=fakes.FakeAccounts(), clock=clock)
-    label = f"G6B Operations; real: {', '.join(REAL_PORTS)}; fake: {', '.join(FAKE_PORTS)}"
+    with connect() as conn:
+        enable(conn, "signup_grant", "credit_admission")
+        users = {name: seed_individual(conn, name) for name in ("alpha", "beta")}
+        conn.execute("update public.api_keys set revoked_at = infrx.now() "
+                     "where audience = 'operator'")
+        conn.execute("select infrx.bootstrap_operator_key(%s, 'e3b3 bootstrap', %s, %s, "
+                     "'ops@e3b2.invalid', 'E3B3 operator bootstrap')",
+                     (b.ORG_B, operator_secret[:service.PREFIX_CHARS],
+                      service.hash_key(operator_secret)))
+    ops = operations(h.extra["database"])
+    label = f"G6B Operations; real: {', '.join(REAL_PORTS)}"
 
     async def provision():
         operator = await ops.operator(operator_secret)
@@ -456,7 +414,28 @@ def provision_two_tenants() -> Provisioned:
         return made, grants
 
     (alpha, beta), grants = asyncio.run(provision())
-    return Provisioned(alpha, beta, ops, operator_secret, grants)
+    return Provisioned(alpha, beta, ops, operator_secret, grants, database=h.extra["database"])
+
+
+# ------------------------------------------------------------------ the pilot box's environment
+
+GATEWAY_PORT = harness.PORT_RANGE.start + 40        # e3b2: 56740, loopback only
+
+
+def pilot_env(database: str, workdir: Path, **extra: str) -> dict[str, str]:
+    """The pilot box's environment on this stack, by the 08 §5 names: `pilot` mode, the
+    clone as `DATABASE_URL`, this namespace's Valkey, the CREDIT regime at the PROVISIONAL
+    Marlin card (P-01: a label, never a price), a processing cache and usage log of its own.
+    `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` name this stack's PostgREST and a service_role
+    token only it accepts."""
+    (workdir / "cache").mkdir(parents=True, exist_ok=True)
+    return {"INFRX_MODE": "pilot", "DATABASE_URL": harness.pg_dsn(database),
+            "VALKEY_URL": harness.valkey_url(), "ACCOUNTING_REGIME": "credit",
+            "ACTIVE_RATE_CARD_VERSION": SEED_CARD, "MODEL_ID": CREDIT_ALIAS,
+            "PROCESSING_CACHE_DIR": str(workdir / "cache"),
+            "USAGE_LOG": str(workdir / "usage.jsonl"),
+            "SUPABASE_URL": postgrest_url(),
+            "SUPABASE_SERVICE_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}
 
 
 # ------------------------------------------------------------------ PostgREST
@@ -540,7 +519,7 @@ def postgrest_down() -> list[str]:
     return [POSTGREST]
 
 
-def jwt(role: str, sub: str | None = None) -> str:
+def jwt(role: str, sub: str | None = None, *, ttl_s: int = 600) -> str:
     """HS256, stdlib only: a token only this suite's PostgREST accepts."""
     import base64
     import hashlib
@@ -549,7 +528,7 @@ def jwt(role: str, sub: str | None = None) -> str:
 
     def b64(raw: bytes) -> str:
         return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-    claims = {"role": role, "exp": int(time.time()) + 600}
+    claims = {"role": role, "exp": int(time.time()) + ttl_s}
     if sub:
         claims["sub"] = sub
     head = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
