@@ -52,6 +52,20 @@ def launch(models: pathlib.Path, tmp: pathlib.Path, *args: str, **env: str):
     return done.returncode, argv, done.stderr
 
 
+def run_script(models: pathlib.Path, tmp: pathlib.Path, script: str, stubs: dict[str, str],
+               **env: str) -> subprocess.CompletedProcess:
+    """Run a measurement script with stub commands on `PATH` (nothing real is called)."""
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name, body in stubs.items():
+        stub = bin_dir / name
+        stub.write_text("#!/bin/sh\n" + body)
+        stub.chmod(0o755)
+    return subprocess.run(["bash", str(models / "marlin2b/measure" / script)],
+                          capture_output=True, text=True, timeout=60,
+                          env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp), **env})
+
+
 def record_of(models: pathlib.Path) -> dict:
     return json.loads((models / RECORD).read_text())
 
@@ -151,6 +165,37 @@ def check_record_matches_the_code(models: pathlib.Path, tmp: pathlib.Path) -> No
         assert source in {member.value for member in DigestSource}, source
 
 
+def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.Path) -> None:
+    """measure/concurrency.sh (review PIN-4): one `/metrics` scrape that fails - a 2 s
+    timeout at c = 32 is plausible - is an empty sample; the sampler goes on, and so does
+    the sweep (every level, the report). An engine log without the KV lines (rotated) is a
+    missing line, not a failed sweep."""
+    repo = tmp / "repo" / "models" / "marlin2b"
+    (repo / "corpus").mkdir(parents=True, exist_ok=True)
+    (repo / "bench.py").write_text("")
+    (repo / "corpus" / "manifest.json").write_text("{}")
+    (tmp / "corpus-cache").mkdir(exist_ok=True)
+    stubs = {
+        "docker": 'case "$*" in *Args*) echo \'["/model","--max-num-seqs","32"]\' ;; '
+                  "*Image*) echo sha256:0 ;; esac\n",
+        # the first scrape times out (curl's 28), every later one answers
+        "curl": 'n=$(cat "$CURL_CALLS" 2>/dev/null || echo 0); echo $((n + 1)) > "$CURL_CALLS"\n'
+                '[ "$n" -gt 0 ] || exit 28\n'
+                "printf 'vllm:num_requests_running 1\\nvllm:num_requests_waiting 0\\n'\n",
+        "nvidia-smi": 'echo "1000, 50"\n',
+        "bench": 'case "$*" in *--report*) echo "report rows" ;; *) sleep 1.5 ;; esac\n'}
+    done = run_script(models, tmp, "concurrency.sh", stubs, REPO=str(tmp / "repo"),
+                      CORPUS_CACHE=str(tmp / "corpus-cache"), PY=str(tmp / "bin" / "bench"),
+                      OUT=str(tmp / "out"), LEVELS="1 2", CURL_CALLS=str(tmp / "curl-calls"))
+    assert done.returncode == 0, (done.returncode, done.stderr[-400:])
+    for line in ("level=1 peak_", "level=2 peak_", "### report", "report rows", "artifacts="):
+        assert line in done.stdout, (line, done.stdout[-600:])
+    (run_dir,) = (tmp / "out").iterdir()
+    sampled = [row.split("\t")[0] for row in
+               (run_dir / "samples.tsv").read_text().splitlines()[1:]]
+    assert "1" in sampled and "2" in sampled, f"a level went unsampled: {sampled}"
+
+
 # --------------------------------------------------------------------------
 # the cases
 # --------------------------------------------------------------------------
@@ -164,4 +209,8 @@ def test_perf_pilot__a_pinned_setting_has_one_source(tmp_path):
 
 def test_perf_pilot__the_serving_record_matches_the_code_it_pins(tmp_path):
     check_record_matches_the_code(MODELS, tmp_path)
+
+
+def test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape(tmp_path):
+    check_the_sweep_survives_a_failed_scrape(MODELS, tmp_path)
 

@@ -28,14 +28,17 @@ from . import test_serving as serving
 
 S = "marlin2b/serve.sh"
 J = "marlin2b/serving-version.json"
-PIN_FILES = ("common/env.sh", "marlin2b/model.env", S, J)
+C = "marlin2b/measure/concurrency.sh"
+PIN_FILES = ("common/env.sh", "marlin2b/model.env", S, J, C)
 
 LAUNCH = "test_perf_pilot__the_engine_starts_pinned_on_loopback_with_the_recorded_flags"
 ONE_SOURCE = "test_perf_pilot__a_pinned_setting_has_one_source"
 RECORD = "test_perf_pilot__the_serving_record_matches_the_code_it_pins"
+SWEEP = "test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape"
 PIN_CHECKS = {LAUNCH: serving.check_pinned_launch,
               ONE_SOURCE: serving.check_one_source_per_setting,
-              RECORD: serving.check_record_matches_the_code}
+              RECORD: serving.check_record_matches_the_code,
+              SWEEP: serving.check_the_sweep_survives_a_failed_scrape}
 DIGEST = "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
 
 PIN_MUTANTS: tuple[Mutant, ...] = (
@@ -79,6 +82,10 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
        "  true || {", ONE_SOURCE),
     _m("missing_root_accepted", "a root that does not exist is refused, not created by docker",
        S, '  test -d "$PROCESSING_CACHE_DIR" || {', "  true || {", ONE_SOURCE),
+    _m("sampler_dies_on_a_failed_scrape", "one failed scrape does not end the sampling",
+       C, "  set +e     # a scrape that times out", "  :     # a scrape that times out", SWEEP),
+    _m("sweep_fails_on_a_rotated_log", "no KV line in the engine log does not fail the sweep",
+       C, "| tail -4 || true\n", "| tail -4\n", SWEEP),
     _m("record_flag_drift", "the record's flags are the flags served",
        J, '    "bfloat16",', '    "float16",', LAUNCH),
     _m("record_digest_stale", "engine_options_digest is recomputed from the flags",

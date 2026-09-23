@@ -41,6 +41,7 @@ echo "run=$run_id utc=$(date -u +%Y-%m-%dT%H:%M:%SZ) repo_sha=$(git -C "$REPO" r
 echo "image=$(docker inspect --format '{{.Image}}' "$CONTAINER") args=$args"
 
 sample() {   # level -> one tab-separated line per 2 s until killed
+  set +e     # a scrape that times out is an empty sample, not the end of the sampling
   while :; do
     metrics=$(curl -sS -m 2 "$ENGINE/metrics" 2>/dev/null \
       | awk '/^vllm:num_requests_running/{r+=$NF} /^vllm:num_requests_waiting/{w+=$NF}
@@ -61,7 +62,7 @@ for c in $LEVELS; do
     --dataset-version e1b-2026-09-22 --profile-version v1 --label "$run_id-c$c" \
     --out "$out/bench.jsonl" --raw "$out/raw/c$c.jsonl" > "$out/c$c.log" 2>&1 \
     || echo "level=$c bench_exit=$? (see $out/c$c.log)"
-  kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null || true
+  kill "$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true
   awk -F'\t' -v c="$c" '$1==c { if ($4>w) w=$4; if ($5>k) k=$5; if ($6>m) m=$6; if ($3>r) r=$3 }
     END { printf "level=%s peak_running=%s peak_waiting=%s peak_kv_usage=%s peak_gpu_mem_mib=%s\n", c, r, w, k, m }' \
     "$out/samples.tsv"
@@ -70,5 +71,6 @@ done
 echo "### report"
 "$PY" "$bench" --report "$out/bench.jsonl"
 echo "### kv capacity at start-up (engine log)"
-docker logs "$CONTAINER" 2>&1 | grep -E -i 'GPU KV cache size|Maximum concurrency' | tail -4
+# no match (a rotated log) is a missing line, not a failed sweep
+docker logs "$CONTAINER" 2>&1 | grep -E -i 'GPU KV cache size|Maximum concurrency' | tail -4 || true
 echo "artifacts=$out"
