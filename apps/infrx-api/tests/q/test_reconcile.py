@@ -193,6 +193,12 @@ def test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_sl
     run(body)
 
 
+def test_q3_relay__two_default_relays_claim_under_different_worker_ids():
+    """D2 OB-1b: the claim-holder check only separates relays whose ids differ."""
+    first, second = (rig.Reconciler(None, None, None) for _ in range(2))
+    assert first.worker_id != second.worker_id
+
+
 class AfterEnqueue:
     """An index that runs `action` once, right after the first `enqueue` lands."""
 

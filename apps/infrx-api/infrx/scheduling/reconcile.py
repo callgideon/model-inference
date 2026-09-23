@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -42,7 +43,9 @@ class Reconciler:
     store: Any
     index: Any
     now: Callable[[], datetime]
-    worker_id: str = "q3-relay"
+    # Unique per relay (D2 OB-1b): the store lets only the claiming worker acknowledge,
+    # which separates two relay processes only if their ids differ.
+    worker_id: str = field(default_factory=lambda: f"q3-relay-{uuid.uuid4().hex[:8]}")
     batch: int = 100
     # Bounded scan: one `drain` reads at most `batch * max_batches` rows. The checkpoint
     # is the store's `claimed_at` stamp - a row handed out is skipped by the next read
