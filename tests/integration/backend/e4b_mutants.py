@@ -116,6 +116,7 @@ UNANSWERED = "test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause"
 LABELS = "test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement"
 RECORD = "test_e4b_the_declared_settings_are_the_serving_record_read_never_typed"
 RULES = "test_e4b_each_stated_client_rule_holds_one_assertion_each"
+EXIT = "test_e4b_the_suite_halves_carry_pytests_own_exit_code"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -157,7 +158,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("stack_down_ignored", "a gate stage that did not pass fails the suite check",
        "    if down:\n", "    if False:\n", SPLIT),
     _m("pending_suite_is_pass", "a suite with pending cases is PENDING, never PASS",
-       "status = run.backend_verdict(cases, 0)", "status = PASS", SPLIT),
+       "status = run.backend_verdict(cases, exit_code)", "status = PASS", SPLIT),
     # --- MARLIN-SOP parity -------------------------------------------------------------
     _m("parity_unknown_is_pass", "an unpaired parity row is PENDING, never PASS",
        "{decide.PASS: PASS, decide.FAIL: FAIL}.get(verdict, PENDING)",
@@ -425,6 +426,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unreadable_engine_is_idle", "an engine whose metrics cannot be read is not idle",
        '        busy = None if engine is None or engine["running"] is None \\\n',
        '        busy = 0 if engine is None or engine["running"] is None \\\n', RULES),
+    # --- review N1: pytest's own exit code ---------------------------------------------
+    _m("exit_code_ignored", "a backend run that exited abnormally fails both halves",
+       "    status = run.backend_verdict(cases, exit_code)", "    status = run.backend_verdict(cases, 0)",
+       EXIT),
+    _m("exit_one_never_attributed", "exit 1 with a failed case is that case's half's",
+       '    return 0 if code == 1 and cases["failed"] else code', "    return code", EXIT),
+    _m("unexplained_exit_one_accepted", "exit 1 with no failed case is not explained",
+       '    return 0 if code == 1 and cases["failed"] else code',
+       '    return 0 if code == 1 else code', EXIT),
+    _m("unrun_backend_accepted", "a backend suite that never ran fails the halves",
+       '        down.append("backend=not run")', "        pass", EXIT),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

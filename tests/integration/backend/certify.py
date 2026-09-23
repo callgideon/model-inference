@@ -306,17 +306,32 @@ def split_backend(cases: dict) -> dict[str, dict]:
     return halves
 
 
-def suite_check(report: Report, check_id: str, cases: dict, gate: list[dict]) -> None:
-    """The gate's own verdict (`run.backend_verdict`) on one half of the backend suite, after
-    the stages it needs: a stack that did not come up is a failed certification run."""
+def attributed_exit(backend: dict | None, cases: dict) -> int | None:
+    """pytest's own exit code for the backend run (review N1), None if it never ran. An exit
+    of 1 is explained when a case failed - the split attributes that case to its half - and
+    any other code stays with both halves."""
+    runs = (backend or {}).get("runs") or []
+    if not runs:
+        return None
+    code = runs[0]["exit"]
+    return 0 if code == 1 and cases["failed"] else code
+
+
+def suite_check(report: Report, check_id: str, cases: dict, gate: list[dict],
+                exit_code: int | None) -> None:
+    """The gate's own verdict (`run.backend_verdict`, with pytest's exit code) on one half of
+    the backend suite, after the stages it needs: a stack that did not come up, or a backend
+    suite that never ran, is a failed certification run."""
     down = [f"{entry['stage']}={entry['status']}" for entry in gate if entry["status"] != PASS]
+    if exit_code is None:
+        down.append("backend=not run")
     counts = {"passed": len(cases["passed"]), "failed": cases["failed"] or None,
               "not_run": cases["skipped"] or None,
               "pending_by_id": {task: len(names) for task, names in cases["pending"].items()}}
     if down:
         report.check(check_id, FAIL, {"stages_not_passed": down, **counts})
         return
-    status = run.backend_verdict(cases, 0)
+    status = run.backend_verdict(cases, exit_code)
     report.check(check_id, status, counts, owners=cases["pending"] if status == PENDING else ())
 
 
@@ -1067,9 +1082,9 @@ def stack_checks(report: Report, keep: bool) -> None:
         backend = next((e for e in report.stages if e["stage"] == "backend"), None)
         cases = (backend or {}).get("cases") or {"passed": [], "failed": ["<no backend run>"],
                                                   "pending": {}, "skipped": []}
-        halves = split_backend(cases)
-        suite_check(report, "e4b.a.protocol", halves["protocol"], gate)
-        suite_check(report, "e4b.b.recovery", halves["recovery"], gate)
+        halves, code = split_backend(cases), attributed_exit(backend, cases)
+        suite_check(report, "e4b.a.protocol", halves["protocol"], gate, code)
+        suite_check(report, "e4b.b.recovery", halves["recovery"], gate, code)
         if have and not keep:
             run.teardown(report)
 

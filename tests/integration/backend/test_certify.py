@@ -156,20 +156,45 @@ def test_e4b_the_backend_suite_splits_into_protocol_and_recovery_by_the_gates_ru
         "STACK": ["tests.integration.backend.recovery.test_recovery::test_i3b_rc08b"]}
     gate = [{"stage": stage, "status": certify.PASS} for stage in certify.GATE_STAGES]
     report = certify.Report(TARGET)
-    certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate)
-    certify.suite_check(report, "e4b.b.recovery", halves["recovery"], gate)
+    certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate, 0)
+    certify.suite_check(report, "e4b.b.recovery", halves["recovery"], gate, 0)
     assert [(s["status"], s["owners"]) for s in report.stages] == [
         (certify.PENDING, ["BOX"]), (certify.PENDING, ["BOX", "STACK"])]
     broken = {**halves["recovery"], "failed": ["x.recovery.test_restore::test_i3b_bk01"]}
-    certify.suite_check(report, "e4b.b.recovery", broken, gate)
+    certify.suite_check(report, "e4b.b.recovery", broken, gate, 0)
     assert report.stages[-1]["status"] == certify.FAIL
     down = [*gate[:-1], {"stage": "rls", "status": certify.FAIL}]
     clean = {"passed": ["a.test_drills::test_x"], "failed": [], "skipped": [], "pending": {}}
-    certify.suite_check(report, "e4b.a.protocol", clean, down)
+    certify.suite_check(report, "e4b.a.protocol", clean, down, 0)
     assert report.stages[-1]["status"] == certify.FAIL
     assert report.stages[-1]["detail"]["stages_not_passed"] == ["rls=FAIL"]
-    certify.suite_check(report, "e4b.a.protocol", clean, gate)
+    certify.suite_check(report, "e4b.a.protocol", clean, gate, 0)
     assert report.stages[-1]["status"] == certify.PASS
+
+
+def test_e4b_the_suite_halves_carry_pytests_own_exit_code(clean_tree):
+    """Review N1: the halves are judged with the backend run's real exit code. Exit 1 is the
+    failed case the split already attributes to its half; any other code (a usage error, an
+    interrupted run) fails both; a backend suite that never ran fails both."""
+    gate = [{"stage": stage, "status": certify.PASS} for stage in certify.GATE_STAGES]
+    rec = "tests.integration.backend.recovery.test_recovery::test_i3b_rc02"
+    whole = {"passed": ["a.test_drills::test_x"], "failed": [rec], "pending": {}, "skipped": []}
+    runs = lambda code: {"stage": "backend", "runs": [{"exit": code}]}   # noqa: E731
+    assert certify.attributed_exit(runs(1), whole) == 0
+    assert certify.attributed_exit(runs(1), {**whole, "failed": []}) == 1
+    assert certify.attributed_exit(runs(2), whole) == 2
+    assert certify.attributed_exit(None, whole) is None
+    halves = certify.split_backend(whole)
+    report = certify.Report(TARGET)
+    certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate,
+                        certify.attributed_exit(runs(1), whole))
+    certify.suite_check(report, "e4b.b.recovery", halves["recovery"], gate,
+                        certify.attributed_exit(runs(1), whole))
+    assert [e["status"] for e in report.stages] == [certify.PASS, certify.FAIL]
+    certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate, 2)
+    assert report.stages[-1]["status"] == certify.FAIL
+    certify.suite_check(report, "e4b.a.protocol", halves["protocol"], gate, None)
+    assert report.stages[-1]["detail"].get("stages_not_passed") == ["backend=not run"]
 
 
 # ------------------------------------------------------------------------------ parity
