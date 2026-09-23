@@ -566,6 +566,32 @@ def test_q3_switch__a_delivery_into_the_old_index_during_the_switch_reaches_the_
     run(body)
 
 
+def test_q3_switch__a_delivery_after_the_post_swap_snapshot_lands_in_the_new_index(adapter):
+    """Review DUR-2: the top-up's snapshot is read AFTER the drain points at the new
+    index, so a dispatch delivered between that read and the top-up goes straight into
+    the new index. Read before the swap, it would land in the old one and the (stale)
+    snapshot could not carry it over."""
+    w = rig.world(adapter)
+
+    async def body():
+        await rig.admit(w)
+        await w.rec.drain()
+        late = []
+
+        async def deliver():
+            late.append(await rig.admit(w))
+            assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+
+        w.rec.store = Interleave(w.outbox, 3, deliver)
+        fresh = rig.make_index("memory", w.h.clock.now)
+        await w.rec.switch(fresh)
+        assert late[0] in (await fresh.members()).values()
+        w.index = fresh
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
 # --- (4) index loss ----------------------------------------------------------------
 
 def _need_valkey():

@@ -158,6 +158,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "        self.index = index\n"
        "        report = Counter(repaired=0)",
        "test_q3_switch__a_delivery_into_the_old_index_during_the_switch_reaches_the_new_one"),
+    _m("the_switch_tops_up_from_a_snapshot_read_before_the_swap",
+       "review DUR-2: the switch's top-up snapshot is read after the drain points at "
+       "the new index",
+       "        self.index = index\n"
+       "        report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)",
+       "        report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)\n"
+       "        self.index = index",
+       "test_q3_switch__a_delivery_after_the_post_swap_snapshot_lands_in_the_new_index"),
     _m("the_switch_leaves_the_drain_on_the_old_index",
        "after a switch the drain feeds the new index",
        "        count = await self.rebuild(index)\n        self.index = index",
