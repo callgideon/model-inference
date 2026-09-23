@@ -488,6 +488,9 @@ MUTANTS += (
 INSTALL, DRAIN, ROLLBACK, LIB = (U + "install.sh", U + "drain.sh", U + "rollback.sh",
                                  U + "lib.sh")
 MUTANTS += (
+    _m("install_mode_guard_removed", "an unusable mode leaves no half deploy behind",
+       INSTALL, """  *) die "INFRX_MODE must be dev, test or pilot (no default); got '${INFRX_MODE:-}'" 2 ;;""",
+       "  *) ;;", "test_deploy_failclosed__only_a_committed_checkout_is_deployed"),
     _m("dirty_checkout_deployed", "the image is built from exactly a commit",
        INSTALL, '[ -z "$(g status --porcelain)" ] || die', ": || die",
        "test_deploy_failclosed__only_a_committed_checkout_is_deployed"),

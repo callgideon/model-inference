@@ -177,8 +177,13 @@ def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_pa
 
 def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monkeypatch):
     """The image is built from exactly a commit: a dirty tree, or HEAD other than the
-    RELEASE the runbook names, stops before the build and before any host change."""
+    RELEASE the runbook names, stops before the build and before any host change. An
+    unusable mode stops before even that - no git, no build, no backup."""
     host = Host(tmp_path, monkeypatch)
+    for mode in ("", "prod"):
+        done = host.run("install.sh", INFRX_MODE=mode)
+        assert done.returncode == 2 and "INFRX_MODE must be" in done.stderr, mode
+        assert host.events == [] and backups(host) == [], mode
     host.behave(dirty=" M apps/infrx-api/infrx/config.py\n")
     done = host.run("install.sh", INFRX_MODE="dev")
     assert done.returncode == 2 and "uncommitted" in done.stderr
