@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:11:33Z",
+  "updated": "2026-09-23T04:13:18Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,12 +20,6 @@
       "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
-    },
-    "D2": {
-      "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "round 3 handed back 2e386f0 (all four items; sweeps plain green, Supabase failures = shared decoy port 55598 self-tests); quick check then MERGE next session",
-      "since": "2026-09-22T20:55:35Z",
-      "note": "real JobStore over PostgreSQL"
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
@@ -251,6 +245,11 @@
       "merged": "Q3 @ 6fa13bf merged --no-ff (25de7ab) + Makefile follow-up 88a48d7",
       "at": "2026-09-23T03:57:39Z",
       "note": "review + confirmation pass; 14 residuals folded; tests/q 169 on the merged tree; Q lists detached (.claude-logs/q3-merged-88a48d7.log) \u2014 read the tail next session"
+    },
+    "D2": {
+      "merged": "D2 @ 2e386f0 merged --no-ff (24b4589) + follow-up (harness 0010-0014, api-mutants += tests/d/test_code_mutants.py)",
+      "at": "2026-09-23T04:13:18Z",
+      "note": "three review rounds; pre-merge 393 passed; merged-tree tests/d both images detached (.claude-logs/d2-merged-*.log); OB-5b implemented by D3; migrations 0010-0014 unapplied on hosted"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

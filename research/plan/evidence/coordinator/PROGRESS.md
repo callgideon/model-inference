@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T04:11:33Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T04:13:18Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 15 done · 8 in progress · 7 remaining (of 30).**
+**Backend packages: 16 done · 7 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -13,7 +13,7 @@ Generated 2026-09-23T04:11:33Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **done** | implemented |  |
-| B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **in-progress** | planned | real JobStore over PostgreSQL |
+| B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **done** | implemented |  |
 | B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **in-progress** | planned | stacked on D2's head; leases, reaper, cancellation |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
@@ -57,7 +57,7 @@ Generated 2026-09-23T04:11:33Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (11 packages): ~16 h at observed cadence, ~1.3 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (10 packages): ~14 h at observed cadence, ~1.2 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -66,7 +66,6 @@ Generated 2026-09-23T04:11:33Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — wire-in fix round IN PROGRESS when the session ended (agent killed; worktree WIP-snapshotted); re-dispatch from evidence/f/F2P-wirein-review-e307084.json since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
-- D2: codex-d2 / codex/d2-admission-outbox — round 3 handed back 2e386f0 (all four items; sweeps plain green, Supabase failures = shared decoy port 55598 self-tests); quick check then MERGE next session since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — round 4 needed: RV3-1 delete/move race case + mutant (or narrow docstring); RV3-2/RV3-3 wording — then merge after D2 (JSON evidence/a/A1-confirm-dc3cb9c.json) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — round 2 handed back d620f14 (RB-1/RB-2 closed); needs an Opus confirmation, then merge with W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
