@@ -1087,6 +1087,15 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
            cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
                   "its_identity",)),
+    Mutant("e3bm78", "E3B3 review H-N5: the execution mode ALONE is part of a key's identity "
+                     "(R94) - sync and async send the identical body, so only the mode tells "
+                     "them apart",
+           "apps/infrx-api/infrx/gateway/routes/ingress.py",
+           "    if request.execution_mode is not ExecutionMode.async_:\n",
+           "    if True:\n",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
 )
 
 

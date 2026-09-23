@@ -226,8 +226,11 @@ def settled_once(trip, tenant, request_id: str, usage: dict, before: tuple) -> D
 @pytest.mark.parametrize("input_kind", INPUTS)
 def test_backend_journey(trip, input_kind, mode):
     """Two tenants call the mounted gateway: the mode's contract, the same-mode replay, the
-    R94 cross-mode conflict that writes nothing, the other tenant's 404s, the settlement
-    once at the admitted card, the USD books unmoved, both wallets conserved."""
+    R94 cross-mode conflict answered by the lookup alone (review H-N5: SSE's body carries
+    `stream: true`, so sync<->SSE and SSE<->async differ in payload as well; sync<->async
+    send the identical body, and only the mode tells them apart - e3bm78), the other
+    tenant's 404s, the settlement once at the admitted card, the USD books unmoved, both
+    wallets conserved."""
     alpha, beta = trip.world.alpha, trip.world.beta
     before = {tenant.name: (trip.wallet(tenant), trip.usd(tenant)) for tenant in (alpha, beta)}
     messages = messages_for(trip, alpha, input_kind)
