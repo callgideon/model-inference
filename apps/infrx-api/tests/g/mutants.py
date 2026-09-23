@@ -896,9 +896,9 @@ MUTANTS: tuple[Mutant, ...] = (
        # the defect IS the refusal: nothing is built, so the composition refuses to start
        dies_by=("RuntimeMisconfigured",)),
     _m("objects_from_settings_in_memory", "no object store from settings is process memory",
-       P, '    raise RuntimeMisconfigured(mode, detail="S3_MEDIA_BUCKET is set, but no S3 object store "\n'
-          '                                            "adapter exists yet (M1 limit 2)")',
-       "    from ..media.store import InMemoryObjectStore\n    return InMemoryObjectStore()",
+       P, "    try:\n        objects = S3ObjectStore.connect(",
+       "    from ..media.store import InMemoryObjectStore\n    return InMemoryObjectStore()\n"
+       "    try:\n        objects = S3ObjectStore.connect(",
        "test_f_base__create_app_never_stages_into_process_memory"),
     _m("objects_unset_in_memory", "an unset S3_MEDIA_BUCKET refuses, naming it",
        P, '        raise RuntimeMisconfigured(mode, ("S3_MEDIA_BUCKET",))',

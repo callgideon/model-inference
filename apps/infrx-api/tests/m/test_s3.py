@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+"""M1-L2: `S3ObjectStore` (infrx/media/s3.py) - the `ObjectStore` port's conformance, run
+against `InMemoryObjectStore` and a real S3-compatible store, plus the settings that
+place it and the startup that refuses without it.
+
+    uv run --frozen pytest -q tests/m/test_s3.py            # memory + the no-Docker cases
+    INFRX_M_S3_ENDPOINT=http://127.0.0.1:55500 uv run --frozen pytest -q tests/m/test_s3.py
+
+The S3 half needs the E2 stack's `s3` service (MinIO, tests/integration/compose.yaml) or
+another S3-compatible endpoint taking the E2 literals as credentials. Without
+`INFRX_M_S3_ENDPOINT` it skips, naming its owner. Each S3 case writes under a prefix of
+its own, `test/m1l2/<uuid>/`, in `INFRX_M_S3_BUCKET` (default `infrx-m1l2`, created if
+absent). Nothing reaches AWS: every case replaces the environment's AWS variables with
+the local literals and turns the instance-metadata lookup off.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+import uuid
+
+import pytest
+from infrx import config
+from infrx.config import DEPLOYMENT_DEFAULTS, RuntimeMisconfigured
+from infrx.contracts import errors
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.limits import DEFAULTS
+from infrx.media import store
+from infrx.media.fetch import digest_of
+from infrx.media.s3 import NO_DIGEST, S3ObjectStore
+
+from . import test_gc
+from .test_uploads import CLIP, adapter_for, created
+
+ENDPOINT = os.environ.get("INFRX_M_S3_ENDPOINT", "")
+BUCKET = os.environ.get("INFRX_M_S3_BUCKET", "infrx-m1l2")
+# The E2 stack's MinIO literals (tests/integration/harness.py): local test strings.
+ACCESS_KEY, SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
+# Nothing listens on the discard port: a store there never answers.
+UNREACHABLE = "http://127.0.0.1:9"
+needs_s3 = pytest.mark.skipif(
+    not ENDPOINT, reason="M1-L2 (owner: M): no S3-compatible endpoint - start the E2 "
+                         "stack's s3 service and export INFRX_M_S3_ENDPOINT")
+
+
+def run(coroutine):
+    return asyncio.run(coroutine)
+
+
+def s3_env(monkeypatch, secret: str = SECRET_KEY) -> None:
+    """The local literals as the only credentials botocore can find."""
+    for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in (("AWS_ACCESS_KEY_ID", ACCESS_KEY), ("AWS_SECRET_ACCESS_KEY", secret),
+                        ("AWS_DEFAULT_REGION", "us-east-1"), ("AWS_EC2_METADATA_DISABLED", "true"),
+                        ("AWS_CONFIG_FILE", os.devnull),
+                        ("AWS_SHARED_CREDENTIALS_FILE", os.devnull)):
+        monkeypatch.setenv(name, value)
+
+
+def unique_prefix() -> str:
+    return f"test/m1l2/{uuid.uuid4().hex}/"
+
+
+_READY: set[str] = set()
+
+
+def s3_store(monkeypatch, prefix: str | None = None, secret: str = SECRET_KEY) -> S3ObjectStore:
+    """A store on the test bucket under a prefix of its own (the bucket made once)."""
+    s3_env(monkeypatch, secret)
+    objects = S3ObjectStore.connect(BUCKET, prefix or unique_prefix(), ENDPOINT)
+    if BUCKET not in _READY and secret == SECRET_KEY:
+        from botocore.exceptions import ClientError
+        try:
+            objects.client.create_bucket(Bucket=BUCKET)
+        except ClientError as exists:
+            if exists.response["Error"]["Code"] not in ("BucketAlreadyOwnedByYou",
+                                                        "BucketAlreadyExists"):
+                raise
+        _READY.add(BUCKET)
+    return objects
+
+
+@pytest.fixture(params=["memory", pytest.param("s3", marks=needs_s3)])
+def objects(request, monkeypatch):
+    """Every conformance case runs on both stores: the reference and the adapter."""
+    return store.InMemoryObjectStore() if request.param == "memory" else s3_store(monkeypatch)
+
+
+@pytest.fixture(params=["memory", pytest.param("s3", marks=needs_s3)])
+def pair(request, monkeypatch):
+    """Two stores: two instances, or two sibling prefixes of ONE bucket."""
+    if request.param == "memory":
+        return store.InMemoryObjectStore(), store.InMemoryObjectStore()
+    root = unique_prefix()
+    return s3_store(monkeypatch, root + "a/"), s3_store(monkeypatch, root + "b/")
+
+
+class Counting:
+    """Any store, saying how often an object was really downloaded."""
+
+    def __init__(self, inner) -> None:
+        self.inner, self.gets = inner, 0
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    async def get(self, key):
+        self.gets += 1
+        return await self.inner.get(key)
+
+
+def uploaded(adapter, data=CLIP, **constraints):
+    """An upload through the port only (no `seed`): create, the bytes, finalize."""
+    handle = created(adapter, **constraints)
+    run(adapter.put_upload(b.ORG_A, handle, data, "video/mp4"))
+    return run(adapter.finalize_upload(b.ORG_A, handle))
+
+
+# --- the settings that place the store (08 §5.1) ----------------------------------------
+BAD_PREFIXES = ("/infrx/", "infrx", "infrx//", "in frx/", "infrx/media")
+BAD_ENDPOINTS = ("ftp://minio:9000", "http://user:secret@minio:9000",
+                 "http://minio:9000/bucket", "minio:9000", "https://minio:9000?x=1")
+
+
+def test_the_store_settings_refuse_a_value_that_cannot_place_an_object():
+    """A prefix is path segments each ending in `/` (never the root, never `//`); an
+    endpoint is a scheme and an authority - no path, no query, no credentials. Refused
+    at startup in any mode, naming the setting and never the value."""
+    for field, name, values in (("s3_media_prefix", "S3_MEDIA_PREFIX", BAD_PREFIXES),
+                                ("s3_endpoint_url", "S3_ENDPOINT_URL", BAD_ENDPOINTS)):
+        for value in values:
+            deployment = DEPLOYMENT_DEFAULTS.replace(**{field: value})
+            with pytest.raises(RuntimeMisconfigured) as refused:
+                config.validate_deployment(deployment, "pilot")
+            assert name in str(refused.value), value
+            assert value not in str(refused.value) and "secret" not in str(refused.value)
+    for prefix in ("infrx/", "test/m1l2/0a1b/", "a.b-c_d/"):
+        config.validate_deployment(DEPLOYMENT_DEFAULTS.replace(s3_media_prefix=prefix), "pilot")
+    for endpoint in ("", "http://127.0.0.1:55500", "https://s3.us-east-1.amazonaws.com",
+                     "http://minio:9000/"):
+        config.validate_deployment(DEPLOYMENT_DEFAULTS.replace(s3_endpoint_url=endpoint), "dev")
+
+
+def test_the_store_settings_are_read_from_the_environment():
+    read = config.from_env({"S3_MEDIA_PREFIX": "pilot/media/",
+                            "S3_ENDPOINT_URL": "http://127.0.0.1:55500"}).deployment
+    assert (read.s3_media_prefix, read.s3_endpoint_url) == ("pilot/media/",
+                                                             "http://127.0.0.1:55500")
+    assert config.from_env({}).deployment.s3_media_prefix == "infrx/"
+
+
+# --- a store that cannot answer (no Docker) --------------------------------------------
+def test_an_unreachable_store_is_an_error_never_absence(monkeypatch):
+    """Fail closed: a store that does not answer never says "not there" (a staging would
+    then write, a finalize would call the destination empty) - it is a typed, retryable
+    `dependency_unavailable`, whatever the transport said."""
+    s3_env(monkeypatch)
+    objects = S3ObjectStore.connect("infrx-m1l2", "test/m1l2/", UNREACHABLE)
+    with pytest.raises(errors.DependencyUnavailable):
+        run(objects.head("media/k"))
+
+
+# --- the port's conformance, on both stores (item 2) -----------------------------------
+SOURCE = f"media/{b.ORG_A}/v1/0123456789abcdef/source"
+
+
+def test_a_round_trip_returns_the_bytes_their_size_type_and_digest(objects):
+    """One byte and a body at MAX_MEDIA_BYTES: the bytes, `(size, type)` and the digest of
+    exactly what was stored come back."""
+    for key, data, mime in ((SOURCE, b"x", "video/mp4"),
+                            (f"payloads/{b.ORG_A}/r.json", os.urandom(DEFAULTS.max_media_bytes),
+                             "application/json")):
+        assert run(objects.put_if_absent(key, data, mime)) is True
+        assert run(objects.get(key)) == data
+        assert run(objects.describe(key)) == (len(data), mime)
+        assert run(objects.head(key)) == digest_of(data)
+
+
+def test_put_is_write_once(objects):
+    """The same bytes again, or other bytes, write nothing and say so (False): the first
+    object, its type and its digest stay."""
+    assert run(objects.put_if_absent(SOURCE, b"first", "video/mp4")) is True
+    assert run(objects.put_if_absent(SOURCE, b"first", "video/mp4")) is False
+    assert run(objects.put_if_absent(SOURCE, b"other bytes", "video/webm")) is False
+    assert run(objects.get(SOURCE)) == b"first" and run(objects.head(SOURCE)) == digest_of(b"first")
+    assert run(objects.describe(SOURCE)) == (5, "video/mp4")
+
+
+def test_a_missing_key_is_absent_to_every_operation(objects):
+    assert run(objects.head(SOURCE)) is None and run(objects.get(SOURCE)) is None
+    assert run(objects.describe(SOURCE)) is None and run(objects.keys("media/")) == []
+    run(objects.delete(SOURCE))                        # absent is not an error
+
+
+def test_delete_removes_exactly_one_object(objects):
+    other = SOURCE.replace("/source", "/prepared")
+    for key in (SOURCE, other):
+        run(objects.put_if_absent(key, b"bytes", "video/mp4"))
+    run(objects.delete(SOURCE))
+    run(objects.delete(SOURCE))                        # twice is not an error either
+    assert run(objects.head(SOURCE)) is None and run(objects.get(other)) == b"bytes"
+    assert run(objects.keys("")) == [other]
+
+
+def test_a_listing_is_exactly_its_prefix_and_names_keys_the_store_takes(objects):
+    keys = (f"media/{b.ORG_A}/v1/1/source", f"media/{b.ORG_A}/v1/2/prepared",
+            f"uploads/{b.ORG_A}/upl_x", f"payloads/{b.ORG_A}/r.json")
+    for key in keys:
+        run(objects.put_if_absent(key, key.encode(), "video/mp4"))
+    assert run(objects.keys("media/")) == sorted(keys[:2])
+    assert run(objects.keys("uploads/")) == [keys[2]]
+    assert run(objects.keys("")) == sorted(keys)
+    for key in run(objects.keys("")):
+        assert run(objects.get(key)) == key.encode()
+
+
+def test_two_stores_never_see_each_others_objects(pair):
+    """Prefix isolation: on one bucket, a sibling prefix neither reads, lists, blocks nor
+    deletes another's object - which really is stored under its own prefix."""
+    one, other = pair
+    assert run(one.put_if_absent(SOURCE, b"one's bytes", "video/mp4")) is True
+    assert run(other.head(SOURCE)) is None and run(other.get(SOURCE)) is None
+    assert run(other.describe(SOURCE)) is None and run(other.keys("")) == []
+    assert run(other.put_if_absent(SOURCE, b"other's", "video/webm")) is True
+    run(other.delete(SOURCE))
+    assert run(one.get(SOURCE)) == b"one's bytes" and run(one.keys("")) == [SOURCE]
+    if isinstance(one, S3ObjectStore):
+        raw = one.client.head_object(Bucket=one.bucket, Key=one.prefix + SOURCE)
+        assert raw["ContentLength"] == len(b"one's bytes")
+
+
+def test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refused_unread(objects):
+    """The size bound (M3): `describe` reports the stored size exactly, so an upload of
+    exactly `max_bytes` finalizes and one byte more is `request_too_large` without a
+    download."""
+    counting = Counting(objects)
+    adapter = adapter_for(objects=counting)
+    assert uploaded(adapter, max_bytes=len(CLIP)).bytes == len(CLIP)
+    over = created(adapter, max_bytes=len(CLIP) - 1)
+    # the client's bytes at the destination, past put_upload's own cap
+    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, over), CLIP, "video/mp4"))
+    gets = counting.gets
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.finalize_upload(b.ORG_A, over))
+    assert counting.gets == gets, "an oversize object was downloaded to be refused"
+
+
+def test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest(objects):
+    """M3's sweep through the store: a closed upload's destination goes at once, an
+    unreferenced object after the grace, and a live job's source never."""
+    adapter, jobs = adapter_for(objects=objects), test_gc.Jobs()
+    ref = uploaded(adapter)
+    test_gc.staged_job(adapter, jobs, ref)
+    orphan = f"media/{b.ORG_B}/v1/{'a' * 16}/source"
+    assert run(objects.put_if_absent(orphan, b"half a request", "video/mp4"))
+    sweeper = test_gc.collector(adapter, jobs)
+    assert run(sweeper.sweep()).deleted == [adapter.upload_key(b.ORG_A, ref.handle)]
+    adapter.clock.advance(test_gc.GRACE)
+    assert run(sweeper.sweep()).deleted == [orphan]
+    assert run(objects.keys("media/")) == [ref.storage_ref]
+    assert run(objects.keys("uploads/")) == []
+    assert run(objects.get(ref.storage_ref)) == CLIP
+
+
+# --- S3 only ---------------------------------------------------------------------------
+@needs_s3
+def test_a_denied_store_is_an_error_never_absence(monkeypatch):
+    """A 403 is not a 404: every operation of a store the bucket refuses raises the typed,
+    retryable `dependency_unavailable` rather than answering "absent" or "not written"."""
+    s3_store(monkeypatch)                              # the bucket exists
+    denied = s3_store(monkeypatch, secret="not-the-local-secret")
+    for call in (denied.head(SOURCE), denied.get(SOURCE), denied.describe(SOURCE),
+                 denied.keys("media/"), denied.put_if_absent(SOURCE, b"x", "video/mp4"),
+                 denied.delete(SOURCE)):
+        with pytest.raises(errors.DependencyUnavailable):
+            run(call)
+
+
+@needs_s3
+def test_an_object_stored_without_our_checksum_is_present_and_matches_no_digest(monkeypatch):
+    """An object written behind the store's back (no x-amz-checksum-sha256) is there - never
+    absent, so never overwritten or finalized as empty - and equal to no digest."""
+    objects = s3_store(monkeypatch)
+    key = f"uploads/{b.ORG_A}/upl_behind_the_back"
+    objects.client.put_object(Bucket=objects.bucket, Key=objects.prefix + key, Body=b"bytes")
+    assert run(objects.head(key)) == NO_DIGEST != digest_of(b"bytes")
+    assert run(objects.put_if_absent(key, b"bytes", "video/mp4")) is False
+
+
+# --- the composition: create_app from settings, and the installer (item 3) ---------------
+def cutover_app(config):
+    """`create_app` as the unit runs it, the object store NOT injected (the Valkey index
+    and the two HTTP clients are, so nothing else leaves the process)."""
+    from infrx.gateway.app import create_app
+    from infrx.scheduling.memory import MemoryScheduler
+
+    from ..g import support as g
+    return create_app(config, client=g.upstream(), sb=g.supabase(),
+                      index=MemoryScheduler(lambda: None))
+
+
+def settings(mode: str, bucket: str, **deployment):
+    from ..g import support as g
+    return g.settings(mode, s3_media_bucket=bucket,
+                      deployment=DEPLOYMENT_DEFAULTS.replace(**deployment))
+
+
+@needs_s3
+def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch):
+    """With S3 configured, `create_app` composes `S3ObjectStore` on that bucket and prefix,
+    and the bytes an upload puts land there - not in process memory. `dev`, because the
+    database here is unreachable and `pilot` refuses to start without it (G2)."""
+    import psycopg
+
+    async def no_database(*args, **kw):
+        raise psycopg.OperationalError("no database in this case")
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", no_database)
+    s3_store(monkeypatch)                              # the bucket exists
+    prefix = unique_prefix()
+    media = cutover_app(settings("dev", BUCKET, s3_media_prefix=prefix,
+                                 s3_endpoint_url=ENDPOINT)).state.runtime.media_store
+    assert isinstance(media.objects, S3ObjectStore)
+    assert (media.objects.bucket, media.objects.prefix) == (BUCKET, prefix)
+    handle = run(media.create_upload(b.ORG_A, {}))["upload_handle"]
+    run(media.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
+    raw = media.objects.client.head_object(Bucket=BUCKET,
+                                           Key=prefix + media.upload_key(b.ORG_A, handle))
+    assert raw["ContentLength"] == len(CLIP)
+
+
+@pytest.mark.parametrize("case", ["unset", "unreachable", pytest.param("missing", marks=needs_s3)])
+def test_create_app_refuses_to_start_when_the_bucket_does_not_answer(case, monkeypatch):
+    """Fail closed, before anything is served: no bucket, an endpoint nobody answers at,
+    or a bucket that does not exist. The refusal names S3_MEDIA_BUCKET and the S3 error,
+    never the bucket or where the store is."""
+    s3_env(monkeypatch)
+    bucket, endpoint = {"unset": ("", UNREACHABLE),
+                        "unreachable": ("infrx-m1l2-pilot", UNREACHABLE),
+                        "missing": ("infrx-m1l2-no-such-bucket", ENDPOINT)}[case]
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        cutover_app(settings("pilot", bucket, s3_endpoint_url=endpoint))
+    message = str(refused.value)
+    assert "S3_MEDIA_BUCKET" in message
+    assert "infrx-m1l2" not in message and "127.0.0.1" not in message
+
+
+def fake_aws(tmp_path, name: str, exit_code: int, stderr: str = ""):
+    """An `aws` that records its argv and answers with `exit_code`/`stderr`."""
+    log = tmp_path / f"{name}.log"
+    code = (f"import sys; open({str(log)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n'); "
+            f"sys.stderr.write({stderr!r}); sys.exit({exit_code})")
+    return (sys.executable, "-c", code), log
+
+
+def test_a_pilot_install_asks_the_bucket_before_replacing_the_file(tmp_path):
+    """preflight `apply` in pilot: no bucket is a refusal (nothing asked); a bucket is asked
+    HeadBucket from the host, with the endpoint when one is set; a refusal names the setting
+    and the S3 error code, never the bucket."""
+    from ..i.support import preflight
+    ok, asked = fake_aws(tmp_path, "ok", 0)
+    cfg = preflight.Config(mode="pilot", env_file=tmp_path / "gateway.env", aws=ok)
+    unset = preflight.bucket_problems(cfg, {})
+    assert len(unset) == 1 and "S3_MEDIA_BUCKET" in unset[0] and not asked.exists()
+    values = {"S3_MEDIA_BUCKET": "infrx-media-pilot"}
+    assert preflight.bucket_problems(cfg, values) == []
+    assert asked.read_text().split() == ["s3api", "head-bucket", "--bucket", "infrx-media-pilot",
+                                         "--region", "us-east-1"]
+    preflight.bucket_problems(cfg, {**values, "S3_ENDPOINT_URL": "http://127.0.0.1:55500"})
+    assert asked.read_text().splitlines()[-1].endswith("--endpoint-url http://127.0.0.1:55500")
+    denied, _ = fake_aws(tmp_path, "denied", 254,
+                         "An error occurred (403) when calling the HeadBucket operation: "
+                         "Forbidden")
+    cfg.aws = denied
+    refused = preflight.bucket_problems(cfg, values)
+    assert len(refused) == 1 and "(403)" in refused[0] and "S3_MEDIA_BUCKET" in refused[0]
+    assert "infrx-media-pilot" not in refused[0]
+
+
+def test_a_pilot_install_without_a_bucket_is_refused(tmp_path, monkeypatch, capsys):
+    from ..i import support as installer
+    installer.stubs(tmp_path, monkeypatch)
+    cfg = installer.config(tmp_path, mode="pilot")
+    before = cfg.env_file.read_bytes()
+    assert installer.preflight.apply(cfg) == installer.preflight.REFUSED
+    assert "S3_MEDIA_BUCKET: not set" in capsys.readouterr().err
+    assert cfg.env_file.read_bytes() == before
+
+
+def test_the_pilot_runtime_probe_refuses_an_image_without_botocore(tmp_path, monkeypatch):
+    from ..i.support import preflight
+    staged = tmp_path / "staged.env"
+    staged.write_text("INFRX_MODE=pilot\n")
+    monkeypatch.setattr(preflight, "_importable", lambda module: module != "botocore")
+    assert any("botocore" in problem for problem in preflight.probe(staged, "pilot")["problems"])
+    monkeypatch.setattr(preflight, "_importable", lambda module: True)
+    assert not any("botocore" in problem
+                   for problem in preflight.probe(staged, "pilot")["problems"])

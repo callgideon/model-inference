@@ -18,7 +18,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from infrx.config import RuntimeMisconfigured
+from infrx.config import DEPLOYMENT_DEFAULTS, RuntimeMisconfigured
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import ExecutionMode, IndexEvent, JobState, OutboxKind
@@ -398,11 +398,19 @@ def cutover_app(config, **adapters):
 
 @pytest.mark.parametrize("mode", ["pilot", "dev", "test"])
 @pytest.mark.parametrize("bucket", ["", "infrx-media-bucket"])
-def test_f_base__create_app_never_stages_into_process_memory(mode, bucket):
-    """With no object store injected, `create_app` refuses to start in every mode, naming
-    `S3_MEDIA_BUCKET` and never its value: unset, nothing is configured; set, there is no S3
-    adapter yet (M1 limit 2). It never falls back to the in-memory store."""
-    config = support.settings(mode, s3_media_bucket=bucket)
+def test_f_base__create_app_never_stages_into_process_memory(mode, bucket, monkeypatch):
+    """With no object store injected, `create_app` refuses to start in every mode unless the
+    `S3_MEDIA_BUCKET` bucket answers, naming the setting and never its value: unset, nothing
+    is configured; set, a bucket that does not answer HeadBucket (M1-L2; nothing listens at
+    this endpoint, and the credentials are local literals). It never falls back to the
+    in-memory store."""
+    for name, value in (("AWS_ACCESS_KEY_ID", "local-test-key"),
+                        ("AWS_SECRET_ACCESS_KEY", "local-test-secret"),
+                        ("AWS_EC2_METADATA_DISABLED", "true")):
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+    config = support.settings(mode, s3_media_bucket=bucket, deployment=DEPLOYMENT_DEFAULTS.replace(
+        s3_endpoint_url="http://127.0.0.1:9"))
     for injected in ({}, {"catalog": support.catalog()}):
         with pytest.raises(RuntimeMisconfigured) as refused:
             cutover_app(config, **injected)
