@@ -185,8 +185,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("no_real_clock_backstop",
        "the aggregate limit also holds on the real clock, for a phase the fetcher cannot see",
        F, "            async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):\n"
-          "                return await self._fetch(url)",
-       "            return await self._fetch(url)",
+          "                return await self._fetch(url, early)",
+       "            return await self._fetch(url, early)",
        "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop", dies_by=("TimeoutError",)),
     _m("asks_for_compression", "the request asks for no content coding",
        F, "\"Accept-Encoding\": \"identity\"", "\"Accept-Encoding\": \"gzip, br\"",

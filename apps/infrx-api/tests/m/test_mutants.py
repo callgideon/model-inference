@@ -54,6 +54,15 @@ def test_the_list_is_well_formed():
             assert case in names, f"{mutant.name} names unknown test {case}"
 
 
+def test_every_anchor_is_in_the_source_as_often_as_declared():
+    """M4: an edit that moves an anchor turns its mutant into `misdeclared` only when the
+    full list runs (`INFRX_MUTANTS=all`); this finds it in the default suite."""
+    source = {m.file: (mutation_list.API_DIR / mutation_list.PACKAGE / m.file).read_text()
+              for m in ALL}
+    moved = [m.name for m in ALL if source[m.file].count(m.old) != m.occurrences]
+    assert moved == [], f"anchors no longer in the source: {moved}"
+
+
 def test_the_mutation_list_covers_the_owned_modules():
     """R32 from the other side: a guard nothing can break is a guard nothing proves. The
     count is a floor on the two modules M1 wrote plus the address policy it reuses."""
