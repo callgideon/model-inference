@@ -153,6 +153,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("private_visible_to_consumer", "a private deployment only for its provider_dev key",
        "        if row is None and audience is CredentialAudience.provider_dev and endpoint_id:",
        "        if row is None and endpoint_id:", CATALOG, file=C),
+    _m("public_resolves_an_inactive_deployment", "review CF-3: a public alias resolves "
+       "only an ACTIVE deployment", "    and d.visibility = 'public' and d.state = 'active'",
+       "    and d.visibility = 'public'", CATALOG, file=C),
+    _m("private_resolves_a_retired_deployment", "review CF-3: a retired private deployment "
+       "never resolves", " and d.visibility = 'private' and d.state <> 'retired'",
+       " and d.visibility = 'private'", CATALOG, file=C),
     _m("card_not_effective_checked", "a card is active only once effective (DB clock)",
        "  where deployment_revision_id = %s and effective_at <= infrx.now()",
        "  where deployment_revision_id = %s", CATALOG, file=C),

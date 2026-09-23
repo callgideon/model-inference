@@ -146,6 +146,11 @@ def test_catalog__a_private_deployment_only_for_its_provider_and_errors_raised()
                                  endpoint_id=v2fix.IDS.dev_endpoint))
     assert found.deployment_revision_id == v2fix.IDS.dev_deployment, found
     assert conn.sent[1][1]["endpoint"] == v2fix.IDS.dev_endpoint, conn.sent[1]
+    # review CF-3: only a serving deployment resolves - the public one active, the private
+    # one not retired (test_catalog_pg drains and retires them on PostgreSQL)
+    assert "d.visibility = 'public' and d.state = 'active'" in conn.sent[0][0], conn.sent[0][0]
+    assert "d.visibility = 'private' and d.state <> 'retired'" in conn.sent[1][0], \
+        conn.sent[1][0]
     failing, _ = _with(cat.PgCatalogDirectory, _db_error("57014", "canceling statement"))
     try:
         asyncio.run(failing.active_rate_card(v2fix.IDS.prod_deployment))

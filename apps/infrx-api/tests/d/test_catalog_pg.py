@@ -131,6 +131,28 @@ def test_credit_rate__private_is_none_to_everyone_else() -> None:
     assert run(catalog.serving_revision(str(uuid.uuid4()))) is None
 
 
+def test_credit_rate__a_draining_or_retired_deployment_does_not_resolve() -> None:
+    """Review CF-3: a listing can keep naming a deployment that stopped serving (0007's
+    listing FK checks only visibility), so `resolve` itself refuses it: the public alias of a
+    DRAINING deployment and a RETIRED private deployment answer None, for everyone."""
+    catalog = RigCatalog(fresh())
+    dev, provider = v2fix.DEV_REQUESTED_MODEL, CredentialAudience.provider_dev
+
+    def public():
+        return run(catalog.resolve(v2fix.REQUESTED_MODEL, audience=CredentialAudience.consumer,
+                                   endpoint_id=None))
+
+    def private():
+        return run(catalog.resolve(dev, audience=provider, endpoint_id=IDS.dev_endpoint))
+    assert public() is not None and private() is not None, "the seed does not resolve"
+    for deployment, state in ((IDS.prod_deployment, "draining"),
+                              (IDS.dev_deployment, "retired")):
+        catalog.owner.execute("update infrx.deployment_revisions set state = %s "
+                              "where deployment_revision_id = %s", (state, deployment))
+    assert public() is None, "a draining deployment still resolves its public alias"
+    assert private() is None, "a retired private deployment still resolves"
+
+
 def test_credit_rate__unpriced_answers_none() -> None:
     """R69: the dev deployment has no card (unpriced is unserveable, not free): None; the
     public one answers its approved card; a card not yet effective at the DATABASE clock
