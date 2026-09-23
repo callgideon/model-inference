@@ -351,6 +351,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unjournalable_payload_stored", "what jsonb cannot store is refused (D4 M1)",
        S, "        if not all(_journalable(event.payload) for event in events):",
        "        if False:", "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    # round 2 (review P1): refused before the fence, where PgStreamStore refuses before sending
+    _m("refuse_after_fence", "an unjournalable batch is refused before the fence (D4 M1)",
+       S, "        if not all(_journalable(event.payload) for event in events):",
+       "        if self.jobs._fence(lease) and not all(_journalable(event.payload)\n"
+       "                                               for event in events):",
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
     _m("only_the_last_event_is_checked", "the whole batch is checked (D4 M1/A1)",
        S, "        if not all(_journalable(event.payload) for event in events):",
        "        if not all(_journalable(event.payload) for event in events[-1:]):",

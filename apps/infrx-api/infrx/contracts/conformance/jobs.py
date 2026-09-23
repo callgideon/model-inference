@@ -3152,6 +3152,20 @@ async def dur_output__an_unjournalable_event_refuses_the_whole_batch(factory):
     page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
     assert page == (), "a refused batch committed part of itself"
     await jobs.cancel(request.org_id, admission.job_handle)
+    # refused BEFORE the fence, as `PgStreamStore` refuses before it sends anything: a
+    # terminal or superseded lease changes nothing about the answer (and the fence, which
+    # can terminalize a job past its deadline, never runs for a batch that stores nothing)
+    nul = EngineEvent(type=ChunkEventType.delta, payload={"x": "\x00"})
+    for stale in (lease, lease.model_copy(update={"generation": lease.generation + 1})):
+        try:
+            await harness.port.append(stale, (nul,))
+        except errors.JournalWriteFailed:
+            pass
+        except errors.DomainError as fenced:
+            raise AssertionError(f"an unjournalable batch was fenced first: {fenced.code}") \
+                from fenced
+        else:
+            raise AssertionError("a fenced-out lease stored an unjournalable payload")
     page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
     assert journal_bytes() == sum(chunk.bytes for chunk in page), \
         "a refused batch charged journal bytes"
