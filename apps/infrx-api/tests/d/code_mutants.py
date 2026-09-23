@@ -86,6 +86,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("an_empty_pump_acknowledges", "no acknowledgment without an indexed row", O,
        "if taken else 0", "if True else 0",
        "test_relay__a_failing_index_acknowledges_nothing"),
+    _m("a_rebuild_does_not_reopen", "OB-1: a rebuild reopens the acknowledgments it may "
+       "have erased", O, "        await self.store.reopen_dispatch(since)\n", "",
+       "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
+    _m("the_fence_is_read_after_the_snapshot", "OB-1: the fence's lower bound predates the "
+       "snapshot", O,
+       "        since = await self.store.db_now()                 # BEFORE the snapshot (the fence)\n"
+       "        indexed = await self.scheduler.rebuild(await self.store.dispatch_snapshot())\n",
+       "        snapshot = await self.store.dispatch_snapshot()\n"
+       "        since = await self.store.db_now()\n"
+       "        indexed = await self.scheduler.rebuild(snapshot)\n",
+       "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
     _m("the_crash_happens_before_the_commit", "crash_after_commit loses the answer, not "
        "the commit", T,
        "            result = await target(*args, **kw)\n            self.plan.after_commit(name)",

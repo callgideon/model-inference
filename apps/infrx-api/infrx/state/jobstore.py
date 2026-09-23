@@ -244,6 +244,15 @@ class PgJobStore:
         return await self._call("acknowledge_dispatch",
                                 {"event_ids": [str(event_id) for event_id in event_ids]})
 
+    async def db_now(self):
+        """The store clock (`infrx.now()`), e.g. the lower bound of a rebuild fence."""
+        return (await self._query("select infrx.now()", ()))[0][0]
+
+    async def reopen_dispatch(self, since) -> int:
+        """The rebuild fence (0012): dispatch rows acknowledged/claimed at or after
+        `since` whose job still wants them become pending again."""
+        return await self._call("reopen_dispatch", {"since": since.isoformat()})
+
     async def dispatch_snapshot(self) -> tuple[IndexEvent, ...]:
         """PostgreSQL truth for `Scheduler.rebuild`."""
         rows = await self._query("select infrx.dispatch_snapshot()", ())

@@ -236,3 +236,34 @@ def test_crash_after_commit_commits_then_loses_the_answer() -> None:
         asyncio.run(port.admit())
     assert calls == ["committed"], "the crash happened before the commit"
     assert asyncio.run(port.admit()) == "admission"
+
+
+def test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased() -> None:
+    """OB-1: the store clock is read BEFORE the snapshot, the rows acknowledged since then
+    are reopened AFTER the index is replaced, and a pump re-sends them."""
+    calls = []
+
+    class _Fenced(_Store):
+        async def db_now(self):
+            calls.append("since")
+            return "t0"
+
+        async def dispatch_snapshot(self):
+            calls.append("snapshot")
+            return ()
+
+        async def reopen_dispatch(self, since):
+            calls.append(f"reopen:{since}")
+            return 0
+
+        async def dispatch_pending(self, **_):
+            calls.append("pump")
+            return ()
+
+    class _Rebuilding(_Index):
+        async def rebuild(self, snapshot):
+            calls.append("rebuild")
+            return 0
+
+    asyncio.run(OutboxRelay(_Fenced([]), _Rebuilding()).rebuild())
+    assert calls == ["since", "snapshot", "rebuild", "reopen:t0", "pump"], calls

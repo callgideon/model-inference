@@ -320,6 +320,32 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
                        and a.released_at is null and a.expires_at > infrx.now());
 $$;
 
+-- Args `{since}`; answers how many rows were reopened. The rebuild fence (review OB-1):
+-- a `Scheduler.rebuild` REPLACES the index with a snapshot, so a job admitted after the
+-- snapshot began, and pumped + acknowledged by another relay before the rebuild landed,
+-- would be wiped from the index while its row says "delivered" - stranded until its queue
+-- deadline. `OutboxRelay.rebuild` therefore reads `since = infrx.now()` BEFORE the
+-- snapshot, rebuilds, then calls this: every dispatch row acknowledged or claimed at/after
+-- `since` whose job still wants it is pending again, and the next pump re-sends it
+-- (`enqueue` is replay-safe on the stable event id). Any such ack started after the
+-- snapshot's statement began, so `since` (taken earlier) is a safe lower bound.
+create or replace function infrx.reopen_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with reopened as (
+    update infrx.outbox o set acknowledged_at = null, claimed_at = null, claimed_by = null
+      from infrx.jobs j
+     where j.request_id = o.aggregate_id
+       and o.kind in ('prepare_dispatch', 'inference_dispatch')
+       and infrx.dispatch_wanted(o.kind, j.state)
+       and (o.acknowledged_at >= (p_args->>'since')::timestamptz
+            or o.claimed_at >= (p_args->>'since')::timestamptz)
+       -- a job under a live lease is being worked: not a candidate (as the snapshot)
+       and not exists (select 1 from infrx.attempts a where a.job_id = j.request_id
+                       and a.released_at is null and a.expires_at > infrx.now())
+    returning 1)
+  select count(*)::int from reopened;
+$$;
+
 -- ================================================================ privileges ===
 do $$
 declare
@@ -337,7 +363,8 @@ begin
   -- The platform's operations: service_role only.
   foreach f in array array[
       'infrx.claim_preparation(jsonb)', 'infrx.dispatch_pending(jsonb)',
-      'infrx.acknowledge_dispatch(jsonb)', 'infrx.dispatch_snapshot()']
+      'infrx.acknowledge_dispatch(jsonb)', 'infrx.dispatch_snapshot()',
+      'infrx.reopen_dispatch(jsonb)']
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

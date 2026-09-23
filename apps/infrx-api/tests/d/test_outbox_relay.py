@@ -202,3 +202,47 @@ def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
         seen |= {e.job_id for e in await drain(q)}
         assert seen == {j.request_id for j in jobs}, "a deferred row was lost"
     run(body)
+
+
+class _SnapshotThenRace:
+    """The store as a rebuilding relay sees it, with the race of review OB-1 injected
+    between its snapshot and the index rebuild: another relay pumps (indexes AND
+    acknowledges) a job admitted after the snapshot began."""
+
+    def __init__(self, store, interleave) -> None:
+        self._store, self._interleave = store, interleave
+
+    def __getattr__(self, name):
+        return getattr(self._store, name)
+
+    async def dispatch_snapshot(self):
+        snapshot = await self._store.dispatch_snapshot()
+        await self._interleave()
+        return snapshot
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job(backend) -> None:
+    """OB-1: a acknowledged; the rebuild snapshots; c is admitted; a second relay pumps
+    (indexes + acknowledges) c; the rebuild lands on the snapshot, which lacks c. Without
+    the reopen fence c sat queued with its row "delivered" until its queue deadline."""
+    h = pgstore.factory()
+    h.extra["grant"](b.ORG_A, "25.00")
+
+    async def body():
+        q = index(backend, h)
+        store = h.extra["store"]
+        [a] = await admitted(h)
+        await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+        late = {}
+
+        async def race():
+            [late["c"]] = await admitted(h)
+            report = await OutboxRelay(store, q, worker_id="relay-b").pump()
+            assert report["acknowledged"] == 1, report        # c delivered and acked
+
+        await OutboxRelay(_SnapshotThenRace(store, race), q).rebuild()
+        got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+        assert got == {a.request_id, late["c"].request_id}, \
+            f"the rebuild stranded a pumped job: dispatchable {got}"
+    run(body)

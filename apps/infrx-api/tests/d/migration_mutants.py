@@ -1390,6 +1390,16 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "    update infrx.outbox set acknowledged_at = infrx.now()\n     where event_id in",
        "    update infrx.outbox set acknowledged_at = null\n     where event_id in",
        "admission", "dispatch_relay", "an acknowledged row is delivered for ever"),
+    _m("d2_reopen_ignores_since", DISPATCH,
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz\n"
+       "            or o.claimed_at >= (p_args->>'since')::timestamptz)",
+       "       and true", "admission", "dispatch_relay",
+       "every rebuild re-sends the whole delivered history"),
+    _m("d2_reopen_revives_superseded_rows", DISPATCH,
+       "       and infrx.dispatch_wanted(o.kind, j.state)\n"
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz",
+       "       and (o.acknowledged_at >= (p_args->>'since')::timestamptz",
+       "admission", "dispatch_relay", "a stale prepare_dispatch is re-sent after a rebuild"),
     _m("d2_snapshot_indexes_a_leased_job", DISPATCH,
        "                       and a.released_at is null and a.expires_at > infrx.now());",
        "                       and false);", "admission", "dispatch_relay",

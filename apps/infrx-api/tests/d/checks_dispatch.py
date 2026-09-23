@@ -263,7 +263,32 @@ def check_dispatch_relay(conn) -> str:
                      (a.request_id,))
         snap = conn.execute("select infrx.dispatch_snapshot()").fetchone()[0]
         assert a.request_id not in {e["job_id"] for e in snap}, "a terminal job was indexed"
-        return "at-least-once with a redelivery window, superseded rows acked, snapshot exact"
+        # the rebuild fence (OB-1): rows acknowledged at/after `since` whose job still
+        # wants them are pending again; older acks, superseded and terminal rows are not
+        def deliver(job_):
+            ev = next(e for e in call(conn, "dispatch_pending", pending)
+                      if e["job_id"] == job_.request_id)
+            call(conn, "acknowledge_dispatch", {"event_ids": [ev["event_id"]]})
+
+        early = _admitted(conn, world)
+        deliver(early)
+        advance(conn, 5)
+        since = conn.execute("select infrx.now()").fetchone()[0]
+        late = _admitted(conn, world)
+        deliver(late)
+        moved = _admitted(conn, world)                # queued since: its row superseded
+        _, lease = claim(conn, moved.request_id)
+        prepare(conn, lease["lease"])
+        call(conn, "dispatch_pending", pending)
+        call(conn, "reopen_dispatch", {"since": since.isoformat()})
+        state = dict(conn.execute(
+            "select aggregate_id::text, acknowledged_at is null from infrx.outbox where "
+            "kind = 'prepare_dispatch' and aggregate_id in (%s, %s, %s)",
+            (early.request_id, late.request_id, moved.request_id)).fetchall())
+        assert state == {early.request_id: False, late.request_id: True,
+                         moved.request_id: False}, f"reopen fenced the wrong rows: {state}"
+        return ("at-least-once with a redelivery window, superseded rows acked, snapshot "
+                "exact, rebuild fence reopens only rows acked since")
     return ca._in_rollback(conn, body)
 
 
