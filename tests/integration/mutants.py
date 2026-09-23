@@ -35,7 +35,9 @@ import harness                                          # noqa: E402
 # E2R item 1: `apps/infrx-api/tests/d` joins them for the D harness's ownership invariants.
 # Its test loads `pgharness.py` by path relative to its own `__file__`, so in the copy it
 # loads the MUTATED one; `infrx` itself comes from the real checkout through PYTHONPATH.
-OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d")
+# E3B phase 2 (I3B req 8): `infra/` joins them, because I3B's alert rules and runbooks are
+# claims too and its mutants (`all_mutants()`) now run here.
+OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d", "infra")
 # E3B.c only: module code a defect mutant may edit, copied per mutant and never in place.
 API_TREE = "apps/infrx-api/infrx"
 
@@ -727,7 +729,30 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/test_services.py", "row_for_every_relation", layer=2,
            cases=("test_the_role_matrix_has_a_row_for_every_relation_and_security_definer_"
                   "function",)),
+    Mutant("e3bm22", "E3B2 item 8: the mutation stage runs I3B's list too",
+           "tests/integration/run.py",
+           "                   for mutant in mutants.all_mutants() if layer",
+           "                   for mutant in mutants.MUTANTS if layer",
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm23", "E3B2 item 8: infra/ is copied, so an I3B rule mutant edits the copy",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           '"apps/infrx-api/tests/d", ' '"infra")',
+           '"apps/infrx-api/tests/d"' ')',
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
 )
+
+
+def all_mutants() -> tuple[Mutant, ...]:
+    """E's list plus I3B's (`backend/recovery/mutants_i3b.py`, I3B request 8): one runner,
+    one mutation stage. Imported here, not at module level: that list imports this module."""
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
+    import mutants_i3b
+    return MUTANTS + tuple(mutants_i3b.MUTANTS)
 
 
 def _copy_trees(destination: Path) -> None:
@@ -901,14 +926,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
-        for mutant in MUTANTS:
+        for mutant in all_mutants():
             print(f"{mutant.id}  layer {mutant.layer}  "
                   f"{'CONTROL ' if mutant.must_survive else ''}{mutant.path}\n"
                   f"        {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants")
+        print(f"\n{len(all_mutants())} mutants")
         return 0
 
-    wanted = [m for m in MUTANTS
+    wanted = [m for m in all_mutants()
               if (args.layer == "all" or m.layer == int(args.layer))
               and (args.only is None or m.id == args.only)]
     stack = bool(harness.load_state()) and bool(harness.docker_available()[0]) \

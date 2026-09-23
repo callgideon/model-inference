@@ -388,8 +388,9 @@ def mutation(report: Report, *, layer: str) -> None:
     import mutants
     stack = bool(harness.load_state())
     try:
-        results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
-                   if layer == "all" or mutant.layer == 1]
+        # E3B phase 2 (I3B req 8): E's list and I3B's, through the one runner.
+        results = [mutants.run_one(mutant, stack_available=stack)
+                   for mutant in mutants.all_mutants() if layer == "all" or mutant.layer == 1]
     except Exception as exc:                       # noqa: BLE001 - reported, and the JSON
         # report is still written (E3B run 3 lost it to a HarnessError in _reprovision).
         report.add("mutants", FAIL, f"the mutation run itself failed: {exc!r}")

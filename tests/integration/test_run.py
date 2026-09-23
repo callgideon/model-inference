@@ -891,3 +891,17 @@ def test_canary_intentional_failure_is_detected_in_the_orchestration_suite():
     if os.environ.get("INFRX_E2_CANARY") == "fail":
         raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
     assert os.environ.get("INFRX_E2_CANARY") in (None, "", "off")
+
+
+def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
+    """E3B phase 2 (I3B request 8): I3B's mutants run in the mutation stage, and every mutant's
+    file lies in a tree the runner copies - `infra/` included, where I3B's rules live."""
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "run_one", lambda mutant, **_: seen.append(mutant.id)
+                        or {"id": mutant.id, "status": "killed"})
+    runner.mutation(runner.Report(), layer="1")
+    import mutants_i3b
+    assert {m.id for m in mutants_i3b.MUTANTS if m.layer == 1} <= set(seen), seen
+    copied = tuple(f"{tree}/" for tree in (*mutants.OWNED_TREES, mutants.API_TREE))
+    assert [m.id for m in mutants.all_mutants() if not m.path.startswith(copied)] == []
