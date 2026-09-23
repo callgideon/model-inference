@@ -279,7 +279,9 @@ async def measure_clip(clip: dict, path: pathlib.Path, transport: Loopback, repe
     url = f"http://{HOST}/{clip['file']}"
     inline = f"data:video/mp4;base64,{base64.b64encode(data).decode()}"
     row = {"kind": "clip", "id": clip["id"], "set": clip["set"], "bytes": len(data),
-           "sha256": hashlib.sha256(data).hexdigest(), "layout": layout(data)}
+           "sha256": hashlib.sha256(data).hexdigest(), "layout": layout(data),
+           # the host is shared: its 1-minute load when this clip started, for the reader
+           "loadavg_1m": os.getloadavg()[0]}
     try:
         probed = probe.probe(data)
         row["probe"] = {"duration_s": probed.duration_s, "width": probed.width,
