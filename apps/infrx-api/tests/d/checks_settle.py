@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from infrx.contracts import money
@@ -137,15 +138,17 @@ def check_settle_exact(conn) -> str:
         proposal = propose(lease.job_id, usage=(1200, 340), ref=stored(conn, lease.job_id))
         code, doc = settle(conn, lease, proposal)
         assert code is None, code
+        # 5a first: whatever else is wrong, the summary must still be ledger + holds
+        assert_no_drift(conn, "a settled job")
         expected = b.DEFAULT_PRICE.debit(1200, 340)
         out = doc["outcome"]
         assert (out["settlement_state"], Decimal(out["debit"])) == ("settled", expected), out
-        assert out["usage"] == Usage.of(1200, 340).model_dump(mode="json", exclude={"schema_version"}), \
-            out["usage"]
-        assert [(d, k) for d, k, _ in ledger(conn, request.request_id)] == [(-expected, "usage")]
+        assert out["usage"] == Usage.of(1200, 340).model_dump(
+            mode="json", exclude={"schema_version"}), out["usage"]
+        entries = [(d, k) for d, k, _ in ledger(conn, request.request_id)]
+        assert entries == [(-expected, "usage")], f"not one usage debit: {entries}"
         assert usd(conn) == (before[0] - expected, before[1] - maximum), (before, usd(conn))
-        assert hold(conn, request.request_id) == "settled"
-        assert_no_drift(conn, "a settled job")
+        assert hold(conn, request.request_id) == "settled", hold(conn, request.request_id)
         count = len(kinds(conn, request.request_id))
         code, again = settle(conn, lease, proposal)
         assert code is None and again["outcome"] == out, f"the identical retry: {code} {again}"
@@ -182,7 +185,8 @@ def check_settle_late_data(conn) -> str:
     proposal (other usage, cause or reference) is `already_terminal` and writes nothing a
     customer reads - no ledger, usage, outbox or journal row, the job untouched; a proposal
     naming another job is refused before anything is read; a job cancelled first answers a
-    late completion `already_terminal`."""
+    late completion `already_terminal`; a foreign worker or a stale generation cannot settle
+    a live job (`stale_lease`); the settled usage and proposal cannot be rewritten."""
     world = ca.World(conn)
 
     def body():
@@ -211,8 +215,27 @@ def check_settle_late_data(conn) -> str:
                                                  ref=stored(conn, other.request_id)))[0] == \
             "already_terminal", "a completion after the cancel settled"
         assert footprint(conn, other.request_id) == cancelled, "the late completion wrote"
+        # a superseded or foreign worker cannot settle a live job (the fence, DUR-FENCE)
+        live, live_lease = cl.running(conn, world)
+        ref = stored(conn, live.request_id)
+        mine = footprint(conn, live.request_id)
+        for label, token in (("a foreign worker", live_lease.model_copy(update={"worker_id": "w9"})),
+                             ("a stale generation", live_lease.model_copy(update={"generation": 2}))):
+            code, _ = settle(conn, token, propose(live.request_id, usage=(1200, 340), ref=ref))
+            assert code == "stale_lease", f"{label} settled: {code}"
+            assert footprint(conn, live.request_id) == mine, f"{label} wrote something"
+        # the settled usage and the winning proposal are as immutable as the outcome
+        for column, value in (("usage_prompt_tokens", 1), ("proposal", "{}")):
+            try:
+                with conn.transaction():
+                    conn.execute(f"update infrx.jobs set {column} = %s where request_id = %s",
+                                 (value, request.request_id))
+            except psycopg.errors.CheckViolation:
+                continue
+            raise AssertionError(f"a settled job's {column} was rewritten")
         assert_no_drift(conn, "late data")
-        return "late proposals already_terminal, nothing written; another job's refused"
+        return "late proposals already_terminal, nothing written; stale leases and another " \
+            "job's proposal refused; the settled record is immutable"
     return ca._in_rollback(conn, body)
 
 

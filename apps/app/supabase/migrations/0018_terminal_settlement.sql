@@ -156,7 +156,7 @@ begin
     values (j.org_id, -p_debit, 'usage', 'inference usage', j.job_handle, p_id,
             j.settled_at);
   else
-    perform infrx.release_hold_legacy_usd(p_id);
+    perform infrx.release_hold_legacy_usd(j.request_id);
   end if;
   insert into public.usage_events (id, org_id, api_key_id, model_id, status, stream,
     prompt_tokens, completion_tokens, cost_usd, created_at, settlement_regime, outcome,
@@ -193,7 +193,7 @@ begin
            'inference', j.settled_at
       from infrx.credit_wallets w where w.wallet_id = j.wallet_id;
   else
-    perform infrx.release_hold_credit(p_id);
+    perform infrx.release_hold_credit(j.request_id);
   end if;
   insert into public.usage_events (id, org_id, api_key_id, model_id, status, stream,
     prompt_tokens, completion_tokens, created_at, settlement_regime, outcome, job_state,

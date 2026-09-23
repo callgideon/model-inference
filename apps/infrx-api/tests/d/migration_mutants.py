@@ -15,6 +15,7 @@ only ledger and the test clock's production barrier.
 """
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -1637,6 +1638,11 @@ MUTANTS = MUTANTS + D2_MUTANTS
 #: D3 (0016 and the 0003 `jobs_guard` amendment, scenario "admission"). One per claimed
 #: invariant, each killed by its named `checks_leases` check.
 LEASES = "0016_fenced_leases.sql"
+#: D5 item 10b: 0018 redefines `infrx.cancel`, `infrx.claim` and `release_aged_unknown`
+#: (each body verbatim but for D5's one change), so the D3 mutants anchored in those bodies
+#: live on 0018's copies - same name, check and defect. A mutant left on a superseded body
+#: would edit dead SQL (`test_no_mutant_anchors_in_a_superseded_function_body`).
+SETTLE = "0018_terminal_settlement.sql"
 _REFUSAL_RETURN = ("  if v_refusal is not null then\n"
                    "    return jsonb_build_object('refusal', v_refusal);\n  end if;\n")
 #: FE-3: recover_job decides publication BEFORE the retry counter.
@@ -1820,16 +1826,16 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "    'prepared_refs', '[]'::jsonb,",
        "admission", "lease_fence", "the engine never sees preparation's media"),
     # --- cancel and the terminalization -------------------------------------------------
-    _m("d3_cancel_any_tenant", LEASES,
+    _m("d3_cancel_any_tenant", SETTLE,
        "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid",
        "   where job_handle = p_args->>'job_handle'",
        "admission", "cancel", "a tenant cancels another tenant's job"),
-    _m("d3_cancel_rewrites_the_committed_outcome", LEASES,
+    _m("d3_cancel_rewrites_the_committed_outcome", SETTLE,
        "  if j.settled_at is not null then\n    return infrx.job_admission(j.request_id)"
        "->'outcome';",
        "  if false then\n    return infrx.job_admission(j.request_id)->'outcome';",
        "admission", "cancel", "a late cancel fails instead of answering the outcome"),
-    _m("d3_cancel_without_the_row_lock", LEASES,
+    _m("d3_cancel_without_the_row_lock", SETTLE,
        "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid\n"
        "   for update;",
        "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid;",
@@ -1904,7 +1910,7 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  if false then",
        "admission", "cancel",
        "a published CREDIT job's hold stays 'held' with no window: never reconciled"),
-    _m("d3_unknown_release_keeps_the_credit_hold", LEASES,
+    _m("d3_unknown_release_keeps_the_credit_hold", SETTLE,
        "  if j.accounting_regime = 'credit' then\n    perform infrx.release_hold_credit(p_id);",
        "  if j.accounting_regime = 'credit' then\n    null;",
        "admission", "recover_unknown_release",
@@ -2013,11 +2019,11 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "     where settlement_state = 'held_unknown' and reconcile_after <= v_now",
        "     where settlement_state = 'held_unknown'",
        "admission", "recover_unknown_release", "reconciliation is skipped (02)"),
-    _m("d3_unknown_released_twice", LEASES,
+    _m("d3_unknown_released_twice", SETTLE,
        "   where request_id = p_id and settlement_state = 'held_unknown'\n   for update skip locked;",
        "   where request_id = p_id\n   for update skip locked;",
        "admission", "recover_unknown_release", "a second sweep releases the hold again"),
-    _m("d3_unknown_release_keeps_the_hold", LEASES,
+    _m("d3_unknown_release_keeps_the_hold", SETTLE,
        "  else\n    perform infrx.release_hold_legacy_usd(p_id);\n  end if;",
        "  else\n    null;\n  end if;",
        "admission", "recover_unknown_release", "platform-absorbed, and still reserved"),
@@ -2304,9 +2310,225 @@ D4_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D4_MUTANTS
 
 
+#: D5 (0018, plus one 0016 edit; scenario "admission"). One per claimed invariant, each
+#: killed by its named `checks_settle` check.
+from . import checks_settle  # noqa: E402
+_S_REPLAY = (
+    "  if found then\n"
+    "    if j.accounting_regime <> v_regime then\n"
+    "      perform infrx.refuse('not_found', 'job ' || j.request_id || ' is not settled in '\n"
+    "                           || v_regime);\n"
+    "    end if;\n"
+    "    if j.settled_at is not null and (v_proposal = j.proposal or v_proposal =\n"
+    "        jsonb_build_object('cause', j.outcome_cause, 'usage',\n"
+    "                           infrx.usage_doc(j.usage_prompt_tokens, j.usage_completion_tokens),\n"
+    "                           'result_ref', j.result_ref)) then\n"
+    "      return infrx.job_admission(j.request_id);\n"
+    "    end if;\n"
+    "  end if;\n")
+_S_FENCE = (
+    "  -- 2. D3's fence: stale, foreign, expired, wrong-kind refused; R29 terminalizes, commits\n"
+    "  -- and answers the refusal as data (R39). The job row is locked from here on.\n"
+    "  v_refusal := infrx.fence_lease(p_args->'lease', array['inference'], v_reconcile_s);\n"
+    "  if v_refusal is not null then\n"
+    "    return jsonb_build_object('refusal', v_refusal);\n"
+    "  end if;\n")
+_S_DEBIT = ("  select round((p_prompt::numeric * (p_snapshot->>'input_rate_per_million')::numeric\n"
+            "                + p_completion::numeric * (p_snapshot->>'output_rate_per_million')"
+            "::numeric)\n"
+            "               * 0.000001, 8)::numeric(20,8);")
+_S_USD_LEDGER = (
+    "    insert into public.credit_ledger (org_id, delta_usd, kind, reason, ref, request_id,\n"
+    "                                      created_at)\n"
+    "    values (j.org_id, -p_debit, 'usage', 'inference usage', j.job_handle, p_id,\n"
+    "            j.settled_at);")
+_S_CAUSE_CHECK = (
+    "  if v_cause not in ('client_cancelled', 'client_disconnected', 'sync_deadline') then\n"
+    "    perform infrx.refuse('invalid_request', v_cause || ' is not a cancellation cause');\n"
+    "  end if;\n")
+_S_CANCEL_LOOKUP = (
+    "  select * into j from infrx.jobs\n"
+    "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid\n"
+    "   for update;\n"
+    "  if not found then\n"
+    "    perform infrx.refuse('not_found', 'no job ' || (p_args->>'job_handle') || ' owned by org '\n"
+    "                         || (p_args->>'org_id'));\n"
+    "  end if;\n")
+D5_MUTANTS: tuple[Mutant, ...] = (
+    # --- item 1: the legacy USD settling transaction --------------------------------------
+    _m("d5_replay_after_the_fence", SETTLE, _S_REPLAY + _S_FENCE, _S_FENCE + _S_REPLAY,
+       "admission", "settle_exact",
+       "the winner's retry after a lost answer is `already_terminal`: a crash after the "
+       "settling commit cannot be resolved"),
+    _m("d5_settle_before_the_fence", SETTLE,
+       "  v_refusal := infrx.fence_lease(p_args->'lease', array['inference'], v_reconcile_s);",
+       "  v_refusal := null;", "admission", "settle_late_data",
+       "a superseded or foreign worker settles a live job (DUR-FENCE)"),
+    _m("d5_result_ref_unchecked", SETTLE,
+       "  if v_ref is not null and (v_ref <> 'infrx-result:' || j.request_id",
+       "  if false and (v_ref <> 'infrx-result:' || j.request_id",
+       "admission", "settle_result_ref", "a success settles for a result nobody stored (R30)"),
+    _m("d5_foreign_result_ref_accepted", SETTLE,
+       "  if v_ref is not null and (v_ref <> 'infrx-result:' || j.request_id\n      or not exists",
+       "  if v_ref is not null and (not exists", "admission", "settle_result_ref",
+       "job A is delivered with job B's result (R10/R30)"),
+    _m("d5_disconnected_not_billable", SETTLE,
+       "        or v_cause not in ('completed', 'client_cancelled', 'client_disconnected') then",
+       "        or v_cause not in ('completed', 'client_cancelled') then",
+       "admission", "settle_causes", "a client that disconnected after its usage is not charged"),
+    _m("d5_sync_deadline_billed", SETTLE,
+       "        or v_cause not in ('completed', 'client_cancelled', 'client_disconnected') then",
+       "        or v_cause not in ('completed', 'client_cancelled', 'client_disconnected',\n"
+       "                           'sync_deadline') then",
+       "admission", "settle_causes", "the customer pays for our synchronous timeout (R21)"),
+    _m("d5_engine_incomplete_is_a_success", SETTLE,
+       "  if v_in is null and v_cause = 'completed' and not j.published then",
+       "  if false then", "admission", "settle_causes",
+       "a delivered success nobody metered is a free success with a fetchable result"),
+    _m("d5_debit_rounds_down", SETTLE, _S_DEBIT, _S_DEBIT.replace("round(", "trunc("),
+       "admission", "settle_exact", "every half-unit tie is lost to the customer's favour"),
+    _m("d5_debit_rounded_twice", SETTLE, _S_DEBIT,
+       "  select (round(p_prompt::numeric * (p_snapshot->>'input_rate_per_million')::numeric"
+       " * 0.000001, 8)\n"
+       "          + round(p_completion::numeric * (p_snapshot->>'output_rate_per_million')"
+       "::numeric * 0.000001, 8))::numeric(20,8);",
+       "admission", "settle_exact", "each token line rounded on its own: two roundings (01 §4)"),
+    _m("d5_debit_above_hold", SETTLE,
+       "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens\n"
+       "       or v_charge > j.maximum_hold then",
+       "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens then",
+       "admission", "settle_envelope", "a debit past the reserved hold fails the settlement"),
+    _m("d5_over_envelope_charged", SETTLE,
+       "    if v_in > j.max_input_tokens or v_out > j.max_output_tokens\n",
+       "    if false\n", "admission", "settle_envelope",
+       "tokens nobody reserved are charged while the debit fits the hold"),
+    _m("d5_wallet_total_written_directly", SETTLE,
+       "    -- The one writer of ledger_total is the ledger row's trigger (0003).\n",
+       "    update infrx.wallets set ledger_total = ledger_total - p_debit "
+       "where org_id = j.org_id;\n", "admission", "settle_exact",
+       "the total moves twice: the summary drifts from the ledger (D1 limit)"),
+    _m("d5_usage_debit_without_ledger_row", SETTLE, _S_USD_LEDGER,
+       "    update infrx.wallets set ledger_total = ledger_total - p_debit "
+       "where org_id = j.org_id;", "admission", "settle_exact",
+       "a debit with no ledger row: the summary is not the immutable ledger (5a)"),
+    _m("d5_hold_not_moved_on_settle", SETTLE,
+       "    update infrx.credit_holds set state = 'settled', updated_at = j.settled_at",
+       "    update infrx.credit_holds set state = 'held', updated_at = j.settled_at",
+       "admission", "settle_exact",
+       "the reservation is released while the hold stays held: reserved drift (5a)"),
+    _m("d5_reservation_kept", SETTLE,
+       "  update infrx.capacity_reservations set active = false, released_at = v_now\n"
+       "   where request_id = j.request_id and active;",
+       "  update infrx.capacity_reservations set active = false, released_at = v_now\n"
+       "   where false;", "admission", "settle_releases", "a settled job pins capacity for ever"),
+    _m("d5_attempt_kept", SETTLE,
+       "   where job_id = j.request_id and released_at is null;", "   where false;",
+       "admission", "settle_releases", "a settled job's worker still holds a live attempt"),
+    _m("d5_tombstone_not_started", SETTLE,
+       "  update infrx.idempotency set expires_at = v_now + make_interval(secs => v_idem_ttl_s)",
+       "  update infrx.idempotency set expires_at = null",
+       "admission", "settle_releases", "a finished job's key is never released (01)"),
+    _m("d5_projection_missing", SETTLE,
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'usage_projection',",
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'trace_projection',",
+       "admission", "settle_releases", "usage never learns the job settled"),
+    _m("d5_cost_is_not_the_debit", SETTLE,
+       "    j.execution_mode = 'stream', j.usage_prompt_tokens, j.usage_completion_tokens, "
+       "p_debit,", "    j.execution_mode = 'stream', j.usage_prompt_tokens, "
+       "j.usage_completion_tokens, 0,", "admission", "settle_releases",
+       "the usage page shows a free request the ledger charged"),
+    _m("d5_result_retention_not_set", SETTLE,
+       "                                  then v_now + make_interval(secs => v_result_ttl_s) end,",
+       "                                  then v_now end,",
+       "admission", "settle_result_ref", "a delivered result expires the instant it settles "
+       "(D2 limit 9)"),
+    _m("d5_usage_created_at_now", SETTLE,
+       "    j.settled_at, 'pilot', j.outcome_cause, j.state, j.settlement_state, "
+       "j.usage_certainty,\n    j.price_version,",
+       "    now(), 'pilot', j.outcome_cause, j.state, j.settlement_state, j.usage_certainty,\n"
+       "    j.price_version,", "admission", "settle_clock",
+       "the usage row is dated by the wall clock, not the settlement (D1 limit)"),
+    _m("d5_ledger_created_at_now", SETTLE,
+       "    values (j.org_id, -p_debit, 'usage', 'inference usage', j.job_handle, p_id,\n"
+       "            j.settled_at);",
+       "    values (j.org_id, -p_debit, 'usage', 'inference usage', j.job_handle, p_id,\n"
+       "            now());", "admission", "settle_clock",
+       "the debit is dated by the wall clock, not the settlement (D1 limit)"),
+    _m("d5_unknown_usage_released", SETTLE,
+       "  if v_in is null and j.published then", "  if false then",
+       "admission", "settle_unknown", "uncounted output drops out of reconciliation (02)"),
+    _m("d5_window_from_the_callers_clock", SETTLE,
+       "    v_reconcile := v_now + make_interval(secs => v_reconcile_s);",
+       "    v_reconcile := (o->>'settled_at')::timestamptz + make_interval(secs => v_reconcile_s);",
+       "admission", "settle_unknown", "a worker chooses when its unknown hold is released (R7)"),
+    _m("d5_second_terminal_event", SETTLE,
+       "  -- The money, last, in the job's own unit: hold, then wallet (no body reads both, R64).\n",
+       "  insert into infrx.stream_chunks (job_id, generation, sequence, event_type, payload,\n"
+       "    bytes, expires_at) values (j.request_id, 99, 1, 'terminal', '{}', 2, v_now);\n",
+       "admission", "settle_terminal_event", "two terminal events, one of them no stored outcome's"),
+    _m("d5_settled_usage_rewritable", SETTLE,
+       "  if old.settled_at is not null\n     and (new.proposal is distinct from old.proposal",
+       "  if false\n     and (new.proposal is distinct from old.proposal",
+       "admission", "settle_late_data", "a settled outcome's usage is rewritten after the fact"),
+    # --- item 3: the cancel cause ---------------------------------------------------------
+    _m("d5_cancel_cause_ignored", SETTLE,
+       "  return infrx.terminalize_no_usage(j.request_id, v_cause, 'cancelled',",
+       "  return infrx.terminalize_no_usage(j.request_id, 'client_cancelled', 'cancelled',",
+       "admission", "cancel_cause", "every cancellation is booked as the client's own (R21)"),
+    _m("d5_cancel_accepts_any_cause", SETTLE,
+       "  if v_cause not in ('client_cancelled', 'client_disconnected', 'sync_deadline') then",
+       "  if false then", "admission", "cancel_refuses_a_cause",
+       "a canceller records `completed` or a platform cause (R21)"),
+    _m("d5_cancel_cause_checked_after_the_lookup", SETTLE,
+       _S_CAUSE_CHECK + _S_CANCEL_LOOKUP, _S_CANCEL_LOOKUP + _S_CAUSE_CHECK,
+       "admission", "cancel_refuses_a_cause",
+       "a refused cause answers `not_found` for another tenant's job: it probes ownership"),
+    _m("d5_sync_deadline_released_free", LEASES,
+       "                    'client_cancelled', 'client_disconnected') then",
+       "                    'client_cancelled', 'client_disconnected', 'sync_deadline') then",
+       "admission", "cancel_cause", "our own synchronous timeout is booked as never charged"),
+    # --- item 5b: the released record -----------------------------------------------------
+    _m("d5_release_reported_as_outcome", SETTLE,
+       "  return jsonb_build_array(jsonb_build_object('released',",
+       "  return jsonb_build_array(jsonb_build_object('outcome',",
+       "admission", "settle_released", "a 24 h release is counted as a second terminalization"),
+)
+MUTANTS = MUTANTS + D5_MUTANTS
+
+
 #: R83: an anchor that appears zero or twice is `misdeclared` - an edit landing on
 #: whichever line came first is not the declared defect (D2 review H4).
 MISDECLARED = "misdeclared"
+
+
+_FUNCTION = re.compile(r"create or replace function ([\w.]+)\s*\(", re.IGNORECASE)
+
+
+def superseded(mutants) -> list[str]:
+    """D5 item 10b (D4 design decision 4, now structural): the mutants whose anchor lies
+    inside a `create or replace function X` body (`$$ ... $$`) that a LATER-numbered
+    migration redefines - an edit there changes SQL nothing runs, so its "kill" would be
+    the redefinition's, not the check's."""
+    files = sorted(migrations.migrations(), key=lambda path: path.name)
+    found = []
+    for mutant in mutants:
+        if mutant.file == SEED:
+            continue
+        text = (migrations.DIR / mutant.file).read_text()
+        at = text.find(mutant.old)
+        later = [path for path in files if path.name > mutant.file]
+        for match in _FUNCTION.finditer(text):
+            start = text.find("$$", match.end())
+            end = text.find("$$", start + 2)
+            if not start <= at < end:
+                continue
+            again = re.compile(rf"create or replace function {re.escape(match.group(1))}\s*\(",
+                               re.IGNORECASE)
+            redefined = [path.name for path in later if again.search(path.read_text())]
+            if redefined:
+                found.append(f"{mutant.name}: anchored in {match.group(1)} of {mutant.file}, "
+                             f"redefined by {redefined}")
+    return found
 
 
 def anchor_count(mutant: Mutant) -> int:
@@ -2433,6 +2655,19 @@ _CHECKS = {
     "credit_journal": checks_journal.check_credit_journal,
     "journal_privileges": checks_journal.check_journal_privileges,
     "journal_races": lambda conn: checks_journal.check_journal_races(pgharness.connect, MUT_DB),
+    # D5, scenario "admission".
+    "settle_exact": checks_settle.check_settle_exact,
+    "settle_late_data": checks_settle.check_settle_late_data,
+    "settle_result_ref": checks_settle.check_settle_result_ref,
+    "settle_causes": checks_settle.check_settle_causes,
+    "settle_envelope": checks_settle.check_settle_envelope,
+    "settle_unknown": checks_settle.check_settle_unknown,
+    "settle_releases": checks_settle.check_settle_releases,
+    "settle_clock": checks_settle.check_settle_clock,
+    "settle_terminal_event": checks_settle.check_settle_terminal_event,
+    "cancel_cause": checks_settle.check_cancel_cause,
+    "cancel_refuses_a_cause": checks_settle.check_cancel_refuses_a_cause,
+    "settle_released": checks_settle.check_settle_released,
 }
 
 

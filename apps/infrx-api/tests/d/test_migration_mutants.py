@@ -132,6 +132,27 @@ def test_the_mutant_list_is_well_formed() -> None:
           f"{len(SELECTED)} selected ({'all' if FULL_RUN else 'subset'})")
 
 
+def test_no_mutant_anchors_in_a_superseded_function_body() -> None:
+    """D5 item 10b: no mutant edits a function body a later migration redefines (0018
+    redefines 0016's `cancel`, `claim` and `release_aged_unknown` and 0011's
+    `job_admission`; their mutants moved with them). Checked statically, like the anchors."""
+    found = mutation_list.superseded(ALL)
+    assert not found, "mutants on superseded bodies:\n  " + "\n  ".join(found)
+    print(f"{len(ALL)} mutants: none anchored in a superseded function body")
+
+
+def test_the_supersession_guard_catches_a_mutant_left_behind() -> None:
+    """The guard's own kill: one of the three cancel mutants left on 0016's (superseded)
+    `infrx.cancel` is reported."""
+    import dataclasses
+    left = dataclasses.replace(next(m for m in ALL if m.name == "d3_cancel_any_tenant"),
+                               file=mutation_list.LEASES)
+    assert mutation_list.anchor_count(left) == 1, "the fixture must still find its anchor"
+    found = mutation_list.superseded([left])
+    assert len(found) == 1 and "infrx.cancel" in found[0] and "0018" in found[0], found
+    print(f"guard self-test: {found[0]}")
+
+
 @pytest.mark.parametrize("mutant", SELECTED, ids=lambda m: m.name)
 def test_mutant_is_killed(mutant) -> None:
     """The check that claims this invariant fails when the migration loses it.
