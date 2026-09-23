@@ -1043,8 +1043,10 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
         report = runner.Report()
         runner.suites(report, own_only=False)
         return report.stages[-1]
-    known = stage(["missing optional hook 'stream' (not a pass)"])
+    known = stage([])
     assert (known["status"], known["detail"]["unexpected_skips"]) == (runner.PASS, None)
+    # D4 landed its `stream` hook: the skip that was attributed to it is no longer expected.
+    assert stage(["missing optional hook 'stream' (not a pass)"])["status"] == runner.FAIL
     other = stage(["task-local PostgreSQL unavailable: docker is not installed"])
     assert other["status"] == runner.FAIL
     assert other["detail"]["unexpected_skips"] == [

@@ -399,9 +399,10 @@ def engine(report: Report) -> None:
             LIVE_SERVERS.remove(server)
 
 
-# The skips `make api-test` may report, each attributed: D4's pgtesting `stream` hook
-# (tests/d/test_jobstore_conformance.py). Remove an entry the day its cause lands.
-KNOWN_API_SKIPS = ("missing optional hook 'stream'",)
+# The skips `make api-test` may report, each attributed. Remove an entry the day its cause
+# lands: D4's pgtesting `stream` hook ("missing optional hook 'stream'", tests/d's conformance)
+# landed with 0017, so none is expected today.
+KNOWN_API_SKIPS: tuple[str, ...] = ()
 
 
 def suites(report: Report, *, own_only: bool) -> None:
@@ -427,7 +428,7 @@ def suites(report: Report, *, own_only: bool) -> None:
     silent = [run["argv"] for run in runs
               if not run["counts"].get("passed") and not run["counts"].get("node_pass")]
     # Review F6-findings: a skip is not a pass. `make api-test`'s skips must be the known,
-    # attributed ones (today D4's missing StreamStore hook); any other reason fails the stage.
+    # attributed ones (none since D4's StreamStore hook landed); any other reason fails it.
     unexpected = sorted({reason for run in runs if run["argv"] == "make api-test"
                          for reason in run.get("skips", ())
                          if not any(known in reason for known in KNOWN_API_SKIPS)})
