@@ -1,0 +1,621 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "S1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/auth/keys.py",
+      "line": "44-52",
+      "claim_broken": "Identity comes from the 0009 key row (audience/user_id/...) \u2014 but F1's cache is keyed by key hash alone, ignoring `select`, so a 3-column authenticate that runs first (legacy chat route, or any caller of the default select on the same Runtime) leaves a cached row without `audience` and the ingress answers 401 invalid_api_key for that key until KEY_TTL.",
+      "evidence": "Reviewer case test_review__cache_keyed_by_hash_only_select_hazard (stand-in projecting `select`): rt.auth.authenticate(req) then AuthResolver(rt).context(req) raises InvalidApiKey. Fail-closed, not a hole, and unreachable in the cutover composition (dr17 forbids legacy chat in pilot); bites in dev/test where both routes share one Runtime.",
+      "minimal_fix": "In Auth.authenticate treat a cached row missing a requested column as a miss: `if hit and hit[1] is not None and not set(select.split(',')) <= hit[1].keys(): hit = None` (or key the caches by (hash, select)).",
+      "lens": "security"
+    },
+    {
+      "id": "S2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_catalog.py",
+      "line": "88-101",
+      "claim_broken": "provider_dev reaches only its own ready_private endpoint \u2014 for the other-endpoint half G has no kill of its own: the branch's case relies on FakeCatalogDirectory's endpoint filter, so removing pin_admission's endpoint check (ports.py:64) survives tests/g (my R1: only my leaky-catalog variant and the contracts/v2 list kill it; the provider_org check is killed by the branch's rival-provider row).",
+      "evidence": "Mutant R1 (`if auth.endpoint_id != deployment.endpoint_id:` -> `if False:`): every branch tests/g case passed; killed only by tests/g/test_zz_review.py::test_review__every_404_is_one_byte_identical_answer (reviewer) \u2014 and by tests/contracts/v2/mutants_v2.py:64 in the contracts list. Evidence \u00a7'Invariants that are layered' admits 'G adds nothing there'.",
+      "minimal_fix": "In test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint build the two scoped rows over `leaky(with_preview_card())` so G's answer is proven independent of the fake's filter; name it in a G mutant on ports.py:64 (or keep the cross-list reference explicit in evidence).",
+      "lens": "security"
+    },
+    {
+      "id": "S3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_audience.py",
+      "line": "66-73",
+      "claim_broken": "A row the record refuses is a typed internal_error \u2014 a consumer row carrying provider/endpoint scope is such a row (500 today) but no branch case names it: silently dropping the scope for consumers (my R17) survives the branch suite.",
+      "evidence": "Mutant R17 (`provider_org_id=provider_org_id if not consumer else None, ...`): all branch cases pass; killed only by reviewer case test_review__consumer_row_carrying_provider_scope_is_refused_typed. Not a hole (the coerced context is a plain consumer, CALLABLE still refuses private).",
+      "minimal_fix": "Add (\"a consumer key with a provider scope\", {**CONSUMER, \"endpoint_id\": IDS.dev_endpoint, \"provider_org_id\": IDS.provider_org}, errors.InternalError) to UNUSABLE.",
+      "lens": "security"
+    },
+    {
+      "id": "S4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/auth/context.py",
+      "line": "49-64",
+      "claim_broken": "provider, wallet and idempotency scope are server-derived from the row \u2014 true, but nothing (here or in 0009) ties a provider_dev row's `org_id` to its `provider_org_id`; a trusted writer minting a provider_dev key under another org would scope idempotency/payload_ref to that org while spending provider P's dev wallet (resolve_wallet checks owner_provider_org_id only).",
+      "evidence": "Code read: auth_context accepts org_id and provider_org_id independently; 0009 has api_keys_endpoint_fk (endpoint_id, provider_org_id) and api_keys_audience_identity but no `provider_org_id = org_id` check; v2 fixture _provider_dev_auth has org_id == provider_org. Only a trusted (operator/Lab) writer can create such a row; D1R/D2 schema owner.",
+      "minimal_fix": "One line in auth_context: `if audience is CredentialAudience.provider_dev and provider_org_id != org_id: raise errors.InternalError(...)`, or a 0009 check constraint (D1R follow-up).",
+      "lens": "security"
+    },
+    {
+      "id": "S5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/catalog.py",
+      "line": "66-67",
+      "claim_broken": "(Acknowledged Limit 2/3) capability is checked against the validation-time revision and org suspension is not read at the ingress (0009's api_key_identity view exposes org_suspended; the ingress reads public.api_keys directly); both are D2/G2's rechecks.",
+      "evidence": "Evidence \u00a7Limits 2 and 3 state both; tests/g has no suspension case and the stand-in models none. Not a G1R regression; recorded so G2 owns it.",
+      "minimal_fix": "None required for G1R; G2 compares admission.pins.serving_version_id to the ingress resolution or re-runs check_capability on the pinned revision; D2 keeps org_suspended in the transaction.",
+      "lens": "security"
+    },
+    {
+      "id": "C1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/contracts/test_config_and_imports.py",
+      "line": "wire-in hunk @@ -509,6 +529,71 (test_a_credit_deployment_needs_an_approved_rate_card); G1R request 4 covers @@ -169/-216/-268/-516/-534 only",
+      "claim_broken": "Integration request 4 is 'the exact, verified diff' that makes tests/contracts green at merge (evidence request 4 / request 6 'no overlap expected').",
+      "evidence": "Textually clean: git merge-file of config.py (base 5552c40, ours d50afa5, theirs codex-f2p-wirein ff8bec4) exit 0, 0 conflicts, parses; the wire-in's validate_runtime hunk (R69 card check, lines 234-240) sits ~14 lines above G1R's dr17 hunk (254-269), and request 4 also merges onto the wire-in's test file with 0 conflicts. Semantically not: the wire-in adds test_a_credit_deployment_needs_an_approved_rate_card, which for mode 'pilot' runs `assert _app({**env, \"ACTIVE_RATE_CARD_VERSION\": ...})` and expects a started app; at d50afa5 every pilot `_app(...)` raises RuntimeMisconfigured at infrx/config.py:268 (measured: 4 failed at HEAD, the same mechanism). After the merge this fifth case goes red and, if a contracts mutant names it, the pristine baseline refuses the list again.",
+      "minimal_fix": "Extend request 4 by one hunk at merge: in test_a_credit_deployment_needs_an_approved_rate_card, `if mode == \"pilot\": assert _validated_as_cutover({**env, \"ACTIVE_RATE_CARD_VERSION\": \"rc_marlin2b_2026_09_provisional\"}) == \"pilot\"` else keep `assert _app(...)`. The R69 refusal still fires first (validate_deployment precedes the pilot branch), so the refused-half of the case is unchanged.",
+      "lens": "composition"
+    },
+    {
+      "id": "C2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_install.py",
+      "line": "206 (assert \"ROUTERS\" in message and \"G2\" in message); infrx/config.py:268-269",
+      "claim_broken": "'Worded apart from preflight's own gate message, so each refusal stays observable (and killable) on its own' (evidence request 8: I0's composition_gate_removed stays independently killable).",
+      "evidence": "At HEAD composition_gate_removed is 1/1 killed. Reviewer probe: reword only G's detail to \"legacy route in ROUTERS; G2 cutover pending (dr17)\" and rerun `python -m tests.i.mutants composition_gate_removed` -> `0/1 killed; survived`. The independence is carried by string content of a message the I test does not own; preflight.probe appends validate_runtime's text to the same `problems` list it asserts on, so any future G rewording containing both tokens silently makes I0's gate unkillable.",
+      "minimal_fix": "In tests/i/test_install.py::test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed assert preflight's own phrase (\"pilot routers to be composed\") rather than \"ROUTERS\"/\"G2\", or assert the probe verdict lists two problems (the runtime's and the installer's). Coordinator/I0 change, not G1R's file.",
+      "lens": "composition"
+    },
+    {
+      "id": "C3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/auth/keys.py",
+      "line": "46-56 (try/raise_for_status/except -> return None, 503)",
+      "claim_broken": "Limit 4: 'Against a pre-0009 schema PostgREST refuses the unknown columns, the lookup raises, and an uncached key gets 503 - fail closed, never open' - stated, but no committed case drives that answer.",
+      "evidence": "Reviewer probe (fake sb answering the select that names `audience` with 400 {\"code\":\"42703\",\"message\":\"column api_keys.audience does not exist\"}): AuthResolver.context -> CLOSED, errors.DependencyUnavailable ('the api_keys identity source is unreachable'); rt.auth.authenticate(req) with F1's default select -> row returned, status None (legacy route unaffected). Mutant `return None, 503` -> `return None, None` is killed by tests/g/test_auth.py::test_dur_rls__an_unusable_key_is_refused_with_a_stable_code[identity source down] (a ConnectError, not the 42703 answer). Mutant `r.raise_for_status()` -> `pass` SURVIVES tests/g (329 passed): the 42703 path then closes only because `rows[0]` on the error object raises KeyError into the same except. grep of tests/g for 42703/'does not exist'/PGRST: no case.",
+      "minimal_fix": "Add one case to tests/g/test_audience.py: stand-in answers 400 with the 42703 body when `select` contains `audience`; assert the ingress refuses with dependency_unavailable (503, Retry-After) and no identity, and that `authenticate(req)` with the default select still returns the row. Name it from `ingress_reads_f1_columns` as a second killing case.",
+      "lens": "composition"
+    },
+    {
+      "id": "C4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "263-269",
+      "claim_broken": "'validate_runtime refuses pilot whenever the metered ingress is not the mounted router' (brief) - implemented as module identity in app.ROUTERS, not as what the route table serves.",
+      "evidence": "Exact condition: `ingress not in composition.ROUTERS or chat in composition.ROUTERS`, pilot branch only, after the missing/forbidden refusal, lazy import of gateway.app. Measured: () refuses; (health, models) refuses; (health, models, chat) refuses ('legacy route' in message, no secret); (health, models, chat, ingress) refuses; (health, models, ingress) validates 'pilot'; dev and unset unaffected. A partial composition `(ingress,)` passes the gate, then create_app fails closed (Ingress(rt, None) -> RuntimeMisconfigured 'needs a model catalog', killed by catalog_optional). A hypothetical third router module registering CHAT_PATH would pass the gate; post-G2 E3B dr17's body inspects the route table by endpoint module, so the gap is covered at cutover. Stronger than I0's `ingress not in ROUTERS` (adds the chat-present refusal); both refuse today's composition and both pass the cutover tuple.",
+      "minimal_fix": "None required for G1R. At G2 composition, after the router loop in create_app (pilot only), assert every route at ingress.CHAT_PATH has `endpoint.__module__ == ingress.__name__`, which is what dr17 then measures.",
+      "lens": "composition"
+    },
+    {
+      "id": "H1",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G1R-6d02921.md",
+      "line": "51, 71, 111",
+      "claim_broken": "\"one byte-identical not_found\" / \"byte-identical envelope\": the test (tests/g/test_catalog.py:74-78) compares the error dicts with request_id stripped, only for the leaky private-vs-unknown pair; there is no byte-level comparison and none at all for proposed/draining/retired (those only check code+fixed message).",
+      "evidence": "Measured in scratch: private/unknown/retired 404 bodies are identical modulo request_id, Content-Length equal, headers minus Inference-Id equal, raw bytes NOT identical (request_id differs by design). strip(private)==strip(unknown) is dict equality on the error object, not bytes.",
+      "minimal_fix": "Reword to \"identical envelope modulo request_id (same fixed message, code, type, length)\"; optionally assert content-length equality across the three refusal kinds in the case.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/mutants.py",
+      "line": "729-733 (operator_runs_inference)",
+      "claim_broken": "The mutant's declared invariant \"an operator credential runs no inference (R66)\" is not what the edit removes: with `if False:` the operator still gets 404 (CALLABLE.get(operator) is None, deployment becomes None -> not_found). The kill is `assert 404 == 403` in both named cases, i.e. it proves the 403 status, not that inference never runs.",
+      "evidence": "percase-g.log: operator_runs_inference -> both cases fail with `assert 404 == 403`. The R66 property is actually proven by audience_rule_ignored (operator -> 202 `{\"accepted\":true}`).",
+      "minimal_fix": "Rename the invariant to \"an operator credential is refused forbidden, not not_found\" or drop the R66 attribution; keep audience_rule_ignored as the R66 kill.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/mutants.py",
+      "line": "195-200 (key_id_not_passed_to_the_store)",
+      "claim_broken": "Evidence says the three retargeted auth mutants \"still target their original invariant\"; the edit is the same (key_id=org_id) but one of its three named cases now dies for an unrelated reason: `test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass` fails with `InvalidRequest: no price snapshot for the requested model` (the v1 fake store prices only the R62 pin and G1R now passes the public alias), not with a revocation/key-identity assertion. G's Runner does not set require_every_case, so this passes R83's letter.",
+      "evidence": "percase-g.log: case 1 -> `infrx.contracts.errors.InvalidRequest: invalid_request: no price snapshot for the requested model`; case 2 -> AssertionError on key_id; case 3 -> `assert 401 == 402`.",
+      "minimal_fix": "Either drop that case from the mutant's list or have it post MODEL_REVISION so the store reaches the revocation recheck and the death is the key-identity refusal.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H4",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G1R-6d02921.md",
+      "line": "92, 116 (\"race\")",
+      "claim_broken": "\"The race: alias/rate changed between validation and admission\" is a sequential injection (credit.acceptor runs `before()` synchronously inside accept, then admit_credit); nothing is concurrent or interleaved. The test is deterministic and correct for the seam, but \"race\" over-states it.",
+      "evidence": "tests/g/credit.py:97-102 `if before is not None: before()` then `await store.admit_credit(...)`; World(before=...) in test_admission.py:134-146.",
+      "minimal_fix": "Say \"a change injected between validation and admission (sequential, at the acceptor seam)\".",
+      "lens": "honesty"
+    },
+    {
+      "id": "H5",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G1R-6d02921.md",
+      "line": "113 (\"no side effects on refusal\")",
+      "claim_broken": "\"all 12 rows assert side_effects() == ({}, {}, {}, {}) and the wallet unchanged\" is true, but the four tables inspected are the implementer's own in-memory stand-in (jobs/holds/replays/journal dicts of tests/g/credit.py) which by construction writes all four only after every check; the FakeWalletDirectory ledger and the catalog are not inspected. Tautological against the stand-in; disclosed as \"D2 real pending\".",
+      "evidence": "tests/g/credit.py:44-45 side_effects() returns the four dicts; writes at lines 86-91 come after every raise.",
+      "minimal_fix": "State explicitly that the no-write property is proven only for the stand-in and must be re-proven on D2's SQL (`dur_admit__a_refused_admission_reserves_nothing`-style) at integration.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/ops/mutants.py",
+      "line": "228-238, 286-299 (client_errors_retried, cli_accepts_a_key_on_argv)",
+      "claim_broken": "Task brief excludes tests/g/ops (\"not tests/g/ops \u2014 G6B's\"); commit 29195be edits it on the lane branch (disclosed in the evidence as \"coordinator addition (separate)\", same git author as the lane commits). Of the eight newly declared deaths, two are harness artifacts rather than the invariant's own death: client_errors_retried dies by the scripted transport's spent-iterator RuntimeError, cli_accepts_a_key_on_argv dies by pytest's captured-stdin OSError when the CLI goes on to prompt. Both are declared per R83 and the list reproduces 68 passed, but their kills depend on the test harness, not on an assertion about the invariant.",
+      "evidence": "Diff 5552c40..d50afa5 of tests/g/ops/mutants.py; the dies_by rationale text in the mutant strings themselves. G6B list reproduced: `68 passed in 381.51s`, exit 0.",
+      "minimal_fix": "G6B owner sign-off on the delegation; for the two cases, add a direct assertion (count of requests sent == 1; CLI exit code before any prompt with input monkeypatched to raise AssertionError) so the death is assertion-shaped.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H7",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G1R-6d02921.md",
+      "line": "145 vs 367-368",
+      "claim_broken": "Internal inconsistency in the recorded G-list timing: the results table says `193 passed in 878.55s (0:14:38)` while integration request 7 says \"Measured 577.09s for the G list\". Counts agree; one of the two timings is from a different run and is not labelled as such.",
+      "evidence": "Both lines quoted from the evidence file at d50afa5.",
+      "minimal_fix": "Label which run each timing came from, or keep one.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H8",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G1R-6d02921.md",
+      "line": "98 (\"every mode\")",
+      "claim_broken": "`test_f_base__the_ingress_refuses_to_start_without_a_catalog` covers `pilot` and `dev` only; \"startup refusal, every mode\" is not tested for `test` or the unset legacy mode.",
+      "evidence": "tests/g/test_startup.py: `for mode in (\"pilot\", \"dev\")`.",
+      "minimal_fix": "Say \"pilot and dev\" or add \"test\" to the loop.",
+      "lens": "honesty"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "security",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "R1_pin_endpoint_check_removed",
+          "edit": "contracts/v2/ports.py: `if auth.endpoint_id != deployment.endpoint_id:` -> `if False:`",
+          "result": "SURVIVED the branch's tests/g; killed only by reviewer test_zz_review (leaky catalog, provider row with prod_endpoint) and by contracts/v2 list",
+          "killed_by": "tests/g/test_zz_review.py::test_review__every_404_is_one_byte_identical_answer (reviewer)"
+        },
+        {
+          "name": "R2_pin_provider_check_removed",
+          "edit": "contracts/v2/ports.py: `if auth.provider_org_id != deployment.provider_org_id:` -> `if False:`",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint"
+        },
+        {
+          "name": "R3_provider_dev_callable_is_production",
+          "edit": "catalog.py CALLABLE[provider_dev] -> (Visibility.public, DeploymentState.active)",
+          "result": "killed",
+          "killed_by": "test_admission::test_api_auth__a_provider_dev_key_never_spends_a_consumer_wallet (+ test_catalog provider case)"
+        },
+        {
+          "name": "R4_catalog_asked_without_endpoint",
+          "edit": "catalog.py resolve: `endpoint_id=auth.endpoint_id` -> `endpoint_id=None`",
+          "result": "killed",
+          "killed_by": "test_admission::test_api_auth__a_provider_dev_key_never_spends_a_consumer_wallet"
+        },
+        {
+          "name": "R5_catalog_asked_as_provider_dev_always",
+          "edit": "catalog.py resolve: `audience=auth.audience` -> `audience=CredentialAudience.provider_dev`",
+          "result": "SURVIVED \u2014 redundant layer: the audience passed to the catalog is re-decided by CALLABLE and pin_admission, so a consumer still gets 404 for private rows; not a defect",
+          "killed_by": "none (layered; no observable difference)"
+        },
+        {
+          "name": "R6_wallet_id_becomes_supported",
+          "edit": "validate.py SUPPORTED += wallet_id,user_id,provider_org_id,endpoint_id",
+          "result": "killed",
+          "killed_by": "test_admission::test_api_auth__no_body_field_or_header_can_name_a_wallet_rate_or_policy"
+        },
+        {
+          "name": "R7_outage_is_a_404",
+          "edit": "catalog.py: DependencyUnavailable -> NotFound on catalog exception",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__a_catalog_outage_is_retryable_not_a_missing_model"
+        },
+        {
+          "name": "R8_stream_check_on_async",
+          "edit": "catalog.py check_capability: `mode is ExecutionMode.stream` -> `mode is ExecutionMode.async_`",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__only_declared_capabilities_are_accepted"
+        },
+        {
+          "name": "R9_output_ceiling_max_not_min",
+          "edit": "validate.py ceilings: min(pilot, deployment) -> max(...)",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__the_ceilings_are_the_deployments_own"
+        },
+        {
+          "name": "R10_operator_falls_back_to_consumer",
+          "edit": "catalog.py: `CALLABLE.get(auth.audience)` -> `.get(auth.audience, CALLABLE[consumer])`",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__an_operator_key_runs_no_inference"
+        },
+        {
+          "name": "R11_any_audiences_kind_is_callable",
+          "edit": "catalog.py: `!= callable_` -> `not in CALLABLE.values()`",
+          "result": "killed",
+          "killed_by": "test_catalog::test_split_contract__a_provider_dev_key_reaches_only_its_own_private_endpoint"
+        },
+        {
+          "name": "R12_operator_audience_read_as_consumer",
+          "edit": "context.py auth_context: operator -> consumer before CredentialAudience()",
+          "result": "killed",
+          "killed_by": "test_admission::test_api_auth__refusals_leave_no_hold_job_or_journal_reservation[operator credential]"
+        },
+        {
+          "name": "R13_standin_hold_written_before_402",
+          "edit": "tests/g/credit.py: write holds[...] before raising InsufficientCredit",
+          "result": "killed (table assertion is live)",
+          "killed_by": "test_admission::test_api_auth__a_provider_dev_key_never_spends_a_consumer_wallet / [unfunded provider wallet]"
+        },
+        {
+          "name": "R14_standin_journal_reserved_before_429",
+          "edit": "tests/g/credit.py: journal[...] = 1 before CapacityExhausted",
+          "result": "killed",
+          "killed_by": "test_admission::test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once"
+        },
+        {
+          "name": "R15_standin_replay_recorded_before_revocation_check",
+          "edit": "tests/g/credit.py: record replays[scope] before the key re-read",
+          "result": "killed",
+          "killed_by": "test_admission::test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once"
+        },
+        {
+          "name": "R16_revoked_cached_row_served",
+          "edit": "keys.py: `if row is None or row.get('revoked_at')` -> `if row is None`",
+          "result": "killed",
+          "killed_by": "test_auth::test_dur_rls__an_unusable_key_is_refused_with_a_stable_code[revoked key]"
+        },
+        {
+          "name": "R17_consumer_scope_kept",
+          "edit": "context.py: drop provider/endpoint scope silently for consumer rows instead of refusing the malformed row",
+          "result": "SURVIVED the branch's tests/g; killed only by reviewer case",
+          "killed_by": "tests/g/test_zz_review.py::test_review__consumer_row_carrying_provider_scope_is_refused_typed (reviewer)"
+        },
+        {
+          "name": "R18_ingress_default_select_columns",
+          "edit": "context.py: authenticate(request) without select=KEY_COLUMNS",
+          "result": "killed",
+          "killed_by": "test_audience::test_api_auth__the_ingress_reads_the_0009_columns_and_the_legacy_route_does_not"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g1r archive d50afa5 | tar -x -C /tmp/claude-1000/review-g1r-security-3774253 && make api-env (scratch copy)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py (scratch, pristine)",
+          "exit": 0,
+          "tail": "329 passed, 2 warnings in 10.44s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/test_zz_review.py (21 reviewer adversarial cases: 9-shape 404 byte diff incl. leaky private-draft/private-active/provider-rival rows, stale created_by, 13 identity headers, malformed consumer+scope row, operator/provider creator not an individual, stream/async capability, ceilings above deployment, cache-select hazard, adapter DomainError detail)",
+          "exit": 0,
+          "tail": "21 passed, 2 warnings in 1.13s"
+        },
+        {
+          "cmd": "python mymutants.py (18 single-edit mutants, each applied in place, named cases run, file restored; restore verified by diff against d50afa5)",
+          "exit": 0,
+          "tail": "16 killed, 2 SURVIVED (R5 redundant layer; R1/R17 killed only by reviewer cases \u2014 see mymutants table); 'restored ok'"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rf tests/g/test_mutants.py (second pristine copy, detached; concurrent with the ops list)",
+          "exit": 0,
+          "tail": "................................................. [100%] / 193 passed in 1567.37s (0:26:07) / exit=0"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rf tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "tail": "68 passed in 499.51s (0:08:19)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_config_and_imports.py",
+          "exit": 1,
+          "tail": "FAILED ...test_pilot_starts_with_authentication_and_metering / ...test_a_whitespace_only_legacy_key_is_not_a_legacy_key / ...test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways / ...test_a_bad_deployment_value_refuses_before_anything_mounts[pilot] / 4 failed, 214 passed in 2.49s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.i.mutants composition_gate_removed",
+          "exit": 0,
+          "tail": "[killed       ] composition_gate_removed: 1 failed, 41 deselected in 3.61s / 1/1 killed"
+        },
+        {
+          "cmd": "git -C codex-g1r status --short | wc -l; rev-parse --short HEAD",
+          "exit": 0,
+          "tail": "0 / d50afa5"
+        }
+      ],
+      "fabrication_check": "Every implementer number I could reproduce without containers matched: tests/g 329 passed; G list 193 passed (186 mutants + 7 self/list tests; 26 min here vs 14.6 min claimed because it ran beside the ops list); G6B ops list 68 passed on the shared runner; exactly the four named tests/contracts/test_config_and_imports.py cases red (integration request 4); I0's composition_gate_removed 1/1 killed. Not run: E3B dr16/dr17 drills (tests/integration, per the no-docker rule), tests/d, tests/e2, `make check`. Code claims verified by reading: identity from the key row only (KEY_COLUMNS; user_id-or-created_by, the same coalesce as 0011 line 521; legacy route keeps 3 columns); headers read by the ingress are exactly authorization, content-type, content-length, prefer, idempotency-key; SUPPORTED is closed (16 forged names refused, 13 identity headers ignored); unknown/private/unpublished/provider-production/provider-rival (leaky) are one byte-identical 404 (status, headers minus Inference-Id/Content-Length, body minus request_id, length); envelope message is fixed from MESSAGES so pin_admission's `requested_model!r` detail never reaches a client or the guard's log line; catalog outage 503 + Retry-After with DSN only in the log; requested name passed through untouched (model_revision=model); validate_runtime's dr17 refusal agrees with preflight's gate (preflight refuses no-ingress; validate_runtime additionally refuses chat-beside-ingress). Evidence's stated limits (capability at validation-time revision, KEY_TTL/suspension deferred to D2, provider_dev admission not built in D2 \u2014 0011 refuses non-consumer as not_found) are accurate. The 'headers cannot name a wallet' invariant is structural and asserted, not mutant-killed, exactly as the evidence says. No fabricated result found.",
+      "cleanup": "Removed /tmp/claude-1000/review-g1r-security-3774253 entirely (both scratch copies, their .venvs, logs, mymutants.py/.json, the reviewer test file) and the scratchpad scr_path note; removed the /tmp/infrx-g1-* usage dirs created after 01:05Z (mutant subprocess leftovers); no worktree was edited or committed (codex-g1r status clean at d50afa5; codex-d2 and codex-f2p-wirein read only); no containers, network, hosted project or push. The `until`-loop waiter shells exited with the G list; one leftover session-wide `tail` of another session's run was not mine and was left alone."
+    },
+    {
+      "lens": "composition",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "or_becomes_and",
+          "edit": "config.py:265 `ingress not in ROUTERS or chat in ROUTERS` -> `... and chat in ROUTERS`",
+          "result": "killed",
+          "killed_by": "tests/g/test_startup.py::test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route (1 failed, 20 passed)"
+        },
+        {
+          "name": "gate_applies_to_every_mode",
+          "edit": "config.py: dr17 block dedented out of `if mode == \"pilot\"` under `if True:`",
+          "result": "killed",
+          "killed_by": "same case (dev/unset assertions) - 1 failed, 20 passed"
+        },
+        {
+          "name": "message_drops_legacy_route",
+          "edit": "config.py:268 detail -> \"metered ingress not composed (dr17)\"",
+          "result": "killed",
+          "killed_by": "same case (`\"legacy route\" in message`) - 1 failed, 20 passed"
+        },
+        {
+          "name": "stale_routers_snapshot",
+          "edit": "config.py:265 compare against a literal (health, models, chat) instead of composition.ROUTERS",
+          "result": "killed",
+          "killed_by": "13 failed in tests/g/test_startup.py incl. the dr17 case (every support.runtime() pilot validation)"
+        },
+        {
+          "name": "i0_wording_coupling_probe",
+          "edit": "config.py:268 detail reworded to contain \"ROUTERS\" and \"G2\" (not a defect injection; a coupling probe)",
+          "result": "I0 composition_gate_removed SURVIVED (0/1 killed) - finding C2",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "lookup_fails_open_status",
+          "edit": "keys.py:56 `return None, 503` -> `return None, None`",
+          "result": "killed",
+          "killed_by": "tests/g/test_auth.py::test_dur_rls__an_unusable_key_is_refused_with_a_stable_code[identity source down]"
+        },
+        {
+          "name": "http_error_ignored",
+          "edit": "keys.py:48 `r.raise_for_status()` -> `pass`",
+          "result": "survived tests/g (329 passed) - closes only via the accidental KeyError path; finding C3",
+          "killed_by": "none"
+        },
+        {
+          "name": "pre0009_schema_probe",
+          "edit": "fake PostgREST answering 400/42703 to any select naming `audience` (script, no code edit)",
+          "result": "ingress: DependencyUnavailable (closed); legacy route (default select): row returned, status None",
+          "killed_by": "n/a (behaviour probe)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g1r archive d50afa5 | tar -x -C /tmp/claude-1000/review-g1r-composition-3773626 && make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / EXIT=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_config_and_imports.py (HEAD)",
+          "exit": 1,
+          "tail": "FAILED ...::test_pilot_starts_with_authentication_and_metering / ...a_whitespace_only_legacy_key... / ...the_cursor_secret... / ...a_bad_deployment_value_refuses_before_anything_mounts[pilot] -- 4 failed, 214 passed in 4.82s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants DEPLOY-03 (HEAD)",
+          "exit": 1,
+          "tail": "[broken_runner] DEPLOY-03: pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['...test_a_bad_deployment_value_refuses_before_anything_mounts[pilot]'] -- 0/1 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (HEAD)",
+          "exit": 1,
+          "tail": "FAILED ...::test_a_known_lethal_mutant_is_killed_for_the_right_reason / ...::test_a_list_whose_cases_fail_unmutated_is_refused -- 12 failed, 16 passed in 54.56s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.i.mutants composition_gate_removed (HEAD)",
+          "exit": 0,
+          "tail": "[killed       ] composition_gate_removed: 1 failed, 41 deselected in 2.96s -- 1/1 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider ../../tests/integration/backend/test_drills.py -k 'dr16 or dr17' (HEAD)",
+          "exit": 1,
+          "tail": "FAILED ...test_e3b_dr16_pilot_refuses_the_legacy_shared_key / FAILED ...test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route -- 2 failed, 25 deselected in 1.23s"
+        },
+        {
+          "cmd": "patch -p1 < req4.patch; patch -p1 < req5.patch (extracted from the evidence; diff of applied vs evidence differs only in hunk-header function labels)",
+          "exit": 0,
+          "tail": "patching file apps/infrx-api/tests/contracts/test_config_and_imports.py / patching file tests/integration/backend/test_drills.py"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_config_and_imports.py ../../tests/integration/backend/test_drills.py -k 'dr16 or dr17 or test_config_and_imports' (requests 4+5 applied)",
+          "exit": 0,
+          "tail": "220 passed, 25 deselected in 2.25s (the four named cases + dr16/dr17 subset: 20 passed)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants DEPLOY-03 (request 4 applied)",
+          "exit": 0,
+          "tail": "1/1 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (request 4 applied)",
+          "exit": 0,
+          "tail": "28 passed in 103.87s (0:01:43)"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python tests/integration/mutants.py --only e3bm06 (requests 4+5 applied)",
+          "exit": 0,
+          "tail": "\"status\": \"killed\""
+        },
+        {
+          "cmd": "request 3 (Operations._context via auth_context) applied; uv run --frozen pytest -q tests/g/ops --ignore=tests/g/ops/test_mutants.py; reverted",
+          "exit": 0,
+          "tail": "40 passed in 1.23s / request 3 reverted"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py (pristine)",
+          "exit": 0,
+          "tail": "329 passed, 2 warnings in 9.63s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rf tests/g/test_mutants.py (second scratch copy, setsid-detached, tail -F watched)",
+          "exit": 0,
+          "tail": "................................................. [100%] / 193 passed in 1571.12s (0:26:11) (F=0, E=0 in the dot stream; 186 mutants + 7 self-tests)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rf tests/g/ops/test_mutants.py (first scratch copy, detached)",
+          "exit": 0,
+          "tail": "68 passed in 581.62s (0:09:41)"
+        },
+        {
+          "cmd": "git merge-file -p ours(d50afa5 config.py) base(5552c40) theirs(codex-f2p-wirein ff8bec4)",
+          "exit": 0,
+          "tail": "merge-file exit=0 (0 = clean, >0 = conflicts) / 0 / merged parses"
+        },
+        {
+          "cmd": "git merge-file -p ours(base test_config_and_imports.py + req4) base theirs(wire-in)",
+          "exit": 0,
+          "tail": "req4 applies to base cleanly / merge-file exit=0 conflicts=0"
+        },
+        {
+          "cmd": "PYTHONPATH=. uv run --frozen python probe_pre0009.py",
+          "exit": 0,
+          "tail": "CLOSED: DependencyUnavailable - dependency_unavailable: the api_keys identity source is unreachable / legacy route: row None"
+        },
+        {
+          "cmd": "reviewer config.py mutants x4 -> tests/g/test_startup.py (each restored)",
+          "exit": 1,
+          "tail": "[or_becomes_and] 1 failed, 20 passed / [gate_applies_to_every_mode] 1 failed, 20 passed / [message_drops_legacy_route] 1 failed, 20 passed / [stale_routers_snapshot] 13 failed, 8 passed"
+        },
+        {
+          "cmd": "G message reworded to contain ROUTERS+G2; uv run --frozen python -m tests.i.mutants composition_gate_removed; restored",
+          "exit": 1,
+          "tail": "0/1 killed; survived: ['composition_gate_removed']"
+        },
+        {
+          "cmd": "keys.py `return None, 503`->`return None, None` and `r.raise_for_status()`->`pass`, tests/g each, restored",
+          "exit": 0,
+          "tail": "first: FAILED tests/g/test_auth.py::...[identity source down]; second: 329 passed, 2 warnings in 7.91s"
+        }
+      ],
+      "fabrication_check": "Every count quoted in the evidence that this lens could reproduce was reproduced: tests/g 329 passed; G list 193 passed (186 mutants, no F/E); g-ops 68 passed; four contracts cases red at HEAD and the contracts mutant module 12 failed / 16 passed with the pristine-baseline refusal naming test_a_bad_deployment_value_refuses_before_anything_mounts[pilot]; request 4 applied -> 28 passed and DEPLOY-03 1/1 killed; requests 4+5 applied -> the named contracts cases and dr16/dr17 pass (my broader selection 220 passed; the evidence's '38 passed' was a different -k selection, not re-derived); e3bm06 still killed; composition_gate_removed 1/1 killed at HEAD; request 3 -> tests/g/ops 40 passed; dr16/dr17 2 failed at HEAD. The request-4/5 diffs in the evidence apply exactly to the base file (only hunk-header labels differ). D2's coalesce is confirmed at codex-d2 0011_admission.sql:521 `coalesce(a.user_id, a.created_by)` and 0009 adds audience/user_id/provider_org_id/endpoint_id; the legacy route (routes/chat.py:20) calls authenticate(req) with the F1 default select. Runner audit (R83): each mutant and the baseline get a fresh copytree from API_DIR into a TemporaryDirectory; the edit is written only to the copy; PYTHONPYCACHEPREFIX/TMPDIR/HOME point inside the copy; the smoke test writes only under tmp_path; the models/ symlink is import-only (bench.py has no import-time writes); the g-ops list mutates client_example.py/tests paths that _layout copies, so no mutant edit persists into the next copy and the baseline is pristine. Two evidence statements are accurate but under-supported: 'no overlap expected' with the wire-in is textually true and semantically false for one wire-in case (C1); 'independently killable' holds only by message wording (C2); Limit 4's fail-closed claim holds (probe) but has no committed test (C3). No claim was found to be fabricated.",
+      "cleanup": "Removed both scratch copies (/tmp/claude-1000/review-g1r-composition-3773626 incl. probe_pre0009.py, req4/req5 patches, *.orig files, merge3 dirs, gops.log; and /tmp/claude-1000/review-g1r-composition-glist-3902584 incl. glist.log) after killing any process whose cwd was inside them (none remained); stopped the Monitor task b14hfg0nm; the earlier background launch was killed and replaced before it ran any mutant. No edit or commit in any worktree (codex-g1r `git status --short` empty; codex-d2 and codex-f2p-wirein read only). Left in place: /tmp/contracts-mutant-*, /tmp/g1-mutant-* and /tmp/g1-pristine-* directories dated 2026-09-22 16:09-20:24 and 2026-09-23 01:13/01:20 with no live process - none attributable to my runs (mine completed and self-cleaned; my only kill preceded 01:13), so they belong to earlier or concurrent sessions and were not touched."
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "per-case audit of 39 G mutants (29 new + 4 rewritten + 3 retargeted + deps_not_read_from_rt, unsupported_parameters_ignored, retry_after_header_dropped)",
+          "edit": "Each mutant applied by the shared runner's own _copy/_prepare to a throwaway copy; every named case run alone with --tb=short and the failure line read (percase.py)",
+          "result": "39/39 mutants: anchor unique (no _prepare refusal), every named case fails; deaths are assertions, pytest Failed (DID NOT RAISE), typed DomainErrors, or the declared KeyError/ValidationError/RuntimeMisconfigured. Exceptions noted: H2 (operator_runs_inference kills on 404!=403, not on inference running), H3 (one key_id_not_passed_to_the_store case dies by an unrelated InvalidRequest), unpriced_is_free kills via a downstream 500 (`assert 500 == 400`) rather than free inference being observed",
+          "killed_by": "see percase-g.log entries quoted in commands"
+        },
+        {
+          "name": "byte-identical 404 probe",
+          "edit": "Drove the leaky-catalog app with private, unknown and retired models and diffed bodies/headers",
+          "result": "bodies identical modulo request_id, Content-Length equal, headers equal minus Inference-Id, raw bytes differ (H1)",
+          "killed_by": "n/a (measurement)"
+        },
+        {
+          "name": "integration requests 4/5 (contracts + drills diffs from the evidence)",
+          "edit": "Extracted both ```diff blocks, `patch -p1` in scratch, ran the four contracts cases + dr16/dr17, ran contracts mutant DEPLOY-03, reverted (diff against d50afa5 clean)",
+          "result": "9 passed, 236 deselected; DEPLOY-03 `[killed] 4 failed, 691 deselected` 1/1 killed; revert clean",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "integration request 3 (G6B shares auth_context)",
+          "edit": "Applied the described import + return replacement to infrx/operations/service.py in scratch, ran tests/g/ops minus mutants, restored the file from d50afa5",
+          "result": "40 passed in 1.45s (matches the evidence)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "I0 composition_gate_removed",
+          "edit": "`python -m tests.i.mutants composition_gate_removed`",
+          "result": "1/1 killed (1 failed, 41 deselected)",
+          "killed_by": "tests/i case"
+        },
+        {
+          "name": "G6B eight declared exception deaths",
+          "edit": "percase.py ops mode (shared runner with require_every_case) \u2014 launched after the G audit",
+          "result": "NOT completed before the forced output (percase-ops.log empty); the full G6B list run did reproduce `68 passed` exit 0, and the eight dies_by declarations were reviewed by reading (H6)",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g1r archive d50afa5 | tar -x -C /tmp/claude-1000/review-g1r-honesty-3773734 && make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "tail": "329 passed, 2 warnings in 7.29s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/test_mutants.py --ignore=tests/contracts/v2/test_mutants_v2.py",
+          "exit": 1,
+          "tail": "FAILED test_config_and_imports.py::test_pilot_starts_with_authentication_and_metering / ::test_a_whitespace_only_legacy_key_is_not_a_legacy_key / ::test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways / ::test_a_bad_deployment_value_refuses_before_anything_mounts[pilot] \u2014 4 failed, 970 passed in 27.64s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py (default subset)",
+          "exit": 1,
+          "tail": "12 failed, 16 passed in 42.72s \u2014 9 test_mutant_is_killed[...] + 3 self-tests, all `broken_runner ... pristine baseline: the unmutated tree fails the list's own cases (pytest exit 1): ['tests/contracts/test_config_and_imports.py::test_a_bad_deployment_value_refuses_before_anything_mounts[pilot]']` (12+4 = the evidence's 16 api-test failures)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rf tests/g/ops/test_mutants.py (detached)",
+          "exit": 0,
+          "tail": "68 passed in 381.51s (0:06:21) / exit=0"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py (detached, g-mutants-all.log)",
+          "exit": -1,
+          "tail": "NOT FINISHED at forced output: `........ [ 37%] ................................` (~60% of 193, zero F so far); the evidence's `193 passed` is therefore NOT independently reproduced by this review \u2014 structure verified: 186 mutants + 2 list checks + 5 self-tests = 193"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider ../../tests/integration/backend/test_drills.py -k 'dr16 or dr17' (unmodified)",
+          "exit": 1,
+          "tail": "RuntimeMisconfigured: INFRX_MODE='pilot': chat would be served by the legacy route, not the metered ingress (dr17) \u2014 2 failed, 25 deselected in 1.00s"
+        },
+        {
+          "cmd": "patch -p1 < req-00 && patch -p1 < req-01; pytest tests/contracts/test_config_and_imports.py ../../tests/integration/backend/test_drills.py -k '<the 4 cases> or dr16 or dr17'; python -m tests.contracts.mutants DEPLOY-03; patch -R ...",
+          "exit": 0,
+          "tail": "9 passed, 236 deselected in 0.92s / [killed] DEPLOY-03: 4 failed, 691 deselected in 4.04s \u2014 1/1 killed / REVERT-CLEAN"
+        },
+        {
+          "cmd": "python -m tests.i.mutants composition_gate_removed",
+          "exit": 0,
+          "tail": "[killed] composition_gate_removed: 1 failed, 41 deselected in 2.98s \u2014 1/1 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/i --ignore=tests/i/test_mutants.py",
+          "exit": 0,
+          "tail": "57 passed in 21.31s"
+        },
+        {
+          "cmd": "(request 3 applied) uv run --frozen pytest -q tests/g/ops --ignore=tests/g/ops/test_mutants.py; restore service.py",
+          "exit": 0,
+          "tail": "40 passed in 1.45s / REVERTED"
+        },
+        {
+          "cmd": ".venv/bin/python percase.py g > percase-g.log (39 mutants, each named case run alone)",
+          "exit": 0,
+          "tail": "39 ##### entries; all named cases exit=1 with the failure lines quoted in findings (e.g. `Failed: DID NOT RAISE RuntimeMisconfigured`, `assert 404 == 403`, `KeyError: 'Idempotency-Replayed'`, `pydantic_core ValidationError ... org_id`)"
+        },
+        {
+          "cmd": "grep coalesce codex-d2/apps/app/supabase/migrations/0011_admission.sql",
+          "exit": 0,
+          "tail": "521: select a.audience, coalesce(a.user_id, a.created_by) as user_id into k \u2014 the legacy-consumer coalesce claim holds; 0009 lines 47-50 add audience/user_id/provider_org_id/endpoint_id"
+        },
+        {
+          "cmd": "diff codex-f2p-wirein:config.py vs G1R config.py",
+          "exit": 1,
+          "tail": "G1R's one hunk (validate_runtime pilot branch, dr17) does not overlap the wire-in's hunks (Amount parsing, accounting_regime, ACTIVE_RATE_CARD_VERSION) \u2014 rebase expected to be clean"
+        }
+      ],
+      "fabrication_check": "Counts reproduced exactly: tests/g 329 passed (2 warnings); tests/contracts 4 failed / 970 passed with the same four test_config_and_imports.py ids; tests/contracts/test_mutants.py default subset 12 failed / 16 passed, every failure the `pristine baseline ... test_a_bad_deployment_value_refuses_before_anything_mounts[pilot]` refusal (so api-test's 16 = 4 + 12 is consistent; the full 13-minute api-test was not re-run because it includes the excluded tests/d, tests/q Valkey and E2 lists); G6B list 68 passed; dr16/dr17 2 failed unmodified; requests 3/4/5 diffs green as claimed (40 passed; 9 passed; DEPLOY-03 1/1 killed); I0 gate 1/1 killed; D2's coalesce(user_id, created_by) and 0009 columns confirmed read-only. NOT reproduced: the full G list `193 passed in 878.55s` \u2014 my detached run was ~60% through with no failures when output was forced; the G6B eight-death per-case run had not started. No fabricated numbers found in the evidence; the honesty gaps are wording over-claims (byte-identical, race, every mode, R66 attribution of operator_runs_inference) and the undisclosed-by-name scope breach on tests/g/ops (disclosed as a coordinator addition). Evidence correctly states make check unfinished, console not run (no TS in the diff), fakes-only status, and the timing inconsistency (H7) is the only internal contradiction found.",
+      "cleanup": "Nothing was written in any worktree (all runs in the tar-extracted scratch copy; every patch applied there was reverted and diffed clean against d50afa5). Scratch still present at forced-output time because two background jobs were live: /tmp/claude-1000/review-g1r-honesty-3773734 (scratch tree, .venv, logs g-mutants-all.log, g6b-mutants-all.log, percase*.log, req-*.diffs, percase.py), /tmp/claude-1000/review-g1r-honesty-scratchpath, and the runner's own temp copies under the scratch's TMPDIR. The harness kills the background pytest/percase processes on this reply; the coordinator should `rm -rf /tmp/claude-1000/review-g1r-honesty-3773734 /tmp/claude-1000/review-g1r-honesty-scratchpath` (I was not permitted a further tool call after the enforce message)."
+    }
+  ]
+}
