@@ -100,7 +100,7 @@ def test_backend_deploy__migrate_plans_read_only_and_names_every_pending_file(
     directory = migrations(tmp_path)
     conn = Conn(applied=["0001"])
     assert run(monkeypatch, conn, "plan", "--dir", str(directory)) == 0
-    assert conn.log[0] == "set default_transaction_read_only = on"
+    assert conn.log[0] == "set transaction_read_only = on"
     out = capsys.readouterr().out
     assert "applied: 0001" in out
     for name in ("0002_seed.sql", "0003_more.sql"):

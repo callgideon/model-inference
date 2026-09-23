@@ -10,8 +10,9 @@ contains no SQL of its own beyond reading and writing the Supabase CLI's history
 `supabase_migrations.schema_migrations`, so the CLI and this script agree on what is
 applied. Rules, each a refusal with nothing changed:
 
-* `plan` is read-only (`default_transaction_read_only`); it prints what is applied, what
-  is pending with each file's sha256, and a digest over exactly that pending list.
+* `plan` is read-only (`transaction_read_only` on its own transaction - the `default_`
+  form would only reach later ones); it prints what is applied, what is pending with
+  each file's sha256, and a digest over exactly that pending list.
 * `apply` refuses unless `--expect` equals the digest it computes **after** taking an
   exclusive lock - so it applies exactly the files, in exactly the database state, that
   the operator reviewed. A changed file, a concurrent migrator or a moved database is a
@@ -115,7 +116,7 @@ def connect():
 def plan_command(directory: pathlib.Path) -> int:
     local = local_migrations(directory)
     with connect() as conn:
-        conn.execute("set default_transaction_read_only = on")
+        conn.execute("set transaction_read_only = on")
         applied, _ = history(conn)
         print(describe(pending(local, applied), applied))
         conn.rollback()

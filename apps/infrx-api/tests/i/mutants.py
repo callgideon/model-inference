@@ -564,7 +564,7 @@ MIGRATE = U + "migrate.py"
 MIG = "test_deploy_failclosed__migrate_"
 MUTANTS += (
     _m("plan_not_read_only", "the dry run cannot write",
-       MIGRATE, '        conn.execute("set default_transaction_read_only = on")\n', "",
+       MIGRATE, '        conn.execute("set transaction_read_only = on")\n', "",
        "test_backend_deploy__migrate_plans_read_only_and_names_every_pending_file"),
     _m("reviewed_digest_not_enforced", "apply runs only the reviewed plan",
        MIGRATE, "        if digest(plan) != expect:", "        if False:",
