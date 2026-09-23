@@ -34,8 +34,12 @@ from infrx.scheduling.valkey import ValkeyScheduler
 # on it. Q3 is the active lane, so `infrx-q3-valkey` on 55462.
 TASK = "q3"
 _SERVICE = tasklocal.local_services(TASK)["valkey"]
-CONTAINER = _SERVICE.container
 PORT = int(os.environ.get("INFRX_Q_VALKEY_PORT", _SERVICE.host_port))
+# Another port is another server, so another container - still in this lane's namespace,
+# and never the default one a run on R63's port owns (review HON-3). `tests/q/mutants.py`
+# writes the port into every mutant copy, whose environment the shared runner fixes.
+CONTAINER = (_SERVICE.container if PORT == _SERVICE.host_port
+             else f"{_SERVICE.container}-{PORT}")
 # valkey/valkey:8.1-alpine, the digest in tests/integration/compose.yaml (E2). Pinned so
 # a rerun cannot silently move to another server version.
 IMAGE = ("valkey/valkey@sha256:"
