@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:47:20Z",
+  "updated": "2026-09-23T12:56:22Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -14,12 +14,6 @@
       "phase": "phase 2 review fix_required at 80cef22 (4 blocking: dr13 premise unpinned, baseline-red mutants counted killed, I2B pending vs RESIDUAL, e3bm22 dies by import; 1 refuted; 17 nonblocking; rulings R92/R93, P-21) \u2192 fix round running",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
-    },
-    "D4": {
-      "lane": "codex-d4 / codex/d4-stream-journal",
-      "phase": "round 3 HANDED BACK 90efcb0 (e34c748: A1 + surrogate guard + A3/A4/JL-N1/N2; 53 migration + 17 code mutants); single Opus verifier running \u2192 MERGE \u2192 D5 dispatch",
-      "since": "2026-09-23T05:12:27Z",
-      "note": "0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook"
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
@@ -44,6 +38,12 @@
       "phase": "HANDED BACK d99da09 (impl 0737ebe); Opus review running; MERGE AFTER E3B2 (depends on stack.stubbed() + OWNED_TREES += infra)",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
+    },
+    "D5": {
+      "lane": "codex-d5 / codex/d5-terminal-transaction",
+      "phase": "dispatching (Opus) at the integration head with D4 merged",
+      "since": "2026-09-23T12:56:22Z",
+      "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     }
   },
   "reviews": {
@@ -64,7 +64,7 @@
       "since": "2026-09-23T11:20:35Z"
     },
     "D4": {
-      "phase": "single-verifier check at 90efcb0 running",
+      "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
@@ -340,6 +340,11 @@
       "merged": "G4U @ d1827d5 merged --no-ff (7d21fa7) + Makefile list",
       "at": "2026-09-23T10:59:19Z",
       "note": "review fix_required f3c8055 \u2192 round 2 962b2b1 \u2192 confirmation PASS \u2192 fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
+    },
+    "D4": {
+      "merged": "D4 @ 90efcb0 merged --no-ff (93ba108) + harness 0017 + Makefile list (e2a52b2)",
+      "at": "2026-09-23T12:56:22Z",
+      "note": "review fix_required a4598b0 \u2192 round 2 7d3ef59 (journal pass) \u2192 round 3 90efcb0 verified pass; 53 migration + 17 code mutants; sweeps 788/802 both images; pgstate rows at the E3B2 merge; D4 requests 2 (G2), 3 (W3), 4 (I3B), 9 (W), 10 (F) recorded"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
