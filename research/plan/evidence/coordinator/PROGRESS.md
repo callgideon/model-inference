@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T05:19:56Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T05:40:38Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 21 done · 5 in progress · 4 remaining (of 30).**
+**Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -34,7 +34,7 @@ Generated 2026-09-23T05:19:56Z from `tasks.json` (manifest v4) and `progress-sta
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **done** | implemented | needs allocated GPU/staging (P-04) |
-| B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **in-progress** | planned | base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window |
 | B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **remaining** | planned | needs allocated GPU/staging (P-04) |
 
 ## Gates
@@ -69,6 +69,8 @@ Generated 2026-09-23T05:19:56Z from `tasks.json` (manifest v4) and `progress-sta
 - D4: codex-d4 / codex/d4-stream-journal — implementing (0017 journal, fenced append, terminal event trigger, replay, pruning, races, PgStreamStore, dr05/06/08/10) since 2026-09-23T05:12:27Z — base 9c1c6ed; ports 55435/55465; brief .claude/handoff/wave3/D4.md
 - G2: codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md
 - G4U: codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3's MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md
+- W4: codex-w4 / codex/w4-measured-tuning — phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement since 2026-09-23T05:40:38Z — base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window
+- F-cancel-cause: codex-fcancel / codex/f-cancel-cause — additive JobStore.cancel(cause=) port + fake + conformance + Pg typed refusal (ahead of D5's 0018 and G2's relay) since 2026-09-23T05:40:38Z — base a237d6f; merged before G2 and D5
 
 ## Checkpoints
 

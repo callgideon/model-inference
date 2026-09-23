@@ -1,0 +1,182 @@
+{
+  "briefs": [
+    {
+      "task": "D5 \u2014 Terminal transaction, grants and reconciliation (brief writer; one file written)",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/D5.md",
+      "summary": "I wrote the D5 brief to /home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/D5.md (251 lines). Nothing else was edited or committed. One thing to know first: when I read the integration worktree, it was in the middle of the coordinator's merge of the F2P wire-in (MERGE_HEAD 6a49af5, Makefile and test_config_and_imports.py unresolved). I did not touch it. Committed content was read with `git show HEAD:`; the wire-in's CreditJobStore, `complete_credit` and credit conformance code was read from the merge working tree.\n\n**Setup.** The lane is on branch codex/d5-terminal-transaction in worktree .claude/worktrees/codex-d5. Its base is D4's branch head at dispatch (stacked; D4 was at 746349f). Its first step checks that 6a49af5 is an ancestor. If not, the coordinator merges claude/backend-impl into the branch before the CREDIT item.\n\n**Acceptance.** The manifest entry has no acceptance field, so the brief quotes it word for word from handoffs/D-durable-state.md \u00a7D5, with the manifest title, test ids and amendment and the five oracle rows from 04-verification.md.\n\n**Owned paths.**\n- Migration 0018_terminal_settlement.sql. No edit of 0003\u20130017, even under R84.\n- infrx/state/jobstore.py: `complete`, `complete_credit`, `load_work_credit`, a `cause` keyword on `cancel`, and a `released` attribute.\n- New infrx/state/catalog.py (`PgCatalogDirectory`) and infrx/state/operations.py (the G6B adapters plus `PgLedger`).\n- Additive edits to pgtesting and credit_schema.\n- New tests/d files, partition-only edits to the two conformance files, and additive lines in the shared mutant lists.\n- Ports: PostgreSQL 55436, decoy 55476 (from D4's `decoy()`), Valkey 55467 (not registered yet).\n\n**Ten items**, each with named killing tests and single-edit mutants:\n1. Legacy USD settlement. The replay comes before D3's fence, then result-ref validation. The fake's `_terminalize` is the reference algorithm. Money moves only by inserting the ledger row, all times come from the database clock, and D4's trigger writes the terminal event.\n2. CREDIT settlement. The hold settles before the debit; SQL `settle` must equal Python `v2.settle` on a boundary grid; plus the D half of WorkV2 (lift MY-3, `load_work_credit`).\n3. Cancel cause (`client_disconnected` / `sync_deadline`, R21) in 0018.\n4. `grant_credit`, `adjust` and `reconcile`: audited and idempotent, with the 24 h decision on the database clock.\n5. No wallet drift, checked after every money path. The recover sweep also reports released jobs in `store.released`.\n6. Races under real transactions.\n7. PostgreSQL adapters for G6B's TenantStore, AuditLog, Registry and AccountView.\n8. `PgCatalogDirectory`.\n9. Conformance: the 23 D5 cases plus the racy one move to must-pass, D4's D5 cases too; the CREDIT suite runs on PostgreSQL; drills dr06/dr07/dr09 run on PostgreSQL; the Q3 rig's PostgreSQL mode is written, run, reverted and handed over as a diff.\n10. Privileges, rollback, and a guard against mutants left behind in superseded code (item 10b). I checked which D3 mutants redefining 0016 functions would strand: 3 in `cancel`, 15 in `claim`, 3 in `release_aged_unknown`, 0 in `terminalize`.\n\n**Integration requests quoted** from D3 (request 4 and its delta, request 5), D1R request 4, D2, D1, A1 (requests 5 and 7), G6B request 6 and its other rows, G1R request 2(b), the F2P wire-in, I3B request 5, E3B phase 1, and the coordinator's ownership decision. D4 request 6 and G2's D-new are marked \"in flight, take the delivered text\". The brief notes that the \"D5\" hits in the S2M and M2 evidence are a discrepancy id, not this task.",
+      "owned_paths": [
+        "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+        "apps/infrx-api/infrx/state/jobstore.py (complete, complete_credit, load_work_credit, cancel cause kwarg, released attribute; D2/D3/D4 functions otherwise intact)",
+        "apps/infrx-api/infrx/state/catalog.py (new)",
+        "apps/infrx-api/infrx/state/operations.py (new)",
+        "apps/infrx-api/infrx/state/pgtesting.py (additive)",
+        "apps/infrx-api/infrx/state/credit_schema.py (additive)",
+        "apps/infrx-api/tests/d/{checks_settle,checks_operations,test_settle,test_settle_races,test_credit_jobstore_conformance,test_operations_pg,test_catalog_pg,code_mutants_d5,test_code_mutants_d5}.py (new)",
+        "apps/infrx-api/tests/d/test_jobstore_conformance.py and test_streamstore_conformance.py (partition lists only)",
+        "apps/infrx-api/tests/d/{migration_mutants,test_migration_mutants,checks,checks_credit,test_e3b_drills,checks_leases}.py (additive lines; item-10b re-anchoring of the D3 cancel/claim/release_aged_unknown mutants)",
+        "research/plan/evidence/d/D5-<impl-sha>.md",
+        "services: infrx-d5-postgres[-supabase] 55436, infrx-d5-dharness-postgres decoy 55476, infrx-d5-valkey 55467"
+      ],
+      "depends_on_merged": [
+        "D3 f237237 (+d57e04e)",
+        "D2 24b4589",
+        "D1R f302091",
+        "A1 2d9d9c5 + e366ae8",
+        "G6B ed6da07",
+        "G1R b609cc9 (+67e0320)",
+        "Q3 25de7ab",
+        "W3 65e2c99",
+        "I3B 8e01fe0",
+        "I2B 08d3240",
+        "E3B phase 1 c7d715f",
+        "F2P additive 9faaa57",
+        "coordinator TASK_PORTS 9c1c6ed",
+        "F2P wire-in 6a49af5 (merge in progress on claude/backend-impl when the brief was written)",
+        "D4 codex/d4-stream-journal (in flight; the D5 base at dispatch)"
+      ],
+      "open_inputs": [
+        "The dispatch base SHA (D4's head at its handback) and whether it contains the wire-in merge 6a49af5; if not, the coordinator merges claude/backend-impl into codex/d5-terminal-transaction before item 2",
+        "Coordinator to confirm D5 owns the D half of WorkV2 (lift 0016 MY-3 in 0018's claim, add load_work_credit). The brief takes this as the default because run_credit_jobstore_conformance cannot run a CREDIT settlement otherwise",
+        "Coordinator to confirm USD admin grants stay on the legacy public.credit_ledger writer (grant_credit is CREDIT only). This is the brief's default",
+        "Coordinator to confirm recover()'s released record is exposed as PgJobStore.released rather than as a port change. This is the brief's default",
+        "TASK_PORTS['d5'] needs valkey 55467 registered (integration request 1)",
+        "D4's handback text for request 6 and its final _D5 JobStore/StreamStore partition lists",
+        "Provider-dev endpoint admission (G1R request 2c) and PgWalletDirectory are still unassigned; the brief carries them",
+        "The second half of I3B request 5 (a reaped preparation's re-dispatch returned as an event) is not yet verified on the D3 code; the lane checks it and carries it if missing"
+      ],
+      "risks": [
+        "When 0018 redefines 0016 functions (cancel, claim, release_aged_unknown), 21 D3 mutants stop testing live code unless they are re-anchored. The brief makes item 10b's guard test mandatory",
+        "The integration worktree was mid-merge of the F2P wire-in (unresolved conflicts in Makefile and tests/contracts/test_config_and_imports.py) when the brief was written. The file references to CreditJobStore, the fake's complete_credit and credit conformance are therefore from the merge working tree, not from committed HEAD",
+        "Lifting MY-3 in the SQL makes CREDIT jobs claimable before W3's worker uses load_work_credit. Until W3 adopts it (integration request 5), a real CREDIT job could be claimed by a worker holding the v1 load_work",
+        "SQL settle must match Python v2.settle and the fake's _terminalize exactly (half-up rounding once, over-envelope becomes platform_error). The brief pins this with a differential grid test, but drift between the two is the likeliest defect",
+        "The brief is 251 lines, at the ~250-line limit",
+        "D-port contention: tests/d full sweeps take about 30 min per image and share host resources with the D4/G2/G4U/E3B2 make check runs"
+      ]
+    },
+    {
+      "task": "W4",
+      "path": "/home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/W4.md",
+      "summary": "I wrote the W4 brief (240 lines, one file; the worktree is still clean). Task: codex/w4-measured-tuning in .claude/worktrees/codex-w4, base edaed57. The lane reads the plan-only commit 8fc4791 after the base (the sweep's coordinator record and P-20) with git show.\n\nWhat the lane delivers:\n- **Phase A, software:**\n  - A predeclared protocol, models/marlin2b/measure/W4-protocol.md, committed before any script so git order proves the criteria came first. The numeric thresholds live in decide.py, and a test holds the protocol's table equal to them.\n  - A table of engine flags, each checked in vLLM's source at the pinned build a8d1aa9c. It must explain where the 16384-token encoder cache budget comes from.\n  - measure/candidate.sh, the box script the coordinator runs. Candidates come from a closed table; it refuses when requests are in flight or no restart consent is given, captures the engine's error lines, records start-to-ready time, and restores the engine on exit, checking the restored arguments.\n  - measure/decide.py: W3's rule as code. It fails closed on blank samples, and setting clips aside must be named explicitly. Golden tests on the committed 050411Z sweep: no level qualifies; with the four 112 s clips set aside it gives c=16.\n  - measure/parity.py, which checks for output and usage drift.\n  - A P-20 decision record: option A (raise the budget) versus option B (cap MAX_VIDEO_SECONDS), plus an interim ceiling derived with the pinned processor, not the \"72 s\" figure.\n- **Phase B, after the coordinator commits the box outputs:** settings are adopted in serve.sh and serving-version.json only if decide.py shows every criterion met, F(c)=0 included. Otherwise nothing is adopted and the failed criterion is named.\n\nThe brief also carries the verbatim acceptance and oracles, the binding rulings (R60, R61(2), R62, R76, R78, R80, R83, R20/R29), quoted requests from the coordinator record, the tracker (P-20, P-04-sweep), W3 requests 6/12(d)/13, I2B request 11, M4 limit 2, E1B and S2M, plus a not-in-scope list, verification commands and the handback format.\n\nTwo facts found while reading:\n1. A W3 follow-up is running right now on codex/w3-drain-pin: 82a7dbf and 70500ae, committed at 05:18\u201305:19Z. It edits concurrency.sh, tests/w/test_serving.py and tests/w/w3_mutants.py, and will write the sweep into serving-version.json. The brief makes those files read-only for W4 until that follow-up merges.\n2. The sweep replayed the same 64 clips at every concurrency level, so every level after the first ran on a warm multimodal cache. The engine's encoder-cache error text is not in the committed artifacts: the raw rows say only error_code \"unrecognized\".",
+      "owned_paths": [
+        "models/marlin2b/serve.sh (phase B only, after a passing re-measurement)",
+        "models/marlin2b/measure/W4-protocol.md (new)",
+        "models/marlin2b/measure/decide.py (new)",
+        "models/marlin2b/measure/candidate.sh (new)",
+        "models/marlin2b/measure/parity.py (new)",
+        "models/marlin2b/serving-version.json (phase B only, after the W3 follow-up merges)",
+        "apps/infrx-api/tests/w/test_serving.py and tests/w/w3_mutants.py (phase B only, after the W3 follow-up merges)",
+        "apps/infrx-api/infrx/worker/** (additive only; no public signature change)",
+        "apps/infrx-api/tests/w/test_w4.py (new)",
+        "apps/infrx-api/tests/w/w4_mutants.py (new)",
+        "apps/infrx-api/tests/w/test_w4_mutants.py (new)",
+        "research/plan/evidence/w/W4-<impl-sha>.md"
+      ],
+      "depends_on_merged": [
+        "W3 65e2c99 (+37b1294, 515ff2f)",
+        "M4 4185f4d",
+        "Q3 25de7ab",
+        "E1B software 164e43e",
+        "F2P additive 9faaa57",
+        "I2B 08d3240",
+        "I3B 8e01fe0",
+        "G1R b609cc9",
+        "D3 f237237",
+        "D2 24b4589",
+        "E3B phase 1 c7d715f",
+        "box sweep artifacts research/plan/evidence/w/box/sweep-20260923T050411Z (at edaed57)",
+        "coordinator record + P-20 at 8fc4791 (plan-only, read via git show)"
+      ],
+      "open_inputs": [
+        "P-20: the coordinator rules A (raise the encoder budget) or B (cap MAX_VIDEO_SECONDS) at W4's handback; G2 or the coordinator applies the interim ceiling",
+        "Ownership extension this brief assigns: new files in models/marlin2b/measure/, plus serving-version.json after the W3 follow-up merges; the coordinator should confirm it",
+        "A logged maintenance window for engine restarts on the pilot box i-0e8449a4ffca29bab (the engine serves the pre-refactor pilot today)",
+        "Whether E1B's L8 reference.py parity run shares W4's box window (it needs the GPU with the engine stopped)",
+        "P-18 (criteria provisional, labelled), P-07 (no accuracy claim), P-19 (no AWS price row)",
+        "Merge timing of the in-flight W3 follow-up on codex/w3-drain-pin: gates W4 phase B and candidate.sh's use of the fixed concurrency.sh"
+      ],
+      "risks": [
+        "The W3 follow-up is active now on codex/w3-drain-pin (70500ae) and edits concurrency.sh, test_serving.py and w3_mutants.py; if W4 edits them before that merges, the two lanes conflict. The brief makes them read-only until then.",
+        "Every candidate run restarts the only engine on the pilot box. That interrupts live pilot traffic and depends on the trap-based restore working; the coordinator's log-before-act and a maintenance window are required.",
+        "The tracker's authorizations still list the 2026-09-23 user instruction 'finish in-flight lanes only; no new task dispatch'. The coordinator record's later entry says parallel dispatch resumed, and the handoff's merge order puts W4 after D5 and G3. Confirm that W4 dispatch is authorized now.",
+        "The base the coordinator named, edaed57, predates 8fc4791, so the lane's worktree lacks the P-20 text and the sweep decision; the brief tells it to read them with git show 8fc4791.",
+        "The sweep's numbers come from warm, repeated clips, and the engine error text is only in the operator's report. Any decision copied from them without the cold-cache control and error capture of items 1 and 3 would break the failure oracle.",
+        "Candidate flags are not assumed to exist at vLLM a8d1aa9c. If no flag raises the encoder budget without changing preprocessing numerics, option A becomes a separately versioned profile with a parity gate, and the interim cap stays in force.",
+        "W4.c (sustained, burst, cancellation and soak through the gateway) cannot run until I2B's rollout and G2/D4/D5 land; phase B can adopt only direct-engine settings."
+      ]
+    }
+  ],
+  "critic": {
+    "conflicts": [
+      {
+        "between": "D5 integration request 3 (to G2) and merge order G4U -> D4 -> G2 -> E3B2 -> D5; G2.md item 4 ('record it as an open input; do not work around it')",
+        "what": "G2 merges before D5, so D5's request 'G2: pass cause=client_disconnected / sync_deadline' reaches a lane that has already closed. D5 also leaves the port and fake change (`JobStore.cancel(..., *, cause)`) as its handback integration request 2. Until that lands, G2 cannot express R21's billing difference on fakes, and D5 cannot run a per-cause conformance case against PostgreSQL.",
+        "resolution": "Before D5 is dispatched, the coordinator lands the additive port and fake change now: `JobStore.cancel(org_id, job_handle, *, cause=TerminalCause.client_cancelled)`, `FakeJobStore.cancel` with the same validation, and one conformance case per cause. The default keeps every caller working. Then tell G2 mid-task to pass the causes against the fake. D5 only makes `infrx.cancel`/`PgJobStore.cancel` honour it and runs the new conformance case on PostgreSQL. D5 IR 2 and IR 3 then shrink to 'done at dispatch'."
+      },
+      {
+        "between": "D5 item 2 (lift MY-3 in 0018) and the worker (W3 merged/closed; W4 owns infrx/worker/** in flight)",
+        "what": "Once `infrx.claim` leases CREDIT jobs, a v1 worker claims a CREDIT job it cannot `load_work`. That is the lease cycle MY-3 existed to prevent. D5 addressed the worker change to W3, whose lane is closed. W4 owns the files but does not have this work in scope.",
+        "resolution": "Fixed the wording in both briefs. D5 IR 5 now goes to 'W, coordinator assigns' and adds the rule that no deployment runs ACCOUNTING_REGIME=credit until the worker uses load_work_credit/complete_credit. W4 \u00a76 now says this lands in W4's files but is not W4's unless assigned. Proposal: assign it as a small W follow-up after D5 merges, not to W4 mid-run."
+      },
+      {
+        "between": "D5 item 4 (operator_adjustment != 0, G6B request 6, drift correction via adjust) and R11",
+        "what": "R11 allows negative ledger deltas 'only for debits and compensating entries created by the store itself'. A negative operator_adjustment is started by an operator, so R11 does not clearly cover it. The brief's own paraphrase of R11 said the same thing more strongly.",
+        "resolution": "I corrected the paraphrase in D5.md to R11's actual scope and added open input (iv). The default treats a negative operator_adjustment as a store-written compensating entry, audited `admin_adjust` with a reason. The coordinator should record it as a ruling candidate (R86) at D5's handback."
+      },
+      {
+        "between": "W4 item 1 cache control ('first level labelled --engine-state restarted') and measure/concurrency.sh (W3's, not W4-owned)",
+        "what": "concurrency.sh hard-codes `--engine-state warm` (l.71) and replays the same 64 clips at every level. candidate.sh calls it, so the restarted first cell W4 needs cannot be labelled correctly, and W4 may not edit the script.",
+        "resolution": "W3's lane is closed and the file has no in-flight owner. Either (a) the coordinator extends W4's ownership to one additive line, `--engine-state \"${ENGINE_STATE:-warm}\"`, with a stub case and a mutant, or (b) candidate.sh runs the restarted cell by calling bench.py directly. Recommend (a), recorded in the dispatch message."
+      },
+      {
+        "between": "W4 (P-20 interim ceiling, 'G2 applies') and G2.md",
+        "what": "G2 was briefed at 05:08, before P-20 was opened at 05:16. G2's brief never mentions P-20, a 72 s cap or MAX_VIDEO_SECONDS, so 'G2 applies' has no receiver.",
+        "resolution": "Apply the interim cap as configuration, not G2 code. `MAX_VIDEO_SECONDS` is already read by config.py:99 and binds both M's `MediaProfile.pinned` and the legacy `media/video.py:204`. It goes through the coordinator/I2B `INFRX_SET` with W4's derived value. G2 needs no change. If the coordinator prefers validation-side enforcement, send G2 a mid-task course correction."
+      },
+      {
+        "between": "D5 merge and E3B phase 2 item 1(c) stage case and item 7 completeness case (E3B2 merges before D5)",
+        "what": "At D5's merge, tasks.json D5 becomes implemented. E3B2's stage case then fails any pending id that still names D5 without a RESIDUAL entry. E3B2's pg_proc/pg_class completeness case also fails for every 0018 function or column without a role-matrix row.",
+        "resolution": "D5 IR 8 already covers the role-matrix rows. At D5's merge the coordinator must also update E3B2's pending ids or its RESIDUAL map in the same merge commit, and re-run layer 3."
+      },
+      {
+        "between": "D5 dispatch 'at D4's handback' and D4's review/fix rounds",
+        "what": "D5 edits D4-owned partitions and shared lists: test_streamstore_conformance._D5, test_jobstore_conformance, test_e3b_drills, migration_mutants D4/D5 blocks and ALWAYS. A D4 fix round after D5 branches means `--no-ff` merges with conflicts in those lists.",
+        "resolution": "Dispatch D5 at D4's post-review head (after its confirmation verdict), not at the raw handback. Each later D4 fix is merged into codex/d5 by the coordinator with --no-ff."
+      }
+    ],
+    "dispatch_order": [
+      "Coordinator prerequisite 1 (now, one commit on claude/backend-impl): add TASK_PORTS[\"d5\"] = {\"postgres\": 55436, \"valkey\": 55467}. Checked free: not reserved, not in E2's 55500-55599 block, not used by any running container, and clear of the D decoys (55472-55477). Also add P-19, P-20 and P-04-sweep to research/plan/15-pending-inputs.md; the common brief says P-ids come from there, and today they exist only in progress-state.json.",
+      "Coordinator prerequisite 2 (now, recommended): land the additive cancel-cause port, fake and conformance change (see conflicts), then send G2 a course correction to pass client_disconnected/sync_deadline. Decide the P-20 interim route: MAX_VIDEO_SECONDS config (recommended) or G2 validation.",
+      "W4: dispatch NOW. Its start deps are met: W3 implemented, F2P wire-in merged at 1baf0b8, the sweep evidence at 8fc4791 and the W3 follow-up at 2115f2f are all on d2a7029. Create worktree /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w4 on branch codex/w4-measured-tuning at d2a7029 (the brief now says so). No TASK_PORTS entry: W is fake-only. Rule on the concurrency.sh ENGINE_STATE ownership extension in the dispatch message. Phase A has no box contact. Before phase B box runs, log a maintenance window for engine restarts on i-0e8449a4ffca29bab (it serves the pre-refactor pilot) and confirm candidate.sh uses a separate checkout, not the unit's tree.",
+      "D5: dispatch at D4's post-review/confirmed head, not the raw handback. D4 head is 7f4aa40 at this check (items 1-5 and 7 WIP; tests and mutants still to come). Create worktree /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-d5 on branch codex/d5-terminal-transaction from that head. Before handing it over, the coordinator runs `git merge --no-ff claude/backend-impl` into it; this brings the wire-in 1baf0b8, e70f103 and the TASK_PORTS d5 commit, since D4's base 740bebf lacks them. Record the resulting SHA in the dispatch message.",
+      "Merge order after that: G4U -> D4 -> G2 -> E3B2 -> D5 (the wire-in is already merged). W4 is independent of it: phase A merges when reviewed, phase B after the coordinator's box runs. At D5's merge: add tests/integration/test_harness.py 0018, api-mutants += test_code_mutants_d5.py, E3B2 role-matrix rows plus its pending-id/RESIDUAL update, then re-run layer 3."
+    ],
+    "gaps": [
+      "D5 item 7: of the adapter code mutants, only `test_api_ops__a_partial_publication_is_unreachable_and_rerunnable` has a named killing case. `key_lookup_ignores_org`, `insert_key_duplicates`, `revoke_rewrites_revoked_at`, `audit_lookup_by_any_key` and `usage_totals_merge_units` need named `test_operations_pg.py::test_api_ops__.../test_dur_rls__...` cases. The per-adapter tenancy case (another org's key id -> None) is also unnamed.",
+      "D5 item 2: `load_work_credit` has no named killing case and no mutant for its fence. Suggest `test_credit_rate__load_work_credit_carries_the_admitted_pins_and_prompt_tokens` and `d5_load_work_credit_unfenced`.",
+      "D5 item 1: no mutant proves the new `jobs.proposal` column is persisted and used by the replay. Suggest `d5_proposal_not_persisted`, killed by the replay case or the conformance `the_winning_worker_can_always_replay_its_completion`.",
+      "D5 item 10(b): the supersession guard is feasible today. I checked all 425 D migration mutants: only the 21 D3 mutants in claim/cancel/release_aged_unknown sit inside a body 0018 will redefine, and none sit in 0004 stubs or in D4's 0017 targets. The guard should also parse overloaded signatures, and the brief does not say so.",
+      "D5 has no named killing case or mutant for 'late data internal-only' beyond `a_different_proposal_after_terminal_is_already_terminal`. That covers already_terminal, but nothing asserts 'writes nothing a customer reads' after terminal, for example no second usage_events or outbox row.",
+      "W4: P-20 and P-04-sweep are not in 15-pending-inputs.md, which the common brief makes the source of P-ids (coordinator prerequisite 1).",
+      "W4 item 3: there is no mutant for the 'writes only under /opt/dlami/nvme/w4-*' boundary or for 'the checkout is not the unit's installed tree' (the safety clause I added). Suggest one stub case plus a mutant, since breaking either takes the pilot engine down.",
+      "wave3-common-brief.md is stale for this wave: it still says B0 lanes, base ec6c548 and 'no D lane active'. Both briefs override its base line, but the 'Only D edits SQL migrations (no D lane is active in B0)' clause could confuse D5. The coordinator should refresh it or add a supersession note.",
+      "tasklocal TASK_PORTS[\"e3b2\"] records postgres 56701, while E3B2 actually runs PostgreSQL on 56732 (docker ps). The comment explains it as the block's first port, but anything reading local_services('e3b2')['postgres'] gets the wrong port. This is not D5/W4's; noted for the coordinator."
+    ],
+    "fixes_applied": [
+      "D5.md status line: the F2P wire-in is merged at 1baf0b8 (+e70f103), not 'being merged'; noted that D4's base 740bebf lacks it; D4 head updated to 7f4aa40 as of this check.",
+      "D5.md binding rulings: R11 paraphrase corrected to R11's actual scope, which negative operator adjustments fall outside (added open input iv); R79 added to the 'Not D5's' list, where it was missing from both lists.",
+      "D5.md item 1 order: added step 0, the argument checks the fake's `_complete` makes before its replay (R30 result_ref present, R10 outcome.job_id = lease.job_id). The brief calls the fake the reference but had put these after the replay and fence. Removed the duplicate R10 check from step 3.",
+      "D5.md item 2: named the CREDIT tables exactly (`infrx.credit_wallet_holds`, `infrx.credit_ledger`); WorkV2 must also carry `prompt_tokens` from `jobs.prepared_prompt_tokens` (F2P wire-in l.198), and DataAccessPolicyRef lives at `WorkV2.request.policy`.",
+      "D5.md item 9c: `pgtesting.make_credit_jobstore_factory` does not exist on the integration branch; D5 must create it, modelled on `fakes/factories.credit_jobstore_factory`, whose hooks I checked against the brief.",
+      "D5.md item 9d and \u00a72: dr09 is already in tests/d/test_e3b_drills.py and passing since D3, and D4 item 8 adds dr06. D5 adds dr07 and only lifts a D4 strict-xfail.",
+      "D5.md \u00a77 mutant selector: `-k ... d3_release` matched none of the three release_aged_unknown mutants, which are named `d3_unknown_release*`. Changed it to `d3_unknown_release`.",
+      "D5.md \u00a76: wire-in merge recorded, and the merge order updated to G4U -> D4 -> G2 -> E3B2 -> D5.",
+      "D5.md IR 5: readdressed from W3 (merged and closed) to 'W, coordinator assigns', with the rule that no ACCOUNTING_REGIME=credit deployment runs before the worker change.",
+      "W4.md status line and \u00a77: base edaed57 -> d2a7029. The W3 follow-up merged at 2115f2f and the wire-in at 1baf0b8, so neither is 'in flight' or 'unmerged'. 8fc4791 is now on base, so no `git show` is needed. Removed the in-flight W3 follow-up bullet and the phase-B 'also brings in the W3 follow-up' clause.",
+      "W4.md \u00a72: serving-version.json/test_serving.py/w3_mutants.py are no longer 'read-only until the W3 follow-up merges'. They are editable in phase B only, and the new `engine_limits`/`concurrency_sweep` sections are superseded, not deleted. `measure/{inventory,capability,concurrency}.sh` is marked merged (W3's; changes go to the coordinator as exact diffs).",
+      "W4.md \u00a73: the encoder-cache text is now quoted in serving-version.json `engine_limits` (taken from the coordinator record) but is still in no raw artifact. Added that c=32's peak_waiting=2 came from the prefix-match bug, so W(32) is unknown.",
+      "W4.md item 3: candidate.sh must use W3's measurement checkout, never the unit's installed tree (W3 request 12(b)). The installed unit passes --max-num-seqs 32, which the checked-out serve.sh refuses, so a shared tree would break the restore on the pilot box.",
+      "W4.md \u00a76: the serving_versions row is an operator publication through G6B's Operations.publish over D5's PgRegistry, not 'D5/G6B'. Added that D5's worker CREDIT-path request lands in W4's files but is not W4's scope unless assigned.",
+      "Only /home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/D5.md and /home/rey/workspace/rey/code/model-inference/.claude/handoff/wave3/W4.md were edited. Originals are backed up in the scratchpad as D5.orig.md/W4.orig.md. The integration worktree was read only."
+    ]
+  }
+}
