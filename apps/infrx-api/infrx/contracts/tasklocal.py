@@ -23,6 +23,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "q2": {"valkey": 55461}, "q3": {"valkey": 55462},
     # D2's relay drills need both a PostgreSQL and a Valkey of their own
     "d2": {"postgres": 55433, "valkey": 55463},
+    # D3's drills run D2's Valkey relay on the lane's own container
+    "d3": {"postgres": 55434, "valkey": 55464},
 }
 
 # track -> {service: (host port, extra ports)}

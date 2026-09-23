@@ -172,6 +172,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         "0013_outbox_gc.sql", "0014_job_results.sql",
         # A1 (verified individual signup eligibility, retention, retirement)
         "0015_signup_eligibility.sql",
+        # D3 (fenced leases, cancellation, reaper)
+        "0016_fenced_leases.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
