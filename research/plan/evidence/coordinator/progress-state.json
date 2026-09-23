@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:14:32Z",
+  "updated": "2026-09-23T18:16:49Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -8,12 +8,6 @@
       "phase": "software slices MERGED (164e43e); GPU measurement slices pending W3 \u2192 I2B",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
-    },
-    "E3B": {
-      "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "round 4 HANDED BACK d0d523f (e2m69 re-anchored + anchor guard; counts() pinned; e3bm54\u201358); single verifier running \u2192 MERGE (IR2-1 ir1-r2.diff one commit; IR2-3 r31-dr04.diff) \u2192 I3B (IR2-2 r4-ir22.diff incl. KNOWN_STALE = {})",
-      "since": "2026-09-22T18:46:49Z",
-      "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
@@ -42,8 +36,8 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "round-4 verifier at d0d523f running",
-      "since": "2026-09-23T18:01:05Z"
+      "phase": "MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3) after the round-4 verifier pass at d0d523f; merged-tree checks running (e3b2-merged log; I3B's two layer-0 reds expected until the I3B merge)",
+      "since": "2026-09-23T18:16:49Z"
     },
     "D4": {
       "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
@@ -355,6 +349,11 @@
       "merged": "a2779d1",
       "when": "2026-09-23T16:27:29Z",
       "note": "R93 fake requeue id; fake refuses unjournalable payloads; journal continues past pruned_to; terminal TTL"
+    },
+    "E3B": {
+      "merged": "d1d4a68",
+      "when": "2026-09-23T18:16:49Z",
+      "note": "phase 2 gate; IR2-1 d588c3e, IR2-3 0a642ad; phase-3 bodies pend on G2-R1/D5"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"

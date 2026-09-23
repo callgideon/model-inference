@@ -3599,8 +3599,8 @@
       "track": "E",
       "product": "shared",
       "milestone": "BACKEND-M1",
-      "status": "planned",
-      "disposition": "backend-first-addition",
+      "status": "implemented",
+      "disposition": "backend-first-addition. Phase 1 merged earlier (e57b820 evidence); phase 2 merged 2026-09-23 as d1d4a68 (+ IR2-1 d588c3e TASK_BLOCKS/strict-xfail, IR2-3 0a642ad dr04) after the confirmation at b0a64e1 and verifications at 0924cf2/d0d523f (research/plan/evidence/e/E3B2-verify-d0d523f.json); the layer-3 gate reproduced at 0924cf2 red only on I3B ids (closed by the I3B follow-up merge); phase-3 bodies (9 journeys, dataset resume, dr11, dr07/dr07c) pend on the held cutover (G2-R1) and D5",
       "execution_class": "core",
       "start_dependencies": [
         "E2R",

@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T18:14:32Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T18:16:49Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 26 done · 3 in progress · 1 remaining (of 30).**
+**Backend packages: 27 done · 2 in progress · 1 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -29,7 +29,7 @@ Generated 2026-09-23T18:14:32Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **done** | implemented |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **done** | implemented |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
-| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges |
+| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **done** | implemented |  |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **done** | implemented | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
@@ -59,20 +59,19 @@ Generated 2026-09-23T18:14:32Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (2 packages): ~3 h at observed cadence, ~6 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (1 packages): ~1 h at observed cadence, ~3 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (E1B, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E3B: codex-e3b / codex/e3b-backend-gate — round 4 HANDED BACK d0d523f (e2m69 re-anchored + anchor guard; counts() pinned; e3bm54–58); single verifier running → MERGE (IR2-1 ir1-r2.diff one commit; IR2-3 r31-dr04.diff) → I3B (IR2-2 r4-ir22.diff incl. KNOWN_STALE = {}) since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges
 - I3B-followup: codex-i3bf / codex/i3b-followup — round 5 HANDED BACK a693c6e (verifier's four items; I3B list 109/107); light verifier running → merge after E3B2 with IR2-2 (r4-ir22.diff incl. KNOWN_STALE = {}) since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)
 - D5: codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
-- review E3B2: round-4 verifier at d0d523f running since 2026-09-23T18:01:05Z
+- review E3B2: MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3) after the round-4 verifier pass at d0d523f; merged-tree checks running (e3b2-merged log; I3B's two layer-0 reds expected until the I3B merge) since 2026-09-23T18:16:49Z
 - review D4: MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z
 - review G3: MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z
 - review I3B-followup: round-5 verifier at a693c6e running since 2026-09-23T18:14:32Z

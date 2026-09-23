@@ -1,0 +1,293 @@
+{
+ "verdict": "pass",
+ "head": "d0d523f",
+ "reviews": [
+  {
+   "verdict_hint": "pass",
+   "findings": [
+    {
+     "id": "R4V-N1",
+     "severity": "nonblocking",
+     "file": "tests/integration/run.py",
+     "line": "170-174 (counts)",
+     "claim_broken": "101160c / evidence: 'the skip count comes from pytest's summary line alone ... wherever skipped sits in that line'.",
+     "evidence": "counts() still takes the FIRST `(\\d+) skipped` anywhere in stdout+stderr (re.search, re.M), so it does not read the summary line alone. Measured at d0d523f: counts('SKIPPED [1] tests/x.py:3: 5 skipped upstream\\n1 passed, 1 skipped in 1s') -> {'passed': 1, 'skipped': 5}. The new pins kill V5 (e3bm54) and V13 (e3bm55), but two other parsers survive. Own mutant C3 (skip count read from the output's last line only) survives test_run+test_stage (61 passed) and the whole layer 0 (only I3B's 2 baseline reds). Own mutant C7 (sum of every 'N skipped') survives test_run+test_stage (61 passed). Every test string puts the summary last and has no 'N skipped' inside a reason. The suites verdict is unaffected today: a parsed reason always fails the stage through `unexpected`, because KNOWN_API_SKIPS is empty. Only the recorded count, and the `unread` arm when the summary is not the last line, are exposed.",
+     "minimal_fix": "Read the counts from the last pytest summary line (for example with mutants.SUMMARY_LINE / _summary). Add one case with a reason text containing '5 skipped' and a trailing stderr line after the summary, expecting skipped == 3. Or reword the claim to 'the first N skipped in the output'."
+    },
+    {
+     "id": "R4V-N2",
+     "severity": "nonblocking",
+     "file": "tests/integration/run.py",
+     "line": "579-581 (_is_recovery)",
+     "claim_broken": "95540cc: '_is_recovery reads the module path's component - pinned'.",
+     "evidence": "Own mutant R1, `return \"recovery\" in case.split(\"::\")[0]` (a substring of the module path rather than a component), passes behaviourally: 60 passed with the anchor guard deselected. With the guard included it is 'killed' only at test_run.py:942, because it touches e3bm58's anchor line. An E3B module such as tests.integration.backend.test_recovery_drills would still be excused. The window closes at the I3B merge, where IR2-2 sets RESIDUAL = {}.",
+     "minimal_fix": "Add one assertion: stale_pending({'pending': {'G1R': ['tests.integration.backend.test_recovery_like::test_e3b_x']}}) == ['G1R']."
+    },
+    {
+     "id": "R4V-N3",
+     "severity": "nonblocking",
+     "file": "tests/integration/test_run.py",
+     "line": "921-945 (KNOWN_STALE / guard)",
+     "claim_broken": "75fa1af: 'KNOWN_STALE is strict: an entry no longer stale fails the guard too'.",
+     "evidence": "Own mutant G1 (`set(stale) <= set(KNOWN_STALE)`) survives the whole layer 0 at d0d523f: 2 failed, which are only I3B's baseline reds, and 145 passed. No case exercises an entry that is no longer stale. Strictness is only measured, not pinned. I confirmed the measurement on scratch B: with IR2-2 applied and KNOWN_STALE put back to {'i3bm57': ...}, the guard fails at test_run.py:941 with 'stale anchors (id: occurrences found): {}'. Once IR2-2 sets KNOWN_STALE = {}, `<=` and `==` are equivalent, so the gap only matters while an entry is listed. Two related guard mutants also survive: G3, which compares against 1 instead of m.occurrences, is equivalent today because all 210/241 mutants have occurrences=1; G4, which counts `before` across all declared files, survives as well. G5 (a mutant's declared path moved to another file) is killed by the real guard at test_run.py:942.",
+     "minimal_fix": "Optional: move the comparison into a small helper and test it with a synthetic KNOWN_STALE that holds an entry that is not stale. Or accept this as measured-only, since IR2-2 empties KNOWN_STALE."
+    },
+    {
+     "id": "R4V-N4",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/test_stage.py",
+     "line": "93",
+     "claim_broken": "fb05821: 'the backend suite's -rfEs is pinned'.",
+     "evidence": "The pin checks presence only (`SUITE_ADDOPTS in argv.split()`). Own mutant S1 appends a later '-rs' after SUITE_ADDOPTS in the backend argv; pytest's -r keeps the last value, so the effective report reverts to -rs. S1 survives test_run+test_stage: 60 passed, guard deselected.",
+     "minimal_fix": "Assert that SUITE_ADDOPTS is the only -r option in the argv, for example [a for a in argv.split() if a.startswith('-r')] == [run.SUITE_ADDOPTS]."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "e2m69 (hand, R83)",
+     "edit": "line run.py:454 `    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else PASS,` (anchor count 1) -> `silent` dropped",
+     "result": "killed: tests/integration/test_run.py:334: AssertionError; mutants.py --only e2m69 killed",
+     "killed_by": "test_a_suite_that_reports_no_tests_at_all_fails_the_run"
+    },
+    {
+     "name": "e3bm56 (hand)",
+     "edit": "line `    checked = mutants.all_mutants()` (count 1) -> `mutants.MUTANTS`",
+     "result": "killed: test_run.py:941: AssertionError at d0d523f; on scratch B (KNOWN_STALE={}) killed at test_run.py:940 (subset assertion); --only killed",
+     "killed_by": "test_every_mutant_anchor_occurs_as_declared_on_the_checkout"
+    },
+    {
+     "name": "e3bm54 (hand)",
+     "edit": "line `    for name, pattern in ((\"failed\", r\"(\\d+) failed\"), (\"skipped\", r\"(\\d+) skipped\"),` (count 1) -> skipped pattern `^SKIPPED \\[(\\d+)\\]`",
+     "result": "killed: test_run.py:1173: AssertionError; --only killed",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "e3bm55 (hand)",
+     "edit": "same line (count 1) -> `(\\d+) skipped in`",
+     "result": "killed: test_run.py:1173: AssertionError; --only killed",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "e3bm57 (hand)",
+     "edit": "line run.py:611 `\"no:cacheprovider\", SUITE_ADDOPTS, f\"--junitxml={junit}\"],` (count 1) -> \"-rs\"",
+     "result": "killed: backend/test_stage.py:93: AssertionError; --only killed",
+     "killed_by": "test_the_backend_stage_reports_the_summary_of_what_its_suite_produced"
+    },
+    {
+     "name": "e3bm58 (hand)",
+     "edit": "line run.py:581 `    return \"recovery\" in case.split(\"::\")[0].split(\".\")` (count 1) -> `\"recovery\" in case`",
+     "result": "killed: backend/test_stage.py:205: AssertionError; --only killed",
+     "killed_by": "test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task"
+    },
+    {
+     "name": "G1 KNOWN_STALE tolerant",
+     "edit": "assert set(stale) <= set(KNOWN_STALE)",
+     "result": "SURVIVED layer 0 at d0d523f (2 failed = I3B baseline reds, 145 passed); equivalent after IR2-2 (R4V-N3)"
+    },
+    {
+     "name": "G2 all_mutants silently drops a list whose module fails to import",
+     "edit": "all_mutants: try import mutants_i3b_renamed except ImportError: return MUTANTS",
+     "result": "killed: test_run.py:941: AssertionError (subset assertion)",
+     "killed_by": "test_every_mutant_anchor_occurs_as_declared_on_the_checkout"
+    },
+    {
+     "name": "G3 guard compares count to 1 not m.occurrences",
+     "edit": "!= 1 in the stale comprehension",
+     "result": "SURVIVED (equivalent today: every one of the 210/241 mutants declares occurrences=1)"
+    },
+    {
+     "name": "G4 guard counts `before` across every declared file",
+     "edit": "blob of all m.path files instead of each m.path",
+     "result": "SURVIVED (guard-of-guard only; R4V-N3)"
+    },
+    {
+     "name": "G5 declared path moved to another file",
+     "edit": "e3bm57 path run.py -> harness.py in mutants.py",
+     "result": "killed: test_run.py:942: AssertionError",
+     "killed_by": "test_every_mutant_anchor_occurs_as_declared_on_the_checkout"
+    },
+    {
+     "name": "G6 subset assertion removed",
+     "edit": "drop `assert {E+I3B ids} <= checked`",
+     "result": "SURVIVED alone (expected: it is the assertion that kills e3bm56)"
+    },
+    {
+     "name": "C3 skip count from the last output line only",
+     "edit": "re.search over output.splitlines()[-1] for skipped",
+     "result": "SURVIVED test_run+test_stage (61 passed) and all of layer 0 (R4V-N1)"
+    },
+    {
+     "name": "C5 skip count only on a line starting 'N passed, '",
+     "edit": "r\"^\\d+ passed, (\\d+) skipped\"",
+     "result": "killed only by the anchor guard (test_run.py:942); behaviourally survives (60 passed, guard deselected); verdict-neutral since failed/silent cover the other shapes"
+    },
+    {
+     "name": "C7 skip count summed over every 'N skipped'",
+     "edit": "sum(re.findall(pattern))",
+     "result": "SURVIVED test_run+test_stage (61 passed) (R4V-N1)"
+    },
+    {
+     "name": "R1 _is_recovery module-path substring",
+     "edit": "return \"recovery\" in case.split(\"::\")[0]",
+     "result": "guard-killed at test_run.py:942 only; behaviourally SURVIVED (60 passed) (R4V-N2)"
+    },
+    {
+     "name": "U1 unread applied to non-api-test runs",
+     "edit": "run[\"argv\"] != \"make api-test\"",
+     "result": "killed: test_run.py:1200: AssertionError",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "S1 later -rs overriding SUITE_ADDOPTS in backend argv",
+     "edit": "SUITE_ADDOPTS, \"-rs\", f\"--junitxml=...\"",
+     "result": "SURVIVED (60 passed, guard deselected) (R4V-N4)"
+    },
+    {
+     "name": "layer-1 E2+E3B list through run_one on scratch B",
+     "edit": "103 layer-1 mutants of mutants.MUTANTS",
+     "result": "{mutants 103, killed 101, controls_survived 2 (e2c01, e3bc01), not_killed 0, pending 0, problems null}; e2m69 and e3bm54-58 killed"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared infrx-impl /tmp/claude-1000/verify-e3b2-r4-v; git fetch origin; git checkout d0d523f; make api-env",
+     "exit": 0,
+     "tail": "origin (local infrx-impl) heads: claude/backend-impl eb2c1ba, codex/i3b-followup d420699, codex/e3b-phase2-gate d0d523f; uv sync ok"
+    },
+    {
+     "cmd": "[d0d523f] pytest -q tests/integration/test_run.py tests/integration/backend/test_stage.py",
+     "exit": 0,
+     "tail": "61 passed in 11.58s"
+    },
+    {
+     "cmd": "[d0d523f] INFRX_E2_NAMESPACE=e3b2 pytest -q -rfs tests/integration (layer 0)",
+     "exit": 1,
+     "tail": "2 failed, 145 passed, 91 skipped, 1 xfailed, 2 warnings in 20.59s; FAILED recovery/test_mutant_list_i3b.py::test_i3b_mutant_list_is_well_formed, recovery/test_recovery.py::test_i3b_rc10_..."
+    },
+    {
+     "cmd": "[d0d523f] anchor scan over mutants.all_mutants()",
+     "exit": 0,
+     "tail": "210 mutants scanned; stale: {'i3bm57': 0}; e2c 2, e2m 71, e3bc 1, e3bm 58, i3bc 1, i3bm 77; occurrences all 1"
+    },
+    {
+     "cmd": "[d0d523f] hand.py e2m69 e3bm54 e3bm55 e3bm56 e3bm57 e3bm58",
+     "exit": 0,
+     "tail": "all 6: anchor count 1, killed at test_run.py:334 / :1173 / :1173 / :941, backend/test_stage.py:93 / :205"
+    },
+    {
+     "cmd": "[d0d523f] INFRX_E2_NAMESPACE=e3b2 mutants.py --only <id> for the six",
+     "exit": 0,
+     "tail": "e2m69, e3bm54, e3bm55, e3bm56, e3bm57, e3bm58: status killed, exit 0 each"
+    },
+    {
+     "cmd": "scratch A: checkout -b scratchA origin/claude/backend-impl (eb2c1ba); git merge d0d523f",
+     "exit": 0,
+     "tail": "clean merge e3955a8, no conflicts"
+    },
+    {
+     "cmd": "[A] git apply ir1-r2.diff (23d1719320510c57); git apply r31-dr04.diff (1f03b05fc4014bb0); git apply --check r93.diff",
+     "exit": 0,
+     "tail": "IR2-1 ok, IR2-3 ok; r93.diff still fails at fakes/state.py:1229 (expected, GATE-N3)"
+    },
+    {
+     "cmd": "[A] pytest tests/integration/backend/test_drills.py -k '(dr03 or dr04) and fake'",
+     "exit": 0,
+     "tail": "2 passed, 36 deselected in 0.75s"
+    },
+    {
+     "cmd": "[A] layer 0",
+     "exit": 1,
+     "tail": "2 failed (same two I3B cases), 146 passed, 91 skipped, 2 warnings in 19.60s (the strict xfail is gone with IR2-1)"
+    },
+    {
+     "cmd": "[A + private task verify-e3b2r4 postgres 55611 in scratch tasklocal] INFRX_D_TASK=verify-e3b2r4 pytest -q -rfEs tests/integration/test_harness.py apps/infrx-api/tests/contracts",
+     "exit": 0,
+     "tail": "1075 passed in 82.28s; -k projection_pg rerun showed infrx-verify-e3b2r4-postgres 127.0.0.1:55611 in use, 3 passed"
+    },
+    {
+     "cmd": "scratch B: A (IR2-1+IR2-3 committed) + git merge origin/codex/i3b-followup (d420699, newer than 95b7df7) + git apply r4-ir22.diff (c8fed49edddce331)",
+     "exit": 0,
+     "tail": "clean merge d5080c8; IR2-2 applied (stack.py RESIDUAL = {}, KNOWN_STALE = {})"
+    },
+    {
+     "cmd": "[B] anchor scan",
+     "exit": 0,
+     "tail": "241 mutants scanned; stale: {}; i3bm 108"
+    },
+    {
+     "cmd": "[B] pytest test_run.py + backend/test_stage.py",
+     "exit": 0,
+     "tail": "61 passed in 10.58s"
+    },
+    {
+     "cmd": "[B] INFRX_E2_NAMESPACE=e3b2 layer 0",
+     "exit": 0,
+     "tail": "153 passed, 99 skipped, 2 warnings in 24.55s; PENDING ids: D5 x10, G2-R1 x12, I2B-R4 x1, M1-L2 x1 (all within {D5,G2-R1,I2B-R4,M1-L2})"
+    },
+    {
+     "cmd": "[B] KNOWN_STALE put back to {'i3bm57': ...}; pytest -k anchor_occurs",
+     "exit": 1,
+     "tail": "test_run.py:941: AssertionError: stale anchors (id: occurrences found): {} - strict entry forces its removal"
+    },
+    {
+     "cmd": "[B + private task/decoy 55611/55613] TMPDIR=<private> INFRX_D_TASK=verify-e3b2r4 INFRX_E2_NAMESPACE=e3b2 run_one over mutants.MUTANTS layer 1",
+     "exit": 0,
+     "tail": "{\"mutants\": 103, \"killed\": 101, \"controls_survived\": 2, \"not_killed\": 0, \"pending\": 0, \"problems\": null}; JSON sha256 8d69e2f375d99684 saved to scratchpad/verify-e3b2-r4-l1-B.json"
+    },
+    {
+     "cmd": "own mutants G1-G6, C3/C5/C7, R1, U1, S1 via own.py on the d0d523f scratch",
+     "exit": 0,
+     "tail": "see mutants: G2, G5, U1 killed; G1, G3, G4, G6, C3, C7, S1 survive; C5, R1 killed only by the anchor guard"
+    },
+    {
+     "cmd": "docker ps -a | grep -E 'verify|e3b2'",
+     "exit": 1,
+     "tail": "empty"
+    }
+   ],
+   "fabrication_check": "Every count, exit code and death line above comes from command output in this session: the d0d523f clone, scratch A (eb2c1ba + d0d523f + IR2-1 + IR2-3) and scratch B (A + codex/i3b-followup@d420699 + IR2-2). The diff sha256 prefixes match the lane's (23d1719320510c57, 1f03b05fc4014bb0, c8fed49edddce331). I did not rerun the layer-3 gate, and no E2 stack was started. Deviations from the brief: (1) The I3B head is d420699 (round 5), newer than 95b7df7. That is why scratch B shows 241 mutants and 153/99/0xf, not the lane's 236 and 152/98/1xf. The lane's scratch also omitted IR2-1, so its strict xfail was still present. (2) Scratch A was not re-merged separately. B was built on top of A's committed IR2-1/IR2-3. (3) The private PostgreSQL ran as task 'verify-e3b2r4' patched into the scratch tasklocal (55611, valkey 55612 reserved). The decoy was patched to 55613 in the scratch test_pgharness.py. Neither patch changes the anchor scan (still stale {} on B). (4) My first `git fetch -q origin` ran in the infrx-impl worktree against the GitHub remote, not the local clone. It only updates remote-tracking refs and was a network access the brief did not ask for; I disclose it. No other network use, and no secrets.",
+   "cleanup": "Removed:\n- the scratch clones /tmp/claude-1000/verify-e3b2-r4-v and /tmp/claude-1000/verify-e3b2-r4-A\n- the private TMPDIRs /tmp/claude-1000/verify-e3b2-r4-tmp and -tmp2. They held my only lock file, infrx-verify-e3b2r4-postgres-55611.lock.\n- the work dir /tmp/claude-1000/verify-e3b2-r4-work\n\nChecks afterwards:\n- The pgharness removed infrx-verify-e3b2r4-postgres and the decoy itself. `docker ps -a | grep -E 'verify|e3b2'` is empty.\n- I never used port 55432, and I never touched other lanes' containers (infrx-d2-postgres, infrx-d3-postgres-supabase, infrx-q3-valkey-55498, gideon-migration-order-test-*).\n- The codex-e3b2 and infrx-impl worktrees are untouched (`git status` shows 0 lines in each).\n\nKept: the layer-1 report at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/verify-e3b2-r4-l1-B.json"
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "R4V-N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "170-174 (counts)",
+   "claim_broken": "101160c / evidence: 'the skip count comes from pytest's summary line alone ... wherever skipped sits in that line'.",
+   "evidence": "counts() still takes the FIRST `(\\d+) skipped` anywhere in stdout+stderr (re.search, re.M), so it does not read the summary line alone. Measured at d0d523f: counts('SKIPPED [1] tests/x.py:3: 5 skipped upstream\\n1 passed, 1 skipped in 1s') -> {'passed': 1, 'skipped': 5}. The new pins kill V5 (e3bm54) and V13 (e3bm55), but two other parsers survive. Own mutant C3 (skip count read from the output's last line only) survives test_run+test_stage (61 passed) and the whole layer 0 (only I3B's 2 baseline reds). Own mutant C7 (sum of every 'N skipped') survives test_run+test_stage (61 passed). Every test string puts the summary last and has no 'N skipped' inside a reason. The suites verdict is unaffected today: a parsed reason always fails the stage through `unexpected`, because KNOWN_API_SKIPS is empty. Only the recorded count, and the `unread` arm when the summary is not the last line, are exposed.",
+   "minimal_fix": "Read the counts from the last pytest summary line (for example with mutants.SUMMARY_LINE / _summary). Add one case with a reason text containing '5 skipped' and a trailing stderr line after the summary, expecting skipped == 3. Or reword the claim to 'the first N skipped in the output'."
+  },
+  {
+   "id": "R4V-N2",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "579-581 (_is_recovery)",
+   "claim_broken": "95540cc: '_is_recovery reads the module path's component - pinned'.",
+   "evidence": "Own mutant R1, `return \"recovery\" in case.split(\"::\")[0]` (a substring of the module path rather than a component), passes behaviourally: 60 passed with the anchor guard deselected. With the guard included it is 'killed' only at test_run.py:942, because it touches e3bm58's anchor line. An E3B module such as tests.integration.backend.test_recovery_drills would still be excused. The window closes at the I3B merge, where IR2-2 sets RESIDUAL = {}.",
+   "minimal_fix": "Add one assertion: stale_pending({'pending': {'G1R': ['tests.integration.backend.test_recovery_like::test_e3b_x']}}) == ['G1R']."
+  },
+  {
+   "id": "R4V-N3",
+   "severity": "nonblocking",
+   "file": "tests/integration/test_run.py",
+   "line": "921-945 (KNOWN_STALE / guard)",
+   "claim_broken": "75fa1af: 'KNOWN_STALE is strict: an entry no longer stale fails the guard too'.",
+   "evidence": "Own mutant G1 (`set(stale) <= set(KNOWN_STALE)`) survives the whole layer 0 at d0d523f: 2 failed, which are only I3B's baseline reds, and 145 passed. No case exercises an entry that is no longer stale. Strictness is only measured, not pinned. I confirmed the measurement on scratch B: with IR2-2 applied and KNOWN_STALE put back to {'i3bm57': ...}, the guard fails at test_run.py:941 with 'stale anchors (id: occurrences found): {}'. Once IR2-2 sets KNOWN_STALE = {}, `<=` and `==` are equivalent, so the gap only matters while an entry is listed. Two related guard mutants also survive: G3, which compares against 1 instead of m.occurrences, is equivalent today because all 210/241 mutants have occurrences=1; G4, which counts `before` across all declared files, survives as well. G5 (a mutant's declared path moved to another file) is killed by the real guard at test_run.py:942.",
+   "minimal_fix": "Optional: move the comparison into a small helper and test it with a synthetic KNOWN_STALE that holds an entry that is not stale. Or accept this as measured-only, since IR2-2 empties KNOWN_STALE."
+  },
+  {
+   "id": "R4V-N4",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_stage.py",
+   "line": "93",
+   "claim_broken": "fb05821: 'the backend suite's -rfEs is pinned'.",
+   "evidence": "The pin checks presence only (`SUITE_ADDOPTS in argv.split()`). Own mutant S1 appends a later '-rs' after SUITE_ADDOPTS in the backend argv; pytest's -r keeps the last value, so the effective report reverts to -rs. S1 survives test_run+test_stage: 60 passed, guard deselected.",
+   "minimal_fix": "Assert that SUITE_ADDOPTS is the only -r option in the argv, for example [a for a in argv.split() if a.startswith('-r')] == [run.SUITE_ADDOPTS]."
+  }
+ ]
+}
