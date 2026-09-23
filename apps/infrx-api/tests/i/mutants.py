@@ -818,6 +818,31 @@ MUTANTS += (
        "", RB_BAD),
 )
 
+# ROLLOUT-PREP: the saved edge and the real-bucket check (infra/rollout/steps).
+EDGE = "test_ops_recover__the_saved_edge_comes_back_byte_for_byte"
+S3C = "test_backend_deploy__the_real_bucket_check_runs_the_release_image_before_the_install"
+MUTANTS += (
+    _m("save_edge_without_sha", "the saved edge's sha256 is printed for the record",
+       STEP + "25-save-edge.sh", 'sha256sum "$saved"\n', "", EDGE),
+    _m("restore_edge_unchecked", "a saved edge that does not match its sha256 restores nothing",
+       STEP + "93-restore-edge.sh", 'echo "$SAVED_SHA256  $SAVED" | sha256sum -c -\n', "", EDGE),
+    _m("restore_edge_new_inode", "the edge is rewritten in place, keeping the bind mount's inode",
+       STEP + "93-restore-edge.sh", 'cat "$SAVED" > /etc/caddy/Caddyfile',
+       'rm /etc/caddy/Caddyfile; cat "$SAVED" > /etc/caddy/Caddyfile', EDGE),
+    _m("restore_edge_reload_on_loopback", "the reload goes through the admin socket",
+       STEP + "93-restore-edge.sh", " --address unix//config/admin.sock", "", EDGE),
+    _m("s3_check_any_checkout", "the real-bucket check runs only on the checked-out release",
+       STEP + "45-s3-check.sh",
+       '[ "$(git -c safe.directory="$PWD" rev-parse HEAD)" = "$RELEASE" ] || ', "", S3C),
+    _m("s3_check_local_creds", "the check uses the instance role, never the MinIO credentials",
+       STEP + "45-s3-check.sh", "-e INFRX_M_S3_ENDPOINT -e INFRX_M_S3_BUCKET",
+       "-e INFRX_M_S3_ENDPOINT -e INFRX_M_S3_BUCKET -e INFRX_M_S3_LOCAL_CREDS", S3C),
+    _m("s3_check_red_ignored", "a red conformance run is a failed step",
+       STEP + "45-s3-check.sh", "tests/m/test_s3.py'", "tests/m/test_s3.py' || true", S3C),
+    _m("s3_check_red_ignored_inside", "the container exits with pytest's status",
+       STEP + "45-s3-check.sh", "tests/m/test_s3.py'", "tests/m/test_s3.py || true'", S3C),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in

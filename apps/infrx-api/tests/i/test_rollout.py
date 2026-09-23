@@ -9,8 +9,10 @@ them for real (research/plan/evidence/i/I2B-*.md, handback).
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -233,3 +235,124 @@ def test_backend_deploy__the_read_only_steps_print_names_never_values(tmp_path):
         assert done.returncode == 0, (step, done.stderr)
         assert "DATABASE_URL" in done.stdout and "SUPABASE_SERVICE_ROLE_KEY" in done.stdout, step
         assert support.MARKER not in done.stdout + done.stderr, step
+
+
+FAKE_DOCKER = """#!{python}
+import json, os, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+with (here / "docker.log").open("a") as log:
+    log.write(json.dumps({{"argv": sys.argv[1:], "env": {{k: os.environ.get(k) for k in (
+        "INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET")}}}}) + "\\n")
+sys.exit(1 if sys.argv[1] == os.environ.get("DOCKER_FAIL") else 0)
+"""
+
+
+def _box_stubs(tmp_path):
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "docker").write_text(FAKE_DOCKER.format(python=sys.executable))
+    (stub / "git").write_text('#!/usr/bin/env bash\necho "$HEAD_SHA"\n')
+    for name in ("docker", "git"):
+        (stub / name).chmod(0o755)
+    return stub
+
+
+def _docker_calls(stub):
+    log = stub / "docker.log"
+    calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+    log.unlink(missing_ok=True)
+    return calls
+
+
+def test_ops_recover__the_saved_edge_comes_back_byte_for_byte(tmp_path):
+    """25-save-edge keeps the live Caddyfile and prints its sha256; after the window put
+    the maintenance site there, 93-restore-edge writes it back in place (the same inode:
+    Caddy's single-file bind mount keeps seeing it) and reloads through the admin socket.
+    A saved file that does not match the recorded sha256 restores nothing."""
+    stub = _box_stubs(tmp_path)
+    live = tmp_path / "Caddyfile"
+    live.write_bytes(b"{\n\tadmin localhost:2019\n}\n:443 { reverse_proxy 127.0.0.1:8001 }\n")
+    original = live.read_bytes()
+    mounted = tmp_path / "mounted"          # what Caddy's single-file bind mount holds: the inode
+    mounted.hardlink_to(live)
+    logs = tmp_path / "w4-logs"
+
+    def step(name, **env):
+        text = (ROLLOUT / "steps" / name).read_text()
+        text = (text.replace("--config /etc/caddy/Caddyfile", "--config @IN-CONTAINER@")
+                .replace("/etc/caddy/Caddyfile", str(live))
+                .replace("@IN-CONTAINER@", "/etc/caddy/Caddyfile")
+                .replace("/opt/dlami/nvme/w4-logs", str(logs)))
+        return subprocess.run(["bash", "-c", text], capture_output=True, text=True,
+                              env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}", **env})
+
+    saved = step("25-save-edge.sh")
+    assert saved.returncode == 0, saved.stderr
+    printed = re.search(r"^saved=(\S+)$", saved.stdout, re.M)
+    assert printed, saved.stdout
+    path = printed.group(1)
+    assert re.fullmatch(rf"{logs}/Caddyfile\.live-\d{{8}}T\d{{6}}Z", path), path
+    sha = hashlib.sha256(original).hexdigest()
+    assert f"{sha}  {path}\n" in saved.stdout, "the saved edge's sha256 was not printed"
+    assert pathlib.Path(path).read_bytes() == original
+    assert [c["argv"][0] for c in _docker_calls(stub)] == ["inspect"]   # read-only
+
+    live.write_bytes(b"# maintenance\n:443 { respond 503 }\n")          # the window's edge
+    wrong = step("93-restore-edge.sh", SAVED=path, SAVED_SHA256="0" * 64)
+    assert wrong.returncode != 0 and live.read_bytes().startswith(b"# maintenance")
+    assert _docker_calls(stub) == [], "reloaded an edge it did not restore"
+    for missing in ({"SAVED": path}, {"SAVED_SHA256": sha}):
+        assert step("93-restore-edge.sh", **missing).returncode != 0
+    assert live.read_bytes().startswith(b"# maintenance")
+
+    restored = step("93-restore-edge.sh", SAVED=path, SAVED_SHA256=sha)
+    assert restored.returncode == 0, restored.stderr
+    assert live.read_bytes() == original and mounted.read_bytes() == original
+    assert [c["argv"] for c in _docker_calls(stub)] == [
+        ["exec", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile",
+         "--adapter", "caddyfile", "--address", "unix//config/admin.sock"]]
+
+
+def test_backend_deploy__the_real_bucket_check_runs_the_release_image_before_the_install(
+        tmp_path):
+    """45-s3-check runs M1-L2's conformance in the image built from the checked-out
+    release, against AWS S3 and the media bucket, with the instance role: only the two
+    names travel into the container (never INFRX_M_S3_LOCAL_CREDS). It refuses a checkout
+    that is not the release, and a red run is a failed step."""
+    stub = _box_stubs(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    release = "c" * 40
+    text = (ROLLOUT / "steps" / "45-s3-check.sh").read_text().replace(
+        "/home/ubuntu/model-inference", str(box))
+
+    def check(**env):
+        return subprocess.run(["bash", "-c", text], capture_output=True, text=True,
+                              env={"PATH": f"{stub}{os.pathsep}{os.environ['PATH']}",
+                                   "HEAD_SHA": release, "INFRX_M_S3_LOCAL_CREDS": "1", **env})
+
+    assert check().returncode != 0 and _docker_calls(stub) == []
+    stale = check(RELEASE=release, HEAD_SHA="d" * 40)
+    assert stale.returncode == 2 and "40-checkout" in stale.stderr
+    assert _docker_calls(stub) == []
+
+    done = check(RELEASE=release)
+    assert done.returncode == 0, done.stderr
+    assert f"real-bucket conformance passed for {release}" in done.stdout
+    build, run = _docker_calls(stub)
+    assert build["argv"][0] == "build" and build["argv"][-3:] == [
+        "-t", f"infrx-runtime:{release}", "apps/infrx-api"]
+    argv = run["argv"]
+    assert argv[0] == "run" and f"infrx-runtime:{release}" in argv
+    assert f"{box}:/repo:ro" in argv
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "-e"] == [
+        "INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET"]
+    assert run["env"]["INFRX_M_S3_ENDPOINT"] == "https://s3.us-east-1.amazonaws.com"
+    assert run["env"]["INFRX_M_S3_BUCKET"] == "llm-bootcamp-641134885443"
+    # the container's exit status is pytest's: the script ends with it, nothing after
+    assert "--require-hashes" in argv[-1] and argv[-1].rstrip().endswith(" tests/m/test_s3.py")
+
+    check(RELEASE=release, S3_MEDIA_BUCKET="another-bucket")
+    assert _docker_calls(stub)[-1]["env"]["INFRX_M_S3_BUCKET"] == "another-bucket"
+    red = check(RELEASE=release, DOCKER_FAIL="run")
+    assert red.returncode != 0 and "passed" not in red.stdout
