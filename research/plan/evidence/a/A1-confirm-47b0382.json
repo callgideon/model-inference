@@ -1,0 +1,319 @@
+{
+  "verdict": "fix_required",
+  "confirmed_blocking": [
+    {
+      "id": "RM-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/d/checks_signup.py",
+      "line": "check_retirement 426-505; 0015_signup_eligibility.sql:247-257 (retire_individual org loop)",
+      "claim_broken": "R-A1 / migration comment: retirement 'renames each personal org the user ALONE owns to retired and suspends it'. The 'alone owns' scope (the `not exists (... x.user_id <> p_user)` clause) has no killable test: a mutant that drops it, so a SHARED organization the individual created is renamed 'retired' and suspended (its other members lose admission, org_suspended), survives.",
+      "evidence": "Reviewer mutant rv_retire_suspends_shared_orgs (deletes 0015 lines 251-252 `and not exists (select 1 from public.org_members x where x.org_id = o.id and x.user_id <> p_user)`) SURVIVED signup_retirement on the plain image (run2 log: `rv_retire_suspends_shared_orgs: survived ::`). check_retirement's t/n/o own only their personal org, so no org with a second member exists for the loop to over-reach. Same rubric the first review applied to M-2 (claimed invariant with no killable test). Money-adjacent: a suspended shared org refuses every admission for its remaining members.",
+      "minimal_fix": "In check_retirement, before retire(t): create a second org with created_by = t and add another member (e.g. o) to it; after retire(t) assert its `suspended` is false and its name unchanged (2 asserts). Register the mutant (old = the two `not exists` lines, new = '') as a1_retirement_suspends_shared_orgs in signup_mutants.MIGRATION_MUTANTS.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed from the code at 47b0382, no experiment needed. `retire_individual` (apps/app/supabase/migrations/0015_signup_eligibility.sql:247-257) loops over orgs where `created_by = p_user`, the user is `owner`, and `not exists (org_members x where x.org_id = o.id and x.user_id <> p_user)`. `check_retirement` (apps/infrx-api/tests/d/checks_signup.py:426-505) seeds t/n/o (uid group 6) only via `individual()` (0001 trigger: one personal org, one owner membership) and never inserts a second org or a second member for any of them, so the `not exists` predicate is vacuously true on every candidate row; deleting lines 251-252 leaves the same row set and every existing assertion (suspended, name='retired', one audit row) still passes. The mutant provably survives, matching the reviewer's `rv_retire_suspends_shared_orgs: survived` run. `signup_mutants.MIGRATION_MUTANTS` (lines 105-141) has no mutant touching the clause, and no test in tests/d exercises retirement of an org the individual created that has other members (the check at checks_signup.py:240 only proves a *bound personal* org cannot gain members, which does not cover a non-personal org like the 'side' org pattern at line 128). The \"alone owns\" scope is a stated invariant in the proposed R-A1 ruling (research/plan/evidence/a/A1-38aea7f.md:148) and the migration comment (0015:245), and the mutant's behaviour (suspending a shared org, so `set_suspension` refuses admission for its other members) is money/availability-adjacent. This is the same class the fix round itself treated as blocking for M-2 (claimed invariant with no killable test). The reviewer's minimal fix (second org created_by t with o as member; assert not suspended and name unchanged after retire(t); register the two-line deletion as a MIGRATION_MUTANT on signup_retirement) is sufficient and small.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at 47b0382 by static analysis; no live run needed. (1) The invariant is stated: R-A1 in research/plan/evidence/a/A1-38aea7f.md:148 (\"renames each personal org the user alone owns to `retired` and suspends it\") and the migration comment at apps/app/supabase/migrations/0015_signup_eligibility.sql:245-246. (2) It is implemented only by the `not exists (... x.user_id <> p_user)` clause at 0015:251-252, and the loop scope is `o.created_by = p_user` (any org the user created, not just the personal one). (3) It is reachable: infrx.personal_org_binding_guard (0015:68-83) freezes membership only of a personal org that funds a wallet; a second org created by the user with another member, or a personal org shared before any grant (the rollout_hold case), is ordinary data. (4) apps/infrx-api/tests/d/checks_signup.py:check_retirement (426-505) builds t/n/o via individual() only, whose 0001 trigger creates one org with one owner row; the check never inserts org_members or a second organization, so for its dataset the loop's row set is identical with or without the clause, and the reviewer's mutant survives by construction. No existing mutant in signup_mutants.MIGRATION_MUTANTS (the six signup_retirement ones at lines 105-141) touches that clause. Same rubric as M-2 (invariant claimed, no killable test); consequence is a suspended shared org refusing admission for its other members. The proposed fix (shared org with created_by=t plus member o before retire(t); assert suspended is false and name unchanged; register the two-line deletion as a1_retirement_suspends_shared_orgs) is minimal and correct.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "RM-2",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "148 (retired check, no lock) vs 229 (retire_individual `for update` on profiles); research/plan/evidence/a/A1-38aea7f.md Limits item 3",
+      "claim_broken": "'Denials are answers, not exceptions' under a claim racing a retirement; and the evidence's Limit 3 ('the claim can still grant ... wallet frozen either way') describes the opposite of what happens.",
+      "evidence": "Probe P4a on BOTH images: conn A `select infrx.retire_individual(x,...)` left uncommitted; conn B `claim_signup_grant(x)` passes the retired check, then BLOCKS on the profile row (the wallet insert's FK KEY SHARE waits on A's FOR UPDATE); after A commits, B's ledger insert trips credit_ledger_signup_frozen and the claim RAISES `23514 CREDIT wallet ... is frozen: its owner is retired` (checks_signup.claim reports 'raised instead of answering'). Afterwards: claim -> retired, ledger 0, entitlements 0, retired 1. Money fails closed (nothing minted; the wallet row is rolled back with the claim); the backfill would count error:23514 and continue; A2's callback would see an exception and answer `retired` on retry. Reverse order (P4b) is clean: retire waits on the claim's transaction, then claim -> replayed with 1 ledger row.",
+      "minimal_fix": "Add `perform 1 from public.profiles p where p.id = p_user_id for key share;` before the retired check at 0015:148 (serialises against retire_individual's FOR UPDATE, so the check runs after the retirement commits and answers `retired`), or catch sqlstate 23514 with 'frozen' in the existing exception block and answer `retired`. Correct Limits item 3 to say the claim raises 23514 and grants nothing.",
+      "lens": "money"
+    },
+    {
+      "id": "RM-3",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "179-180 (R72 scope `o.created_by = p_user_id`)",
+      "claim_broken": "R72 signup-time scope is 'every organization this individual created'. An organization the individual OWNS (org_members role owner) whose created_by is NULL, holding nonzero legacy USD, does not hold the grant; nor does an org the individual was invited to (the creator is held instead, consistent with the documented scope).",
+      "evidence": "Probe P2b both images: org (created_by NULL, z owner) with +9.000000 USD -> claim(z) = granted, wallet created; console_legacy_usd_statement of that org still answers rollout_hold = true, balance 9.00000000 (R72's 'required field on the record' holds; the USD is neither converted nor discarded). P2a: USD +9 on an org x was invited to -> granted. No console/migration path creates an org with created_by NULL (0001 handle_new_user always sets it), so this needs a manual insert. Control mutant rv_hold_ignores_created_by (adds `and o.created_by is not null`) survived as an equivalent, confirming NULL-created orgs are outside scope today.",
+      "minimal_fix": "Widen the exists predicate to ownership: `where (o.created_by = p_user_id or exists (select 1 from public.org_members m where m.org_id = o.id and m.user_id = p_user_id and m.role = 'owner')) and infrx.legacy_usd_rollout_hold(o.id)`, with one check case (owner of a created_by-NULL org with USD -> rollout_hold); or record in the migration comment that created_by is the boundary.",
+      "lens": "money"
+    },
+    {
+      "id": "RM-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_signup.py",
+      "line": "214-218 (campaign length cases)",
+      "claim_broken": "M-6 'campaign_version > 100 characters -> 22023' is only exercised with ASCII, so the character-vs-byte semantics of the 0015 guard (which must match 0006's `length(campaign_version) <= 100`) is undefended.",
+      "evidence": "Reviewer mutant rv_campaign_octet_length (`length(` -> `octet_length(` at 0015:144) SURVIVED signup_eligibility (plain). Shipped behaviour is correct and measured on both images: 100 x '\u00e9' (200 bytes) -> granted; 101 ASCII -> 22023; 100 ASCII + '\u00e9' (101 chars) -> 22023. Not a money defect (the mutant would only over-refuse).",
+      "minimal_fix": "Change the 100-character case to a multibyte campaign (e.g. '\u00e9' * 100) so an octet-based guard is killed; optionally register the mutant.",
+      "lens": "money"
+    },
+    {
+      "id": "RM-5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_signup.py",
+      "line": "183-203 (USD fixtures)",
+      "claim_broken": "Per-organization hold semantics (+x in one created org, -x in another = two nonzero balances = hold) is not asserted by the eligibility check; it is defended only indirectly by D1R's unit scan.",
+      "evidence": "Probe P1 both images: +3.000000 on the personal org and -3.000000 on a second org the user created -> rollout_hold, no wallet (correct, fail closed). Reviewer mutant rv_hold_summed_across_orgs (replace the exists predicate with a cross-org sum of delta_usd inline in claim_signup_grant) SURVIVED signup_eligibility but was KILLED by checks_credit.check_no_unit_conversion ('cross-unit code exists'), which tests/d/test_credit_schema.py:94 runs in the default suite. So the suite as a whole kills it.",
+      "minimal_fix": "Optional: add the +x/-x two-org individual to check_eligibility asserting rollout_hold (3 lines).",
+      "lens": "money"
+    },
+    {
+      "id": "SEC-R1",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "~221 (retire_individual: `perform 1 from public.profiles p where p.id = p_user for update;`)",
+      "claim_broken": "Migration comment: 'The profile row lock serialises concurrent retirements of one individual' - a claimed invariant with no killable test (transaction-boundary lens). The evidence only claims sequential idempotence ('a second call returns the first retirement time'), which IS tested.",
+      "evidence": "Own mutant rv_retire_no_row_lock (drops `for update`) SURVIVED the suite via migration_mutants.kill() -> ('survived', ''). Two-thread probe P10 on the plain image: pristine -> both callers return the same retired_at ('2026-09-23 02:35:32.592240+00:00' x2); mutant -> {2: '2026-09-23 02:35:35.694583+00:00', 1: 'raised 23505'}. No money moves and a retry answers idempotently, hence nonblocking; coordinator may upgrade under the strict 'claimed invariant, no killable test' rule.",
+      "minimal_fix": "In checks_signup.check_retirement (or check_claim_race) retire one fresh individual from two threads behind a Barrier and assert both return the same timestamp and no error (~8 lines); add mutant a1_retirement_not_serialised (`for update;` -> `;`) to signup_mutants.MIGRATION_MUTANTS.",
+      "lens": "security"
+    },
+    {
+      "id": "SEC-R2",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0015_signup_eligibility.sql",
+      "line": "1-3 (header)",
+      "claim_broken": "Task check: header states migration number, date and R84 status. It states none: header is '-- A1: verified individual signup eligibility ...'; the file was amended in place during the fix round (M-4 scope, M-6 campaign check, SEC-3 rename) with no dated note. Same convention as sibling 0009 (no number/date either), and R84 strictly binds files already on the integration branch (0015 is not there yet: claude/infrx-impl lists 0001-0005 only), so this is a hygiene gap, not a ruling breach. The evidence quotes no 0015 digest, so R84's 'say which file version' clause is not triggered.",
+      "evidence": "`git show 47b0382:apps/app/supabase/migrations/0015_signup_eligibility.sql | head -3`; `git ls-tree claude/infrx-impl --name-only apps/app/supabase/migrations/` -> 0001..0005; grep -n 'digest|sha256' on the evidence returns only the image digests (lines 59-60).",
+      "minimal_fix": "One header line: `-- 0015 \u00b7 A1 \u00b7 2026-09-22; amended 2026-09-23 in the A1 review round (M-4, M-6, SEC-3); applied to no hosted or shared environment (R84).`",
+      "lens": "security"
+    },
+    {
+      "id": "SEC-R3",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/a/A1-38aea7f.md",
+      "line": "integration request 8 (SEC-6)",
+      "claim_broken": "Task question: is the 60 s revocation lag within the R-A1/abuse budget stated in the brief? No such budget exists: 09 \u00a7A1 (lines 22-33), R-A1 and 04-verification APP-JOURNEY ('own history and key revocation') state no bound; the only 'immediate denial on revocation' (09 line 115, LAB-ACCESS) is the provider-grant path, not consumer keys. The evidence states the 60 s fact correctly but not that the budget is unstated and pending.",
+      "evidence": "infrx/auth/keys.py:47 reads `select=id,org_id,revoked_at` only; :48 caches for `s.key_ttl` (infrx/config.py:64 `key_ttl: int = 60`); :52-55 on a Supabase error a previously cached row is served (a revoked key stays valid for the outage's length). grep of 04-verification/09/18 for a time budget: none.",
+      "minimal_fix": "Add one line to integration request 8 / 15-pending-inputs: 'revocation-lag budget for consumer keys: unstated in the brief; input needed (D2/P-05); legacy gateway = key_ttl 60 s + outage length'. No A1 code change.",
+      "lens": "security"
+    },
+    {
+      "id": "SEC-R4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/signup.py",
+      "line": "96-104 (backfill docstring)",
+      "claim_broken": "Evidence SEC-5 row says the run 'stops' on 42501 but neither it nor the docstring states the partial-page outcome (claims before the refusal are committed, the refused one wrote nothing, later ones untouched). Measured to be exactly that; only the statement is missing.",
+      "evidence": "Probe P4b (plain): service_role run, EXECUTE revoked before the 3rd new individual's BEGIN -> 'raised 42501'; states (wallet?, entitlements, identity_claims) = 01:(True,1,1) 02:(True,1,1) 03:(False,0,0) 04:(False,0,0) 05:(False,0,0), read from a second connection.",
+      "minimal_fix": "One docstring sentence: 'On a stop, every individual claimed before it stays committed (one transaction each); the refused one and the rest are untouched, and a rerun resumes as replays.'",
+      "lens": "security"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "rv_guard_never_matches",
+          "edit": "0015 retired_wallet_guard `where w.wallet_id = new.wallet_id) then` -> `where false) then`",
+          "result": "KILLED (plain)",
+          "killed_by": "signup_retirement: 'a retired wallet reserves: expected 23514 frozen, got None'"
+        },
+        {
+          "name": "rv_ledger_freeze_kind_swapped",
+          "edit": "credit_ledger_signup_frozen `when (new.kind = 'signup_grant')` -> `when (new.kind = 'operator_adjustment')`",
+          "result": "KILLED (plain)",
+          "killed_by": "signup_retirement: 'a D5 compensating entry into a frozen wallet was refused: 23514 ... frozen' (M-2 acceptance half now killable)"
+        },
+        {
+          "name": "rv_ledger_freeze_debits_too",
+          "edit": "`when (new.kind = 'signup_grant')` -> `when (new.kind in ('signup_grant', 'inference_debit'))`",
+          "result": "KILLED (plain)",
+          "killed_by": "signup_retirement: 'a hold admitted before retirement could not settle: 23514 ... frozen'"
+        },
+        {
+          "name": "rv_hold_abs_threshold",
+          "edit": "legacy_usd_rollout_hold `<> 0` -> `not between -0.000001 and 0.000001`",
+          "result": "KILLED (plain)",
+          "killed_by": "signup_eligibility: 'a negative legacy USD balance is nonzero too (R72): (granted ...)' (M-1 negative case, smallest unit)"
+        },
+        {
+          "name": "rv_campaign_octet_length",
+          "edit": "0015:144 `length(coalesce(p_campaign_version, ''))` -> `octet_length(...)`",
+          "result": "SURVIVED (plain) - finding RM-4; shipped code measured correct on both images",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "rv_retired_denial_unrecorded",
+          "edit": "`perform infrx.record_signup_denial(p_user_id, 'retired');` -> `null;`",
+          "result": "KILLED (plain)",
+          "killed_by": "signup_retirement: 'a retired individual's claim' (denial count 1)"
+        },
+        {
+          "name": "rv_retire_suspends_shared_orgs",
+          "edit": "retire_individual org loop: delete the `and not exists (select 1 from public.org_members x where x.org_id = o.id and x.user_id <> p_user)` clause",
+          "result": "SURVIVED (plain) - finding RM-1",
+          "killed_by": "n/a (no shared org created by the retiree exists in check_retirement)"
+        },
+        {
+          "name": "rv_hold_summed_across_orgs",
+          "edit": "R72 exists predicate -> inline `(select coalesce(sum(l.delta_usd),0) <> 0 from public.credit_ledger l join public.organizations o on o.id = l.org_id where o.created_by = p_user_id)`",
+          "result": "SURVIVED signup_eligibility (plain); KILLED when run against check_no_unit_conversion (same edit, name rv_hold_summed_across_orgs_unit_scan): 'cross-unit code exists'",
+          "killed_by": "checks_credit.check_no_unit_conversion (tests/d/test_credit_schema.py, default suite) - finding RM-5"
+        },
+        {
+          "name": "rv_hold_ignores_created_by",
+          "edit": "R72 predicate adds `and o.created_by is not null`",
+          "result": "SURVIVED (plain) - intended equivalent control confirming created_by-NULL orgs are outside scope (RM-3)",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-a1 archive 47b0382 | tar -x -C /tmp/claude-1000/confirm-a1-money-1146892; patch tests/d/pgharness.py (PORT=55446, CONTAINER=infrx-review-a1-money-postgres, lock /tmp/infrx-review-a1-money.lock); make api-env",
+          "exit": 0,
+          "tail": " + valkey==6.1.1\n + zstandard==0.25.0\nexit=0"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_signup.py -p no:cacheprovider (plain image)",
+          "exit": 0,
+          "tail": "32 passed in 46.19s   (17 cases + 15 code mutants killed)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_migration_mutants.py -k 'a1_ or well_formed' -p no:cacheprovider (plain)",
+          "exit": 0,
+          "tail": "27 passed, 194 deselected in 36.93s   (26 A1 mutants + list well-formed; D list = 219 = 193 + 26, code list 15, measured by import)"
+        },
+        {
+          "cmd": "uv run --frozen python -c 'from tests.d import rv_money_mutants as r, migration_mutants as d; [print(m.name, *d.kill(m)) for m in r.RV]' (plain)",
+          "exit": 0,
+          "tail": "rv_campaign_octet_length: survived :: \nrv_retired_denial_unrecorded: killed :: AssertionError: a retired individual's claim\nrv_retire_suspends_shared_orgs: survived :: \nrv_hold_summed_across_orgs: survived :: \nrv_hold_summed_across_orgs_unit_scan: killed :: AssertionError: cross-unit code exists:\nrv_hold_ignores_created_by: survived :: \nexit=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -s tests/d/test_rv_money.py -p no:cacheprovider (reviewer probes P1-P6, plain)",
+          "exit": 0,
+          "tail": "P4a after commit: claim -> retired ledger 0 ent 0 retired 1\nP5 totals after settle+adjust on frozen wallet: ('9995.02400000', '0.00000000', '9995.02400000') reconciliation drift 0E-8\nP5 operator_adjustment on the retired wallet as service -> 42501 permission denied for table credit_ledger\n6 passed, 1 warning in 11.72s  (the warning is P4a's claim thread raising 23514 frozen)"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_signup.py -p no:cacheprovider",
+          "exit": 0,
+          "tail": "32 passed in 59.94s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_migration_mutants.py -k 'a1_ or well_formed' -p no:cacheprovider",
+          "exit": 0,
+          "tail": "27 passed, 194 deselected in 49.61s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -s tests/d/test_rv_money.py -p no:cacheprovider",
+          "exit": 0,
+          "tail": "P1 +3/-3 across two created orgs -> rollout_hold None\nP2b USD on created_by NULL org z owns -> granted wallet ...\nP4a after commit: claim -> retired ledger 0 ent 0 retired 1\nP5 R73 per-unit reads by the retired user's own session: [('9995.02400000', 'CREDIT')] [('0.00000000', 'USD', False)]\n6 passed, 1 warning in 14.08s"
+        }
+      ],
+      "fabrication_check": "Every implementer claim I could test was re-measured, not taken from the evidence file: test_signup.py under INFRX_MUTANTS=all (32 passed = 17 cases + 15/15 code mutants) and the 26-mutant A1 subset (27 passed incl. well-formed) pass on BOTH images in my namespace (port 55446, container infrx-review-a1-money-postgres); D list length 219 (193 + 26) and code list 15 measured by importing the modules. M-1 (neg -0.000001 -> rollout_hold, mutant `> 0` registered), M-2 (settle -9.976 and +5 adjustment on the frozen wallet, two registered mutants; my three sharper edits also killed), M-3/H4 (grant answered inside the transaction, denial after commit; test_port asserts the denial row), M-4 (created_by scope, killed mutant a1_usd_hold_personal_org_only), M-5 (RuntimeError guard, fake parses PAGE), M-6 (22023 before any write; 100 granted), SEC-3 (rename to 'retired'), SEC-5 (42501 re-raised) are all present in the abbf066..47b0382 diff and covered by the passing runs. The full 299-mutant tests/d run and its ~19 min timings were NOT re-run by me (only the A1 subset + test_signup), so those two implementer rows are unverified here. The 'Limits' item 3 in the evidence ('the claim can still grant') is contradicted by measurement (RM-2): the racing claim raises 23514 and grants nothing. The other lane's scratch (/tmp/claude-1000/confirm-i3b-observe-1271784) was briefly written to by mistake (a shared scratch_path pointer was overwritten by that lane): I removed the one file and the .venv I had created there within a minute; nothing else in it was touched.",
+      "cleanup": "Container infrx-review-a1-money-postgres removed (harness removed it at exit; `docker rm -f` confirmed no such container; `docker ps -a` shows 0 review-a1-money containers). Lock /tmp/infrx-review-a1-money.lock removed. Scratch /tmp/claude-1000/confirm-a1-money-1146892 removed. Worktree codex-a1 untouched (git status clean, HEAD 47b0382); no worktree edited or committed; port 55432 and infrx-d1/d2/d3, gideon-* and other lanes' review containers never used. Log files remain at /tmp/claude-1000/confirm-a1-money-run1.log and -run2.log for audit."
+    },
+    {
+      "lens": "security",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "rv_keyset_guard_strict (code)",
+          "edit": "signup.py backfill: `if rows[-1][0] <= after:` -> `if rows[-1][0] < after:` (a page whose last key repeats the cursor no longer stops)",
+          "result": "killed",
+          "killed_by": "test_backfill__a_keyset_that_does_not_advance_stops_loudly (1 failed, 19 deselected in 1.11s)"
+        },
+        {
+          "name": "rv_denial_row_read_after_commit (code)",
+          "edit": "grant_initial: `if status in (GRANTED, REPLAYED):` -> `if status in (GRANTED,):` (a replayed grant bound elsewhere is refused after commit)",
+          "result": "survived - equivalent: a replay writes nothing, so the late refusal rolls back nothing; not a defect",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_backfill_42501_counted_as_error_when_first (code)",
+          "edit": "backfill: 42501 re-raised only when `counts` is non-empty",
+          "result": "killed",
+          "killed_by": "test_backfill__a_role_without_execute_stops_the_run (1 failed)"
+        },
+        {
+          "name": "rv_retired_denial_not_recorded (0015)",
+          "edit": "`perform infrx.record_signup_denial(p_user_id, 'retired');` -> `null;`",
+          "result": "killed",
+          "killed_by": "check_retirement: AssertionError: a retired individual's claim"
+        },
+        {
+          "name": "rv_rollout_hold_denial_not_recorded (0015)",
+          "edit": "`perform infrx.record_signup_denial(p_user_id, v_status);` -> `null;`",
+          "result": "killed",
+          "killed_by": "check_eligibility: AssertionError: identity reuse not recorded"
+        },
+        {
+          "name": "rv_campaign_check_after_writes (0015)",
+          "edit": "delete the 4-line `length(p_campaign_version) > 100` guard",
+          "result": "killed",
+          "killed_by": "check_eligibility: expected 22023, got 23514 signup_entitlements_campaign_version_check"
+        },
+        {
+          "name": "rv_acl_revoke_dropped (0015, H3 drill)",
+          "edit": "delete `revoke all on function public.claim_signup_grant(uuid, text, uuid) from public, anon, authenticated;`",
+          "result": "survived on plain AND supabase - equivalent, as the implementer claimed: proacl '{postgres=X/postgres,service_role=X/postgres}' byte-identical with and without the revoke; has_function_privilege(anon/authenticated)=False, service_role=True; anon and JWT-authenticated calls answer 42501 on both databases",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_retire_no_row_lock (0015)",
+          "edit": "`... where p.id = p_user for update;` -> `... where p.id = p_user;`",
+          "result": "survived the suite; two-thread probe: one caller raised 23505 (pristine: both return the same retired_at) -> finding SEC-R1",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-a1 diff abbf066..47b0382 --stat",
+          "exit": 0,
+          "tail": "6 files changed, 235 insertions(+), 34 deletions(-) (0015, signup.py, checks_signup, signup_mutants, test_signup, evidence)"
+        },
+        {
+          "cmd": "uv run --frozen python -c 'from tests.d import migration_mutants as d, signup_mutants as s; print(len(d.MUTANTS), len(s.MIGRATION_MUTANTS), len(s.MUTANTS))' (scratch)",
+          "exit": 0,
+          "tail": "D total 219 A1 26 code 15 / dupes 0 (219 = 193 + 26 confirmed)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py (plain, review namespace infrx-review-a1-security-postgres:55447)",
+          "exit": 0,
+          "tail": "32 passed in 55.12s (15 code mutants killed + 17 pure/DB cases)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k a1_ (plain)",
+          "exit": 0,
+          "tail": "26 passed, 195 deselected in 46.93s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py",
+          "exit": 0,
+          "tail": "20 passed in 23.34s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_migration_mutants.py -k a1_",
+          "exit": 0,
+          "tail": "26 passed, 195 deselected in 45.87s"
+        },
+        {
+          "cmd": "uv run --frozen python probes_sec.py (plain; P1-P11, log probes.log)",
+          "exit": 1,
+          "tail": "P1 PASS: B during=(None,0,0) after_rollback=(None,0,0) after_commit=(wallet,1,1) | P2 PASS: err='crash after answer, before commit' state_after_crash=(None,0,0) regrant replayed=False | P3 PASS: commit error surfaced for rollout_hold and unverified (no answer without a persisted row) | P4 my over-strict expectation (revoke landed after BEGIN; states 01-03 committed, 04-05 untouched, raised 42501) | P5 entitlements=[1]*12 ledger=[1]*12 dup_grant_rows=0 granted_total=14 (=12 + the 2 P4 stragglers; my expectation wrong, invariant holds) | P6 PASS counts {'retired':1,...} retired_user_state=(None,0,0) | P7 PASS n=39 sorted_match=True type=uuid attcollation=0 idx=profiles_pkey btree(id) page1_walked=39 | P8 PASS 0015 applied twice more, differing snapshot parts=[] | P9 crashed on my own sanity assert (re-run below) | P10 PASS (finding SEC-R1) | P11 own mutants as tabled"
+        },
+        {
+          "cmd": "uv run --frozen python probes_sec2.py (plain, corrected P4b trigger) and INFRX_D1_IMAGE=supabase ... probes_sec2.py",
+          "exit": 1,
+          "tail": "P4b: raised 42501; states 01:(True,1,1) 02:(True,1,1) 03:(False,0,0) 04:(False,0,0) 05:(False,0,0) (exit 1 only from my `claimed == us[:3]` clause, which also lists the replayed earlier users) | P9b PASS on plain and supabase: pristine == mutated proacl, anon/auth 42501, suite verdict ('survived','')"
+        },
+        {
+          "cmd": "docker rm -f -v infrx-review-a1-security-postgres*; rm -f /tmp/infrx-review-a1-security.lock; rm -rf /tmp/claude-1000/confirm-a1-security-1190409",
+          "exit": 0,
+          "tail": "remaining review-a1-security containers: 0; lock and scratch gone; infrx-d1/d2/d3, other infrx-review-*, gideon-* untouched"
+        }
+      ],
+      "fabrication_check": "Every number above is copied from a log I produced in the review namespace (probes.log, probes2-*.log, long.log) or from an in-process import count; the scratch was removed at the end, so the tails quoted in `commands` are the surviving record. Implementer claims re-measured by me: M-3/H4 (P1, P2, P3 plus code mutant denial_answered_inside_the_transaction in the 32-passed run), M-5 (P7 keyset ordering on uuid with no collation, page=1 walk of 39 profiles, own mutant rv_keyset_guard_strict), SEC-5 (P4b partial page, own 42501 mutant), H3 (P9b on both images incl. the mutant's survival), 0015 idempotence (P8), D list 219 = 193 + 26 and 15 code mutants (import), all 26 A1 migration mutants killed on both images and all 15 code mutants killed (long.log). SEC-6 confirmed from infrx/auth/keys.py:47-55 and infrx/config.py:64. NOT re-run by me: the implementer's two full `tests/d` sweeps (299 passed per image) - I ran the A1 slice only (test_signup.py + `-k a1_`), which is what my lens needed; the concurrent-retirement race window between a claim's retired check and a retirement's commit (evidence Limits 3) was not exercised, only read. My timings (about 1 min per run) are far below the implementer's 18-20 min because this host was lightly loaded; that is not evidence against their figures.",
+      "cleanup": "Removed: container infrx-review-a1-security-postgres (and its -supabase variant; both verified absent), lock /tmp/infrx-review-a1-security.lock, scratch /tmp/claude-1000/confirm-a1-security-1190409 (all probe scripts and logs lived there). Never touched: port 55432, infrx-d1-postgres, infrx-d2-*, infrx-d3-*, any other infrx-review-*, gideon-*; no worktree was edited or committed; no hosted project reached."
+    }
+  ]
+}
