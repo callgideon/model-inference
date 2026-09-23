@@ -9,10 +9,16 @@ A `HarnessBusy` refusal means another checkout holds the D port: retry, never re
 """
 from __future__ import annotations
 
-import pytest
-from infrx.state import migrations
+import asyncio
 
-from . import checks_admission, checks_leases, pgharness
+import pytest
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.records import OutboxKind
+from infrx.state import migrations
+from infrx.state.outbox import OutboxRelay
+
+from . import checks_admission, checks_leases, pgharness, pgstore
+from .test_outbox_relay import drain, index
 
 DB = f"{pgharness.DATABASE}_leases"
 
@@ -83,3 +89,34 @@ def test_races__claim_heartbeat_and_cancel_serialize_on_the_job_row() -> None:
     with pgharness.connect(race_db) as conn:
         checks_admission.seed_admission(conn)
     print(checks_leases.check_lease_races(pgharness.connect, race_db))
+
+
+# --- D2 OB-5b, landed with the reaper: the relay case --------------------------------------
+@pytest.mark.parametrize("backend", ("fake", "memory"))
+def test_relay__a_preparation_lost_after_a_rebuild_comes_back_through_the_pump(backend) -> None:
+    """A rebuild skips a job under a live preparation lease (its prepare_dispatch row is
+    already acknowledged). When that lease lapses, `recover` writes a FRESH prepare_dispatch
+    row in the same transaction, so the relay's next pump - no second rebuild - indexes the
+    job again under a NEW event id, and another worker claims generation 2."""
+    h = pgstore.factory()
+    h.extra["grant"](b.ORG_A, "25.00")
+    store = h.extra["store"]
+
+    async def body():
+        q = index(backend, h)
+        request = b.request(h)
+        await h.port.admit(request, b.idem(request, request.request_id))
+        await OutboxRelay(store, q).pump()
+        [first] = await drain(q)
+        busy = await h.port.claim_preparation(request.request_id, "prep-a")
+        lost = index(backend, h)                     # the index is lost and rebuilt
+        assert await OutboxRelay(store, lost).rebuild() == 0, "a leased job was re-offered"
+        h.clock.advance(busy.expires_at.timestamp() - h.clock.now().timestamp())
+        assert await store.recover() == (), "a preparation reap produced an index event"
+        assert (await OutboxRelay(store, lost).pump())["indexed"] == 1, "nothing to pump"
+        [again] = await drain(lost)
+        assert (again.job_id, again.kind) == (request.request_id, OutboxKind.prepare_dispatch) \
+            and again.event_id != first.event_id, (first, again)
+        lease = await h.port.claim_preparation(request.request_id, "prep-b")
+        assert (lease.generation, lease.worker_id) == (2, "prep-b"), lease
+    asyncio.run(body())

@@ -1860,6 +1860,16 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  values (gen_random_uuid(), p_id, j.org_id, 'inference_dispatch',",
        "  values (gen_random_uuid(), p_id, j.org_id, 'prepare_dispatch',",
        "admission", "recover_requeue", "a requeued job is handed to the preparation pool"),
+    _m("d3_requeue_reopens_the_old_row", LEASES,
+       "  insert into infrx.outbox (event_id, aggregate_id, org_id, kind, payload, available_at)\n"
+       "  values (gen_random_uuid(), p_id, j.org_id, 'inference_dispatch',\n"
+       "          jsonb_build_object('job_handle', j.job_handle, 'request_id', p_id,\n"
+       "                             'attempt', j.attempts), p_now)\n",
+       "  update infrx.outbox set acknowledged_at = null, claimed_at = null, claimed_by = null\n"
+       "   where event_id = (select event_id from infrx.outbox where aggregate_id = p_id\n"
+       "                        and kind = 'inference_dispatch' order by created_at desc limit 1)\n",
+       "admission", "recover_requeue",
+       "a requeue re-sends an old event id a replay-safe index drops (D2 OB-5b)"),
     _m("d3_requeue_keeps_the_lost_attempt", LEASES,
        "   where job_id = p_id and kind = 'inference' and generation = a.generation;",
        "   where false;",
@@ -1897,6 +1907,15 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "    values (gen_random_uuid(), p_id, j.org_id, 'prepare_dispatch',",
        "    values (gen_random_uuid(), p_id, j.org_id, 'inference_dispatch',",
        "admission", "recover_preparation", "a reaped preparation is never tried again"),
+    _m("d3_prep_redispatch_reopens_the_old_row", LEASES,
+       "    insert into infrx.outbox (event_id, aggregate_id, org_id, kind, payload, available_at)\n"
+       "    values (gen_random_uuid(), p_id, j.org_id, 'prepare_dispatch',\n"
+       "            jsonb_build_object('job_handle', j.job_handle, 'request_id', p_id,\n"
+       "                               'attempt', j.preparation_attempts), p_now);",
+       "    update infrx.outbox set acknowledged_at = null, claimed_at = null, claimed_by = null\n"
+       "     where aggregate_id = p_id and kind = 'prepare_dispatch';",
+       "admission", "recover_preparation",
+       "a lost preparation is re-sent under an old event id a replay-safe index drops (OB-5b)"),
     _m("d3_prep_reap_keeps_the_lease", LEASES,
        "     where job_id = p_id and kind = 'preparation' and generation = a.generation;",
        "     where false;",

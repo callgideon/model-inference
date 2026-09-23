@@ -394,6 +394,19 @@ def _recover(conn) -> list[dict]:
     return call(conn, "recover", {"limits": LIMITS})
 
 
+RELAY = "relay-d3"
+
+
+def pump(conn) -> list[dict]:
+    """What a relay reads now, acknowledged under its own worker id (D2's protocol: OB-8
+    requires the id, OB-1b lands only the claim holder's acknowledgment)."""
+    events = call(conn, "dispatch_pending", {"worker_id": RELAY, "limit": 1000})
+    ids = [e["event_id"] for e in events]
+    assert call(conn, "acknowledge_dispatch", {"event_ids": ids, "worker_id": RELAY}) == \
+        len(ids), f"the relay could not acknowledge what it was handed: {events}"
+    return events
+
+
 def _decide(conn, request_id: str) -> list:
     """The reaper's per-job decision on its own, from the fresh row - what it does when a
     renewal (or any other commit) lands between its candidate scan and its row lock."""
@@ -406,7 +419,8 @@ def check_recover_requeue(conn) -> str:
     """The reaper, inference side: a live lease is left alone (by the sweep AND by the
     per-job decision under the lock); an expired one BEFORE publication is requeued as a
     new attempt (attempts + 1, the attempt released, the job queued with only the unspent
-    queue remainder, R38) with exactly one inference_dispatch, returned as an IndexEvent
+    queue remainder, R38) with exactly one NEW inference_dispatch row (a fresh event id the
+    relay delivers, never an old row reopened - D2 OB-5b), returned as an IndexEvent
     carrying that row's own id; after MAX_PREPUBLICATION_RETRIES requeues it is
     `retries_exhausted`; AFTER publication it is `lost_after_publication` and never
     requeued; past the generation instant (lease live) it is `deadline_exceeded`; a queued
@@ -415,6 +429,7 @@ def check_recover_requeue(conn) -> str:
 
     def body():
         request = queued(conn, world)
+        pump(conn)                                    # the first dispatch is delivered
         advance(conn, 3)                              # 3 s of the queue budget used
         code, answer = d3(conn, "claim", job_id=request.request_id, worker_id="w1")
         assert code is None, code
@@ -436,7 +451,10 @@ def check_recover_requeue(conn) -> str:
             (request.request_id,)).fetchall()
         assert len(dispatches) == 2 and str(dispatches[-1][0]) == event["event_id"] and \
             event["attempt"] == 1 and event["kind"] == "inference_dispatch", \
-            (dispatches, event)
+            f"not one NEW inference_dispatch row carrying the returned id: {dispatches} {event}"
+        # OB-5b: a FRESH row (new event id), pending for the relay - never the old one reopened
+        assert [e["event_id"] for e in pump(conn)] == [event["event_id"]], \
+            "the requeue is not the relay's one new pending row"
         assert _decide(conn, request.request_id) == [], "a queued job was reaped early"
         # the retry counter: MAX_PREPUBLICATION_RETRIES requeues, then retries_exhausted
         for attempt in range(2, DEFAULTS.max_prepublication_retries + 1):
@@ -478,8 +496,8 @@ def check_recover_requeue(conn) -> str:
 
 def check_recover_preparation(conn) -> str:
     """The reaper, preparation side (R46/R52): a live preparation lease is left alone; an
-    expired one is released and the job redispatched (`prepare_dispatch`, still preparing,
-    no index event); after the first claim plus MAX_PREPUBLICATION_RETRIES it is settled
+    expired one is released and the job redispatched by a FRESH `prepare_dispatch` row the
+    relay delivers under a new event id (D2 OB-5b; still preparing, no index event); after the first claim plus MAX_PREPUBLICATION_RETRIES it is settled
     `preparation_failed` without a further dispatch; past `preparation_deadline_at` it is
     `preparation_failed`."""
     world = ca.World(conn)
@@ -488,6 +506,7 @@ def check_recover_preparation(conn) -> str:
         request = gateway_request(world)
         ca.admit(conn, request, b.idem(request, request.request_id))
         for attempt in range(1, DEFAULTS.max_prepublication_retries + 1):
+            delivered = {e["event_id"] for e in pump(conn)}    # the index has every row
             code, answer = claim(conn, request.request_id, f"p{attempt}")
             assert code is None and answer["lease"]["generation"] == attempt, (code, answer)
             advance(conn, PREP_TTL - 1)
@@ -501,6 +520,11 @@ def check_recover_preparation(conn) -> str:
             assert live_attempts(conn, request.request_id) == [], "the lost lease is live"
             assert kinds(conn, request.request_id).count("prepare_dispatch") == attempt + 1, \
                 "the reaped preparation was not redispatched"
+            # OB-5b: a FRESH row the relay delivers (new event id), never an old one reopened
+            fresh = pump(conn)
+            assert [(e["job_id"], e["kind"]) for e in fresh] == \
+                [(request.request_id, "prepare_dispatch")] and \
+                fresh[0]["event_id"] not in delivered, f"not one fresh redispatch: {fresh}"
         claim(conn, request.request_id, "last")
         advance(conn, PREP_TTL)
         out = reaped(_recover(conn))
