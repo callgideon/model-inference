@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:19:43Z",
+  "updated": "2026-09-23T18:25:08Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -8,12 +8,6 @@
       "phase": "software slices MERGED (164e43e); GPU measurement slices pending W3 \u2192 I2B",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
-    },
-    "I3B-followup": {
-      "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round 5 HANDED BACK a693c6e (verifier's four items; I3B list 109/107); light verifier running \u2192 merge after E3B2 with IR2-2 (r4-ir22.diff incl. KNOWN_STALE = {})",
-      "since": "2026-09-23T11:22:39Z",
-      "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
@@ -48,8 +42,8 @@
       "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "round-5 verifier at a693c6e running",
-      "since": "2026-09-23T18:14:32Z"
+      "phase": "MERGED 90b81c7 (+ 08725c0 IR2-2) after the round-5 verifier pass at a693c6e; merged-tree checks running (i3bf-merged-08725c0.log)",
+      "since": "2026-09-23T18:25:08Z"
     },
     "F-fakes-followup": {
       "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
@@ -354,6 +348,11 @@
       "merged": "d1d4a68",
       "when": "2026-09-23T18:16:49Z",
       "note": "phase 2 gate; IR2-1 d588c3e, IR2-3 0a642ad; phase-3 bodies pend on G2-R1/D5"
+    },
+    "I3B-followup": {
+      "merged": "90b81c7",
+      "when": "2026-09-23T18:25:08Z",
+      "note": "R92 restore ACL families, rc10 drills, rc04a live restart; IR2-2 08725c0"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
