@@ -44,6 +44,9 @@ MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
 # the reservation, and the terminal write is then checked like any other, never
 # waved through (02: per-job *and* global byte limits, both enforced).
 TERMINAL_EVENT_RESERVE_BYTES = 1024
+# 0017 (D4 Limit 2): a terminal event written with no chunk left takes this frozen TTL (the
+# trigger sees no store limits); otherwise it takes the newest chunk's.
+TERMINAL_TTL_WITHOUT_CHUNKS_S = 3600
 
 # released_free = the customer was never going to be charged (rejected, invalid,
 # never ran). released_platform_absorbed = we did work and ate the cost.
@@ -1442,10 +1445,12 @@ class FakeStreamStore:
         sequence = self._last_sequence(job.id, generation) + 1
         now = self.clock.now()
         payload = self.terminal_payload(outcome)
+        # the newest chunk's TTL, so a job's chunks expire in cursor order (0017)
+        ttl = (stored[-1].expires_at - stored[-1].persisted_at if stored
+               else timedelta(seconds=TERMINAL_TTL_WITHOUT_CHUNKS_S))
         chunk = Chunk(job_id=job.id, generation=generation, sequence=sequence,
                       event_type=ChunkEventType.terminal, payload=payload,
-                      bytes=len(compact_bytes(payload)), persisted_at=now,
-                      expires_at=now + timedelta(seconds=self.limits.journal_chunk_ttl_s))
+                      bytes=len(compact_bytes(payload)), persisted_at=now, expires_at=now + ttl)
         stored.append(chunk)
         self.jobs.journal.store(job.id, chunk.bytes, settling=True)
         return chunk

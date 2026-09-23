@@ -3034,6 +3034,17 @@ async def dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark(f
                                             Cursor.parse("1-3"), 10)
     assert [(chunk.event_type, chunk.generation, chunk.sequence) for chunk in page] == \
         [(ChunkEventType.terminal, 1, 4)], "the terminal event restarted below the watermark"
+    # its TTL (0017, D4 Limit 2): with no chunk left the frozen 3600 s, not the store's 30 s;
+    # with chunks, the newest chunk's, whatever the store is configured with by then
+    assert page[0].expires_at - page[0].persisted_at == timedelta(seconds=3600), \
+        f"a chunkless terminal event lives {page[0].expires_at - page[0].persisted_at}"
+    other, admitted, lease = await _stream_job(harness, key="terminal-ttl")
+    await harness.port.append(lease, b.events("d"))
+    hook(harness, "retune")(journal_chunk_ttl_s=600)
+    await jobs.cancel(other.org_id, admitted.job_handle)
+    page, _ = await harness.port.read_owned(other.org_id, admitted.job_handle, None, 10)
+    assert [chunk.expires_at - chunk.persisted_at for chunk in page] == \
+        [timedelta(seconds=30)] * 2, "the terminal event did not take the newest chunk's TTL"
 
 
 async def dur_output__expiry_never_runs_on_a_callers_clock(factory):
