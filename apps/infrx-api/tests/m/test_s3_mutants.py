@@ -18,7 +18,8 @@ from . import test_s3
 
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-SUBSET = ("s3_prefix_unchecked", "s3_transport_failure_is_absence")
+SUBSET = ("s3_prefix_unchecked", "s3_transport_failure_is_absence", "s3_put_not_conditional",
+          "s3_listing_ignores_its_prefix")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

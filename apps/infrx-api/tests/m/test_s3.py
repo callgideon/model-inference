@@ -23,7 +23,14 @@ import pytest
 from infrx import config
 from infrx.config import DEPLOYMENT_DEFAULTS, RuntimeMisconfigured
 from infrx.contracts import errors
-from infrx.media.s3 import S3ObjectStore
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.limits import DEFAULTS
+from infrx.media import store
+from infrx.media.fetch import digest_of
+from infrx.media.s3 import NO_DIGEST, S3ObjectStore
+
+from . import test_gc
+from .test_uploads import CLIP, adapter_for, created
 
 ENDPOINT = os.environ.get("INFRX_M_S3_ENDPOINT", "")
 BUCKET = os.environ.get("INFRX_M_S3_BUCKET", "infrx-m1l2")
@@ -53,6 +60,61 @@ def s3_env(monkeypatch, secret: str = SECRET_KEY) -> None:
 
 def unique_prefix() -> str:
     return f"test/m1l2/{uuid.uuid4().hex}/"
+
+
+_READY: set[str] = set()
+
+
+def s3_store(monkeypatch, prefix: str | None = None, secret: str = SECRET_KEY) -> S3ObjectStore:
+    """A store on the test bucket under a prefix of its own (the bucket made once)."""
+    s3_env(monkeypatch, secret)
+    objects = S3ObjectStore.connect(BUCKET, prefix or unique_prefix(), ENDPOINT)
+    if BUCKET not in _READY and secret == SECRET_KEY:
+        from botocore.exceptions import ClientError
+        try:
+            objects.client.create_bucket(Bucket=BUCKET)
+        except ClientError as exists:
+            if exists.response["Error"]["Code"] not in ("BucketAlreadyOwnedByYou",
+                                                        "BucketAlreadyExists"):
+                raise
+        _READY.add(BUCKET)
+    return objects
+
+
+@pytest.fixture(params=["memory", pytest.param("s3", marks=needs_s3)])
+def objects(request, monkeypatch):
+    """Every conformance case runs on both stores: the reference and the adapter."""
+    return store.InMemoryObjectStore() if request.param == "memory" else s3_store(monkeypatch)
+
+
+@pytest.fixture(params=["memory", pytest.param("s3", marks=needs_s3)])
+def pair(request, monkeypatch):
+    """Two stores: two instances, or two sibling prefixes of ONE bucket."""
+    if request.param == "memory":
+        return store.InMemoryObjectStore(), store.InMemoryObjectStore()
+    root = unique_prefix()
+    return s3_store(monkeypatch, root + "a/"), s3_store(monkeypatch, root + "b/")
+
+
+class Counting:
+    """Any store, saying how often an object was really downloaded."""
+
+    def __init__(self, inner) -> None:
+        self.inner, self.gets = inner, 0
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    async def get(self, key):
+        self.gets += 1
+        return await self.inner.get(key)
+
+
+def uploaded(adapter, data=CLIP, **constraints):
+    """An upload through the port only (no `seed`): create, the bytes, finalize."""
+    handle = created(adapter, **constraints)
+    run(adapter.put_upload(b.ORG_A, handle, data, "video/mp4"))
+    return run(adapter.finalize_upload(b.ORG_A, handle))
 
 
 # --- the settings that place the store (08 §5.1) ----------------------------------------
@@ -97,3 +159,130 @@ def test_an_unreachable_store_is_an_error_never_absence(monkeypatch):
     objects = S3ObjectStore.connect("infrx-m1l2", "test/m1l2/", UNREACHABLE)
     with pytest.raises(errors.DependencyUnavailable):
         run(objects.head("media/k"))
+
+
+# --- the port's conformance, on both stores (item 2) -----------------------------------
+SOURCE = f"media/{b.ORG_A}/v1/0123456789abcdef/source"
+
+
+def test_a_round_trip_returns_the_bytes_their_size_type_and_digest(objects):
+    """One byte and a body at MAX_MEDIA_BYTES: the bytes, `(size, type)` and the digest of
+    exactly what was stored come back."""
+    for key, data, mime in ((SOURCE, b"x", "video/mp4"),
+                            (f"payloads/{b.ORG_A}/r.json", os.urandom(DEFAULTS.max_media_bytes),
+                             "application/json")):
+        assert run(objects.put_if_absent(key, data, mime)) is True
+        assert run(objects.get(key)) == data
+        assert run(objects.describe(key)) == (len(data), mime)
+        assert run(objects.head(key)) == digest_of(data)
+
+
+def test_put_is_write_once(objects):
+    """The same bytes again, or other bytes, write nothing and say so (False): the first
+    object, its type and its digest stay."""
+    assert run(objects.put_if_absent(SOURCE, b"first", "video/mp4")) is True
+    assert run(objects.put_if_absent(SOURCE, b"first", "video/mp4")) is False
+    assert run(objects.put_if_absent(SOURCE, b"other bytes", "video/webm")) is False
+    assert run(objects.get(SOURCE)) == b"first" and run(objects.head(SOURCE)) == digest_of(b"first")
+    assert run(objects.describe(SOURCE)) == (5, "video/mp4")
+
+
+def test_a_missing_key_is_absent_to_every_operation(objects):
+    assert run(objects.head(SOURCE)) is None and run(objects.get(SOURCE)) is None
+    assert run(objects.describe(SOURCE)) is None and run(objects.keys("media/")) == []
+    run(objects.delete(SOURCE))                        # absent is not an error
+
+
+def test_delete_removes_exactly_one_object(objects):
+    other = SOURCE.replace("/source", "/prepared")
+    for key in (SOURCE, other):
+        run(objects.put_if_absent(key, b"bytes", "video/mp4"))
+    run(objects.delete(SOURCE))
+    run(objects.delete(SOURCE))                        # twice is not an error either
+    assert run(objects.head(SOURCE)) is None and run(objects.get(other)) == b"bytes"
+    assert run(objects.keys("")) == [other]
+
+
+def test_a_listing_is_exactly_its_prefix_and_names_keys_the_store_takes(objects):
+    keys = (f"media/{b.ORG_A}/v1/1/source", f"media/{b.ORG_A}/v1/2/prepared",
+            f"uploads/{b.ORG_A}/upl_x", f"payloads/{b.ORG_A}/r.json")
+    for key in keys:
+        run(objects.put_if_absent(key, key.encode(), "video/mp4"))
+    assert run(objects.keys("media/")) == sorted(keys[:2])
+    assert run(objects.keys("uploads/")) == [keys[2]]
+    assert run(objects.keys("")) == sorted(keys)
+    for key in run(objects.keys("")):
+        assert run(objects.get(key)) == key.encode()
+
+
+def test_two_stores_never_see_each_others_objects(pair):
+    """Prefix isolation: on one bucket, a sibling prefix neither reads, lists, blocks nor
+    deletes another's object - which really is stored under its own prefix."""
+    one, other = pair
+    assert run(one.put_if_absent(SOURCE, b"one's bytes", "video/mp4")) is True
+    assert run(other.head(SOURCE)) is None and run(other.get(SOURCE)) is None
+    assert run(other.describe(SOURCE)) is None and run(other.keys("")) == []
+    assert run(other.put_if_absent(SOURCE, b"other's", "video/webm")) is True
+    run(other.delete(SOURCE))
+    assert run(one.get(SOURCE)) == b"one's bytes" and run(one.keys("")) == [SOURCE]
+    if isinstance(one, S3ObjectStore):
+        raw = one.client.head_object(Bucket=one.bucket, Key=one.prefix + SOURCE)
+        assert raw["ContentLength"] == len(b"one's bytes")
+
+
+def test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refused_unread(objects):
+    """The size bound (M3): `describe` reports the stored size exactly, so an upload of
+    exactly `max_bytes` finalizes and one byte more is `request_too_large` without a
+    download."""
+    counting = Counting(objects)
+    adapter = adapter_for(objects=counting)
+    assert uploaded(adapter, max_bytes=len(CLIP)).bytes == len(CLIP)
+    over = created(adapter, max_bytes=len(CLIP) - 1)
+    # the client's bytes at the destination, past put_upload's own cap
+    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, over), CLIP, "video/mp4"))
+    gets = counting.gets
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.finalize_upload(b.ORG_A, over))
+    assert counting.gets == gets, "an oversize object was downloaded to be refused"
+
+
+def test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest(objects):
+    """M3's sweep through the store: a closed upload's destination goes at once, an
+    unreferenced object after the grace, and a live job's source never."""
+    adapter, jobs = adapter_for(objects=objects), test_gc.Jobs()
+    ref = uploaded(adapter)
+    test_gc.staged_job(adapter, jobs, ref)
+    orphan = f"media/{b.ORG_B}/v1/{'a' * 16}/source"
+    assert run(objects.put_if_absent(orphan, b"half a request", "video/mp4"))
+    sweeper = test_gc.collector(adapter, jobs)
+    assert run(sweeper.sweep()).deleted == [adapter.upload_key(b.ORG_A, ref.handle)]
+    adapter.clock.advance(test_gc.GRACE)
+    assert run(sweeper.sweep()).deleted == [orphan]
+    assert run(objects.keys("media/")) == [ref.storage_ref]
+    assert run(objects.keys("uploads/")) == []
+    assert run(objects.get(ref.storage_ref)) == CLIP
+
+
+# --- S3 only ---------------------------------------------------------------------------
+@needs_s3
+def test_a_denied_store_is_an_error_never_absence(monkeypatch):
+    """A 403 is not a 404: every operation of a store the bucket refuses raises the typed,
+    retryable `dependency_unavailable` rather than answering "absent" or "not written"."""
+    s3_store(monkeypatch)                              # the bucket exists
+    denied = s3_store(monkeypatch, secret="not-the-local-secret")
+    for call in (denied.head(SOURCE), denied.get(SOURCE), denied.describe(SOURCE),
+                 denied.keys("media/"), denied.put_if_absent(SOURCE, b"x", "video/mp4"),
+                 denied.delete(SOURCE)):
+        with pytest.raises(errors.DependencyUnavailable):
+            run(call)
+
+
+@needs_s3
+def test_an_object_stored_without_our_checksum_is_present_and_matches_no_digest(monkeypatch):
+    """An object written behind the store's back (no x-amz-checksum-sha256) is there - never
+    absent, so never overwritten or finalized as empty - and equal to no digest."""
+    objects = s3_store(monkeypatch)
+    key = f"uploads/{b.ORG_A}/upl_behind_the_back"
+    objects.client.put_object(Bucket=objects.bucket, Key=objects.prefix + key, Body=b"bytes")
+    assert run(objects.head(key)) == NO_DIGEST != digest_of(b"bytes")
+    assert run(objects.put_if_absent(key, b"bytes", "video/mp4")) is False
