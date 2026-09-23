@@ -284,6 +284,24 @@ def test_media_sec__no_store_field_outside_the_frozen_ticket_leaves():
     assert ORG_A not in response.text and "uploads/" not in response.text
 
 
+
+def test_media_sec__a_control_body_is_bounded():
+    """Create and complete read at most `MAX_CONTROL_BYTES` (plus one chunk) of an
+    authenticated body - a constraint object is four fields - and create nothing."""
+    app, _, store, _ = mounted()
+    bodies = [clips.Chunks([b" " * 1024] * 16) for _ in range(2)]
+
+    async def script(client):
+        return [await client.post(CREATE, content=bodies[0],
+                                  headers=bearer(**{"content-type": "application/json"})),
+                await client.post(complete_path(UNKNOWN_HANDLE), content=bodies[1],
+                                  headers=bearer())]
+
+    for response, body in zip(run(app, script), bodies):
+        assert body.read <= uploads.MAX_CONTROL_BYTES + 1024, body.read
+        assert response.status_code == 413 and code_of(response) == "request_too_large"
+    assert store.uploads == {}
+
 # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
 def created_handle(client_answer) -> str:
     assert client_answer.status_code == 201, client_answer.text

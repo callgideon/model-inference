@@ -16,9 +16,12 @@ from . import uploads_mutants as mutation_list
 ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-# One pytest process per mutant: the default suite runs one per item, the whole list
-# runs with `INFRX_MUTANTS=all`. A survivor fails the suite either way.
-SUBSET = ("mounted_without_a_store",)
+# One pytest process per mutant: the default suite runs one per item (enablement,
+# identity-first, the byte bound, the slot, the projection, tenancy, the declared paths);
+# the whole list runs with `INFRX_MUTANTS=all`. A survivor fails the suite either way.
+SUBSET = ("mounted_without_a_store", "create_reads_before_identity",
+          "destination_cap_is_the_request_cap", "slot_never_released",
+          "completion_renders_the_ref", "tenant_is_the_key_id", "undeclared_path")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

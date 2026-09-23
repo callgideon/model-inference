@@ -68,6 +68,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("created_is_not_201", "a created upload is 201 (the section 7 default)",
        U, "status_code=201,", "status_code=200,",
        "test_media_sec__the_ticket_carries_exactly_the_frozen_fields"),
+    _m("control_body_unbounded", "create and complete read at most MAX_CONTROL_BYTES",
+       U, "max_bytes=MAX_CONTROL_BYTES,", "max_bytes=limits.max_request_bytes,",
+       "test_media_sec__a_control_body_is_bounded"),
     # --- item 3: PUT /v1/uploads/{handle}, the constrained destination -----------
     _m("destination_cap_is_the_request_cap", "the destination reads at most MAX_MEDIA_BYTES",
        U, "max_bytes=limits.max_media_bytes,", "max_bytes=limits.max_request_bytes,",
