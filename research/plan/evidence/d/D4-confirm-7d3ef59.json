@@ -1,0 +1,484 @@
+{
+  "verdict": "fix_required",
+  "head": "7d3ef59",
+  "reviews": [
+    {
+      "lens": "journal",
+      "verdict_hint": "pass",
+      "fabrication_check": "Every outcome and failure text above was copied from command output in my scratch at 7d3ef59. I did not run the full ~19-min plain sweep, the -k d4_ list on the Supabase image, or the Supabase test_streamstore_conformance; the lane's figures for these (802/29/1, 101/30) are unverified by me. Round-2 claims I reproduced: J1 race kill; J2/H3a TTL and the (3,1) generation; H1 exactly one job per pass at limit 1; J3 kill (through the check's conversion of the index violation); M3 terminalization with no reservation; H4 direct assertion (dies 'after prepare'); 51/51 d4_ migration mutants; 14 code mutants. Round-1's four surviving hand mutants were re-applied by hand with my own edit text (not the list's), and all die by AssertionError at the named check.",
+      "cleanup": "Harness containers (infrx-confirm-d4-journal-postgres and its -supabase variant) were removed at interpreter exit; docker ps -a shows 0 matching. Lock /tmp/infrx-confirm-d4-journal.lock deleted. Scratch /tmp/claude-1000/confirm-d4-journal-3449128 deleted, including the driver and edited copies. No Valkey container was started. The codex-d4 worktree and ports 55435/55465/55475/55432 were not touched.",
+      "mutants": [
+        {
+          "name": "R83 HM1 expire inner 'if not found then continue' -> 'null' (round-1 J1 survivor)",
+          "edit": "0017 expire_journal: second 'continue;' replaced by 'null;'",
+          "result": "killed (plain + supabase): AssertionError: a stale pruner reset job 2's watermark to None-None",
+          "killed_by": "journal_races / stale_pruner_race"
+        },
+        {
+          "name": "R83 HM2 v_ttl 3600 -> 30 s (round-1 J2 survivor)",
+          "edit": "0017 journal_terminal_event: v_ttl := interval '30 seconds'",
+          "result": "killed: AssertionError: 0012 preparation failure: a chunkless terminal event lives 0:00:30",
+          "killed_by": "terminal_every_path"
+        },
+        {
+          "name": "R83 HM3 'limit v_limit' dropped (round-1 H1 survivor)",
+          "edit": "0017 expire_journal candidate query without limit",
+          "result": "killed: AssertionError: pass 1 with limit 1 did not prune exactly one job's two chunks",
+          "killed_by": "expire_clock"
+        },
+        {
+          "name": "R83 HM4 WHEN 'old.settled_at is null and' dropped (round-1 J3 survivor)",
+          "edit": "0017 trigger WHEN (new.settled_at is not null ...)",
+          "result": "killed (plain + supabase): AssertionError: rewriting settled_at to itself failed: duplicate key ... stream_chunks_one_terminal_idx; the check converts the error into this assertion (see JL-N1)",
+          "killed_by": "terminal_every_path / rewritten_to_itself"
+        },
+        {
+          "name": "SM5 limit v_limit + 1",
+          "edit": "0017 expire_journal 'limit v_limit + 1'",
+          "result": "killed: pass 1 with limit 1 did not prune exactly one job's two chunks",
+          "killed_by": "expire_clock"
+        },
+        {
+          "name": "SM6 limit v_limit - 1",
+          "edit": "0017 expire_journal 'limit v_limit - 1' (prunes nothing at limit 1)",
+          "result": "killed: pass 1 with limit 1 did not prune exactly one job's two chunks",
+          "killed_by": "expire_clock"
+        },
+        {
+          "name": "SM7 chunkless terminal at min(generation)",
+          "edit": "0017 greatest(coalesce(min(a.generation),1),...)",
+          "result": "killed: recover retries_exhausted: a chunkless terminal event at 1-1",
+          "killed_by": "terminal_every_path"
+        },
+        {
+          "name": "SM8 terminal event on every state transition",
+          "edit": "0017 trigger 'after update on infrx.jobs when (old.state is distinct from new.state ...)'",
+          "result": "killed: after prepare the queued job's journal shows a terminal event",
+          "killed_by": "terminal_every_path / never_while_live"
+        },
+        {
+          "name": "CM1 stale-pruner check without read(None)",
+          "edit": "checks_journal: replay_gap assertion -> pass; run with HM1 and baseline",
+          "result": "HM1 still killed by the watermark assertion; the baseline survives. The two assertions are each sufficient (redundant, no hole)",
+          "killed_by": "n/a (check mutant; redundancy)"
+        },
+        {
+          "name": "CM2 stale-pruner check without the final watermark assertion",
+          "edit": "checks_journal: final watermark assert -> assert True; run with HM1",
+          "result": "HM1 still killed: 'a cursor-less replay of a pruned prefix answered None' (the read(None) assertion is load-bearing by itself)",
+          "killed_by": "n/a (check mutant; redundancy)"
+        },
+        {
+          "name": "CM3 third connection released too early",
+          "edit": "checks_journal: blocker.execute('commit') right after the FOR UPDATE, before pruner B starts",
+          "result": "check mutant killed by the unmutated baseline: 'backend 81 never waited on the first transaction's lock'. The check detects when the race is not exercised",
+          "killed_by": "baseline (waiting_on_a_lock)"
+        },
+        {
+          "name": "CM4 TTL asserted on one path only",
+          "edit": "checks_journal: TTL assert guarded by what != 'cancel before publication' or ...",
+          "result": "HM2 still killed ('cancel before publication: ... lives 0:00:30'). Equivalent for the current SQL: v_ttl is one constant shared by every chunkless path, so this is not a hole",
+          "killed_by": "n/a (check mutant; equivalent)"
+        },
+        {
+          "name": "CM5 chunkless generation asserted as 1 always",
+          "edit": "checks_journal: retries_exhausted expected (1,1)",
+          "result": "check mutant killed by the baseline ('a chunkless terminal event at 3-1'); under it the min() mutant SM7 SURVIVES. The (3,1) expectation is the only thing that kills SM7",
+          "killed_by": "baseline"
+        },
+        {
+          "name": "CM6a expire_clock count 'at most' only",
+          "edit": "checks_journal: == (None, 2) -> [1] <= 2; run with SM6, HM3",
+          "result": "SM6 still killed by 'a pass pruned past its job bound' (exact per-job lengths); HM3 killed",
+          "killed_by": "n/a (check mutant; redundancy)"
+        },
+        {
+          "name": "CM6b expire_clock fully 'at most' (count <= and lengths >=)",
+          "edit": "checks_journal: both assertions weakened; run with SM6, HM3, SM5",
+          "result": "SM6 (limit-1: prunes nothing) SURVIVES; HM3 and SM5 are still killed. This shows the 'exactly one job' form is load-bearing, and the shipped check has it",
+          "killed_by": "n/a (check mutant; the original check kills SM6)"
+        },
+        {
+          "name": "CM7 H4 without the heartbeat assertion",
+          "edit": "checks_journal: clean('heartbeat') deleted; run with SM8",
+          "result": "SM8 still killed 'after prepare'. The heartbeat step is vacuous for any jobs-trigger mutant, because 0016 heartbeat updates only attempts (JL-N2)",
+          "killed_by": "n/a (check mutant; vacuous step)"
+        },
+        {
+          "name": "CM9 J3 conversion removed",
+          "edit": "checks_journal rewritten_to_itself: except Exception -> except ZeroDivisionError; run with HM4 and baseline",
+          "result": "HM4 becomes setup_error 'the check raised instead of asserting: UniqueViolation ... stream_chunks_one_terminal_idx'; the baseline survives. The J3 kill rests on the check's deliberate conversion (JL-N1)",
+          "killed_by": "n/a (classification probe)"
+        },
+        {
+          "name": "code: the_pruning_bound_is_not_sent (by hand)",
+          "edit": "journal.py '\"limit\": EXPIRE_JOBS_PER_PASS}))' -> '}))'",
+          "result": "killed: test_expire__passes_the_callers_bound_and_counts AssertionError: {'now': '2026-09-20T12:00:00+00:00'} (no limit sent). Equivalent at the SQL layer (JL-N3)",
+          "killed_by": "test_journal_units::test_expire__passes_the_callers_bound_and_counts"
+        },
+        {
+          "name": "code: adapter sends limit 0 (own)",
+          "edit": "journal.py '\"limit\": 0'",
+          "result": "killed: AssertionError: {'limit': 0, 'now': ...} != {..., 'limit': 1000}",
+          "killed_by": "test_journal_units::test_expire__passes_the_callers_bound_and_counts"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-d4 archive 7d3ef59 | tar -x -C /tmp/claude-1000/confirm-d4-journal-3449128; patched tests/d/pgharness.py: PORT=55481, DATABASE=infrx_confirm_d4_journal, CONTAINER=infrx-confirm-d4-journal-postgres, lock /tmp/infrx-confirm-d4-journal.lock; test_pgharness decoy infrx-confirm-d4-journal-dharness-postgres:55521",
+          "exit": 0,
+          "tail": "scratch created; harness isolated"
+        },
+        {
+          "cmd": "UV_OFFLINE=1 make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "INFRX_D2_VALKEY_PORT=55494 INFRX_D2_VALKEY_CONTAINER=infrx-confirm-d4-journal-valkey uv run --frozen pytest -q tests/d/test_journal.py tests/d/test_journal_races.py tests/d/test_streamstore_conformance.py (plain)",
+          "exit": 0,
+          "tail": "40 passed, 5 xfailed in 25.67s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_migration_mutants.py -k d4_ -s (plain)",
+          "exit": 0,
+          "tail": "51 passed, 428 deselected in 86.83s; e.g. d4_expire_empty_inner_resets_watermark: killed by journal_races -> a stale pruner reset job 2's watermark to None-None; d4_terminal_trigger_on_any_update -> AssertionError: untyped 23505"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/d/test_code_mutants_d4.py",
+          "exit": 0,
+          "tail": "D4 code mutants: 14 / 15 passed in 39.10s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.d._confirm_driver BASE_races BASE_terminal BASE_expire HM1..HM4 SM5..SM8 (plain)",
+          "exit": 0,
+          "tail": "3 baselines survived; all 8 hand SQL mutants killed by AssertionError (texts in the mutant table)"
+        },
+        {
+          "cmd": "check-mutant loop CM1..CM9 x paired SQL mutants (checks_journal.py edited then restored, cmp RESTORED)",
+          "exit": 0,
+          "tail": "CM5 x SM7 survived; CM6b x SM6 survived; CM9 x HM4 setup_error; the rest killed (see mutant table); RESTORED"
+        },
+        {
+          "cmd": "hand code mutants on infrx/state/journal.py + pytest -k test_expire__passes_the_callers_bound_and_counts",
+          "exit": 1,
+          "tail": "AssertionError: {'now': '2026-09-20T12:00:00+00:00'} / AssertionError: {'limit': 0, ...}; file restored (cmp RESTORED)"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/d/test_journal_races.py tests/d/test_journal.py",
+          "exit": 0,
+          "tail": "27 passed in 21.52s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase uv run --frozen python -m tests.d._confirm_driver BASE_races HM1_inner_not_found_to_null HM4_when_old_null_dropped",
+          "exit": 0,
+          "tail": "BASE survived; HM1 killed (watermark None-None); HM4 killed (one_terminal_idx via conversion)"
+        },
+        {
+          "cmd": "docker ps -a | grep confirm-d4-journal; rm -f /tmp/infrx-confirm-d4-journal.lock; rm -rf /tmp/claude-1000/confirm-d4-journal-3449128",
+          "exit": 0,
+          "tail": "0 containers left; lock and scratch removed"
+        }
+      ]
+    },
+    {
+      "lens": "adapter",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every result above comes from commands run in this session on a scratch archive of 7d3ef59 at /tmp/claude-1000/confirm-d4-adapter-3448456. They used an isolated container (infrx-confirm-d4-adapter-postgres[-supabase], port 55482, lock /tmp/infrx-confirm-d4-adapter.lock) and VPORT 55495, and no lane ports. Lane claims confirmed:\n- The 14/14 code mutants and the unit tests pass.\n- M1: NUL in a key or string at any depth, NaN, \u00b1Inf and 1e309 are refused JournalWriteFailed, raised directly and not via domain_error. Nothing is sent (0 statements on the fake connection). On real Pg the whole batch is refused, with rows 0 and published False. The literal \\u0000 text, -0.0 and 1e308 pass.\n- The fake-side pin is a plain assertion, not an xfail, so it FAILS loudly (it does not keep passing silently) once F adopts the rule.\n- M2: the stored measures match. The adapter has no size pre-check; the SQL alone decides on octet_length(jsonb::text). The 1048572-compact / 1048870-stored batch is refused whole.\n- M3: reserved=0 terminalizes with no chunk. reserved=100 (<107) refuses the cancel whole, and the job stays running with settled_at NULL.\n- H2: raises= is effective, shown by a mutant and a control.\n- The d4 oversize, credit, privilege and reservation migration mutants are 14/14 killed.\nNot rerun: the full 19-minute sweep and the 51-mutant run.",
+      "cleanup": "Both containers (plain and -supabase) were removed at interpreter exit by the harness; `docker ps -a | grep confirm-d4-adapter` returns 0. /tmp/infrx-confirm-d4-adapter.lock was removed. The scratch directory /tmp/claude-1000/confirm-d4-adapter-3448456 was removed, including the probe files and the patched harness. The codex-d4 worktree was never written to (git status clean) and no lane port was used.",
+      "mutants": [
+        {
+          "name": "isinf_only (reviewer)",
+          "edit": "journal.py `return math.isfinite(value)` -> `return not math.isnan(value)`",
+          "result": "killed",
+          "killed_by": "test_journal_units::test_append__refuses_what_jsonb_cannot_store_before_sending_it (JournalWriteFailed was not raised)"
+        },
+        {
+          "name": "isnan_only (reviewer)",
+          "edit": "`return math.isfinite(value)` -> `return not math.isinf(value)`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "nul_prefix_only (reviewer)",
+          "edit": "`\"\\x00\" not in value` -> `not value.startswith(\"\\x00\")`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "list_not_recursed (reviewer)",
+          "edit": "`isinstance(value, (list, tuple))` -> `isinstance(value, tuple)`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "key_or_value (reviewer)",
+          "edit": "`_journalable(key) and _journalable(item)` -> `... or ...`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "dict_values_unchecked (reviewer)",
+          "edit": "dict branch checks keys only",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "any_not_all (reviewer)",
+          "edit": "`if not all(_journalable(...))` -> `if all(not _journalable(...))`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "first_event_only (reviewer)",
+          "edit": "`for event in events)` -> `for event in events[:1])`",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it"
+        },
+        {
+          "name": "last_event_only (reviewer)",
+          "edit": "`for event in events)` -> `for event in events[-1:])`",
+          "result": "SURVIVED (unit, streamstore conformance and test_journal.py: 39 passed, 5 xfailed) -> finding A1"
+        },
+        {
+          "name": "wrong_error_type (reviewer)",
+          "edit": "`raise errors.JournalWriteFailed(` -> `raise errors.InvalidRequest(`",
+          "result": "killed",
+          "killed_by": "_refused exact class: expected JournalWriteFailed, got InvalidRequest"
+        },
+        {
+          "name": "literal_text_refused (reviewer)",
+          "edit": "the str branch also refuses the literal text \\\\u0000",
+          "result": "killed",
+          "killed_by": "test_append__refuses_what_jsonb_cannot_store_before_sending_it (positive payload refused)"
+        },
+        {
+          "name": "scalars_refused (reviewer)",
+          "edit": "_journalable's final `return True` -> `return False`",
+          "result": "survived test_journal_units; killed on Pg",
+          "killed_by": "test_streamstore_conformance[dur_output__any_committed_chunk_is_publication] -> finding A4"
+        },
+        {
+          "name": "H2 raises= effectiveness (reviewer)",
+          "edit": "jobstore.py:369 `raise NotImplementedError(` -> `raise ValueError(`",
+          "result": "killed: streamstore 5/5 pending FAILED; jobstore 23 _D5 FAILED, F2 still XFAIL (InvalidApiKey), RACY XPASS; control with raises= removed: 5 xfailed (hidden)",
+          "killed_by": "xfail(strict=True, raises=NotImplementedError) in test_streamstore_conformance/test_jobstore_conformance"
+        },
+        {
+          "name": "rv_limit_on_characters (reviewer SQL)",
+          "edit": "0017 `max(octet_length((e->'payload')::text))` -> `max(length(...))`",
+          "result": "SURVIVED (append_oversize) -> finding A3"
+        },
+        {
+          "name": "rv_limit_on_batch_sum (reviewer SQL)",
+          "edit": "0017 `if v_largest > v_max_event` -> `if v_bytes > v_max_event`",
+          "result": "SURVIVED (append_oversize) -> finding A3"
+        },
+        {
+          "name": "rv_limit_minus_numbers (reviewer SQL)",
+          "edit": "measure strips digits: octet_length(regexp_replace(payload::text,'[0-9]','','g'))",
+          "result": "killed",
+          "killed_by": "append_oversize: a float event of 308 stored bytes, 64-byte limit: None"
+        },
+        {
+          "name": "rv_zero_reservation_refused (reviewer SQL)",
+          "edit": "trigger WHEN `journal_reserved_bytes > 0` -> `>= 0`",
+          "result": "killed",
+          "killed_by": "terminal_every_path: a job without a journal reservation could not terminalize: journal_capacity_exhausted"
+        },
+        {
+          "name": "lane d4_ migration mutants (14 selected)",
+          "edit": "d4_oversize_event_stored, d4_event_limit_off_by_one, d4_only_the_first_event_is_measured, d4_job_ceiling_ignores_the_terminal_reserve, d4_job_ceiling_is_the_whole_reservation_plus_one, d4_terminal_event_waved_through, d4_terminal_reserve_sized_to_this_outcome, d4_stored_bytes_not_counted, d4_stored_counted_beside_the_reservation, d4_terminal_event_without_a_reservation, d4_terminal_event_legacy_regime_only, d4_append_granted_to_authenticated, d4_journal_usage_granted_to_anon, d4_chunk_doc_callable_by_the_service",
+          "result": "14/14 killed on the plain image",
+          "killed_by": "append_oversize / append_job_ceiling / append / global_charge / terminal_every_path / credit_journal / journal_privileges"
+        },
+        {
+          "name": "lane code mutants (14)",
+          "edit": "code_mutants_d4.MUTANTS",
+          "result": "14/14 killed",
+          "killed_by": "test_code_mutants_d4.py"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-d4 archive 7d3ef59 | tar -x -C /tmp/claude-1000/confirm-d4-adapter-3448456 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "patch tests/d/pgharness.py (SERVICE container=infrx-confirm-d4-adapter-postgres port 55482 db infrx_confirm_d4_adapter, lock /tmp/infrx-confirm-d4-adapter.lock) and test_pgharness DECOY port 55482+40",
+          "exit": 0,
+          "tail": "SERVICE = _NS(container=\"infrx-confirm-d4-adapter-postgres\", host_port=55482, ...)"
+        },
+        {
+          "cmd": "pytest -q tests/d/test_journal_units.py tests/d/test_code_mutants_d4.py (no Docker)",
+          "exit": 0,
+          "tail": "21 passed in 46.93s (6 units + well-formed + 14 code mutants)"
+        },
+        {
+          "cmd": "PYTHONPATH=. python probe_m1.py (adapter refusal edge payloads, _Conn statement count)",
+          "exit": 0,
+          "tail": "nested key NUL / NUL in list in dict / NaN in list / 1e309: JournalWriteFailed statements=0; literal \\u0000, -0.0, 1e308, huge int: sent; lone surrogate / surrogate key: sent; bytes / Decimal / Decimal NaN / set: sent but json.dumps TypeError"
+        },
+        {
+          "cmd": "INFRX_D2_VALKEY_PORT=55495 pytest -q tests/d/test_journal.py -k 'oversize or credit or privilege or ...' -s",
+          "exit": 0,
+          "tail": "limit 1048576 accepted, 1048577 refused (fake compact measure 1048575); 5 passed"
+        },
+        {
+          "cmd": "pytest -q tests/d/test_zz_probe_adapter.py -s (reviewer Pg probe, plain)",
+          "exit": 0,
+          "tail": "MEASURE logprob 1e300 compact 18 stored 314; [1e300]*10 77/3037; 1e16 11/24; -3.2e-07 14/18; -0.0 10/10; 1e308 12/316. BOUNDARY compact 1048572 stored 1048870 -> journal_write_failed rows 0 published False. SQL \\ud800 untyped 22P02; literal \\\\u0000 stored. RESERVED100 cancel journal_capacity_exhausted state running settled_at None journal []; RESERVED0 cancel None state cancelled journal [] stored 0"
+        },
+        {
+          "cmd": "pytest -q tests/d/test_zz_probe_adapter.py -k e2e -s (real PgStreamStore.append)",
+          "exit": 0,
+          "tail": "NUL -> JournalWriteFailed; [nan] -> JournalWriteFailed; \\ud800 -> psycopg.errors.InvalidTextRepresentation 22P02; rows 0 published False"
+        },
+        {
+          "cmd": "H2 mutant (complete raises ValueError): pytest tests/d/test_streamstore_conformance.py -k <5 pending>",
+          "exit": 1,
+          "tail": "5 failed, 13 deselected in 5.74s"
+        },
+        {
+          "cmd": "H2 mutant: pytest tests/d/test_jobstore_conformance.py -rxX",
+          "exit": 1,
+          "tail": "23 failed, 46 passed, 1 xfailed (F2 InvalidApiKey), 1 xpassed (RACY) in 56.70s"
+        },
+        {
+          "cmd": "H2 control (raises= removed + ValueError mutant): pytest test_streamstore_conformance.py -k <5 pending>",
+          "exit": 0,
+          "tail": "13 deselected, 5 xfailed in 4.77s (restored after)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k '<14 d4 oversize/ceiling/credit/privilege/reservation mutants>' -s",
+          "exit": 0,
+          "tail": "14 passed, 465 deselected in 22.71s (all killed)"
+        },
+        {
+          "cmd": "pytest -q tests/d/test_journal.py tests/d/test_credit_schema.py (plain)",
+          "exit": 0,
+          "tail": "41 passed in 40.33s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_journal.py -k 'oversize or credit or privilege or terminal'",
+          "exit": 0,
+          "tail": "7 passed, 13 deselected in 7.94s"
+        },
+        {
+          "cmd": "python run_code_mutants.py (12 reviewer adapter mutants vs test_journal_units)",
+          "exit": 0,
+          "tail": "10 KILLED; last_event_only SURVIVED; scalars_refused SURVIVED"
+        },
+        {
+          "cmd": "scalars_refused mutant: pytest tests/d/test_streamstore_conformance.py",
+          "exit": 1,
+          "tail": "FAILED [dur_output__any_committed_chunk_is_publication]; 1 failed, 12 passed, 5 xfailed"
+        },
+        {
+          "cmd": "last_event_only mutant: pytest test_streamstore_conformance.py test_journal_units.py test_journal.py; probe bad-first batch",
+          "exit": 0,
+          "tail": "39 passed, 5 xfailed; bad-first batch SENT, statements 1 (original: refused, statements 0)"
+        },
+        {
+          "cmd": "pytest -q tests/d/test_zz_sqlmut.py -s (4 reviewer SQL mutants via migration_mutants.kill)",
+          "exit": 0,
+          "tail": "rv_limit_on_characters survived; rv_limit_on_batch_sum survived; rv_limit_minus_numbers killed; rv_zero_reservation_refused killed"
+        },
+        {
+          "cmd": "rm -f /tmp/infrx-confirm-d4-adapter.lock; rm -rf scratch; docker ps -a | grep -c confirm-d4-adapter",
+          "exit": 0,
+          "tail": "0 containers; lock and scratch gone"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "A1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/d/test_journal_units.py",
+      "line": "104-125 (test_append__refuses_what_jsonb_cannot_store_before_sending_it); rule at infrx/state/journal.py:70",
+      "claim_broken": "M1, round 2: 'PgStreamStore.append refuses the WHOLE batch ... when ANY payload has a NUL or NaN/\u00b1Inf, before sending.' The any-position half of this new claim has no killable test. Every refused batch in the unit test is (*b.events('fine'), BAD), so the bad event is always last.",
+      "evidence": "Single-edit mutant `for event in events):` -> `for event in events[-1:]):` (only the last event is checked). It SURVIVED test_journal_units.py (6 passed), and it also survived test_journal_units + test_streamstore_conformance + test_journal.py together (39 passed, 5 xfailed): no Pg test sends a NUL through PgStreamStore.append, because checks_journal.append calls _append_args directly. Under the mutant, a batch (NUL-event, 'fine') is sent to the database (1 statement), and jsonb then raises the untyped 22P05 that M1 was fixed to prevent. The shipped code is correct: the same probe on the original code is refused with 0 statements. The mirror mutant events[:1] is killed.",
+      "minimal_fix": "In the unit test, also refuse a batch with the bad event FIRST and one with it in the MIDDLE (e.g. (EngineEvent(payload=bad), *b.events('fine')) and (*b.events('a'), bad, *b.events('b'))), and add the events[-1:] edit to code_mutants_d4 as a declared mutant.",
+      "lens": "adapter",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at 7d3ef59. The rule is at infrx/state/journal.py:70: `if not all(_journalable(event.payload) for event in events):`. In test_journal_units.py:104-125, every refused batch has the shape (*b.events(\"fine\"), EngineEvent(payload=bad)), so the bad event is always last. I made a scratch copy (git archive 7d3ef59) and applied the single edit `for event in events):` -> `for event in events[-1:]):`. test_journal_units.py still passed (6 passed), so the mutant survives. No other test can kill it. The only other NUL/NaN/Inf payloads in tests/d or the conformance suite are in checks_journal.py:239, and that check calls append_docs straight against SQL to pin the untyped 22P05/22P02 errors, so it never goes through PgStreamStore.append. None of the four declared M1 code mutants (the_unjournalable_payload_is_sent, a_nul_in_a_key_is_sent, a_non_finite_number_is_sent, a_nul_inside_a_list_is_sent) vary which events in the batch get checked. The shipped code is correct. But the evidence row for M1 (D4-ce7659b.md:321) and limit 9 (line 308) promise that PgStreamStore.append refuses \"such a batch\" whenever any payload has a NUL or a non-finite number, and the position part of that promise has no killable test. Under the mutant, a batch with a NUL in the first event reaches the database and fails with the raw, untyped 22P05 error that M1 was fixed to prevent. The project's own R30 check (check_append_terminal_refused) tests the \"anywhere\" case as alone, first, last and middle, so the same bar applies here. I rate it blocking: it is a clause of a blocking round-1 item (M1) with no killable test, which the rubric counts as blocking. The fix is small: add a batch with the bad event first and one with it in the middle to the unit test, and declare the events[-1:] mutant in code_mutants_d4.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at 7d3ef59. The shipped check at infrx/state/journal.py:70 is correct and tests every event. The gap is in the tests. In test_journal_units.py:104-125, every refused batch has the form (*b.events('fine'), EngineEvent(payload=bad)), so the bad payload is always last. I ran the mutant in a scratch copy: replacing `for event in events):` with `for event in events[-1:]):` survived tests/d/test_journal_units.py (6 passed). A grep of tests/ and infrx/contracts/conformance found no other test that sends a NUL or a non-finite payload through PgStreamStore.append, so nothing else kills it. code_mutants_d4.py covers only 'the_unjournalable_payload_is_sent', which removes the whole check, and the recursive _journalable mutant; it has no mutant that narrows which positions are checked. So the new round-2 M1 clause, that ANY payload in the batch triggers the refusal, has no killable test. The 'whole batch' half is pinned: the fine events before the bad one are refused and conn.sent stays empty. Severity: the code is correct today, but the brief's rubric counts an invariant that no test can kill as blocking. The fix is test-only: add batches with the bad event first and in the middle, and declare the events[-1:] mutant in code_mutants_d4.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "JL-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_journal.py",
+      "line": "rewritten_to_itself (check_terminal_every_path)",
+      "claim_broken": "R83/R40: J3's mutant dies for its reason. It does die by an assertion, but the reason is not pinned.",
+      "evidence": "d4_terminal_trigger_refires_on_the_same_instant and my hand mutant HM4 ('old.settled_at is null and ' dropped) are KILLED with 'AssertionError: rewriting settled_at to itself failed: duplicate key value violates unique constraint \"stream_chunks_one_terminal_idx\"' on both the plain and the Supabase image. My ruling: this is an assertion in the check, not an undeclared exception death. The check deliberately converts the failure, and CM9 (except Exception -> except ZeroDivisionError) turns the same mutant into setup_error 'the check raised instead of asserting: UniqueViolation'. The conversion is `except Exception`, though, and the mutant declares no expects_detail. So any failure of the rewrite (a jobs_guard refusal, an unrelated trigger error) would also be scored as a J3 kill.",
+      "minimal_fix": "Catch psycopg.errors.UniqueViolation only, or add expects_detail=\"stream_chunks_one_terminal_idx\" to d4_terminal_trigger_refires_on_the_same_instant.",
+      "lens": "journal"
+    },
+    {
+      "id": "JL-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_journal.py",
+      "line": "never_while_live docstring / clean(\"heartbeat\")",
+      "claim_broken": "H4: 'asserted directly, so a trigger that fires on another update dies for this reason and not by 0003's one-terminal index'; heartbeat is listed as a guarded transition",
+      "evidence": "d4_terminal_trigger_on_any_update still dies by 'AssertionError: untyped 23505': the trigger's own jobs update re-fires it inside the claim, so the direct assertion is never reached. Its relabelled `why` admits this, but the docstring overstates it. d4_terminal_event_on_every_transition dies directly ('after prepare the queued job's journal shows a terminal event'). CM7 (clean(\"heartbeat\") deleted) leaves that kill unchanged. 0016 heartbeat updates only infrx.attempts, so no jobs-trigger mutant can reach the heartbeat assertion.",
+      "minimal_fix": "Change the docstring: the any-update mutant dies by the one-terminal index, and the heartbeat step is a guard that no current mutant exercises. Alternatively, add a heartbeat-that-touches-jobs mutant.",
+      "lens": "journal"
+    },
+    {
+      "id": "JL-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/journal.py",
+      "line": "expire (\"limit\": EXPIRE_JOBS_PER_PASS)",
+      "claim_broken": "H1: code mutant the_pruning_bound_is_not_sent is 'one pass prunes at most EXPIRE_JOBS_PER_PASS jobs'",
+      "evidence": "By hand, the mutant (limit omitted) and a 'limit: 0' variant both die in test_expire__passes_the_callers_bound_and_counts with AssertionError: {'now': ...} / {'limit': 0, ...} != the expected {..., 'limit': 1000}. That is the spy pinning what is sent, which is its stated reason. At the database the omission is an equivalent mutant: 0017 already defaults the limit with coalesce(limit, 1000) and clamps it to 1..10000. So the mutant is killed, but no behaviour is lost when the bound is omitted.",
+      "minimal_fix": "None required. Optionally record that the SQL default equals EXPIRE_JOBS_PER_PASS and that the spy is the only thing that kills the mutant.",
+      "lens": "journal"
+    },
+    {
+      "id": "A2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/journal.py",
+      "line": "30-41 (_journalable docstring: 'Anything else JSON can say, it can')",
+      "claim_broken": "The rule claims to be complete: anything else JSON can express, jsonb can store. It is not. A lone UTF-16 surrogate in a key or a string passes _journalable, and jsonb refuses it untyped. This is the same failure class as M1.",
+      "evidence": "End to end on the plain image with real PgStreamStore.append: {'a': 'x\\x00'} and {'a':[nan]} both raise infrx.contracts.errors.JournalWriteFailed; nothing is stored or published. {'a': '\\ud800'} raises psycopg.errors.InvalidTextRepresentation 22P02, which is unmapped because domain_error returns it as is. At the SQL boundary, {'\\udc00': 1} is also 'untyped 22P02'. Non-JSON values are also unchecked: bytes, Decimal (including Decimal('NaN')) and set are passed by _journalable and then raise a raw TypeError in psycopg's Jsonb dump. Reachability from vLLM text is low: fast-tokenizer output is valid UTF-8 and an incomplete sequence decodes to U+FFFD. So this is not blocking.",
+      "minimal_fix": "In the str branch, also refuse surrogates: `return '\\x00' not in value and not any('\\ud800' <= c <= '\\udfff' for c in value)`, or equivalently try value.encode('utf-8'). Optionally refuse any type other than str/int/float/bool/None/dict/list/tuple. Then correct the docstring and add one unit payload for it.",
+      "lens": "adapter"
+    },
+    {
+      "id": "A3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_journal.py",
+      "line": "198-244 (check_append_oversize); SQL 0017:136-142",
+      "claim_broken": "R25/M2: the per-event limit is decided on the STORED octet measure (octet_length(payload::text)), 'exactly the limit accepted, one byte more refused', for one event wherever it sits in the batch. Two single-edit SQL mutants of that decision survive the named check. Both predate round 2; neither was flagged in round 1.",
+      "evidence": "mutation_list.kill() on the plain image, check append_oversize. (1) rv_limit_on_characters: max(octet_length(...)) -> max(length(...)) SURVIVED. Every oversize and boundary payload is ASCII, and 1e300's fixed-point text is ASCII too, so characters equal octets. A 3-byte-per-char event of about 3 MiB would pass the 1 MiB event limit; the job ceiling still counts octets, so capacity stays bounded. (2) rv_limit_on_batch_sum: `if v_largest > v_max_event` -> `if v_bytes > v_max_event` SURVIVED. Under it, a legitimate batch of two 600 KB events would be refused journal_write_failed, but only single events are tested at the default limit. Control: rv_limit_minus_numbers (strips digits from the measure) is KILLED by the new 1e300 assertion, so the M2 pin does work for numbers.",
+      "minimal_fix": "In check_append_oversize: (1) assert that a multibyte payload with at most limit characters but limit+1 octets is refused (e.g. '\u00e9' * k padded to limit+1 octets); (2) assert that a batch of two events, each at about 0.6 \u00d7 the limit, is accepted. Declare both edits as d4_ migration mutants.",
+      "lens": "adapter"
+    },
+    {
+      "id": "A4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/test_journal_units.py",
+      "line": "121-122 (the journalable payload)",
+      "claim_broken": "A payload with only journalable values is sent. The fast no-Docker runner does not pin this for int/bool/null values.",
+      "evidence": "Mutant: _journalable's final `return True` -> `return False`, which refuses every int, bool and None. It SURVIVED test_journal_units.py (6 passed), because the positive payload {'content':'\\\\u0000','logprob':-3.2e-07} holds only a str and a float. On Pg it is KILLED by test_streamstore_conformance (dur_output__any_committed_chunk_is_publication FAILED), so the full suite catches it; the declared code-mutant runner does not.",
+      "minimal_fix": "Add e.g. 'n': 1, 'b': True, 'z': None, 'l': [0] to the positive payload in the unit test.",
+      "lens": "adapter"
+    }
+  ]
+}

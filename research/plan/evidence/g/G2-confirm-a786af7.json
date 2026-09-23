@@ -1,0 +1,941 @@
+{
+  "verdict": "fix_required",
+  "head": "a786af7",
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Claimed counts reproduced at a786af7 in a scratch export: tests/g 485 passed, contracts 1011 passed, G --list 291 mutants over 217 cases, relay files 64 passed with 0 RecordKeysDropped references, contracts lookup mutants 4/4 killed, all 17 named money G mutants killed through the runner, and 15 of them killed again by hand with failure texts matching their declared invariants. I did not re-run the full 298-case G mutant list (17 min) or the cutover export. The R91 lookup exists on JobStore and CreditJobStore (ports.py) and in the fake, and it is called first in Relay.admit. A changed digest raises IdempotencyConflict. An expired mapping returns None, and admission then answers 410 with no new job. PgJobStore.lookup raises UnsupportedParameter(param='lookup'). tests/d PENDING names the case with 'D5: the SQL read behind JobStore.lookup (R91)' as strict xfail (checked statically, since Docker is not allowed). The CREDIT lookup cases run only against the fake. Where the evidence departs from what I observed: its Limits frame the in-flight re-prepare as 'by design', but R91's text says no preparing or staging for any mapped job. The probes also show the re-prepare's failure, and the re-run rechecks, reach live billable jobs (B1/B2 above). This is new, not a fabrication.",
+      "cleanup": "Removed /tmp/claude-1000/confirm-g2-money-3103295 (scratch export, .venv, probe test file, dbg script), /tmp/claude-1000/g-money-probe (mutant helpers) and /tmp/claude-1000/g-money-tests-g.log. The codex-g2 worktree was never written: git status is clean and HEAD is a786af7.",
+      "mutants": [
+        {
+          "name": "lookup_skipped",
+          "edit": "found = await self._lookup(...) -> found = None",
+          "result": "killed (runner + by hand)",
+          "killed_by": "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired: 400 media_fetch_failed != 200"
+        },
+        {
+          "name": "terminal_replay_prepares",
+          "edit": "prepare guard -> if True",
+          "result": "killed",
+          "killed_by": "same case: assert 400 == 200 (media_fetch_failed)"
+        },
+        {
+          "name": "terminal_replay_rechecked",
+          "edit": "_admitted guard -> if True",
+          "result": "killed",
+          "killed_by": "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked: Idempotency-Replayed None != 'true'"
+        },
+        {
+          "name": "lookup_refusal_escapes",
+          "edit": "refused.param != 'lookup' -> True",
+          "result": "killed",
+          "killed_by": "terminal_replay case [refused_until_d5]: (400 unsupported_parameter) != (504 deadline_exceeded)"
+        },
+        {
+          "name": "replay_crosses_regimes",
+          "edit": "regime check -> if False",
+          "result": "killed",
+          "killed_by": "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict: (500 internal_error) != (409)"
+        },
+        {
+          "name": "replay_reaccepted",
+          "edit": "if admission.replayed -> if False",
+          "result": "killed",
+          "killed_by": "terminal_replay case [refused_until_d5]: replayed header None"
+        },
+        {
+          "name": "post_admission_outage_cancels",
+          "edit": "drop 'except DependencyUnavailable: raise'",
+          "result": "killed",
+          "killed_by": "outage-retry + catalog-outage cases: job outcome cancelled, expected None"
+        },
+        {
+          "name": "inflight_replay_skips_completion",
+          "edit": "_admitted guard -> if found is None",
+          "result": "killed",
+          "killed_by": "3 cases incl. crash_after_commit: 404 not_found != 200"
+        },
+        {
+          "name": "refusal_final_before_its_cancel",
+          "edit": "N1 branch -> if False",
+          "result": "killed",
+          "killed_by": "(400 invalid_request) != (503)"
+        },
+        {
+          "name": "unknown_usage_invented / unknown_usage_finishes_on_length",
+          "edit": "invent zero usage / return 'length'",
+          "result": "killed",
+          "killed_by": "test_api_modes__a_success_with_unknown_usage_is_answered_without_counts"
+        },
+        {
+          "name": "status_read_failure_ends_the_wait",
+          "edit": "except Exception -> ZeroDivisionError",
+          "result": "killed",
+          "killed_by": "500 != 200"
+        },
+        {
+          "name": "no_grace / legacy_bound_from_the_request",
+          "edit": "bound=deadline / request.deadline_at",
+          "result": "killed",
+          "killed_by": "assert 2.5 == 6.0 / 3606.0 == 6.0"
+        },
+        {
+          "name": "missing_revision_is_a_500",
+          "edit": "NotFound -> InternalError",
+          "result": "killed",
+          "killed_by": "(500) != (404 not_found)"
+        },
+        {
+          "name": "refused_admission_left_running / replay_names_a_new_job",
+          "edit": "as declared",
+          "result": "killed (runner)",
+          "killed_by": "declared cases"
+        },
+        {
+          "name": "contracts: lookup_reads_another_orgs_scope, lookup_raises_on_an_expired_mapping, lookup_crosses_regimes, credit_replay_crosses_regimes",
+          "edit": "as declared in tests/contracts/mutants.py",
+          "result": "4/4 killed",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing / credit_admit__lookup_answers_the_pinned_admission / credit_admit__a_replay_is_pinned_and_never_crosses_regimes"
+        },
+        {
+          "name": "own_lookup_after_staging",
+          "edit": "prepare_request+stage moved before _lookup; conditional prepare -> if False",
+          "result": "killed",
+          "killed_by": "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired (400 media_fetch_failed)"
+        },
+        {
+          "name": "own_lookup_ignores_digest",
+          "edit": "fake _replay: payload-hash check only when credit is not None (lookup skips it)",
+          "result": "killed by contracts; survives tests/g (462 passed)",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing: 'lookup answered a changed payload under the same key'"
+        },
+        {
+          "name": "own_expired_mapping_readmits",
+          "edit": "fake _replay: expired -> return None",
+          "result": "killed",
+          "killed_by": "dur_admit__expired_mapping_is_explicit_never_a_second_billable_job (StateConflict); probe: head answers 410 idempotency_expired, 1 job, 1 hold"
+        },
+        {
+          "name": "own_lookup_drops_outcome",
+          "edit": "fake lookup returns (admission, None)",
+          "result": "killed",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+        },
+        {
+          "name": "own_lookup_consumes_mapping",
+          "edit": "fake lookup pops the idem mapping",
+          "result": "killed",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+        },
+        {
+          "name": "own_regime_default_is_self",
+          "edit": "getattr(found[0],'accounting_regime', LEGACY) -> default self.regime",
+          "result": "SURVIVED tests/g (462 passed)",
+          "killed_by": "only my reverse-direction probe (404 vs 409); see N2"
+        },
+        {
+          "name": "own_replay_attaches_other_refs",
+          "edit": "attach(job.request_id, () if admission.replayed else refs)",
+          "result": "SURVIVED tests/g (462 passed)",
+          "killed_by": "none; see N1"
+        },
+        {
+          "name": "own_unknown_usage_null_field",
+          "edit": "model_dump without exclude_none",
+          "result": "killed",
+          "killed_by": "test_api_modes__a_success_with_unknown_usage_is_answered_without_counts ('usage' present)"
+        },
+        {
+          "name": "own_unknown_usage_branch_dropped",
+          "edit": "if outcome.usage is None -> if False",
+          "result": "killed",
+          "killed_by": "same case: 500 != 200"
+        },
+        {
+          "name": "own_lookup_swallows_any_refusal",
+          "edit": "_lookup returns None for any UnsupportedParameter",
+          "result": "SURVIVED (structural: lookup never raises another param)",
+          "killed_by": "none"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-g2 archive a786af7 | tar -x -C /tmp/claude-1000/confirm-g2-money-3103295; make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g",
+          "exit": 0,
+          "tail": "485 passed, 2 warnings in 150.24s (0:02:30)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.mutants <17 named money mutants>",
+          "exit": 0,
+          "tail": "17/17 killed"
+        },
+        {
+          "cmd": "byhand.py: apply each of 15 named money mutants to relay.py, run their declared cases, restore",
+          "exit": 0,
+          "tail": "15/15 killed; relay.py restored (diff -q clean)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "1011 passed in 17.81s"
+        },
+        {
+          "cmd": "same -k lookup -v",
+          "exit": 0,
+          "tail": "jobstore-dur_admit__lookup_reads_the_mapped_job_and_writes_nothing PASSED; credit_admit__lookup_answers_the_pinned_admission PASSED; 2 passed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants lookup_reads_another_orgs_scope lookup_raises_on_an_expired_mapping lookup_crosses_regimes credit_replay_crosses_regimes",
+          "exit": 0,
+          "tail": "4/4 killed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.mutants --list",
+          "exit": 0,
+          "tail": "291 mutants over 217 named cases"
+        },
+        {
+          "cmd": "pytest tests/g/test_mutants.py -k 'well_formed or every_case' (probe file removed)",
+          "exit": 0,
+          "tail": "2 passed, 21 deselected"
+        },
+        {
+          "cmd": "pytest tests/g/test_relay_{sync,sse,matrix,recovery}.py; grep -rn RecordKeysDropped tests/ infrx/ | wc -l",
+          "exit": 0,
+          "tail": "64 passed in 0.84s; 0"
+        },
+        {
+          "cmd": "probe p1 (expired-media terminal replay, fetch counter)",
+          "exit": 0,
+          "tail": "passed: 1 fetch then 0 fetches on replay, same 200 JSON, replayed=true, payloads unchanged, 1 job, 1 hold"
+        },
+        {
+          "cmd": "probe p2/p2b (CREDIT catalog outage and legacy attach outage, then same-key retry)",
+          "exit": 0,
+          "tail": "503 then 200 replayed; attach completed; CREDIT wallet back to seed 10.0144 (single hold 14.7456 while open); legacy holds=1"
+        },
+        {
+          "cmd": "probe p3 [legacy, credit] crash_after_commit('admit') then retry",
+          "exit": 0,
+          "tail": "2 passed: 503 then 200, job attached, 1 job"
+        },
+        {
+          "cmd": "probe p5 (legacy job key on a CREDIT relay)",
+          "exit": 0,
+          "tail": "passed: 409 idempotency_conflict, 1 job"
+        },
+        {
+          "cmd": "probe p6 concurrent same-key x {legacy,credit} x {lookup served,refused}",
+          "exit": 0,
+          "tail": "4 passed: 1 job each, both 200; one hold (legacy holds=1; CREDIT delta 14.7456 = one maximum hold); both attaches bind the same handle"
+        },
+        {
+          "cmd": "probe p7 expired mapping / p8 changed digest",
+          "exit": 0,
+          "tail": "410 idempotency_expired, 1 job, 1 hold / 409 idempotency_conflict, 0 fetches"
+        },
+        {
+          "cmd": "probe p9b [served, refused] in-flight replay after process death, host 403",
+          "exit": 1,
+          "tail": "inflight replay: 400 media_fetch_failed, fetches 1; job preparing; after completion: succeeded settled debit 0.000243 (replay then 200 served / 400 refused)"
+        },
+        {
+          "cmd": "probe p10 in-flight replay, host fine",
+          "exit": 1,
+          "tail": "200 but fetches 1, payloads 1 -> 2 (R91: no prepare/stage for a mapped job)"
+        },
+        {
+          "cmd": "probe p11 CREDIT in-flight (running, 2 deltas committed) replay after card rotation",
+          "exit": 1,
+          "tail": "replay 400 invalid_request; job cancelled client_cancelled, held_unknown, usage None"
+        },
+        {
+          "cmd": "mut.py own_* relay mutants against tests/g (excluding test_mutants and the probe file)",
+          "exit": 0,
+          "tail": "lookup_after_staging killed; regime_default_is_self SURVIVED 462; replay_attaches_other_refs SURVIVED 462; unknown_usage_null_field killed; unknown_usage_branch_dropped killed; lookup_swallows_any_refusal SURVIVED 462"
+        },
+        {
+          "cmd": "mut.py own_* fake mutants against tests/contracts (and tests/g)",
+          "exit": 0,
+          "tail": "lookup_ignores_digest killed (contracts) / survives G; expired_mapping_readmits killed; lookup_drops_outcome killed; lookup_consumes_mapping killed"
+        }
+      ]
+    },
+    {
+      "lens": "stream",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "These claims were reproduced at a786af7 in a scratch archive: the relay files without the shim give 64 passed, RecordKeysDropped is absent, tests/g gives 485, the G list gives 291 mutants over 217 cases, and the full G mutant run gives 298 passed. Every named stream mutant is killed, both through the runner and by hand. The hand runs failed on the invariant's own assertion, with no swallowed crashes: preparing/running state, secret on the wire, the stream never ending under wait_for, [DONE] present, a truncated text. Round-1 items confirmed closed in code and tests: S3, S4/H-B2 (5 s wait_for; asserts sync_deadline, deadline_exceeded with state cancelled, then [DONE]), H-B1 (ReplayGap plus an unreachable cancel gives an error with no state, no [DONE], no DSN, job still running), S5, S6 (caplog names the cause; param='other' does not fall back), S7, S8 (no active reservation, reserved_total 0), and H-N1 stream (stream_ends_on_an_empty_page is dropped and declared structural). S1 is closed in code, and its drain is proven against a slow store cancel with the handler left unawaited, as uvicorn 0.53's shutdown does it. The pre-pool.close order it claims is not pinned by any suite case (finding stream-C2-1). S2/H-B3 is closed for http.response.start but not for the identity frame's send (stream-C2-2). No evidence claim was found to be false.",
+      "cleanup": "Scratch /tmp/claude-1000/confirm-g2-stream-3103786 removed, including the probe scripts and scratch test file. The codex-g2 worktree was only read: git status is clean. No Docker, network or secrets were used.",
+      "mutants": [
+        {
+          "name": "unnamed_stream_cancel_dropped (named)",
+          "edit": "`if not named or gone.done():` -> `if gone.done():`",
+          "result": "killed (hand + runner): test_relay_sse.py:300 AssertionError: preparing",
+          "killed_by": "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"
+        },
+        {
+          "name": "named_before_identity (named)",
+          "edit": "`named = False` -> `named = True`",
+          "result": "killed (hand + runner): AssertionError: preparing",
+          "killed_by": "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"
+        },
+        {
+          "name": "left_client_on_restart (named)",
+          "edit": "`if not named or gone.done():` -> `if not named:`",
+          "result": "killed: AssertionError: running",
+          "killed_by": "test_api_stream__a_process_stop_after_the_client_left_cancels_as_disconnected"
+        },
+        {
+          "name": "delta_relays_content_alias (named)",
+          "edit": "visible = payload.get('visible', payload.get('content'))",
+          "result": "killed: 'CONTENT-ALIASTwo people.' == 'Two people.'",
+          "killed_by": "test_api_stream__nothing_but_visible_text_reaches_the_wire"
+        },
+        {
+          "name": "usage_event_relayed_as_data (named)",
+          "edit": "final `return None` in _frame -> SseFrame(data=chunk.payload)",
+          "result": "killed: AssertionError: 91919 (secret on wire)",
+          "killed_by": "test_api_stream__nothing_but_visible_text_reaches_the_wire"
+        },
+        {
+          "name": "stream_bound_never_checked (named)",
+          "edit": "`if ending is None and self._now() >= job.bound:` -> `if False:`",
+          "result": "killed: pytest.fail 'the stream never ended' under wait_for 5 s",
+          "killed_by": "test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline"
+        },
+        {
+          "name": "done_after_an_unconfirmed_cancel (named)",
+          "edit": "`if ended is not None:` -> `if True:`",
+          "result": "killed: '[DONE]' not in body assert",
+          "killed_by": "test_api_stream__a_gap_whose_cancel_is_unconfirmed_ends_without_done"
+        },
+        {
+          "name": "ended_on_failed_read_after_outcome (named)",
+          "edit": "`if chunks is not None and ending is not None:` -> `if ending is not None:`",
+          "result": "killed: 'Two ' == 'Two people'",
+          "killed_by": "test_api_stream__a_read_that_fails_after_the_outcome_is_known_still_drains"
+        },
+        {
+          "name": "drain_skipped (named)",
+          "edit": "lifespan drain -> pass",
+          "result": "killed: test_composition.py:350 AssertionError: preparing",
+          "killed_by": "test_f_base__shutdown_drains_the_relays_durable_cancels"
+        },
+        {
+          "name": "stop_after_leave_cause_dropped, restart_cancels_a_named_stream, journal_outage_ends_the_stream, fallback_log_dropped, fallback_on_any_param, unstarted_stream_leaks, unconfirmed_cancel_claims_a_state (named)",
+          "edit": "as registered in tests/g/mutants.py",
+          "result": "each 1/1 killed via `python -m tests.g.mutants <name>`",
+          "killed_by": "their registered cases"
+        },
+        {
+          "name": "own1 drain_timeout_zero",
+          "edit": "asyncio.wait(..., timeout=timeout_s) -> timeout=0",
+          "result": "killed: AssertionError: preparing",
+          "killed_by": "test_f_base__shutdown_drains_the_relays_durable_cancels"
+        },
+        {
+          "name": "own2 drain_after_pool_close",
+          "edit": "swap lifespan drain and pool.close",
+          "result": "SURVIVED test_composition.py (16 passed); killed by reviewer probe (order close before cancel, state preparing)",
+          "killed_by": "none in suite (finding stream-C2-1)"
+        },
+        {
+          "name": "own3 bound_checked_only_when_ending_set",
+          "edit": "`if ending is None and now >= bound` -> `if ending is not None and now >= bound`",
+          "result": "killed: stream never ended",
+          "killed_by": "test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline"
+        },
+        {
+          "name": "own4 done_on_replay_gap",
+          "edit": "`if ended is not None:` -> `if ended is not None or isinstance(error, errors.ReplayGap):`",
+          "result": "killed: '[DONE]' not in body",
+          "killed_by": "test_api_stream__a_gap_whose_cancel_is_unconfirmed_ends_without_done"
+        },
+        {
+          "name": "own5 cause_swapped_in_cancelled_branch",
+          "edit": "client_disconnected/client_cancelled swapped in the CancelledError branch",
+          "result": "killed: client_disconnected is client_cancelled",
+          "killed_by": "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"
+        },
+        {
+          "name": "own6 named_before_identity_send_completes",
+          "edit": "`named = True` moved above the identity-frame emit",
+          "result": "SURVIVED test_relay_sse.py (15 passed); killed by reviewer probe blocked at the identity body (AssertionError: preparing)",
+          "killed_by": "none in suite (finding stream-C2-2)"
+        },
+        {
+          "name": "own7 cancel_unshielded",
+          "edit": "`await asyncio.shield(task)` -> `await task`",
+          "result": "killed: AssertionError: preparing",
+          "killed_by": "test_f_base__shutdown_drains_the_relays_durable_cancels"
+        },
+        {
+          "name": "own8 drain_waits_one",
+          "edit": "asyncio.wait({next(iter(self._cancels))}, ...)",
+          "result": "SURVIVED test_composition.py (16 passed)",
+          "killed_by": "none (finding stream-C2-3)"
+        },
+        {
+          "name": "own9 drain_before_tasks_stopped",
+          "edit": "drain moved before stop.set()/gather",
+          "result": "survived (equivalent: still before pool.close; not a defect)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "own10 cancels_not_registered",
+          "edit": "self._cancels.add(task) -> pass",
+          "result": "killed: AssertionError: preparing",
+          "killed_by": "test_f_base__shutdown_drains_the_relays_durable_cancels"
+        },
+        {
+          "name": "own11 fallback_warning_names_wrong_cause",
+          "edit": "warning prints client_cancelled instead of the refused cause",
+          "result": "killed: caplog message mismatch",
+          "killed_by": "test_api_modes__a_store_that_cannot_record_the_cause_still_cancels[disconnect]"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-g2> archive a786af7 | tar -x -C /tmp/claude-1000/confirm-g2-stream-3103786 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g/test_relay_sse.py tests/g/test_relay_sync.py tests/g/test_relay_matrix.py tests/g/test_relay_recovery.py",
+          "exit": 0,
+          "tail": "64 passed in 1.34s"
+        },
+        {
+          "cmd": "(same) + tests/g/test_composition.py",
+          "exit": 0,
+          "tail": "80 passed, 2 warnings in 2.67s"
+        },
+        {
+          "cmd": "grep -rn RecordKeysDropped infrx tests",
+          "exit": 1,
+          "tail": "(no matches: shim deleted)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/g",
+          "exit": 0,
+          "tail": "485 passed, 2 warnings in 149.40s"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.mutants --list",
+          "exit": 0,
+          "tail": "291 mutants over 217 named cases"
+        },
+        {
+          "cmd": "for n in <16 named stream mutants>; uv run --frozen python -m tests.g.mutants $n",
+          "exit": 0,
+          "tail": "1/1 killed (x16)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "298 passed in 963.04s (0:16:03)"
+        },
+        {
+          "cmd": "python mut/m.py <hand mutants, named + own1..own11>",
+          "exit": 0,
+          "tail": "see mutant table; own2, own6, own8 survive (own9 equivalent)"
+        },
+        {
+          "cmd": "python mut/probe_drain.py (real pilot.lifespan, slow cancel, fake pool, handler not awaited)",
+          "exit": 0,
+          "tail": "order=['open','cancel_committed','close','lifespan_exited'] state=cancelled; PROBE_DRAIN_OK (under own2: order=['open','close','cancel_on_closed_pool',...] state=preparing)"
+        },
+        {
+          "cmd": "pytest tests/g/test_zz_probe_stream.py (scratch; blocked at http.response.start / identity body)",
+          "exit": 0,
+          "tail": "2 passed; under own6: 1 failed (identity) AssertionError: preparing"
+        },
+        {
+          "cmd": "python mut/probe_replay.py",
+          "exit": 0,
+          "tail": "replay 200 [journal_expired error, '[DONE]'] succeeded"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/confirm-g2-stream-3103786; git -C <codex-g2> status --short",
+          "exit": 0,
+          "tail": "removed; worktree clean"
+        }
+      ]
+    },
+    {
+      "lens": "composition",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "I reproduced every claim in my lens at a786af7.\n- Runs: tests/g 485; G list 298 = 291 mutants + 7, and --list prints '291 mutants over 217 named cases'. By name, 257 + 36 - 2 = 291. Contracts 1011; the 4 lookup mutants are 4/4 killed, and the three R91 mutants each fail for their own reason. There is no RecordKeysDropped left.\n- Merge: 53e7e72 is a clean no-ff merge of 91b8879, with no stray content.\n- Contracts change: exactly R91. Only ports.py (two lookup methods), fakes/state.py (lookup + _replay credit=None), one exported case in each of jobstore_cases and credit_jobstore_cases, and PgJobStore.lookup raising UnsupportedParameter(param='lookup'), plus its D5 PENDING line. No other port or record changed, and apps/app/lib/contracts is untouched.\n- Composition fixes: C1, the pool test drives pool._configure with set role and statement_timeout, and both mutants die. C2 and C3, _answer uses wait_for, a hung first probe reads False, and no thread is left. C4 and H-B4, the CREDIT probe requires card == ACTIVE_RATE_CARD_VERSION. C5, open and close are pinned. C6, the route table resolves via Match.FULL, and the shadowing pattern route is refused.\n- H-N1: the coverage rule still holds, because result_not_read covers success_is_answered_only_after_the_terminal_commit and done_without_its_cursor covers done_is_sent_only_after. The structural declaration is reasonable: stream_ends_on_an_empty_page would call _finish(None), and success_before_terminal_commit would return no ASGI response.\n- H-N2 is fixed. The H-N5 commit attributions match git show --stat. The H-N6 hashes match byte for byte.\n- Cutover: 484 / 233 / 100 / 10 of 10.\n- Mutant reasons: I checked 22 of the 36 new mutants by hand for why they die, and 38 in total including the remaining new and re-anchored ones.\n- Not reproduced: the ordering 'drain before pool.close' has no test (COMP-R2-B1). tests/d was not run (it needs Docker); I checked its PENDING entry statically.",
+      "cleanup": "I removed /tmp/claude-1000/confirm-g2-composition-3103553, the cutover export /tmp/claude-1000/confirm-g2-composition-cut-3271135, the swap copy /tmp/claude-1000/g2c-swap-*, and the helper scripts, logs and per-mutant temp dirs (/tmp/claude-1000/g2c*, /tmp/g2cm-*, /tmp/g2cc-*). The worktree /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-g2 is untouched: git status --short is empty.",
+      "mutants": [
+        {
+          "name": "drain_skipped",
+          "edit": "relay.drain(DRAIN_S) -> pass",
+          "result": "killed for its reason (test_composition.py:350 job state 'preparing', not cancelled)",
+          "killed_by": "test_f_base__shutdown_drains_the_relays_durable_cancels"
+        },
+        {
+          "name": "pool_configure_dropped",
+          "edit": "configure=None",
+          "result": "killed: 'the built pool has no configure hook'",
+          "killed_by": "test_f_base__the_pool_sets_the_service_role_on_every_connection"
+        },
+        {
+          "name": "pool_statement_timeout_zero",
+          "edit": "configure_connection(0)",
+          "result": "killed: executed == [...'= 0'] != [...'= 15000']",
+          "killed_by": "test_f_base__the_pool_sets_the_service_role_on_every_connection"
+        },
+        {
+          "name": "price_probe_ignores_active_card",
+          "edit": "regime != CREDIT -> True",
+          "result": "killed: other-card CREDIT probe True is False",
+          "killed_by": "test_f_base__the_credit_price_probe_requires_the_active_card"
+        },
+        {
+          "name": "probe_failure_reads_ready",
+          "edit": "_answer except -> return True",
+          "result": "killed: hangs and raises both read True; refresh case True",
+          "killed_by": "test_f_base__a_probe_that_hangs_or_fails_reads_unavailable_and_leaves_no_thread[hangs|raises], ..._refresh_loop_replaces_a_cached_answer_when_a_check_hangs"
+        },
+        {
+          "name": "refresh_loop_runs_once",
+          "edit": "while -> if",
+          "result": "killed: probe stays True",
+          "killed_by": "test_f_base__the_refresh_loop_replaces_a_cached_answer_when_a_check_hangs"
+        },
+        {
+          "name": "lifespan_pool_never_opened",
+          "edit": "if False: pool.open()",
+          "result": "killed: order missing ('open',0)",
+          "killed_by": "test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last"
+        },
+        {
+          "name": "lifespan_pool_never_closed",
+          "edit": "if False: pool.close()",
+          "result": "killed: order missing ('close',True)",
+          "killed_by": "test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last"
+        },
+        {
+          "name": "pattern_route_shadows_the_ingress",
+          "edit": "revert to served[0].endpoint check",
+          "result": "killed: DID NOT RAISE RuntimeMisconfigured for the /v1/{rest:path} app",
+          "killed_by": "test_f_base__exactly_one_chat_route_and_it_is_the_ingress"
+        },
+        {
+          "name": "lookup_skipped",
+          "edit": "found = None",
+          "result": "killed: replay re-fetched the expired URL -> media_fetch_failed",
+          "killed_by": "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired"
+        },
+        {
+          "name": "terminal_replay_prepares",
+          "edit": "if True (prepare)",
+          "result": "killed: media_fetch_failed on terminal replay",
+          "killed_by": "test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired"
+        },
+        {
+          "name": "terminal_replay_rechecked",
+          "edit": "if True (_admitted)",
+          "result": "killed in both params: replay header None != 'true'",
+          "killed_by": "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"
+        },
+        {
+          "name": "lookup_refusal_escapes",
+          "edit": "param != 'lookup' -> True",
+          "result": "killed [refused_until_d5]: 400 unsupported_parameter",
+          "killed_by": "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"
+        },
+        {
+          "name": "replay_crosses_regimes",
+          "edit": "regime check -> if False",
+          "result": "killed: 500 != 409 idempotency_conflict",
+          "killed_by": "test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict"
+        },
+        {
+          "name": "replay_reaccepted",
+          "edit": "admission.replayed -> False",
+          "result": "killed [refused_until_d5]",
+          "killed_by": "test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked"
+        },
+        {
+          "name": "post_admission_outage_cancels",
+          "edit": "drop DependencyUnavailable re-raise",
+          "result": "killed: job cancelled instead of left for retry",
+          "killed_by": "..._an_outage_after_admission_leaves_the_job_for_the_same_key_retry, ..._a_catalog_outage_after_a_credit_admission_is_retryable"
+        },
+        {
+          "name": "inflight_replay_skips_completion",
+          "edit": "found[1] is None clause dropped",
+          "result": "killed: retry answers not_found, not 200",
+          "killed_by": "..._outage_after_admission..., ..._a_crash_after_the_admission_commit_is_completed_by_the_retry"
+        },
+        {
+          "name": "unnamed_stream_cancel_dropped",
+          "edit": "not named or gone.done() -> gone.done()",
+          "result": "killed: job 'preparing', not cancelled",
+          "killed_by": "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"
+        },
+        {
+          "name": "named_before_identity",
+          "edit": "named = True",
+          "result": "killed: job not cancelled",
+          "killed_by": "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"
+        },
+        {
+          "name": "delta_relays_content_alias",
+          "edit": "visible falls back to content",
+          "result": "killed: 'CONTENT-ALIASTwo people.'",
+          "killed_by": "test_api_stream__nothing_but_visible_text_reaches_the_wire"
+        },
+        {
+          "name": "usage_event_relayed_as_data",
+          "edit": "_frame returns data frame",
+          "result": "killed: 91919 on the wire",
+          "killed_by": "test_api_stream__nothing_but_visible_text_reaches_the_wire"
+        },
+        {
+          "name": "stream_bound_never_checked",
+          "edit": "bound check -> if False",
+          "result": "killed via the case's own pytest.fail ('the stream never ended: its bound was not checked')",
+          "killed_by": "test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline"
+        },
+        {
+          "name": "done_after_an_unconfirmed_cancel",
+          "edit": "if ended is not None -> True",
+          "result": "killed: [DONE] present",
+          "killed_by": "test_api_stream__a_gap_whose_cancel_is_unconfirmed_ends_without_done"
+        },
+        {
+          "name": "remaining 14 new + 3 re-anchored (refusal_final_before_its_cancel, no_grace, legacy_bound_from_the_request, missing_revision_is_a_500, attach_interrupted_left_running, unknown_usage_invented, unknown_usage_finishes_on_length, status_read_failure_ends_the_wait, invalid_media_rendered_as_failure, left_client_on_restart, stop_after_leave_cause_dropped, ended_on_failed_read_after_outcome, fallback_log_dropped, fallback_on_any_param, unconfirmed_cancel_claims_a_state, refused_admission_left_running)",
+          "edit": "as declared",
+          "result": "each killed by an assertion on its own invariant (e.g. no_grace 2.5 != 6.0; legacy_bound 3606 != 6; unconfirmed_cancel 'state' in detail; stop_after_leave cause client_cancelled)",
+          "killed_by": "the named cases"
+        },
+        {
+          "name": "contracts: lookup_reads_another_orgs_scope",
+          "edit": "org check -> if False",
+          "result": "killed: 'one organization read another's idempotency scope'",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+        },
+        {
+          "name": "contracts: lookup_raises_on_an_expired_mapping",
+          "edit": "return None -> raise",
+          "result": "killed: IdempotencyExpired escapes",
+          "killed_by": "dur_admit__lookup_reads_the_mapped_job_and_writes_nothing"
+        },
+        {
+          "name": "contracts: lookup_crosses_regimes",
+          "edit": "credit = False",
+          "result": "killed: IdempotencyConflict different accounting regime",
+          "killed_by": "credit_admit__lookup_answers_the_pinned_admission"
+        },
+        {
+          "name": "reviewer: drain_after_pool_close (undeclared)",
+          "edit": "swap pool.close() before relay.drain(DRAIN_S) in lifespan finally",
+          "result": "SURVIVED (composition 16 passed; relay+startup files 101 passed)",
+          "killed_by": "none, see COMP-R2-B1"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git log --oneline 2d742aa..a786af7 --first-parent; cmp <(git diff a7531dbb 2d742aa) <(git diff 91b8879 53e7e72)",
+          "exit": 0,
+          "tail": "53e7e72 merges only 91b8879; MERGE_CLEAN (merge-base..2d742aa diff == 91b8879..53e7e72 diff, no conflict resolutions); 7 round-2 commits + evidence"
+        },
+        {
+          "cmd": "make api-env (scratch archive of a786af7)",
+          "exit": 0,
+          "tail": "env installed offline"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g",
+          "exit": 0,
+          "tail": "485 passed, 2 warnings in 152.95s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "298 passed in 1107.57s (0:18:27)"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.g.mutants --list",
+          "exit": 0,
+          "tail": "291 mutants over 217 named cases"
+        },
+        {
+          "cmd": "name diff of tests/g/mutants.py 2d742aa vs a786af7",
+          "exit": 0,
+          "tail": "257 -> 291; added 36; dropped stream_ends_on_an_empty_page success_before_terminal_commit"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py --ignore=tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "tail": "1011 passed in 29.81s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts/test_mutants.py -k 'well_formed or every_case'",
+          "exit": 0,
+          "tail": "2 passed, 37 deselected"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants lookup_reads_another_orgs_scope lookup_raises_on_an_expired_mapping lookup_crosses_regimes credit_replay_crosses_regimes",
+          "exit": 0,
+          "tail": "4/4 killed"
+        },
+        {
+          "cmd": "grep -rn RecordKeysDropped tests infrx | wc -l",
+          "exit": 0,
+          "tail": "0"
+        },
+        {
+          "cmd": "cutover: extract inline diff (evidence lines 420-1033) + git apply --index + git rm six retirements on a scratch export of a786af7",
+          "exit": 0,
+          "tail": "inline sha256 bae34495...c46b4 (614 lines); full git diff --cached sha256 f02c8519...9102; 19 files changed, 175 insertions(+), 1044 deletions(-)"
+        },
+        {
+          "cmd": "cutover export: pytest tests/contracts/test_config_and_imports.py",
+          "exit": 0,
+          "tail": "233 passed in 2.86s"
+        },
+        {
+          "cmd": "cutover export: pytest tests/i --ignore=tests/i/test_mutants.py",
+          "exit": 0,
+          "tail": "100 passed in 42.33s (round-1 schema red gone)"
+        },
+        {
+          "cmd": "cutover export: python -m tests.g.mutants <10 cutover mutants>",
+          "exit": 0,
+          "tail": "10/10 killed"
+        },
+        {
+          "cmd": "cutover export: pytest tests/g",
+          "exit": 0,
+          "tail": "484 passed, 2 warnings in 145.30s"
+        },
+        {
+          "cmd": "cutover export: pytest tests/g/test_mutants.py -k 'well_formed or every_case'",
+          "exit": 0,
+          "tail": "2 passed, 21 deselected"
+        },
+        {
+          "cmd": "reviewer mutant drain_after_pool_close: pytest composition + relay_* + startup",
+          "exit": 0,
+          "tail": "101 passed (survivor)"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "G2r2-money-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "147-153, 177-180",
+      "claim_broken": "R91 (08 \u00a710): 'The acceptor calls it first whenever an idempotency key is present and answers the mapped job, a terminal job's committed result or an in-flight job's wait or stream, without preparing or staging anything; media is fetched and staged only for a request that has no mapping.' The round-1 money-B1 claim is that a lost answer is recovered by retrying with the same key.",
+      "evidence": "`admit` calls `prepare_request` and `stage` whenever `found is None or found[1] is None`, so a mapped job that is still in flight re-fetches the customer's media and stages again. Scratch probe at a786af7 using the fakes and `relay_support.World`: process A runs `relay.admit`, so the job is admitted and attached, then the handler dies before the wait, as a SIGKILL would; the job stays `preparing` with attached=True. (1) With the host healthy, the same-key retry answers 200, but it makes 1 media fetch and the payload objects go 1 -> 2. That is the R91 deviation. (2) With the host answering 403 (an expired presigned URL), the same-key retry answers `400 media_fetch_failed`, a definitive, non-retryable error, while the job keeps running. The job then settles `succeeded/settled` with debit 0.000243 USD. With the lookup refused (the PG path until D5), the replay after completion is still 400. The lane's Limits say 'A replay of a job in flight re-prepares by design, because it must re-attach'. That is a departure from R91's wording with no recorded amendment, and it does not disclose that the re-prepare's failure becomes the answer for a live, billable job. No G case covers an in-flight mapped replay whose media host fails.",
+      "minimal_fix": "For a mapped in-flight job, do not call `prepare_request`/`stage`. If the job may still be unattached (the crash-after-commit case), bind the refs the first acceptance already staged durably (the admitted payload's refs via M's staged payload), not a fresh preparation. Otherwise just attach to the job's wait or stream. Alternatively, obtain an R91 amendment that allows a re-prepare, and in that case never answer a re-prepare failure for a mapped job: fall back to the job's own wait. Add the in-flight + 403 case (expect 200 or the committed outcome, 0 fetches, no new payload) with a mutant that restores the re-prepare.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at a786af7 from the code and by reproducing it in a scratch copy of the tree; the worktree was not modified. In `Relay.admit` (relay.py:147-153), `prepare_request` and `stage` run whenever `found is None or found[1] is None`. That means a keyed request whose job is mapped but still in flight fetches the customer's media and stages it again. R91 in 08 \u00a710 rules this out word for word: \"an in-flight job's wait or stream \u2014 without preparing or staging anything; media is fetched and staged only for a request that has no mapping.\" The only place this is acknowledged is a Limit line in G2-e5e7d3a.md (\"re-prepares by design\"). The ruling itself has no amendment and no newer ruling, so the code departs from R91 without authority.\n\nThe probe used relay_support.World with the fakes. Process A ran `relay.admit`, and the handler then raised before its wait. The job stayed `preparing` with its media attached, and the same process then took the same-key retry.\n- With the host healthy, the retry answered 200. It made 1 fetch, and the object store went from 2 objects to 4, which is the R91 deviation.\n- With the host answering 403, the retry answered `400 media_fetch_failed`. That is a definitive, non-retryable error, but the job kept running and settled `succeeded/settled` with a debit of 0.00024300. The customer was told a definitive failure and was billed anyway.\n- In that 403 case, a keyed replay after completion answered 200 when the lookup works. With the lookup refused (PostgreSQL until D5), the prepare step runs before admission can report a replay, so the answer is 400 media_fetch_failed. I read this from the code; I did not run it.\n\nOne part of the stated fix needs care. When I restarted the process instead, the job could not run at all (\"no staged media for job\") because M's job-to-refs binding lives in process memory. That case settles nothing and bills nothing. It also shows why the author re-prepares: to re-attach, as G3 (b)2 requires. So the proposed fix needs M to keep the staged refs durably, or R91 needs an amendment. Neither exists.\n\nNo G test covers an in-flight mapped replay whose media host fails. The only URL-expiry test, `test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired`, covers a job that has already finished.\n\nI rate this blocking for three reasons:\n- The code changes the R91 contract with no recorded amendment.\n- A live, billable job can be answered with a definitive 400, which is a money hole.\n- The round-1 money-B1 item, recovering a lost answer after the media URL expires, is closed only for jobs that have already finished.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I could not refute it. The defect is real at a786af7. In relay.py `admit`, lines 147-153 call `self.media.prepare_request` and `self.media.stage` whenever `found is None or found[1] is None`. That includes a key that maps to a job still in flight. R91 (08 \u00a710 line 251) says the acceptor answers \"an in-flight job's wait or stream \u2014 without preparing or staging anything; media is fetched and staged only for a request that has no mapping\". The code does the opposite for in-flight jobs. The lane's Limits (G2-e5e7d3a.md:1539, \"re-prepares by design\") are a unilateral departure from the ruling. No R91 amendment is recorded; the \u00a710 log says the next free ruling is R92 and adds nothing for this.\n\nI reproduced it with a throwaway test in the G2 worktree, using relay_support.World on the fakes. I deleted the test afterwards and the tree is clean. The test wraps `relay.admit` so that it raises after a successful admit, which simulates a SIGKILL after the attach. The first call answered 500. The job was left with outcome None, attached=True, and 1 payload object.\n(1) Same-key retry with the host healthy: 200, but 1 media fetch, and the payload objects went from 1 to 2. That is the R91 deviation.\n(2) Same-key retry with the host answering 403: `400 media_fetch_failed`, which is a definitive, non-retryable error. The job's outcome was still None. After the worker ran, it ended `succeeded/settled` with debit 0.000243.\n\nSo the customer gets a final error for a job that goes on to run and bill them. This is the lost-answer case that the round-1 money-B1 fix (recover a lost answer by retrying with the same key) was meant to close, now for the in-flight window. It is a contract departure beyond R91 and a money/honesty hole. No existing G case covers an in-flight mapped replay whose media host fails: test_relay_recovery's cases use a terminal job, or a healthy host with crash_after_commit. The reviewer's fix direction is sound: for a mapped in-flight job, skip prepare/stage and attach to the wait or stream. For the crash-after-commit case, rebind the refs already staged instead of re-preparing, or at least never answer a re-prepare failure for a mapped job.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "G2r2-money-B2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "177-180, 205-240",
+      "claim_broken": "`_admitted` docstring and evidence: 'A definitive refusal cancels the job (nothing ran, nothing is billed)'. A same-key replay answers the same job and re-admits and re-runs nothing (R91: an in-flight job's wait).",
+      "evidence": "An in-flight replay re-runs the full `_admitted`, including the CREDIT card and capability rechecks, against a job that may already be executing. Scratch probe (CREDIT, fakes): `relay.admit`, then the process dies; a worker leases the job and commits two deltas (state `running`); the deployment's approved card rotates (`active_rate_card_version = 'rc_rotated_since'`, as on a redeploy); the client retries with the same key. Result: `400 invalid_request`, and the RUNNING job is cancelled as `client_cancelled` with settlement `held_unknown`, usage None, and a reconcile_after set. A retry has cancelled a job that was producing output. The hold is left for reconciliation, not released free, and the customer gets a definitive 400 for work that ran. The existing `terminal_replay_rechecked` case covers only the terminal replay. In-flight replays under a changed card or catalog are not covered.",
+      "minimal_fix": "Run the rechecks and the attach on a replay only while the job provably cannot have run (still `preparing` and unattached, e.g. gated on the store's state from `lookup`/`get_owned`). Never cancel a mapped job from a replay's recheck; answer its wait or stream instead. Add a case: an in-flight (leased, chunks committed) CREDIT job, a rotated card, a same-key retry leaves the job running and answers its outcome; add a mutant that re-enables the recheck for running jobs.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "The defect is real at a786af7. In relay.py `admit`, `found[1] is None` covers any job without a committed outcome, including one that is leased and running. For such a job it re-runs prepare/stage and then `_admitted` (lines 173-176). In `_admitted`, the CREDIT card check `pins.rate_card_version != self.active_rate_card_version` raises InvalidRequest. That falls into `except BaseException`, which calls `self.cancel(..., client_cancelled)` on the mapped job with no check of its state.\n\nI reproduced it with a probe in a scratch copy (tests/g/test_zz_probe.py, run with the codex-g2 venv, fakes only). The steps: CREDIT World; `relay.admit` runs through the ASGI path, then the answer is lost as a 503; `world.lease()` claims the job; two deltas are committed (state `running`); `relay.active_rate_card_version = 'rc_rotated_since'`; the client retries with the same key.\n- Result: `400 invalid_request`. The job's outcome is `cancelled / client_cancelled`, `usage=None`, `settlement_state=held_unknown`, with `reconcile_after` set.\n- Control (same steps, no rotation): the replay waits on the running job (outcome None at the first poll) and ends only at its own sync deadline. So the rotated card alone turns a retry into a cancel of the running work.\n\nThe only existing cases are `terminal_replay_rechecked` (terminal only) and `inflight_replay_skips_completion`, which covers a job never attached, not a running one. Nothing kills a recheck that cancels a running job.\n\nIt is blocking. The round-2 money-B2 change (completing in-flight replays) introduced it, so it is a regression. It breaks the stated invariant (\"a definitive refusal cancels the job (nothing ran, nothing is billed)\"; a replay re-runs nothing), and it is a durability/money hole: an idempotent retry destroys a job that was producing output, leaves the hold `held_unknown` for reconciliation, and returns a definitive 400 for work that ran. The trigger, a card rotation on redeploy while jobs are in flight, is the same scenario the round-2 terminal test treats as realistic.\n\nThe reviewer's fix direction is sound: only complete the acceptance while the job is provably unrun (preparing and unattached), never cancel a mapped job from a replay's recheck, and add the case plus a mutant."
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the defect at a786af7 from the code and with a scratch probe. In relay.py `admit`, `_admitted` runs whenever `found is None or found[1] is None`, which covers any non-terminal replay. That includes a job that is already leased and has chunks committed. `_admitted` repeats the CREDIT card check (`pins.rate_card_version != self.active_rate_card_version` raises InvalidRequest) and the catalog/capability rechecks. Its `except BaseException` handler then calls `self.cancel(...)` on the job. Nothing checks whether the job could already have run.\n\nProbe: a copy of apps/infrx-api in scratch with the real CREDIT relay_support.World, no Docker, no network. A sync request was admitted with key k-x. During its wait a worker leased the job (prepare + claim) and committed two deltas, so the job state was `running`. The approved card was then set to 'rc_rotated_since' and a second request was sent with the same key. Results:\n- The retry got 400 invalid_request, with no Idempotency-Replayed header.\n- The RUNNING job was cancelled: state=cancelled, cause=client_cancelled, settlement_state=held_unknown, usage=None, reconcile_after set.\n- The original waiter got 409 state_conflict (cancelled).\n\nSo a retry killed work that was producing output. That breaks R91 (a replay re-admits and re-runs nothing), and the docstring's 'nothing ran, nothing is billed' premise is false here. The existing test (`test_dur_output__a_terminal_replay_is_answered_as_committed_not_rechecked`) covers only the terminal replay.\n\nWhy it blocks: round 2's money-B2 fix introduced the in-flight replay path, so this is a regression. It is also a money/durability hole: the customer gets a definitive refusal for work that ran, the hold is left for reconciliation, and a mid-rollout card rotation or catalog removal is enough to trigger it. No test kills it.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "stream-C2-1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "249-252 (lifespan finally: drain then pool.close)",
+      "claim_broken": "Round-1 S1 fix: pilot.lifespan drains the relay's durable cancels BEFORE pool.close. The code comment says this ('before the pool it needs is closed'), and so do the C5 case's docstring ('closed after ... the relay's cancels drained') and the evidence table. No case can observe the order. test_f_base__shutdown_drains_the_relays_durable_cancels runs with lifetime.pool None (composed() over fakes). test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last has no cancel in flight, so _cancels is empty.",
+      "evidence": "Own mutant drain_after_pool_close moves `await lifetime.relay.drain(DRAIN_S)` after `await lifetime.pool.close()`. It SURVIVES all of tests/g/test_composition.py (16 passed). My scratch probe uses the real pilot.lifespan, a fake Pool whose close() makes the store's cancel fail, and a 0.2 s slow store cancel. Following uvicorn 0.53's shutdown order, the handler is cancelled once and not awaited, then the lifespan exits. On head: order=['open','cancel_committed','close','lifespan_exited'], state=cancelled. Under the mutant: order=['open','close','cancel_on_closed_pool','lifespan_exited'], state=preparing, so the job stays claimable and billable. That is the S1 hazard this fix exists to close. With a PgJobStore the in-flight cancel needs the pool the mutant has just closed.",
+      "minimal_fix": "Give the drain case a fake pool whose close() makes later store calls fail (or records whether the cancel had committed), and drop the handler's second await so the cancel is still in flight when the lifespan exits. Assert the cancel commits before close. Register drain_after_pool_close in tests/g/mutants.py against that case.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at a786af7. The production code is correct: pilot.py:249-252 drains the relay's cancels and then closes the pool. The ordering itself has no test that fails when it breaks.\n\nI ran the reviewer's mutant in a scratch copy, swapping the two blocks so pool.close() runs before relay.drain(DRAIN_S). I checked the import resolved to the scratch pilot.py. All 16 tests in tests/g/test_composition.py still passed, and that is the only test file that exercises the lifespan (grep).\n\nWhy nothing catches it:\n1. test_f_base__shutdown_drains_the_relays_durable_cancels runs with lifetime.pool None, because composed() builds on fakes. The order between drain and close therefore cannot be seen there.\n2. test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last has no cancel in flight, so relay._cancels is empty and the swap makes no difference.\n3. tests/g/mutants.py registers drain_skipped, which replaces the drain with `pass`, against the S1 case. It has no reorder mutant. Line 1275 only covers dropping pool.close.\n\nThe order matters in production. With a PgJobStore, the shielded cancel still in flight needs the pool. If the pool closes first, that cancel fails and the job stays claimable and billable until its stored deadline. That is the round-1 stream-S1 hazard. The C5 docstring and the evidence also claim this order is covered when it is not.\n\nThis is test coverage only: behaviour at head is right. It is still blocking under the stated rubric, because it is the S1 invariant with no killable test. The fix: give the drain case a fake pool whose close() makes later store calls fail, keep the cancel in flight when the lifespan exits, and register a drain_after_pool_close mutant against that case.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at a786af7. pilot.lifespan's finally (pilot.py:249-252) is correct at head: it runs `relay.drain(DRAIN_S)` before `pool.close()`. The ordering is not pinned by any test, though. I applied the reviewer's mutant to a scratch `git archive` copy, moving the drain after `pool.close()` and dropping the comment, and checked that the scratch `infrx` was the one imported. The result was `tests/g/test_composition.py`: 16 passed. The mutant survives.\n\nWhy it survives:\n- `test_f_base__shutdown_drains_the_relays_durable_cancels` uses `composed()`, where `lifetime.pool` is None, so there is no close for the drain to be ordered against.\n- `test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last` installs a Pool but starts no cancel, so `_cancels` is empty and the drain is a no-op. Its docstring still claims \"after the relay's cancels drained\".\n- `mutants.py` registers only `drain_skipped` (drain deleted), which the drain case kills. Nothing covers reordering.\n\nThe ordering matters. The round-1 S1 finding in `G2-review-2d742aa.json` explicitly required the drain \"before pool.close()\". The reason is that a PgJobStore cancel needs a pool connection. psycopg_pool's `close()` makes every waiting or later `getconn` fail with PoolClosed. So a shielded cancel that has not yet acquired a connection is lost, and that is likely when several sync waits are cancelled at once or the task has not run yet. The job then stays in `preparing` and is claimable and billable, which is the exact S1 hazard.\n\nThis is an invariant from a round-1 blocking fix with no test that can kill its violation, so it is blocking under the stated criteria. The production code needs no change; the fix is to the test. Give the drain case (or the C5 case) a fake pool whose `close()` makes later store calls fail or records whether the cancel had committed, keep a cancel in flight when the lifespan exits, and register `drain_after_pool_close` in `tests/g/mutants.py`.\n\nScratch copy: /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/g2v/apps/infrx-api",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "stream-C2-2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "567-571 (_Stream.__call__: identity emit, then named = True)",
+      "claim_broken": "H-B3/S2: a stream cancelled from outside before its identity reached the client (during http.response.start OR during the identity frame's send) cancels its job. The named mutant's invariant says 'a stream is named only once its identity frame was sent'. The new case blocks only at http.response.start, so nothing pins the identity-send half.",
+      "evidence": "Own mutant named_before_identity_send_completes moves `named = True` above `await emit(<identity frame>)`. It SURVIVES tests/g/test_relay_sse.py (15 passed). The listed named_before_identity (`named = False` -> `named = True`) is killed only because the case blocks earlier, at http.response.start. My scratch probe is parametrized on the blocked message: block at the body carrying job_handle, cancel the task, run relay.drain, then assert cancelled/client_cancelled, reserved_total 0 and no active reservation. It passes on head for both parametrizations. Under the mutant it fails with `AssertionError: preparing`: a process stop while a slow peer holds the identity frame orphans the job.",
+      "minimal_fix": "Parametrize test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job over the blocked message (http.response.start, and the body containing job_handle). Register named_before_identity_send_completes against it.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at a786af7, working in a scratch copy at scratchpad/verify-idsend-3774133 that used the worktree's .venv. The code on head is correct. relay.py sets `named = True` only after `await emit(<identity frame>)`, so a CancelledError during the identity send takes the `not named` branch and cancels the job as client_cancelled.\n\nThe test gap is real. The only case, test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job, blocks only on http.response.start.\n\n- **Probe on head:** I parametrized the reviewer's case to block either on http.response.start or on the body carrying job_handle, then cancel the task and run relay.drain. It asserts the job ends cancelled/client_cancelled with reserved_total 0. Both variants pass on head (17 passed with test_relay_sse).\n- **Mutant:** I moved `named = True` above the identity `await emit(...)`. test_relay_sse, test_relay_matrix, test_relay_sync, test_relay_recovery and test_composition all still pass: 81 passed, 1 failed. The one failure is the probe's identity variant, `AssertionError: preparing`, meaning the job is left running with its reservation held.\n\nSo the identity-send half of the registered invariant \"a stream is named only once its identity frame was sent\" has no test that kills it. The listed mutant named_before_identity dies only because the case blocks earlier, at the headers.\n\nThe round-1 H-B3/S2 finding explicitly covered \"the headers or identity frame are still in flight\". That half is still unpinned. If it regressed, a process stop while a slow peer holds the identity frame would orphan the job and its credit hold. That is a money and durability hole behind an invariant with no killable test, which the bar counts as blocking. The one argument against: the round-1 minimal fix offered the identity frame only as an alternative (\"or\"), and the mutant it asked for is registered and killed.\n\nThe fix is to parametrize the existing case over the blocked message (http.response.start, and the body containing job_handle) and register named_before_identity_send_completes against it. No code change is needed.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The coverage gap is real, but I rate it nonblocking. At a786af7, _Stream.__call__ (relay.py:567-571) is correct: `named = True` comes after `await emit(identity)`, so a cancel during the identity send still takes the `not named` branch and cancels the job. I reproduced the reviewer's result in a scratch copy using git archive, run with the codex-g2 venv, and confirmed infrx was imported from the scratch copy. I parametrized test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job over the blocked message: http.response.start, and the body that contains b\"job_handle\". Both cases pass on head. Under the mutant named_before_identity_send_completes (`named = True` moved above the identity emit), only the [identity] case fails at test_relay_sse.py:303, the job.state assert, and [start] plus the other 14 cases still pass. The head file has only the start-blocking case, so the mutant survives the suite. Under the registered mutant named_before_identity (`named = False` changed to `named = True`), both cases fail, so the listed invariant does have a test that kills it. It is nonblocking because the product code has no defect, the registered mutant is killed, and this round-2 case matches the round-1 finding's own proposed test: its evidence text says a probe blocking on http.response.start \"kills both mutants\". The implementer closed round-1 stream-S2/H-B3 as it was specified. What remains is a narrower test-strength gap: one reordering mutant is not pinned. The fix is small: parametrize the case over the two blocked messages and register the reorder mutant against it. The worktree already had an untracked file, apps/infrx-api/tests/g/test_zz_probe_scratch.py, that I did not create, and I left it in place.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    },
+    {
+      "id": "COMP-R2-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "249-252 (lifespan finally)",
+      "claim_broken": "stream-S1 as closed in round 2, plus 4cee7a8's message, the code comment ('before the pool it needs is closed'), the evidence ('pilot.lifespan calls it with DRAIN_S = 5 s before it closes the pool') and the C5 case docstring ('closed after they have finished (and after the relay's cancels drained)'), all say shutdown drains the relay's durable cancels before pool.close(). No test can kill a reversal of that order. This is a new invariant, it carries the S1 fix, and nothing kills its failure.",
+      "evidence": "I swapped the two blocks in a scratch copy, so the finally runs `if lifetime.pool is not None: await lifetime.pool.close()` and then `relay.drain(DRAIN_S)`. I confirmed the mutated module was the one imported. Result: tests/g/test_composition.py 16 passed. The composition, relay_sse, relay_sync, relay_recovery, relay_matrix and startup files together: 101 passed, so the swap survives. Why: test_f_base__shutdown_drains_the_relays_durable_cancels runs with pool=None (fakes), and test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last records open/serving/close but never drain. drain_skipped only kills removing the drain. In production the swapped order would send the in-flight shielded cancels to a closed psycopg pool, and the jobs would be left to their stored deadline, which is exactly S1.",
+      "minimal_fix": "In test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last, set rt.lifetime.relay to a stub (or wrap rt.relay.drain) whose drain appends ('drain',) to `order`. Assert order == [('open',0), ('serving',2), ('drain',), ('close',True)]. Declare a mutant drain_after_pool_close (swap the two blocks, P anchor) that names this case.",
+      "lens": "composition",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at a786af7. The production order in apps/infrx-api/infrx/gateway/pilot.py:249-252 is correct today: drain runs first, then pool.close. But no test fails if the order is reversed.\n\nExperiment: I made a scratch copy of apps/infrx-api and swapped the blocks, so the finally runs pool.close() and then relay.drain(DRAIN_S). I checked that infrx.gateway.pilot imported from the scratch file. Then I ran tests/g/test_composition.py, test_relay_sse.py, test_relay_sync.py, test_relay_recovery.py, test_relay_matrix.py and test_startup.py: 101 passed.\n\nWhy the reversal survives:\n- test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last records only open, serving and close. Its expected list [(\"open\",0),(\"serving\",2),(\"close\",True)] never mentions drain, even though its docstring says the close happens after the relay's cancels drained.\n- test_f_base__shutdown_drains_the_relays_durable_cancels runs on the fake composition with no real pool. With the swap it still sees the job cancelled.\n- tests/g/mutants.py only has drain_skipped (deleting the drain, around line 1243) and lifespan_pool_never_opened. No mutant reorders drain and close.\n\nScope of the full tests/g run on the swapped copy: 451 passed, 25 failed, 2 collection errors. I did not check the 25 failures one by one. I expect they are test_mutants cases whose anchors no longer match the edited file (the swap dropped the drain line's comment, which is the drain_skipped anchor). The 2 errors are client example/smoke collection that depends on the scratch path. Neither is evidence that anything catches the order.\n\nIn production the reversed order would send the in-flight shielded cancels to a closed psycopg pool. The jobs would then wait out their stored deadline, which is exactly what stream-S1 was about.\n\nSeverity: the order is a new invariant that carries the S1 fix, its test's docstring and the evidence both claim it, and no test catches its reversal. That is an invariant with no killable test, so it is blocking. The fix is small: record drain in the order test and add a drain_after_pool_close mutant that names that test.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at a786af7. The lifespan finally in apps/infrx-api/infrx/gateway/pilot.py runs relay.drain(DRAIN_S) and then pool.close(), and the comment says the drain must come first ('before the pool it needs is closed'). I swapped the two blocks in a scratch copy made with git archive and confirmed the mutated pilot.py was the module imported. tests/g/test_composition.py: 16 passed. All of tests/g, excluding the mutant runner and two client files that only fail to collect because of the scratch path: 398 passed. The swap survives. Why: test_f_base__the_lifespan_opens_the_pool_first_and_closes_it_last installs a Pool stub but records only open/serving/close, never drain. test_f_base__shutdown_drains_the_relays_durable_cancels runs with pool=None, so the order doesn't matter there. The only related mutant in tests/g/mutants.py, drain_skipped, removes the drain rather than reordering it. The ordering carries the round-2 fix for stream-S1: with a real psycopg pool, drain after close would send the shielded durable cancels to a closed pool, and the jobs would be left to their stored deadline. So this is a new invariant that no test can kill, and that counts as blocking under the stated criteria. The fix is the one proposed: record ('drain',) in the pool-order test, assert open, serving, drain, close, and declare a drain_after_pool_close mutant that names this case.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "G2r2-money-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_relay_recovery.py",
+      "line": "121-141",
+      "claim_broken": "money-B2 / G3 (b)2: 'the same-key retry ... re-runs the (idempotent) attach, so the job is prepared and answered'. Nothing pins which refs the retry binds.",
+      "evidence": "Hand mutant `own_replay_attaches_other_refs` (`attach(job.request_id, () if admission.replayed else refs)`) SURVIVES the whole tests/g (462 passed, excluding test_mutants). The crash-after-commit VIDEO case asserts only `succeeded`, so a video job bound to zero refs runs text-only, succeeds and is billed without its media.",
+      "minimal_fix": "In the crash-after-commit and outage-retry cases, assert `world.media.by_job[job.id]` equals the refs staged by the first acceptance (handles and digests). Declare the mutant.",
+      "lens": "money"
+    },
+    {
+      "id": "G2r2-money-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "200-202",
+      "claim_broken": "One key, one regime, in both directions, through the lookup.",
+      "evidence": "Hand mutant `own_regime_default_is_self` (`getattr(found[0], 'accounting_regime', self.regime)`) SURVIVES tests/g (462 passed): only CREDIT-job -> legacy-relay is covered. My probe (a legacy job on the credit harness, USD granted, then a CREDIT relay with the same key) kills it: 409 at head vs 404 under the mutant. No money moves under the mutant.",
+      "minimal_fix": "Add the reverse-direction case (legacy job, CREDIT relay -> 409 idempotency_conflict) to test_dur_admit__a_key_naming_a_job_of_another_regime_is_a_conflict.",
+      "lens": "money"
+    },
+    {
+      "id": "G2r2-money-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/conformance/v2_contracts.py",
+      "line": "977-990",
+      "claim_broken": "Docstring: `lookup` answers the pinned admission 'after a rate change as before it'.",
+      "evidence": "The case never changes a rate. It only admits, looks up and compares pins. The 'after a rate change' half is unproven by this case (credit_admit__a_replay_is_pinned covers admit's replay, not lookup).",
+      "minimal_fix": "Rotate the rate card between admit_credit and lookup in the case, or drop the phrase.",
+      "lens": "money"
+    },
+    {
+      "id": "G2r2-money-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "137-142",
+      "claim_broken": "`admit` docstring: 'A mapped job is answered in the mode of the request that asks for it.'",
+      "evidence": "R94 (added at the G3 review, after this round) says a key with a different mode is idempotency_conflict and 'A replay therefore always answers in the job's own mode'. The docstring now contradicts a binding ruling, although the digest change is G3's.",
+      "minimal_fix": "Update the docstring when R94 lands in the ingress digest (G3), or reference R94 now.",
+      "lens": "money"
+    },
+    {
+      "id": "G2r2-money-N5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/relay_support.py",
+      "line": "178-181",
+      "claim_broken": "B2 CREDIT closure: 'the same-key retry passes the recheck and waits on the same job'.",
+      "evidence": "`World.work` cannot run a CREDIT job: W's AttemptRunner returns refusal 'not_found: job \u2026 is a CREDIT job: use load_work_credit'. Every CREDIT relay case ends in 504 or a refusal, and none reaches a CREDIT 200. My probe drove `complete_credit` by hand: after a post-admission catalog outage, the retry got 200 and the wallet was back at its seed (one hold of 14.7456 CREDIT, released on settlement). So the relay behaves correctly, but the evidence never shows it.",
+      "minimal_fix": "Add one CREDIT success case (hand-driven lease + complete_credit) for the outage-retry and crash-after-commit paths.",
+      "lens": "money"
+    },
+    {
+      "id": "stream-C2-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "272-276 (Relay.drain)",
+      "claim_broken": "drain waits for 'the shielded cancels still in flight' (plural). The only case has a single cancel in flight.",
+      "evidence": "Own mutant drain_waits_one (`asyncio.wait({next(iter(self._cancels))}, ...)`) survives test_composition.py (16 passed).",
+      "minimal_fix": "Cancel two sync handlers in the drain case and assert that both jobs are cancelled.",
+      "lens": "stream"
+    },
+    {
+      "id": "stream-C2-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "132-134, 365-389 (stream replay of a terminal job)",
+      "claim_broken": "The R91 note says a lost answer is recovered by its key. That holds for sync. A stream-mode replay of a succeeded job whose journal passed its TTL gets journal_expired followed by [DONE], not the committed result. The relay also issues a (harmless, AlreadyTerminal) cancel on the terminal job.",
+      "evidence": "Scratch probe: stream with key k1 succeeds, the clock advances 60 s, expire() removes 8 chunks, then the same key streamed again gives `[{'error': {'code': 'journal_expired', ...}}, '[DONE]']` and the job stays succeeded. There is no money or state effect. This behaviour predates round 2 and is out of R91's wording; it is recorded so G3's events route can decide.",
+      "minimal_fix": "None required in G2. Either document that a stream replay after the journal TTL answers journal_expired (use sync or G3's result route), or render the committed result for a terminal replay in stream mode.",
+      "lens": "stream"
+    },
+    {
+      "id": "COMP-R2-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "77-97 (Probe.__call__/_answer)",
+      "claim_broken": "C3: a refusal to start can finish. The first answer now joins its executor with no outer timeout, so it relies entirely on asyncio.wait_for. Limits already declare that a check blocking its thread synchronously is not interrupted. Also undeclared: under Python 3.12, wait_for waits for the cancelled inner task to finish, so a check that suppresses or delays CancelledError hangs the first answer, and with it the registration, indefinitely. Round 1's result(timeout_s) bounded the caller in that case.",
+      "evidence": "`with ThreadPoolExecutor(1) as pool: self.value = pool.submit(asyncio.run, self._answer()).result()` has no timeout. `_answer` is `asyncio.wait_for(self.check(), self.timeout_s)`. The limits paragraph covers only 'a check that blocks its thread synchronously'. Today's checks (catalog.resolve, active_rate_card, stream.usage) are cooperative, so no live failure.",
+      "minimal_fix": "Extend the Probes limit line to cover a check that suppresses cancellation. Optionally keep an outer `.result(self.timeout_s + 1)` that falls back to False, and make the worker a daemon thread (or run the first answer in lifespan) so both bounds hold.",
+      "lens": "composition"
+    },
+    {
+      "id": "COMP-R2-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/ports.py",
+      "line": "88-98",
+      "claim_broken": "R91 types JobStore.lookup as returning (Admission, ...). Through the same method, the fake answers AdmissionV2 for a CREDIT job, because `_replay(credit=None)` uses the job's own regime. The relay depends on this through getattr(found[0], 'accounting_regime', LEGACY). AdmissionV2 does not subclass Admission (records.py:515 vs v2/records.py:522), so the port's annotation understates what the one shared method returns. The docstring says so in prose ('A CREDIT job answers its AdmissionV2'). This is not a contract change beyond R91, since R91 gives CreditJobStore.lookup AdmissionV2.",
+      "evidence": "fakes/state.py: `if credit is None: credit = job.credit is not None`. The conformance case credit_admit__lookup_answers_the_pinned_admission asserts isinstance(mapped, v2.AdmissionV2) through harness.port.lookup.",
+      "minimal_fix": "Leave as is, or have D5 note in R2-2 that PgJobStore.lookup must answer the job's own regime record (AdmissionV2 for CREDIT), since the relay's regime-conflict check reads accounting_regime from it.",
+      "lens": "composition"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "verdict": "pass",
+  "mutants": [
+    {
+      "name": "(1a) A1 only the last event checked",
+      "edit": "infrx/state/journal.py:73 'for event in events):' -> 'for event in events[-1:]):'",
+      "result": "killed",
+      "killed_by": "test_journal_units.py::test_append__refuses_what_jsonb_cannot_store_before_sending_it -> 'AssertionError: JournalWriteFailed was not raised' (via _refused; the bad-first/middle batches are not refused). 1 failed, 5 passed"
+    },
+    {
+      "name": "(1b) A1 only the first event checked",
+      "edit": "journal.py:73 'for event in events):' -> 'for event in events[:1]):'",
+      "result": "killed",
+      "killed_by": "same test -> 'AssertionError: JournalWriteFailed was not raised' (the bad-last batch reaches the fake). 1 failed, 5 passed"
+    },
+    {
+      "name": "(2) A2 surrogate clause dropped",
+      "edit": "journal.py:37 'return \"\\x00\" not in value and not any(\"\\ud800\" <= char <= \"\\udfff\" for char in value)' -> 'return \"\\x00\" not in value'",
+      "result": "killed",
+      "killed_by": "same test -> 'AssertionError: JournalWriteFailed was not raised' (SURROGATES payloads pass). 1 failed, 5 passed"
+    },
+    {
+      "name": "(3) A3 per-event limit on characters",
+      "edit": "0017: 'coalesce(max(octet_length((e->'payload')::text)), 0)' -> 'coalesce(max(char_length((e->'payload')::text)), 0)', via migration_mutants.kill(), scenario admission, check append_oversize",
+      "result": "killed",
+      "killed_by": "check_append_oversize -> 'AssertionError: 65 octets in 40 characters, 64-octet limit: None'"
+    },
+    {
+      "name": "(4) A3 limit on the batch sum",
+      "edit": "0017: '  if v_largest > v_max_event then' -> '  if v_bytes > v_max_event then', via kill()",
+      "result": "killed",
+      "killed_by": "check_append_oversize -> 'AssertionError: two events under the limit, over it together, were refused: journal_write_failed'"
+    },
+    {
+      "name": "(5a) A4 bool treated as unjournalable",
+      "edit": "journal.py: insert 'if isinstance(value, bool): return False' before the float branch",
+      "result": "killed",
+      "killed_by": "same unit test, at the positive append: 'infrx.contracts.errors.JournalWriteFailed: journal_write_failed: an event carries a NUL character or a non-finite number, which the journal cannot store'. This is a typed DomainError death, which the shared runner accepts as assertion-shaped. The reason is right: a journalable payload was refused. The text is the product's refusal, not the test's 'a journalable payload was refused' assertion (see N2)."
+    },
+    {
+      "name": "(5b) A4 null refused",
+      "edit": "journal.py:44 'return True' -> 'return value is not None'",
+      "result": "killed",
+      "killed_by": "same test, the same typed JournalWriteFailed at the positive append"
+    },
+    {
+      "name": "(6) rewritten_to_itself converts any Exception",
+      "edit": "checks_journal.py:653 'except UniqueViolation as failed:' -> 'except Exception as failed:'",
+      "result": "No test detects the edit by itself, but expects_detail makes the J3 kill reason-specific, so the regression is still caught. With the committed J3 mutant, both the narrow and the wide except give 'killed' with the detail 'duplicate key value violates unique constraint \"stream_chunks_one_terminal_idx\"', and expects_detail matches. To test a wrong-reason death, I temporarily added 'if old.settled_at is not null then raise exception ...' to journal_terminal_event and applied the J3 mutant on top. With (6) applied, the check counts it as 'killed' with the detail 'AssertionError: rewriting settled_at to itself failed: wrong reason: not the index', and expects_detail rejects it (match=False), so test_mutant_is_killed would fail 'for the wrong reason'. With the committed narrow except, the same run is 'setup_error: the check raised instead of asserting: RaiseException'. The two guards back each other up.",
+      "killed_by": "test_migration_mutants.py::test_mutant_is_killed[d4_terminal_trigger_refires_on_the_same_instant], through its expects_detail assertion"
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "git -C codex-d4 diff 7d3ef59..90efcb0 (stat, apps/ diff, and 0017 diff)",
+      "exit": 0,
+      "tail": "6 files changed. The 0017 diff is 0 lines. The only product change is in infrx/state/journal.py: the _journalable docstring and one line adding the surrogate clause. Everything else is tests or evidence."
+    },
+    {
+      "cmd": "make api-env (scratch /tmp/claude-1000/verify-d4-r3, offline)",
+      "exit": 0,
+      "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+      "cmd": ".venv/bin/python -m pytest -q tests/d/test_journal_units.py tests/d/test_code_mutants_d4.py",
+      "exit": 0,
+      "tail": "24 passed in 38.51s"
+    },
+    {
+      "cmd": ".venv/bin/python -m tests.d.code_mutants_d4",
+      "exit": 0,
+      "tail": "[killed] only_the_last_event_is_checked / a_lone_surrogate_is_sent / a_json_scalar_is_refused ... 17/17 killed"
+    },
+    {
+      "cmd": "INFRX_D2_VALKEY_PORT=55494 INFRX_D2_VALKEY_CONTAINER=infrx-verify-d4-valkey pytest -q test_journal.py test_journal_races.py test_journal_units.py test_streamstore_conformance.py test_jobstore_conformance.py test_e3b_drills.py -rxX (plain image, pgharness patched to infrx-verify-d4-postgres:55481, db infrx_verify_d4, lock /tmp/infrx-verify-d4.lock)",
+      "exit": 0,
+      "tail": "101 passed, 29 xfailed, 1 xpassed in 68.59s (XPASS dur_settle__cancel_and_complete_race_has_a_single_winner)"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k 'd4_ or well_formed'",
+      "exit": 0,
+      "tail": "54 passed, 427 deselected in 83.24s"
+    },
+    {
+      "cmd": "hand mutants 1a/1b/2/5a/5b: pytest -q tests/d/test_journal_units.py on a second scratch copy, restored after each (cmp confirmed)",
+      "exit": 1,
+      "tail": "each: FAILED test_append__refuses_what_jsonb_cannot_store_before_sending_it, 1 failed, 5 passed; RESTORED"
+    },
+    {
+      "cmd": "python hand_mut.py 3 / 4 (migration_mutants.kill with ad-hoc Mutant)",
+      "exit": 0,
+      "tail": "hand3_char_length: killed :: AssertionError: 65 octets in 40 characters, 64-octet limit: None | hand4_batch_sum: killed :: AssertionError: two events under the limit, over it together, were refused: journal_write_failed"
+    },
+    {
+      "cmd": "python hand_mut.py j3 with the narrow except, with (6), with (6) plus the wrong-reason trigger, and with the narrow except plus the wrong-reason trigger",
+      "exit": 0,
+      "tail": "killed match=True | killed match=True | killed match=False ('wrong reason: not the index') | setup_error RaiseException; checks_journal.py and 0017 then matched 90efcb0 byte for byte (RESTORED)"
+    }
+  ],
+  "findings": [
+    {
+      "id": "N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/journal.py",
+      "claim_broken": "A2 docs say the refused values are named. The _journalable docstring was updated, but the append() docstring and the JournalWriteFailed message were not.",
+      "evidence": "journal.py lines 69-75: the append docstring lists '(a NUL character, NaN, an infinity)', and the raise text is 'an event carries a NUL character or a non-finite number, which the journal cannot store'. A batch refused for a lone surrogate therefore reports a stale reason.",
+      "minimal_fix": "Add 'a lone UTF-16 surrogate' to the append docstring and to the JournalWriteFailed message."
+    },
+    {
+      "id": "N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/test_journal_units.py",
+      "claim_broken": "A4 kill text should state the invariant. The positive append is called bare through asyncio.run, so a scalar-refusing mutant dies by the product's typed JournalWriteFailed, and that message wrongly blames a NUL or non-finite number. The test's own 'a journalable payload was refused' assertion is never reached.",
+      "evidence": "Hand mutant (5a), bool -> False, fails with 'JournalWriteFailed: journal_write_failed: an event carries a NUL character or a non-finite number'. The runner accepts DomainError deaths (R83 amendment), so the committed a_json_scalar_is_refused is still counted as killed correctly.",
+      "minimal_fix": "Wrap the positive append: try: asyncio.run(...) except errors.JournalWriteFailed as refused: raise AssertionError(f'a journalable payload was refused: {refused}') from None"
+    }
+  ],
+  "fabrication_check": "Every count claimed in round 3 reproduced independently from git archive 90efcb0 in an isolated namespace: 24 passed (units plus code mutants), 17/17 killed (CLI), 101/29/1 (focused, plain), 54 passed (53 D4 migration mutants plus well_formed). The kill texts quoted in D4-ce7659b.md for d4_event_limit_on_characters ('65 octets in 40 characters, 64-octet limit: None') and d4_event_limit_on_the_batch_sum ('two events under the limit, over it together, were refused: journal_write_failed') match my hand-applied equivalents word for word. The claims 'only the surrogate guard changes product code' and '0017 unchanged' are confirmed: the 7d3ef59..90efcb0 diff of 0017 is empty, and the only product edit is journal.py's docstring plus the surrogate clause. The claim that the middle-position case is really in the middle holds: b.events('a') and b.events('b') each yield one delta event, so the bad event is at index 1 of 3. All round-2 items are closed: A1, A2, A3, A4, JL-N1 and JL-N2 (the docstring text is present).",
+  "cleanup": "The pgharness containers (infrx-verify-d4-postgres; the valkey and decoy were never started) were already removed at interpreter exit, and docker rm -f reported 'No such container' for all three. I deleted the lock /tmp/infrx-verify-d4.lock (confirmed absent), both scratch trees (/tmp/claude-1000/verify-d4-r3 and /tmp/claude-1000/verify-d4-r3-code), the logs and the .orig backups. The codex-d4 worktree was never written to (git status clean). Ports 55435/55465/55475/55432 were not touched."
+}

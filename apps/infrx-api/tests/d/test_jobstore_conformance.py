@@ -9,7 +9,8 @@ FROZEN PostgreSQL database per harness). The partition is explicit and strict:
   it starts passing, the run fails until the list is corrected (a pending list cannot
   quietly go stale);
 * a case needing an optional hook this rig does not provide is SKIPPED naming the hook
-  (R32: a skip is never a pass): `stream` is the StreamStore (D4).
+  (R32: a skip is never a pass). D4: none is - `stream` is the real `PgStreamStore` and
+  `publish` one chunk through its `append`.
 * D3: `RACY` cases are non-strict xfail - see its comment.
 
     uv run --frozen pytest -q tests/d/test_jobstore_conformance.py
@@ -20,6 +21,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from infrx.contracts import errors
 from infrx.contracts.conformance import MissingHook, jobstore_cases
 
 from . import pgharness, pgstore
@@ -32,9 +34,12 @@ _D5 = "D5: needs JobStore.complete's settlement (D3's fence runs first and holds
 
 #: D3: every case whose store operations are D2's or D3's passes. What is left needs the
 #: settling transaction (D5) - `complete` with a lease that holds raises
-#: NotImplementedError after D3's fence - or the journal (D4, the `stream` hook: skipped).
-#: `publish` is D3's stand-in hook (`pgtesting.hooks`: the fence plus the marker in one
-#: transaction), so the after-publication paths of `recover` and `cancel` run here.
+#: NotImplementedError after D3's fence.
+#: D4: the three former `stream` skips (dur_fence__a_deadline_binds_append_and_complete,
+#: dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call,
+#: dur_settle__one_unsettleable_job_does_not_stop_the_sweep) must pass on the real append,
+#: and so must the `publish` cases outside this list; the two `publish` cases below still
+#: reach `complete` after their journal step.
 PENDING: dict[str, str] = {
     # The tombstone cases settle a job first (D5 complete). The TTL itself is D2's and is
     # proved on SQL in tests/d/test_admission.py (idempotency check).
@@ -89,11 +94,18 @@ RACY: dict[str, str] = {
 CASES = jobstore_cases()
 
 
+#: D4 review H2: the exception each pending case must die of - D5's `complete` for `_D5`,
+#: the refused key for the F2 case - so a regression before that step fails, never xfails.
+RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey}
+
+
 def _param(case):
     reason = PENDING.get(case.__name__)
-    marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
+    raises = RAISES.get(case.__name__, NotImplementedError)
+    marks = [pytest.mark.xfail(strict=True, reason=reason, raises=raises)] if reason else []
     if case.__name__ in RACY:
-        marks = [pytest.mark.xfail(strict=False, reason=RACY[case.__name__])]
+        marks = [pytest.mark.xfail(strict=False, reason=RACY[case.__name__],
+                                   raises=NotImplementedError)]
     return pytest.param(case, id=case.__name__, marks=marks)
 
 
