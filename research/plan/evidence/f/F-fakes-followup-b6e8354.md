@@ -113,12 +113,14 @@ Not changed, as the review allows:
 | Command (from `apps/infrx-api`, tree `f6da113`) | UTC | Exit | Tail (quoted) |
 |---|---|---|---|
 | `uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py` | 15:41:04Z–15:43:09Z | 0 | `1051 passed in 124.12s (0:02:04)` (unchanged count: round 2 added assertions, not cases) |
-| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py` (detached, `/tmp/claude-1000/ffakes/r2-mutants-all.log`) | R2_UTC | R2_EXIT | R2_TAIL |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py` (detached, `/tmp/claude-1000/ffakes/r2-mutants-all.log`) | 15:40:58Z–16:00:57Z | 0 | `442 passed in 1199.23s (0:19:59)` - all 422 declared mutants killed, plus the list's own checks (round 1: 438 for 418) |
 | `uv run --frozen pytest -q -p no:cacheprovider tests/d/test_journal_units.py` - runs without Docker, fake path included (no skip) | 15:43:09Z–15:43:10Z | 0 | `6 passed in 0.36s` |
 | `uv run --frozen python -m tests.d.code_mutants_d4` | after the units, ended 15:44:06Z | 0 | `17/17 killed` |
 | `uv run --frozen pytest -q -p no:cacheprovider tests/g` | 15:44:12Z–15:46:23Z | 0 | `405 passed, 2 warnings in 130.03s (0:02:10)` |
 | `uv run --frozen pytest -q -p no:cacheprovider tests/w -x` | 15:46:23Z–15:49:22Z | 0 | `157 passed in 178.42s (0:02:58)` |
 | targeted before each commit: `uv run --frozen python -m tests.contracts.mutants <names>` | before 15:37:16Z / 15:38:02Z / 15:39:34Z / 15:40:46Z | 0 | P1 `1/1 killed`; P2 (+3 item-3 mutants) `4/4 killed`; P3 (+2 terminal mutants) `4/4 killed`; H1 (all 8 item-2 mutants) `8/8 killed` |
+
+Round-2 logs (local, sha256): `r2-contracts-d.log` e0328dc53ab4b825e41f87e975477e99e242f15d5a135b9b45fe82a659ffb304, `r2-g-w.log` 598dd938369f464353aa9308c5e4f79125a70e7153d86d4efff42dece70630a7, `r2-mutants-all.log` 2fe6d72912ae8d7e98e08d1a3aecbde6fc8b8bac6fc21f48f535d1b8f18e1a97 (under `/tmp/claude-1000/ffakes/`).
 
 Mutant list: `python -m tests.contracts.mutants --list` → `422 mutants over 214 named cases` (418 + `refuse_after_fence`, `expired_by_key_presence`, `chunkless_terminal_ttl_from_the_store`, `terminal_ttl_ignores_the_newest_chunk`). Trial merges at `f6da113` (`git merge-tree --write-tree`): `codex/g2-chat-relay` rc=0, `codex/e3b-phase2-gate` rc=0, `origin/codex/e3b-phase2-gate` rc=0, no conflicts. G2: round 2 additionally changed `FakeStreamStore.write_terminal` (TTL) and added the module constant `TERMINAL_TTL_WITHOUT_CHUNKS_S`.
 
