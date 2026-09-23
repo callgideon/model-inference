@@ -191,6 +191,10 @@ TUNABLE = (
     "MAX_VIDEO_MB", "FETCH_TIMEOUT_S", "MAX_REDIRECTS", "ALLOWED_VIDEO_MIME",
     "USAGE_FAILED_LOG", "MODELS_DOC",
 )
+# Tunables with a shape of their own. The runtime reads 0 here as a valid count (it refuses
+# only negatives), and serve.sh hands it to vLLM, which does not start on it: refused
+# before anything changes rather than found after the engine restart.
+TUNABLE_SHAPES = {"ENGINE_MAX_NUM_SEQS": "positive_int", "WORKER_CONCURRENCY": "positive_int"}
 # Read by the runtime, never written by this installer.
 NOT_SETTABLE = {
     "CONSOLE_CURSOR_SECRET": "a signing key, and the console's rather than this gateway's "
@@ -392,7 +396,8 @@ def tunables(settings, values: dict[str, str]) -> list[str]:
         elif name in values:
             problems.append(f"--set {name}: given twice")
         else:
-            problem = shape_problem(Key(name, "tunable", "tunable"), value)
+            problem = shape_problem(Key(name, "tunable", TUNABLE_SHAPES.get(name, "tunable")),
+                                    value)
             if problem:
                 problems.append(problem)
             else:

@@ -279,7 +279,9 @@ def test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime(
         tmp_path, monkeypatch, capsys):
     """A schema name reaches the file; a value the runtime cannot read (`abc`, a negative
     cap) is refused by the probe's `validate_runtime(from_env(...))` over the staged
-    bytes, before anything is replaced or restarted."""
+    bytes, before anything is replaced or restarted. The engine's sequence count and the
+    worker's runner count must be positive: the runtime reads 0 and vLLM does not start
+    on it, so preflight refuses it by shape."""
     made = support.stubs(tmp_path, monkeypatch)
     cfg = support.config(tmp_path, settings=("MAX_ACTIVE_JOBS=4",))
     assert preflight.apply(cfg) == 0
@@ -291,6 +293,16 @@ def test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime(
         assert preflight.apply(cfg) == preflight.REFUSED, bad
         assert cfg.env_file.read_bytes() == installed and made.systemctl_calls == [], bad
         assert "does not start" in capsys.readouterr().err
+    for bad in ("ENGINE_MAX_NUM_SEQS=0", "ENGINE_MAX_NUM_SEQS=-1", "ENGINE_MAX_NUM_SEQS=abc",
+                "WORKER_CONCURRENCY=0"):
+        (made.dir / "systemctl.log").unlink(missing_ok=True)
+        cfg = support.config(tmp_path, previous=None, settings=(bad,))
+        assert preflight.apply(cfg) == preflight.REFUSED, bad
+        assert cfg.env_file.read_bytes() == installed and made.systemctl_calls == [], bad
+        assert "is not a valid positive_int" in capsys.readouterr().err, bad
+    cfg = support.config(tmp_path, previous=None, settings=("ENGINE_MAX_NUM_SEQS=32",))
+    assert preflight.apply(cfg) == 0
+    assert preflight.read_env(cfg.env_file).get("ENGINE_MAX_NUM_SEQS") == "32"
 
 
 # --- the runtime image at install time ------------------------------------------------
