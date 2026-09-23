@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T08:22:54Z",
+  "updated": "2026-09-23T08:39:54Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,9 +35,9 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement",
+      "phase": "phase A HANDED BACK db12a5a (impl ecacd50); Opus review running; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window)",
       "since": "2026-09-23T05:40:38Z",
-      "note": "base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window"
+      "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     }
   },
   "reviews": {},
