@@ -690,3 +690,73 @@ def test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing():
         assert refusal(reply) == (400, "invalid_request"), headers
     assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
     assert delete(world, headers={"content-length": "0"}).json()["state"] == "cancelled"
+
+
+# --- item 6: the explicit-async matrix ---------------------------------------------------
+INPUTS = {"text": rs.TEXT, "video_url": rs.VIDEO}
+
+
+@pytest.mark.parametrize("route", ["post_jobs", "prefer"])
+@pytest.mark.parametrize("kind", sorted(INPUTS))
+def test_api_modes__the_async_matrix_end_to_end(kind, route):
+    """Each cell, end to end through W's real attempt runner: 202, then either polling
+    (`POST /v1/jobs`: status until terminal, then the result) or the events (`Prefer` on
+    chat: the whole committed journal, then a resume from its first cursor), then the
+    result. One settlement, the hold settled, capacity released."""
+    world = JobsWorld()
+    if route == "post_jobs":
+        accepted = post(world, payload=rs.body(INPUTS[kind]))
+    else:
+        accepted = post(world, CHAT, rs.body(INPUTS[kind]), headers=PREFER)
+    assert accepted.status == 202, accepted.body
+    job = world.only_job()
+    handle = accepted.json()["job_handle"]
+    assert accepted.headers.get(jobs_router.HEADER_LOCATION) == job_path(handle)
+    if route == "post_jobs":
+        assert status(world, handle).json()["state"] == "preparing"
+        rs.run(world.work())
+        assert status(world, handle).json()["state"] == "succeeded"
+    else:
+        world.during.append(world.work)
+        whole = events(world, handle)
+        assert whole.text() == world.results[job.id] and whole.data()[-1] == "[DONE]"
+        first = [c for c in world.journal(job.id) if c.event_type is ChunkEventType.delta][0]
+        rest = events(world, handle, cursor=first.cursor.token)
+        assert ids_of(rest) == ids_of(whole)[ids_of(whole).index(first.cursor.token) + 1:]
+        assert rest.text() == whole.text()[len(first.payload["visible"]):]
+        assert rest.frames[-1] == whole.frames[-1]
+    answer = result(world, handle)
+    assert answer.status == 200
+    assert answer.json()["response"]["choices"][0]["message"]["content"] == world.results[job.id]
+    outcome = job.outcome
+    assert (outcome.state, outcome.settlement_state) == (JobState.succeeded,
+                                                         SettlementState.settled)
+    assert world.jobs.holds[job.id].state is HoldState.settled
+    assert not any(r.active for r in job.reservations.values())
+    assert world.jobs.outbox_kinds(job.id).count(OutboxKind.usage_projection) == 1
+    if kind == "video_url":
+        (ref,) = world.media.prepared_by_job[job.id]
+        assert ref.org_id == world.org and ref.duration_s == 4.0
+
+
+def test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result():
+    """A CREDIT job whose async queue wait ran out (`recover` on the store clock): its status
+    is job_expired.json's shape - `expired` / `queue_wait_expired`, no result, no usage - its
+    result is the outcome with no response (the result's own expiry is the 410, not this),
+    and its hold is released unbilled."""
+    world = JobsWorld(regime=CREDIT)
+    assert post(world).status == 202
+    job = world.only_job()
+    assert status(world).json()["state"] == "preparing"
+    rs.run(world.prepare())
+    world.clock.advance(world.limits.queue_wait_async_s + 1)
+    rs.run(world.jobs.recover())
+    body = status(world).json()
+    assert set(body) == set(fixtures.load("job_expired.json"))
+    assert (body["state"], body["cause"], body["result_available"]) == (
+        "expired", "queue_wait_expired", False)
+    assert body["updated_at"] > body["created_at"]
+    answer = result(world)
+    assert answer.status == 200 and "response" not in answer.json()
+    assert (answer.json()["state"], answer.json()["cause"]) == ("expired", "queue_wait_expired")
+    assert world.released(job) and job.settlement is None

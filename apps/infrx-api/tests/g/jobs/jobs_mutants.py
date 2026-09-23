@@ -62,6 +62,8 @@ DELETE = "test_dur_fence__delete_cancels_durably_and_answers_the_committed_outco
 RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
 MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
 BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
+MATRIX = "test_api_modes__the_async_matrix_end_to_end"
+EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -79,7 +81,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("retry_after_dropped", "the 202 says when to poll (Retry-After)",
        J, "            wire.HEADER_RETRY_AFTER: str(POLL_AFTER_S)})", "            })", ACCEPT),
     _m("hook_not_installed", "mounting the jobs router installs the 202 hook",
-       J, "    relay.on_async = jobs.accepted\n", "", ACCEPT),
+       J, "    relay.on_async = jobs.accepted\n", "", ACCEPT, MATRIX),
     _m("staged_refs_never_attached", "the 202 follows the attach of the staged refs",
        R, "                await _dependency(self.media.attach(job.request_id, refs))",
        "                pass", ACCEPT),
@@ -148,7 +150,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '            raise errors.StateConflict("the job is not terminal")', RESULT),
     _m("result_not_read", "the result body is the committed result object",
        J, "            text = await relay.results.read_result(org, outcome.result_ref)",
-       '            text = ""', RESULT),
+       '            text = ""', RESULT, MATRIX),
     _m("completed_at_is_created", "completed_at is the store's settlement instant",
        J, "            completed_at=outcome.settled_at), admission)",
        "            completed_at=admission.admitted_at), admission)", RESULT),
@@ -170,7 +172,8 @@ MUTANTS: tuple[Mutant, ...] = (
     # === item 4: events replay (API-MODES, DUR-OUTPUT read side) =======================
     _m("cursor_ignored", "replay resumes after Last-Event-ID",
        J, "            await self.relay.pump(self.job, emit, gone, cursor=self.cursor,",
-       "            await self.relay.pump(self.job, emit, gone, cursor=None,", EVENTS, GAP),
+       "            await self.relay.pump(self.job, emit, gone, cursor=None,", EVENTS, GAP,
+       MATRIX),
     _m("cursor_guessed", "a malformed cursor is 400 invalid_cursor, never a guess (R36)",
        J, "        cursor = Cursor.parse(last) if last is not None else None",
        "        cursor = None", CURSOR),
@@ -221,6 +224,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("delete_body_accepted", "a DELETE that declares a body is 400 and cancels nothing",
        J, '        if request.headers.get("content-length", "0") != "0" \\',
        "        if False \\", BODY),
+    # === item 6: the async matrix (API-MODES) ===========================================
+    _m("expired_job_served_as_running", "a terminal job reports its committed state (CREDIT)",
+       J, "        if outcome is not None:\n            return outcome.state",
+       "        if False:\n            return outcome.state", EXPIRED_Q),
 )
 
 
