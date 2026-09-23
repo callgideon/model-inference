@@ -27,6 +27,10 @@ FIXED_ID = "8b8b8b8b-0000-4000-8000-000000000008"
 
 class JobsWorld(rs.World):
     new_request_id: Callable | None = None
+    skew_s = 0.0                                  # the gateway clock minus the store clock
+
+    def now_s(self) -> float:
+        return self.clock.now().timestamp() + self.skew_s
 
     def restart(self) -> None:
         super().restart()
