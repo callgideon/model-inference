@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T10:33:10Z",
+  "updated": "2026-09-23T10:40:50Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,9 +11,9 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 2 implementing on codex-e3b2 / codex/e3b-phase2-gate (real-store gate; namespace e3b2 56700-56799)",
+      "phase": "phase 2 HANDED BACK 80cef22 (impl e57b820); Opus review running; gate exit 1 = I3B's recovery tree (rc10, i3bm57, bk01 restore ACL finding) + a D-port HarnessBusy run",
       "since": "2026-09-22T18:46:49Z",
-      "note": "phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)"
+      "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
     "D4": {
       "lane": "codex-d4 / codex/d4-stream-journal",
@@ -38,12 +38,6 @@
       "phase": "phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
-    },
-    "W-new": {
-      "lane": "codex-wnew / codex/w-consumed-parameters",
-      "phase": "implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2",
-      "since": "2026-09-23T10:02:48Z",
-      "note": "blocks the pilot's validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md"
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
@@ -306,6 +300,11 @@
       "merged": "I schema fix @ 4c7de56 merged --no-ff",
       "at": "2026-09-23T08:22:54Z",
       "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to \u00a75; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
+    },
+    "W-new": {
+      "merged": "W-new @ 483d763 merged --no-ff (a15fa4b)",
+      "at": "2026-09-23T10:40:50Z",
+      "note": "CONSUMED_PARAMETERS; cap reaches vLLM via the typed max_output_tokens ceiling; W lists 320, tests/w 157 on the merged tree, 3 mutants killed"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
