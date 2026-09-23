@@ -110,7 +110,7 @@ class World:
         self.stream = FakeStreamStore(self.jobs, failures=self.failures)
         if self.scheduler is None:
             self.scheduler = FakeScheduler(self.clock, limits=self.limits)
-        self.metrics = metrics.Registry("worker")
+        self.metrics = metrics.Registry("worker", mounts=("media",))
         self.accepted: dict[str, object] = {}         # request_id -> Admission at acceptance
         self.results: dict[str, str] = {}
         self.media = None

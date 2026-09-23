@@ -37,9 +37,9 @@ def is_direct_loopback(request: Request) -> bool:
 
 
 def register(app, rt):
-    if getattr(rt, "metrics", None) is None:
-        rt.metrics = Registry("gateway")
     disks = getattr(rt, "metrics_disks", None) or DEFAULT_DISKS
+    if getattr(rt, "metrics", None) is None:
+        rt.metrics = Registry("gateway", mounts=disks)
 
     @app.get(PATH, include_in_schema=False)
     async def metrics(request: Request):

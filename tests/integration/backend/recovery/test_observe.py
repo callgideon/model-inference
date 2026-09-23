@@ -225,7 +225,7 @@ def test_i3b_ob08_host_gauges_read_the_machine_and_fail_towards_the_alert(tmp_pa
         assert tuple(argv) == host.NVIDIA_SMI
         return SimpleNamespace(returncode=0, stdout="0, 39945, 46068, 7\n")
 
-    reg = Registry("gateway")
+    reg = Registry("gateway", mounts=("media", "spool"))
     host.collect_host(reg, {"media": "/srv", "spool": "/gone"}, proc=str(proc),
                       statvfs=statvfs, run=smi)
     assert reg.value("infrx_host_memory_bytes", state="available") == 250 * 1024
@@ -501,3 +501,28 @@ def test_i3b_ob15_a_stale_or_empty_source_is_scrape_failed_not_silence(tmp_path,
     assert fired() == (0, [])                             # no bound given: not judged on age
     worker.write_text("\n")                               # what an empty Registry renders
     assert fired() == (1, ["ScrapeFailed"])
+
+
+def test_i3b_ob16_names_labels_mounts_and_buckets_are_pinned():
+    """M2/M6: a process or mount name outside its syntax is refused at construction; a
+    label the family does not declare is an error, never silently dropped; a `mount` that
+    is a word but not a configured mount is `other` and counted; the histogram bounds are
+    exactly the declared ones plus +Inf."""
+    for bad in ("bad name", "Gateway", ""):
+        with pytest.raises(ValueError):
+            Registry(bad)
+    with pytest.raises(ValueError):
+        Registry("gateway", mounts=("media", "Prompt Leak"))
+    reg = Registry("gateway", mounts=("root", "media"))
+    with pytest.raises(ValueError):
+        reg.inc("infrx_settlements_total", settlement="settled", request_id="r-1")
+    reg.set("infrx_disk_free_ratio", 0.5, mount="prompt_leak")
+    reg.set("infrx_disk_free_ratio", 0.7, mount="media")
+    reg.observe("infrx_phase_seconds", 0.2, phase="queue")
+    samples = alerts.parse(reg.render())
+    assert {dict(labels)["mount"] for (name, labels) in samples
+            if name == "infrx_disk_free_ratio"} == {"other", "media"}
+    assert reg.value(metrics.REJECTED, family="infrx_disk_free_ratio") == 1
+    bounds = [dict(labels)["le"] for (name, labels) in samples if name == "infrx_phase_seconds_bucket"]
+    assert bounds == ["0.005", "0.01", "0.025", "0.05", "0.1", "0.25", "0.5", "1.0", "2.5",
+                      "5.0", "10.0", "30.0", "60.0", "120.0", "300.0", "+Inf"]

@@ -10,9 +10,11 @@
 Why it is built this way. R59's rule for operator surfaces applied to telemetry: nothing a
 customer sent, and no identifier a customer did not reveal, leaves through a metric.
 
-* **Every label is a closed vocabulary.** A family declares, per label, the values it may
-  carry: a contracts enum (error codes, terminal causes, settlement states, dispatch kinds)
-  or a short pattern for a device index or a configured mount name. Anything else is
+* **Every label is a closed vocabulary or configuration.** A family declares, per label,
+  the values it may carry: a contracts enum (error codes, terminal causes, settlement
+  states, dispatch kinds), the registry's configured mount names (`METRICS_DISKS` keys,
+  fixed at construction), or - for the two values only configuration and the machine
+  produce, a GPU index and the deployed git revision - a short pattern. Anything else is
   written as `other` and counted in `infrx_metrics_label_rejected_total{family}`, so a
   call site that tries to put a prompt, a URL, a key or an exception message into a label
   cannot, and the attempt is visible. There is no free-text label anywhere.
@@ -182,10 +184,13 @@ def _line(name: str, labels: Mapping[str, str], value: float) -> str:
 class Registry:
     """One process's metrics. Thread-safe (probes run in worker threads); nothing global."""
 
-    def __init__(self, process: str) -> None:
+    def __init__(self, process: str, *, mounts: Collection[str] = ("root",)) -> None:
         if not _PROCESS.fullmatch(process):
             raise ValueError("a process label is lower-case letters and underscores")
+        if not all(_MOUNT.fullmatch(mount) for mount in mounts):
+            raise ValueError("a mount name is lower-case letters and underscores")
         self.process = process
+        self.mounts = frozenset(mounts)             # the only `mount` values this process has
         self._lock = threading.Lock()
         self._samples: dict[str, dict[tuple[str, ...], object]] = {n: {} for n in FAMILIES}
 
@@ -284,6 +289,8 @@ class Registry:
             raise ValueError(f"{name} takes labels {declared}, got {sorted(labels)}")
         key = []
         for label, allowed in spec.labels:
+            if label == "mount":
+                allowed = self.mounts
             value = str(getattr(labels[label], "value", labels[label]))
             if label == TENANT_LABEL:
                 value = tenant_label(value)
