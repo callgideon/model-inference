@@ -444,15 +444,25 @@ class Journey:
                         request_id)[0]
 
     def conserved(self, tenant) -> None:
-        """Per CREDIT wallet: ledger = the one grant - the settled charges (the usage rows),
+        """Per CREDIT wallet: every settled charge (a CREDIT usage row) = its job's ADMITTED
+        card x its usage, half up (review J4: `RateCardSnapshot.debit`, never the ledger
+        compared with what the same settlement wrote), ledger = the one grant - those charges,
         reserved = its holds still held or unknown, available never negative."""
+        from infrx.contracts.v2 import records as v2
         ledger, reserved, available = self.one(
             "select ledger_total, reserved_total, available from infrx.credit_wallets "
             "where wallet_id = %s", tenant.wallet.wallet_id)
-        charged, = self.one("select coalesce(sum(u.charged_credits), 0) from infrx.jobs j "
-                            "join public.usage_events u on u.id = j.request_id "
-                            "where j.wallet_id = %s and u.accounting_regime = 'credit'",
-                            tenant.wallet.wallet_id)
+        charged = 0
+        for request_id, card, prompt, completion, amount in self.db(
+                "select j.request_id, infrx.job_admission(j.request_id)->'rate_card', "
+                "u.prompt_tokens, u.completion_tokens, u.charged_credits from infrx.jobs j "
+                "join public.usage_events u on u.id = j.request_id "
+                "where j.wallet_id = %s and u.accounting_regime = 'credit'",
+                tenant.wallet.wallet_id):
+            due = v2.RateCardSnapshot.model_validate(card).debit(prompt, completion).raw("CREDIT")
+            assert amount == due, f"{tenant.name} {request_id}: charged {amount}, " \
+                                  f"card x usage {due}"
+            charged += due
         held, = self.one("select coalesce(sum(amount), 0) from infrx.credit_wallet_holds "
                          "where wallet_id = %s and state in ('held', 'unknown')",
                          tenant.wallet.wallet_id)

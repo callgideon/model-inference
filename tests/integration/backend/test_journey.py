@@ -270,8 +270,9 @@ def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property)
     dataset client, `--target gateway`, text form) runs 8 items against the mounted gateway
     and is interrupted (SIGINT) mid-run; `--resume` with its raw file re-sends every item
     that is not terminal under the SAME key. Jobs = items (one per key), one hold per job,
-    at most one debit per job and exactly one for each that succeeded, the wallet's total =
-    the sum of the per-item debits, and no item accepted twice."""
+    at most one debit per job and exactly one for each that succeeded, each debit = its
+    admitted card x usage (`conserved`, review J4), the wallet's total = the grant - those,
+    and no item accepted twice."""
     import os
     import signal
     import subprocess
