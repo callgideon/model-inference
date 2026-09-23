@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T04:18:26Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T04:30:08Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 17 done · 6 in progress · 7 remaining (of 30).**
 
@@ -68,7 +68,7 @@ Generated 2026-09-23T04:18:26Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - W3: codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — round 2 handed back d620f14 (RB-1/RB-2 closed); needs an Opus confirmation, then merge with W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- D3: codex-d3 / codex/d3-fenced-leases — confirmation review (Opus) of fix round at 41e5cef; merge after D2 since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
+- D3: codex-d3 / codex/d3-fenced-leases — confirmation PASS at 41e5cef; five test-strength fold-ins then merge (after D2+A1) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 
 ## Checkpoints
 
