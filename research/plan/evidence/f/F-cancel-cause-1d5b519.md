@@ -243,3 +243,41 @@ No secrets appear: the harness DSN password is the D harness's fixed local value
 ## Verification log
 
 - 2026-09-23: Written at implementation SHA `1d5b519`. All counts and tails above are quoted from command output.
+- 2026-09-23: Folded in review M1 (`research/plan/evidence/f/F-cancel-cause-review-b691add.json` on `claude/backend-impl`). The fold-in is one commit after `b691add`.
+  - **Invariant now pinned:** a second `cancel` naming a DIFFERENT cause answers the committed outcome, with the first cause, and moves no money.
+  - **Where it is pinned:** in `dur_settle__cancel_records_its_cause_and_settles_by_r21` and its CREDIT twin `credit_settle__cancel_records_its_cause_and_settles_by_r21`. After each first cancel, the cases cancel again with another `CANCEL_CAUSES` member and assert:
+    - the answer equals the committed outcome;
+    - the re-read (`get_owned` / `get_owned_credit`) still equals it, so a persisted rewrite is caught too;
+    - the balance (USD, or the CREDIT wallet) is unchanged.
+  - **New mutants:** `second_cancel_rewrites_the_cause` (v1 case) and `credit_second_cancel_rewrites_the_cause` (CREDIT case).
+    - They make one edit to the fake's terminal branch. For a `cancelled` job it now rewrites `job.outcome` to the new cause before returning it.
+    - The rewrite uses `model_copy(update=...)` instead of the review's suggested `dataclasses.replace`: `TerminalOutcome` is a pydantic model, so `dataclasses.replace` would raise `TypeError`, an undeclared death rather than a kill.
+  - **Commands and results:**
+    - `uv run --frozen pytest -q tests/contracts/test_conformance.py tests/contracts/v2/test_conformance_v2.py tests/contracts/test_cancel_cause.py -k cancel` → exit 0, `8 passed, 215 deselected in 0.35s`.
+    - The same three files without `-k` → exit 0, `223 passed in 4.81s`.
+    - `uv run --frozen pytest -q tests/contracts/test_mutants.py -k "well_formed or covered"` → exit 0, `2 passed, 37 deselected in 0.22s`.
+    - The runner, on the two new mutants plus every mutant naming the two edited cases:
+      ```
+      uv run --frozen python -m tests.contracts.mutants second_cancel_rewrites_the_cause credit_second_cancel_rewrites_the_cause cancel_cause_dropped credit_cancel_cause_dropped cancel_sync_deadline_charged_to_the_client cancel_client_disconnected_absorbed_by_the_platform cancel_loses_the_committed_outcome
+      ```
+      exit 0:
+      ```
+      [killed       ] cancel_loses_the_committed_outcome: 1 failed, 1 passed, 762 deselected in 0.73s
+      [killed       ] cancel_cause_dropped: 1 failed, 763 deselected in 0.73s
+      [killed       ] credit_cancel_cause_dropped: 1 failed, 763 deselected in 0.72s
+      [killed       ] cancel_sync_deadline_charged_to_the_client: 3 failed, 761 deselected in 0.79s
+      [killed       ] cancel_client_disconnected_absorbed_by_the_platform: 2 failed, 762 deselected in 0.75s
+      [killed       ] second_cancel_rewrites_the_cause: 1 failed, 763 deselected in 0.74s
+      [killed       ] credit_second_cancel_rewrites_the_cause: 1 failed, 763 deselected in 0.76s
+
+      7/7 killed
+      ```
+    - The full folded list was not rerun, as the coordinator directed. It now declares 2 more mutants than the 424 above.
+  - **D5 at 0018:** a repeat `infrx.cancel` with another cause must answer the committed row unchanged; the edited case is D5's oracle. On 0016 that case stays `PENDING` (integration request 1, which the coordinator applies at merge).
+  - **Log hashes (sha256 prefix):**
+    - `m1-cases.log` `e3cb946bc904929d`
+    - `m1-mutants.log` `2f01096a33faad0c`
+    - `m1-suites.log` `c8d117ff4e49c5f0`
+  - **Review M2 and M3:** no code change in this lane.
+    - M2: G2 must cancel with the default, or come after D5's 0018. This is recorded by the coordinator.
+    - M3: the `PENDING` line is applied by the coordinator at the merge.

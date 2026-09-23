@@ -2339,7 +2339,8 @@ async def dur_settle__cancel_records_its_cause_and_settles_by_r21(factory):
     (`client_cancelled`, `client_disconnected`) are `released_free`, and the platform's own
     `sync_deadline` is `released_platform_absorbed`. After publication every cause is
     `held_unknown` with the hold still held, released platform-absorbed after the fenced
-    24 h. No cause moves the ledger: a cancel carries no usage."""
+    24 h. No cause moves the ledger: a cancel carries no usage. A repeat cancel with a
+    different cause answers the committed outcome and moves nothing."""
     harness = factory()
     publish = hook(harness, "publish")
     unpublished = {TerminalCause.client_cancelled: SettlementState.released_free,
@@ -2359,6 +2360,13 @@ async def dur_settle__cancel_records_its_cause_and_settles_by_r21(factory):
             assert committed == outcome, (cause, committed)
             after = harness.extra["balance"](request.org_id)
             assert after["ledger"] == before["ledger"], cause
+            # A second cancel naming another cause answers the committed outcome, first
+            # cause and all, and moves nothing.
+            other = next(c for c in unpublished if c is not cause)
+            again = await harness.port.cancel(request.org_id, admission.job_handle, cause=other)
+            _stored, still = await harness.port.get_owned(request.org_id, admission.job_handle)
+            assert again == committed and still == committed, (cause, other, again, still)
+            assert harness.extra["balance"](request.org_id) == after, (cause, other)
             if published:
                 assert outcome.settlement_state is SettlementState.held_unknown, cause
                 assert outcome.reconcile_after is not None, cause

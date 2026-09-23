@@ -1113,7 +1113,7 @@ async def credit_settle__cancel_records_its_cause_and_settles_by_r21(factory):
     `released_platform_absorbed`, the hold back on the CREDIT wallet at once; after
     publication every cause is `held_unknown` on that wallet until the fenced 24 h, then
     released platform-absorbed. The CREDIT ledger and the organization's USD wallet never
-    move."""
+    move, and a repeat cancel with a different cause answers the committed outcome."""
     from .harness import hook
     from ..limits import DEFAULTS
     harness = factory()
@@ -1139,6 +1139,14 @@ async def credit_settle__cancel_records_its_cause_and_settles_by_r21(factory):
             _owned, committed = await harness.port.get_owned_credit(IDS.consumer_org,
                                                                     admission.job_handle)
             assert committed == outcome, (cause, committed)
+            # A repeat cancel with another cause answers the committed outcome, moves nothing.
+            settled = balance(IDS.consumer_wallet)
+            other = next(c for c in unpublished if c is not cause)
+            again = await harness.port.cancel(IDS.consumer_org, admission.job_handle, cause=other)
+            _owned, still = await harness.port.get_owned_credit(IDS.consumer_org,
+                                                                admission.job_handle)
+            assert again == committed and still == committed, (cause, other, again, still)
+            assert balance(IDS.consumer_wallet) == settled, (cause, other)
             if published:
                 assert outcome.settlement_state is v1.SettlementState.held_unknown, cause
                 held.append((admission, cause))

@@ -2058,6 +2058,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled,\n})",
        "dur_settle__cancel_records_its_cause_and_settles_by_r21",
        "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    # Review M1: a repeat cancel answers the COMMITTED outcome; the first cause stands.
+    _m("second_cancel_rewrites_the_cause", "a second cancel never rewrites the committed cause",
+       S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
+       "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("credit_second_cancel_rewrites_the_cause", "a second CREDIT cancel never rewrites the committed cause",
+       S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
+       "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
     # Item 3: the PostgreSQL adapter until D5's 0018 (D5 retires this with the refusal).
     _m("pg_cancel_records_an_unsupported_cause", "before 0018 no cause but client_cancelled reaches 0016",
        "state/jobstore.py", "        if cause != TerminalCause.client_cancelled:", "        if False:",
