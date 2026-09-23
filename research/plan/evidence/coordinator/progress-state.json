@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T08:16:58Z",
+  "updated": "2026-09-23T08:22:54Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -38,12 +38,6 @@
       "phase": "phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement",
       "since": "2026-09-23T05:40:38Z",
       "note": "base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window"
-    },
-    "I-schema": {
-      "lane": "codex-ischema / codex/i-schema-wirein-names",
-      "phase": "implementing (Opus): the three F2P wire-in names enter deploy/preflight.py TUNABLE + 08 \u00a75/\u00a75.1 rows",
-      "since": "2026-09-23T08:16:58Z",
-      "note": "gate 8892c27 api-test red: tests/i test_packaging config-schema partition + the revert_runtime_before_tree I mutant (baseline); fix lane from the integration head"
     }
   },
   "reviews": {},
@@ -286,6 +280,11 @@
       "merged": "F cancel-cause @ 0fe8fdd merged --no-ff (6803d2f) + PENDING line 0024da2",
       "at": "2026-09-23T06:50:14Z",
       "note": "review pass at b691add (wf_fc480c08-828); M1 folded (second cancel keeps the first cause; 2 mutants killed); Pg refuses non-default causes until D5's 0018; G2 falls back to the default cancel on UnsupportedParameter"
+    },
+    "I-schema": {
+      "merged": "I schema fix @ 4c7de56 merged --no-ff",
+      "at": "2026-09-23T08:22:54Z",
+      "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to \u00a75; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

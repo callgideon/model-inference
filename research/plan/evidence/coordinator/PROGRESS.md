@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T08:16:58Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T08:22:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
 
@@ -70,7 +70,6 @@ Generated 2026-09-23T08:16:58Z from `tasks.json` (manifest v4) and `progress-sta
 - G2: codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param="cause")
 - G4U: codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3's MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md
 - W4: codex-w4 / codex/w4-measured-tuning — phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement since 2026-09-23T05:40:38Z — base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window
-- I-schema: codex-ischema / codex/i-schema-wirein-names — implementing (Opus): the three F2P wire-in names enter deploy/preflight.py TUNABLE + 08 §5/§5.1 rows since 2026-09-23T08:16:58Z — gate 8892c27 api-test red: tests/i test_packaging config-schema partition + the revert_runtime_before_tree I mutant (baseline); fix lane from the integration head
 
 ## Checkpoints
 
