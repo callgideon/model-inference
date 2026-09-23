@@ -1,0 +1,196 @@
+# D3 — fenced leases, recovery and cancellation
+
+| Field | Value |
+|---|---|
+| Task | D3 (track D, durable state), oracles DUR-FENCE, DUR-OUTPUT (+ the cancellation halves of DUR-SETTLE) |
+| Status | **implemented** (real PostgreSQL, both images: the pinned `postgres:16.14` + shim and the real `supabase/postgres` 17.6.1.173). Not integrated: stacked on D2's unmerged head, no coordinator merge, nothing applied to any Supabase project. `complete`'s settlement is D5's and `append` is D4's (see Limits). |
+| Base SHA | `8728aec` (D2's committed head, `codex/d2-admission-outbox`); stacked, never rebased |
+| Implementation SHA | `IMPLSHA` (commits `88ef4ad` … `IMPLSHA`, listed per item below) |
+| Branch / worktree | `codex/d3-fenced-leases` in `.claude/worktrees/codex-d3` |
+| Classification | local only: task-local Docker PostgreSQL on the shared D harness port (`infrx-d1-postgres[-supabase]`, 55432, per-checkout label + port lock) and, for development only, D3's own R48 port (`infrx-d3-postgres`, 55434). No cloud, hosted project, pilot host or paid provider touched; nothing pushed. |
+
+## What was built
+
+| Item | Where | Commit | Killing test (named) |
+|---|---|---|---|
+| (1) atomic claim + generation increment + fenced heartbeat on the DB clock | `0016`: `infrx.claim`, `infrx.heartbeat`, `infrx.fence_lease`; `PgJobStore.claim/heartbeat` | `88ef4ad` (SQL+adapter), `23ce4d9` (checks) | `test_leases.py::test_claim__one_generation_under_the_job_lock_with_its_phase_instants`, `::test_fence__stale_foreign_expired_refused_stored_lease_renewed_deadline_first`; mutants `d3_claim_*`, `d3_fence_*`, `d3_heartbeat_*` |
+| (2) cancellation that terminalizes and releases hold/capacity in the same transaction | `0016`: `infrx.cancel`, `infrx.terminalize_no_usage` (+ `quarantine_hold_*`); `PgJobStore.cancel` | `88ef4ad`, `23ce4d9` | `test_leases.py::test_cancel__every_state_terminalizes_and_releases_in_one_transaction`; mutants `d3_cancel_*`, `d3_terminalization_*`, `d3_published_output_released`, `d3_quarantine_releases_the_hold` |
+| (3) lease reaper `recover()` — bounded prepublication requeue, absolute deadline, publication marker forbids regeneration, aged unknown-usage release | `0016`: `infrx.recover`, `recover_job`, `release_aged_unknown`; `0003` `jobs_guard` amendment (one allowed transition); `PgJobStore.recover` | `88ef4ad`, `23ce4d9`, `7e48098` | `test_leases.py::test_recover__*` (4 tests); mutants `d3_requeue_*`, `d3_retries_*`, `d3_one_retry_too_many`, `d3_prep_*`, `d3_unknown_*`, `d3_one_stuck_job_stops_the_sweep`, `d3_any_terminal_settlement_may_change`, `d3_held_unknown_may_be_rewritten`, `d3_unknown_release_refused` |
+| (4) fence preparation the same way | `fence_lease` serves both kinds (heartbeat renews a preparation lease clamped to `preparation_deadline_at`, R52; load_work) | `88ef4ad`, `23ce4d9` | `test_leases.py::test_fence__a_preparation_lease_renews_within_its_phase_and_terminalizes_after`; mutants `d3_fence_accepts_any_kind`, `d3_fence_ignores_the_preparation_deadline`, `d3_preparation_renewal_past_the_phase` |
+| (5) typed conflicts mapped to the port's errors | SQL refusals `stale_lease` / `already_terminal` / `not_claimable` / `not_found` (P0001 → `DomainError`), R39 refusal-as-data raised by the adapter | `3eedb3e` | `test_lease_units.py` (7 tests, no Docker); code mutants `code_mutants_d3.py` (10) |
+| (6) races under real transactions | `test_lease_races.py` (4 tests: lock-step both orders + barrier stress) and `checks_leases.check_lease_races` (the mutants' concurrency check) | `70afe20`, `7e48098` | `test_lease_races.py::test_race__*`; mutants `d3_fence_without_the_row_lock`, `d3_claim_without_the_row_lock`, `d3_cancel_without_the_row_lock` |
+| (7) DUR-FENCE/DUR-OUTPUT conformance partition on the real store | `test_jobstore_conformance.py` (PENDING/RACY rewritten), `pgtesting.hooks` gains `publish` (stand-in) and `unsettleable` | `88ef4ad` | see Results |
+| E3B drills naming D3 | `test_e3b_drills.py`: dr03, dr04, dr09 verbatim on PostgreSQL | `f7ff59f` | the three tests |
+| Coordinator requests from the D2 review | (1) claim leases and leaves `queued` in ONE transaction; a rebuild during a claim never sees half of it; (2) every D3 check stamps requests with a gateway clock 1 h behind the DB clock and moves the DB clock explicitly; the reaper refuses a caller's `now` | `684313e` | `test_lease_races.py::test_race__a_rebuild_during_a_claim_never_sees_half_a_claim`; mutants `d3_claim_leases_without_running`, `d3_heartbeat_deadline_from_created_at` (survives with the skew set to 0, killed with it - see Results), `d3_fence_clock_is_the_gateways`, `d3_claim_instants_from_created_at`, `d3_reaper_deadline_from_created_at`, `d3_reaper_takes_the_callers_clock` |
+| Coordinator extra (D2 request 8) | `checks_credit.check_grant_race` first produces the personal-org-only collision deterministically | `bfccdea` | mutant `d1r_grant_race_arbitrates_one_index`: 5/5 kills on repeat |
+
+### Design decisions worth reviewing
+
+1. **One fence, internal, called first by every execution mutation.** `infrx.fence_lease(lease, kinds, reconcile_s)` locks the job row `FOR UPDATE`, then checks, in the fake's order: kind ∈ allowed kinds → job exists → not terminal (`already_terminal`) → a live attempt of that kind exists → generation → owner → **R29 phase deadline before expiry** (R55: terminalizes in the same call, returns the refusal as data so it commits, R39) → expiry (`stale_lease`). `heartbeat`, `load_work` and `terminalize` (complete) call it now; D4's `append` must call it as its first statement.
+2. **`complete` = D3's fence + D5's settlement.** `infrx.terminalize` (the 0004 boundary D5 owns) now runs the fence, then still calls `infrx.unimplemented(..., 'D5')`. So a stale, foreign, expired, wrong-kind or overdue lease is refused (or terminalized, R29) on the real store today, and a lease that holds fails closed (`NotImplementedError` in the adapter). D5 replaces the one line after the fence and puts the identical-proposal replay in front of it.
+3. **Every D3 terminalization moves no money.** `terminalize_no_usage`: unpublished → hold released (`released_free` for the free causes and a client's own cancel, `released_platform_absorbed` otherwise, R21); published → `held_unknown` with the 24 h window (hold `unknown`, still reserved). `recover` releases it platform-absorbed at `reconcile_after` on the database clock.
+4. **The `jobs_guard` amendment is in 0003, in place** (outside the brief's "0016+" paths, same basis as D2's in-place 0003 amendment: 0003 is applied to no hosted project). The guard made a terminal `settlement_state` immutable, which made the 02 §R21 exit of the unknown-usage window (held_unknown → released_platform_absorbed) impossible. Replacing `jobs_guard` from 0016 instead would have silently disarmed five D1 mutants that target its body in 0003 (`the_publication_marker_can_be_cleared`, `job_org_mutable`, `terminal_settlement_is_rewritable`, `maximum_hold_is_mutable`, `job_key_is_mutable`). The amendment allows exactly that one transition; three mutants pin it. **Coordinator: please confirm or move it.**
+5. **Lock order.** A job row, then (when terminalizing) its hold, then its wallet — never a wallet before a job row; `recover` takes job rows `SKIP LOCKED`, one at a time, so it never waits on a job row while holding a wallet, and a job whose heartbeat/cancel/claim is in flight is the next sweep's. Documented in `0016`'s header and `credit_schema.py`.
+6. **Recover returns IndexEvents carrying the outbox row's own event id** (the fake mints a second id). The relay delivers the same row; a direct `Scheduler.enqueue` of the returned event is deduplicated on that id.
+7. **Two duplicate guards were deleted, not kept as unkillable defence** (`7e48098`): `terminalize_no_usage` does not re-check "terminal" (every caller does under the row lock and `jobs_guard` refuses the rest), and `release_aged_unknown` does not re-check the window (the sweep's scan does; it re-checks only "still held_unknown", which is killable). The reaper's per-job decisions are checked directly (`recover_job`/`release_aged_unknown` called on live states), because the scan-then-lock window cannot be interleaved deterministically.
+8. **`load_work` returns `PreparedWork(Work)` with `prompt_tokens`** — preparation's exact count stored by `prepared(..., prompt_tokens=)` — as the coordinator asked, a local attribute until F2P adds `Work.prompt_tokens`. A CREDIT job is refused `invalid_request` (a v1 `Work` needs a price snapshot a CREDIT job does not have; its `WorkV2` is not built).
+9. **`publish` hook = D4's append protocol written out** (the fence + `published = true` in one transaction), so the after-publication paths of `recover` and `cancel` run on the real store now. It proves the fence and the marker, never the journal.
+
+## Requirement coverage
+
+Named cases, each with the invariant it proves. SQL checks are in `tests/d/checks_leases.py`
+(each rolled back; every request stamped by a gateway **an hour behind** the database clock,
+`GATEWAY_SKEW`, and the database clock advanced explicitly, so "the store's clock, never the
+gateway's" is observable - R29/R79/R7).
+
+| Test | Oracle | Invariant |
+|---|---|---|
+| `test_leases.py::test_claim__one_generation_under_the_job_lock_with_its_phase_instants` | DUR-FENCE | only a `queued` job is claimable; the lease is minted on `infrx.now()` (acquired, expires = now + `LEASE_TTL_S`), generation instant = min(now + budget, `deadline_at`) and first-token = min(now + budget, generation) - both equal `deadline_at` for a 30 s job (R20); the queued interval is charged to `queue_wait_used_s` (R38); a second claimer is `not_claimable` and leaves no attempt; a requeue is claimed as generation 2; past the queue instant / the absolute deadline `not_claimable`; unknown `not_found`; terminal `already_terminal` |
+| `test_leases.py::test_fence__stale_foreign_expired_refused_stored_lease_renewed_deadline_first` | DUR-FENCE | heartbeat, load_work and terminalize (complete) each refuse a preparation token, a foreign worker at the same generation, a stale generation, a token with no live attempt behind it, and an expired lease - `stale_lease`, nothing changes; a forged record renews only the STORED lease (R29); a live holder loads its work incl. prepared refs; the settlement after the fence is D5's stub (0A000); past the generation instant **with the lease live** each of the three terminalizes the job `deadline_exceeded`, releases hold/reservations/attempt, writes the two projections and answers `already_terminal` (R29/R39); with lease AND deadline passed the deadline wins (R55) |
+| `test_leases.py::test_fence__a_preparation_lease_renews_within_its_phase_and_terminalizes_after` | DUR-FENCE (R46/R52) | a preparation lease loads the admitted request (deadline = the store's clamped one), no prepared refs, the admitted snapshot; `terminalize` refuses it `stale_lease`; heartbeats renew to min(now + 30 s, `preparation_deadline_at`) and never past it; past the phase heartbeat/load_work terminalize `preparation_failed` (`released_free`) in the call |
+| `test_leases.py::test_cancel__every_state_terminalizes_and_releases_in_one_transaction` | DUR-SETTLE (cancel) / DUR-OUTPUT | preparing, queued and running jobs cancel to `cancelled`/`client_cancelled`, `released_free`, debit 0, hold released (wallet reserved drops by exactly the hold), reservations and attempts released, one usage + one trace projection; the cancelled worker's heartbeat is `already_terminal`; a repeated cancel answers the committed outcome and writes nothing; another org's handle is `not_found` and the job is untouched; after publication the outcome is `held_unknown` with hold `unknown`, `reconcile_after = now + 24 h`, still reserved; a CREDIT job releases its CREDIT hold |
+| `test_leases.py::test_recover__requeues_before_publication_only_within_the_retry_counter` | DUR-OUTPUT | a live lease is left alone by the sweep and by the per-job decision; an expired one before publication is requeued: attempts + 1, attempt released, queued with only the unspent queue remainder (3 s used of 10 → 7 s, R38), exactly one new `inference_dispatch` returned as an `IndexEvent` carrying that row's id; after `MAX_PREPUBLICATION_RETRIES` requeues `retries_exhausted`; after publication `lost_after_publication` (`held_unknown`) and no redispatch; past the generation instant with a live lease `deadline_exceeded`; a queued job untouched until its queue instant, then `queue_wait_expired`/`released_free` |
+| `test_leases.py::test_recover__a_lost_preparation_is_redispatched_then_settled` | DUR-OUTPUT (R46/R52) | a live preparation lease is left alone; an expired one is released and redispatched (`prepare_dispatch`, still preparing, no index event); after the first claim + 2 retries it is settled `preparation_failed` with no further dispatch; past `preparation_deadline_at` `preparation_failed` whatever the count |
+| `test_leases.py::test_recover__unknown_usage_is_released_platform_absorbed_at_the_window` | DUR-OUTPUT / DUR-SETTLE (02, R7, R21) | a held_unknown outcome is released `released_platform_absorbed` exactly at `reconcile_after` (not 1 s before), once, with its usage projection; ledger unchanged; a caller-supplied `now` releases nothing (R7); the terminal settlement moves only held_unknown -> released_platform_absorbed (to `released_free`/`settled`/`held_unknown` refused) |
+| `test_leases.py::test_recover__one_unreapable_job_never_stops_the_sweep` | DUR-OUTPUT | a job whose terminalization fails is reported `unsettleable` with its SQLSTATE and rolled back alone; the other overdue jobs are reaped in the same pass |
+| `test_leases.py::test_privileges__service_operations_and_internal_bodies` | DUR-RLS | `load_work`/`recover` executable by `service_role` only; the fence, the terminalization, the reaper's per-job bodies, the quarantines and `lease_limit` by nobody |
+| `test_leases.py::test_races__claim_heartbeat_and_cancel_serialize_on_the_job_row` | DUR-FENCE (item 6) | two claimers: the second waits on the row and is `not_claimable`, and the committed claim is running with one live attempt and absent from `dispatch_snapshot`; a heartbeat behind an uncommitted requeue waits, then `stale_lease`; a cancel behind complete's R29 terminalization waits, then answers `deadline_exceeded` |
+| `test_lease_races.py::test_race__two_claimers_mint_exactly_one_generation` | DUR-FENCE | lock-step + 5 rounds x 8 concurrent claimers: exactly one lease, 7 `not_claimable`, one live attempt at generation 1 |
+| `test_lease_races.py::test_race__a_rebuild_during_a_claim_never_sees_half_a_claim` | DUR-OUTBOX x DUR-FENCE (coordinator (1)) | during an uncommitted claim a snapshot sees (queued, no live attempt) and offers the job; the claimer it feeds waits and is `not_claimable`; after commit (running, one attempt) and never offered |
+| `test_lease_races.py::test_race__recover_and_heartbeat_never_both_win` | DUR-FENCE | a heartbeat in flight: the reaper returns at once (SKIP LOCKED), does not requeue, and after the commit the renewed lease is not reaped; a requeue in flight: the heartbeat waits and is `stale_lease`; never a renewed lease on a queued job |
+| `test_lease_races.py::test_race__cancel_and_complete_have_one_terminal_outcome` | DUR-SETTLE | complete-first (R29 terminalization) and cancel-first orders each give one outcome; a complete whose fence holds leaves nothing and the cancel after it wins; 5 rounds x (4 cancels + 4 past-deadline heartbeats): one cause, one usage projection, wallet back to baseline |
+| `test_lease_races.py::test_race__publication_is_honoured_and_a_late_append_is_fenced` | DUR-OUTPUT | a publication committed while the reaper runs is never regenerated (reaper skips, then `lost_after_publication`, one dispatch); an append after a requeue is `stale_lease` and publishes nothing; publication vs cancel decides held_unknown vs released_free by commit order; an append after `lost_after_publication` is `already_terminal` |
+| `test_e3b_drills.py::test_e3b_dr03…`, `…dr04…`, `…dr09…` | E3B | E3B's drill bodies verbatim on the real store (lost preparation redispatched and fenced; a claim whose answer was lost requeued once as generation 2; cancellation beats a late completion, one usage projection, conservation) |
+| `test_lease_units.py` (7) | item 5 | lease conflicts map to their types; the store's own (retuned) lease limits go with every call; R39 refusals raised from heartbeat/load_work/complete; `PreparedWork` with `prompt_tokens`; a CREDIT job refused; complete fails closed after the fence and never swallows a fence refusal; recover's outcomes/events/backlog |
+| `test_jobstore_conformance.py` | DUR-FENCE / DUR-OUTPUT | the exported v1 suite on the real store - partition below |
+
+## Environment
+
+| Item | Value |
+|---|---|
+| Host | `Linux 7.0.0-1010-aws x86_64` (the dev host), Docker `29.6.2` |
+| Python | `3.12.3`, `uv 0.11.8`, `make api-env` (= `uv sync --frozen --all-extras`, exit 0) |
+| Node / pnpm | `v22.23.1` / `9.15.9` (`pnpm install --frozen-lockfile` in `apps/app`, lockfile untouched) |
+| PostgreSQL (plain) | `postgres@sha256:33f923b05f64…` (16.14-bookworm) + `infrx/state/supabase_shim.sql`, container `infrx-d1-postgres` on 127.0.0.1:55432 (the shared D harness, labelled with this checkout, port lock `/tmp/infrx-d1-postgres-55432.lock`) |
+| PostgreSQL (Supabase) | `supabase/postgres@sha256:7768d0d1d377…` (17.6.1.173), no shim, `INFRX_D1_IMAGE=supabase`, container `infrx-d1-postgres-supabase` |
+| Dev only | the same images on D3's own R48 port (`infrx-d3-postgres`, 55434) through a scratch launcher that maps `local_services("d1")` to `"d3"`; used for iteration while the shared port was held by other checkouts. **No result below is from the dev port unless it says so.** |
+| Clock | the frozen test clock (`infrx_test.freeze` at `2026-09-20T12:00:00Z`, moved only by `advance`) in `infrx_*` databases; production `infrx.now()` is `now()` |
+
+## Commands and results
+
+All from `apps/infrx-api` unless a `make` target. UTC times from the run logs.
+
+RUNS_PLACEHOLDER
+
+### The conformance partition (exported v1 JobStore suite, real store)
+
+`test_jobstore_conformance.py` runs all 70 cases on a fresh migrated, seeded, frozen database
+each. Counts from the run above (`-rs`) and a `-v` listing:
+
+| | Cases |
+|---|---|
+| must pass (and do) | **42** |
+| strict xfail, D5 (need `complete`'s settlement) | 23 |
+| strict xfail, F2 conformance (a key reused across two organizations - no real store can admit it) | 1 |
+| non-strict xfail `RACY` (passes when cancel commits first, D5 otherwise) | 1 (`dur_settle__cancel_and_complete_race_has_a_single_winner`: both outcomes observed - XPASS in the dev runs and the superseded `e6fbff1` run, XFAIL in the final plain run; see the counts) |
+| skipped, hook `stream` (D4's StreamStore) | 3 (`dur_fence__a_deadline_binds_append_and_complete`, `dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call`, `dur_settle__one_unsettleable_job_does_not_stop_the_sweep`) |
+
+**DUR-FENCE / DUR-OUTPUT partition** (the oracles of this task):
+
+| Suite | Oracle | Cases | Pass | Pending |
+|---|---|---|---|---|
+| JobStore | DUR-FENCE | 9 | 6 (`claim_increments…`, `preparation_is_claimed_and_fenced…`, `load_work_is_fenced…`, `an_expired_lease_can_neither_renew_nor_settle`, `another_worker_at_the_same_generation…`, `a_lease_is_a_fencing_token…`) | 2 skip `stream` (D4), 1 strict xfail D5 (`a_stale_generation_is_rejected`: its last step settles generation 2; the stale refusal before it passes) |
+| JobStore | DUR-OUTPUT | 15 | **15** | - |
+| StreamStore | DUR-FENCE/DUR-OUTPUT | 12 | not run | no PostgreSQL StreamStore exists (D4) |
+
+Against D2's partition (19 pass / 44 strict xfail / 7 skip): of the 22 cases D2 left pending
+on D3, 20 now pass, `dur_fence__a_stale_generation_is_rejected` is D5's (its last step settles
+generation 2) and `dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call` now
+skips on `stream` (it asks for that hook before its complete/heartbeat/load_work halves). With
+the `publish` stand-in, three former `publish` skips pass
+(`dur_output__loss_after_publication_is_a_terminal_failure`,
+`dur_settle__cancelling_after_publication_reconciles`,
+`dur_settle__a_published_job_past_its_deadline_reconciles`) and two reach `complete` (D5
+xfail); the cancel/complete race became the one non-strict case.
+
+### Mutation (R32/R40/R83)
+
+MUTANTS_PLACEHOLDER
+
+## Failure drill
+
+| Injection | Durable state before → after | Duplicate / retry | Cleanup |
+|---|---|---|---|
+| dr04: the claim commits, the answer is lost (`crash_after_commit("claim")`) | queued → running (gen 1, lease nobody holds) → after `LEASE_TTL_S` `recover`: queued, attempts 1, one new `inference_dispatch` | the next claim is generation 2; the lost generation is fenced | none needed: the reaper is the cleanup |
+| dr03: the preparation worker dies | preparing + live prep lease → reaped: preparing, lease released, second `prepare_dispatch` | the dead worker's `prepared` is `stale_lease`; the new worker queues the job once (one `inference_dispatch`) | - |
+| a live-lease worker past its generation instant (checks_leases fence) | running → `failed/deadline_exceeded/released_platform_absorbed` **in the worker's own call** | every later fenced call `already_terminal` | hold, reservations, attempt released in that transaction |
+| a published attempt loses its lease | running + published → `failed/lost_after_publication/held_unknown`, hold `unknown`, reserved | never requeued; an append after it `already_terminal` | the reaper releases it `released_platform_absorbed` at +24 h, ledger unchanged |
+| one job's terminalization raises (injected trigger) | the sweep's other overdue jobs terminalize; the stuck job stays queued with its reservations | reported `unsettleable` with its SQLSTATE; the next sweep retries it | its subtransaction rolled back alone |
+| processes killed mid-transaction | a PL/pgSQL error aborts its transaction and releases its locks at once (measured: a cancel behind a failing complete did not wait) | - | - |
+
+Containers: every run's `infrx-d1-postgres[-supabase]` / `infrx-d3-postgres[-supabase]` was
+created by this checkout and removed at exit (`docker ps -a` after the runs lists none of
+ours). One run was interrupted by this session (the first final run, superseded by a code
+change) with SIGINT; its container was removed by the harness's exit handler (checked).
+
+## Artifacts
+
+Run logs are in this session's scratch directory (not committed; no secrets, prompts or
+URLs in them): `scratchpad/d3/final2.log`, `scratchpad/d3/make*.log`,
+`scratchpad/d3/mut-dev2.log`. The numbers quoted here are copied from them.
+
+## Changes (paths)
+
+| Path | Change |
+|---|---|
+| `apps/app/supabase/migrations/0016_fenced_leases.sql` | new: the fence, claim, heartbeat, load_work, cancel, terminalize's fenced prefix, recover (+ per-job bodies), the no-usage terminalization, the hold quarantines, privileges |
+| `apps/app/supabase/migrations/0003_pilot_durable_schema.sql` | **in place, outside 0016+**: `jobs_guard` permits held_unknown → released_platform_absorbed (5 lines) |
+| `apps/infrx-api/infrx/state/jobstore.py` | `claim`, `heartbeat`, `load_work` (`PreparedWork`), `cancel`, `complete` (fence; D5 raises), `recover`, `unsettleable`; D2's functions unchanged |
+| `apps/infrx-api/infrx/state/pgtesting.py` | hooks `publish` (stand-in for D4's append protocol) and `unsettleable` |
+| `apps/infrx-api/infrx/state/credit_schema.py` | the D3 operations in `SEAMS` (checked against the catalog by `check_seams`) |
+| `apps/infrx-api/tests/d/` new | `checks_leases.py`, `test_leases.py`, `test_lease_races.py`, `test_lease_units.py`, `code_mutants_d3.py`, `test_code_mutants_d3.py` |
+| `apps/infrx-api/tests/d/` shared, additive | `checks.py` (`FILLED_RPCS` + 4), `checks_credit.py` (`FILLED_BOUNDARIES` + 4; the deterministic grant-race probe), `migration_mutants.py` (`D3_MUTANTS`, 10 checks registered), `test_migration_mutants.py` (14 D3 names in the default subset), `test_e3b_drills.py` (dr03/dr04/dr09), `test_jobstore_conformance.py` (the partition, replaced) |
+
+No contract, config, Makefile, lockfile, composition root or other track's file changed.
+
+## Migration / rollback
+
+* **0016** is additive: functions only, no relation, column or constraint. Rollback: drop
+  `infrx.{lease_limit, quarantine_hold_legacy_usd, quarantine_hold_credit,
+  terminalize_no_usage, fence_lease, load_work, recover_job, release_aged_unknown,
+  recover}` and re-run 0004's stub block for `claim`, `heartbeat`, `cancel`, `terminalize`
+  (their grants are kept by `create or replace`). Jobs D3 terminalized stay terminal and
+  keep their settlement (never un-settled); held_unknown holds then stay reserved until D3
+  returns - the safe direction (no money moves without it).
+* **0003 amendment**: rollback = the previous `jobs_guard` body (drop the clause); an
+  already released held_unknown job is unaffected, and no further release can happen.
+* Feature-disable: stop calling `claim`/`recover` (drain); no flag. Nothing here is applied
+  to any hosted project (hosted carries 0001-0002).
+
+## Limits
+
+1. **`complete`'s settlement is D5's.** The fence in front of it is real (stale/foreign/expired/wrong-kind refused, R29 terminalization committed), but a lease that holds gets `NotImplementedError`. The cancel-vs-complete race is proven with complete's R29 terminalization and with the failing settlement, not with a settling complete. 23 conformance cases wait on D5.
+2. **`append`/the journal is D4's.** The `publish` hook and the races' "publication" side are D4's append protocol written out (fence + marker in one transaction). No terminal journal event is written by D3's terminalizations (cancel, R29, recover) - D4/D5 must add it to `terminalize_no_usage` (or wrap it) so a replaying client sees the end. dr05 (stale append + replay) and the 12 StreamStore DUR-FENCE/OUTPUT cases need D4.
+3. **CREDIT jobs' work**: `load_work` refuses a CREDIT job (`invalid_request`); `WorkV2` needs the pinned `DataAccessPolicyRef` (policy_version is on the job; `effective_at` would come from `infrx.data_access_policies`). Every other D3 operation handles both regimes (cancel/recover release or quarantine the CREDIT hold through its own trigger).
+4. **The reaper's scan is over active jobs** (bounded by `MAX_ACTIVE_JOBS`, 64) plus the held_unknown index, `limit` 1000 per pass; no partial index on the phase instants. Enough for the pilot's caps; index `preparation_deadline_at`/`generation_deadline_at` if the cap grows.
+5. **`unsettleable` is per sweep, in memory** (`PgJobStore.unsettleable`): no metric or alert yet (I3B).
+6. **The scan-then-lock window of the reaper** is proven by calling the per-job decision directly on live states, not by an interleaving (none can be forced from SQL).
+7. **Pre-existing failures on the base `8728aec`, not D3's** (no D3 diff under `infrx/contracts`, `infrx/media`, `infrx/worker`, `tests/m`, `tests/w`, `tests/q`): `tests/w/test_loop_mutants.py` does not collect (`Mutant.__init__() got an unexpected keyword argument 'allowed_errors'`), which aborts `make api-test`/`make api-mutants`/`make check`; with it ignored, 6-7 failures remain in `tests/m/test_uploads.py` (4-5, F2R R82 "was not materialized"), `tests/w/test_loop.py::test_ops_recover__the_shared_fake_engine_drives_the_same_loop` (1) and, under load only, `tests/m/test_prepare.py` conformance and one Valkey mutant (`vkharness` RuntimeError - E2's shared Valkey).
+8. **The port docstring of `JobStore.heartbeat`** still says a preparation lease is refused; R52 and the conformance suite renew it, and so does this store.
+
+## Handback
+
+* **Next unblocked task:** D4 (journal: `append` must call `infrx.fence_lease(lease, array['inference'], reconcile_s)` first and return `{"refusal": …}` when it answers, set `jobs.published` in the same transaction as the first chunk, and write the terminal event for D3's terminalizations); then D5 (fill `infrx.terminalize` after the fence; replay before it).
+* **integration_requests**
+  1. **W3 - the worker timer (store side done):** call `await PgJobStore.recover()` every **10 s** (≤ `PREPARATION_LEASE_TTL_S`/3, so a lost preparation worker is reaped with room for its retries); it writes the dispatch outbox rows itself, so with the `OutboxRelay` pumping, the returned `IndexEvent`s may be ignored (or `enqueue`d - same event ids, deduplicated). Read `store.unsettleable` after each sweep and export it (I3B). Heartbeats: inference every `LEASE_HEARTBEAT_S` (40 s, TTL 120 s), preparation every 10 s (TTL 30 s, clamped to the phase).
+  2. **G2 - the relay contract:** `cancel(org, handle)` answers the COMMITTED outcome - a job whose completion won returns that outcome, never an error; another tenant's handle is `NotFound` like an unknown one. A cancel after publication answers `held_unknown` with `debit 0` and a `reconcile_after`: render it as cancelled (never failed, never billed). After any `already_terminal` from a fenced call, read the outcome with `get_owned(org, handle)` and relay nothing more.
+  3. **D4:** as above; replace `pgtesting`'s `publish` stand-in with the real append; the dr05 drill and the StreamStore suite then run on `pgtesting.make_jobstore_factory`.
+  4. **D5:** keep D3's fence as the first statement of `infrx.terminalize`, put the identical-proposal replay before it, replace the `infrx.unimplemented` line; `PgJobStore.complete` then returns the outcome; move the 23 `_D5` cases and the `RACY` case to must-pass.
+  5. **Coordinator / F2P:** `Work.prompt_tokens` (then `PreparedWork` goes); a v2 `load_work` for CREDIT jobs; correct the `JobStore.heartbeat` docstring (R52); **confirm the in-place `jobs_guard` amendment in 0003** (outside 0016+).
+  6. **E3B:** point `rig("postgres", …)` of dr01-dr04 and dr09 at `infrx.state.pgtesting.make_jobstore_factory` on E2's PostgreSQL; the bodies pass verbatim here.
+  7. **Coordinator (base):** `tests/w/test_loop_mutants.py` does not collect on `8728aec` (see Limit 7); `make check` cannot pass on this base until it does.
+* **Unresolved findings:** none in D3's own code; every D3 mutant is killed on both images.
+
+## Verification log
+
+- 2026-09-23: D3 implemented stacked on `8728aec`; the coordinator's D2-review requirements (atomic claim under a rebuild; the gateway-clock skew) and D2 request 8 (deterministic grant race) included. Local task-local PostgreSQL only; nothing integrated or live-verified.
