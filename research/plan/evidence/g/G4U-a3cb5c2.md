@@ -334,7 +334,7 @@ rebase, reset, amend, push or Docker. The round-2 implementation SHA is `6ad81ba
 | H2 | `a4b0387` | `destination_unguarded` and `completion_unguarded` (dropping `@guarded` made `request_id` a query parameter, so every call answered 422) are replaced by `refusals_not_translated`: the translation is gone and a minted request id is still passed | dies on the store's typed refusal escaping the route: `Conflict` in `…the_destination_is_write_once_over_http`, `InvalidRequest` in `…completion_refusals_leave_in_the_envelope` |
 | T4 | `6d520f5` | tests only | `…the_body_names_no_org_and_nothing_the_contract_lacks` also creates with `?org_id=ORG_B`, `x-org-id` and `x-infrx-org` → 201 in ORG_A. `…another_orgs_upload_is_the_unknown_handles_404` sends org B's PUT and complete naming ORG_A in the query and both headers → still the unknown-handle envelope. Mutants: `create_org_from_query`, `put_org_from_header`, `complete_org_from_header` (the reviewer's R12/R13 shape) |
 | R2 | `ef2d08f` | `slots = large_bodies or rt.large_bodies or rt.ingress.large_bodies or LargeBodies()` | `test_media_sec__without_a_runtime_pool_uploads_count_against_the_ingress_pool` → `ingress_pool_ignored` |
-| R3 | `5ec093c` | `store.put_upload` runs under `asyncio.wait_for(limits.intake_timeout_s)`; a timeout becomes `deadline_exceeded`, and the slot is still released in `finally` | `test_media_sec__a_hung_store_is_cut_at_the_deadline` (a store 1 s slow against a 0.2 s deadline: 504, nothing stored, `in_flight == 0`; this uses real time because `wait_for` has no injectable clock) → `store_call_undeadlined` |
+| R3 | `5ec093c` | `store.put_upload` runs under a further `intake_timeout_s` (`asyncio.wait_for`), not whatever remains of the read's deadline, so a PUT holds a slot for at most two deadlines; a timeout becomes `deadline_exceeded`, and the slot is still released in `finally` | `test_media_sec__a_hung_store_is_cut_at_the_deadline` (a store 1 s slow against a 0.2 s deadline: 504, nothing stored, `in_flight == 0`; this uses real time because `wait_for` has no injectable clock) → `store_call_undeadlined` |
 | R4 | `6ad81ba` | wording: with every slot taken, a PUT is 429 before its body is read when it declares its length, and after at most the threshold plus one chunk when it is chunked. Now asserted | `…large_uploads_hold_a_shared_slot_until_stored` (a chunked PUT: 429, `read <= threshold + 30`), killed by that case's existing mutants |
 
 **Recorded as requests, not code**
@@ -366,6 +366,29 @@ Not re-run in round 2: the orderings, `tests/d`, `tests/q` and `make check` (the
 `gateway/routes/uploads.py` and `tests/g/uploads/`; Docker was not used in this round, per the
 coordinator's instruction).
 
+## Confirmation fold-ins (`G4U-confirm-962b2b1.json`: pass, 0 blocking)
+
+All nonblocking items are in one commit, `73dfaaf`. The only code change is the G5 wording
+of a comment.
+
+| Item | Change | Case → mutant (all killed) |
+|---|---|---|
+| C1/G1/G2 | `…no_store_value_outside_the_frozen_ticket_leaves` gains a destination that keeps the scheme but not the value (`infrx-upload:<org>/<handle>`) and a valid handle with a suffix (`<handle>/<org>`, with a destination to match). Both are 500, and the org is absent | `ticket_destination_prefix_only` (`startswith`), `ticket_handle_prefix_match` (`match` for `fullmatch`) |
+| C2 | the 500 answers in that case carry `Connection: close` | `refusals_keep_the_connection` now also names that case |
+| G4 | `…every_refusal_closes_the_connection` asserts the 201, 204 and 200 answers do not close | `successes_close_the_connection` |
+| C3 | `test_dur_rls__the_router_reads_no_org_from_the_query_or_headers`: a structural check that `uploads.py` reads only `request.path_params["handle"]` and `request.headers.get("content-type")` from the request, and no query or cookie | named by `create_org_from_query`, `put_org_from_header`, `complete_org_from_header` |
+| G5 | wording only: the store call gets a further `intake_timeout_s` (comment at the call and the R3 row above) | — |
+| G3 | none: this is request (a). The coordinator applies it at the cutover, putting one `LargeBodies` on both `rt.large_bodies` and `IngressDeps.large_bodies`, with `rt.media_store` shared with G2's acceptor | — |
+
+**Runs** (head `73dfaaf`; tails quoted from `.claude-logs/r3/`)
+
+| Command | Exit | Tail |
+|---|---|---|
+| `uv run --frozen pytest -q tests/g/uploads/test_uploads.py` (10:35Z) | 0 | `27 passed in 1.01s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py` (10:35–10:37Z) | 0 | `42 passed in 135.96s (0:02:15)` (39 mutants plus 3 list tests) |
+| `uv run --frozen python -m tests.g.uploads.uploads_mutants` | 0 | `39/39 killed` |
+| `uv run --frozen python -m tests.g.uploads.uploads_mutants --list` | 0 | `39 mutants over 27 named cases` (killed = declared) |
+
 ## Verification log
 
 - 2026-09-23: Report written at implementation SHA `a3cb5c2` on base `740bebf`; all tails
@@ -378,3 +401,6 @@ coordinator's instruction).
   plus T1, T3, H2, T4, R2, R3 and R4 fixed in `176c76f..6ad81ba`, one commit each. T2/R5 filed
   as an M request, H4 left to the coordinator's gate. Deviation 2's parenthetical and the 429
   wording are corrected in place. The round-2 runs are quoted from `.claude-logs/r2/`.
+- 2026-09-23: Confirmation `G4U-confirm-962b2b1.json` passed. Its nonblocking C1–C3 and G4–G5 are
+  folded into `73dfaaf`, and G3 is request (a), which the coordinator applies at the
+  cutover. The focused suite and the list were re-run at `73dfaaf` (39/39 killed).
