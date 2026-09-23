@@ -4,8 +4,8 @@
 |---|---|
 | Task | D5 (track D, durable state), "Terminal transaction, grants and reconciliation". Oracles DUR-SETTLE, DUR-CAP, DUR-OUTPUT, CREDIT-SPEND, CREDIT-RATE; also touched: DUR-FENCE, API-OPS, DUR-RLS; R91 (the replay lookup, coordinator follow-up) |
 | Status | **implemented**: real PostgreSQL on both images (pinned `postgres:16.14` + shim, and `supabase/postgres` 17.6.1.173 without it). Not integrated: no coordinator merge, nothing applied to any hosted Supabase project, never the pilot box. Owner: the Opus D5 implementer, re-dispatched after the first D5 agent died (its one commit, `1d5c66e`, is kept) |
-| Base SHA | `e2a52b2` (the integration head at dispatch, addendum 5: contains D4, the F2P wire-in `6a49af5` and the cancel-cause merge). Merged since, as the coordinator instructed: `origin/claude/backend-impl` `d486142` (G2 `2391d4d`: R91 port/fakes/case, relay; W4; G4U) via `f2ee977` (`--no-ff`) |
-| Implementation SHA | `4bcac3b` (commits `1d5c66e` … `4bcac3b`, per item below). This evidence commit follows it; the head SHA is in the handback |
+| Base SHA | `e2a52b2` (the integration head at dispatch, addendum 5: contains D4, the F2P wire-in `6a49af5` and the cancel-cause merge). Merged since, as the coordinator instructed: `origin/claude/backend-impl` `d486142` (G2 `2391d4d`: R91 port/fakes/case, relay; W4; G4U) via `f2ee977` (`--no-ff`); fix round: `d926cc9` via `c807bb5` and `0bdb61a` via `493c4ac` |
+| Implementation SHA | `4bcac3b` (commits `1d5c66e` … `4bcac3b`, per item below). The fix round's code is `8554b47` (section "Fix round"); the evidence commits follow it, and the head SHA is in the handback |
 | Branch / worktree | `codex/d5-terminal-transaction` in `.claude/worktrees/codex-d5` |
 | Classification | local only. Task-local Docker created and removed by this checkout's harness: `infrx-d5-postgres[-supabase]` on 55436, `infrx-d5-valkey` on 55467, the `test_pgharness` decoy `infrx-d5-dharness-postgres` on 55476; Q's harness on 55498 (no pre-started container). No cloud, hosted project, pilot host or paid provider; nothing pushed |
 
@@ -476,6 +476,10 @@ Further deltas and proposals (the coordinator rules; no D edit is pending on the
 11. **The 906d963 Supabase sweep had 11 failures**, in the conformance rig and a service test, not in 0018: 8 CREDIT cases (`InsufficientPrivilege: must be owner of table users`, D2's trigger bypass on `auth.users`) and 3 operations-service tests (`UndefinedColumn: email_confirmed_at`, since the bare image has no GoTrue columns). Both are fixed at `4bcac3b` (see its row).
     - Commit-message correction: `4bcac3b` says "(8 CREDIT cases, 2 service/partial-publication, 1 setup)". The three non-CREDIT failures are `test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a1`, `…__the_operations_service_runs_on_the_postgres_adapters` and `…__a_partial_publication_is_unreachable_and_rerunnable`.
 12. **`result_expires_at` is stored but not readable** (fix round; review N7/CF-7/H-N3). G3 request (c) stays open. It is a contract change for F/coordinator, and the proposal is under "Further deltas".
+13. **The task ports sit inside Linux's ephemeral range** (`32768 60999`), found in the fix round.
+    - An unrelated connection whose local port is 55436, 55476, 55467 or 55498 leaves a TIME-WAIT socket, and the harness's `docker run -p` then fails with `address already in use`. That is the P-21 collision. It caused row 25's two `test_pgharness` failures.
+    - The fix-round driver waits until no socket holds a task port, and retries once after 60 s.
+    - Moving `TASK_PORTS` below 32768, or reserving them with `net.ipv4.ip_local_reserved_ports`, is the coordinator's (`tasklocal`).
 
 ## Handback
 
@@ -485,11 +489,13 @@ Further deltas and proposals (the coordinator rules; no D edit is pending on the
   - D6F/D6J (the remaining D stubs).
   - C3A/U1 (the console reads settled usage).
   - W's CREDIT worker path (request 5).
-- **Pending coordinator wiring:**
-  - requests 1 (harness list, Makefile), 2 (contracts retirement, together with the merge), 4 (cli diff);
+- **Pending coordinator wiring** (restated in the fix round):
+  - merge D5 TOGETHER with the E3B phase-3 lane. That lane already applies requests 1, 2 and 8, and carries the cutover's `f7d9b03`, which supersedes request 4's diff. Do not apply those diffs again, and drop merge-plan step 2(a);
+  - request 6 (`q3rig.diff`, still applies);
   - the G6B action map;
-  - the ruling candidates.
-- **Unresolved findings:** Limits 1–4, 6, 7.
+  - the ruling candidates;
+  - G3 request (c) (`result_expires_at`, F).
+- **Unresolved findings:** Limits 1–4, 6, 7, 12, 13. Limit 1 is gone once the phase-3 lane's `8c00bb4` is in the merged tree.
 
 ## Artifacts
 
