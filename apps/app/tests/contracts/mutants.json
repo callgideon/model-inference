@@ -2017,6 +2017,17 @@
       ]
     },
     {
+      "id": "AUDIT-ACTION-02",
+      "entry": "fixtures",
+      "note": "a read-only audit action drifts from 0009's constraint (F2P review HON-1)",
+      "file": "lib/contracts/types.ts",
+      "find": "  \"admin_key_issue\",",
+      "replace": "  \"key_issue\",",
+      "cases": [
+        "the console audit actions are D1's ten, in D1's order"
+      ]
+    },
+    {
       "id": "AUDIT-ACTION-01",
       "note": "an operator grant is audited under the console's old spelling, not D1's `admin_grant` (F2P wire-in, AuditAction alignment)",
       "file": "lib/contracts/fake-services.ts",

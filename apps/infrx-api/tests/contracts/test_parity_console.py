@@ -625,3 +625,16 @@ def test_the_v2_vocabulary_has_its_own_parity_module_and_one_seam_here():
         list(money_units.ACCOUNTING_REGIMES)
     assert set(test_parity_v2.SHARED_ENUMS) | set(test_parity_v2.UNIT_ENUMS) >= {
         "CREDENTIAL_AUDIENCES", "WALLET_KINDS", "MONEY_UNITS", "ACCOUNTING_REGIMES"}
+
+
+def test_the_console_audit_actions_are_the_ten_of_0009s_constraint():
+    """F2P review HON-1: `AUDIT_ACTIONS` in the console is D1's ten spellings, in the order
+    0009's `audit_entries_action_check` lists them - all ten, not only the one the fake
+    writes. (The console's own copy of this check carries the mutant, AUDIT-ACTION-02.)"""
+    sql = (CONSOLE / "supabase" / "migrations" / "0009_operator_seams.sql").read_text()
+    check = re.search(r"add constraint audit_entries_action_check\s+check \(action in \(([^)]*)\)\)",
+                      sql)
+    assert check, "0009 no longer declares audit_entries_action_check"
+    d1 = re.findall(r"'([a-z_]+)'", check.group(1))
+    assert len(d1) == 10
+    assert ts_string_array(TYPES.read_text(), "AUDIT_ACTIONS") == d1

@@ -4,13 +4,14 @@
 // hand-written guards. No schema dependency is added: 08 §6 forbids a new console package,
 // and a bad fixture must fail here rather than surface as a mystery in a UI track.
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import judgeFixture from "../../lib/contracts/fixtures/judge.json" with { type: "json" };
 import orgsFixture from "../../lib/contracts/fixtures/orgs.json" with { type: "json" };
 import traceFixture from "../../lib/contracts/fixtures/traces.json" with { type: "json" };
 import { isMoney } from "../../lib/contracts/money.ts";
 import {
+  AUDIT_ACTIONS,
   AUTHOR_ROLES,
   CALIBRATION_LABELS,
   ENTITLEMENT_LIMIT_NAMES,
@@ -381,4 +382,18 @@ test("every model a trace template names carries its public model id (R62)", () 
     assert.match(model, PUBLIC_REVISION, `trace template model ${model} lacks its public model id`);
     assert.ok(orgsFixture.models.includes(model), `trace template model ${model} is not a served model`);
   }
+});
+
+test("the console audit actions are D1's ten, in D1's order", () => {
+  // F2P review HON-1: 0009's CHECK constraint is the authority; the console list mirrors it by
+  // hand, so every value (not only the one the fake writes) is compared here.
+  const sql = readFileSync(
+    new URL("../../supabase/migrations/0009_operator_seams.sql", import.meta.url),
+    "utf8",
+  );
+  const check = /add constraint audit_entries_action_check\s+check \(action in \(([^)]*)\)\)/.exec(sql);
+  assert.ok(check, "0009 no longer declares audit_entries_action_check");
+  const d1 = [...check[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.equal(d1.length, 10);
+  assert.deepEqual([...AUDIT_ACTIONS], d1);
 });
