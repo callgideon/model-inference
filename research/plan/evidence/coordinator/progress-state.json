@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T21:02:05Z",
+  "updated": "2026-09-23T21:19:52Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half HANDED BACK 37a4652 (certify runner, protocol, endpoint doc, release decision PENDING; 77 mutants; local certify run green except the two findings B1/B2); one-round review running \u2192 merge; box half after the rollout",
+      "phase": "review fix_required at 37a4652 (9 runner-honesty gaps) \u2192 ONE fix round running \u2192 single verifier \u2192 merge; box half after the rollout",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },
@@ -98,8 +98,8 @@
       "since": "2026-09-23T20:58:35Z"
     },
     "E4B": {
-      "phase": "review at 37a4652 running (Opus runner/honesty lens + refuters)",
-      "since": "2026-09-23T21:02:05Z"
+      "phase": "fix_required at 37a4652 (wf_be41f24a-b97; JSON evidence/e/E4B-review-37a4652.json) \u2192 fix round",
+      "since": "2026-09-23T21:19:52Z"
     }
   },
   "gates": {

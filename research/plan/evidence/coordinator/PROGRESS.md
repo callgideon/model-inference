@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T21:02:05Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T21:19:52Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -67,7 +67,7 @@ Generated 2026-09-23T21:02:05Z from `tasks.json` (manifest v4) and `progress-sta
 
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D5: codex-d5 / codex/d5-terminal-transaction — review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) → ONE fix round running → single verifier → MERGE together with E3B phase 3 since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- E4B: codex-e4b / codex/e4b-certify — software half HANDED BACK 37a4652 (certify runner, protocol, endpoint doc, release decision PENDING; 77 mutants; local certify run green except the two findings B1/B2); one-round review running → merge; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — review fix_required at 37a4652 (9 runner-honesty gaps) → ONE fix round running → single verifier → merge; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - BOX: codex-box / codex/box-measure — dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab — W4 phase B (candidate.sh E0/E1[/E3] → decide.py → P-20), E1B L0/L1/L8 in the same maintenance window; L2–L7 + E4B real runs after the rollout (phase 2) since 2026-09-23T19:35:52Z — SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh
@@ -84,7 +84,7 @@ Generated 2026-09-23T21:02:05Z from `tasks.json` (manifest v4) and `progress-sta
 - review checkpoint-2-interim: whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z
 - review D5: fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) → fix round since 2026-09-23T20:43:27Z
 - review M1-L2: review at e1bb54f running (Opus adapter/honesty lens + refuters) since 2026-09-23T20:58:35Z
-- review E4B: review at 37a4652 running (Opus runner/honesty lens + refuters) since 2026-09-23T21:02:05Z
+- review E4B: fix_required at 37a4652 (wf_be41f24a-b97; JSON evidence/e/E4B-review-37a4652.json) → fix round since 2026-09-23T21:19:52Z
 
 ## Checkpoints
 
