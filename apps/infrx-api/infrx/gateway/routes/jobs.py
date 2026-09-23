@@ -301,7 +301,10 @@ def register(app, rt):
                 or "transfer-encoding" in request.headers:
             raise errors.InvalidRequest("DELETE /v1/jobs/{handle} takes no body")
         admission, _ = await relay._owned(org, handle)
-        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)
+        # Never a 200 without the committed cancel: an outage is a retryable 503 (the job is
+        # untouched), and the retried DELETE answers what is committed then.
+        outcome = await _dependency(
+            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))
         return _answer(jobs.status_of(admission, outcome, await relay.jobs.db_now()), admission)
 
     # The guard's wrapper is defined in `intake`; the route table names this module

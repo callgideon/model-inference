@@ -870,6 +870,23 @@ def test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job():
     assert job.outcome.cause is TerminalCause.client_cancelled
 
 
+def test_dur_fence__a_delete_whose_cancel_fails_is_retryable_never_a_200():
+    """The store's cancel fails for want of the database: the DELETE is a retryable 503 with
+    `Retry-After` (the driver's text in no answer) - never a 200 showing the row before the
+    cancel - the job is untouched, and the retried DELETE cancels it."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    world.failures.fail("cancel", error=ConnectionError(
+        "connection to postgresql://infrx:secret@db:5432 refused"))
+    down = delete(world)
+    assert refusal(down) == (503, "dependency_unavailable")
+    assert down.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in down.body
+    assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
+    again = delete(world)
+    assert again.status == 200 and again.json()["state"] == "cancelled"
+    assert job.outcome.cause is TerminalCause.client_cancelled
+
 def test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing():
     """A DELETE carries no body: one that declares one (a length, or chunked) is 400, decided
     from the headers without reading it, and the job runs on."""

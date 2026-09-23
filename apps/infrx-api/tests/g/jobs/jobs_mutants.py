@@ -69,6 +69,7 @@ DELETE = "test_dur_fence__delete_cancels_durably_and_answers_the_committed_outco
 RACE = "test_dur_fence__a_delete_racing_a_completion_settles_once"
 MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
 BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
+DELETE_OUTAGE = "test_dur_fence__a_delete_whose_cancel_fails_is_retryable_never_a_200"
 MATRIX = "test_api_modes__the_async_matrix_end_to_end"
 EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result"
 CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
@@ -249,16 +250,19 @@ MUTANTS: tuple[Mutant, ...] = (
        OBSERVER),
     # === item 5: DELETE (API-MODES, DUR-FENCE) ==========================================
     _m("delete_cause_disconnected", "an explicit DELETE is client_cancelled (R21)",
-       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
-       "        outcome = await relay.cancel(org, handle, "
-       "cause=TerminalCause.client_disconnected)", DELETE, MIDWAY),
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
+       "            relay.cancel(org, handle, cause=TerminalCause.client_disconnected))",
+       DELETE, MIDWAY),
     _m("delete_cancels_nothing", "DELETE requests durable cancellation",
-       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
+       J, "        outcome = await _dependency(\n            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
        "        outcome = (await relay._owned(org, handle))[1]", DELETE),
     _m("delete_unshielded", "the DELETE's cancel survives the handler's own cancellation",
-       J, "        outcome = await relay.cancel(org, handle, cause=TerminalCause.client_cancelled)",
-       "        outcome = await relay.jobs.cancel(org, handle, "
-       "cause=TerminalCause.client_cancelled)", MIDWAY),
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
+       "            relay.jobs.cancel(org, handle, cause=TerminalCause.client_cancelled))", MIDWAY),
+    _m("delete_quiet", "a DELETE whose cancel failed is never a 200 with the pre-cancel row",
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
+       "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled, quiet=True))",
+       DELETE_OUTAGE),
     _m("cancel_resettles_a_completed_job", "a DELETE after completion answers it, one settlement",
        ST, "            if job.terminal:\n                # Completion won the race",
        "            if False:\n                # Completion won the race", RACE),
