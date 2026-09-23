@@ -201,12 +201,18 @@ def test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain(tmp_path
         migrate.pending(local, ["0001", "0003"])
     for i, extra in enumerate(({"0004-Bad Name.sql": "select 1;"},
                                {"0003_other.sql": "select 1;"},
-                               {"0004_idx.sql": "create unique index\n  concurrently i on a (x);"},
+                               {"0004_idx.sql": "create unique index concurrently i on a (x);"},
                                {"0004_vac.sql": "-- tidy up\nVACUUM a;"},
                                {"0004_sys.sql": "alter system set work_mem = '64MB';"})):
         odd = migrations(tmp_path / f"odd{i}", **extra)
         conn = Conn()
         assert run(monkeypatch, conn, "plan", "--dir", str(odd)) == 2 and conn.log == []
+    # ... but only statements: the words in a comment or a literal are not refused
+    words = migrations(tmp_path / "words", **{"0004_words.sql": (
+        "/* retired:\nvacuum a;\ncreate index concurrently i on a (x);\n*/\n"
+        "create table w (\n  x int, -- rebuilt concurrently by the worker\n"
+        "  note text default 'refreshed concurrently'\n);\n")})
+    assert run(monkeypatch, Conn(), "plan", "--dir", str(words)) == 0
     assert run(monkeypatch, Conn(), "apply", "--dir", str(directory)) == 2
     monkeypatch.undo()                      # the real `connect`, with no DSN set
     monkeypatch.delenv(migrate.DSN_ENV, raising=False)
