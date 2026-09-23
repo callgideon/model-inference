@@ -336,6 +336,10 @@ MUTANTS += (
                      "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
            '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',
            '        if " ACL " in line:', RESTORE, "bk01h", layer=2),
+    Mutant("i3bm102", "RST-2: D's plain image is refused by name, not run into 17.6-client "
+                      "restore failures", RESTORE,
+           "    if not d_harness().ON_SUPABASE:\n        pytest.skip(PLAIN_IMAGE)\n", "",
+           RESTORE, "bk00"),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),

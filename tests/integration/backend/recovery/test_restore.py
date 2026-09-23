@@ -30,7 +30,8 @@ template and dropped at the end of each case; `harness.PG_DATABASE` is only ever
 (`pg_dump`).
 
 `INFRX_I3B_PG=d` runs the same cases on the D harness instead (`tests/d/pgharness.py`: one
-task-local container on `INFRX_D_TASK`'s port, `INFRX_D1_IMAGE`'s image, removed at exit), with
+task-local container on `INFRX_D_TASK`'s port, removed at exit; `INFRX_D1_IMAGE=supabase` only:
+the plain image is refused by name, bk00), with
 its task database migrated and seeded the way `run.py` builds E2's as the source. No
 compose stack; bk03 (a SIGKILL of E2's compose service) still needs E2's.
 """
@@ -93,14 +94,35 @@ def pg_password() -> str:
     return d_harness().PASSWORD if ON_D else harness.PG_PASSWORD
 
 
+# RST-2: the one D image this module supports, refused by name before any container starts.
+PLAIN_IMAGE = ("UNSUPPORTED[plain D image] INFRX_I3B_PG=d needs INFRX_D1_IMAGE=supabase: the "
+               "restore client (pgrestore.IMAGE) is PostgreSQL 17.6 and sends SET "
+               "transaction_timeout, which D's plain 16.14 server rejects, and D's shim has no "
+               "auth.users.confirmed_at (bk02's hosted seed)")
+
+
 def needs_pg() -> None:
-    """E2's stack, or the D harness's container (started here, removed at exit)."""
+    """E2's stack, or the D harness's Supabase container (started here, removed at exit)."""
     if not ON_D:
         return kit.needs_stack()
+    if not d_harness().ON_SUPABASE:
+        pytest.skip(PLAIN_IMAGE)
     why = d_harness().unavailable()
     if why:
         pytest.skip(why)
     d_harness().ensure()
+
+
+def test_i3b_bk00_the_plain_d_image_is_refused_by_name(monkeypatch):
+    """RST-2: `INFRX_I3B_PG=d` on D's plain image is a typed skip naming the 17.6-client /
+    16.14-server mismatch, before any container is started - not 13 red restores. Layer 0:
+    the harness is a stand-in reporting the plain image."""
+    import types
+    monkeypatch.setitem(globals(), "ON_D", True)
+    monkeypatch.setitem(sys.modules, "i3b_pgharness", types.SimpleNamespace(
+        ON_SUPABASE=False, unavailable=lambda: None, ensure=lambda: None))
+    with pytest.raises(pytest.skip.Exception, match=r"^UNSUPPORTED\[plain D image\] .*17\.6"):
+        needs_pg()
 
 
 def source_db() -> str:
@@ -126,13 +148,8 @@ def _admin(*statements: str) -> None:
     """As the image's superuser over the local socket, like E2's `provision_database`."""
     import subprocess
     if ON_D:
-        d = d_harness()
-        for statement in statements:
-            if d.ON_SUPABASE:
-                d._sb("template1", statement)
-            else:                                   # D's plain image: `postgres` is superuser
-                with d.connect("postgres") as conn:
-                    conn.execute(statement)
+        for statement in statements:                # needs_pg refused the plain image
+            d_harness()._sb("template1", statement)
         return
     argv = ["docker", "exec", "-i", harness.assert_ours(harness.container_of("postgres")),
             "psql", "-U", harness.PG_ADMIN_ROLE, "-d", "template1", "-v", "ON_ERROR_STOP=1"]
@@ -145,11 +162,7 @@ def _admin(*statements: str) -> None:
 
 def _create(name: str) -> None:
     if ON_D:
-        d = d_harness()
-        d.recreate(name)                            # the Supabase template's copy, or a
-        if d.NEEDS_SHIM:                            # plain database plus D's shim
-            from infrx.state import migrations as d_migrations
-            d.apply(name, (("supabase_shim.sql", d_migrations.SHIM.read_text()),))
+        d_harness().recreate(name)                  # the Supabase template's copy
         return
     terminate = ("select pg_terminate_backend(pid) from pg_stat_activity "
                  f"where datname = '{harness.PG_TEMPLATE_SOURCE}' and pid <> pg_backend_pid()")
