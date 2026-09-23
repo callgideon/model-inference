@@ -72,6 +72,7 @@ from infrx.state import operations as ops  # noqa: E402
 from infrx.state.jobstore import PgJobStore, connector  # noqa: E402
 
 from . import checks_credit as cc  # noqa: E402
+from . import checks_signup  # noqa: E402
 
 ADAPTERS = f"{pgharness.DATABASE}_ops_adapters"
 AT = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
@@ -256,6 +257,7 @@ def test_api_ops__the_ledger_port_adjusts_reconciles_and_grants_through_d5_and_a
         wallet.ledger_total + Credit("2.50000000")
     with pytest.raises(errors.NotFound):
         run(ledger.reconcile(b.ORG_B, str(uuid.uuid4()), "r", "ops@test", AT))
+    checks_signup.gotrue_columns(owner)     # the bare Supabase image has no GoTrue columns
     owner.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
                   (cc.CONSUMER_2,))
     identity = run(ops.PgSignup(ops._Db(connect)).verified_user(cc.CONSUMER_2))
@@ -289,6 +291,7 @@ def _operations():
         owner.execute("select infrx.bootstrap_operator_key(%s, 'bootstrap', %s, %s, "
                       "'ops@test', 'operator bootstrap')",
                       (b.ORG_B, secret[:service.PREFIX_CHARS], service.hash_key(secret)))
+        checks_signup.gotrue_columns(owner)
         owner.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
                       (cc.CONSUMER_1,))
         connect = connector(pgharness.dsn(SERVICE_DB))

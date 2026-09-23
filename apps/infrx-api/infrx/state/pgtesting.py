@@ -320,17 +320,22 @@ def seed_credit_world(conn, seed_sql: str) -> None:
     for flag in ("credit_admission", "signup_grant"):
         conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'rig', "
                      "reason = 'conformance' where name = %s", (flag,))
-    # The fixture's personal organization id: the signup trigger would mint its own, so it
-    # is stepped around for this one insert (test database only) and the rows written.
-    _without_trigger(conn, "auth.users", "on_auth_user_created",
-                     "insert into auth.users (id, email) values (%s, 'consumer@example.com')",
-                     (ids.consumer_user,))
-    conn.execute("insert into public.profiles (id, email) values (%s, 'consumer@example.com')",
-                 (ids.consumer_user,))
-    conn.execute("insert into public.organizations (id, name, slug, created_by) values "
-                 "(%s, 'consumer', 'consumer-fixture', %s)", (ids.consumer_org, ids.consumer_user))
-    conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, 'owner')",
-                 (ids.consumer_org, ids.consumer_user))
+    # The fixture's personal organization id. 0001's `handle_new_user` mints a personal
+    # organization only for a user with no membership yet, so the user, profile, fixture
+    # organization and owner membership are ONE statement: the AFTER trigger runs at its end
+    # and finds the membership. No trigger is disabled (`postgres` does not own `auth.users`
+    # on the Supabase image).
+    conn.execute(
+        "with u as (insert into auth.users (id, email) values (%(user)s, 'consumer@example.com') "
+        "returning id), p as (insert into public.profiles (id, email) select id, "
+        "'consumer@example.com' from u returning id), o as (insert into public.organizations "
+        "(id, name, slug, created_by) select %(org)s, 'consumer', 'consumer-fixture', id from p "
+        "returning id) insert into public.org_members (org_id, user_id, role) "
+        "select o.id, %(user)s, 'owner' from o",
+        {"user": ids.consumer_user, "org": ids.consumer_org})
+    assert conn.execute("select array_agg(org_id::text) from public.org_members "
+                        "where user_id = %s", (ids.consumer_user,)).fetchone()[0] == \
+        [ids.consumer_org], "the signup trigger minted a second personal organization"
     conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_user_id, "
                  "personal_org_id) values (%s, 'consumer', %s, %s)",
                  (ids.consumer_wallet, ids.consumer_user, ids.consumer_org))
