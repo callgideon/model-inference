@@ -91,10 +91,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__large_uploads_hold_a_shared_slot_until_stored",
        "test_media_sec__a_chunked_upload_over_the_cap_stops_reading",
        "test_media_sec__a_slow_upload_is_cut_at_the_deadline"),
+    # The brief's order: the slot goes back before the store call, which still runs.
     _m("slot_released_before_the_store", "the slot is held until the store has the bytes",
-       U, "                                          large=slot)\n            await store.put_upload(context.org_id, handle, data, mime)\n"
-          "        finally:\n",
-       "                                          large=slot)\n        finally:\n            await store.put_upload(context.org_id, handle, data, mime)\n",
+       U, "large=slot)\n            await store.put_upload(",
+       "large=slot)\n            slot.release()\n            await store.put_upload(",
        "test_media_sec__large_uploads_hold_a_shared_slot_until_stored"),
     _m("handle_grammar_unchecked", "a malformed handle is not_found before any byte",
        U, "        if not ids.UPLOAD_HANDLE_RE.fullmatch(handle):", "        if False:",
