@@ -83,7 +83,10 @@ def run(backup: Path, *argv: str) -> str:
     result = subprocess.run([*client(backup), *argv], capture_output=True, text=True,
                             timeout=1800)
     if result.returncode != 0:
-        raise RuntimeError(f"{argv[0]} failed ({result.returncode}): {result.stderr[-800:]}")
+        # DETAIL/CONTEXT quote key values or a whole row (auth.users e-mails): never re-raised.
+        said = "\n".join(line for line in result.stderr.splitlines()
+                         if not line.lstrip().startswith(("DETAIL:", "CONTEXT:")))
+        raise RuntimeError(f"{argv[0]} failed ({result.returncode}): {said[-800:]}")
     return result.stdout
 
 

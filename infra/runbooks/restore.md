@@ -77,6 +77,11 @@ docker exec infrx-i3b-restore psql -U supabase_admin -d template1 -v ON_ERROR_ST
 LOCAL="host=127.0.0.1 port=55470 user=postgres password=$LOCALPW dbname=infrx_i3b_hosted_copy sslmode=disable"
 ```
 
+`LOCAL` carries `password=` on purpose, the one exception to [README.md](README.md) rule 2:
+`check` needs two passwords at once and `PGPASSWORD` holds hosted's, so the throwaway local
+literal travels in the conninfo (and hence in `docker run`'s argument list). It is not a
+secret - the container is loopback-only and removed in A9 - and nothing else may.
+
 (55470 is unallocated in `tasklocal` (08 §8); any free loopback port works. The database
 name must start `infrx_` like E2's, which is what keeps D1's test clock out of production.)
 
@@ -229,3 +234,5 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   box; all hosted/box windows are ⚠️.
 - 2026-09-23 (I3B fix round, RS-1): A5's "never over live data" is now enforced by the tool
   (source identity + empty-target guard before any write), drilled by `bk01e_a`/`bk01e_b`.
+- 2026-09-23 (RS-4): A4 states LOCAL's password as the one deliberate non-secret exception;
+  the tool drops pg_restore's DETAIL/CONTEXT lines (row data) from its errors (`rb06`).

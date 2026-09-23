@@ -5,7 +5,8 @@
   with the pinned client image E2's stack runs;
 * rollback.md's maintenance statement is bk04's, character for character;
 * every `bash` step block parses (a step that cannot run over SSM is not a step);
-* every relative link and anchor between runbooks resolves.
+* every relative link and anchor between runbooks resolves;
+* a failed restore client never re-raises row data (RS-4).
 """
 from __future__ import annotations
 
@@ -74,3 +75,24 @@ def test_i3b_rb05_every_link_between_runbooks_resolves_and_each_keeps_a_log():
                 assert anchor in anchors(path), (book.name, target, anchor)
         for anchor in re.findall(r"\]\(#([\w-]+)\)", text):
             assert anchor in anchors(book), (book.name, anchor)
+
+
+def test_i3b_rb06_a_failed_client_never_re_raises_row_data(monkeypatch, tmp_path):
+    """RS-4: pg_restore's DETAIL/CONTEXT lines quote key values or whole rows (measured:
+    `DETAIL: Key (id)=(<uuid>) already exists.`); the error an operator sees keeps the
+    failure and drops them."""
+    pg = test_restore.pg
+    stderr = ('pg_restore: error: COPY failed for table "users": ERROR:  duplicate key value '
+              'violates unique constraint "users_pkey"\n'
+              "DETAIL:  Key (id)=(0a000000-0000-4000-8000-000000000001) already exists.\n"
+              "CONTEXT:  COPY users, line 1: \"one@example.com\"\n")
+    monkeypatch.setattr(pg.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a[0], 1, stdout="", stderr=stderr))
+    try:
+        pg.run(tmp_path, "pg_restore", "-d", "x")
+    except RuntimeError as failure:
+        said = str(failure)
+    else:
+        raise AssertionError("a failed client did not raise")
+    assert "users_pkey" in said
+    assert "0a000000" not in said and "one@example.com" not in said, said
