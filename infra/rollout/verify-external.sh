@@ -14,19 +14,20 @@ IP=${IP:-100.57.145.167}
 base=https://$HOST
 fails=0
 hdr=$(mktemp)                      # 0600
-trap 'rm -f "$hdr"' EXIT
+out=$(mktemp)                      # response bodies: not a fixed, pre-plantable /tmp path
+trap 'rm -f "$hdr" "$out"' EXIT
 ok()  { echo "PASS $*"; }
 bad() { echo "FAIL $*"; fails=$((fails + 1)); }
 expect() {  # expect NAME WANT-STATUS CURL-ARGS...
   local name=$1 want=$2; shift 2
-  local got; got=$(curl -s -o /tmp/infrx-verify.body -w '%{http_code}' --max-time 30 "$@")
+  local got; got=$(curl -s -o "$out" -w '%{http_code}' --max-time 30 "$@")
   if [ "$got" = "$want" ]; then ok "$name ($got)"; else bad "$name: got $got, want $want"; fi
 }
 # printf is a builtin: the key is written to the file without becoming anyone's argument.
 auth() { printf 'Authorization: Bearer %s\n' "$1" > "$hdr"; echo "@$hdr"; }
 
 expect "public health" 200 "$base/health"
-[ "$(cat /tmp/infrx-verify.body)" = '{"ok":true}' ] && ok "health body is exactly {\"ok\":true}" || bad "health body leaks detail"
+[ "$(cat "$out")" = '{"ok":true}' ] && ok "health body is exactly {\"ok\":true}" || bad "health body leaks detail"
 expect "/metrics hidden" 404 "$base/metrics"
 expect "/readyz hidden" 404 "$base/readyz"
 for port in 8000 8001 6379 2019; do
@@ -54,6 +55,5 @@ else
   echo "PENDING revoked-key check: INFRX_REVOKED_KEY not given (G6B/A1)"
 fi
 expect "a declared oversize body" 413 -H 'Content-Type: application/json' -H 'Content-Length: 100663297' --data-binary @/dev/null "$base/v1/chat/completions"
-rm -f /tmp/infrx-verify.body
 echo "failures: $fails"
 exit "$fails"
