@@ -268,7 +268,7 @@ async def call(app, payload: dict, *, key: str | None = None, headers: dict | No
                leave: asyncio.Event | None = None, on_send: Callable | None = None) -> Reply:
     """One `POST /v1/chat/completions` over ASGI. Once `leave` is set, the next `receive`
     answers `http.disconnect`; `on_send(message)` sees every message as it is sent (a case
-    can set `leave` from it, or raise to make a send fail)."""
+    can set `leave` from it, raise to make a send fail, or return a coroutine to block it)."""
     raw = json.dumps(payload).encode()
     sent: list = []
     first = True
@@ -284,7 +284,9 @@ async def call(app, payload: dict, *, key: str | None = None, headers: dict | No
     async def send(message):
         sent.append(message)
         if on_send is not None:
-            on_send(message)
+            result = on_send(message)
+            if asyncio.iscoroutine(result):     # a send that blocks (a slow peer)
+                await result
 
     head = {**support.RAW, **({"idempotency-key": key} if key else {}), **(headers or {})}
     scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"},

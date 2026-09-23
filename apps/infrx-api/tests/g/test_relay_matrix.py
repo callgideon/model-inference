@@ -152,6 +152,9 @@ def test_api_stream__an_upstream_error_is_an_honest_terminal_error(fault, mode):
     reply = rs.run(rs.call(world.app, rs.body(stream=mode == "stream")))
     job = world.only_job()
     assert (job.state, job.outcome.debit) == (JobState.failed, 0)
+    # Review stream-S8: nothing in flight is left behind, and the hold is off the wallet.
+    assert not any(r.active for r in job.reservations.values())
+    assert world.jobs.wallet(world.org).reserved_total == 0
     if mode == "sync":
         assert (reply.status, reply.json()["error"]["code"]) == (500, "internal_error")
     else:

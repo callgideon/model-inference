@@ -562,8 +562,12 @@ class _Stream(_Owned):
             named = True
             await relay.pump(job, emit, gone)
         except asyncio.CancelledError:
-            if not named:                       # no identity reached the client: an orphan
-                await relay.cancel(job.org_id, job.handle, quiet=True)
+            # No identity reached the client (an orphan), or the client had already left
+            # (review stream-S7); otherwise the job is left to its worker.
+            if not named or gone.done():
+                await relay.cancel(job.org_id, job.handle, quiet=True, cause=(
+                    TerminalCause.client_disconnected if gone.done()
+                    else TerminalCause.client_cancelled))
             raise
         except Exception as failure:
             # A replay gap, an expired journal, the store gone, or the client gone (a send
