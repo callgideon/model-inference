@@ -81,8 +81,10 @@ def client(backup: Path) -> list[str]:
 
 def run(backup: Path, *argv: str) -> str:
     try:
+        # errors="replace": a client reading a damaged archive can print non-UTF-8 bytes,
+        # which must end in the RuntimeError below, not in a UnicodeDecodeError.
         result = subprocess.run([*client(backup), *argv], capture_output=True, text=True,
-                                timeout=1800)
+                                errors="replace", timeout=1800)
     except subprocess.TimeoutExpired:
         # Its text is the whole argv, conninfo included: names only, and not chained.
         raise RuntimeError(f"{argv[0]} timed out after 1800 s") from None
@@ -232,19 +234,36 @@ def restore(conninfo: str, backup: Path, *, neutralize: bool = True) -> None:
 
 # --------------------------------------------------------------------- check
 
+# R92: an ACL is compared by the privileges it grants, not by how the catalog spells them. A
+# NULL ACL is the owner's implicit default, and pg_dump writes only the difference from that
+# default, so an explicit owner-only ACL (0014's `revoke all ... from public, anon,
+# authenticated, service_role` on infrx.job_results) is restored as NULL. It is the same
+# privilege set: both sides are normalised with acldefault() before the diff. An ACL emptied
+# by a REVOKE from the owner is '{}', not NULL, and still differs.
 CATALOG = {
     "relations": "select n.nspname || '.' || c.relname, c.relkind::text, c.relrowsecurity, "
-                 "c.relforcerowsecurity, array(select unnest(c.relacl)::text order by 1)::text "
+                 "c.relforcerowsecurity, array(select unnest(coalesce(c.relacl, acldefault("
+                 "case c.relkind when 'S' then 's' else 'r' end::\"char\", c.relowner)))::text "
+                 "order by 1)::text "
                  "from pg_class c join pg_namespace n on n.oid = c.relnamespace "
                  "where n.nspname = any(%(s)s) and c.relkind in ('r','p','v','m','S') order by 1",
     "columns": "select table_schema || '.' || table_name, column_name, data_type, is_nullable, "
                "coalesce(column_default, '') from information_schema.columns "
                "where table_schema = any(%(s)s) order by 1, 2",
+    # RST-3: column privileges (0001's `grant update (full_name, avatar_url) on
+    # public.profiles to authenticated`). A column has no owner default: NULL is no grant.
+    "column_acls": "select n.nspname || '.' || c.relname, a.attname, "
+                   "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a "
+                   "join pg_class c on c.oid = a.attrelid "
+                   "join pg_namespace n on n.oid = c.relnamespace where n.nspname = any(%(s)s) "
+                   "and a.attnum > 0 and not a.attisdropped and a.attacl is not null "
+                   "order by 1, 2",
     "policies": "select schemaname || '.' || tablename, policyname, cmd, roles::text, "
                 "coalesce(qual, ''), coalesce(with_check, '') from pg_policies "
                 "where schemaname = any(%(s)s) order by 1, 2",
     "functions": "select n.nspname || '.' || p.proname, pg_get_function_identity_arguments(p.oid), "
-                 "p.prosecdef, array(select unnest(p.proacl)::text order by 1)::text, "
+                 "p.prosecdef, array(select unnest(coalesce(p.proacl, acldefault('f', "
+                 "p.proowner)))::text order by 1)::text, "
                  "md5(p.prosrc), coalesce(p.proconfig::text, '') from pg_proc p "
                  "join pg_namespace n on n.oid = p.pronamespace "
                  "where n.nspname = any(%(s)s) order by 1, 2",
@@ -260,7 +279,8 @@ CATALOG = {
                "where schemaname = any(%(s)s) order by 1",
     "views": "select schemaname || '.' || viewname, md5(definition) from pg_views "
              "where schemaname = any(%(s)s) order by 1",
-    "schemas": "select nspname, array(select unnest(nspacl)::text order by 1)::text "
+    "schemas": "select nspname, array(select unnest(coalesce(nspacl, acldefault('n', "
+               "nspowner)))::text order by 1)::text "
                "from pg_namespace where nspname = any(%(s)s) order by 1",
     # What every FUTURE object gets: the defaults 0004 narrowed, per schema and global.
     "default_acls": "select defaclrole::regrole::text, "

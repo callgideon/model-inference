@@ -96,10 +96,19 @@ class Report:
     def __init__(self) -> None:
         self.stages: list[dict] = []
         self.started = datetime.now(timezone.utc)
+        self._last = time.monotonic()
+        # Confirmation G-B2: the tree as the run STARTS, and `as_json` records the end too. This
+        # catches a tree dirty at the start and cleaned before the end (or the reverse); an edit
+        # made AND undone between the two samples is not seen (verification RUN-N1).
+        self.head = git_head()
 
     def add(self, stage: str, status: str, detail: object = None, **extra) -> dict:
+        # Review H7: how long each stage took (since the previous stage ended).
+        now = time.monotonic()
+        seconds, self._last = round(now - self._last, 1), now
         entry = {"stage": stage, "status": status, "detail": detail,
-                 "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **extra}
+                 "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 "seconds": seconds, **extra}
         self.stages.append(entry)
         mark = {PASS: "ok  ", FAIL: "FAIL", PENDING: "PEND", SKIP: "skip"}[status]
         print(f"[{mark}] {stage}: {_short(detail)}", flush=True)
@@ -114,11 +123,26 @@ class Report:
         return 0
 
     def as_json(self) -> str:
-        return json.dumps({"started": self.started.isoformat(timespec="seconds"),
+        # Review H7: which tree and which namespace a report is evidence for - at the start
+        # and at the end of the run (G-B2); the report is evidence for one clean tree only
+        # when both say so.
+        return json.dumps({"git_head": self.head, "git_head_end": git_head(),
+                           "namespace": harness.NAMESPACE,
+                           "started": self.started.isoformat(timespec="seconds"),
                            "seconds": round((datetime.now(timezone.utc)
                                              - self.started).total_seconds(), 1),
                            "exit_code": self.exit_code, "stages": self.stages},
                           indent=2, default=str)
+
+
+def git_head() -> dict:
+    """The checkout's commit and whether its tree differs from it (untracked files count)."""
+    def git(*args: str) -> str:
+        done = subprocess.run(["git", "-C", str(harness.REPO_ROOT), *args], capture_output=True,
+                              text=True, timeout=60)
+        return done.stdout.strip() if done.returncode == 0 else ""
+    return {"sha": git("rev-parse", "HEAD") or None,
+            "dirty": bool(git("status", "--porcelain"))}
 
 
 def _short(detail: object, limit: int = 220) -> str:
@@ -157,12 +181,39 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
     detail long before its summary block, so a tail-only search reported "detected but not
     named" for a failure that was named perfectly well."""
     started = time.monotonic()
-    result = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
-                            timeout=timeout, env={**os.environ, **(env or {})})
-    output = result.stdout + result.stderr
+    # Its own process group (review H5): a run past its budget takes make, uv and pytest -
+    # and whatever lock or container they hold - down with it, not only the direct child.
+    process = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True, start_new_session=True,
+                               # pytest cuts its summary lines at the terminal width - 80
+                               # columns without a tty - and drops the failure's message first.
+                               env={**os.environ, "COLUMNS": "400", **(env or {})})
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        code = process.returncode
+    except subprocess.TimeoutExpired:
+        # E3B phase 2, measured: `make api-test` outlived 1800 s on a loaded host and the
+        # traceback lost the whole report. A run past its budget is a FAILED run (exit 124,
+        # the `timeout` convention) with what it printed, never a crash of the gate.
+        os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        code, stderr = 124, stderr + f"\ntimed out after {timeout:.0f} s"
+    except BaseException:
+        # SIGINT/SIGTERM to run.py (`Interrupted`) no longer reaches a separate group.
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        raise
+    output = stdout + stderr
     return {"argv": " ".join(argv), "cwd": str(cwd.relative_to(harness.REPO_ROOT) or "."),
-            "exit": result.returncode, "seconds": round(time.monotonic() - started, 1),
+            "exit": code, "seconds": round(time.monotonic() - started, 1),
             "counts": counts(output),
+            # `-rs` reasons, when the run was asked for them (review F6-findings).
+            "skips": sorted(set(re.findall(r"^SKIPPED \[\d+\] \S+?:\d+: (.*)$", output, re.M))),
+            # Every red case by id, not only the 12-line tail (the round-2 gate's suites stage
+            # reported '4 failed' while its tail named three).
+            "failures": re.findall(r"^(?:FAILED|ERROR) (\S+)", output, re.M),
+            # ... and each one's first line, so a flaky red can be attributed (G-N1).
+            "failure_lines": re.findall(r"^((?:FAILED|ERROR) \S+.*)$", output, re.M)[:50],
             "named": None if needle is None else (needle.lower() in output.lower()),
             "tail": "\n".join(output.strip().splitlines()[-12:])}
 
@@ -210,7 +261,8 @@ def preflight(report: Report, *, want_services: bool) -> bool:
         if busy:
             report.add("preflight", FAIL,
                        f"these task-local ports are already in use: {busy} - stop whatever holds "
-                       f"them (a previous `--keep` run, or `docker compose -p infrx-e2 down -v`)")
+                       f"them (a previous `--keep` run, or "
+                       f"`docker compose -p {harness.PROJECT} down -v`)")
             return False
     except harness.HarnessError as exc:
         report.add("preflight", FAIL, str(exc))
@@ -358,6 +410,16 @@ def engine(report: Report) -> None:
             LIVE_SERVERS.remove(server)
 
 
+# The skips `make api-test` may report, each attributed. Remove an entry the day its cause
+# lands: D4's pgtesting `stream` hook ("missing optional hook 'stream'", tests/d's conformance)
+# landed with 0017, so none is expected today.
+KNOWN_API_SKIPS: tuple[str, ...] = ()
+# pytest's short summary for the make targets and the backend suite: failures and errors (its
+# default, "fE") AND skip reasons. A bare `-rs` REPLACES the default, and a red run then names
+# no failing case at all (confirmation G-N1, measured).
+SUITE_ADDOPTS = "-rfEs"
+
+
 def suites(report: Report, *, own_only: bool) -> None:
     """Cross-module discovery, measured. The canonical targets are the root Makefile's
     (08 §7); this suite has none yet, so it is invoked directly and `make integration` is
@@ -367,7 +429,10 @@ def suites(report: Report, *, own_only: bool) -> None:
                   env={"INFRX_E2_CANARY": "off"})]
     if not own_only:
         for target in ("api-test", "console-test", "bench-test"):
-            runs.append(shell(["make", target], cwd=harness.REPO_ROOT))
+            # E3B phase 2: the D suite alone has grown past 30 min on a shared host. `-rs`
+            # makes pytest name every skip, so an unexpected one fails the stage (below).
+            runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0,
+                              env={"PYTEST_ADDOPTS": SUITE_ADDOPTS}))
     failed = [run["argv"] for run in runs if run["exit"] != 0]
     # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
     # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose
@@ -377,10 +442,22 @@ def suites(report: Report, *, own_only: bool) -> None:
     # is that cross-module discovery is measured rather than assumed.
     silent = [run["argv"] for run in runs
               if not run["counts"].get("passed") and not run["counts"].get("node_pass")]
-    report.add("suites", FAIL if (failed or silent) else PASS,
-               {"runs": [{k: run[k] for k in ("argv", "exit", "counts")} for run in runs],
+    # Review F6-findings: a skip is not a pass. `make api-test`'s skips must be the known,
+    # attributed ones (none since D4's StreamStore hook landed); any other reason fails it.
+    unexpected = sorted({reason for run in runs if run["argv"] == "make api-test"
+                         for reason in run.get("skips", ())
+                         if not any(known in reason for known in KNOWN_API_SKIPS)})
+    # Confirmation G-B3: a skip COUNT with no parsed reason is a skip nobody attributed (the
+    # reasons come from `-rs` lines; if they cannot be read, the count still fails the stage).
+    unread = [run["argv"] for run in runs if run["argv"] == "make api-test"
+              and run["counts"].get("skipped") and not run.get("skips")]
+    report.add("suites", FAIL if (failed or silent or unexpected or unread) else PASS,
+               {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips",
+                                                  "failure_lines")} for run in runs],
                 "nonzero_exit": failed or None,
-                "reported_no_tests": silent or None}, runs=runs)
+                "reported_no_tests": silent or None,
+                "unexpected_skips": unexpected or None,
+                "skips_without_reasons": unread or None}, runs=runs)
 
 
 def mutation(report: Report, *, layer: str) -> None:
@@ -388,8 +465,9 @@ def mutation(report: Report, *, layer: str) -> None:
     import mutants
     stack = bool(harness.load_state())
     try:
-        results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
-                   if layer == "all" or mutant.layer == 1]
+        # E3B phase 2 (I3B req 8): E's list and I3B's, through the one runner.
+        results = [mutants.run_one(mutant, stack_available=stack)
+                   for mutant in mutants.all_mutants() if layer == "all" or mutant.layer == 1]
     except Exception as exc:                       # noqa: BLE001 - reported, and the JSON
         # report is still written (E3B run 3 lost it to a HarnessError in _reprovision).
         report.add("mutants", FAIL, f"the mutation run itself failed: {exc!r}")
@@ -475,9 +553,32 @@ def classify(junit_xml: str) -> dict:
 def backend_verdict(cases: dict, exit_code: int) -> str:
     """FAIL beats PENDING beats PASS. A pending case is never a pass, a plain skip at layer 3
     is a case that did not run, and a run that ran nothing proves nothing."""
-    if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,):
+    if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,) \
+            or stale_pending(cases):
         return FAIL
     return PENDING if cases["pending"] else PASS
+
+
+def stale_pending(cases: dict) -> list[str]:
+    """Pending ids that name a task tasks.json marks implemented/integrated (E3B phase 2,
+    review H2): a merged task blocks nothing, whichever vocabulary the skip came through -
+    `stack.pending`, I3B's kit, or a hand-written skip.
+
+    R3-1: that holds while the merged task's cutover is HELD, too. The owner of held work is
+    the cutover request - an owner reference such as `G2-R1`, which is no task and so never
+    stale - not the merged task. A `stack.RESIDUAL` id is excused only where every case naming
+    it is one of I3B's read-only recovery cases; in any other case it is stale."""
+    tasks = {task["id"]: task["status"] for task in json.loads(
+        (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
+    residual = _backend_stack().RESIDUAL
+    return sorted(task for task, names in cases["pending"].items()
+                  if tasks.get(task) in ("implemented", "integrated")
+                  and not (task in residual and all(_is_recovery(name) for name in names)))
+
+
+def _is_recovery(case: str) -> bool:
+    """`classname::name` of one of I3B's cases (`tests/integration/backend/recovery/`)."""
+    return "recovery" in case.split("::")[0].split(".")
 
 
 def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:
@@ -488,6 +589,7 @@ def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:
         "passed": len(cases["passed"]), "pending": len(distinct),
         "failed": len(cases["failed"]), "failed_cases": cases["failed"] or None,
         "not_run": cases["skipped"] or None,
+        "stale_pending": stale_pending(cases) or None,
         "detected": sorted(name.split("::")[-1] for name in cases["passed"]
                            if "detects" in name),
         "pending_by_id": {task: len(names) for task, names in sorted(cases["pending"].items())}}
@@ -506,17 +608,18 @@ def backend(report: Report) -> None:
         with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-e3b-") as tmp:
             junit = Path(tmp) / "backend.xml"
             run = shell([sys.executable, "-m", "pytest", "-q", BACKEND_SUITE, "-p",
-                         "no:cacheprovider", "-rs", f"--junitxml={junit}"],
+                         "no:cacheprovider", SUITE_ADDOPTS, f"--junitxml={junit}"],
                         cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "off"})
             cases = classify(junit.read_text()) if junit.exists() else \
                 {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}
+        status, summary = backend_summary(cases, run["exit"])
+        # Confirmation G-N2: recorded BEFORE its teardown, so the stage's seconds are its own.
+        report.add("backend", status, {"postgrest": postgrest, **summary},
+                   cases=cases, runs=[run])
     finally:
         # Measured: PostgREST's pool holds sessions on `infrx_e2`, so a dirtying mutant's
         # re-provision (DROP DATABASE) later in the run is refused while it is up.
         backend_teardown(report)
-    status, summary = backend_summary(cases, run["exit"])
-    report.add("backend", status, {"postgrest": postgrest, **summary},
-               cases=cases, runs=[run])
 
 
 def backend_teardown(report: Report) -> None:
@@ -549,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="1 = nothing that needs a container; 3 = all + the E3B backend "
                              "gate (exits 3 while any backend case is pending)")
     parser.add_argument("--keep", action="store_true",
-                        help="leave the stack running (still only infrx-e2-* containers)")
+                        help=f"leave the stack running (still only {harness.PREFIX}* containers)")
     parser.add_argument("--pull", action="store_true", help="pull the pinned digests first")
     parser.add_argument("--canary", action="store_true",
                         help="also prove an intentional failure is detected")

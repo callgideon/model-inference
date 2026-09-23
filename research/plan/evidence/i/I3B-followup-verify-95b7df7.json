@@ -1,0 +1,291 @@
+{
+ "verdict": "pass",
+ "head": "95b7df7",
+ "reviews": [
+  {
+   "verdict_hint": "fix_required",
+   "findings": [
+    {
+     "id": "DRL-R4-1",
+     "severity": "blocking",
+     "file": "tests/integration/backend/recovery/test_recovery.py",
+     "line": "947-951 (rc10b)",
+     "claim_broken": "rc10b's new comment says the probe is polled 'for the whole READY_S budget, not a fixed one', and its docstring says rollback.sh 'polls it for READY_S'. The round-4 assert (`waited >= 2`) puts only a lower bound on the budget. It kills fixed budgets under 2 s (V1 = i3bm108, +1 s) and a halved budget. A wait_http that ignores its argument and uses a fixed budget of 4 s or more passes every drill. On a real host (READY_S=120) that script exits 4 as soon as the restored gateway needs more than about 5 s. This is DRL-R3-1's mechanism with a larger constant: a drill that passes while rollback.sh would behave otherwise on a real host.",
+     "evidence": "Hand mutant A4 on lib.sh, anchor asserted once: `local deadline=$((SECONDS + $2))` -> `local deadline=$((SECONDS + 5))`. `-k rc10` gives `3 passed, 1 skipped, 13 deselected in 9.76s`, exit 0. A5 (budget capped: `$(( SECONDS + ($2 < 3 ? $2 : 3) ))`) gives `3 passed, 1 skipped` too, but A5 is identical to the real code at READY_S=3 and no finite test can kill it, so it is not part of this finding. I tried the minimal fix in scratch: `assert 2 <= waited < 4`. It kills A4 with `gave up after 4.60 s` / `4.97 s of a 3 s READY_S (302/315 probes)`, 2 failed. The unmutated code passed 3/3 runs with it. Unmutated waited values, 10 samples (5 runs x 2 params, run while a D-mode mutant list was loading the host): 2.31/2.95, 2.32/2.97, 2.32/2.98, 2.31/2.95, 2.33/2.94 s. The max is 2.98, so an upper bound of 4 leaves more than 1 s of slack. The round-3 minimal_fix asked only for the lower bound, so this is partly a round-3 verifier miss. The lane implemented the round-3 fix as written.",
+     "minimal_fix": "In rc10b, replace `assert waited >= 2` with `assert 2 <= waited < 4` and keep the message. Declare a mutant `local deadline=$((SECONDS + 5))` killed at the same line. Reword the comment to 'for READY_S (between 2 and 4 s here), not a fixed budget of 1 s or 5 s+'."
+    },
+    {
+     "id": "DRL-R4-2",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/deploy/lib.sh / tests/integration/backend/recovery/test_recovery.py",
+     "line": "lib.sh:31 (sleep); rc10b :949",
+     "claim_broken": "The poll interval is not pinned. rc10b passes with a wait_http that busy-loops (no sleep) or polls only every READY_S/2. The outcome (exit 4, or success once ready) is still right, so this is cost and latency, not correctness.",
+     "evidence": "A1: `sleep \"${POLL_S:-2}\"` deleted. `-k rc10` gives `3 passed, 1 skipped`. rc10b's probes: 555 in 2.18 s and 754 in 2.97 s. On a real host this is a tight curl loop for up to 120 s next to the restoring gateway. A2: `sleep $(( $2 / 2 ))`. `-k 'rc10b or rc10c'` gives `3 passed`, with 4 probes in 3.04 s for each param. On a real host that is 60 s polls, so a gateway ready at 61 s is only seen at about 120 s.",
+     "minimal_fix": "Optional: add `len(retries) >= 10` to rc10b, which kills A2 (the real code makes 150-195 probes). A busy loop only matters for CPU. Leave it, or bound it with `len(retries) < 400`, which kills A1 at its measured 555-754 probes against a real 190."
+    },
+    {
+     "id": "RST-R4-1",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/recovery/test_restore.py",
+     "line": "425-434 (DAMAGE column_acls*)",
+     "claim_broken": "i3bm106 claims 'a column grant is compared by what it grants'. A grant-option change (w -> w*) has no witness. A projection that strips '*' passes the whole restore suite, although production names the change.",
+     "evidence": "Mutant P2 in pgrestore: `array(select unnest(a.attacl)::text ...)` -> `array(select replace(x::text, '*', '') from unnest(a.attacl) x order by 1)::text`. The full test_restore.py on d3 Supabase gives `27 passed, 1 skipped in 43.51s`, exit 0 (it survives). I added a scratch parameter `column_acls_grantopt`: `grant update (full_name) on public.profiles to authenticated with grant option`, FAMILY -> column_acls. Unmutated it gives `1 passed`, so production names it. Under P2 it dies at test_restore.py:472 `assert set() == {'column_acls'}`.",
+     "minimal_fix": "Add the `column_acls_grantopt` DAMAGE entry (the one statement above plus its FAMILY mapping) and declare P2 as a mutant it kills. Or narrow i3bm106's wording to grantee and privilege."
+    },
+    {
+     "id": "DRL-R4-3",
+     "severity": "nonblocking",
+     "file": "infra/runbooks/pgrestore.py",
+     "line": "318-326 (drift)",
+     "claim_broken": "pgrestore.drift claims to be 'the two detectors (R59-7): a wallet total that disagrees with its ledger or holds'. Every caller asserts `== []` (rc04a :324, bk :272/:700/:742/:842, and the restore check at :370). So a detector that never reports anything passes everything, and rc04a's new 'the runbook's detector finds none' holds vacuously. This predates round 4: i3bm111 pins only 'a reported row fails the drill', not 'drift is reported'.",
+     "evidence": "Mutant M7: `found += conn.execute(` -> `found += [] and conn.execute(` (the detector always returns []). `-k 'rc04a or bk'` over test_recovery.py and test_restore.py on d3 Supabase gives `28 passed, 1 skipped, 16 deselected in 46.99s`, exit 0 (it survives). rc04a's own wallet_reconciliation read does cover the invariant in rc04a (see M5 among the mutants). Only the runbook tool's detection is unpinned.",
+     "minimal_fix": "In rc04a, or in one bk case on a scratch DB, cause a real drift after the zero-drift checks, for example `update infrx.credit_holds set state='released' where request_id=<first>`, and assert `bk.drift(database) != []`. Declare M7 killed there."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "i3bm108 (by hand)",
+     "edit": "lib.sh `  local deadline=$((SECONDS + $2))` -> `+ 1))`",
+     "result": "killed",
+     "killed_by": "rc10b[8001]/[8002] test_recovery.py:951 `AssertionError: gave up after 1.02 s of a 3 s READY_S (64 probes)` / `0.94 s (60 probes)`; rc10c passed"
+    },
+    {
+     "name": "i3bm109 (by hand)",
+     "edit": "lib.sh `until curl ... \"$1\"; do` -> `until curl ... \"$1\" || curl ... \"$1\" || return 1; do`",
+     "result": "killed",
+     "killed_by": "rc10b x2 test_recovery.py:951 `gave up after 0.03 s of a 3 s READY_S (2 probes)`"
+    },
+    {
+     "name": "i3bm110 (by hand, d3 Supabase)",
+     "edit": "pgrestore attacl -> `array(select split_part(x::text, '=', 1) from unnest(a.attacl) x order by 1)::text` (grantees only)",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls_privilege] test_restore.py:471 `assert set() == {'column_acls'}`; bk01f[column_acls] passed"
+    },
+    {
+     "name": "i3bm111 (by hand, d3 Supabase)",
+     "edit": "pgrestore drift `where ledger_drift <> 0 ` -> `= 0 `",
+     "result": "killed",
+     "killed_by": "rc04a test_recovery.py:324 `AssertionError: the reconcile runbook's detector reports drift`"
+    },
+    {
+     "name": "i3bm104 (re-check, by hand)",
+     "edit": "lib.sh `until curl ... \"$1\"; do` -> `... \"$1\" || return 1; do`",
+     "result": "killed",
+     "killed_by": "rc10c test_recovery.py:966 `assert 4 == 0`; rc10b x2 :949 `assert (1 > 1)`"
+    },
+    {
+     "name": "Full I3B list via E3B2's runner (retry)",
+     "edit": "mutants_i3b.py --layer all, private TMPDIR, D=d3 Supabase, on 95b7df7 + origin/codex/e3b-phase2-gate@0924cf2 + IR2-2",
+     "result": "{\"mutants\": 104, \"killed\": 102, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; i3bm33 no-cases; 0 baseline-red. The count equals the declared 104.",
+     "killed_by": "i3bm108/109 :951, i3bm110 test_restore.py:471, i3bm111 :324, i3bm104 :966, i3bm103/106 test_restore.py:471, i3bm107 :295"
+    },
+    {
+     "name": "A1 (mine) busy loop",
+     "edit": "lib.sh delete `    sleep \"${POLL_S:-2}\"`",
+     "result": "SURVIVED rc10 + rc10b x2 + rc10c (3 passed, 1 skipped); 555/754 probes",
+     "killed_by": "none (DRL-R4-2, acceptable: outcome correct)"
+    },
+    {
+     "name": "A2 (mine) poll every READY_S/2",
+     "edit": "lib.sh `sleep \"${POLL_S:-2}\"` -> `sleep $(( $2 / 2 ))`",
+     "result": "SURVIVED (3 passed); 4 probes, 3.04 s",
+     "killed_by": "none (DRL-R4-2)"
+    },
+    {
+     "name": "A3 (mine) budget READY_S-1",
+     "edit": "lib.sh deadline=$((SECONDS + $2 - 1))",
+     "result": "killed 5/5 runs, but narrowly: [8001] 1.36-1.59 s, [8002] 1.94-1.97 s against the bound 2. This is phase luck, not a structural kill. On a 120 s host, 119 vs 120 s does not matter, so it is not a finding",
+     "killed_by": "rc10b test_recovery.py:951"
+    },
+    {
+     "name": "A4 (mine) fixed 5 s budget",
+     "edit": "lib.sh deadline=$((SECONDS + 5))",
+     "result": "SURVIVED rc10 x all (3 passed, 1 skipped in 9.76s)",
+     "killed_by": "none (DRL-R4-1); killed by the proposed `2 <= waited < 4` (4.60/4.97 s)"
+    },
+    {
+     "name": "A5 (mine) budget capped at 3",
+     "edit": "lib.sh deadline=$((SECONDS + ($2 < 3 ? $2 : 3)))",
+     "result": "SURVIVED (equivalent at READY_S=3; no finite test can kill it)",
+     "killed_by": "none (equivalent on the tested domain)"
+    },
+    {
+     "name": "A6 (mine) budget halved",
+     "edit": "lib.sh deadline=$((SECONDS + $2 / 2))",
+     "result": "killed",
+     "killed_by": "rc10b :951 `gave up after 0.06 s` / `0.94 s`"
+    },
+    {
+     "name": "P1 (mine) privilege letters only",
+     "edit": "pgrestore attacl -> `split_part(split_part(x::text, '=', 2), '/', 1)`",
+     "result": "killed by the grantee-swap parameter",
+     "killed_by": "bk01f[column_acls] test_restore.py:471 `assert set() == {'column_acls'}`; [column_acls_privilege] passed"
+    },
+    {
+     "name": "P2 (mine) grant option stripped",
+     "edit": "pgrestore attacl -> `replace(x::text, '*', '')`",
+     "result": "SURVIVED the full test_restore.py (27 passed, 1 skipped); killed by my scratch column_acls_grantopt witness at :472",
+     "killed_by": "none in the lane (RST-R4-1)"
+    },
+    {
+     "name": "M5 (mine) reaper releases the hold",
+     "edit": "0016 recover_job requeue: prepend `update infrx.credit_holds set state = 'released' where request_id = p_id;`",
+     "result": "killed by the round-4 rc04a; SURVIVES the round-3 rc04a (1a7a256: 1 passed)",
+     "killed_by": "rc04a test_recovery.py:323 `(0, 0.00629760, 0.01259520) == (0, 0, 0.01889280)`: DRL-R3-2's new check has real teeth"
+    },
+    {
+     "name": "D1 (mine) drift checks moved before the reaper step",
+     "edit": "test: the wallet_reconciliation + detector block moved above rig.clock.advance",
+     "result": "passes alone (1 passed); with M5 it SURVIVES (1 passed). The lane's placement after the reaper is what kills M5",
+     "killed_by": "n/a (the placement matters and the lane's is correct)"
+    },
+    {
+     "name": "D2 (mine) reconciliation read for the wrong org",
+     "edit": "rc04a `(b.ORG_A,)` -> `(b.ORG_B,)`",
+     "result": "killed",
+     "killed_by": "rc04a :323 `(0, 0, 0) == (0, 0, 0.01889280)`"
+    },
+    {
+     "name": "D3 (mine) (0, 0, any)",
+     "edit": "rc04a `assert drifts == (0, 0, holds)` -> `assert drifts[:2] == (0, 0)`",
+     "result": "SURVIVED (1 passed); equivalent: balance['reserved'] == holds (the same infrx.wallets.reserved_total) and reserved_drift == 0 imply active_holds == holds",
+     "killed_by": "none (does not matter)"
+    },
+    {
+     "name": "M7 (mine) vacuous detector",
+     "edit": "pgrestore drift `found += conn.execute(` -> `found += [] and conn.execute(`",
+     "result": "SURVIVED rc04a + every bk (28 passed, 1 skipped)",
+     "killed_by": "none (DRL-R4-3, predates round 4)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared -q <infrx-impl> /tmp/claude-1000/verify-i3bf-r4-899539 && git fetch -q origin && git checkout -q 95b7df7 && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (0924cf2, which descends from the lane's 5eb7b85); IR2-2: RESIDUAL entries deleted from stack.PENDING, `RESIDUAL: dict[str, str] = {}`, OWNERS kept; commit 635cffb",
+     "exit": 0,
+     "tail": "b6705cd Merge remote-tracking branch 'origin/codex/e3b-phase2-gate' into HEAD; stack.PENDING = ['D5','G2-R1'], RESIDUAL {}"
+    },
+    {
+     "cmd": "make api-env",
+     "exit": 0,
+     "tail": "+ valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "$PY -m pytest -q -rs tests/integration/test_harness.py tests/integration/backend/test_stage.py tests/integration/test_run.py tests/integration/backend/recovery (merge + IR2-2, the merge's tasks.json)",
+     "exit": 0,
+     "tail": "116 passed, 32 skipped, 1 xfailed, 2 warnings in 22.56s. That is 113 + 3: E3B2 0924cf2 adds 3 cases over 5eb7b85 (collect-only 76 vs 79 in the three E files)"
+    },
+    {
+     "cmd": "same, with research/plan/tasks.json from origin/claude/backend-impl@382b625",
+     "exit": 0,
+     "tail": "116 passed, 32 skipped, 1 xfailed, 2 warnings in 21.27s"
+    },
+    {
+     "cmd": "IR2-2 check: run.classify(junit of layer 0) + run.stale_pending with the coordinator's tasks.json; stack/recoverykit vocab",
+     "exit": 0,
+     "tail": "pending {'G2-R1': 1, 'M1-L2': 1, 'I2B-R4': 1} stale= []; stack.PENDING ['D5','G2-R1'], RESIDUAL {}, recoverykit.PENDING ['D5','G2-R1','I2B-R4','M1-L2']; tasks: D5 planned, G2/I2B/D2/D3/M3/W3/G1R implemented. The only literal `pending(\"G2\"` strings are in the mutant texts"
+    },
+    {
+     "cmd": "$D TMPDIR=<private> $PY -m pytest -rs -v tests/integration/backend/recovery (d3 Supabase)",
+     "exit": 0,
+     "tail": "61 passed, 9 skipped, 2 warnings in 59.76s; test_restore.py 27 PASSED + 1 SKIPPED (bk03); rc04a, rc10b[8001]/[8002], rc10c, bk01f[column_acls], [column_acls_privilege] PASSED"
+    },
+    {
+     "cmd": "cd apps/infrx-api && TMPDIR=<private> $PY -m pytest -q -rs tests/i",
+     "exit": 0,
+     "tail": "143 passed in 155.26s (0:02:35)"
+    },
+    {
+     "cmd": "$D TMPDIR=<private> $PY tests/integration/backend/recovery/mutants_i3b.py --layer all --report m-all.json (first attempt, 17:25:18Z)",
+     "exit": 1,
+     "tail": "{mutants 104, killed 78, controls_survived 1, not_killed 25}: i3bm33 no-cases + 24 baseline-red, each ~0.9-1.0 s. A single bk01d reproduced `failed to bind host port 127.0.0.1:55434/tcp: address already in use`; ss showed `TIME-WAIT 127.0.0.1:55434 -> 127.0.0.1:56732` (the E3B2 verification's postgres took 55434 as an ephemeral port). This is P-21. I removed my own Created d3 container (label = my scratch), waited 60 s and retried once"
+    },
+    {
+     "cmd": "same, retry (17:34:09Z-17:45:09Z)",
+     "exit": 1,
+     "tail": "{\"mutants\": 104, \"killed\": 102, \"controls_survived\": 1, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"i3bm33\"]}; 0 baseline-red; m-all2.json sha256 50d4743538e3cf4e"
+    },
+    {
+     "cmd": "hand mutants i3bm108/109/104 + A1-A6 on a second scratch clone, `pytest -k 'rc10b or rc10c'` / `-k rc10`",
+     "exit": 1,
+     "tail": "i3bm108/109 :951 killed; i3bm104 :966 + :949 killed; A1, A2, A4, A5 3 passed (survive); A6 :951 killed"
+    },
+    {
+     "cmd": "rc10b x5 (assert bound raised to 99 to expose waited; unmutated lib.sh)",
+     "exit": 1,
+     "tail": "waited [8001]/[8002]: 2.31/2.95, 2.32/2.97, 2.32/2.98, 2.31/2.95, 2.33/2.94 s; 151-152 / 190-195 probes"
+    },
+    {
+     "cmd": "A3 (READY_S-1) x5",
+     "exit": 1,
+     "tail": "killed 5/5: [8001] 1.59/1.36/1.38/1.36/1.38 s, [8002] 1.96/1.96/1.96/1.97/1.94 s"
+    },
+    {
+     "cmd": "proposed fix `assert 2 <= waited < 4` vs A4, and unmutated x3",
+     "exit": 1,
+     "tail": "A4: 2 failed (4.60 / 4.97 s); fixed-4 budget: 2 passed (not killed); unmutated: 2 passed x3"
+    },
+    {
+     "cmd": "D-mode hand batch (d3 Supabase, private TMPDIR): i3bm110, i3bm111, P1, P2, M5, M7, D2, D3, D1, D1+M5, M5 vs 1a7a256 rc04a, grantopt witness",
+     "exit": 0,
+     "tail": "i3bm110 :471; i3bm111 :324; P1 [column_acls] :471; P2 27 passed 1 skipped (survives); M5 :323; M7 28 passed 1 skipped (survives); D2 :323; D3 1 passed; D1 1 passed; D1+M5 1 passed; M5 vs round-3 1 passed; grantopt unmutated 1 passed, vs P2 :472 killed"
+    }
+   ],
+   "fabrication_check": "Every count, time, line number and quote above comes from command output in this session. Merged head: origin/codex/e3b-phase2-gate@0924cf2, not the lane's 5eb7b85. 0924cf2 descends from 5eb7b85 and adds 3 test_run cases, so layer 0 is 116/32/1xf here against the lane's 113/32/1xf. The +3 is accounted for by collect-only (76 vs 79). I reproduced the lane's other claims: recovery 61/9 (test_restore 27 + 1 skip); tests/i 143; the list is 104 = declared, 102 killed, the control survived, i3bm33 no-cases. The kill sites match: i3bm108/109 :951, i3bm110 :471, i3bm111 :324, i3bm104 :966, i3bm103/106 :471, i3bm107 :295. The by-hand messages match the lane's shape (0.94-1.02 s / 60-64 probes, 0.03 s / 2 probes). The first list attempt hit P-21 (24 baseline-red) on 55434, taken as an ephemeral port by a connection to infrx-e3b2-postgres at 56732. I retried once after 60 s and that run was clean. I did not modify the lane worktree (still at 95b7df7).",
+   "cleanup": "Removed: the scratch clone /tmp/claude-1000/verify-i3bf-r4-899539, the hand-mutant clone /tmp/claude-1000/verify-i3bf-r4-hand (its temporary git worktree from the collect-only comparison went first), the private TMPDIRs v4-tmp and v4-mtmp with their infrx-d3-postgres-55434.lock files, and all v4-* logs, JSON and scripts. I also removed one Created infrx-d3-postgres-supabase container with my checkout label, left by the P-21 collision. No infrx-d3 or i3b container remains, and no volume was created during my window. Untouched: other lanes' containers (infrx-e3b2-*, infrx-d5-*, infrx-d2-*, gideon-*) and the read-only lane worktree codex-i3bf. I used no network, no secrets and no E2 stack."
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [
+  {
+   "id": "DRL-R4-1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "947-951 (rc10b)",
+   "claim_broken": "rc10b's new comment says the probe is polled 'for the whole READY_S budget, not a fixed one', and its docstring says rollback.sh 'polls it for READY_S'. The round-4 assert (`waited >= 2`) puts only a lower bound on the budget. It kills fixed budgets under 2 s (V1 = i3bm108, +1 s) and a halved budget. A wait_http that ignores its argument and uses a fixed budget of 4 s or more passes every drill. On a real host (READY_S=120) that script exits 4 as soon as the restored gateway needs more than about 5 s. This is DRL-R3-1's mechanism with a larger constant: a drill that passes while rollback.sh would behave otherwise on a real host.",
+   "evidence": "Hand mutant A4 on lib.sh, anchor asserted once: `local deadline=$((SECONDS + $2))` -> `local deadline=$((SECONDS + 5))`. `-k rc10` gives `3 passed, 1 skipped, 13 deselected in 9.76s`, exit 0. A5 (budget capped: `$(( SECONDS + ($2 < 3 ? $2 : 3) ))`) gives `3 passed, 1 skipped` too, but A5 is identical to the real code at READY_S=3 and no finite test can kill it, so it is not part of this finding. I tried the minimal fix in scratch: `assert 2 <= waited < 4`. It kills A4 with `gave up after 4.60 s` / `4.97 s of a 3 s READY_S (302/315 probes)`, 2 failed. The unmutated code passed 3/3 runs with it. Unmutated waited values, 10 samples (5 runs x 2 params, run while a D-mode mutant list was loading the host): 2.31/2.95, 2.32/2.97, 2.32/2.98, 2.31/2.95, 2.33/2.94 s. The max is 2.98, so an upper bound of 4 leaves more than 1 s of slack. The round-3 minimal_fix asked only for the lower bound, so this is partly a round-3 verifier miss. The lane implemented the round-3 fix as written.",
+   "minimal_fix": "In rc10b, replace `assert waited >= 2` with `assert 2 <= waited < 4` and keep the message. Declare a mutant `local deadline=$((SECONDS + 5))` killed at the same line. Reword the comment to 'for READY_S (between 2 and 4 s here), not a fixed budget of 1 s or 5 s+'.",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I confirmed the mechanism with code reading and a small experiment. I could not refute it.\n\nCode: rc10b calls rollback_sh with ready_s=3 and POLL_S=0.01. Its only timing assert is `assert waited >= 2` at test_recovery.py:951. The subprocess timeout is 60 s, so nothing bounds the wait from above. lib.sh:27-33 wait_http sets `local deadline=$((SECONDS + $2))`. A version that ignores $2 and uses a constant of 4 or more waits at least 3 s. That clears the lower bound and still exits 1, so rollback.sh still exits 4 and every other rc10b assert holds.\n\nExperiment: I copied wait_http out of the worktree's lib.sh into scratch and stubbed curl to always fail. I ran it at READY_S=3 and POLL_S=0.01, once as is and once with `SECONDS + $2` changed to `SECONDS + 5`.\nCommand: `sed -n '/^wait_http()/,/^}/p' $L > wh.sh; [ $v = A4 ] && sed -i 's/SECONDS + \\$2/SECONDS + 5/' wh.sh; bash -c 'curl(){ return 1; }; POLL_S=0.01; source ./wh.sh; s=$EPOCHREALTIME; wait_http x 3; ...'`\nTail: `orig rc=1 waited=2.144088` / `A4 rc=1 waited=4.993371`.\nA4 gives up at about 5 s, which passes `waited >= 2`. So rc10b's comment (\"for the whole READY_S budget, not a fixed one\") and its docstring (\"polls it for READY_S\") promise more than the assert checks. The unmutated wait of about 2.1 s here, and the verifier's maximum of 2.98 s under load, leave enough room for the proposed `2 <= waited < 4`.\n\nSeverity, rated nonblocking:\n(1) The lane implemented the round-3 minimal fix exactly as written (\"READY_S=3 and elapsed >= 2\"). The declared mutants i3bm108 (+1) and i3bm109 (two tries) are correctly declared and killed at :951. Nothing is misdeclared.\n(2) There is no real-host divergence today. lib.sh at 95b7df7 uses $2, so rollback.sh does poll for READY_S=120. The gap only matters for a hypothetical regression that hardcodes a constant of 4 or more, which is less plausible than the +1 and two-try shapes already killed.\n(3) Both round-3 refuters rated DRL-R3-1 itself nonblocking-if-real. The coordinator log records it as blocking only because of the workflow's non-refuted-means-confirmed rule.\n\nStill worth folding in: the one-line `2 <= waited < 4` tightening, the declared `SECONDS + 5` mutant, and the comment rewording, because the comment currently claims more than the assert pins.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute the mechanism, and the experiment confirms it. I used a git-archive copy of codex-i3bf HEAD 95b7df7 in scratch, ran it with the lane's venv python, removed it afterwards and left the worktree clean. I started no Docker.\n\nWhat the code does:\n- lib.sh:28 is `local deadline=$((SECONDS + $2))`.\n- rc10b (test_recovery.py:951) asserts only `waited >= 2`.\n- The comment at :947 says \"for the whole READY_S budget, not a fixed one\".\n\nA4 is `sed 's/SECONDS + $2/SECONDS + 5/'` on lib.sh. The command `python -m pytest -q -p no:cacheprovider -k \"rc10b or rc10c\" tests/integration/backend/recovery/test_recovery.py` gives `3 passed, 14 deselected in 9.84s`. A4 also survives `pytest -q tests/i/test_scripts.py` (`11 passed in 36.51s`), because tests/i runs with READY_S=1 and only checks the text. No other suite pins the budget from above.\n\nThe proposed fix works. With `assert 2 <= waited < 4`, A4 gives `AssertionError: gave up after 4.96 s of a 3 s READY_S (327 probes)` and `2 failed, 15 deselected in 9.96s`. The real lib.sh passes twice: `2 passed, 15 deselected in 5.61s` and `5.67s`. So the comment overclaims, and a fixed budget of 4 s or more is a surviving mutant.\n\nSeverity is nonblocking:\n1. It does not reopen DRL-R3-1. That finding's claim was about a budget of \"about 1 s whatever its budget\" or two tries. Its minimal fix asked only for the lower bound (`elapsed >= 2`), the lane landed it verbatim, and V1 (i3bm108) and V2 (i3bm109) are both declared and killed at :951.\n2. There is no real-host divergence in the code under test. Production lib.sh is correct and unchanged, and A4 is a hard-coded constant regression that nothing suggests.\n3. No mutant is misdeclared. i3bm108 is `+ 1`, and it is killed as declared.\n4. The docstring already qualifies the bound as \"at least 2 s of wall time\". Only the one-line comment overstates it.\n5. The upper bound trades mutant strength for timing-flake risk: the real give-up lands at about 2.3-3.0 s against a 4 s cap under load.\n\nRound-3's two refuters rated the parent mechanism nonblocking for the same reasons. This is its one-sided extension, so a comment reword, or the cheap upper bound, can land as a nonblocking follow-up.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "DRL-R4-2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/deploy/lib.sh / tests/integration/backend/recovery/test_recovery.py",
+   "line": "lib.sh:31 (sleep); rc10b :949",
+   "claim_broken": "The poll interval is not pinned. rc10b passes with a wait_http that busy-loops (no sleep) or polls only every READY_S/2. The outcome (exit 4, or success once ready) is still right, so this is cost and latency, not correctness.",
+   "evidence": "A1: `sleep \"${POLL_S:-2}\"` deleted. `-k rc10` gives `3 passed, 1 skipped`. rc10b's probes: 555 in 2.18 s and 754 in 2.97 s. On a real host this is a tight curl loop for up to 120 s next to the restoring gateway. A2: `sleep $(( $2 / 2 ))`. `-k 'rc10b or rc10c'` gives `3 passed`, with 4 probes in 3.04 s for each param. On a real host that is 60 s polls, so a gateway ready at 61 s is only seen at about 120 s.",
+   "minimal_fix": "Optional: add `len(retries) >= 10` to rc10b, which kills A2 (the real code makes 150-195 probes). A busy loop only matters for CPU. Leave it, or bound it with `len(retries) < 400`, which kills A1 at its measured 555-754 probes against a real 190."
+  },
+  {
+   "id": "RST-R4-1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_restore.py",
+   "line": "425-434 (DAMAGE column_acls*)",
+   "claim_broken": "i3bm106 claims 'a column grant is compared by what it grants'. A grant-option change (w -> w*) has no witness. A projection that strips '*' passes the whole restore suite, although production names the change.",
+   "evidence": "Mutant P2 in pgrestore: `array(select unnest(a.attacl)::text ...)` -> `array(select replace(x::text, '*', '') from unnest(a.attacl) x order by 1)::text`. The full test_restore.py on d3 Supabase gives `27 passed, 1 skipped in 43.51s`, exit 0 (it survives). I added a scratch parameter `column_acls_grantopt`: `grant update (full_name) on public.profiles to authenticated with grant option`, FAMILY -> column_acls. Unmutated it gives `1 passed`, so production names it. Under P2 it dies at test_restore.py:472 `assert set() == {'column_acls'}`.",
+   "minimal_fix": "Add the `column_acls_grantopt` DAMAGE entry (the one statement above plus its FAMILY mapping) and declare P2 as a mutant it kills. Or narrow i3bm106's wording to grantee and privilege."
+  },
+  {
+   "id": "DRL-R4-3",
+   "severity": "nonblocking",
+   "file": "infra/runbooks/pgrestore.py",
+   "line": "318-326 (drift)",
+   "claim_broken": "pgrestore.drift claims to be 'the two detectors (R59-7): a wallet total that disagrees with its ledger or holds'. Every caller asserts `== []` (rc04a :324, bk :272/:700/:742/:842, and the restore check at :370). So a detector that never reports anything passes everything, and rc04a's new 'the runbook's detector finds none' holds vacuously. This predates round 4: i3bm111 pins only 'a reported row fails the drill', not 'drift is reported'.",
+   "evidence": "Mutant M7: `found += conn.execute(` -> `found += [] and conn.execute(` (the detector always returns []). `-k 'rc04a or bk'` over test_recovery.py and test_restore.py on d3 Supabase gives `28 passed, 1 skipped, 16 deselected in 46.99s`, exit 0 (it survives). rc04a's own wallet_reconciliation read does cover the invariant in rc04a (see M5 among the mutants). Only the runbook tool's detection is unpinned.",
+   "minimal_fix": "In rc04a, or in one bk case on a scratch DB, cause a real drift after the zero-drift checks, for example `update infrx.credit_holds set state='released' where request_id=<first>`, and assert `bk.drift(database) != []`. Declare M7 killed there."
+  }
+ ]
+}

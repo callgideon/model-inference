@@ -114,9 +114,10 @@ def probe_clock(conn) -> dict:
     Three facts, each of which a caller gets wrong if it is not stated:
 
     * the offset really moves `infrx.now()`, the function the migrations default to;
-    * `advance()` RETURNS `infrx.now()`, and `infrx.now()` is STABLE, so within that one
-      statement it is still the PRE-move value. Move the clock in its own statement, then
-      read (E2 round-3 limit 3, now measured rather than asserted in prose);
+    * `advance()` RETURNS the MOVED clock. It used to return the pre-move value (a SQL
+      function reads `infrx.now()`, which is STABLE, in the UPDATE's own snapshot); D2
+      rewrote it as plpgsql, one statement each, so `PgClock.advance` can use the answer.
+      E3B phase 2 re-measured it: `advance_return_lag_s` is ~0, not 3600;
     * the offset is a committed row, not a transaction-local GUC: it survives its statement
       and a rolled-back transaction is what undoes it.
     """
@@ -124,7 +125,7 @@ def probe_clock(conn) -> dict:
     returned = advance_clock(conn, 3600.0)
     read_back, wall = conn.execute(f"select {CLOCK_FUNCTION}, now()").fetchone()
     moved = (read_back - wall).total_seconds()
-    stale = (read_back - returned).total_seconds()
+    lag = (read_back - returned).total_seconds()
     set_clock_offset(conn, 0.0)
     at_rest = clock_delta_s(conn)
     try:
@@ -136,7 +137,7 @@ def probe_clock(conn) -> dict:
         pass
     return {"function": CLOCK_FUNCTION, "offset_table": f"{CLOCK_SCHEMA}.clock",
             "fixture": str(CLOCK_FIXTURE.relative_to(harness.REPO_ROOT)),
-            "moved_s": round(moved, 1), "advance_returned_pre_move_s": round(stale, 1),
+            "moved_s": round(moved, 1), "advance_return_lag_s": round(lag, 1),
             "at_rest_s": round(at_rest, 1),
             "inside_rolled_back_tx_s": round(inside, 1),
             "after_rollback_s": round(clock_delta_s(conn), 1)}
@@ -574,7 +575,329 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", beta_keys),
               "auth.uid() is read from request.jwt.claim.sub, so whoever sets that claim IS "
               "the tenant: it must only ever be set from a verified JWT, never from input"),
-    ]
+    ] + access_rows() + write_rows() + journal_rows()
+
+
+# --------------------------------------------------------------------- access completeness
+#
+# E3B phase 2, item 7 (E2R handback: "the pilot tables ... and the 0005 console views and RPCs
+# have no matrix rows here"). Every relation and every SECURITY DEFINER function in `infrx` and
+# `public` - measured on the migrated database, 0001-0017 - with the API roles that may reach
+# it; each of anon/authenticated/service_role gets a row, so a grant that appears (or goes)
+# fails the row, and an object with no entry fails `test_services`' completeness case. D4's
+# 0017 (D4 request 8) adds no relation: its functions are rows below, and its watermark
+# columns, their CHECK and the terminal-event trigger on `infrx.jobs` are `journal_rows()`.
+#
+# A relation row: `select 1 from <it> limit 0` as the role - the grant alone (schema usage,
+# table/view privilege), independent of the rows and of RLS. A function row:
+# `has_function_privilege(<signature>, 'execute')` as the role; for a browser role an `infrx`
+# function is refused one layer earlier, at the schema, and the row says so.
+API_ROLES = ("anon", "authenticated", "service_role")
+NOBODY, SERVICE, BROWSER = (), ("service_role",), ("authenticated", "service_role")
+
+RELATIONS = {
+    "infrx.attempts": SERVICE,
+    "infrx.audit_entries": SERVICE,
+    "infrx.callback_deliveries": SERVICE,
+    "infrx.callback_destinations": SERVICE,
+    "infrx.capacity_reservations": SERVICE,
+    "infrx.catalog_listings": SERVICE,
+    "infrx.consent_history": SERVICE,
+    "infrx.credit_holds": SERVICE,
+    "infrx.credit_ledger": SERVICE,
+    "infrx.credit_wallet_holds": SERVICE,
+    "infrx.credit_wallet_reconciliation": SERVICE,
+    "infrx.credit_wallets": SERVICE,
+    "infrx.data_access_policies": SERVICE,
+    "infrx.deployment_revisions": SERVICE,
+    "infrx.endpoints": SERVICE,
+    "infrx.feature_flags": SERVICE,
+    "infrx.feedback": SERVICE,
+    "infrx.idempotency": SERVICE,
+    "infrx.job_media": SERVICE,
+    "infrx.job_results": NOBODY,
+    "infrx.jobs": SERVICE,
+    "infrx.judge_budgets": SERVICE,
+    "infrx.judge_reservations": SERVICE,
+    "infrx.judge_runs": SERVICE,
+    "infrx.judge_samples": SERVICE,
+    "infrx.media_objects": SERVICE,
+    "infrx.media_uploads": SERVICE,
+    "infrx.model_versions": SERVICE,
+    "infrx.org_entitlements": SERVICE,
+    "infrx.outbox": SERVICE,
+    "infrx.price_versions": SERVICE,
+    "infrx.provider_memberships": SERVICE,
+    "infrx.provider_orgs": SERVICE,
+    "infrx.rate_card_versions": SERVICE,
+    "infrx.retired_individuals": SERVICE,
+    "infrx.serving_versions": SERVICE,
+    "infrx.signup_denials": SERVICE,
+    "infrx.signup_entitlements": SERVICE,
+    "infrx.signup_identity_claims": SERVICE,
+    "infrx.staged_media": SERVICE,
+    "infrx.stream_chunks": SERVICE,
+    "infrx.wallet_reconciliation": SERVICE,
+    "infrx.wallets": SERVICE,
+    "public.api_keys": BROWSER,
+    "public.calibration_labels": BROWSER,
+    "public.consent_history": BROWSER,
+    "public.console_admin_orgs": BROWSER,
+    "public.console_credit_ledger": BROWSER,
+    "public.console_credit_wallets": BROWSER,
+    "public.console_judge_runs": BROWSER,
+    "public.console_ledger": BROWSER,
+    "public.console_usage": BROWSER,
+    "public.credit_ledger": BROWSER,
+    "public.feedback": BROWSER,
+    "public.models": BROWSER,
+    "public.operator_audit": BROWSER,
+    "public.org_members": BROWSER,
+    "public.org_settings": BROWSER,
+    "public.organizations": BROWSER,
+    "public.profiles": BROWSER,
+    "public.usage_events": BROWSER,
+    "public.wallets": BROWSER,
+}
+
+VIEWS = frozenset({
+    "public.calibration_labels",
+    "public.consent_history",
+    "public.console_admin_orgs",
+    "public.console_credit_ledger",
+    "public.console_credit_wallets",
+    "public.console_judge_runs",
+    "public.console_ledger",
+    "public.console_usage",
+    "public.feedback",
+    "public.operator_audit",
+    "public.org_settings",
+    "public.wallets",
+})
+
+FUNCTIONS = {
+    "infrx.accept_feedback(jsonb)": SERVICE,
+    "infrx.acknowledge_dispatch(jsonb)": SERVICE,
+    "infrx.active_holds(uuid)": SERVICE,
+    "infrx.admission_checks(jsonb,jsonb,jsonb,text,timestamp with time zone)": NOBODY,
+    ("infrx.admission_insert_job(jsonb,jsonb,jsonb,jsonb,timestamp with time zone,"
+     "timestamp with time zone,text,text,text,jsonb,jsonb,numeric)"): NOBODY,
+    "infrx.admission_replay(jsonb,double precision,timestamp with time zone,text)": NOBODY,
+    "infrx.admission_rows(jsonb,jsonb,jsonb,text,timestamp with time zone)": NOBODY,
+    "infrx.admit_credit(jsonb)": NOBODY,
+    "infrx.admit_legacy_usd(jsonb)": NOBODY,
+    "infrx.admit(jsonb)": SERVICE,
+    "infrx.api_keys_identity_guard()": SERVICE,
+    "infrx.append(jsonb)": SERVICE,
+    "infrx.audit_by_idempotency_key(text)": SERVICE,
+    "infrx.bootstrap_operator_key(uuid,text,text,text,text,text)": SERVICE,
+    "infrx.cancel(jsonb)": SERVICE,
+    "infrx.claim_preparation(jsonb)": SERVICE,
+    "infrx.claim(jsonb)": SERVICE,
+    "infrx.consent_guard()": NOBODY,
+    "infrx.credit_ledger_moves_wallet()": SERVICE,
+    "infrx.credit_wallet_holds_moves_wallet()": SERVICE,
+    "infrx.credit_wallets_guard()": SERVICE,
+    "infrx.delete_media_object_if_idle(text,timestamp with time zone)": SERVICE,
+    "infrx.deployment_revisions_guard()": SERVICE,
+    "infrx.dispatch_pending(jsonb)": SERVICE,
+    "infrx.dispatch_snapshot()": SERVICE,
+    "infrx.ensure_wallet()": NOBODY,
+    "infrx.expire_journal(jsonb)": SERVICE,                       # 0017 (D4)
+    "infrx.extend_model_limits()": SERVICE,
+    "infrx.fail_dispatch(jsonb)": SERVICE,
+    "infrx.fence_lease(jsonb,text[],double precision)": NOBODY,
+    "infrx.forbid_truncate()": NOBODY,
+    "infrx.forbid_update_delete()": NOBODY,
+    "infrx.gc_outbox(jsonb)": SERVICE,
+    "infrx.grant_credit(jsonb)": SERVICE,
+    "infrx.grant_signup_credit(uuid,text,text,uuid)": SERVICE,
+    "infrx.heartbeat(jsonb)": SERVICE,
+    "infrx.individual_usd_hold(uuid)": NOBODY,
+    "infrx.is_entitled(uuid,text)": NOBODY,
+    "infrx.job_admission(uuid)": SERVICE,
+    "infrx.jobs_admission_guard()": SERVICE,
+    "infrx.jobs_admission_record_guard()": NOBODY,
+    "infrx.jobs_credit_admission_guard(infrx.jobs)": NOBODY,
+    "infrx.jobs_guard()": NOBODY,
+    "infrx.jobs_no_delete_when_terminal()": NOBODY,
+    "infrx.jobs_pins_guard()": SERVICE,
+    "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
+    "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
+    "infrx.journal_bytes_charged()": NOBODY,
+    "infrx.key_by_hash(text)": SERVICE,
+    "infrx.ledger_moves_wallet()": NOBODY,
+    "infrx.legacy_usd_rollout_hold(uuid)": NOBODY,
+    "infrx.load_work(jsonb)": SERVICE,
+    "infrx.media_uploads_guard()": NOBODY,
+    "infrx.now()": SERVICE,
+    "infrx.outbox_aggregate_tenant()": NOBODY,
+    "infrx.personal_org_binding_guard()": SERVICE,
+    "infrx.prepare(jsonb)": SERVICE,
+    "infrx.provider_memberships_guard()": SERVICE,
+    "infrx.put_result(jsonb)": SERVICE,
+    "infrx.quarantine_hold_credit(uuid,timestamp with time zone)": NOBODY,
+    "infrx.quarantine_hold_legacy_usd(uuid,timestamp with time zone)": NOBODY,
+    "infrx.read_journal(jsonb)": SERVICE,                         # 0017 (D4)
+    "infrx.read_result(uuid,text)": SERVICE,
+    "infrx.record_signup_denial(uuid,text)": NOBODY,
+    "infrx.record_submission(jsonb)": SERVICE,
+    "infrx.recover_job(uuid,timestamp with time zone,integer,double precision)": NOBODY,
+    "infrx.recover(jsonb)": SERVICE,
+    "infrx.release_aged_unknown(uuid,timestamp with time zone)": NOBODY,
+    "infrx.release_dispatch(jsonb)": SERVICE,
+    "infrx.release_hold_credit(uuid)": NOBODY,
+    "infrx.release_hold_legacy_usd(uuid)": NOBODY,
+    "infrx.reopen_dispatch(jsonb)": SERVICE,
+    "infrx.require_feature(text)": SERVICE,
+    "infrx.reserve_judge(jsonb)": SERVICE,
+    "infrx.resolve_admission_pins(text)": SERVICE,
+    "infrx.retire_individual(uuid,text,text,text)": SERVICE,
+    "infrx.retired_wallet_guard()": SERVICE,
+    "infrx.revoke_key(uuid,text,text,text)": SERVICE,
+    "infrx.set_suspension(uuid,boolean,text,text,text,text)": SERVICE,
+    "infrx.staged_media_guard()": NOBODY,
+    "infrx.terminalize_no_usage(uuid,text,text,double precision)": NOBODY,
+    "infrx.terminalize_unstarted(uuid,text)": NOBODY,
+    "infrx.terminalize(jsonb)": SERVICE,
+    "infrx.touch_media_object(text,uuid)": SERVICE,
+    "infrx.usage_pilot_row_matches_job()": NOBODY,
+    "infrx.usage_records(uuid,timestamp with time zone,uuid,integer)": SERVICE,
+    "infrx.verified_user(uuid)": SERVICE,
+    "public.claim_signup_grant(uuid,text,uuid)": SERVICE,
+    "public.handle_new_user()": SERVICE,
+    "public.is_operator()": BROWSER,
+    "public.is_org_member(uuid)": BROWSER,
+    "public.is_org_owner(uuid)": BROWSER,
+}
+
+# SECURITY INVOKER functions a row pins although the completeness case does not list them:
+# 0017's `chunk_doc`, callable only from the SECURITY DEFINER bodies (revoked from everyone).
+INVOKER_FUNCTIONS = {"infrx.chunk_doc(infrx.stream_chunks)": NOBODY}
+
+# 0017's two watermark columns on `infrx.jobs`, as `pg_get_*def` renders them (measured at
+# the D4 merge): one cursor or none, each part >= 1; and the trigger that writes the terminal
+# journal event in the settling transaction, enabled.
+JOURNAL_CHECK = ("CHECK ((((journal_pruned_generation IS NULL) = (journal_pruned_sequence IS "
+                 "NULL)) AND COALESCE(((journal_pruned_generation >= 1) AND "
+                 "(journal_pruned_sequence >= 1)), true)))")
+JOURNAL_TRIGGER = ("CREATE TRIGGER jobs_terminal_journal_event AFTER UPDATE OF settled_at ON "
+                   "infrx.jobs FOR EACH ROW WHEN (((old.settled_at IS NULL) AND "
+                   "(new.settled_at IS NOT NULL) AND (new.journal_reserved_bytes > 0))) "
+                   "EXECUTE FUNCTION infrx.journal_terminal_event()")
+
+
+def journal_rows() -> list[Check]:
+    """D4's 0017 objects on `infrx.jobs` (D4 request 8): the watermark columns per API role
+    (service_role reads them through 0004's table grant; a browser role never reaches the
+    schema), their CHECK and the terminal-event trigger, each pinned to its definition."""
+    rows = [
+        Check("E3B-RLS-0017-watermark-check", "postgres", None,
+              "select pg_get_constraintdef(oid) from pg_constraint where conrelid = "
+              "'infrx.jobs'::regclass and conname = 'jobs_journal_watermark_is_one_cursor'",
+              ("value", JOURNAL_CHECK), "the prune watermark is one cursor or none (0017)"),
+        Check("E3B-RLS-0017-terminal-trigger", "postgres", None,
+              "select pg_get_triggerdef(oid) from pg_trigger where tgrelid = "
+              "'infrx.jobs'::regclass and tgname = 'jobs_terminal_journal_event' "
+              "and tgenabled = 'O'",
+              ("value", JOURNAL_TRIGGER), "the settling UPDATE writes the terminal event (0017)")]
+    for role in API_ROLES:
+        sql = "select journal_pruned_generation, journal_pruned_sequence from infrx.jobs limit 0"
+        rows.append(Check(
+            f"E3B-RLS-0017-watermark-columns-{role}", role, None, sql,
+            ("rows", 0) if role == "service_role" else ("error", PERMISSION_DENIED),
+            f"{role} {'reads' if role == 'service_role' else 'never reaches'} the watermark",
+            message_contains=None if role == "service_role"
+            else "permission denied for schema infrx"))
+    return rows
+
+
+# Review F2 (refuted as a gate hole - D's check_privileges enforces write grants verb by
+# verb - and folded in): the TABLE-level write verbs each API role holds, measured at 0016.
+# anon and authenticated hold none on any relation (authenticated's api_keys/organizations/
+# profiles writes are COLUMN grants, which `has_table_privilege` does not count); service_role
+# holds its schema's default except the immutable registry rows (insert only) and the money
+# and signup relations only SECURITY DEFINER functions write.
+WRITE_VERBS = ("INSERT", "UPDATE", "DELETE", "TRUNCATE")
+SERVICE_WRITES = {
+    "infrx": "INSERT,UPDATE,DELETE", "public": "INSERT,UPDATE,DELETE,TRUNCATE",
+    **dict.fromkeys(("infrx.catalog_listings", "infrx.data_access_policies",
+                     "infrx.deployment_revisions", "infrx.endpoints", "infrx.model_versions",
+                     "infrx.provider_memberships", "infrx.provider_orgs",
+                     "infrx.rate_card_versions", "infrx.serving_versions"), "INSERT"),
+    **dict.fromkeys(("infrx.credit_ledger", "infrx.credit_wallet_holds",
+                     "infrx.credit_wallet_reconciliation", "infrx.credit_wallets",
+                     "infrx.feature_flags", "infrx.job_results", "infrx.retired_individuals",
+                     "infrx.signup_denials", "infrx.signup_entitlements",
+                     "infrx.signup_identity_claims", "infrx.wallets"), ""),
+}
+
+
+def write_rows() -> list[Check]:
+    """Per relation and API role, the table-level write verbs it holds, read as `postgres`
+    (the three-argument form needs no schema usage). A grant that widens or narrows fails."""
+    rows = []
+    for relation in RELATIONS:
+        for role in API_ROLES:
+            expected = (SERVICE_WRITES.get(relation, SERVICE_WRITES[relation.split(".")[0]])
+                        if role == "service_role" else "")
+            verbs = ", ".join(f"'{verb}'" for verb in WRITE_VERBS)
+            rows.append(Check(
+                f"E3B-RLS-W-{relation}-{role}", "postgres", None,
+                f"select array_to_string(array(select v from unnest(array[{verbs}]) v "
+                f"where has_table_privilege('{role}', '{relation}', v)), ',')",
+                ("value", expected),
+                f"{role} holds exactly {expected or 'no'} table-level write on {relation}"))
+    return rows
+
+
+def access_rows() -> list[Check]:
+    rows = []
+    for relation, allowed in RELATIONS.items():
+        schema, name = relation.split(".")
+        for role in API_ROLES:
+            if role in allowed:
+                rows.append(Check(f"E3B-RLS-{relation}-{role}", role, None,
+                                  f"select 1 from {relation} limit 0", ("rows", 0),
+                                  f"{role} holds the grant on {relation} (measured at 0016)"))
+                continue
+            cause = ("schema infrx" if schema == "infrx" and role != "service_role" else
+                     f"{'view' if relation in VIEWS else 'table'} {name}")
+            rows.append(Check(f"E3B-RLS-{relation}-{role}", role, None,
+                              f"select 1 from {relation} limit 0",
+                              ("error", PERMISSION_DENIED),
+                              f"{role} holds no privilege on {relation}",
+                              message_contains=f"permission denied for {cause}"))
+    for function, allowed in {**FUNCTIONS, **INVOKER_FUNCTIONS}.items():
+        for role in API_ROLES:
+            barrier = function.startswith("infrx.") and role != "service_role"
+            rows.append(Check(
+                f"E3B-RLS-{function}-{role}", role, None,
+                f"select has_function_privilege('{function}', 'execute')",
+                ("error", PERMISSION_DENIED) if barrier else ("value", role in allowed),
+                f"{role} {'may' if role in allowed else 'may not'} execute {function}"
+                + (" (the infrx schema refuses first)" if barrier else ""),
+                message_contains="permission denied for schema infrx" if barrier else None))
+    return rows
+
+
+CATALOG_RELATIONS = ("select n.nspname || '.' || c.relname from pg_class c join pg_namespace n "
+                     "on n.oid = c.relnamespace where n.nspname in ('infrx', 'public') "
+                     "and c.relkind in ('r', 'v', 'm', 'p', 'f')")
+CATALOG_FUNCTIONS = ("select p.oid::regprocedure::text from pg_proc p join pg_namespace n "
+                     "on n.oid = p.pronamespace where n.nspname in ('infrx', 'public') "
+                     "and p.prosecdef")
+
+
+def catalog_objects(conn) -> tuple[set[str], set[str]]:
+    """(relations, SECURITY DEFINER functions) of `infrx`/`public` on this database, named
+    exactly as RELATIONS/FUNCTIONS name them (schema-qualified: empty search_path)."""
+    conn.execute("set search_path = ''")
+    try:
+        return ({name for name, in conn.execute(CATALOG_RELATIONS).fetchall()},
+                {name for name, in conn.execute(CATALOG_FUNCTIONS).fetchall()})
+    finally:
+        conn.execute("reset search_path")
 
 
 def run_check(conn, check: Check, fixtures: Fixtures) -> dict:

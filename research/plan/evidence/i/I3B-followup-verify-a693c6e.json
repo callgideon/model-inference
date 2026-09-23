@@ -1,0 +1,172 @@
+{
+ "verdict": "pass",
+ "head": "a693c6e",
+ "reviews": [
+  {
+   "verdict_hint": "pass",
+   "findings": [
+    {
+     "id": "VER-R5-0",
+     "severity": "nonblocking",
+     "file": "(verification process)",
+     "line": "-",
+     "claim_broken": "I did not finish two of the requested steps. Step 5 (the full I3B list, 109 mutants, through E3B2's runner) was still running when the harness required this output. Step 6 (tests/i, 143) was never started, because I ran things one after another to keep rc10b's timing bounds free of host load.",
+     "evidence": "The full-list log (/tmp/claude-1000/verify-i3bf-r5-mall.log) had reached i3bm36 with every mutant so far `killed` and no `exit=` line yet. The lane's T8 (109/107/1 control/i3bm33 no-cases) and T9 (143 passed) are therefore NOT independently confirmed here.",
+     "minimal_fix": "Before integration, rerun `$D TMPDIR=<private> $PY tests/integration/backend/recovery/mutants_i3b.py --layer all` and `cd apps/infrx-api && $PY -m pytest -q tests/i` on a693c6e + origin/codex/e3b-phase2-gate@d0d523f + IR2-2. This is a gap in the verification, not a defect in the lane."
+    },
+    {
+     "id": "DRL-R5-1",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/recovery/test_recovery.py",
+     "line": "959",
+     "claim_broken": "The busy-loop mutant is killed by host speed, not by structure. The upper bound of 400 probes kills i3bm114 (no sleep) only because a busy curl loop on this host manages about 250 probes/s. Separately, a wait_http that ignores POLL_S and sleeps a fixed 0.05 s passes rc10b.",
+     "evidence": "i3bm114 by hand: `565 probes in 2.24 s` / `741 probes in 2.96 s`, killed at :959 with about 40% margin. Unmutated code: 154-161 probes (8001) and 195-198 probes (8002). A POLL_S sleep caps the real code at about 300 probes in 3 s. My V5 (`sleep 0.05`) passed 3 of 3 runs (`2 passed`). On a real host that means polling 40 times more often than POLL_S=2. That is cost only; DRL-R4-2 already classed it as not a correctness issue.",
+     "minimal_fix": "Optional: tighten to `len(retries) < 310` (the ceiling of 3 s / 0.01 s) so a busy loop dies however slow curl is. The V5 class can be left alone."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "i3bm112 (by hand)",
+     "edit": "lib.sh `  local deadline=$((SECONDS + $2))` -> `+ 5))` (anchor count 1)",
+     "result": "killed",
+     "killed_by": "rc10b[8001]/[8002] test_recovery.py:961 `AssertionError: gave up after 4.58 s of a 3 s READY_S (303 probes)` / `4.96 s (327 probes)`; rc10/rc10c passed"
+    },
+    {
+     "name": "i3bm113 (by hand)",
+     "edit": "lib.sh `    sleep \"${POLL_S:-2}\"` -> `    sleep $(( $2 / 2 ))` (anchor count 1)",
+     "result": "killed",
+     "killed_by": "rc10b x2 test_recovery.py:959 `AssertionError: 4 probes in 3.04 s` / `assert 10 <= 4`"
+    },
+    {
+     "name": "i3bm114 (by hand)",
+     "edit": "lib.sh sleep line deleted after the deadline check (anchor count 1)",
+     "result": "killed",
+     "killed_by": "rc10b x2 test_recovery.py:959 `AssertionError: 565 probes in 2.24 s` / `741 probes in 2.96 s` (`assert 565 < 400`)"
+    },
+    {
+     "name": "i3bm115 (by hand, d3 Supabase)",
+     "edit": "pgrestore attacl -> `array(select replace(x::text, '*', '') from unnest(a.attacl) x order by 1)::text` (anchor count 1)",
+     "result": "killed",
+     "killed_by": "bk01f[column_acls_grantopt] test_restore.py:475 `assert set() == {'column_acls'}`; [column_acls] and [column_acls_privilege] passed (`1 failed, 2 passed`)"
+    },
+    {
+     "name": "i3bm116 (by hand, d3 Supabase)",
+     "edit": "pgrestore drift `            found += conn.execute(` -> `            found += [] and conn.execute(` (anchor count 1)",
+     "result": "killed",
+     "killed_by": "rc04a test_recovery.py:331 `AssertionError: the detector missed a released hold` / `assert set() == {'1a1a1a1a-00...000000000001'}`"
+    },
+    {
+     "name": "V1 (mine) detector ignores reserved_drift",
+     "edit": "pgrestore drift: `or reserved_drift <> 0` dropped (ledger_drift only)",
+     "result": "killed",
+     "killed_by": "rc04a test_recovery.py:331 `the detector missed a released hold`. The new witness is a reserved-only drift, so it pins the second half of the predicate"
+    },
+    {
+     "name": "V3 (mine) budget READY_S+1",
+     "edit": "lib.sh `deadline=$((SECONDS + $2 + 1))`",
+     "result": "killed 1 of 3 runs (`4.00 s`, :961); survived 2 of 3. Phase luck, the mirror of the round-4 A3. 121 s vs 120 s does not matter on a host, so this is not a finding",
+     "killed_by": "rc10b[8002] :961 in 1 of 3 runs"
+    },
+    {
+     "name": "V4 (mine) sleep 0.001 (POLL_S ignored, too short)",
+     "edit": "lib.sh `    sleep \"${POLL_S:-2}\"` -> `    sleep 0.001`",
+     "result": "killed 3 of 3",
+     "killed_by": "rc10b x2 :959 `417/420/414 probes in 2.43 s`, `504/504/506 probes in ~2.95 s`"
+    },
+    {
+     "name": "V5 (mine) sleep 0.05 (POLL_S ignored)",
+     "edit": "lib.sh `    sleep \"${POLL_S:-2}\"` -> `    sleep 0.05`",
+     "result": "SURVIVED 3 of 3 (`2 passed`)",
+     "killed_by": "none (DRL-R5-1, cost only)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared -q <infrx-impl> /tmp/claude-1000/verify-i3bf-r5-1965717 && git fetch -q origin && git checkout -q a693c6e && git merge --no-ff -q --no-edit origin/codex/e3b-phase2-gate (d0d523f) && git apply r4-ir22.diff",
+     "exit": 0,
+     "tail": "merge a528951 clean; IR2-2 applied (stack.py RESIDUAL = {}, test_run.py KNOWN_STALE = {})"
+    },
+    {
+     "cmd": "make api-env",
+     "exit": 0,
+     "tail": "uv sync --frozen --all-extras ok"
+    },
+    {
+     "cmd": "$PY -m pytest -q -k rc10b --durations=0 test_recovery.py (x5, unmodified, merge)",
+     "exit": 0,
+     "tail": "5/5 `2 passed, 15 deselected`; call times [8002]/[8001]: 2.99/2.83, 3.00/2.42, 2.99/2.44, 3.00/2.36, 3.00/2.43 s"
+    },
+    {
+     "cmd": "rc10b x5 with one print line added before the asserts (scratch only, reverted)",
+     "exit": 0,
+     "tail": "8001 waited/probes: 2.35/154, 2.41/159, 2.42/159, 2.42/159, 2.45/161; 8002: 3.00/198, 3.00/197, 3.00/198, 3.00/195, 2.99/197. All within [2,4) s and [10,400) probes; 5/5 `2 passed`"
+    },
+    {
+     "cmd": "$D TMPDIR=<private> $PY -m pytest -q -rs test_restore.py (d3 Supabase, 18:17:58Z)",
+     "exit": 0,
+     "tail": "`28 passed, 1 skipped in 42.75s`; skip recoverykit.py:104 no infrx-e2 stack"
+    },
+    {
+     "cmd": "$D $PY -m pytest -v test_recovery.py -k 'rc04a or rc10' (18:18:49Z)",
+     "exit": 0,
+     "tail": "`5 passed, 12 deselected in 14.45s`"
+    },
+    {
+     "cmd": "layer 0 on the merge: $PY -m pytest -q -rs test_harness.py backend/test_stage.py test_run.py backend/recovery (18:21:34Z)",
+     "exit": 0,
+     "tail": "`117 passed, 33 skipped, 1 xfailed, 2 warnings in 19.22s`; PENDING [G2-R1], [M1-L2], [I2B-R4]. 117 = the lane's 116 (on 0924cf2) + the anchor guard test that d0d523f adds"
+    },
+    {
+     "cmd": "$PY -m pytest test_run.py -k test_every_mutant_anchor_occurs_as_declared_on_the_checkout (merge, KNOWN_STALE = {})",
+     "exit": 0,
+     "tail": "`1 passed, 50 deselected in 0.03s` (i3bm57 is fixed; i3bm112-116 anchors occur as declared)"
+    },
+    {
+     "cmd": "layer 0 on the branch head a693c6e (scratch checkout)",
+     "exit": 0,
+     "tail": "`95 passed, 33 skipped, 2 warnings in 14.77s`"
+    },
+    {
+     "cmd": "mutants_i3b.MUTANTS count",
+     "exit": 0,
+     "tail": "109 declared, 109 unique; i3bm112-114 layer 1 select rc10b; i3bm115 layer 2 'bk01f and column_acls_grantopt'; i3bm116 layer 2 rc04a"
+    },
+    {
+     "cmd": "$D TMPDIR=<private> $PY mutants_i3b.py --layer all --report verify-i3bf-r5-mall.json (background)",
+     "exit": -1,
+     "tail": "INCOMPLETE when output was forced: the log had reached i3bm36, every line so far `[killed]`; no exit or summary yet"
+    },
+    {
+     "cmd": "cd apps/infrx-api && $PY -m pytest -q tests/i",
+     "exit": -1,
+     "tail": "NOT RUN (sequenced after the mutant list)"
+    }
+   ],
+   "fabrication_check": "Every count, waited value, probe count and assertion line above is quoted from command output in this session on scratch a693c6e + d0d523f + IR2-2. My results agree with the lane's round-5 claims: i3bm112 at :961 (lane: 4.21 s/276 probes; mine: 4.58/4.96 s), i3bm113/114 at :959, i3bm115 at test_restore.py:475, i3bm116 at :331, test_restore 28/1, and layer 0 on the branch 95/33. Layer 0 on the merge gives 117/33/1xf, not the lane's 116. The difference is E3B2 d0d523f's new anchor guard test; the lane measured on 0924cf2. Two lane claims are NOT independently verified: T8 (the full list, 109/107) and T9 (tests/i 143). I did not claim results for either.",
+   "cleanup": "Incomplete. The full-list mutant run was still going in the background when output was forced. It may still hold a d3 container (infrx-d3-postgres on 55434), the lock /tmp/claude-1000/verify-i3bf-r5-tmp/infrx-d3-postgres-55434.lock and runner temp dirs. Still to remove: the scratch clone /tmp/claude-1000/verify-i3bf-r5-1965717, the private TMPDIR /tmp/claude-1000/verify-i3bf-r5-tmp, /tmp/claude-1000/verify-i3bf-r5-mut.py and verify-i3bf-r5-mall.{log,json}. The coordinator should run `docker rm -f infrx-d3-postgres infrx-d3-valkey 2>/dev/null; rm -rf /tmp/claude-1000/verify-i3bf-r5-*` once the process has exited. Never touched: port 55432, other lanes' containers, the E2 stack and the lane worktree (read-only). Every lib.sh and pgrestore mutation was reverted with git checkout, and the instrumented test file was restored."
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "VER-R5-0",
+   "severity": "nonblocking",
+   "file": "(verification process)",
+   "line": "-",
+   "claim_broken": "I did not finish two of the requested steps. Step 5 (the full I3B list, 109 mutants, through E3B2's runner) was still running when the harness required this output. Step 6 (tests/i, 143) was never started, because I ran things one after another to keep rc10b's timing bounds free of host load.",
+   "evidence": "The full-list log (/tmp/claude-1000/verify-i3bf-r5-mall.log) had reached i3bm36 with every mutant so far `killed` and no `exit=` line yet. The lane's T8 (109/107/1 control/i3bm33 no-cases) and T9 (143 passed) are therefore NOT independently confirmed here.",
+   "minimal_fix": "Before integration, rerun `$D TMPDIR=<private> $PY tests/integration/backend/recovery/mutants_i3b.py --layer all` and `cd apps/infrx-api && $PY -m pytest -q tests/i` on a693c6e + origin/codex/e3b-phase2-gate@d0d523f + IR2-2. This is a gap in the verification, not a defect in the lane."
+  },
+  {
+   "id": "DRL-R5-1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "959",
+   "claim_broken": "The busy-loop mutant is killed by host speed, not by structure. The upper bound of 400 probes kills i3bm114 (no sleep) only because a busy curl loop on this host manages about 250 probes/s. Separately, a wait_http that ignores POLL_S and sleeps a fixed 0.05 s passes rc10b.",
+   "evidence": "i3bm114 by hand: `565 probes in 2.24 s` / `741 probes in 2.96 s`, killed at :959 with about 40% margin. Unmutated code: 154-161 probes (8001) and 195-198 probes (8002). A POLL_S sleep caps the real code at about 300 probes in 3 s. My V5 (`sleep 0.05`) passed 3 of 3 runs (`2 passed`). On a real host that means polling 40 times more often than POLL_S=2. That is cost only; DRL-R4-2 already classed it as not a correctness issue.",
+   "minimal_fix": "Optional: tighten to `len(retries) < 310` (the ceiling of 3 s / 0.01 s) so a busy loop dies however slow curl is. The V5 class can be left alone."
+  }
+ ]
+}

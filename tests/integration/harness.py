@@ -1,8 +1,10 @@
 """Task-local service lifecycle, readiness and fault injection for E2.
 
 Everything here is scoped to one namespace: compose project `infrx-e2`, containers
-`infrx-e2-<service>`, host ports inside E's 55500-55599 range, ClickHouse database
-`infrx_e2`, Valkey key prefix `infrx_e2:`, object prefix `test/e2/`. Every destructive
+`infrx-e2-<service>`, host ports inside E's 55500-55599 range, PostgreSQL database
+`infrx_e2`, Valkey key prefix `infrx_e2:`, object prefix `test/e2/`. `INFRX_E2_NAMESPACE`
+selects another namespace, which moves every one of those names and the whole port block
+together (`NAMESPACES`); unset, every value is E2's own. Every destructive
 helper refuses a container it did not create, because other sessions run containers on
 this host and a teardown that guesses is a teardown that deletes someone else's work.
 
@@ -30,15 +32,10 @@ COMPOSE_FILE = HERE / "compose.yaml"
 API_ROOT = REPO_ROOT / "apps" / "infrx-api"
 MIGRATIONS_DIR = REPO_ROOT / "apps" / "app" / "supabase" / "migrations"
 
-TASK = "e2"
-PROJECT = "infrx-e2"
-PREFIX = f"{PROJECT}-"            # every container name starts with this
-NETWORK = f"{PROJECT}_default"    # compose's default network for this project
-
-# 08 §8 / R48: E's compose range. `tasklocal.local_services("e2")` is the authority;
-# test_harness.py asserts these against it rather than trusting the copy.
-PORT_RANGE = range(55500, 55600)
-PORTS = {
+# 08 §8 / R48: E2's layout inside E's compose range. `tasklocal.local_services(<ns>)` is
+# the authority; test_harness.py asserts every namespace against it rather than trusting
+# the copy.
+E2_PORTS = {
     "postgres": 55532,
     "valkey": 55579,
     "clickhouse_http": 55523,
@@ -46,6 +43,28 @@ PORTS = {
     "s3": 55500,
     "fake_vllm": 55580,          # a host process, not a container (see fake_vllm.py)
 }
+# E3B phase 2: namespace -> offset of its block from E2's. A namespace moves the whole
+# layout, so two checkouts can run the stack at once (e3b2: 56700-56799, E2's +1200).
+NAMESPACES = {"e2": 0, "e3b2": 1200}
+NAMESPACE = os.environ.get("INFRX_E2_NAMESPACE") or "e2"
+if NAMESPACE not in NAMESPACES:
+    raise ValueError(f"INFRX_E2_NAMESPACE={NAMESPACE!r}: expected one of {sorted(NAMESPACES)}")
+
+
+def ports_for(namespace: str) -> dict[str, int]:
+    return {service: port + NAMESPACES[namespace] for service, port in E2_PORTS.items()}
+
+
+def range_for(namespace: str) -> range:
+    return range(55500 + NAMESPACES[namespace], 55600 + NAMESPACES[namespace])
+
+
+TASK = NAMESPACE
+PROJECT = f"infrx-{NAMESPACE}"
+PREFIX = f"{PROJECT}-"            # every container name starts with this
+NETWORK = f"{PROJECT}_default"    # compose's default network for this project
+PORT_RANGE = range_for(NAMESPACE)
+PORTS = ports_for(NAMESPACE)
 
 # Local test credentials. Fixed literals on purpose: an integration run must need no
 # secret, so there is nothing to leak and nothing to forget to unset.
@@ -56,12 +75,12 @@ PG_USER, PG_PASSWORD = "postgres", "infrx-e2-local"
 # D1's `current_database() like 'infrx\_%'` gate on the test clock - production is
 # `postgres`, so that gate is what keeps a movable clock out of it. See
 # `provision_database()` for the two things the copy needs.
-PG_DATABASE = "infrx_e2"
+PG_DATABASE = f"infrx_{NAMESPACE}"
 PG_ADMIN_ROLE = "supabase_admin"     # the image's superuser; `postgres` is not one
 PG_TEMPLATE_SOURCE = "postgres"
 CH_USER, CH_PASSWORD, CH_DATABASE = "infrx_e2", "infrx-e2-local", "infrx_e2"
 S3_ACCESS_KEY, S3_SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
-S3_BUCKET = "infrx-e2"
+S3_BUCKET = PROJECT
 OBJECT_PREFIX = f"test/{TASK}/"
 VALKEY_PREFIX = f"infrx_{TASK}:"
 
@@ -88,7 +107,10 @@ def s3_endpoint() -> str:
 # Where `run.py` leaves what the layer-2 tests need to find the stack it provisioned:
 # the seed and the fixture ids. Outside the repository on purpose - it is run state, not
 # source, and it must never be committed or read by anything but this task.
-STATE_FILE = Path(os.environ.get("TMPDIR", "/tmp")) / f"{PROJECT}-state.json"
+# `INFRX_E2_STATE_FILE` is set by one caller, `mutants.py`, which gives each mutant's run a
+# private TMPDIR (E3B phase 2) and still has to point it at the stack this run provisioned.
+STATE_FILE = Path(os.environ["INFRX_E2_STATE_FILE"]) if os.environ.get("INFRX_E2_STATE_FILE") \
+    else Path(os.environ.get("TMPDIR", "/tmp")) / f"{PROJECT}-state.json"
 
 
 def save_state(state: dict) -> Path:
@@ -205,10 +227,14 @@ def working_dir() -> str:
     return os.environ.get("INFRX_E2_CHECKOUT") or str(COMPOSE_FILE.parent)
 
 
-def compose_env() -> dict[str, str]:
-    """What every `docker compose` invocation must carry. compose.yaml uses `:?`, so a
-    missing value is a refusal rather than an unlabelled resource."""
-    return {"INFRX_E2_CHECKOUT": working_dir()}
+def compose_env(namespace: str | None = None) -> dict[str, str]:
+    """What every `docker compose` invocation must carry: the checkout label, and the
+    namespace's project name and host ports. compose.yaml uses `:?` for each, so a missing
+    value is a refusal rather than an unlabelled resource or a port of another namespace."""
+    namespace = namespace or NAMESPACE
+    return {"INFRX_E2_CHECKOUT": working_dir(), "INFRX_E2_PROJECT": f"infrx-{namespace}",
+            **{f"INFRX_E2_PORT_{service.upper()}": str(port)
+               for service, port in ports_for(namespace).items()}}
 
 
 def _docker_ls(kind: str) -> list[str]:
@@ -277,7 +303,7 @@ def foreign(kind: str) -> list[dict]:
                       "project": labels.get("com.docker.compose.project"),
                       "checkout": other,
                       "why": (f"another checkout's run ({other})" if other
-                              else "no infrx-e2 checkout label: not created by this harness")})
+                              else f"no {PROJECT} checkout label: not created by this harness")})
     return found
 
 
@@ -404,7 +430,7 @@ def _resource_id(kind: str, name: str) -> str:
 
 # --------------------------------------------------------------------- database (R-a)
 
-def provision_database() -> dict:
+def provision_database(database: str = PG_DATABASE) -> dict:
     """`CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres` (r1 review R-a).
 
     Two things the copy needs, both measured on the pinned image:
@@ -423,6 +449,8 @@ def provision_database() -> dict:
     Each statement is its own `-c`: `DROP DATABASE` and `CREATE DATABASE` cannot run inside a
     transaction block, and psql wraps a multi-statement `-c` in one. The workers reconnect
     within seconds, so a lost race is retried rather than reported as a refusal.
+
+    `database` defaults to E2's; E3B phase 2 builds its JobStore template the same way.
     """
     container = assert_ours(container_of("postgres"))
     terminate = (f"select pg_terminate_backend(pid) from pg_stat_activity "
@@ -431,13 +459,13 @@ def provision_database() -> dict:
     for attempt in range(4):
         result = run(["docker", "exec", "-i", container, "psql", "-U", PG_ADMIN_ROLE,
                       "-d", "template1", "-v", "ON_ERROR_STOP=1",
-                      "-c", f"drop database if exists {PG_DATABASE}",
+                      "-c", f"drop database if exists {database}",
                       "-c", terminate,
-                      "-c", (f"create database {PG_DATABASE} "
+                      "-c", (f"create database {database} "
                              f"template {PG_TEMPLATE_SOURCE} owner {PG_USER}")],
                      check=False, timeout=300.0)
         if result.returncode == 0:
-            return {"database": PG_DATABASE, "template": PG_TEMPLATE_SOURCE,
+            return {"database": database, "template": PG_TEMPLATE_SOURCE,
                     "created_by": PG_ADMIN_ROLE, "owner": PG_USER, "attempts": attempt + 1,
                     "statements": ["drop database if exists", "pg_terminate_backend",
                                    "create database … template … owner"]}

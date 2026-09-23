@@ -237,8 +237,9 @@ def test_the_needle_is_searched_in_the_whole_output_not_the_tail():
     """The bug this replaced: node --test prints a failure's detail long before its summary
     block, so a tail-only search reported a perfectly named canary as unnamed."""
     long_output = "E2 canary: intentional\n" + "\n".join(f"filler {i}" for i in range(60))
-    with patched(runner.subprocess, run=lambda *a, **k: _Completed(1, long_output)):
-        result = runner.shell(["true"], cwd=harness.REPO_ROOT, needle="E2 canary")
+    # A real process (shell() runs its own process group since E3B phase 2, review H5).
+    result = runner.shell([sys.executable, "-c", f"print({long_output!r}); raise SystemExit(1)"],
+                          cwd=harness.REPO_ROOT, needle="E2 canary")
     assert result["named"] is True
     assert "E2 canary" not in result["tail"], "the needle really was outside the tail"
 
@@ -468,7 +469,8 @@ def test_compose_always_carries_the_checkout_label_value():
     seen = {}
     with patched(harness, run=lambda argv, **kwargs: seen.update(kwargs) or _Completed(0)):
         harness.compose("ps")
-    assert seen["env"] == {"INFRX_E2_CHECKOUT": harness.working_dir()}
+    assert seen["env"]["INFRX_E2_CHECKOUT"] == harness.working_dir()
+    assert seen["env"] == harness.compose_env(), "and the namespace's project and ports"
     assert "INFRX_E2_CHECKOUT" in harness.COMPOSE_FILE.read_text()
     assert ":?" in harness.COMPOSE_FILE.read_text(), "compose must refuse without the value"
 
@@ -563,7 +565,7 @@ def test_sigterm_tears_down_and_orphans_no_fake_server():
     import signal
     import subprocess as _subprocess
     import time as _time
-    marker = Path(os.environ.get("TMPDIR", "/tmp")) / "infrx-e2-sigterm-drill.json"
+    marker = Path(os.environ.get("TMPDIR", "/tmp")) / f"{harness.PROJECT}-sigterm-drill.json"
     marker.unlink(missing_ok=True)
     port = harness.PORTS["fake_vllm"] + 3
     driver = f"""
@@ -890,3 +892,354 @@ def test_canary_intentional_failure_is_detected_in_the_orchestration_suite():
     if os.environ.get("INFRX_E2_CANARY") == "fail":
         raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
     assert os.environ.get("INFRX_E2_CANARY") in (None, "", "off")
+
+
+def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
+    """E3B phase 2 (I3B request 8): I3B's mutants run in the mutation stage, and every mutant's
+    file lies in a tree the runner copies - `infra/` included, where I3B's rules live."""
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "run_one", lambda mutant, **_: seen.append(mutant.id)
+                        or {"id": mutant.id, "status": "killed"})
+    runner.mutation(runner.Report(), layer="1")
+    # Review H3: on the case's own path, never through the code under test's sys.path side
+    # effect, so a stage that skips I3B's list dies at the subset assertion below.
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
+    import mutants_i3b
+    assert {m.id for m in mutants_i3b.MUTANTS if m.layer == 1} <= set(seen), seen
+    copied = tuple(f"{tree}/" for tree in (*mutants.OWNED_TREES, mutants.API_TREE))
+    assert [m.id for m in mutants.all_mutants() if not m.path.startswith(copied)] == []
+    # I3B R2-A: rc10 runs I2B's deploy scripts (rollback.sh, lib.sh) from the COPY, and
+    # I3B's i3bm94/97/98/104 edit them there - so the copy must carry them.
+    scripts = sorted(path.relative_to(harness.REPO_ROOT).as_posix()
+                     for path in (harness.API_ROOT / "deploy").glob("*.sh"))
+    assert scripts and [path for path in scripts if not path.startswith(copied)] == []
+
+
+# Anchors known stale on THIS tree, each with its owner. Strict: an entry that is no longer
+# stale fails the guard too, so it is removed the day its owner's fix merges.
+KNOWN_STALE: dict[str, str] = {}
+
+
+def test_every_mutant_anchor_occurs_as_declared_on_the_checkout():
+    """Verification GATE-B1: a shared-line edit (e3eefac widened the suites status line) left
+    E2's e2m69 anchored on text that no longer existed - `stale` in the mutation stage and
+    invisible at layer 0. Every mutant of every list the stage runs (E2's, E3B's, I3B's) must
+    find its `before` exactly `occurrences` times in the checkout, known exceptions aside."""
+    import mutants
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
+    import mutants_i3b
+    checked = mutants.all_mutants()
+    stale = {m.id: (harness.REPO_ROOT / m.path).read_text().count(m.before)
+             for m in checked
+             if (harness.REPO_ROOT / m.path).read_text().count(m.before) != m.occurrences}
+    assert {m.id for m in (*mutants.MUTANTS, *mutants_i3b.MUTANTS)} <= {m.id for m in checked}
+    assert set(stale) == set(KNOWN_STALE), f"stale anchors (id: occurrences found): {stale}"
+
+
+def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():
+    """E3B phase 2 (measured: `make api-test` past 1800 s crashed the gate and lost its
+    report): a timed-out run comes back as exit 124 with its output, which the suites stage
+    reports as a failure."""
+    import subprocess
+    import tempfile
+    import time
+    with tempfile.TemporaryDirectory(prefix="e3b2-h5-") as scope:
+        alive = Path(scope) / "grandchild-alive"
+        # Review H5: a grandchild (make -> uv -> pytest) must die with the run, not outlive it.
+        script = ("import subprocess, time; print('started', flush=True); "
+                  f"subprocess.Popen(['sh', '-c', 'sleep 2; touch {alive}']); time.sleep(30)")
+        try:
+            result = runner.shell([sys.executable, "-c", script], cwd=harness.REPO_ROOT,
+                                  timeout=1.0)
+        except subprocess.TimeoutExpired:
+            pytest.fail("a timed-out suite raised out of shell(): the gate loses its report")
+        assert result["exit"] == 124 and "timed out after 1 s" in result["tail"], result
+        time.sleep(2.5)
+        assert not alive.exists(), "a grandchild of the timed-out run outlived it"
+
+
+def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
+    """E3B phase 2, review H1 (R83 pristine baseline): the named cases run once on the
+    UNMUTATED copy first. Red there, the mutant is `baseline-red` - a problem, never a kill -
+    and the edit is not even applied; green there, the mutated run is judged as before."""
+    import mutants
+    mutant = mutants.MUTANTS[2]
+    calls = []
+
+    def fake_pytest(results):
+        def run(root, m, api_root, tmpdir):
+            calls.append((root / m.path).read_text().count(m.before))
+            return results[len(calls) - 1]
+        return run
+
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    # Red both times, so a runner that skipped the baseline verdict would report a KILL here
+    # (and die at the status assertion below, never of an IndexError).
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")] * 2))
+    red = mutants.run_one(mutant, stack_available=False)
+    assert red["status"] == "baseline-red" and "already red" in red["why"], red
+    assert calls == [mutant.occurrences], "the baseline must run on the unmutated copy only"
+    summary = mutants.summarise([red])
+    assert (summary["killed"], summary["problems"]) == (0, [mutant.id])
+
+    calls.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(0, ".\n1 passed in 0.1s\n"),
+                                                         (1, "F\n1 failed in 0.1s\n")]))
+    assert mutants.run_one(mutant, stack_available=False)["status"] == "killed"
+    assert calls == [mutant.occurrences, 0], "baseline unmutated, then the mutated run"
+
+    # Confirmation G-B1/HON-6: a CONTROL red on the unmutated copy is a problem too - neither
+    # a survivor nor silently dropped from both counts.
+    import dataclasses
+    control = dataclasses.replace(mutant, id="red-control", must_survive=True)
+    calls.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest([(1, "F\n1 failed in 0.1s\n")] * 2))
+    red_control = mutants.run_one(control, stack_available=False)
+    assert red_control["status"] == "baseline-red", red_control
+    summary = mutants.summarise([red_control])
+    assert (summary["problems"], summary["controls_survived"]) == (["red-control"], 0), summary
+
+
+def test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind(monkeypatch):
+    """Confirmation G-B1/HON-2 (R83): the pristine baseline is cached per (suite, selector,
+    copy kind). Real pairs span both copy kinds today - (test_observe.py, ob11): i3bm21 with the
+    copied `infrx`, i3bm22 without; (test_recovery.py, rc01) likewise - so a baseline taken
+    without the copied package must never stand in for a mutant that runs against it (the
+    e2m64-66 vacuous-kill shape), nor one selector's baseline for another's."""
+    import dataclasses
+
+    import mutants
+    copied = next(m for m in mutants.MUTANTS if m.id == "e3bm01")   # edits apps/infrx-api/infrx
+    plain = dataclasses.replace(mutants.MUTANTS[2], id="plain", suite=copied.suite,
+                                select=copied.select, cases=())
+    baselines = []
+
+    def fake_pytest(red_unmutated):
+        def run(root, m, api_root, tmpdir):
+            kind = (m.select, api_root != harness.API_ROOT)
+            if (root / m.path).read_text().count(m.before) == m.occurrences:     # unmutated
+                baselines.append(kind)
+                return (1, "F\n1 failed in 0.1s\n") if kind in red_unmutated else \
+                    (0, ".\n1 passed in 0.1s\n")
+            return 1, "F\n1 failed in 0.1s\n"
+        return run
+
+    # The same (suite, selector), two copy kinds; only the copied kind is red unmutated.
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest({(copied.select, True)}))
+    statuses = [mutants.run_one(m, stack_available=False)["status"] for m in (plain, copied)]
+    assert (statuses, len(baselines)) == (["killed", "baseline-red"], 2), (statuses, baselines)
+    # The same suite and copy kind, two selectors; only the second is red unmutated.
+    other = dataclasses.replace(plain, id="other", select=f"{plain.select} or dr02")
+    baselines.clear()
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest({(other.select, False)}))
+    statuses = [mutants.run_one(m, stack_available=False)["status"] for m in (plain, other)]
+    assert (statuses, len(baselines)) == (["killed", "baseline-red"], 2), (statuses, baselines)
+
+
+def test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_files(
+        monkeypatch, tmp_path):
+    """E3B phase 2 (the coordinator, from I3B's lane: the name-based sweep deleted another
+    lane's LIVE mutant copy). A mutant's run gets a private TMPDIR inside its own copy, with
+    the state file pointed back at ours; what it leaks goes with the copy, and whatever another
+    run keeps in the shared temp directory during the run survives - a `<project>-*` copy, and
+    E2's literal `infrx-e2-*` names in every namespace (a live copy and a fake-vLLM log)."""
+    import tempfile
+
+    import mutants
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))       # the "shared" /tmp here
+    foreign = (tmp_path / f"{harness.PROJECT}-e2m54-another-lane",
+               tmp_path / "infrx-e2-i3bm57-another-lane")
+    foreign_log = tmp_path / "infrx-e2-fake-vllm-another-lane.log"
+    seen = {}
+
+    def fake_pytest(root, mutant, api_root, tmpdir):
+        seen["tmpdir"] = tmpdir
+        for copy in foreign:                           # someone else's live copies, mid-run
+            copy.mkdir(exist_ok=True)
+        foreign_log.write_text("theirs")
+        (Path(tmpdir or tempfile.gettempdir()) / "infrx-e2-fake-vllm-leak.log").write_text("x")
+        return 0, ".\n1 passed in 0.1s\n"
+
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", fake_pytest)
+    mutants.run_one(mutants.MUTANTS[2], stack_available=False)   # a tests/integration suite
+    assert all(copy.is_dir() for copy in foreign) and foreign_log.exists(), \
+        "another run's live copy or log was deleted"
+    assert not (tmp_path / "infrx-e2-fake-vllm-leak.log").exists(), \
+        "the mutant's litter landed in the shared temp directory"
+    assert seen["tmpdir"] is not None and not Path(seen["tmpdir"]).exists(), seen
+
+
+def test_a_d_mode_recovery_run_keeps_the_parents_tmpdir_for_the_pgharness_lock(monkeypatch):
+    """I3B R2-B (DR-2): in D mode (INFRX_I3B_PG=d) a recovery suite drives D's pgharness,
+    whose port lock is `gettempdir()/<container>-<port>.lock`. Its mutant run therefore gets
+    NO private TMPDIR, so the child's lock lands in the parent's tempdir with every other run
+    of this TMPDIR; any other suite, or a recovery suite outside D mode, keeps its private one."""
+    import dataclasses
+
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root, tmpdir: seen.append(
+        tmpdir) or (0, ".\n1 passed in 0.1s\n"))
+    template = mutants.MUTANTS[2]                          # any layer-1 tests/integration one
+    recovery = dataclasses.replace(template, suite="tests/integration/backend/recovery/x.py")
+    for mode, mutant in (("d", recovery), ("", recovery), ("d", template)):
+        monkeypatch.setenv("INFRX_I3B_PG", mode)
+        monkeypatch.setattr(mutants, "BASELINES", {})
+        mutants.run_one(mutant, stack_available=False)
+    assert seen[0] is None and seen[1] is None, "D mode: the parent's TMPDIR, baseline too"
+    assert all(tmpdir is not None for tmpdir in seen[2:]), seen
+
+
+def test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run(monkeypatch):
+    """Review H6: the other half of e3bm24's claim - a timed-out `make api-test` (exit 124
+    with the passes it printed before the budget ran out) fails the suites stage and the run."""
+    def fake_shell(argv, **_):
+        timed_out = "api-test" in argv
+        return {"argv": " ".join(argv), "exit": 124 if timed_out else 0,
+                "counts": {"passed": 5}, "seconds": 1.0, "tail": ""}
+    monkeypatch.setattr(runner, "shell", fake_shell)
+    report = runner.Report()
+    runner.suites(report, own_only=False)
+    stage = report.stages[-1]
+    assert (stage["status"], report.exit_code) == (runner.FAIL, 1), stage
+    assert stage["detail"]["nonzero_exit"] == ["make api-test"], stage["detail"]
+
+
+def test_the_report_names_its_tree_its_namespace_and_each_stages_duration():
+    """Review H7: a report is evidence for one commit in one namespace; it says which, and
+    how long every stage took."""
+    import json as _json
+    import subprocess
+    report = runner.Report()
+    report.add("preflight", runner.PASS, "x")
+    payload = _json.loads(report.as_json())
+    head = subprocess.run(["git", "-C", str(harness.REPO_ROOT), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    assert payload["git_head"]["sha"] == head and isinstance(payload["git_head"]["dirty"], bool)
+    assert payload["namespace"] == harness.NAMESPACE
+    assert isinstance(payload["stages"][0]["seconds"], float)
+
+
+def test_the_report_records_the_tree_at_the_start_and_at_the_end(monkeypatch, tmp_path):
+    """Confirmation G-B2: `dirty` is measured, not assumed, and at BOTH ends of the run - a
+    file present when the run starts and gone by its end leaves the start dirty."""
+    import json as _json
+    import subprocess
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
+                        *args], check=True, capture_output=True)
+    git("init", "-q")
+    (tmp_path / "tracked").write_text("x")
+    git("add", "tracked")
+    git("commit", "-q", "-m", "t")
+    head = subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    monkeypatch.setattr(harness, "REPO_ROOT", tmp_path)
+    stray = tmp_path / "untracked"
+    stray.write_text("edited during the run")
+    report = runner.Report()                                  # starts on a dirty tree
+    stray.unlink()                                            # ... restored before the end
+    payload = _json.loads(report.as_json())
+    assert payload["git_head"] == {"sha": head, "dirty": True}, payload["git_head"]
+    assert payload["git_head_end"] == {"sha": head, "dirty": False}, payload["git_head_end"]
+    clean = _json.loads(runner.Report().as_json())
+    assert clean["git_head"] == clean["git_head_end"] == {"sha": head, "dirty": False}
+
+
+def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
+    """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
+    known, attributed set fails the stage - a skip is never a pass."""
+    real_shell = runner.shell                      # before any arm below replaces it
+    # Confirmation G-B3: the SKIPPED line sits mid-output, as in a real run (re.M matters).
+    parsed = runner.shell([sys.executable, "-c", "print('x\\nSKIPPED [3] tests/d/x.py:110: "
+                           "missing optional hook stream\\n1 passed, 3 skipped in 1s')"],
+                          cwd=harness.REPO_ROOT)
+    assert parsed["skips"] == ["missing optional hook stream"], parsed
+    assert parsed["counts"]["skipped"] == 3, parsed
+    # Verification GATE-B2: the COUNT comes from pytest's summary line alone - never from the
+    # `-rs` lines it is cross-checked against - and wherever `skipped` sits in that line.
+    assert runner.counts("x\n1 passed, 3 skipped, 2 xfailed in 1s").get("skipped") == 3
+    named = runner.shell([sys.executable, "-c", "print('FAILED tests/a.py::t1 - boom'); "
+                          "print('ERROR tests/b.py::t2')"], cwd=harness.REPO_ROOT)
+    assert named["failures"] == ["tests/a.py::t1", "tests/b.py::t2"], named
+
+    def stage(skips, skipped=None):
+        def fake_shell(argv, **kw):
+            if "api-test" in argv:
+                assert kw.get("env", {}).get("PYTEST_ADDOPTS") == runner.SUITE_ADDOPTS, kw
+            counts = {"passed": 5, **({"skipped": skipped} if skipped and "api-test" in argv
+                                      else {})}
+            return {"argv": " ".join(argv), "exit": 0, "counts": counts,
+                    "skips": skips if "api-test" in argv else [], "seconds": 1.0, "tail": ""}
+        monkeypatch.setattr(runner, "shell", fake_shell)
+        report = runner.Report()
+        runner.suites(report, own_only=False)
+        return report.stages[-1]
+    known = stage([])
+    assert (known["status"], known["detail"]["unexpected_skips"]) == (runner.PASS, None)
+    # D4 landed its `stream` hook: the skip that was attributed to it is no longer expected.
+    assert stage(["missing optional hook 'stream' (not a pass)"])["status"] == runner.FAIL
+    other = stage(["task-local PostgreSQL unavailable: docker is not installed"])
+    assert other["status"] == runner.FAIL
+    assert other["detail"]["unexpected_skips"] == [
+        "task-local PostgreSQL unavailable: docker is not installed"]
+    # A skip count whose reasons were not read (no `-rs` line parsed) fails the stage too.
+    unread = stage([], skipped=1)
+    assert (unread["status"], unread["detail"]["skips_without_reasons"]) == (
+        runner.FAIL, ["make api-test"]), unread["detail"]
+    # ... measured through the real shell(): a summary skip count and no SKIPPED line at all.
+    def through_real_shell(argv, **kw):
+        text = "x\n3120 passed, 3 skipped, 30 xfailed in 1s" if "api-test" in argv else \
+            "1 passed in 0.1s"
+        result = real_shell([sys.executable, "-c", f"print({text!r})"], cwd=harness.REPO_ROOT)
+        return {**result, "argv": " ".join(argv)}
+    monkeypatch.setattr(runner, "shell", through_real_shell)
+    report = runner.Report()
+    runner.suites(report, own_only=False)
+    measured = report.stages[-1]
+    assert (measured["status"], measured["detail"]["skips_without_reasons"]) == (
+        runner.FAIL, ["make api-test"]), measured["detail"]
+
+
+def test_a_red_make_target_names_its_failures_and_its_skips(tmp_path):
+    """Confirmation G-N1: a real pytest run under the make targets' options (`PYTEST_ADDOPTS`)
+    names every failing case with its first line AND every skip reason - `-rs` alone replaced
+    pytest's default `-rfE`, so a red api-test named no failure."""
+    suite = tmp_path / "test_red.py"
+    suite.write_text("import pytest\n\ndef test_ok():\n    pass\n\n"
+                     "def test_red():\n    assert 1 == 2, 'boom'\n\n"
+                     "def test_skip():\n    pytest.skip('a reason')\n")
+    result = runner.shell([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           str(suite)], cwd=harness.REPO_ROOT,
+                          env={"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS})
+    assert [case.rsplit("/", 1)[-1] for case in result["failures"]] == [
+        "test_red.py::test_red"], result
+    assert [line.rsplit("/", 1)[-1] for line in result["failure_lines"]] == [
+        "test_red.py::test_red - AssertionError: boom"], result
+    assert result["skips"] == ["a reason"], result
+
+
+def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):
+    """Found by the pristine baseline (review H1): tests/d spawns children with
+    PYTHONPATH=<its own api root>, so in a copy without `infrx` its cases failed UNMUTATED and
+    e2m64-66 were counted killed for nothing. A mutant whose suite lives under apps/infrx-api
+    now runs with the package copied beside it."""
+    import mutants
+    seen = []
+    monkeypatch.setattr(mutants, "BASELINES", {})
+    monkeypatch.setattr(mutants, "_pytest", lambda root, m, api_root, tmpdir: seen.append(
+        (api_root, (api_root / "infrx").is_dir())) or (0, ".\n1 passed in 0.1s\n"))
+    mutant = next(m for m in mutants.MUTANTS if m.id == "e2m64")
+    mutants.run_one(mutant, stack_available=False)
+    assert seen and all(root != harness.API_ROOT and has_infrx for root, has_infrx in seen), seen

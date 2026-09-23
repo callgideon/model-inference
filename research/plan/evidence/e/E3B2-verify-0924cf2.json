@@ -1,0 +1,713 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "head": "0924cf2",
+ "reviews": [
+  {
+   "lens": "gate",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Everything here comes from my own runs at 0924cf2: the gate report JSON, the suites-stage JSON, layer 0, the two merge scratches, the anchor scan, and every hand mutant with its death line. The one exception is the lane's artefact hashes, which I recomputed from the scratchpad files and which match. Two things deviate from the requested procedure. (1) I ran the gate with --only-suites, because the gate's own make api-test starts infrx-d1-postgres on 55432, which this brief forbids, and INFRX_D_TASK=e3b2 collides with E2's postgres on 56732 while the stack is up. I ran the suites stage separately after teardown instead (INFRX_D_TASK=e3b2, CORPUS_CACHE exported). (2) That api-test run (tests/d relay drills) also created, and its harness removed, an infrx-d2-valkey container on 55463. vkstore uses that fixed name unless INFRX_D2_VALKEY_* is set. I did not anticipate it, and I disclose it here. It was created by my run under its own checkout label. No such container existed before, and none remains (`docker ps -a` shows no d2-valkey). The 3 W reds in api-test are caused by my private deep TMPDIR (they pass with the default TMPDIR) and are not an E3B finding. Not re-derived: the lane's D drill copy on both images, and the scratch merge at 7ed6993 (I merged into the newer 88feb1f and the newer I3B head 95b7df7).",
+   "cleanup": "Removed:\n- my gate's containers infrx-e3b2-{clickhouse,postgres,s3,valkey} and infrx-e3b2rest-postgrest (the gate's teardown: 'removed 4, foreign []')\n- the transient D-harness and vkstore containers of the suites run (removed by their own harnesses)\n- the scratch clones /tmp/claude-1000/verify-e3b2-gate-643326, -mut-643326 and -merge-643326\n- the work, report and TMPDIR directories /tmp/claude-1000/verify-e3b2-gate-work-643326, -mtmp-643326 and -xtmp-643326, which held every lock file my runs created (infrx-e3b2-postgres-56732.lock, infrx-d2-valkey-55463.lock) and the state file\n\nChecks afterwards:\n- `docker ps -a | grep -E 'e3b2|d2-valkey|d1-postgres|dharness'` is empty\n- `ls /tmp/claude-1000/verify-e3b2-gate-*` finds nothing\n- the lock files that remain in /tmp are other lanes' (d1-d5), and I did not touch them\n\nI never wrote to the codex-e3b2 or infrx-impl worktrees: both `git status` are clean. I never used port 55432 and never touched another lane's containers.",
+   "mutants": [
+    {
+     "name": "e3bm44",
+     "edit": "key = (mutant.suite, mutant.select)",
+     "result": "killed: 1 failed; tests/integration/test_run.py:1015: AssertionError (lane's line)",
+     "killed_by": "test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind"
+    },
+    {
+     "name": "e3bm45",
+     "edit": "key = 0",
+     "result": "killed: test_run.py:1015: AssertionError",
+     "killed_by": "test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind"
+    },
+    {
+     "name": "e3bm46",
+     "edit": "\"baseline-red\" dropped from summarise's problem tuple",
+     "result": "killed: test_run.py:984: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "e3bm47",
+     "edit": "\"dirty\": False",
+     "result": "killed: test_run.py:1131: AssertionError",
+     "killed_by": "test_the_report_records_the_tree_at_the_start_and_at_the_end"
+    },
+    {
+     "name": "e3bm48",
+     "edit": "git_head taken at as_json time for both",
+     "result": "killed: test_run.py:1131: AssertionError",
+     "killed_by": "test_the_report_records_the_tree_at_the_start_and_at_the_end"
+    },
+    {
+     "name": "e3bm49",
+     "edit": "re.M dropped from SKIPPED findall",
+     "result": "killed: test_run.py:1144: AssertionError",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "e3bm50",
+     "edit": "unread removed from the suites FAIL condition",
+     "result": "killed: test_run.py:1172: AssertionError",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "e3bm51",
+     "edit": "dr11's stack.pending replaced by a no-op lambda",
+     "result": "killed: backend/test_stage.py:185: Failed (DID NOT RAISE)",
+     "killed_by": "test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task"
+    },
+    {
+     "name": "e3bm52",
+     "edit": "(\"implemented\",) only",
+     "result": "killed: backend/test_stage.py:157: AssertionError",
+     "killed_by": "test_a_pending_id_naming_a_merged_task_fails_the_stage"
+    },
+    {
+     "name": "e3bm53",
+     "edit": "SUITE_ADDOPTS = \"-rs\"",
+     "result": "killed: test_run.py:1187: AssertionError",
+     "killed_by": "test_a_red_make_target_names_its_failures_and_its_skips"
+    },
+    {
+     "name": "e3bm12 / e3bm27 / e3bm35 / e3bm40 / e3bm41 / e3bm42 / e3bm43 (re-checked)",
+     "edit": "lane's declared edits",
+     "result": "all killed: test_stage.py:87, test_stage.py:157, test_run.py:1165, test_stage.py:192, test_stage.py:199, test_run.py:918, test_run.py:1076 (all AssertionError; line numbers moved by the round-3 additions)"
+    },
+    {
+     "name": "V1 baseline key with copy kind, without selector",
+     "edit": "key = (mutant.suite, api_root != harness.API_ROOT)",
+     "result": "killed: test_run.py:1022: AssertionError (the selector arm)",
+     "killed_by": "test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind"
+    },
+    {
+     "name": "V2 control arm: red control reported SURVIVED",
+     "edit": "run_one baseline-red branch returns status 'SURVIVED' if must_survive",
+     "result": "killed: test_run.py:982: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "V3 control arm: baseline-red control counted as survived",
+     "edit": "controls = [... r['status'] in ('SURVIVED','baseline-red')]",
+     "result": "killed: test_run.py:984: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "V4 git_head_end equal to start by construction",
+     "edit": "\"git_head_end\": self.head",
+     "result": "killed: test_run.py:1132: AssertionError",
+     "killed_by": "test_the_report_records_the_tree_at_the_start_and_at_the_end"
+    },
+    {
+     "name": "V5 skip count parsed from the wrong line",
+     "edit": "counts(): (\"skipped\", r\"^SKIPPED \\[(\\d+)\\]\")",
+     "result": "SURVIVED: 1 passed, 49 deselected, exit 0 (GATE-B2)"
+    },
+    {
+     "name": "V13 skip count only when followed by ' in'",
+     "edit": "counts(): r\"(\\d+) skipped in\"",
+     "result": "SURVIVED: exit 0 (GATE-B2; misses '3 skipped, 30 xfailed in')"
+    },
+    {
+     "name": "V6 unread keyed on the failed count",
+     "edit": "run['counts'].get('failed') in unread",
+     "result": "killed: test_run.py:1172: AssertionError"
+    },
+    {
+     "name": "V7 failure_lines truncated at 80 columns (COLUMNS removed)",
+     "edit": "drop \"COLUMNS\": \"400\" from shell env",
+     "result": "killed: test_run.py:1189: AssertionError",
+     "killed_by": "test_a_red_make_target_names_its_failures_and_its_skips"
+    },
+    {
+     "name": "V8 failure_lines keeps only the id",
+     "edit": "r\"^((?:FAILED|ERROR) \\S+)\"",
+     "result": "killed: test_run.py:1189: AssertionError"
+    },
+    {
+     "name": "V9 -rfEs default loses s",
+     "edit": "SUITE_ADDOPTS = \"-rfE\"",
+     "result": "killed: test_run.py:1191: AssertionError"
+    },
+    {
+     "name": "V11 make targets drop PYTEST_ADDOPTS",
+     "edit": "env={} for the make targets",
+     "result": "killed: AssertionError raised in the fake shell (test_run.py:1159 via run.py:433)"
+    },
+    {
+     "name": "V10 backend suite on bare -rs",
+     "edit": "backend shell argv SUITE_ADDOPTS -> \"-rs\"",
+     "result": "SURVIVED: 25 passed (GATE-N1)"
+    },
+    {
+     "name": "V12 _is_recovery substring",
+     "edit": "return \"recovery\" in case",
+     "result": "SURVIVED: 3 passed (GATE-N2)"
+    },
+    {
+     "name": "e2m69 equivalent re-anchored by hand",
+     "edit": "drop `silent` from the current suites FAIL line",
+     "result": "killed: test_run.py:334: AssertionError (the invariant holds; only the registered anchor is stale)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "docker ps -a --format {{.Names}} | grep e3b2 ; ss -ltn in 56700-56799",
+     "exit": 1,
+     "tail": "empty; no listener in the block (only infrx-d3/d5-postgres-supabase, infrx-d2-postgres and gideon-migration-order-test-* were present, none touched)"
+    },
+    {
+     "cmd": "git clone --shared ... /tmp/claude-1000/verify-e3b2-gate-643326 && git checkout 0924cf2 && make api-env && (apps/app) pnpm install --frozen-lockfile --offline",
+     "exit": 0,
+     "tail": "uv sync ok; pnpm 'Done in 2.5s'"
+    },
+    {
+     "cmd": "TMPDIR=<private> INFRX_E2_NAMESPACE=e3b2 INFRX_Q_VALKEY_PORT=56761 CORPUS_CACHE=/home/rey/workspace/rey/code/model-inference/.claude/corpus-cache python tests/integration/run.py --layer 3 --canary --only-suites --report l3-0924cf2.json (detached, 17:16:16Z, 601.1 s). --only-suites was used because a full make api-test inside the gate uses infrx-d1-postgres:55432, which this brief forbids, and INFRX_D_TASK=e3b2 collides with E2's own postgres on 56732 while the stack is up",
+     "exit": 1,
+     "tail": "git_head {sha 0924cf260b5e2364802513102c2de713200a6e19, dirty false}; git_head_end {same sha, dirty false}; ns e3b2. Seconds: preflight 3.4, services 16.4, migrate 0.4, rls 0.6, backend 59.7, backend-teardown 0.3, engine 1.2, suites 111.3, mutants 391.4, canary 4.0, backend-teardown 0.0, teardown 12.4 (backend recorded at 17:17:37 before its teardown). migrate 0001_init..0017_stream_journal (17 files); rls 696 cases failed null; backend FAIL {passed 99, pending 17, failed 11, stale_pending null, pending_by_id D2 1 D3 1 D5 12 G1R 1 G2 1 G2-R1 11 I2B 1 M3 1 W3 1}, run counts 99 passed/3 failed/17 skipped/8 errors; failed_cases = i3b mutant_list, rc10, bk01_a, 8x bk01f; detected db03-db11 incl db08b + bk01b/c/d; the backend run's failure_lines (11) name them: 'FAILED ...test_mutant_list_i3b.py::test_i3b_mutant_list_is_well_formed - AssertionError: i3bm57', 'FAILED ...test_recovery.py::test_i3b_rc10_... - Failed: I2B's rollback exists (['rollback.sh']): drive it through a rollback drill now', 'FAILED ...test_restore.py::test_i3b_bk01_a_... - assert [\"relations d...alse, '{}')]\"] == []', 8x 'ERROR ...bk01f[...] - assert [...] == []'; engine PASS 8; suites FAIL: tests/integration 206 passed/3 failed/20 skipped/8 errors, the same 11; mutants FAIL {205, killed 187, controls_survived 4 (e2c01, e2c02, e3bc01, i3bc01), not_killed 14}, problems e2m69 (STALE) + i3bm57 (stale) + i3bm40,41,42,48,49,60-66 (baseline-red); e3bm 53/53 killed, e2m 70/71 killed; canary PASS; teardown PASS, 4 removed, foreign []. report sha256 0bbfad08ef69f16e, log f933612d33758654"
+    },
+    {
+     "cmd": "after teardown: the suites stage itself (run.suites(Report(), own_only=False)) with TMPDIR=<private> INFRX_E2_NAMESPACE=e3b2 INFRX_D_TASK=e3b2 CORPUS_CACHE=<main>/.claude/corpus-cache",
+     "exit": 0,
+     "tail": "stage FAIL 1179.8 s; git_head/git_head_end 0924cf2 dirty false; tests/integration (layer 0) 144 passed/2 failed/91 skipped (i3bm57 list, rc10 with messages); make api-test exit 2: 3117 passed, 3 failed, skips [], so skips_without_reasons null and unexpected_skips null (the corpus cache was found through CORPUS_CACHE); failure_lines name tests/w/test_serving.py perf_pilot x3 'AssertionError: run=w3-L1-... repo_sha=unknown' (TMPDIR-path sensitivity: rerun with the default TMPDIR gives 8 passed three times, and it is red again under the private TMPDIR); console-test node_pass 289 fail 0; bench-test 67 passed. sha c746c64f8fc8bb6c"
+    },
+    {
+     "cmd": "pytest -q tests/integration/test_run.py tests/integration/backend/test_stage.py (0924cf2)",
+     "exit": 0,
+     "tail": "60 passed in 11.82s"
+    },
+    {
+     "cmd": "layer 0 at 0924cf2: INFRX_E2_NAMESPACE=e3b2 COLUMNS=400 pytest -q -rfE tests/integration",
+     "exit": 1,
+     "tail": "2 failed, 144 passed, 91 skipped, 1 xfailed (i3bm57 list case, rc10), matching the lane's R3-2"
+    },
+    {
+     "cmd": "merge scratch: origin/claude/backend-impl@88feb1f + merge --no-ff 0924cf2 (clean) + ir1-r2.diff + r31-dr04.diff (r93.diff: 'patch failed: .../fakes/state.py:1229'); layer 0",
+     "exit": 1,
+     "tail": "2 failed, 145 passed, 91 skipped (I3B's two); PENDING [D5,G2-R1] x9, [G2-R1,D5], [G2-R1], [G1R,G2], [D2,D3], [M3], [W3,I2B]"
+    },
+    {
+     "cmd": "+ merge origin/codex/i3b-followup@95b7df7 (clean) + r31-i3b-residual.diff (RESIDUAL = {}); layer 0",
+     "exit": 0,
+     "tail": "152 passed, 98 skipped, 2 warnings; PENDING [D5,G2-R1] x9, [G2-R1,D5], [G2-R1] x2, [I2B-R4], [M1-L2]"
+    },
+    {
+     "cmd": "anchor-count scan of all_mutants() on 0924cf2 and on the merged tree",
+     "exit": 0,
+     "tail": "0924cf2: 205 mutants, stale [('e2m69',0,1), ('i3bm57',0,1)]; merged: 231 mutants, stale [('e2m69',0,1)]"
+    },
+    {
+     "cmd": "mutants.py --only e2m69 (0924cf2)",
+     "exit": 1,
+     "tail": "[        stale] e2m69  E2R item 4: a suite that reported no tests at all fails the run"
+    },
+    {
+     "cmd": "hand-mutant driver (apply one edit, run its selector, restore) for e3bm44-53, 12, 27, 35, 40-43 and V1-V13",
+     "exit": 0,
+     "tail": "every lane mutant killed at an AssertionError/Failed line; V5, V10, V12, V13 survived (see the mutants table); the clone was verified clean after each run"
+    },
+    {
+     "cmd": "sha256 of the lane's round-2b/2c/3 artefacts",
+     "exit": 0,
+     "tail": "all match the evidence: r3-run-stage 5a866b3bc5a96d64, r3-layer0 000653e69636d924, r3-merge-layer0 e496d3cda203e36a, r3-merge-layer0b 522c88da31e43788, r3-merge-i3b-layer0 c948e3862d719bdc, r3-only affa43939b536c45 (15 killed), r3-shape 341814ae54b327c7, r2c-* f6d85586/c6eeb585/cfd9db61, r31-* 1f03b05f/5763acb9/4f346281/47af590c/414ca498/e5dd84e4/ff2e2c18, ir1-r2 23d17193, r93 bce25ab6"
+    }
+   ]
+  },
+  {
+   "lens": "runner",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count and kill line here comes from my own runs in scratch clones, except the log-hash check, which recomputed the lane's own files.\n\n**Reproduced from the evidence:** R3-1 (60 passed), R3-2 (2/144/91/1xf), R3-6 (151/97/1xf, reproduced exactly with I3B 1a7a256 and no IR2-1), and R3-7 (--only, all killed). R3-8's death lines match for e3bm44–53. The dr04 IR2-3 behaviour is red without the deletion and green with it. fa17b96 was committed red and fixed by 4c21b3b, as the evidence states. The log and diff sha256 prefixes all match. HON-8 names an owner: \"F fakes follow-up 2\", track F, after a coordinator ruling.\n\n**HON-5 skip taxonomy:** it matches a grep of the skip sites under apps/infrx-api/tests. The sites are test_parity:113 (corpus cache); the tests/d and tests/q skipif and skip calls (task-local PostgreSQL/Valkey unavailable, from docker, psycopg or valkey unavailable); the conformance optional-hook skips in two phrasings; and test_cost:489 (judge extra). The psycopg and valkey-client import variants are not listed separately in the evidence, which is minor.\n\n**Counts that differ, and why:** my merge base is the current head 382b625, not 7ed6993. The current I3B head is 95b7df7, not 1a7a256. So the merged-tree counts are 145 passed with IR2-1 (the lane's 144 + 1xf without it), and 152/98 with I3B 95b7df7 + IR2-2. The IR2-1 suite gives 1075, where the lane's 1070 was measured at f97bfb7.\n\n**Not re-derived:** anything that needs the E2 stack (layer 2 or 3, the live drills), and I3B's recovery-list and D-suite mutants.\n\n**Namespace:** layer 0 on the first merge ran with ns e3b2. Later runs used ns e2 so they would not share ports with a concurrent gate verifier's infrx-e3b2-* stack (checkout /tmp/claude-1000/verify-e3b2-gate-643326). I never touched that stack.\n\n**Not claimed by the lane:** e2m69 is stale. The lane's round-3 runs never ran the whole list.",
+   "cleanup": "Removed:\n- all three scratch clones: /tmp/claude-1000/verify-e3b2-runner-660177, -merge-909607 and -rev-<pid>\n- their private TMPDIRs (.tmp), which held my locks infrx-verify-e3b2-runner-postgres-55591.lock and infrx-d1-postgres-55432.lock\n- the hm/spec/probe/only/l1 files and the path files\n\n`ls -d /tmp/claude-1000/verify-e3b2-runner*` now finds nothing. `docker ps -a | grep -E 'verify-e3b2-runner|infrx-d1'` is empty: pgharness created and removed infrx-verify-e3b2-runner-postgres on 55591. No Valkey container was started (port 55592 was only reserved) and the decoy port 55593 was never used.\n\n**Rule deviation:** my IR2-1 count run (test_harness.py + apps/infrx-api/tests/contracts) was meant to deselect test_v1_projection_pg. The --deselect path did not match, so the projection file ran under the default INFRX_D_TASK=d1. pgharness took its lock in my private TMPDIR, created its own infrx-d1-postgres on 127.0.0.1:55432 at about 17:28:08Z, and removed it. No infrx-d1-postgres container existed before or after. The shared /tmp/infrx-d1-postgres-55432.lock (pid 635585, a d5-verify lane, 17:14) was unheld (flock -n succeeded), so no live lane was using that port. This still breaks the 'never port 55432' rule, and I am reporting it here.\n\n**Not touched:**\n- the codex-e3b2 and infrx-impl worktrees: `git status --short` is 0 lines in both\n- the lane scratchpad/e3b2 (read only)\n- infrx-e3b2-* (the concurrent gate verifier's), infrx-d2/d3/d5 and gideon-*\n- any hosted project, AWS, the box and all secrets",
+   "mutants": [
+    {
+     "name": "C1/e3bm44",
+     "edit": "key = (mutant.suite, mutant.select)",
+     "result": "killed",
+     "killed_by": "test_run.py:1015: AssertionError (test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind)"
+    },
+    {
+     "name": "hm15/e3bm45",
+     "edit": "key = 0",
+     "result": "killed",
+     "killed_by": "test_run.py:1015: AssertionError"
+    },
+    {
+     "name": "C2/e3bm46",
+     "edit": "drop \"baseline-red\" from summarise's problem tuple",
+     "result": "killed",
+     "killed_by": "test_run.py:984: AssertionError"
+    },
+    {
+     "name": "V1 (own)",
+     "edit": "key = (mutant.suite, api_root != harness.API_ROOT), i.e. no selector",
+     "result": "killed",
+     "killed_by": "test_run.py:1022: AssertionError"
+    },
+    {
+     "name": "V2 (own)",
+     "edit": "summarise bad: `... \"baseline-red\")) and not (must_survive and status == baseline-red)` (the control arm swallows red controls)",
+     "result": "killed",
+     "killed_by": "test_run.py:984: AssertionError"
+    },
+    {
+     "name": "V3 (own)",
+     "edit": "controls counts status in (SURVIVED, baseline-red)",
+     "result": "killed",
+     "killed_by": "test_run.py:984: AssertionError"
+    },
+    {
+     "name": "V4 (own)",
+     "edit": "run_one: `if red is not None and not mutant.must_survive:`",
+     "result": "killed",
+     "killed_by": "test_run.py:982: AssertionError"
+    },
+    {
+     "name": "C8/e3bm47",
+     "edit": "\"dirty\": False",
+     "result": "killed",
+     "killed_by": "test_run.py:1131: AssertionError"
+    },
+    {
+     "name": "e3bm48 (end-only git_head)",
+     "edit": "\"git_head\": git_head() in as_json",
+     "result": "killed",
+     "killed_by": "test_run.py:1131: AssertionError"
+    },
+    {
+     "name": "V5 (own)",
+     "edit": "git status --porcelain -uno (untracked files ignored)",
+     "result": "killed",
+     "killed_by": "test_run.py:1131: AssertionError"
+    },
+    {
+     "name": "V6 (own)",
+     "edit": "\"git_head_end\": self.head",
+     "result": "killed",
+     "killed_by": "test_run.py:1132: AssertionError"
+    },
+    {
+     "name": "C10/e3bm49",
+     "edit": "skips findall without re.M",
+     "result": "killed",
+     "killed_by": "test_run.py:1144: AssertionError"
+    },
+    {
+     "name": "e3bm50",
+     "edit": "`or unread` removed from the suites verdict",
+     "result": "killed",
+     "killed_by": "test_run.py:1172: AssertionError"
+    },
+    {
+     "name": "V7 (own, skips_without_reasons)",
+     "edit": "counts.get(\"skip\") instead of \"skipped\"",
+     "result": "killed",
+     "killed_by": "test_run.py:1172: AssertionError"
+    },
+    {
+     "name": "V8 (own, skips_without_reasons)",
+     "edit": "unread condition `and False`",
+     "result": "killed",
+     "killed_by": "test_run.py:1172: AssertionError"
+    },
+    {
+     "name": "V9 (own, failure_lines)",
+     "edit": "regex ^((?:FAILED|ERROR) \\S+) with the message dropped",
+     "result": "killed",
+     "killed_by": "test_run.py:1189: AssertionError"
+    },
+    {
+     "name": "V10 (own, failure_lines)",
+     "edit": "[:50] -> [:0]",
+     "result": "killed",
+     "killed_by": "test_run.py:1189: AssertionError"
+    },
+    {
+     "name": "V11 (own)",
+     "edit": "COLUMNS \"400\" -> \"80\"",
+     "result": "killed",
+     "killed_by": "test_run.py:1189: AssertionError"
+    },
+    {
+     "name": "V12 (own)",
+     "edit": "COLUMNS removed from shell env",
+     "result": "killed",
+     "killed_by": "test_run.py:1189: AssertionError"
+    },
+    {
+     "name": "V13 (own, failure_lines)",
+     "edit": "suites detail keys report \"failures\" instead of \"failure_lines\"",
+     "result": "SURVIVED (60 passed); equivalent: the stage entry's runs=runs still carries failure_lines into the JSON"
+    },
+    {
+     "name": "V14 (own, stale_pending)",
+     "edit": "_is_recovery: `\"recovery\" in case` (substring)",
+     "result": "SURVIVED (60 passed); equivalent today, see RUN-N4"
+    },
+    {
+     "name": "V15 (own, stale_pending)",
+     "edit": "all(_is_recovery) -> any(_is_recovery)",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:199: AssertionError"
+    },
+    {
+     "name": "V16 (own, stale_pending)",
+     "edit": "_is_recovery returns True",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:199: AssertionError"
+    },
+    {
+     "name": "V17 (own, stale_pending)",
+     "edit": "statuses += \"planned\"",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:37: AssertionError"
+    },
+    {
+     "name": "W1 (own, OWNERS; merged tree + I3B 95b7df7 + IR2-2)",
+     "edit": "stack.OWNERS[\"G2-R1\"]: 'HELD' -> 'held' (one-word drift)",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:120: AssertionError. It survives on 0924cf2 alone, where recoverykit has no OWNERS to compare against"
+    },
+    {
+     "name": "W2 (own, OWNERS; merged tree)",
+     "edit": "recoverykit.OWNERS: 'HELD' -> 'PAUSED'",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:120: AssertionError"
+    },
+    {
+     "name": "W3 (own, OWNERS; merged tree)",
+     "edit": "`**OWNERS,` removed from stack.PENDING",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:192: AssertionError"
+    },
+    {
+     "name": "W4 (e3bm41 on merged tree)",
+     "edit": "`and task not in residual`",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:199: AssertionError"
+    },
+    {
+     "name": "W5 (own; merged tree)",
+     "edit": "BY_MODE async = (G2-R1, G3)",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:192: AssertionError"
+    },
+    {
+     "name": "W6 (own; merged tree)",
+     "edit": "dataset resume pends on D5 only",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:193: AssertionError"
+    },
+    {
+     "name": "W7 (own; merged tree)",
+     "edit": "stack.pending accepts RESIDUAL ids",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:145: AssertionError"
+    },
+    {
+     "name": "lane e3bm12/35/40/41/42/43 applied by hand at 0924cf2",
+     "edit": "lane definitions",
+     "result": "killed at test_stage.py:87, test_run.py:1165, test_stage.py:192, :199, test_run.py:918, :1076 (all AssertionError). Round 2b quoted :187/:194 for e3bm40/41 at cd8099b; those are historical line numbers"
+    },
+    {
+     "name": "mutants.py --only e3bm40..53 + e3bm12/27/35 (private TMPDIR, ns e2, 0924cf2)",
+     "edit": "lane definitions via the runner",
+     "result": "17/17 killed, each report {killed 1, problems null}; death lines :192, :199, :1076, :1015, :1015, :984, :1131, :1131, :1144, test_stage.py:185 Failed, test_stage.py:157, test_run.py:1187 and test_stage.py:157 where the 12-line tail kept them"
+    },
+    {
+     "name": "runner layer-1 run (93 mutants of the tests/integration and models lists, excluding recovery and apps/infrx-api suites)",
+     "edit": "run_one + summarise",
+     "result": "0924cf2 and the merged tree both {93, killed 90, controls_survived 2 (e2c01, e3bc01), problems [e2m69 stale]}, see RUN-B1"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared ... /tmp/claude-1000/verify-e3b2-runner-660177 && git checkout 0924cf2 && make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "pytest -q test_run.py backend/test_stage.py (0924cf2, private TMPDIR)",
+     "exit": 0,
+     "tail": "60 passed in 12.22s (matches R3-1)"
+    },
+    {
+     "cmd": "hm.py batch 1 (24 single-edit mutants, test_run + test_stage)",
+     "exit": 0,
+     "tail": "22 killed at the lines in the mutant table; V13 and V14 survived (60 passed); TREE CLEAN"
+    },
+    {
+     "cmd": "probe: runner.shell on a real pytest suite (PYTEST_ADDOPTS=-rfEs) with a parametrized skip, a skipif, a module-level importorskip and a failure",
+     "exit": 0,
+     "tail": "counts {passed 3, failed 1, skipped 4}; skips ['a skipif reason', \"could not import 'no_such_module_xyz'...\", 'param skip 1', 'param skip 3'] parsed mid-output after the FAILED line; failure_lines ['FAILED .../test_param.py::test_red - AssertionError: boom']; the suites stage with this run as make api-test: FAIL, with unexpected_skips listing all 4"
+    },
+    {
+     "cmd": "probe: Report() on a clean tmp repo, file added and tracked file edited, then both restored before as_json",
+     "exit": 0,
+     "tail": "start {dirty False}, end {dirty False}, mid-run git_head() {dirty True}: neither field catches it (RUN-N1)"
+    },
+    {
+     "cmd": "git checkout fa17b96; pytest test_run.py -k names_its_failures; then 4c21b3b",
+     "exit": 1,
+     "tail": "fa17b96: AssertionError 'test_red.py::test_red' != 'test_red.py::test_red - AssertionError: boom' (committed red, as stated); 4c21b3b: 1 passed, 49 deselected"
+    },
+    {
+     "cmd": "layer 0 at 0924cf2 (ns e2, private TMPDIR)",
+     "exit": 1,
+     "tail": "2 failed, 144 passed, 91 skipped, 1 xfailed, 2 warnings in 19.82s: i3bm57 list case + rc10 (matches R3-2)"
+    },
+    {
+     "cmd": "mutants.py --only <id> for e3bm40..53, e3bm12, e3bm27, e3bm35 (private TMPDIR)",
+     "exit": 0,
+     "tail": "all 17 exit 0, status killed"
+    },
+    {
+     "cmd": "mutants.py --only e2m69 (0924cf2)",
+     "exit": 1,
+     "tail": "[        stale] e2m69; problems ['e2m69']; 'the mutated text occurs 0 times, expected 1'"
+    },
+    {
+     "cmd": "anchor scan of all_mutants() at b0a64e1, 5eb7b85, a18f567, 42e0819, e3eefac ... b892ab0, 0924cf2",
+     "exit": 0,
+     "tail": "e2m69 stale from e3eefac onward (and i3bm57 throughout); 205 mutants at 0924cf2; merged tree with I3B 95b7df7: 231 mutants, stale [e2m69]"
+    },
+    {
+     "cmd": "scratch: origin/claude/backend-impl@382b625 (current; newer than the 88feb1f/7ed6993 named) + git merge --no-ff 0924cf2",
+     "exit": 0,
+     "tail": "clean merge, no conflicts; reverse order (I3B 95b7df7 first, then 0924cf2) is also clean, and the tree is identical apart from the IR diffs"
+    },
+    {
+     "cmd": "merge tree, IR2-3 not applied: pytest backend/test_drills.py -k 'dr03 or dr04'",
+     "exit": 1,
+     "tail": "assert '00000005-...' not in ('00000004-...', '00000005-...'); 1 failed, 1 passed, 2 skipped, 34 deselected"
+    },
+    {
+     "cmd": "git apply r93.diff on the merge",
+     "exit": 1,
+     "tail": "error: patch failed: apps/infrx-api/infrx/contracts/fakes/state.py:1229 (fake half already in a2779d1); r31-dr04.diff and ir1-r2.diff apply cleanly"
+    },
+    {
+     "cmd": "merge + IR2-1 + r31-dr04.diff: pytest -k 'dr03 or dr04'",
+     "exit": 0,
+     "tail": "2 passed, 2 skipped, 34 deselected in 0.33s"
+    },
+    {
+     "cmd": "merge + IR2-1 + IR2-3: layer 0 (ns e3b2, private TMPDIR)",
+     "exit": 1,
+     "tail": "2 failed, 145 passed, 91 skipped (only I3B's i3bm57 list case and rc10; IR2-1 turns the xfail into a pass). PENDING ids: D5, G2-R1 from stack; G1R, G2, D2, D3, M3, W3, I2B from recoverykit only"
+    },
+    {
+     "cmd": "that tree: backend suite junit -> run.classify / stale_pending",
+     "exit": 0,
+     "tail": "stale [] (every merged id pends only in tests.integration.backend.recovery.test_recovery; G2-R1 in test_drills and test_journey)"
+    },
+    {
+     "cmd": "+ git merge codex/i3b-followup@95b7df7 (current head, newer than 1a7a256): layer 0 before IR2-2",
+     "exit": 1,
+     "tail": "1 failed, 151 passed, 98 skipped: test_stage.py:131 AssertionError ('I2B', {'D2','D3','G1R','G2','M3','W3'}), resolved by IR2-2"
+    },
+    {
+     "cmd": "+ IR2-2 (r31-i3b-residual.diff: RESIDUAL block deleted, RESIDUAL = {}, stack.OWNERS kept): layer 0",
+     "exit": 0,
+     "tail": "152 passed, 98 skipped, 2 warnings in 24.18s. PENDING [D5,G2-R1] x9, [G2-R1,D5] x1, [G2-R1] x2, [I2B-R4] x1, [M1-L2] x1"
+    },
+    {
+     "cmd": "that tree: backend junit -> stale_pending; stack.OWNERS vs recoverykit.OWNERS",
+     "exit": 0,
+     "tail": "pending {G2-R1 12, D5 10, I2B-R4 1, M1-L2 1}; stale []; RESIDUAL {}; PENDING keys [G2-R1, D5]; OWNERS['G2-R1'] byte-equal (sha256 fd3d146ca8f21778 on both sides)"
+    },
+    {
+     "cmd": "lane reproduction: 382b625 + 0924cf2 + r31-dr04 + I3B 1a7a256 + IR2-2 (no IR2-1): layer 0",
+     "exit": 0,
+     "tail": "151 passed, 97 skipped, 1 xfailed, 2 warnings in 20.24s (matches R3-6 exactly)"
+    },
+    {
+     "cmd": "IR2-1: tasklocal hunk alone vs full ir1-r2.diff: pytest test_harness.py",
+     "exit": 1,
+     "tail": "alone: FAILED test_every_port_is_inside_the_range_tasklocal_grants_this_task[e3b2], 1 failed, 18 passed; full diff: 19 passed"
+    },
+    {
+     "cmd": "IR2-1: pytest test_harness.py apps/infrx-api/tests/contracts on the merge + IR2-1",
+     "exit": 0,
+     "tail": "1075 passed in 89.82s (the lane's 1070 was at f97bfb7). My --deselect path did not match the rootdir-relative node id, so test_v1_projection_pg ran on the default D1 task port 55432, see cleanup"
+    },
+    {
+     "cmd": "INFRX_D_TASK=verify-e3b2-runner (scratch-only TASK_PORTS patch pg 55591, valkey 55592): pytest test_v1_projection_pg.py",
+     "exit": 0,
+     "tail": "3 passed in 2.95s; container infrx-verify-e3b2-runner-postgres created and removed by pgharness; lock in the private TMPDIR"
+    },
+    {
+     "cmd": "detached layer-1 runner run (93 mutants) on merged tree main95, then 0924cf2; watched by Monitor until-loop",
+     "exit": 0,
+     "tail": "both: {\"mutants\": 93, \"killed\": 90, \"controls_survived\": 2, \"not_killed\": 1, \"pending\": 0, \"problems\": [\"e2m69\"]}"
+    },
+    {
+     "cmd": "sha256 of the lane's logs under scratchpad/e3b2",
+     "exit": 0,
+     "tail": "r3-run-stage 5a866b3bc5a96d64, r3-layer0 000653e69636d924, r3-merge-layer0 e496d3cda203e36a, r3-merge-layer0b 522c88da31e43788, r3-merge-i3b-layer0 c948e3862d719bdc, r3-only affa43939b536c45, r3-shape 341814ae54b327c7, r31-* and r2c-* all match the evidence prefixes, and their last lines match the quoted tails; ir1-r2.diff 23d1719320510c57, r31-dr04.diff 1f03b05fc4014bb0, r31-i3b-residual.diff 5763acb9d3a6c045 match"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "GATE-B1",
+   "severity": "blocking",
+   "file": "tests/integration/mutants.py",
+   "line": "178-183 (e2m69); anchor broken by run.py:461 in e3eefac",
+   "claim_broken": "Round-3 claim that the mutation stage's problems are exactly I3B's 13 (i3bm57 stale plus i3bm40,41,42,48,49,60-66 baseline-red), with every e2m killed. The lane's evidence says 'e3bm35 re-anchored' for the suites-status line and 'every e2m killed'.",
+   "evidence": "My layer-3 gate at 0924cf2 (report sha256 0bbfad08ef69f16e) gives mutants FAIL {mutants 205, killed 187, controls_survived 4, not_killed 14, pending 0}. The problems are ['e2m69', 'i3bm57', 'i3bm40', 'i3bm41', 'i3bm42', 'i3bm48', 'i3bm49', 'i3bm60'...'i3bm66'], and e2m69 reads {status: stale, why: 'the mutated text occurs 0 times, expected 1'}. e2m69's `before` is `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. That text occurs once in run.py at b0a64e1 and at e3eefac~1, and 0 times at e3eefac and at 0924cf2: e3eefac appended `or unread` to the line, re-anchored e3bm35 and e3bm50, and missed e2m69. `mutants.py --only e2m69` at 0924cf2 gives `[stale] e2m69`, exit 1. On the merge scratch (88feb1f + 0924cf2 + IR2-1 + IR2-3 + codex/i3b-followup@95b7df7 + IR2-2), an anchor-count scan of all 231 mutants leaves e2m69 as the only stale one. So after every requested merge, the gate still fails on an E3B-caused non-I3B problem, and no request covers it. Round 3 never ran a full mutation stage (R3-7 ran `--only` on 15 ids), which is why this was missed. The invariant itself still holds: removing `silent` from the new line by hand is killed at test_run.py:334 AssertionError.",
+   "minimal_fix": "Re-anchor e2m69 on the current line: before `    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else ` and after `    report.add(\"suites\", FAIL if (failed or unexpected or unread) else `. Then run `mutants.py --only e2m69` (expect killed at test_run.py:334) plus one full mutation stage, or at least an anchor-count scan over all_mutants().",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed at 0924cf2. The `before` text for e2m69 at tests/integration/mutants.py:178-183 is `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. run.py:453 at 0924cf2 now reads `    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else PASS,`. At e3eefac~1 the same line was at run.py:441 without `or unread`, so e3eefac broke the anchor.\n\nExperiment: I made a scratch `git clone --shared` checked out at 0924cf2 and ran `.venv/bin/python tests/integration/mutants.py --only e2m69`. Tail of the output: `\"id\": \"e2m69\", \"status\": \"stale\", ... \"why\": \"the mutated text occurs 0 times, expected 1: the mutant no longer describes the code\"`, exit=1.\n\nNothing fixes it at merge time. e3eefac is not an ancestor of origin/claude/backend-impl. Both origin/claude/backend-impl and codex/i3b-followup@95b7df7 still carry the older anchor `(failed or silent) else PASS,`. After the merge, the E3B side's mutants.py holds, and its anchor matches nothing. So the full mutation stage reports one E3B-caused stale problem that is not among I3B's 13, and no pending request covers it.\n\nThis makes the round-3 claim false: the stage's problems are not exactly I3B's 13, and not every e2m is killed. It is blocking for the gate claim. The code invariant itself still holds; only the mutant's anchor is out of date. The fix is a one-line re-anchor of e2m69's before/after strings to the current run.py:453 line, then rerunning `--only e2m69` and the full stage.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "I could not refute it. The defect is real at 0924cf2.\n\n1. The anchor is stale. At 0924cf2, tests/integration/mutants.py:180 gives e2m69's `before` as `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. In tests/integration/run.py:453 at 0924cf2 the line now reads `FAIL if (failed or silent or unexpected or unread) else PASS,`. Running `git show <c>:tests/integration/run.py | grep -c '<e2m69 before>'` returns 1 at e3eefac~1 and 0 at e3eefac. So e3eefac changed the line and did not re-anchor e2m69.\n\n2. Smallest experiment. In a scratch shared clone at 0924cf2 I ran `python3 tests/integration/mutants.py --only e2m69`. Tail of the output:\n   \"invariant\": \"E2R item 4: a suite that reported no tests at all fails the run\",\n   \"why\": \"the mutated text occurs 0 times, expected 1: the mutant no longer describes the code\"\n   exit 1\n\n3. It is counted as a gate problem. mutants.py:995 emits status \"stale\", and mutants.py:1136 counts a \"stale\" status as a problem, so the mutation stage fails on e2m69.\n\n4. Merging does not fix it. On origin/claude/backend-impl, claude/backend-impl and codex/i3b-followup (95b7df7), both e2m69 and run.py:380 still carry the older `FAIL if (failed or silent) else PASS,` form. The merge therefore takes E3B's run.py line and E3B's e2m69 entry together, and e2m69 stays stale. Nothing on the base re-anchors it.\n\n5. Severity. This is blocking. It falsifies the round-3 claims that 'every e2m killed' and that the mutation stage's problems are exactly I3B's 13, and it leaves the full gate failing on an E3B-caused problem. The code invariant itself is intact, since the verifier's hand mutation is killed at test_run.py:334. The fix is a two-line re-anchor, then `mutants.py --only e2m69` and a full anchor-count scan."
+    }
+   ]
+  },
+  {
+   "id": "GATE-B2",
+   "severity": "blocking",
+   "file": "tests/integration/run.py",
+   "line": "171-172 (counts: skipped pattern); 451-452 (unread)",
+   "claim_broken": "G-B3 fix e3eefac: 'a skip count with no parsed reason fails the stage (skips_without_reasons)'. The count must come from pytest's summary, independently of the -rs reason lines. Otherwise the cross-check is vacuous exactly when the reasons are missing.",
+   "evidence": "Own mutant V5, one edit: counts() reads skipped from the reason line, `(\"skipped\", r\"^SKIPPED \\[(\\d+)\\]\")` instead of `r\"(\\d+) skipped\"`. It SURVIVES test_run.py -k unexpected_skip (exit 0, '1 passed, 49 deselected'). The case's fake output has 'SKIPPED [3] ...' and '1 passed, 3 skipped', both 3, so it cannot tell the two sources apart, and the stage() arm injects counts directly and bypasses counts(). Under V5, a real api-test whose -rs lines are absent yields no skipped count, so `unread` can never fire. Own mutant V13, `r\"(\\d+) skipped in\"`, also SURVIVES (exit 0) and misses a real summary such as '3120 passed, 3 skipped, 30 xfailed in ...'. By the stated standard (a runner rule that one edit defeats without a kill), this is blocking. It fails open only when reasons are unreadable, and it did not bite in my run: the api-test had 0 skips.",
+   "minimal_fix": "In test_an_unexpected_skip_in_api_test_fails_the_suites_stage, assert `runner.counts('x\\n1 passed, 3 skipped, 2 xfailed in 1s')['skipped'] == 3` (no SKIPPED line at all). Also run one stage arm through the real shell() on output with a summary skip count and no SKIPPED line, and expect skips_without_reasons == ['make api-test']. Register V5 as an e3bm mutant.",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute it. The defect is real at 0924cf2, but it is a coverage gap, not wrong runtime behaviour.\n\n1. The runtime code is correct. `counts()` (tests/integration/run.py:169) reads `(\"skipped\", r\"(\\d+) skipped\")`, which comes from pytest's summary line, not from the `-rs` reason lines. `unread` (lines 451-452) fires correctly today.\n\n2. No test pins where that count comes from:\n   - The parse assertion in test_an_unexpected_skip_in_api_test_fails_the_suites_stage (test_run.py:1141-1145) feeds output that contains both 'SKIPPED [3] ...' and '1 passed, 3 skipped in 1s', so both sources give 3.\n   - The `stage()` arm injects `counts` through fake_shell and never calls `counts()`.\n   - e3bm50 only deletes `unread` from the verdict line. e3bm49 only covers re.M on the reason regex.\n\n3. Experiment. I made a shared scratch clone at 0924cf2 and applied one edit, the verifier's V5, on line 169: `r\"(\\d+) skipped\"` became `r\"^SKIPPED \\[(\\d+)\\]\"`. I then ran the whole file, not just the -k subset:\n   - Command: `INFRX_E2_CANARY=off apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_run.py -x`\n   - Tail: `50 passed in 10.48s`, so V5 survives every case in the file.\n   - tests/integration/backend/test_stage.py, the only other test file that mentions skip counts, also passed under V5 (`10 passed in 0.58s`). Its hits are for `classify()`, not `counts()`.\n\n4. Direct probe under V5: `run.counts('x\\n3120 passed, 3 skipped, 30 xfailed in 1s')` returned `{'passed': 3120}`. With no SKIPPED line, `skipped` is never set, so `unread` cannot fire in exactly the case G-B3 exists for. This confirms the vacuity.\n\n5. Cleanup: I removed the scratch clone and the codex-e3b2 worktree is still clean. No PostgreSQL or E2 stack was used.\n\nSeverity: the runtime is correct, and the fix is test-only (the assertion and e3bm mutant the verifier proposed). But G-B3's claimed invariant is \"a skip count with no parsed reason fails the stage\". Under R32 (\"every invariant this task claims must be killable\"), a single edit that turns that check off without any kill counts as blocking.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "nonblocking",
+     "reason": "The gap is real, but it is a missing test, not a runtime defect. The code at 0924cf2 is correct. At tests/integration/run.py:169, counts() reads `skipped` from pytest's summary with r\"(\\d+) skipped\". This is independent of the -rs reasons that shell() parses at :210 (r\"^SKIPPED \\[\\d+\\] ...\"). With the original code, `run.counts('x\\n3120 passed, 3 skipped, 30 xfailed in 9s')` returns {'passed': 3120, 'skipped': 3}, so `unread` (:451-452) fires correctly today.\n\nThe test does not pin that independence. On a scratch clone at 0924cf2 (scratchpad/e3b2ref), I made each edit to run.py:169 alone and ran the whole of test_run.py, not only -k. Command: `$PY -m pytest -q tests/integration/test_run.py -p no:cacheprovider | tail -2`.\n- V5 (`(\"skipped\", r\"^SKIPPED \\[(\\d+)\\]\")`): `50 passed in 10.30s`. It survives.\n- V13 (`(\"skipped\", r\"(\\d+) skipped in\")`): `50 passed in 10.37s`. It survives. Under V13, counts('x\\n3120 passed, 3 skipped, 30 xfailed in 9s') returns {'passed': 3120} with no skipped count, so `unread` could never fire on a real summary of that shape.\n- Baseline (no edit): `50 passed in 10.20s`.\n- My first loop reported kills, but its regexes were over-escaped. Those were false kills and I discarded them.\n\nWhy nothing catches it: the only realistic case (test_run.py:1139-1145) has 'SKIPPED [3]' and '1 passed, 3 skipped', both 3, so V5 cannot be told apart. The stage() arm (:1150-1173) monkeypatches shell() and injects counts directly. The counts() unit test at :253-257 never checks `skipped`.\n\nWhy nonblocking:\n1. The G-B3 rule as claimed (\"a skip count with no parsed reason fails the stage\") is implemented correctly, and the registered mutant e3bm50 kills the removal of the cross-check.\n2. The survivors need someone to deliberately change counts() in the future. Nothing in the shipped behaviour fails open now.\n3. SUITE_ADDOPTS='-rfEs' makes the -rs lines present in real runs, and the verifier's own api-test had 0 skips.\n\nThe proposed fix is cheap and correct: assert counts('x\\n1 passed, 3 skipped, 2 xfailed in 1s')['skipped'] == 3 with no SKIPPED line, and register V5 as an e3bm mutant. It should be a follow-up, not a merge gate."
+    }
+   ]
+  },
+  {
+   "id": "RUN-B1",
+   "severity": "blocking",
+   "file": "tests/integration/mutants.py",
+   "line": "178-183 (e2m69); regression introduced by e3eefac at tests/integration/run.py (suites report.add line)",
+   "claim_broken": "Round 3 (e3eefac, G-B3) changed only the skip parser and the count cross-check, the gate's remaining reds are I3B's, and the mutation lists stay well-formed (e3bm35 was re-anchored, and the round-3 table lists every re-anchor).",
+   "evidence": "e3eefac rewrote `report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,` to `... (failed or silent or unexpected or unread) ...`. It re-anchored e3bm35 and added e3bm50, but E2's e2m69 still anchors on the old text `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. An anchor scan of all_mutants() walked b0a64e1 through 0924cf2 one commit at a time: e2m69 is not stale at 42e0819, and it is stale from e3eefac through 0924cf2 (the text occurs 0 times, 1 expected). `mutants.py --only e2m69` at 0924cf2 gives `[        stale] e2m69`, problems [\"e2m69\"], exit 1. I ran the 93 layer-1 mutants of the tests/integration and models lists through run_one, on 0924cf2 and on the merged tree (382b625 + 0924cf2 + IR2-1 + IR2-3 + I3B 95b7df7 + IR2-2). Both runs gave {mutants 93, killed 90, controls_survived 2, not_killed 1, problems [\"e2m69\"]}. So the gate's mutation stage and `make integration --layer 1` fail on an E3B-caused problem, not only on I3B's, and the merged tree carries the same problem. Layer 0 does not catch it, because no case checks the anchors of the E2/E3B lists (I3B has its own list case for i3bm57). The invariant itself still holds: the same edit re-anchored by hand (drop `silent or` from the current line) is killed at test_run.py:334 AssertionError.",
+   "minimal_fix": "Re-anchor e2m69 in mutants.py to `'    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else'` -> `'    report.add(\"suites\", FAIL if (failed or unexpected or unread) else'`, then confirm `--only e2m69` returns killed. Optionally add a layer-0 case asserting that every all_mutants() anchor occurs `occurrences` times, so a shared-line edit cannot leave a sibling stale again.",
+   "lens": "runner",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute the finding. The defect is real at 0924cf2. I checked in the worktree, read-only, and in a scratch clone that I deleted afterwards. PostgreSQL was not needed.\n\n- **The anchor text is gone.** tests/integration/mutants.py:180 still anchors e2m69 on `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. At 0924cf2, run.py:453 reads `... (failed or silent or unexpected or unread) else PASS,`. `grep -c` of the old anchor text in run.py gives 0.\n- **When it broke.** At 42e0819 the old line is still present (run.py:441). e3eefac is the only commit in that range that touches the line. The E3B lane had already re-anchored e2m69 once, from the base 382b625 text `(failed or silent)` to the `unexpected` form. That makes the stale anchor this lane's own regression.\n- **Running only that mutant at 0924cf2.** The command was `apps/infrx-api/.venv/bin/python tests/integration/mutants.py --only e2m69`. Its tail shows `[        stale] e2m69` and `\"problems\": [...{\"id\": \"e2m69\", \"status\": \"stale\", \"why\": \"the mutated text occurs 0 times, expected 1: the mutant no longer describes the code\"}]`, and it exits with code 1.\n- **The proposed fix works.** I applied the verifier's re-anchor in scratch: `(failed or silent or unexpected or unread) else` becomes `(failed or unexpected or unread) else`. `--only e2m69` then prints `[       killed] e2m69` and exits 0. The invariant still holds; only the list entry is wrong.\n\nI rate it blocking. The mutation stage exits non-zero because of an E3B-caused problem. That contradicts the round-3 claim that the gate's remaining reds are I3B's and that the lists stay well-formed. The fix is two lines.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it; the defect is real at 0924cf2. In the codex-e3b2 worktree at HEAD 0924cf2, tests/integration/run.py:453 reads `report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else PASS,`. But e2m69's `before` in tests/integration/mutants.py:180 is still the old `    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,`. That old text is at 42e0819:run.py:441, and e3eefac (G-B3) changed it. `git log` shows e3eefac as the last run.py commit on this path. In a scratch `git clone --shared` checked out at 0924cf2, I ran `python3 tests/integration/mutants.py --only e2m69`. Tail: `[        stale] e2m69  E2R item 4: a suite that reported no tests at all fails the run` ... `\"problems\": [\"e2m69\"]` ... `\"why\": \"the mutated text occurs 0 times, expected 1: the mutant no longer describes the code\"`. main() returns 1 when problems is non-empty (the `bad` list at mutants.py ~1172). The staleness check (mutants.py:993-997) runs before any suite does, so this needs no Docker or Postgres and does not touch the E2 stack. For the merge: origin/claude/backend-impl (382b625) and I3B 95b7df7 both still have the pre-E3B line `(failed or silent)` at run.py:380. So E3B's version of that line wins on merge, and I3B's changes to that line do not re-anchor e2m69. The merged tree therefore carries the same stale mutant. Severity is blocking: the E3B round-3 change turns the mutation stage red (`make integration --layer 1` and the gate's mutants step exit 1) on a problem E3B itself caused. That contradicts round 3's claim that the gate's only remaining reds are I3B's. The fix is one line: re-anchor e2m69 to the `... or unexpected or unread) else` text with `silent or` removed.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "unverified_blocking": [],
+ "nonblocking": [
+  {
+   "id": "GATE-N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "610 (backend shell argv)",
+   "claim_broken": "G-N1: 'SUITE_ADDOPTS = -rfEs now drives the make targets and the backend suite'.",
+   "evidence": "Own mutant V10 puts the backend suite back on a bare \"-rs\", which drops the backend run's failure_lines. It SURVIVES test_stage.py plus test_run.py (-k backend/suites/stage/failures: 25 passed). The backend status comes from junit, so the verdict is unaffected. Only the backend run's failure_lines (11 lines in my gate) would disappear unnoticed.",
+   "minimal_fix": "In test_the_backend_stage_reports_the_summary..., assert that the recorded backend argv contains run.SUITE_ADDOPTS (the fake shell already sees argv).",
+   "lens": "gate"
+  },
+  {
+   "id": "GATE-N2",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "577-579 (_is_recovery)",
+   "claim_broken": "cd8099b: 'RESIDUAL excuses a merged id only where every case naming it is one of I3B's recovery cases'.",
+   "evidence": "Own mutant V12, `return \"recovery\" in case` (a substring anywhere, not the module path), SURVIVES test_stage.py -k 'held_cutover or merged_task' (3 passed). An E3B case whose name contains 'recovery' would then be excused. There is none today, and IR2-2 empties RESIDUAL at the I3B merge, so the window is short.",
+   "minimal_fix": "Add one assertion: stale_pending({'pending': {'G1R': ['b.test_drills::test_e3b_recovery_like']}}) == ['G1R'] with G1R monkeypatched into RESIDUAL.",
+   "lens": "gate"
+  },
+  {
+   "id": "GATE-N3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "Round 3, 'Integration requests after round 3'",
+   "claim_broken": "The dispatch text says IR2-3 (scratchpad r93.diff) applies at the merge.",
+   "evidence": "On origin/claude/backend-impl@88feb1f + 0924cf2, `git apply --check r93.diff` fails: 'patch failed: apps/infrx-api/infrx/contracts/fakes/state.py:1229'. The fake hunk already landed with the F fakes follow-up. Only the test_drills hunk (r31-dr04.diff, sha 1f03b05fc4014bb0) applies. It applied cleanly, and layer 0 on that merge + IR2-1 gave 2 failed (I3B's i3bm57 list case and rc10) / 145 passed / 91 skipped / 0 xfailed. Round 2b's text names r31-dr04.diff; the IR2-3 paragraph and the dispatch still point at r93.diff.",
+   "minimal_fix": "State in IR2-3 that only the dr04 hunk (r31-dr04.diff) is applied at the merge, because the fake half is already on the integration head.",
+   "lens": "gate"
+  },
+  {
+   "id": "GATE-N4",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "215 (failure_lines)",
+   "claim_broken": "G-N1: 'each red keeps its first line, so a flaky red can be attributed'.",
+   "evidence": "COLUMNS=400 works: the i3bm57 and rc10 lines carry their messages. But the 9 bk01/bk01f lines read `assert [\"relations d...alse, '{}')]\"] == []`, because pytest's own assertion-repr truncation applies whatever COLUMNS is set to. So the first line names the family only partly. Separately, in my suites run with a private deep TMPDIR, make api-test had 3 W reds (tests/w/test_serving.py perf_pilot x3, 'repo_sha=unknown ... peak_waiting=0'). They reproduce with TMPDIR=/tmp/claude-1000/verify-e3b2-gate-work-643326/tmp, pass 8/8 three times with the default TMPDIR, and are unrelated to COLUMNS (red with COLUMNS unset and with COLUMNS=400). That is W's environmental fragility, not E3B's; failure_lines attributed it at once, as intended.",
+   "minimal_fix": "None required for E3B. Optionally note the repr truncation in Limits. Route the TMPDIR sensitivity of W's perf_pilot to W.",
+   "lens": "gate"
+  },
+  {
+   "id": "GATE-N5",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "429-434 (suites: make api-test)",
+   "claim_broken": "The gate runs in its own namespace/port block (e3b2, 56700-56799).",
+   "evidence": "make api-test, inside the suites stage, starts D's harness on infrx-d1-postgres:55432 (unless INFRX_D_TASK is set) and vkstore's infrx-d2-valkey:55463 (unless INFRX_D2_VALKEY_PORT/CONTAINER is set). Both are fixed shared names outside the e3b2 block. INFRX_D_TASK=e3b2 cannot be used during the gate, because it maps to 56732, which is E2's infrx-e3b2-postgres. So the full gate cannot run in-namespace while other lanes hold those names. This is the Limits-2 contention the lane already records, but the valkey half is not named.",
+   "minimal_fix": "Name the vkstore 55463 dependency in Limits. Or have suites() pass INFRX_D2_VALKEY_PORT/CONTAINER in-block (e.g. 56763/infrx-e3b2-dvalkey) and run the api-test D harness only after the stack is down.",
+   "lens": "gate"
+  },
+  {
+   "id": "RUN-N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "100-102 (Report.__init__ comment)",
+   "claim_broken": "The comment says 'a tree edited during the run and restored before its end must not read clean'.",
+   "evidence": "Probe on a tmp git repo: Report() is taken clean, then a file is added and a tracked file edited (git_head() mid-run shows dirty True), then both are restored before as_json(). The result is git_head {dirty False} and git_head_end {dirty False}. Only a tree that is dirty at the START and cleaned by the end is caught, which is exactly what the case and the evidence row say. The comment overstates it, and no rule fails the run when start and end differ.",
+   "minimal_fix": "Reword the comment to 'a tree dirty when the run starts and cleaned before its end'. If mid-run edits matter, fail the report when git_head != git_head_end or when either is dirty.",
+   "lens": "runner"
+  },
+  {
+   "id": "RUN-N2",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "IR2-3 (section 'Integration requests IR2-1...IR2-6', item 3) and the merge instructions",
+   "claim_broken": "IR2-3 is to be applied at the merge (the dispatch names r93.diff).",
+   "evidence": "On the current integration head 382b625, `git apply --check r93.diff` (bce25ab6ef18582b) fails at apps/infrx-api/infrx/contracts/fakes/state.py:1229, because the F fakes follow-up merge a2779d1 already landed the fake half of the change. Only the test_drills hunk is still needed, and that is r31-dr04.diff (1f03b05fc4014bb0): it applies cleanly, and with it dr03/dr04 give 2 passed, 2 skipped. Without it, dr04[fake] is red: `assert '00000005-...' not in ('00000004-...', '00000005-...')`, 1 failed, 1 passed, 2 skipped.",
+   "minimal_fix": "State in the merge request that on a head at or after a2779d1 IR2-3 means r31-dr04.diff (the dr04 fake-branch deletion) only, not r93.diff.",
+   "lens": "runner"
+  },
+  {
+   "id": "RUN-N3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "IR2-1 ('1070 passed')",
+   "claim_broken": "IR2-1 is verified by `test_harness.py + apps/infrx-api/tests/contracts` giving 1070 passed.",
+   "evidence": "1070 was measured at f97bfb7. On 382b625 + 0924cf2 + IR2-1 the same selection gives 1075 passed; the projection file's 3 cases are inside that count. Applying the tasklocal hunk alone makes test_every_port_is_inside_the_range_tasklocal_grants_this_task[e3b2] red (1 failed, 18 passed); with the full diff, 19 passed. The documented command runs test_v1_projection_pg on D1's default task port 55432 unless INFRX_D_TASK is set.",
+   "minimal_fix": "Mark 1070 as the f97bfb7 count and give the command with INFRX_D_TASK set to a task-local port.",
+   "lens": "runner"
+  },
+  {
+   "id": "RUN-N4",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "_is_recovery",
+   "claim_broken": "RESIDUAL excuses a merged id only in I3B's recovery cases (module path component `recovery`).",
+   "evidence": "Own mutant V14, `return \"recovery\" in case` (a substring match instead of a path component), SURVIVES: test_run + test_stage give 60 passed. It is equivalent today, because stack.pending refuses RESIDUAL ids for E3B cases (W7 is killed at test_stage.py:145), no non-recovery case name contains 'recovery', and RESIDUAL is {} after IR2-2.",
+   "minimal_fix": "Optional: add a case with classname 'b.test_x' and name 'test_recovery_like' pending on a RESIDUAL id, and expect it stale.",
+   "lens": "runner"
+  }
+ ]
+}

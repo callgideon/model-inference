@@ -92,9 +92,9 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **five**
-# mutants declare one; the first two and the last are guards whose entire purpose is to
-# stop an untyped error escaping:
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **seven**
+# mutants declare one; all but `DEPLOY-04` and `drop_reason_falls_back_on_truthiness` are
+# guards whose entire purpose is to stop an untyped error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
 #   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
@@ -115,6 +115,10 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # * `load_work_credit_serves_a_legacy_job` - the mirror: a legacy job has no CREDIT terms,
 #   so without the guard `load_work_credit` raises `AttributeError` (on `job.credit.pins`)
 #   out of the port instead of the typed `not_found` (F2P confirmation MONEY-C1).
+# * `surrogates_are_journalable` - without the surrogate clause the fake's own byte measure
+#   (`compact_bytes`) raises `UnicodeEncodeError` out of `append` instead of the typed
+#   `journal_write_failed`, as jsonb's untyped 22P02 would on PostgreSQL: that escape is
+#   the defect (F fakes follow-up review H1).
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -347,9 +351,73 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "                    raise errors.JournalWriteFailed(\n"
           "                        f\"event of {size} bytes exceeds {self.limits.journal_event_max_bytes}\")",
        "                    pass", "dur_output__an_oversize_event_is_refused"),
+    # D4 request 10a (review M1): what jsonb cannot store, refused as PgStreamStore refuses it.
+    _m("unjournalable_payload_stored", "what jsonb cannot store is refused (D4 M1)",
+       S, "        if not all(_journalable(event.payload) for event in events):",
+       "        if False:", "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    # round 2 (review P1): refused before the fence, where PgStreamStore refuses before sending
+    _m("refuse_after_fence", "an unjournalable batch is refused before the fence (D4 M1)",
+       S, "        if not all(_journalable(event.payload) for event in events):",
+       "        if self.jobs._fence(lease) and not all(_journalable(event.payload)\n"
+       "                                               for event in events):",
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    _m("only_the_last_event_is_checked", "the whole batch is checked (D4 M1/A1)",
+       S, "        if not all(_journalable(event.payload) for event in events):",
+       "        if not all(_journalable(event.payload) for event in events[-1:]):",
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    _m("surrogates_are_journalable", "a lone surrogate is refused (D4 A2)",
+       S, '        return "\\x00" not in value and not any("\\ud800" <= char <= "\\udfff" for char in value)',
+       '        return "\\x00" not in value',
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch",
+       dies_by=("UnicodeEncodeError",)),
+    _m("keys_are_not_checked", "a NUL in a key is refused (D4 M1)",
+       S, "_journalable(key) and _journalable(item)", "_journalable(item)",
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    _m("non_finite_numbers_are_journalable", "NaN and the infinities are refused (D4 M1)",
+       S, "        return math.isfinite(value)", "        return True",
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    _m("the_escape_text_is_refused", "the literal text \\u0000 is journalable (D4 M1)",
+       S, '        return "\\x00" not in value and not any(',
+       '        return "\\x00" not in value and "\\\\u0000" not in value and not any(',
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
+    _m("a_refused_batch_is_charged", "a refused batch charges no journal bytes (D4 M1)",
+       S, '            raise errors.JournalWriteFailed("an event carries a NUL character, a lone surrogate "',
+       "            self.jobs.journal.store(lease.job_id, 100)\n"
+       '            raise errors.JournalWriteFailed("an event carries a NUL character, a lone surrogate "',
+       "dur_output__an_unjournalable_event_refuses_the_whole_batch"),
     _m("replay_gap_hidden", "a pruned prefix is an explicit gap",
        S, 'raise errors.ReplayGap(f"events up to {pruned_to} are no longer retained")', "pass",
        "dur_output__a_pruned_prefix_is_an_explicit_replay_gap"),
+    # D4 request 10b (J4): a journal pruned to nothing continues past its watermark.
+    _m("pruned_journal_restarts_at_one", "numbering continues past a prune watermark (J4)",
+       S, "                   + [pruned_sequence if pruned_generation == generation else 0])",
+       "                   + [0])",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
+    _m("the_terminal_event_restarts_below_the_watermark", "the terminal event lands past it (J4)",
+       S, "        sequence = self._last_sequence(job.id, generation) + 1",
+       "        sequence = max((chunk.sequence for chunk in stored if chunk.generation == generation),\n"
+       "                       default=0) + 1",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
+    _m("a_pruned_journal_expires_for_ever", "expired is a watermark and no chunk left (J4)",
+       S, "        return job_id in self.pruned_to and not self.chunks.get(job_id)",
+       "        return job_id in self.pruned_to",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark",
+       "dur_output__a_pruned_prefix_is_an_explicit_replay_gap"),
+    # round 2 (review P2): a present-but-empty chunk list (an empty batch's setdefault) is
+    # still "no chunk left"
+    _m("expired_by_key_presence", "expired is no chunk left, not a missing key (J4)",
+       S, "        return job_id in self.pruned_to and not self.chunks.get(job_id)",
+       "        return job_id in self.pruned_to and job_id not in self.chunks",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
+    # round 2 (review P3): the terminal event's TTL as 0017 sets it (D4 Limit 2)
+    _m("chunkless_terminal_ttl_from_the_store", "a chunkless terminal event lives 3600 s (0017)",
+       S, "               else timedelta(seconds=TERMINAL_TTL_WITHOUT_CHUNKS_S))",
+       "               else timedelta(seconds=self.limits.journal_chunk_ttl_s))",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
+    _m("terminal_ttl_ignores_the_newest_chunk", "a terminal event takes its newest chunk's TTL",
+       S, "        ttl = (stored[-1].expires_at - stored[-1].persisted_at if stored",
+       "        ttl = (timedelta(seconds=self.limits.journal_chunk_ttl_s) if stored",
+       "dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark"),
     _m("expired_journal_served", "an expired journal is 410",
        S, 'raise errors.JournalExpired(f"journal for {job_handle} has expired")', "pass",
        "dur_output__an_expired_journal_is_gone_not_regenerated"),
@@ -686,11 +754,21 @@ MUTANTS: tuple[Mutant, ...] = (
           "                               execution_mode=job.request.execution_mode, available_at=now,",
        "dur_output__every_requeued_candidate_carries_the_right_kind"),
     _m("lost_inference_emits_a_prepare_dispatch", "a lost attempt dispatches for its own phase (s18)",
-       S, '            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,\n'
-          '                                                                    "attempt": job.attempts})',
-       '            self._emit(job.id, OutboxKind.prepare_dispatch, now, {"request_id": job.id,\n'
-          '                                                               "attempt": job.attempts})',
+       S, "            dispatch = self._emit(job.id, OutboxKind.inference_dispatch, now,",
+       "            dispatch = self._emit(job.id, OutboxKind.prepare_dispatch, now,",
        "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    # R93 (E3B2 request 3, D2 OB-5b): the requeue event and its fresh outbox row are one id.
+    _m("requeue_event_id_minted_apart", "a requeue event carries its fresh row's id (R93)",
+       S, "            event = IndexEvent(event_id=dispatch.event_id, job_id=job.id,",
+       "            event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,",
+       "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"),
+    _m("lapsed_preparation_reopens_its_old_row", "a lapsed preparation gets a fresh row (OB-5b)",
+       S, "            self._emit(job.id, OutboxKind.prepare_dispatch, now,\n"
+          "                       {\"request_id\": job.id, \"attempt\": job.preparation_attempts})",
+       "            self.outbox.append(next(event for event in self.outbox\n"
+          "                                    if event.aggregate_id == job.id\n"
+          "                                    and event.kind is OutboxKind.prepare_dispatch))",
+       "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"),
     # --- r1 R55: untrusted store inputs -----------------------------------------
     _m("attach_trusts_a_caller_supplied_org", "attach reads the org from the job row (R55)",
        M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',

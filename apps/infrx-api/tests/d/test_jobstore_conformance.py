@@ -32,9 +32,11 @@ pytestmark = pytest.mark.skipif(_reason is not None,
 
 #: D5: every case that needed the settlement passes - the former `_D5` cases (23 at D3,
 #: unchanged by D4), the cancel-cause case (0018's `infrx.cancel` records the cause), G2's
-#: R91 lookup case (0018's `infrx.idempotency_lookup`) and the former `RACY` case, now strict whichever transaction wins (complete settles, or cancel
-#: commits first and complete is `already_terminal`). Only a case NO real store can pass
-#: as written stays pending, with its reason.
+#: R91 lookup case (0018's `infrx.idempotency_lookup`) and the former `RACY` case, now
+#: strict whichever transaction wins (complete settles, or cancel commits first and
+#: complete is `already_terminal`). Only a case NO real store can pass as written stays
+#: pending, with its reason; RAISES names that one case only (the integration head's
+#: cancel-cause and R91 entries, 75cd7bb/f52308a, are dropped with their PENDING lines).
 PENDING: dict[str, str] = {
     # Cannot pass on ANY real store as written: the case pairs KEY_B with ORG_A and KEY_A
     # with ORG_B, and in PostgreSQL a key belongs to exactly one organization (the

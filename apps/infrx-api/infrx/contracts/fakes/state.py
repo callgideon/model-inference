@@ -17,6 +17,7 @@ keeps concurrency cases deterministic.
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -43,6 +44,9 @@ MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
 # the reservation, and the terminal write is then checked like any other, never
 # waved through (02: per-job *and* global byte limits, both enforced).
 TERMINAL_EVENT_RESERVE_BYTES = 1024
+# 0017 (D4 Limit 2): a terminal event written with no chunk left takes this frozen TTL (the
+# trigger sees no store limits); otherwise it takes the newest chunk's.
+TERMINAL_TTL_WITHOUT_CHUNKS_S = 3600
 
 # released_free = the customer was never going to be charged (rejected, invalid,
 # never ran). released_platform_absorbed = we did work and ate the cost.
@@ -59,6 +63,22 @@ def _phase_deadline(now: datetime, budget_s: float, deadline_at: datetime) -> da
     """r1 R20: a phase instant is the database clock plus that phase's budget,
     clamped by the absolute accepted deadline. No phase outlives the job."""
     return min(now + timedelta(seconds=budget_s), deadline_at)
+
+
+def _journalable(value: object) -> bool:
+    """What jsonb can store: no NUL character and no lone UTF-16 surrogate in a string or
+    key, no NaN or infinity; every other JSON value is stored. A COPY of D4's rule
+    (`infrx.state.journal._journalable`, the source): contracts never import `infrx.state`.
+    `tests/d/test_journal_units.py` holds the two stores to one table of payloads."""
+    if isinstance(value, str):
+        return "\x00" not in value and not any("\ud800" <= char <= "\udfff" for char in value)
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, dict):
+        return all(_journalable(key) and _journalable(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_journalable(item) for item in value)
+    return True
 
 
 @dataclass
@@ -1249,15 +1269,17 @@ class FakeJobStore:
             job.state = JobState.queued
             job.lease = None
             self._enter_queued(job, now)          # r1 R38: only the remainder is left
-            event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,
+            # R93 (D2 OB-5b): the published event IS the fresh dispatch row, by its id, as on
+            # PostgreSQL - two ids for one dispatch would let a replay-safe index run it twice.
+            dispatch = self._emit(job.id, OutboxKind.inference_dispatch, now,
+                                  {"request_id": job.id, "attempt": job.attempts})
+            event = IndexEvent(event_id=dispatch.event_id, job_id=job.id,
                                org_id=job.request.org_id, key_id=job.request.key_id,
                                # r1 R52: a requeue after a lost inference attempt is an
                                # inference candidate, and says so.
                                kind=OutboxKind.inference_dispatch,
                                execution_mode=job.request.execution_mode, available_at=now,
                                attempt=job.attempts)
-            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,
-                                                                    "attempt": job.attempts})
             return [event]
         return []
 
@@ -1291,15 +1313,34 @@ class FakeStreamStore:
         self.failures = failure_hooks(failures)
         self.chunks: dict[str, list[Chunk]] = {}
         self.pruned_to: dict[str, tuple[int, int]] = {}
-        self.expired_jobs: set[str] = set()
         jobs.stream = self          # one database: settlement writes the terminal event
 
     @staticmethod
     def event_bytes(event: EngineEvent) -> int:
         return len(compact_bytes(event.payload))
 
+    def _expired(self, job_id: str) -> bool:
+        """D4's definition (0017), not a flag: a prune watermark and no chunk left. A later
+        append or terminal event lands past the watermark and the journal is live again."""
+        return job_id in self.pruned_to and not self.chunks.get(job_id)
+
+    def _last_sequence(self, job_id: str, generation: int) -> int:
+        """The last sequence `generation` issued, pruned or not. Numbering continues past a
+        prune watermark and never restarts below it (D4 J4): a restarted journal would
+        reissue cursors that already named pruned events."""
+        pruned_generation, pruned_sequence = self.pruned_to.get(job_id, (0, 0))
+        return max([chunk.sequence for chunk in self.chunks.get(job_id, ())
+                    if chunk.generation == generation]
+                   + [pruned_sequence if pruned_generation == generation else 0])
+
     async def append(self, lease: Lease, events: tuple[EngineEvent, ...]) -> tuple[Chunk, ...]:
         self.failures.before("append")
+        if not all(_journalable(event.payload) for event in events):
+            # D4 review M1: refused typed, the whole batch, before anything is fenced, stored
+            # or charged - where `PgStreamStore.append` refuses it (jsonb would raise untyped).
+            raise errors.JournalWriteFailed("an event carries a NUL character, a lone surrogate "
+                                            "or a non-finite number, which the journal cannot "
+                                            "store")
         async with self.jobs._lock:
             job = self.jobs._fence(lease)
             now = self.clock.now()
@@ -1316,8 +1357,7 @@ class FakeStreamStore:
                         f"event of {size} bytes exceeds {self.limits.journal_event_max_bytes}")
             self.jobs.journal.store(job.id, sum(sizes))
             stored = self.chunks.setdefault(job.id, [])
-            sequence = max((chunk.sequence for chunk in stored
-                            if chunk.generation == lease.generation), default=0)
+            sequence = self._last_sequence(job.id, lease.generation)
             committed = []
             for event, size in zip(events, sizes):
                 sequence += 1
@@ -1342,7 +1382,7 @@ class FakeStreamStore:
         if not isinstance(limit, int) or limit <= 0:
             raise errors.InvalidRequest(f"limit must be a positive integer, not {limit!r}")
         limit = min(limit, MAX_READ_LIMIT)
-        if job.id in self.expired_jobs:
+        if self._expired(job.id):
             raise errors.JournalExpired(f"journal for {job_handle} has expired")
         position = (cursor.generation, cursor.sequence) if cursor else (0, 0)
         head = max(((chunk.generation, chunk.sequence) for chunk in self.chunks.get(job.id, ())),
@@ -1377,7 +1417,7 @@ class FakeStreamStore:
         if not job.terminal:
             raise errors.StateConflict("finalize_in_transaction runs inside the settling "
                                        "transaction, after the terminal outcome")
-        if job.id in self.expired_jobs:
+        if self._expired(job.id):
             raise errors.JournalExpired(f"journal for job {job.id} has expired")
         if outcome != job.outcome:
             # The argument is a lookup key, not content: an outcome that is not the
@@ -1422,14 +1462,15 @@ class FakeStreamStore:
             if chunk.event_type is ChunkEventType.terminal:
                 return chunk                        # one terminal event, replay safe
         generation = max((chunk.generation for chunk in stored), default=job.generation) or 1
-        sequence = max((chunk.sequence for chunk in stored if chunk.generation == generation),
-                       default=0) + 1
+        sequence = self._last_sequence(job.id, generation) + 1
         now = self.clock.now()
         payload = self.terminal_payload(outcome)
+        # the newest chunk's TTL, so a job's chunks expire in cursor order (0017)
+        ttl = (stored[-1].expires_at - stored[-1].persisted_at if stored
+               else timedelta(seconds=TERMINAL_TTL_WITHOUT_CHUNKS_S))
         chunk = Chunk(job_id=job.id, generation=generation, sequence=sequence,
                       event_type=ChunkEventType.terminal, payload=payload,
-                      bytes=len(compact_bytes(payload)), persisted_at=now,
-                      expires_at=now + timedelta(seconds=self.limits.journal_chunk_ttl_s))
+                      bytes=len(compact_bytes(payload)), persisted_at=now, expires_at=now + ttl)
         stored.append(chunk)
         self.jobs.journal.store(job.id, chunk.bytes, settling=True)
         return chunk
@@ -1453,5 +1494,4 @@ class FakeStreamStore:
                 self.chunks[job_id] = keep
             else:
                 del self.chunks[job_id]
-                self.expired_jobs.add(job_id)
         return removed

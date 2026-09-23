@@ -66,7 +66,7 @@ def seeded():
     """D's fixture rows in one transaction on E2's database, rolled back afterwards."""
     state = harness.load_state()
     if not state or not harness.owned_containers():
-        pytest.skip("no infrx-e2 stack: run `tests/integration/run.py --layer 3`")
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
     import psycopg
     conn = psycopg.connect(harness.pg_dsn())
     try:

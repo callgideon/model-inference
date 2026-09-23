@@ -1,0 +1,682 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "head": "b0a64e1",
+ "reviews": [
+  {
+   "lens": "gate",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Re-derived from my own gate run at b0a64e1 (report sha256 115b8d3c884c8fc4, git_head b0a64e1 with dirty:false, namespace e3b2, per-stage seconds present): migrate 0001-0017; rls 696 / failed null; backend 98/17/11 with the same 11 I3B ids and the same pending_by_id; detected db03-db11 including db08b and db11; mutants 191/174/4/13 with the same problems (i3bm57 stale; i3bm40,41,42,48,49,60-66 baseline-red); e3bm 39/39 killed; e2m 71/71 killed; controls e2c01, e2c02, e3bc01 and i3bc01 survived, the four must_survive entries in all_mutants(); engine 8; bench 67; canary PASS; teardown PASS. From the catalog I also re-derived the 20 new 0017 pgstate rows and their agreement with pg_proc/pg_trigger/pg_constraint/privileges, and layer 0 at b0a64e1 (2 failed/139 passed/91 skipped/1 xfailed). I recomputed the lane's l3-f883a0a.json sha256 (b7c9993b7742fb11) and its stage values, and they match the evidence text. NOT re-derived or not matching: the api-test count of 3120 with zero skips (mine was 3119 plus 1 corpus-cache skip, an environment difference); console 289 (I did not run npm ci, so mine was 288/1); the tests/integration '3 failed' (mine was 5, with 2 E2 fake_vllm flakes that did not reproduce in 5 re-runs); the D drill copy on both images (INFRX_D_TASK=e3b2, 9 passed each), which I did not run; the scratch merge with codex/i3b-followup@d99da09 (R2-5, 141/94/1), which I did not run; round-1 H1's 'killed in round 1' history. I applied every hand mutant myself and quote each kill line from my own runs. Nothing in this output is copied from the lane's text without a matching run of mine, except where marked above as not re-derived.",
+   "cleanup": "Removed: my containers infrx-e3b2-{clickhouse,postgres,s3,valkey} (twice: the gate's own teardown, then the kept layer-2 stack through harness.down; PostgREST was already down; foreign_containers []), the state file (harness.clear_state), both scratch clones (/tmp/claude-1000/confirm-e3b2-gate-3290059, /tmp/claude-1000/confirm-e3b2-gate-mut), the tools and output dirs, and the private TMPDIRs (cfm-*). `docker ps -a | grep -c e3b2` returns 0. I left /tmp/infrx-e3b2-postgres-56732.lock (mtime 16:01:27Z, which predates this session's 16:08Z start, so it is the lane's D-drill lock and not mine; the lane's cleanup statement missed it). I never wrote to any worktree or to the lane's scratchpad/e3b2, never used port 55432, and never touched another lane's containers (infrx-d5-postgres, infrx-d2-postgres, gideon-migration-order-test-*).",
+   "mutants": [
+    {
+     "name": "e3bm16",
+     "edit": "stack.pending: `task not in PENDING` only (RESIDUAL no longer refused)",
+     "result": "killed: baseline 2 passed; mutated backend/test_stage.py:136: AssertionError",
+     "killed_by": "test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual"
+    },
+    {
+     "name": "e3bm22",
+     "edit": "run.mutation iterates mutants.MUTANTS",
+     "result": "killed: test_run.py:911: AssertionError (no ModuleNotFoundError; H3 closed)",
+     "killed_by": "test_the_mutation_stage_runs_every_list_through_one_runner"
+    },
+    {
+     "name": "e3bm23",
+     "edit": "OWNED_TREES drops infra",
+     "result": "killed: test_run.py:913: AssertionError",
+     "killed_by": "test_the_mutation_stage_runs_every_list_through_one_runner"
+    },
+    {
+     "name": "e3bm26",
+     "edit": "`if red is not None` -> `if False`",
+     "result": "killed: test_run.py:957: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "e3bm27",
+     "edit": "stale_pending filter -> `if False`",
+     "result": "killed: backend/test_stage.py:145: AssertionError",
+     "killed_by": "test_a_pending_id_naming_a_merged_task_fails_the_stage"
+    },
+    {
+     "name": "e3bm29",
+     "edit": "dr01c usd count reads `request_id <> %s` (live, e3b2 stack)",
+     "result": "killed: backend/test_drills.py:756: Failed",
+     "killed_by": "test_e3b_db08b_detects_a_usd_hold_beside_the_credit_one"
+    },
+    {
+     "name": "e3bm30",
+     "edit": "stack.defect clone guard -> `if False`",
+     "result": "killed: backend/test_stage.py:168: Failed",
+     "killed_by": "test_a_live_defect_is_refused_outside_this_processs_clones"
+    },
+    {
+     "name": "e3bm32",
+     "edit": "timeout path process.kill() instead of killpg",
+     "result": "killed: test_run.py:935: AssertionError",
+     "killed_by": "test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback"
+    },
+    {
+     "name": "e3bm33",
+     "edit": "suites failed ignores exit 124",
+     "result": "killed: test_run.py:1015: AssertionError",
+     "killed_by": "test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run"
+    },
+    {
+     "name": "e3bm34",
+     "edit": "git_head sha None",
+     "result": "killed: test_run.py:1029: AssertionError",
+     "killed_by": "test_the_report_names_its_tree_its_namespace_and_each_stages_duration"
+    },
+    {
+     "name": "e3bm35",
+     "edit": "suites status ignores `unexpected`",
+     "result": "killed: test_run.py:1057: AssertionError",
+     "killed_by": "test_an_unexpected_skip_in_api_test_fails_the_suites_stage"
+    },
+    {
+     "name": "e3bm38",
+     "edit": "trigger row drops `tgenabled = 'O'` (live)",
+     "result": "killed: test_services.py:240: AssertionError",
+     "killed_by": "test_a_live_grant_inversion_fails_its_matrix_row"
+    },
+    {
+     "name": "e3bm39",
+     "edit": "run_one sweeps shared infrx-e2-* after a run",
+     "result": "killed: test_run.py:997: AssertionError",
+     "killed_by": "test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_files"
+    },
+    {
+     "name": "e3bm12/13/14/15/18/21/24/31/37",
+     "edit": "lane's declared edits, applied by hand",
+     "result": "all killed at the lane's quoted lines: test_stage.py:87, test_harness.py:86, test_stage.py:100, test_drills.py:655 (baseline 1 skipped = D5 pending), test_drills.py:852, test_services.py:208, test_run.py:932 Failed (declared pytest.fail), test_run.py:999, test_run.py:1076"
+    },
+    {
+     "name": "C1 baseline key without copy kind",
+     "edit": "key = (mutant.suite, mutant.select)",
+     "result": "SURVIVED (51 passed before and after); see G-B1"
+    },
+    {
+     "name": "C2 baseline-red control not a problem",
+     "edit": "drop \"baseline-red\" from summarise's status tuple",
+     "result": "SURVIVED (51 passed); see G-B1"
+    },
+    {
+     "name": "C3 baseline-red counted as killed",
+     "edit": "killed count includes baseline-red",
+     "result": "killed: test_run.py:960: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "C4 baseline ignores 'failed' in its summary",
+     "edit": "`ran` regex (passed|errors?) only",
+     "result": "killed: test_run.py:957: AssertionError",
+     "killed_by": "test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red"
+    },
+    {
+     "name": "C5 baseline ignores exit code/errors",
+     "edit": "`if not re.search(r'\\d+ (failed)\\b', summary): return None`",
+     "result": "SURVIVED; equivalent in effect: an error or no-summary baseline is then caught by _verdict as setup-error, so it is not a finding"
+    },
+    {
+     "name": "C6 control that dies counted as a kill",
+     "edit": "_verdict must_survive branch returns 'killed' instead of CONTROL-KILLED",
+     "result": "killed: test_run.py:803: AssertionError"
+    },
+    {
+     "name": "C7 CONTROL-KILLED not a problem",
+     "edit": "drop CONTROL-KILLED from summarise tuple",
+     "result": "killed: test_run.py:822: AssertionError"
+    },
+    {
+     "name": "C8 dirty never recorded",
+     "edit": "\"dirty\": False",
+     "result": "SURVIVED (51 passed); see G-B2"
+    },
+    {
+     "name": "C9 KNOWN_API_SKIPS tolerates all",
+     "edit": "KNOWN_API_SKIPS = (\"\",)",
+     "result": "killed: test_run.py:1057: AssertionError"
+    },
+    {
+     "name": "C10 skip parser loses re.M",
+     "edit": "re.findall(…SKIPPED…, output) without re.M",
+     "result": "SURVIVED (51 passed); see G-B3"
+    },
+    {
+     "name": "C11 baseline runs in shared TMPDIR",
+     "edit": "_pytest(root, mutant, api_root, None) for the baseline",
+     "result": "killed: test_run.py:999: AssertionError"
+    },
+    {
+     "name": "D1 dr13 premise: acknowledged_at not read",
+     "edit": "unacknowledged(): `acknowledged_at is null and false`",
+     "result": "killed live by db10: test_drills.py:841 AssertionError ('the acknowledged rows came back', the clock arm) -> :879 pytest.raises match fails",
+     "killed_by": "test_e3b_db10_detects_an_outbox_acknowledgment_that_does_not_land"
+    },
+    {
+     "name": "D2 dr13 clock advance removed",
+     "edit": "delete h.clock.advance(relay.redelivery_s + 1)",
+     "result": "SURVIVED as expected: the premise arm alone still reports db10. F1's two arms are each sufficient, and D1 shows the premise arm is not needed while the clock arm stands"
+    },
+    {
+     "name": "D3 dr13 premise reads the wrong kind",
+     "edit": "unacknowledged(kind='prepare_dispatch')",
+     "result": "killed live by db10: test_drills.py:841 -> :879"
+    },
+    {
+     "name": "live inversion (own, rolled back)",
+     "edit": "revoke read_journal from service_role; ENABLE REPLICA trigger (tgenabled R); grant journal_terminal_event to service_role; revoke select on infrx.jobs from service_role; weaker watermark CHECK",
+     "result": "all 5 rows passed=False inverted, True restored (read_journal-service_role, 0017-terminal-trigger, journal_terminal_event()-service_role, 0017-watermark-columns-service_role, 0017-watermark-check)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "docker ps -a --format {{.Names}} | grep e3b2",
+     "exit": 1,
+     "tail": "(empty; only infrx-d5-postgres, infrx-d2-postgres, gideon-migration-order-test-* present, none touched)"
+    },
+    {
+     "cmd": "git clone --shared … /tmp/claude-1000/confirm-e3b2-gate-3290059 && git checkout b0a64e1 && make api-env",
+     "exit": 0,
+     "tail": "uv sync --frozen ok; git diff f883a0a..b0a64e1 = research/plan/evidence/e/E3B-e57b820.md only"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e3b2 INFRX_Q_VALKEY_PORT=56761 apps/infrx-api/.venv/bin/python tests/integration/run.py --layer 3 --canary --report …/l3-b0a64e1.json (detached, 16:08:14Z-16:42:46Z, 2072.2 s)",
+     "exit": 1,
+     "tail": "git_head {sha b0a64e13c1bc…, dirty false}, namespace e3b2; preflight PASS 3.5s; services PASS 18.5s; migrate PASS 0001-0017 (17 files); rls PASS 696 cases failed null; backend FAIL {passed 98, pending 17, failed 11, stale_pending null, pending_by_id D2 1 D3 1 D5 12 G1R 1 G2 12 G3 4 I2B 1 M3 1 W3 1}, pytest '3 failed, 98 passed, 17 skipped, 6 warnings, 8 errors in 63.99s', failed = i3b mutant_list, rc10, bk01_a, 8x bk01f; detected db03-db11 incl db08b + bk01b/c/d; engine PASS 8 cases; suites FAIL: tests/integration '5 failed, 199 passed, 20 skipped, 1 xfailed, 8 errors' (the 11 I3B ids + 2 test_fake_vllm, see G-N1), make api-test exit 0 '3119 passed, 1 skipped' skip 'corpus cache not found' -> unexpected_skips, console-test 288/1 (my clone lacks node_modules), bench-test 67 passed; mutants FAIL {191, killed 174, controls_survived 4, not_killed 13, pending 0}, problems i3bm57 (stale) + i3bm40,41,42,48,49,60-66 (baseline-red), e3bm 39/39 killed, e2m 71/71 killed, controls e2c01/e2c02/e3bc01/i3bc01 SURVIVED; canary PASS; teardown PASS 4 removed; report sha256 115b8d3c884c8fc4, log 6c7a580a8acc52cb"
+    },
+    {
+     "cmd": "summarise lane report …/scratchpad/e3b2/l3-f883a0a.json (sha256 b7c9993b7742fb11, matches the claim)",
+     "exit": 0,
+     "tail": "git_head f883a0a dirty false, ns e3b2, 2063.7 s; same backend/mutants numbers as mine; tests/integration 3 failed/201 passed/20 skipped/8 errors; api-test 3120 passed skips []; console 289; bench 67; backend-teardown 77.8 s / backend 0.0 s"
+    },
+    {
+     "cmd": "hand mutants (hm.py: baseline, apply, pytest -k -x, revert) for 22 e3bm ids + C1-C12 on test_run.py+backend/test_stage.py",
+     "exit": 0,
+     "tail": "every e3bm killed at the lane's quoted line; survivors C1, C2, C5 (equivalent), C8, C10; every revert left a clean tree"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e3b2 pytest -q -rs tests/integration (layer 0, b0a64e1)",
+     "exit": 1,
+     "tail": "2 failed, 139 passed, 91 skipped, 1 xfailed (i3b mutant_list :25, rc10 :631), matches the lane's R2-4"
+    },
+    {
+     "cmd": "scratch merge b0a64e1 into origin/claude/backend-impl (6dedf1e) + layer 0 e3b2",
+     "exit": 1,
+     "tail": "clean merge; 3 failed, 138 passed, 91 skipped, 1 xfailed; new red test_stage.py:122 Extra items G2, G3; with IR2-5 applied mechanically for G2/G3: dr11 PASSED (vacuous), residual case passed, journeys pend on D5"
+    },
+    {
+     "cmd": "run.py --layer 2 --keep --no-mutants (e3b2), then psql catalog.sql in infrx-e3b2-postgres",
+     "exit": 0,
+     "tail": "read_journal/expire_journal/journal_usage/append prosecdef t, service_role only; journal_terminal_event t, {postgres=X}; chunk_doc prosecdef f, {postgres=X}; anon/authenticated no usage on infrx and no column select; service_role selects both watermark columns; CHECK text == JOURNAL_CHECK; trigger tgenabled O, def == JOURNAL_TRIGGER; role_matrix 696 rows, 20 name the 0017 objects"
+    },
+    {
+     "cmd": "pytest test_fake_vllm.py x3 isolated (e3b2) and pytest tests/integration x2 with the stack up",
+     "exit": 1,
+     "tail": "17 passed x3; '3 failed, 201 passed, 20 skipped, 1 xfailed, 8 errors' x2 (I3B only): the 2 fake_vllm reds in my gate did not reproduce"
+    },
+    {
+     "cmd": "harness teardown of the kept stack + scratch removal",
+     "exit": 0,
+     "tail": "removed infrx-e3b2-{clickhouse,postgres,s3,valkey}; foreign []; docker ps -a | grep -c e3b2 -> 0"
+    }
+   ]
+  },
+  {
+   "lens": "honesty",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Re-derived from the lane's JSON and logs, and every count matches: l3-f883a0a.json sha256 b7c9993b7742fb11; git_head f883a0a with dirty:false; namespace e3b2; 2063.7 s; backend 98 passed / 17 pending / 11 failed; the 11 failures are exactly I3B's ids; pending_by_id D5 12 / G2 12 / G3 4. The 17 distinct pending cases are 13 E3B-owned plus rc03/rc04/rc05b/rc08b. rls 696. Suites: tests/integration 3 failed / 201 passed / 20 skipped / 8 errors; make api-test 3120 passed with the '30 xfailed, 1 xpassed' text present and skips []; console 289; bench 67. Mutants 191 / 174 killed / 4 controls / 13 problems, all I3B's. The killtexts file lists all 39 e3bm as killed and 4 controls SURVIVED. The layer-0 and tests/d logs match the claimed counts, and I reproduced layer 0 at b0a64e1 exactly (2/139/91/1). R2-8's kill locations reproduce. Not re-derived, because they need a live stack: pgstate's 186 write rows, the db03-db11 detections (only the report's 'detected' list was checked), and the 1d2e0a1 claim that dr13's advance matters (HON-7). 'No push' holds. Every push of origin/codex/e3b-phase2-gate falls either at a coordinator WIP save or in a multi-branch push in the same second as other lanes' refs, and all commits carry one shared git identity, so authorship cannot be separated further. 'No rebase, reset, amend' holds: the reflog since 80cef22 has only commit and merge entries. Three texts are inaccurate against the current head: IR2-5 'Due now: none' (G2 had merged 25 min before the handback); the phase-3 table's 'turns red when G2 mounts the ingress' (it turns red when tasks.json flips); and IR2-2 'Only I3B's stack.py hunk is needed' (it was measured on d99da09, and it misses I3B's R2-A and R2-B and G2's merge). These are stale claims, not fabricated ones.",
+   "cleanup": "Removed both scratch clones (/tmp/claude-1000/confirm-e3b2-honesty-3289606 and -f) and the private TMPDIR (-tmp, which held my locks and mut.py). Only container started: infrx-confirm-e3b2-honesty-postgres, twice via pgharness on 127.0.0.1:55571; the harness removed it both times; `docker ps -a | grep -c honesty` → 0. No Valkey container was started; 55572 was only reserved in the patched TASK_PORTS, and decoy 55573 was never used. Never touched: port 55432 (a pgharness run under my private TMPDIR refused infrx-d1-postgres as foreign and altered nothing), the running infrx-e3b2-*, infrx-d1/d2/d5 or gideon-* containers (the infrx-e3b2-* ones belong to the concurrent gate reviewer's /tmp/claude-1000/confirm-e3b2-gate-3290059), the codex-e3b2 worktree (git status is empty; only read-only reflog and diff were used), any hosted project, AWS or the box.",
+   "mutants": [
+    {
+     "name": "hm01",
+     "edit": "run.stale_pending: drop 'and task not in residual'",
+     "result": "SURVIVED (test_stage+test_run 55 passed)"
+    },
+    {
+     "name": "hm02",
+     "edit": "stale_pending statuses ('implemented','integrated') -> ('integrated',)",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:145 AssertionError"
+    },
+    {
+     "name": "hm03",
+     "edit": "stale_pending statuses -> ('implemented',)",
+     "result": "SURVIVED (9 passed)"
+    },
+    {
+     "name": "hm04",
+     "edit": "backend_verdict: 'or stale_pending(cases)' -> 'or False'",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:147 AssertionError"
+    },
+    {
+     "name": "hm05",
+     "edit": "stack.RESIDUAL key I2B -> I2Bx (residual computation)",
+     "result": "killed",
+     "killed_by": "backend/test_stage.py:122 AssertionError"
+    },
+    {
+     "name": "hm06",
+     "edit": "KNOWN_API_SKIPS = ('',)",
+     "result": "killed",
+     "killed_by": "test_run.py:1057 AssertionError"
+    },
+    {
+     "name": "hm07",
+     "edit": "KNOWN_API_SKIPS = ('unavailable',)",
+     "result": "killed",
+     "killed_by": "test_run.py:1059 AssertionError"
+    },
+    {
+     "name": "hm08",
+     "edit": "KNOWN_API_SKIPS = ('corpus cache not found',)",
+     "result": "SURVIVED (46 passed); no test pins this skip's handling"
+    },
+    {
+     "name": "hm09",
+     "edit": "suites: unexpected skips read where argv != 'make api-test'",
+     "result": "killed",
+     "killed_by": "test_run.py:1057 AssertionError"
+    },
+    {
+     "name": "hm10",
+     "edit": "run_one: red = BASELINES[key] -> red = None (skip baseline)",
+     "result": "killed",
+     "killed_by": "test_run.py:957 AssertionError"
+    },
+    {
+     "name": "hm11",
+     "edit": "run_one: key without copy kind",
+     "result": "SURVIVED (46 passed)"
+    },
+    {
+     "name": "hm12",
+     "edit": "summarise counts baseline-red as killed",
+     "result": "killed",
+     "killed_by": "test_run.py:960 AssertionError"
+    },
+    {
+     "name": "hm13",
+     "edit": "summarise: 'baseline-red' removed from the problem tuple",
+     "result": "SURVIVED (46 passed)"
+    },
+    {
+     "name": "hm14",
+     "edit": "_baseline ignores the exit code",
+     "result": "SURVIVED (46 passed)"
+    },
+    {
+     "name": "hm15",
+     "edit": "run_one: key = 0 (the first baseline is reused for every mutant)",
+     "result": "SURVIVED (46 passed)"
+    },
+    {
+     "name": "hm16",
+     "edit": "suites: FAIL if (failed or silent) (drop unexpected)",
+     "result": "killed",
+     "killed_by": "test_run.py:1057 AssertionError"
+    },
+    {
+     "name": "hm17 (static)",
+     "edit": "dr13: delete the unacknowledged() premise assertion",
+     "result": "not run (no stack); by reading the code, db10's pytest.raises(match) would fail with 'the acknowledged rows came back', so killed at layer 2",
+     "killed_by": "db10 (analysis)"
+    },
+    {
+     "name": "e3bm22/e3bm23/e3bm12/e3bm33/e3bm34/e3bm35 (lane's, re-run in place at b0a64e1)",
+     "edit": "lane definitions",
+     "result": "killed at test_run.py:911, :913, backend/test_stage.py:87, test_run.py:1015, :1029, :1057, all AssertionError, matching R2-8",
+     "killed_by": "named cases"
+    },
+    {
+     "name": "e3bm26/e3bm27/e3bm16/e3bm37 via mutants.py --only at b0a64e1",
+     "edit": "lane definitions",
+     "result": "killed ×4"
+    },
+    {
+     "name": "e3bm16 on merged tree (integration head + b0a64e1 + IR2-1)",
+     "edit": "lane definition",
+     "result": "baseline-red (the residual case is red unmutated because G2/G3 are implemented); killed after HON-1's fix"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared ... && git checkout b0a64e1 && make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "git checkout -b scratch-merge origin/claude/backend-impl(6dedf1e) && git merge --no-ff b0a64e1",
+     "exit": 0,
+     "tail": "16 files changed, 2829 insertions(+), 318 deletions(-); no conflicts"
+    },
+    {
+     "cmd": "TMPDIR=<private> pytest -q -rs tests/integration  (scratch merge, ns e2, no stack)",
+     "exit": 1,
+     "tail": "3 failed, 138 passed, 91 skipped, 1 xfailed: i3bm57 list, rc10, test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual ({'G2','G3',...} vs RESIDUAL). One earlier run also had test_fake_vllm Errno 98 on 55586 from a concurrent process; a re-run of test_fake_vllm.py gave 17 passed"
+    },
+    {
+     "cmd": "run.backend_summary(classify(<journeys PENDING[D5,G2]/[D5,G2,G3], rc03 PENDING[G1R,G2]>)) on the scratch merge",
+     "exit": 0,
+     "tail": "('FAIL', stale_pending ['G2','G3'])"
+    },
+    {
+     "cmd": "git apply ir1-r2.diff (sha256 23d1719320510c57); pytest tests/integration/test_harness.py apps/infrx-api/tests/contracts",
+     "exit": 1,
+     "tail": "3 failed, 1069 passed: the 3 are test_v1_projection_pg ForeignContainer on infrx-d1-postgres (a concurrent reviewer's checkout)"
+    },
+    {
+     "cmd": "INFRX_D_TASK=confirm-e3b2-honesty (TASK_PORTS patched: pg 55571, valkey 55572) pytest tests/contracts/v2/test_v1_projection_pg.py",
+     "exit": 0,
+     "tail": "3 passed in 3.20s (so IR2-1 = 1072 on the integration head)"
+    },
+    {
+     "cmd": "layer 0 on scratch merge + IR2-1",
+     "exit": 1,
+     "tail": "3 failed, 139 passed, 91 skipped (the e3b2 row now passes instead of xfail)"
+    },
+    {
+     "cmd": "merge origin/codex/i3b-followup@662c07c + git apply i3b-residual.diff (0cdce4ef58b14874); layer 0",
+     "exit": 1,
+     "tail": "2 failed, 144 passed, 96 skipped: residual case ({'G2','G3'}, set()); every_list_through_one_runner ['i3bm94','i3bm97','i3bm98'] == []"
+    },
+    {
+     "cmd": "+ HON-1 fix (G2/G3 re-pinned, G2 RESIDUAL) + R2-A line; layer 0",
+     "exit": 0,
+     "tail": "146 passed, 96 skipped, 2 warnings in 21.39s"
+    },
+    {
+     "cmd": "mutants.py --only e3bm16 / e3bm27 at scratch IR2-1 commit, then at fixed commit",
+     "exit": 0,
+     "tail": "e3bm16 baseline-red, e3bm27 killed; after fix: both killed"
+    },
+    {
+     "cmd": "git clone b0a64e1 + merge origin/codex/f-fakes-followup(0cf5cd6); pytest backend/test_drills.py -k 'dr03 or dr04' (pin NOT deleted)",
+     "exit": 1,
+     "tail": "1 failed, 1 passed, 2 skipped: assert '00000005-...' not in ('00000004-...', '00000005-...') - dr04[fake] RED without the deletion"
+    },
+    {
+     "cmd": "git apply --include='tests/*' r93.diff (bce25ab6ef18582b); same selection; then layer 0",
+     "exit": 1,
+     "tail": "2 passed, 2 skipped (postgres twins: no infrx-e2 stack); layer 0: 2 failed (i3bm57, rc10), 139 passed, 91 skipped, 1 xfailed"
+    },
+    {
+     "cmd": "cd apps/infrx-api && INFRX_D_TASK=confirm-e3b2-honesty pytest -q -rs tests/d/test_e3b_drills.py (plain, then INFRX_D1_IMAGE=supabase)",
+     "exit": 0,
+     "tail": "9 passed in 6.51s / 9 passed in 8.38s; container removed by the harness"
+    },
+    {
+     "cmd": "pytest tests/m/test_parity.py -k real_corpora (in a --shared clone)",
+     "exit": 0,
+     "tail": "SKIPPED [1] tests/m/test_parity.py:113: corpus cache not found; git-common-dir=/tmp/.../.git"
+    },
+    {
+     "cmd": "layer 0 at b0a64e1 (unmerged)",
+     "exit": 1,
+     "tail": "2 failed, 139 passed, 91 skipped, 1 xfailed (matches R2-4 and layer0-f883a0a.log)"
+    },
+    {
+     "cmd": "mut.py hm01..hm16 at b0a64e1 (pristine baseline test_stage+test_run: 55 passed)",
+     "exit": 0,
+     "tail": "killed: hm02,04,05,06,07,09,10,12,16; survived: hm01,03,08,11,13,14,15"
+    },
+    {
+     "cmd": "lane mutants e3bm22/23/12/33/34/35 applied in place and case run",
+     "exit": 1,
+     "tail": "test_run.py:911/:913, test_stage.py:87, test_run.py:1015/:1029/:1057 AssertionError"
+    },
+    {
+     "cmd": "sha256sum of lane scratch artefacts; python re-derivation of l3-f883a0a.json",
+     "exit": 0,
+     "tail": "l3 b7c9993b7742fb11, log 1134692cd1f289c3, layer0 c144fc1497b7ef3e, testsd 1bc8aaccd77379e1/fc4c3b06f2cd3261, ir1-r2 23d1719320510c57, i3b-residual 0cdce4ef58b14874, r93 bce25ab6ef18582b all match; git_head f883a0a dirty false; backend 98/17/11 with pending_by_id D5 12 G2 12 G3 4 D2/D3/G1R/I2B/M3/W3 1; rls 696; api-test 3120 passed, skips []; console 289; bench 67; mutants 191/174/4/13; killtexts has 39 e3bm, all killed"
+    },
+    {
+     "cmd": "git -C codex-e3b2 reflog; reflog refs/remotes/origin/codex/e3b-phase2-gate",
+     "exit": 0,
+     "tail": "HEAD: only commit/merge entries since 80cef22 (the only reset is a no-op at 04:49); remote ref pushed 14:09:26 (c587ddc), 14:55:50 (f97bfb7, in the same second as d5/f-fakes/g3/i3b refs: the coordinator's bulk push), 16:05:11 (b0a64e1)"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "G-B1",
+   "severity": "blocking",
+   "file": "tests/integration/mutants.py",
+   "line": "906 (key), 1041-1042 (summarise tuple)",
+   "claim_broken": "H1 fix: 'R83 pristine baseline, cached per (suite, selector, copy kind)'; 'a mutant whose cases are already red there is baseline-red: a problem, never a kill'.",
+   "evidence": "Two single edits leave test_run.py and backend/test_stage.py green (51 passed before and after each). (C1) `key = (mutant.suite, mutant.select)`, which drops the copy kind, SURVIVES. The copy kind matters today: all_mutants() has two (suite, select) pairs that span both kinds, test_observe.py/'ob11' (i3bm21 with copied infrx, i3bm22 without) and test_recovery.py/'rc01' (i3bm30 without; i3bm31 and i3bm34 with). Under C1 one kind's green baseline is reused for the other kind, which is the e2m64-66 vacuous-kill class that 8eba9c4 exists to stop. (C2) Dropping \"baseline-red\" from summarise's problem tuple SURVIVES. A baseline-red CONTROL then counts as neither a problem nor a survivor, and nothing checks that controls_survived == 4. The e3bm26 case covers only MUTANTS[2], a non-control, and never covers a shared key. No false count in this gate, where both kinds are green.",
+   "minimal_fix": "One test_run case with the fake _pytest: two mutants with the same (suite, select) but different copy kinds, where the copied kind answers red. Assert that the second is baseline-red and that _pytest ran two baselines. Add a control arm to test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red: a must_survive mutant with a red baseline must appear in summarise(...)['problems'].",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I confirmed it at b0a64e1, in a shared scratch clone checked out at that commit. The worktree HEAD is now 5eb7b85, but b0a64e1..HEAD does not touch the `key =` line (906), the summarise tuple (1041-1042) or test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red. No Postgres was needed and no container was started.\n\nCommand: `INFRX_E2_REPO_ROOT=$S PYTHONPATH=$S/apps/infrx-api $PY -m pytest -q -p no:cacheprovider tests/integration/test_run.py tests/integration/backend/test_stage.py`\n\n- **Unmodified:** `FAILED tests/integration/test_run.py::test_sigterm_tears_down_and_orphans_no_fake_server / 1 failed, 54 passed`. That sigterm test is flaky and unrelated; it passed in the next two runs.\n- **C1:** changing line 906 to `key = (mutant.suite, mutant.select)` gives `55 passed in 13.66s`. The mutant survives.\n- **C2:** removing \"baseline-red\" from the summarise tuple gives `55 passed in 9.51s` on the rerun (the first run showed only the same flaky sigterm failure). The mutant survives.\n\nI enumerated all_mutants() and confirmed that two keys mix both copy kinds:\n- test_observe.py/'ob11': i3bm21 (with the copied infrx) and i3bm22 (without)\n- test_recovery.py/'rc01': i3bm30 (without), i3bm31 and i3bm34 (with)\n\nSo under C1 a green baseline from one copy kind would be reused for the other, which reopens the e2m64-66 vacuous-kill class. For C2: the controls are e2c01, e2c02, e3bc01 and i3bc01. A control that went baseline-red would count as neither a problem nor a survivor, and nothing checks that controls_survived equals 4. The only test covers MUTANTS[2], a non-control, alone with BASELINES reset, so it never exercises a shared key or a control. The gap is real.\n\nSeverity is nonblocking. The shipped code at b0a64e1 is correct, and in this gate every baseline is green in both copy kinds, so no count is wrong today. This is a missing regression guard on a claimed fix, not a wrong result. The reviewer's suggested fix fits: a two-kind shared-key case run with the fake _pytest, plus a control arm asserting that a baseline-red must_survive mutant appears in problems.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed at b0a64e1. I tested a scratch shared clone of the codex-e3b2 worktree, checked out at b0a64e1; the worktree HEAD itself is 5eb7b85. I used no PostgreSQL and started no container.\n\nCode: mutants.py:906 is `key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)`. mutants.py:1041-1042 add \"baseline-red\" to summarise's problem tuple. Without that entry, a must_survive result with status baseline-red is neither in `bad` (it is must_survive and not in the tuple) nor in `controls` (its status is not SURVIVED). The only consumer of controls_survived is run.py:462, which copies the number into the report. Nothing asserts that it equals 4. The controls are e2c01, e2c02, e3bc01 and i3bc01.\n\nExperiment, run from the clone:\n`$PY -m pytest -q -p no:cacheprovider tests/integration/test_run.py tests/integration/backend/test_stage.py`\n- Unedited: `55 passed in 9.62s`. The reviewer reported 51; the count differs, the result does not.\n- C1 (`key = (mutant.suite, mutant.select)`): `55 passed in 9.54s`, and again `55 passed in 9.53s`. One earlier C1 run had `1 failed, 54 passed`. The failing case was test_sigterm_tears_down_and_orphans_no_fake_server, a timing case that is unrelated to this change. It also failed once under C2, and every rerun passed.\n- C2 (drop \"baseline-red\" from the tuple): `55 passed in 9.61s`, and again `55 passed in 9.53s`.\nBoth edits survive.\n\nPairs that span both copy kinds, enumerated from all_mutants():\n- test_observe.py/'ob11': i3bm21 (copied infrx), i3bm22 (not copied).\n- test_recovery.py/'rc01': i3bm30 (not copied), i3bm31 and i3bm34 (copied).\nUnder C1, one kind's green baseline would be reused for the other kind. That brings back the vacuous-kill class of e2m64-66 that 8eba9c4 fixed.\n\nThe only baseline-red case uses MUTANTS[2], which is not a control and has a single-kind key.\n\nThe evidence row in research/plan/evidence/e/E3B-e57b820.md:428 states \"cached per (suite, selector, copy kind)\" and \"a problem, never a kill\". It cites e3bm26 and e3bm37 as the killing cases, and neither covers these two clauses.\n\nSeverity: the code is correct today, and this gate has no false count because both kinds are green. I still rate it blocking. H1 is itself a blocking finding, and the lane's evidence contract is that every finding has a killing case with a mutant behind it. The copy-kind cache key and the check that a red-baseline control counts as a problem are the two parts of H1's fix that stop vacuous kills, and neither is guarded. The reviewer's suggested fix is small: one test_run case with the fake _pytest, plus a control arm in the baseline-red test.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "G-B2",
+   "severity": "blocking",
+   "file": "tests/integration/run.py",
+   "line": "137-138 (git_head), 123 (computed in as_json at the end of the run)",
+   "claim_broken": "H7: 'The report records git_head (sha, dirty)'. The round-2 evidence relies on dirty:false (R2-7 used dirty:true to disqualify the f97bfb7 report).",
+   "evidence": "C8, `\"dirty\": False` (never recorded), SURVIVES test_run.py plus test_stage.py (51 passed). test_the_report_names_its_tree_… asserts only `isinstance(payload['git_head']['dirty'], bool)`. e3bm34 kills only a None sha. Also, git_head() runs in as_json() after teardown, so a tree edited during the run and restored before the end reports dirty:false.",
+   "minimal_fix": "In the case, point harness.REPO_ROOT (monkeypatch) at a tmp git repo holding one untracked file and assert dirty is True, then False once the file is removed. Take git_head once in Report.__init__ and again at the end, and record both (or fail when they differ).",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The test gap is real at b0a64e1. At that commit, tests/integration/run.py:137-138 has git_head() return {\"sha\": git(\"rev-parse\",\"HEAD\") or None, \"dirty\": bool(git(\"status\",\"--porcelain\"))}. The only test that reads the field, test_run.py:1029, asserts just `isinstance(payload[\"git_head\"][\"dirty\"], bool)`. The e3bm34 mutant (mutants.py:810-815) replaces only the sha with None. `git grep dirty` over tests/integration/test_*.py finds no other assertion on git_head.dirty.\n\nSmallest experiment, run in a scratch `git clone --shared` checked out at b0a64e1. I patched line 138 to `\"dirty\": False}` (`git diff -U0` shows `-            \"dirty\": bool(git(\"status\", \"--porcelain\"))}` / `+            \"dirty\": False}`), then ran:\n`apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_run.py tests/integration/backend/test_stage.py`\nTail: `....... [100%]` / `55 passed in 9.69s`. The mutant survives. The case the claim names, `-k names_its_tree`, also gave `1 passed, 45 deselected`. An earlier mutated run had one sigterm test fail (`1 failed, 45 passed`). That test passed on its own on the unmutated tree, and the mutated rerun above passed all 55. So the failure is a flake and does not kill the mutant.\n\nThe second point is also accurate: as_json() calls git_head() only when the report is serialised, not when the run starts. A tree edited during the run and restored before the end would therefore show dirty:false.\n\nWhy it is nonblocking: the production code is correct. `git status --porcelain` does report untracked and modified files, so the dirty:false values that the round-2 evidence depends on (and the dirty:true that R2-7 used to disqualify f97bfb7) were computed correctly. The defect is a missing kill for half of H7's field, plus a narrow edited-and-restored window. Neither makes an existing report false. The fix is a small case plus a mutant: point REPO_ROOT at a tmp repo with an untracked file and assert dirty is True, then False. Optionally, take the snapshot in Report.__init__ as well as at the end.\n\nNo PostgreSQL or E2 stack was used, and the scratch clone was removed.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "nonblocking",
+     "reason": "The finding is real at b0a64e1, but as a gap in the tests, not a bug in the code. I checked it on a scratch shared clone at b0a64e1. Nothing touched PostgreSQL, the worktree stayed clean, and I deleted the clone afterwards.\n\n**Code (run.py:131-138).** `git_head()` returns `{\"sha\": git(\"rev-parse\",\"HEAD\") or None, \"dirty\": bool(git(\"status\",\"--porcelain\"))}`, and `as_json()` (line 123) calls it once, at the end of the run. The only case that covers it is test_run.py:1029, which asserts `payload[\"git_head\"][\"sha\"] == head and isinstance(payload[\"git_head\"][\"dirty\"], bool)`. That type check passes for any hard-coded boolean. The `e3bm34` mutant in mutants.py:810 attacks only the sha. Yet the evidence file E3B-e57b820.md:440 says H7 \"records git_head (sha, dirty)\" and that it is closed by `e3bm34` being killed.\n\n**Experiment.** I ran `sed -i 's/\"dirty\": bool(git(\"status\", \"--porcelain\"))}/\"dirty\": False}/' tests/integration/run.py`, then `.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_run.py tests/integration/backend/test_stage.py`. Tail: `55 passed in 9.95s`. On the first try one case failed (`test_sigterm_tears_down_and_orphans_no_fake_server`). That failure is flaky and unrelated: the same case passes on its own with the mutant applied (`1 passed, 45 deselected`), and the full rerun gave 55 passed. So the mutant survives. The part of H7 that says \"records dirty\" has no case that kills it.\n\n**Why it is nonblocking.**\n- The code itself is correct. `bool(git status --porcelain)` is the right check, and it counts untracked files.\n- It has been seen working in a real run. In R2-7 (E3B-e57b820.md:482) a gate report recorded `dirty: true` while the evidence file was being edited, and that matched `git status`.\n- So the `dirty: false` at f883a0a (line 489) comes from the correct code. No evidence value is wrong. What is wrong is the evidence row's claim that the dirty half is covered by a killed mutant.\n- The second point is also real: the check runs only after teardown, so an edit made during the run and undone before the end reports `dirty: false`. That needs a deliberate edit-and-revert during a gate run, so it is not a practical threat to the recorded evidence.\n\n**Fix.** Add a case that points `harness.REPO_ROOT` at a temporary git repo with one untracked file and asserts `dirty` is True, then False once the file is removed. Add a matching mutant, and correct the H7 evidence row. Taking `git_head` at the start of the run and again at the end is optional hardening."
+    }
+   ]
+  },
+  {
+   "id": "G-B3",
+   "severity": "blocking",
+   "file": "tests/integration/run.py",
+   "line": "202 (skips regex), 432-434 (unexpected)",
+   "claim_broken": "F6-findings / 11cbbae: 'KNOWN_API_SKIPS empty -> any api-test skip fails the suites stage' (e3bm35).",
+   "evidence": "C10 drops re.M from the `^SKIPPED \\[\\d+\\] \\S+?:\\d+: (.*)$` findall. The mutant SURVIVES (51 passed), because the case's shell() output is a single line, where ^ and $ match without MULTILINE. In a real `make api-test` output the SKIPPED lines sit mid-output, so under C10 no skip is parsed and every skip is tolerated. The stage never cross-checks counts['skipped'] against the parsed reasons. Measured separately: pytest -rs prints `SKIPPED [n] path:line: reason` for runtime, skipif, parametrized, fixture, module-level and importorskip skips, so the unmutated regex does catch every real skip kind. My gate caught one live ('corpus cache not found …', in a fresh clone). C9 (KNOWN_API_SKIPS=('',)) is killed at test_run.py:1057.",
+   "minimal_fix": "Give the case's fake output lines before and after the SKIPPED line (for example 'x\\nSKIPPED [3] …\\n1 passed, 3 skipped in 1s'). Also fail the stage when make api-test's counts.get('skipped') is non-zero and the parsed reasons are empty.",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The test gap is real, but the code is correct. At b0a64e1, the only test that checks skip parsing (`test_an_unexpected_skip_in_api_test_fails_the_suites_stage`, test_run.py:1037) feeds `shell()` a single-line output. Without `re.M`, `^` and `$` still match a single line, so the test cannot tell whether the flag is there. The `run.py` and `test_run.py` changes up to the worktree HEAD 5eb7b85 do not touch this regex or its case, so the gap is still there.\n\nExperiment: I made a shared scratch clone at b0a64e1 and removed `re.M` from run.py:202, which is the reviewer's C10. No PostgreSQL was needed. Commands and tails:\n1. `python -m pytest -q -p no:cacheprovider tests/integration/test_run.py -k unexpected_skip` with the mutant applied gave `1 passed, 45 deselected in 0.24s`, so the mutant survives.\n2. `run.shell()` on output shaped like real pytest -rs output (`'....s\\n=== short test summary info ===\\nSKIPPED [3] tests/d/x.py:110: missing optional hook stream\\n5 passed, 3 skipped in 1.00s'`), with the mutant, gave `counts {'passed': 5, 'skipped': 3} skips []`.\n3. The same output with the code unmutated gave `counts {'passed': 5, 'skipped': 3} skips ['missing optional hook stream']`.\n\nSo under the mutant, `suites()` computes `unexpected` as empty, and since `passed` > 0 the stage reports PASS even though there were 3 unattributed skips. The stage never compares `counts['skipped']` with the parsed reasons, so nothing else catches it.\n\nSeverity: nonblocking. Unmutated, the regex has `re.M` and does catch real skips, so the claimed behaviour (any unexpected api-test skip fails the suites stage) holds at b0a64e1. e3bm35 is still killed. What is missing is the test that protects that behaviour: a `re.M` regression would go unnoticed. This is a follow-up item under R32, not a behaviour defect. The fix is cheap: add a line before and after the fake SKIPPED output, and optionally fail the stage when `counts['skipped']` > 0 but no reasons were parsed.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The test gap is real at b0a64e1, but the runtime code is correct. The worktree HEAD is now 5eb7b85, so I checked out b0a64e1 in a scratch shared clone. At b0a64e1, run.py:202 is `re.findall(r\"^SKIPPED \\[\\d+\\] \\S+?:\\d+: (.*)$\", output, re.M)`, and it correctly extracts a skip reason from multi-line pytest output.\n\nUnmutated probe: I passed realistic output ('....s\\n=== short test summary info ===\\nSKIPPED [3] tests/d/x.py:110: corpus cache not found\\n5 passed, 3 skipped in 1s') through the real runner.shell(). Tail: `counts {'passed': 5, 'skipped': 3} skips ['corpus cache not found']`.\n\nC10 mutant: I applied it with `sed -i '202s/, output, re.M)))/, output)))/' tests/integration/run.py`, then ran `INFRX_E2_CANARY=off .venv/bin/python -m pytest -q tests/integration/test_run.py -p no:cacheprovider`. Tail: `46 passed in 10.54s`, so the mutant survives; the claim said 51, and the count difference does not matter. Under the mutant, the same multi-line probe gives `counts {'passed': 5, 'skipped': 3} skips []`. So suites() would compute unexpected=() and PASS a real api-test run that has an unattributed skip. The only parse case, test_an_unexpected_skip_in_api_test_fails_the_suites_stage (test_run.py ~1063), prints a single line, and on a single line ^ and $ match without MULTILINE. suites() also never checks counts['skipped'] against the parsed reasons.\n\nSeverity is nonblocking. The shipped regex works; the declared mutant e3bm35 (which drops `or unexpected`) is killed; and C10 is an ad hoc reviewer mutant that is not on the committed list, so R32's rule that a surviving mutant fails the suite does not trip. The defect is that the case is too weak to catch a plausible regression. The fix is small: put lines before and after the SKIPPED line in the fake output, and optionally fail the stage when counts['skipped'] > 0 but no reasons were parsed. No PostgreSQL was needed; no container was started. Scratch clone: /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/v21 (run.py restored).",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "G-B4",
+   "severity": "blocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "IR2-5 ('Due now: none … The remaining ids are D5, G2 and G3'); tests/integration/backend/test_drills.py:768-777 (dr11)",
+   "claim_broken": "The integration requests cover the merge: 'the merge procedure, complete … Due now: none'.",
+   "evidence": "On claude/backend-impl (6dedf1e), G2 (2391d4d, 15:37Z) and G3 (b560b51, 16:03Z) are merged and tasks.json marks them implemented. Both merges HOLD the router registration for the cutover. Scratch merge of b0a64e1 into 6dedf1e: clean. Layer 0 (INFRX_E2_NAMESPACE=e3b2, no stack) gives 3 failed, 138 passed, 91 skipped. The new red is test_stage.py:122 `Extra items in the left set: 'G2' 'G3'`, and at layer 3 stale_pending would fail the backend stage on G2 12 and G3 4. I applied IR2-5 (i)-(iii) mechanically for G2/G3 on that merge (drop them from stack.PENDING, the BY_MODE tuples, the dataset tuple and dr11's literal pending call). test_e3b_dr11_client_disconnect_mid_stream_is_pending then PASSES with no assertion, because the ingress is not mounted and nothing fails or pends. The procedure therefore turns dr11 into a vacuous pass. The journeys stay honest, pending on D5.",
+   "minimal_fix": "Add an IR2-7 for the merge. G3 leaves PENDING, BY_MODE['async'] and the dataset tuple. G2 leaves PENDING, but dr11, the sync/SSE/async journey mount condition and dataset resume must pend on a non-task owner reference for the HELD cutover (e.g. 'G2-CUTOVER' through the OWNERS vocabulary the residual case already accepts, or RESIDUAL with that reason). dr11's pending call must never be deleted while stack.ingress_is_mounted() is False.",
+   "lens": "gate",
+   "votes": [
+    {
+     "refuted": false,
+     "severity_if_real": "blocking",
+     "reason": "I confirmed the finding at b0a64e1. I tested it on a scratch shared clone, merging b0a64e1 into 6dedf1e (the origin/claude/backend-impl tip). I used no E2 stack and no PostgreSQL, and removed the clone afterwards.\n\nFacts:\n- G2 (2391d4d, 15:37:16Z, 'cutover diff HELD') and G3 (b560b51, 16:03:11Z, 'router registration HELD') both merged before b0a64e1 was committed (16:03:30Z). Both are ancestors of 6dedf1e, and tasks.json marks G2 and G3 'implemented'. So IR2-5's 'Due now: none … The remaining ids are D5, G2 and G3' was already stale when it was handed back.\n\n1) The merge is clean, but layer 0 goes red:\n`INFRX_E2_NAMESPACE=e3b2 .venv/bin/python -m pytest -q tests/integration/backend/test_stage.py tests/integration/backend/test_drills.py -k \"stage or dr11 or merged\"`\ntail: `E 'G3' / E 'G2' … tests/integration/backend/test_stage.py:122: AssertionError … FAILED test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual … 1 failed, 8 passed, 1 skipped`\n\n2) I then applied IR2-5 (i)-(iii) mechanically for G2 and G3. That meant dropping them from stack.PENDING, emptying the BY_MODE tuples, reducing the dataset tuple to (\"D5\",) and deleting dr11's literal `stack.pending(\"G2\", …)` call. Same command with -rA over test_stage, dr11 and test_journey:\ntail: `PASSED tests/integration/backend/test_drills.py::test_e3b_dr11_client_disconnect_mid_stream_is_pending … SKIPPED … PENDING[D5] text x sync … PENDING[D5] resume needs idempotent explicit jobs … 11 passed, 15 skipped`\n\ndr11's body becomes only `if stack.ingress_is_mounted(): pytest.fail(...)`. The ingress is not mounted because the cutover is held, so dr11 passes without asserting anything. The journeys stay honest because they still pend on D5.\n\nOption (i), 'move to RESIDUAL', cannot rescue dr11, because stack.pending refuses RESIDUAL ids.\n\nThe procedure that calls itself complete therefore does two things when followed: it turns a pending drill into a pass that asserts nothing, and it leaves the actual merge red at layer 0. That makes the finding blocking for b0a64e1.\n\nThis is already fixed later on the same branch. At 5eb7b85, e95bce5 ('E3B's pendings are keyed on the held cutover G2-R1, never on merged G2/G3') and cd8099b (stale_pending's held-cutover rule) change dr11 to `stack.pending(\"G2-R1\", …)`. That is exactly the proposed fix, so the lane must hand back 5eb7b85 or later, not b0a64e1."
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it, and I reproduced both halves on a scratch merge.\n\n1. The claim that nothing is due now was already stale when b0a64e1 was handed back. b0a64e1 was committed at 16:03:30Z. G2 was merged on the base as 2391d4d at 15:37:16Z and G3 as b560b51 at 16:03:11Z. At 6dedf1e, tasks.json has G2 and G3 as implemented and D5 as planned. Both merge commits say the router registration or cutover is HELD.\n\n2. Scratch clone, `git checkout 6dedf1e && git merge --no-ff b0a64e1` (clean), then `INFRX_E2_NAMESPACE=e3b2 PYTHONPATH=<clone>/apps/infrx-api pytest -q -rs tests/integration` with no stack. Tail: `tests/integration/backend/test_stage.py:122: AssertionError ... Extra items in the left set: 'G2' 'G3'` / `3 failed, 138 passed, 91 skipped, 1 xfailed`. So the merge is red at layer 0 because of these two ids.\n\n3. On that merge `stack.ingress_is_mounted()` returned False. I applied IR2-5 (iii) to dr11 by deleting its only statement after the `if`, the literal `stack.pending(\"G2\", ...)`. Then `pytest -rA tests/integration/backend/test_drills.py -k dr11` gave `PASSED ...test_e3b_dr11_client_disconnect_mid_stream_is_pending / 1 passed, 37 deselected`. That is a vacuous pass with no assertion.\n\nIR2-5's other option doesn't help either. In (i), moving G2 into RESIDUAL makes `stack.pending` refuse the id (`task in RESIDUAL` raises an AssertionError), so dr11 goes red. Keeping G2 in PENDING leaves test_stage.py:122 red and stale_pending red at layer 3.\n\nThe procedure has no correct path for a task that is merged while its cutover is held. PENDING['G2'] even describes G2 as the cutover that mounts the ingress, which the merged G2 does not do. The handback's claim that the merge procedure is complete (review F2-merge) is false, and following it either leaves the merge red or turns dr11 into a pass that checks nothing. That makes it blocking.\n\nThe reviewer's proposed IR2-7 fits the code's existing seam: an owner reference for the held cutover that `pending()` accepts, like recoverykit.OWNERS, and dr11 keeps its pending call while the ingress is not mounted.\n\nNo containers were created. I deleted the scratch clone.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "HON-1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "30",
+   "claim_broken": "IR2-5 says 'Due now: none. The remaining ids are D5, G2 and G3'. The phase-3 table says the journeys and dr11 turn red 'when G2 mounts the ingress'. IR2-2 says RESIDUAL can be set to {} at the I3B merge. The branch breaks when it is merged into the current integration head.",
+   "evidence": "tasks.json on origin/claude/backend-impl marks G2 implemented (d486142, 15:38Z, before the 16:03Z handback) and G3 implemented (00d785d, 16:04Z). Both cutovers are HELD, so ingress_is_mounted() is still False. I merged b0a64e1 into origin/claude/backend-impl@6dedf1e: the merge was clean with no conflicts. Layer 0 then gave 3 failed / 138 passed / 91 skipped / 1 xfailed; with IR2-1 applied, 3 failed / 139 passed / 91 skipped. The new red is test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual, with AssertionError ({'D2','D3','G1R','G2','G3','I2B',...} vs RESIDUAL without G2/G3). At layer 3, run.backend_summary on the journeys' PENDING[D5,G2] and PENDING[D5,G2,G3] gives ('FAIL', stale_pending ['G2','G3']). On the merged tree, mutants.py --only e3bm16 gives baseline-red, so the mutation stage fails too. I also merged origin/codex/i3b-followup@662c07c and applied the lane's i3b-residual.diff (RESIDUAL={}). Layer 0 then gave 2 failed / 144 passed / 96 skipped: this residual case with ({'G2','G3'}, set()), plus HON-3. I3B's rc03 still calls kit.pending(\"G2\"), so IR2-2's empty RESIDUAL is also stale. The gate fails closed, never green. But its reason is a tasks.json status flip while the routes are unmounted, not the 'G2 mounts the ingress' that the lane states, and no integration request covers it.",
+   "minimal_fix": "This fix was measured on the merged tree. BY_MODE becomes all () and dataset resume pends on (\"D5\",). dr11 pends on \"D5\", because the cutover is held until D5's adapters and ingress_is_mounted() still fails every case the day the routes mount. Drop G3 from stack.PENDING. Keep G2 only as a RESIDUAL with a reason ('I3B rc03 names it; cutover held'), or re-pin rc03 in the I3B follow-up. With that change plus R2-A (HON-3), layer 0 on integration head + b0a64e1 + IR2-1 + I3B 662c07c + the stack.py hunk gives 146 passed / 96 skipped / 0 failed, and e3bm16 and e3bm27 are killed. A cleaner option is a non-task owner id for the held cutover (like recoverykit.OWNERS). Either way, IR2-2 and IR2-5 must be restated against the current head.",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The finding holds at b0a64e1. I did not need PostgreSQL for this, so I started no container.\n\nWhat I ran:\n1. I made a scratch shared clone, checked out b0a64e1 and ran `git merge origin/claude/backend-impl` (head bfbbeb0, newer than the reviewer's 6dedf1e). The merge was clean.\n2. tasks.json: b0a64e1 has G2 and G3 as planned. The merged tree has G2 and G3 as implemented.\n3. On the merged tree, `PYTHONPATH=apps/infrx-api .venv/bin/python -m pytest -q tests/integration/backend/test_stage.py` ends with:\n   `E 'G2' / E 'G3' ... tests/integration/backend/test_stage.py:122: AssertionError ... FAILED tests/integration/backend/test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual ... 1 failed, 8 passed in 0.62s`\n4. The same file at b0a64e1 alone gives `9 passed`, so the merge causes the red.\n\nWhy it fails: test_stage.py:120-122 computes `merged = {vocabulary ids tasks.json marks implemented/integrated}` and asserts `merged == set(stack.RESIDUAL)`. At b0a64e1, stack.PENDING still carries G2 and G3, and RESIDUAL has neither. run.stale_pending (run.py:543-550) applies the same rule, so a pending on G2 or G3 makes backend_verdict FAIL. That matches the reviewer's layer-3 claim.\n\nIt is fail-closed, never a false green. Still, merging b0a64e1 as recorded would turn the gate red, and IR2-2 and IR2-5 are stale against the current head. That makes it blocking for b0a64e1.\n\nIt is already superseded. The lane's rounds 2b/2c (e95bce5 and cd8099b, head 5eb7b85) apply essentially the reviewer's fix: the cases pend on the non-task owner G2-R1 plus D5, G3 leaves the vocabulary, G2 stays only as an I3B residual, and IR2-2 was updated. The same scratch merge of 5eb7b85 into bfbbeb0 gives `10 passed in 0.72s` on test_stage.py.\n\nSo the finding is real at b0a64e1 but is closed at 5eb7b85. The merge should take 5eb7b85, not b0a64e1. The scratch clone was removed.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. The defect is real at b0a64e1 once that commit is merged into the integration head. I tested in a scratch shared clone of codex-e3b2. I did not use Postgres, because this is a layer-0 test. At b0a64e1, stack.PENDING still holds G2 and G3 as E3B blockers, and stack.RESIDUAL leaves both out. test_journey BY_MODE is {\"sync\":(\"G2\",),\"sse\":(\"G2\",),\"async\":(\"G2\",\"G3\")}.\n\nThe merged tasks.json has G2=implemented, G3=implemented, D5=planned and G1R=implemented. I ran `git checkout b0a64e1 && git merge --no-edit 6dedf1e` (clean, merge 2f161d9), then `.venv/bin/python -m pytest -q tests/integration/backend/test_stage.py -k named_residual`. The tail was \"E 'G3' / E 'G2' ... tests/integration/backend/test_stage.py:122: AssertionError / FAILED test_stage.py::test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual / 1 failed, 8 deselected\". The same command at plain b0a64e1 gave \"1 passed, 8 deselected\", so the red comes from the merge.\n\nThe claim is also right about the cause. The red comes from tasks.json marking G2 and G3 merged while ingress_is_mounted() is still False, not from G2 mounting the ingress. So IR2-5 ('Due now: none') and IR2-2 are stale at b0a64e1. This is blocking for b0a64e1 because the layer-0 gate goes red on integration.\n\nThe lane has already fixed it at 5eb7b85 (R3-1), which is the worktree's current head. There, G3 is gone from PENDING and G2 is a RESIDUAL whose reason names the owner reference G2-R1. BY_MODE is all (\"G2-R1\",) and COMMON is (\"D5\",). I merged 5eb7b85 with the current origin/claude/backend-impl (bfbbeb0), giving merge 00e7975, and ran pytest on test_stage.py and test_journey.py: \"11 passed, 15 skipped in 0.88s\". So the finding holds against b0a64e1 and is resolved at 5eb7b85. I removed the scratch clone afterwards.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "HON-2",
+   "severity": "blocking",
+   "file": "tests/integration/mutants.py",
+   "line": "906",
+   "claim_broken": "H1 (R83) states that run_one caches the pristine baseline 'once per distinct (suite, selector, copy kind)'. Two single edits to the cache key defeat that rule and no test kills them.",
+   "evidence": "hm11: dropping copy kind from the key (key = (mutant.suite, mutant.select)) leaves test_run.py at 46 passed, exit 0. hm15: a constant key (key = 0) means the first baseline verdict is reused for every later mutant; it also leaves test_run.py at 46 passed, exit 0. The dimension matters: two real (suite, select) pairs in all_mutants() span both copy kinds, (test_observe.py, ob11) and (test_recovery.py, rc01). A module-code mutant would reuse a baseline taken without the copied infrx, which is the e2m64-66 vacuous-kill shape H1 exists to prevent. The two parts of the rule that are covered: hm10 (skip the baseline verdict) dies at test_run.py:957, and hm12 (count baseline-red as killed) dies at test_run.py:960.",
+   "minimal_fix": "Add one test_run case. Two mutants differ only in copy kind, or only in selector. A fake _pytest answers red for the first baseline and green for the second. Assert that two baselines ran (the unmutated call count) and that the statuses are baseline-red and killed. Register it as an e3bm mutant with key=(suite, select).",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I confirmed the finding at b0a64e1 using a scratch `git clone --shared` of the codex-e3b2 worktree, checked out at b0a64e1. The worktree's own HEAD is 5eb7b85, which descends from b0a64e1, and its cache-key line there is unchanged (now at line 940). I did not use PostgreSQL or the E2 stack, because test_run.py uses a fake `_pytest`. The worktree is still clean.\n\n**The code.** At `tests/integration/mutants.py:906` the key is `key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)`, and it is the only use of BASELINES. In test_run.py, both baseline tests (`test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red` at about line 938, and the ones at lines 999, 1024 and 1097) reset BASELINES to `{}` before every `run_one` call. So no test ever runs two mutants against one cache, and the key's contents are never witnessed.\n\n**The experiment.** I ran this loop over the pristine file and two one-line sed edits:\n`for m in pristine hm11 hm15; do ... sed -i 's/key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)/key = (mutant.suite, mutant.select)/' (hm11) | 's/.../key = 0/' (hm15); $PY -m pytest -q -p no:cacheprovider tests/integration/test_run.py | tail -3; done`\n\nTails:\n- pristine: \"46 passed in 9.54s\", exit 0\n- hm11: \"46 passed in 9.61s\", exit 0\n- hm15: \"46 passed in 9.57s\", exit 0\n\nBoth mutants survive.\n\n**Why the dimension matters.** In `all_mutants()`, two real (suite, select) pairs span both copy kinds:\n- `(backend/recovery/test_observe.py, ob11)`: i3bm22 has no copied infrx, i3bm21 has one.\n- `(backend/recovery/test_recovery.py, rc01)`: i3bm30 has none; i3bm31 and i3bm34 have one.\n\nUnder hm11, a copied-infrx mutant reuses a baseline taken against the checkout's infrx. That hides exactly the red H1 was added to detect: an unmutated case that fails only because of the copy's import environment, which made the e2m64-66 kills vacuous. Under hm15 (`key = 0`), the first verdict is reused for every later mutant in the process, so the pristine baseline is empty for all but one suite.\n\n**Severity.** Blocking. The runtime code is correct today, so this is a test-coverage gap, not a behaviour bug. But the lane claims the rule \"once per distinct (suite, selector, copy kind)\" in R83 / review H1, and under this repo's mutant-evidence standard a claimed rule needs a killing case. No test kills either the key's copy-kind part (hm11) or its whole scope (hm15).\n\n**Fix.** The proposed fix is adequate: one test_run case with two mutants that differ only in copy kind, a fake `_pytest` that answers red for the first baseline and green for the second, assertions that two baselines ran and that the statuses are baseline-red then killed, and a registered e3bm mutant that sets `key = (mutant.suite, mutant.select)`.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it: the coverage gap is real at b0a64e1, and it is still there at the worktree HEAD 5eb7b85. mutants.py:906 is `key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)`. Every test_run case that calls run_one first resets BASELINES and then makes only one run_one call per reset: baseline_red (reset before each half), private-litter, api-tree copy, and the d-mode test added in 5eb7b85. No test ever looks up a second key, so nothing notices a wrong key.\n\nExperiment: a scratch `git clone --shared` checked out at b0a64e1, with the worktree .venv symlinked in and no Postgres or E2 stack. Pristine: `python -m pytest -q -p no:cacheprovider tests/integration/test_run.py` gave `46 passed in 10.08s`. I then edited line 906 with sed for each mutant and ran the same command.\n- hm15 (`key = 0`): tail `46 passed in 9.65s`, exit 0.\n- hm11 (`key = (mutant.suite, mutant.select)`): tail `46 passed in 9.49s`, exit 0.\n\nBoth mutants survive. I also checked that the copy-kind dimension is live: a script over all_mutants() finds two (suite, select) pairs whose mutants span both copy kinds, (test_observe.py, ob11) and (test_recovery.py, rc01). So hm11 would really let a module-code mutant reuse a baseline taken without the copied infrx, which is the e2m64-66 vacuous-kill shape.\n\nWhy nonblocking: the cache key at b0a64e1 and 5eb7b85 is correct, so no current run gives a wrong verdict. The defect is a missing witness for part of the R83/H1 rule, which would only matter if someone later edits the key. The proposed fix is one cheap test case: two mutants that differ only in copy kind, a fake _pytest that answers red then green, assert two unmutated baseline runs and the statuses baseline-red then killed, and register it as an e3bm mutant. I would ship that fix, but it need not gate the round unless the protocol makes every uncovered claimed rule blocking. I deleted the scratch clone afterwards.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "unverified_blocking": [],
+ "nonblocking": [
+  {
+   "id": "G-N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/test_fake_vllm.py",
+   "line": "323-340, 345-377",
+   "claim_broken": "Round-2 claim: the tests/integration reds are exactly the backend stage's 11 I3B ids.",
+   "evidence": "In my independent gate at b0a64e1 the suites stage's tests/integration run gave `5 failed, 199 passed, 20 skipped, 1 xfailed, 8 errors`. That is the 11 I3B ids plus test_killing_the_engine_process_is_a_transport_failure_and_it_restarts and test_the_server_log_is_never_left_behind_in_the_temp_directory, both E2-owned, on ports TEST_PORT+1/+5 = 56782/56786. Five later attempts did not reproduce them: 3 isolated runs in e3b2 (17 passed each) and 2 full tests/integration runs with the e3b2 stack up (3 failed/201 passed/8 errors, exactly the lane's). The report keeps only ids and a 12-line tail, so the cause cannot be recovered. It is consistent with the lane's own IR2-4 caveat (block ports inside the ephemeral range, host load ~11-12). The backend stage matched the lane exactly.",
+   "minimal_fix": "Keep each failing case's first error line (for example the `-rfE` short summary) in the suites run record, so a flaky red can be attributed. Treat the two cases' port binds as R-c retry candidates.",
+   "lens": "gate"
+  },
+  {
+   "id": "G-N2",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "101-107, 587-590",
+   "claim_broken": "H7: 'per-stage seconds'.",
+   "evidence": "backend() calls backend_teardown() (report.add) before report.add('backend'), so the backend pytest time is charged to 'backend-teardown' and 'backend' shows 0.0. Lane report: backend-teardown 77.8 / backend 0.0. Mine: 68.4 / 0.0. e3bm34's case checks only that seconds is a float.",
+   "minimal_fix": "Add the backend stage before its teardown entry, or time each stage explicitly.",
+   "lens": "gate"
+  },
+  {
+   "id": "G-N3",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "405, 432-435",
+   "claim_broken": "The gate is reproducible from a fresh clone.",
+   "evidence": "From a fresh `git clone --shared`, make api-test gave 3119 passed, 1 skipped ('corpus cache not found ($CORPUS_CACHE or <main>/.claude/corpus-cache)'). With KNOWN_API_SKIPS empty, the suites stage FAILS on it (unexpected_skips). This is correct by the rule, but the green half of the gate depends on a host cache that the lane's worktree has and a clone does not. The lane's 3120 includes that case. My console-test red (288/1, 'node_modules missing') is my own setup: I did not run npm ci.",
+   "minimal_fix": "Record the corpus-cache prerequisite in the gate's documented command (or export CORPUS_CACHE in run.py's suites env).",
+   "lens": "gate"
+  },
+  {
+   "id": "G-N4",
+   "severity": "nonblocking",
+   "file": "tests/integration/mutants.py",
+   "line": "983-1027 (_verdict)",
+   "claim_broken": "R83: 'every failing test must name one of the mutant's own cases; every death must be assertion-shaped or declared'.",
+   "evidence": "E's runner still counts any `N failed` without errors as killed. Mutant.cases is only echoed (selected_cases), and the exception type is never read. Round 2 enforces the death shape by hand: the kill texts and the R2-8 re-runs caught e3bm26 dying of an IndexError at f97bfb7. All 22 e3bm I applied by hand died at the lane's quoted lines. A future crash-shaped kill would still be counted.",
+   "minimal_fix": "Parse the failing test ids from `-rf` and require that each is in mutant.cases. Parse the `path:line: <Type>` death line and require AssertionError, Failed, or a declared dies_by.",
+   "lens": "gate"
+  },
+  {
+   "id": "HON-3",
+   "severity": "nonblocking",
+   "file": "tests/integration/mutants.py",
+   "line": "40",
+   "claim_broken": "IR2-2 says 'Only I3B's stack.py hunk is needed' at the I3B follow-up merge.",
+   "evidence": "The lane measured this on codex/i3b-followup@d99da09, which predates I3B round 2. I3B's 662c07c (15:32Z) asks E3B2 for IR R2-A, 'OWNED_TREES += (\"apps/infrx-api/deploy\",)', and marks it required before I3B merges. On integration head + b0a64e1 + I3B 662c07c + stack.py hunk, test_run.py::test_the_mutation_stage_runs_every_list_through_one_runner fails with 'assert ['i3bm94', 'i3bm97', 'i3bm98'] == []'. With the one line added it passes; see HON-1's green run. R2-B (keep the shared TMPDIR for I3B's recovery suites when INFRX_I3B_PG=d) is also absent from run_one at b0a64e1. The round-2 evidence mentions neither request.",
+   "minimal_fix": "Land R2-A (one line) and R2-B on this branch, or list them explicitly in IR2-2 as part of the I3B merge.",
+   "lens": "honesty"
+  },
+  {
+   "id": "HON-4",
+   "severity": "nonblocking",
+   "file": "tests/integration/mutants.py",
+   "line": "884",
+   "claim_broken": "The private TMPDIR per mutant run must not weaken D's host-wide port lock. The comment says 'suites under apps/infrx-api keep the shared TMPDIR, because their port lock lives there'.",
+   "evidence": "pgharness.lock_path() and vkstore._lock() build their paths from tempfile.gettempdir(), so the lock is per TMPDIR. The runner exempts only suites under apps/infrx-api/. I3B's recovery suites in D mode (tests/integration/backend/recovery, INFRX_I3B_PG=d) get a private lock. I3B measured the result: i3bm87 is falsely 'killed', because the run went over a held port. I saw the same mechanism in my own run: under a private TMPDIR, the contracts PG test created its own infrx-d1-postgres-55432.lock there, and only pgharness's container-label check (ForeignContainer, because the concurrent gate reviewer owned infrx-d1-postgres) stopped it. Consequence: in D mode, two runs can both 'hold' the lock. The label check is then the only guard, and a mutant can be counted killed on a harness conflict.",
+   "minimal_fix": "Apply I3B's R2-B diff (private=None for tests/integration/backend/recovery/ when INFRX_I3B_PG == 'd'). Alternatively, point pgharness and vkstore at a fixed lock directory that does not depend on TMPDIR.",
+   "lens": "honesty"
+  },
+  {
+   "id": "HON-5",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "405",
+   "claim_broken": "Emptying KNOWN_API_SKIPS is described as 'no make api-test skip is attributed any more; any skip fails', as though only a real regression could now fail the suites stage.",
+   "evidence": "Skip reasons make api-test can emit on this tree: (1) 'corpus cache not found' (tests/m/test_parity.py:113). default_corpus() resolves <git-common-dir>/../.claude/corpus-cache, so any `git clone --shared` checkout skips it. Measured in my clone: 'SKIPPED [1] tests/m/test_parity.py:113'. The confirmation protocol itself prescribes such clones, so the suites stage FAILs there for an environmental reason. It fails closed, but the Limits do not record it. (2) 'task-local PostgreSQL/Valkey unavailable: docker is not installed/usable': preflight catches this first, so it is fail-closed by design. (3) 'missing optional hook' and '<case> needs the optional hook': deterministic, fail-closed by design. (4) 'the judge extra is not installed': deterministic under make api-env. HarnessBusy and ForeignContainer are not skips but failures or errors: round 1 recorded 272 failed, and I saw 3 ForeignContainer failures in test_v1_projection_pg while a concurrent reviewer held infrx-d1-postgres. So a busy D port fails the gate through a nonzero exit whatever KNOWN_API_SKIPS contains. That is the documented flake (Limits 2), not a new one. Mutant hm08 (attributing 'corpus cache not found') survives, because no test pins that skip's handling.",
+   "minimal_fix": "Have run.py export CORPUS_CACHE, resolved from the main checkout, to make api-test. Alternatively, have preflight name a missing corpus cache. Either way, add the clone case to Limits.",
+   "lens": "honesty"
+  },
+  {
+   "id": "HON-6",
+   "severity": "nonblocking",
+   "file": "tests/integration/run.py",
+   "line": "548",
+   "claim_broken": "stale_pending's docstring and test_stage's docstring both state that ids tasks.json marks implemented OR integrated are stale, and that 'a RESIDUAL id still counts as pending'.",
+   "evidence": "hm01 (drop 'and task not in residual') survives test_stage.py + test_run.py: 55 passed, exit 0. hm03 (('implemented','integrated') becomes ('implemented',)) survives test_stage.py: 9 passed. This one fails open: a hand-written PENDING[D1], where D1 is an 'integrated' task, would count as pending. hm13 (drop 'baseline-red' from summarise's problem tuple) also survives: a control that is red on the unmutated copy would silently disappear from both the problems and controls_survived counts.",
+   "minimal_fix": "In test_a_pending_id_naming_a_merged_task_fails_the_stage, add PENDING[D1] (integrated) expecting stale, and a monkeypatched RESIDUAL id expecting not stale. Add a baseline-red must_survive result to the baseline case's summarise assertion.",
+   "lens": "honesty"
+  },
+  {
+   "id": "HON-7",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_drills.py",
+   "line": "840",
+   "claim_broken": "F1's closure also claims that dr13 'advances the DB clock past redelivery_s, so a claimed row that was never acknowledged would come back'.",
+   "evidence": "db10 kills the premise read: under the acknowledged_at=null defect, removing the unacknowledged() assertion makes dr13 fail later with 'the acknowledged rows came back', which does not match db10's pytest.raises(match=\"not acknowledged on the store\"). There is no registered mutant of that read; I did not run this, because this lens has no E2 stack. No live drill injects a relay or outbox read that ignores acknowledged_at. So removing h.clock.advance(relay.redelivery_s + 1), or the post-rebuild read == 0 assertion, would pass every gate case. e3bm18/19 mutate only the rebuild line. PLAUSIBLE, not executed.",
+   "minimal_fix": "Add a db drill that makes the outbox claim ignore acknowledged_at, and register a mutant that removes the clock advance.",
+   "lens": "honesty"
+  },
+  {
+   "id": "HON-8",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_drills.py",
+   "line": "632",
+   "claim_broken": "IR2-6 is addressed to 'Contract fake / ports' without naming a single owner.",
+   "evidence": "The divergence is real. 0011's CREDIT bodies (apps/app/supabase/migrations/0011_admission.sql:436 and :526) refuse every non-consumer, non-operator audience with refuse('not_found','model') before any wallet or catalog read. FakeJobStore._credit_terms resolves provider_dev_wallet(), then catalog.resolve and _check_balance, so it answers InsufficientCredit for an unfunded dev wallet and would ADMIT a funded one. origin/codex/f-fakes-followup@0cf5cd6 does not change this. dr02c[fake] pins today's answer honestly.",
+   "minimal_fix": "The coordinator should rule whether backend-first CREDIT admission refuses provider_dev (as D2 MC-1 encodes). Track F (the contract fakes owner) then adds the rule to _credit_terms and flips dr02c's pin in the same merge, as R93 did for dr04.",
+   "lens": "honesty"
+  }
+ ]
+}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T15:38:21Z",
+  "updated": "2026-09-23T20:43:27Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -9,35 +9,47 @@
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     },
-    "E3B": {
-      "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "fix round running on codex-e3b2 @ f97bfb7+ (its layer-3 gate on infrx-e3b2-* running) \u2192 confirmation \u2192 merge",
-      "since": "2026-09-22T18:46:49Z",
-      "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
-    },
-    "G3": {
-      "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "round 3 HANDED BACK 9133efe (G2 r3 merged clean; B1/B2/B3/C1 + N1/N3/C2/C3/C4 closed; G3 list 79 mutants; tests/g 559); re-confirmation running \u2192 MERGE after G2",
-      "since": "2026-09-23T10:09:50Z",
-      "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
-    },
-    "I3B-followup": {
-      "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "round 2 HANDED BACK 662c07c (DR-1/RST-1/RST-4 closed + DR-3/DR-4/RST-2/RST-3; I3B list 96/94 on the E3B2 merge); confirmation running (restore + drill) \u2192 merge after E3B2 with R2-A/R2-B/request-1 stack.py",
-      "since": "2026-09-23T11:22:39Z",
-      "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
-    },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) \u2192 review \u2192 merge after I3B",
+      "phase": "review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) \u2192 ONE fix round running \u2192 single verifier \u2192 MERGE together with E3B phase 3",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
-    "F-fakes-followup": {
-      "lane": "codex-ffakes / codex/f-fakes-followup",
-      "phase": "review at 4209aee fix_required (P1 refuse-before-fence unpinned, P2 empty-list expiry unpinned; P3/H1 nonblocking) \u2192 fix round running \u2192 re-verify \u2192 merge after G3",
-      "since": "2026-09-23T12:58:13Z",
-      "note": "from the integration head \u2265 ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion"
+    "E4B": {
+      "lane": "codex-e4b / codex/e4b-certify",
+      "phase": "dispatched (Opus) 2026-09-23T19:2xZ from 7c52627: software half (certify runner, envelope/soak/overload/recovery protocol, release decision, headless examples, capability docs); box-measured half needs the maintenance window",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "namespace e2, d2/55466, Q 55493"
+    },
+    "CUTOVER": {
+      "lane": "codex-cutover / codex/cutover-mount",
+      "phase": "milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3\u20135 (edge proxying, preflight, evidence) in progress at 6cb8ebe+",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "d3 ports, Q 55492; merges together with E3B phase 3"
+    },
+    "E3B-phase3": {
+      "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
+      "phase": "cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands",
+      "since": "2026-09-23T19:29:02Z",
+      "note": "namespace e3b2 / 56732"
+    },
+    "BOX": {
+      "lane": "codex-box / codex/box-measure",
+      "phase": "dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab \u2014 W4 phase B (candidate.sh E0/E1[/E3] \u2192 decide.py \u2192 P-20), E1B L0/L1/L8 in the same maintenance window; L2\u2013L7 + E4B real runs after the rollout (phase 2)",
+      "since": "2026-09-23T19:35:52Z",
+      "note": "SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh"
+    },
+    "M1-L2": {
+      "lane": "codex-objstore / codex/m1l2-object-store",
+      "phase": "dispatched (Opus) from 43fe900: S3ObjectStore + settings + preflight probe + conformance + adapters_from_env wiring; needed for the box rollout",
+      "since": "2026-09-23T19:57:28Z",
+      "note": "compose S3 in namespace e2 if free; else stub"
+    },
+    "M-pilot-media": {
+      "lane": "codex-mpilot / codex/m-pilot-media",
+      "phase": "dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2)",
+      "since": "2026-09-23T20:11:55Z",
+      "note": "d4 ports, Q 55494; merges on top of the cutover head"
     }
   },
   "reviews": {
@@ -50,28 +62,36 @@
       "since": "2026-09-23T10:33:10Z"
     },
     "G2": {
-      "phase": "MERGED 2391d4d after the round-3 confirmation pass at 76ba3bb (evidence/g/G2-confirm-76ba3bb.json); merged-tree checks running (g2-merged-2391d4d.log)",
+      "phase": "MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306",
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
-      "since": "2026-09-23T11:20:35Z"
+      "phase": "MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B's two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2",
+      "since": "2026-09-23T18:16:49Z"
     },
     "D4": {
       "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "round-3 confirmation at 9133efe running (admission + stream lenses + refuters)",
-      "since": "2026-09-23T15:33:16Z"
+      "phase": "MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306",
+      "since": "2026-09-23T16:04:40Z"
     },
     "I3B-followup": {
-      "phase": "round-2 confirmation at 662c07c running (wf_f6e063df-a4a)",
-      "since": "2026-09-23T15:38:21Z"
+      "phase": "MERGED 90b81c7 (+ 08725c0 IR2-2); merged-tree checks green: layer 0 exit 0, recovery 62/9, I3B list 109/107, tests/i 143",
+      "since": "2026-09-23T18:25:08Z"
     },
     "F-fakes-followup": {
-      "phase": "fix_required at 4209aee (wf_c651c5fa-262; JSON evidence/f/F-fakes-followup-review-4209aee.json) \u2192 fix round",
-      "since": "2026-09-23T15:38:21Z"
+      "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
+      "since": "2026-09-23T16:27:29Z"
+    },
+    "checkpoint-2-interim": {
+      "phase": "whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console \u00d74, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log)",
+      "since": "2026-09-23T18:41:52Z"
+    },
+    "D5": {
+      "phase": "fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) \u2192 fix round",
+      "since": "2026-09-23T20:43:27Z"
     }
   },
   "gates": {
@@ -357,6 +377,26 @@
       "merged": "2391d4d",
       "when": "2026-09-23T15:38:21Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters | confirmation pass at 76ba3bb; cutover HELD"
+    },
+    "G3": {
+      "merged": "b560b51",
+      "when": "2026-09-23T16:04:40Z",
+      "note": "explicit jobs API; confirmation pass at 9133efe; ROUTERS += jobs HELD for the cutover"
+    },
+    "F-fakes-followup": {
+      "merged": "a2779d1",
+      "when": "2026-09-23T16:27:29Z",
+      "note": "R93 fake requeue id; fake refuses unjournalable payloads; journal continues past pruned_to; terminal TTL"
+    },
+    "E3B": {
+      "merged": "d1d4a68",
+      "when": "2026-09-23T18:16:49Z",
+      "note": "phase 2 gate; IR2-1 d588c3e, IR2-3 0a642ad; phase-3 bodies pend on G2-R1/D5"
+    },
+    "I3B-followup": {
+      "merged": "90b81c7",
+      "when": "2026-09-23T18:25:08Z",
+      "note": "R92 restore ACL families, rc10 drills, rc04a live restart; IR2-2 08725c0"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"

@@ -35,6 +35,14 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e3b2": {"postgres": 56732},
 }
 
+# A task's own block of a track service, replacing the track's (host port, extra ports).
+# E3B phase 2 runs the E2 stack as compose namespace `e3b2`: E2's layout moved by +1200
+# (tests/integration/harness.NAMESPACES), 56700-56799. Its TASK_PORTS postgres port lies
+# inside the block (the port the harness derives), which `all_host_ports` allows.
+TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
+    "e3b2": {"compose": (56700, tuple(range(56701, 56800)))},
+}
+
 # track -> {service: (host port, extra ports)}
 TRACK_SERVICES: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "d": {"postgres": (55432, ())},
@@ -74,6 +82,7 @@ def local_services(task_id: str) -> dict[str, LocalService]:
     # r1 R48: a task-specific port overrides (or grants) its track's.
     for service, port in TASK_PORTS.get(task, {}).items():
         services[service] = (port, services.get(service, (port, ()))[1])
+    services.update(TASK_BLOCKS.get(task, {}))
     if not services:
         if track in FAKE_ONLY_TRACKS:
             return {}
@@ -93,7 +102,7 @@ def all_host_ports() -> dict[int, str]:
     two tasks on one port is exactly the clash this module exists to prevent.
     """
     reserved: dict[int, str] = {}
-    for track, services in TRACK_SERVICES.items():
+    for track, services in (*TRACK_SERVICES.items(), *TASK_BLOCKS.items()):
         for service, (port, extra) in services.items():
             for number in (port, *extra):
                 owner = f"{track}/{service}"
@@ -106,7 +115,8 @@ def all_host_ports() -> dict[int, str]:
             clash = reserved.get(port)
             # A task may take its track's default port (D1 keeps 55432); it may not take
             # another task's, or another service's.
-            if clash is not None and clash != f"{track_of(task)}/{service}":
+            if clash is not None and clash != f"{track_of(task)}/{service}" \
+                    and not clash.startswith(f"{task}/"):         # inside its own block
                 raise ValueError(f"port {port} reserved twice: {clash} and {owner}")
             reserved[port] = owner
     return reserved

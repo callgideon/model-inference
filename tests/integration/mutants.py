@@ -35,7 +35,12 @@ import harness                                          # noqa: E402
 # E2R item 1: `apps/infrx-api/tests/d` joins them for the D harness's ownership invariants.
 # Its test loads `pgharness.py` by path relative to its own `__file__`, so in the copy it
 # loads the MUTATED one; `infrx` itself comes from the real checkout through PYTHONPATH.
-OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d")
+# E3B phase 2 (I3B req 8): `infra/` joins them, because I3B's alert rules and runbooks are
+# claims too and its mutants (`all_mutants()`) now run here.
+OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d", "infra")
+# I3B follow-up round 2 (DR-1/DR-3): rc10 runs I2B's rollback.sh and lib.sh from the
+# copy, and i3bm94/i3bm97/i3bm98 mutate them.
+OWNED_TREES += ("apps/infrx-api/deploy",)
 # E3B.c only: module code a defect mutant may edit, copied per mutant and never in place.
 API_TREE = "apps/infrx-api/infrx"
 
@@ -172,8 +177,9 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_an_undetected_canary_fails_the_run",)),
     Mutant("e2m69", "E2R item 4: a suite that reported no tests at all fails the run",
            "tests/integration/run.py",
-           '    report.add("suites", FAIL if (failed or silent) else PASS,',
-           '    report.add("suites", FAIL if failed else PASS,',
+           # re-anchored at E3B2 round 4 (verification GATE-B1): e3eefac widened this line
+           '    report.add("suites", FAIL if (failed or silent or unexpected or unread) else',
+           '    report.add("suites", FAIL if (failed or unexpected or unread) else',
            "tests/integration/test_run.py", "reports_no_tests",
            cases=("test_a_suite_that_reports_no_tests_at_all_fails_the_run",)),
     Mutant("e2m35", "r1 B2: a failing suite fails the run",
@@ -668,11 +674,305 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_an_expected_failure_is_not_pending_even_if_it_says_so",)),
     Mutant("e3bm12", "E3B stage (rv07): backend() reports the status its summary computed",
            "tests/integration/run.py",
-           '    report.add("backend", status, {"postgrest": postgrest, **summary},\n',
-           '    report.add("backend", PASS, {"postgrest": postgrest, **summary},\n',
+           '        report.add("backend", status, {"postgrest": postgrest, **summary},\n',
+           '        report.add("backend", PASS, {"postgrest": postgrest, **summary},\n',
            "tests/integration/backend/test_stage.py", "reports_the_summary",
            cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
+
+    # ---------------- E3B phase 2 (one per item; the item number is in the invariant)
+    Mutant("e3bm13", "E3B2 item 0: no port of E2's block is left literal in a derived place",
+           "tests/integration/compose.yaml",
+           '      - "127.0.0.1:${INFRX_E2_PORT_POSTGRES:?}:5432"',
+           '      - "127.0.0.1:55532:5432"',
+           "tests/integration/test_harness.py", "compose_file_publishes and e3b2",
+           cases=("test_the_compose_file_publishes_exactly_those_ports_on_loopback[e3b2]",)),
+    Mutant("e3bm14", "E3B2 item 1a: a drill pends on ITS stubs, not on the global stub count",
+           "tests/integration/backend/stack.py",
+           "    return {rpc: owners[rpc] for rpc in rpcs if rpc in owners}\n",
+           "    return dict(owners)\n",
+           "tests/integration/backend/test_stage.py", "pends_only_on_the_stubs",
+           cases=("test_a_drill_pends_only_on_the_stubs_it_drives",)),
+    Mutant("e3bm15", "E3B2 item 1a: a drill whose functions are stubs pends, it never runs",
+           "tests/integration/backend/test_drills.py",
+           "        if stubs:\n            stack.pending(",
+           "        if False:\n            stack.pending(",
+           # D4 merged: `append` is no stub, so the drill still held back by one is dr07c
+           # (D5's `terminalize`), which fails by name the moment it runs.
+           "tests/integration/backend/test_drills.py", "dr07c", layer=2,
+           cases=("test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction",)),
+    Mutant("e3bm16", "E3B2 item 1c: an E3B case cannot name a merged task as its blocker",
+           "tests/integration/backend/stack.py",
+           "    unknown = [task for task in ids if task not in PENDING or task in RESIDUAL]\n",
+           "    unknown = [task for task in ids if task not in PENDING]\n",
+           "tests/integration/backend/test_stage.py", "merged_task",
+           cases=("test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual",)),
+    Mutant("e3bm17", "E3B2 item 2: the real store's replay is reported as a replay (dr01)",
+           "apps/infrx-api/infrx/state/jobstore.py",
+           'if name != "schema_version")\n',
+           'if name not in ("schema_version", "replayed"))\n',
+           "tests/integration/backend/test_drills.py", "dr01 and postgres", layer=2,
+           cases=("test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity"
+                  "[postgres]",)),
+    Mutant("e3bm18", "E3B2 item 4: without the rebuild the acknowledged dispatches are lost",
+           "tests/integration/backend/test_drills.py",
+           "        assert await relay.rebuild() == 3\n", "\n",
+           "tests/integration/backend/test_drills.py", "dr13", layer=2,
+           cases=("test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job",)),
+    Mutant("e3bm19", "E3B2 item 4: a rebuild from the pre-ack snapshot re-dispatches the "
+                     "terminal job",
+           "tests/integration/backend/test_drills.py",
+           "        assert await relay.rebuild() == 3\n", "        await port.rebuild(early)\n",
+           "tests/integration/backend/test_drills.py", "dr13", layer=2,
+           cases=("test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job",)),
+    Mutant("e3bm20", "E3B2 item 5: the worker's reaper enqueues what recover requeued",
+           "apps/infrx-api/infrx/worker/service.py",
+           "                await self.loop.scheduler.enqueue(event)\n",
+           "                pass\n",
+           "tests/integration/backend/test_drills.py", "dr04 and postgres", layer=2,
+           cases=("test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once[postgres]",)),
+    Mutant("e3bm21", "E3B2 item 7: a relation with no matrix row fails the completeness case",
+           "tests/integration/pgstate.py", '    "infrx.jobs": SERVICE,\n', "",
+           "tests/integration/test_services.py", "row_for_every_relation", layer=2,
+           cases=("test_the_role_matrix_has_a_row_for_every_relation_and_security_definer_"
+                  "function",)),
+    Mutant("e3bm22", "E3B2 item 8: the mutation stage runs I3B's list too",
+           "tests/integration/run.py",
+           "                   for mutant in mutants.all_mutants() if layer",
+           "                   for mutant in mutants.MUTANTS if layer",
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm23", "E3B2 item 8: infra/ is copied, so an I3B rule mutant edits the copy",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           '"apps/infrx-api/tests/d", ' '"infra")',
+           '"apps/infrx-api/tests/d"' ')',
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm24", "E3B2 item 9: a suite past its budget is a failed run, not a crash",
+           "tests/integration/run.py",
+           "    except subprocess.TimeoutExpired:\n",
+           "    except ZeroDivisionError:\n",
+           "tests/integration/test_run.py", "outlives_its_budget",
+           cases=("test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback",)),
+    Mutant("e3bm26", "E3B2 review H1: a mutant whose cases are red unmutated is never a kill",
+           "tests/integration/mutants.py",
+           "        if red is not None:\n", "        if False:\n",
+           "tests/integration/test_run.py", "baseline_red",
+           cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
+    Mutant("e3bm27", "E3B2 review H2: a pending id naming a merged task fails the stage",
+           "tests/integration/run.py",
+           '                  if tasks.get(task) in ("implemented", "integrated")\n',
+           "                  if False\n",
+           "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
+           cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
+    Mutant("e3bm28", "E3B2 review F3: the fake CREDIT admission holds on the CREDIT wallet",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "                                               wallet_id=wallet_id)\n",
+           "                                               wallet_id=None)\n",
+           "tests/integration/backend/test_drills.py", "dr01c and fake",
+           cases=("test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_"
+                  "hold[fake]",)),
+    Mutant("e3bm29", "E3B2 review F5: dr01c's 'no USD hold' half is load-bearing (db08b)",
+           "tests/integration/backend/test_drills.py",
+           'from infrx.credit_holds where request_id = %s",',
+           'from infrx.credit_holds where request_id <> %s",',
+           "tests/integration/backend/test_drills.py", "db08b", layer=2,
+           cases=("test_e3b_db08b_detects_a_usd_hold_beside_the_credit_one",)),
+    Mutant("e3bm30", "E3B2 review F6: a live defect never lands outside this process's clones",
+           "tests/integration/backend/stack.py",
+           '    if not name.startswith(f"{harness.PG_DATABASE}_{os.getpid()}_"):\n',
+           "    if False:\n",
+           "tests/integration/backend/test_stage.py", "refused_outside",
+           cases=("test_a_live_defect_is_refused_outside_this_processs_clones",)),
+    Mutant("e3bm31", "E3B2: a mutant run's litter stays in its private TMPDIR",
+           "tests/integration/mutants.py",
+           '        private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"\n',
+           "        private = None\n",
+           "tests/integration/test_run.py", "litter_private",
+           cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
+                  "files",)),
+    Mutant("e3bm32", "E3B2 review H5: a timed-out suite takes its whole process group down",
+           "tests/integration/run.py",
+           "        os.killpg(process.pid, signal.SIGKILL)\n        stdout, stderr = "
+           "process.communicate()\n",
+           "        process.kill()\n        stdout, stderr = process.communicate()\n",
+           "tests/integration/test_run.py", "outlives_its_budget",
+           cases=("test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback",)),
+    Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
+           "tests/integration/pgstate.py",
+           "    lag = (read_back - returned).total_seconds()\n",
+           "    lag = (read_back - wall).total_seconds()\n",
+           "tests/integration/test_services.py", "shared_clock", layer=2,
+           cases=("test_the_shared_clock_moves_the_function_every_durable_decision_reads",)),
+    Mutant("e3bm33", "E3B2 review H6: a timed-out suite fails the suites stage and the run",
+           "tests/integration/run.py",
+           '    failed = [run["argv"] for run in runs if run["exit"] != 0]\n',
+           '    failed = [run["argv"] for run in runs if run["exit"] not in (0, 124)]\n',
+           "tests/integration/test_run.py", "timed_out_fails_the_suites",
+           cases=("test_a_suite_that_timed_out_fails_the_suites_stage_and_the_run",)),
+    Mutant("e3bm34", "E3B2 review H7: a report names the commit it is evidence for",
+           "tests/integration/run.py",
+           '    return {"sha": git("rev-parse", "HEAD") or None,\n',
+           '    return {"sha": None,\n',
+           "tests/integration/test_run.py", "names_its_tree",
+           cases=("test_the_report_names_its_tree_its_namespace_and_each_stages_duration",)),
+    Mutant("e3bm35", "E3B2 review F6-findings: an unattributed api-test skip fails the stage",
+           "tests/integration/run.py",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else "
+           "PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent or unread) else PASS,\n",
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm36", "E3B2 review F2: a relation's table-level write grants are pinned",
+           "tests/integration/pgstate.py",
+           '                     "infrx.provider_memberships", "infrx.provider_orgs",\n',
+           '                     "infrx.provider_orgs",\n',
+           "tests/integration/test_services.py", "role_matrix_holds", layer=2,
+           cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e3bm37", "E3B2 review H1: a suite under apps/infrx-api runs against a copied infrx",
+           "tests/integration/mutants.py",
+           ' or mutant.suite.startswith("apps/infrx-api/"):\n',
+           ":\n",
+           "tests/integration/test_run.py", "copied_infrx",
+           cases=("test_a_suite_under_the_api_tree_runs_against_a_copied_infrx",)),
+    Mutant("e3bm38", "E3B2 (b): 0017's terminal-event trigger row requires it ENABLED",
+           "tests/integration/pgstate.py",
+           "              \"and tgenabled = 'O'\",\n",
+           "              \"\",\n",
+           "tests/integration/test_services.py", "live_grant_inversion", layer=2,
+           cases=("test_a_live_grant_inversion_fails_its_matrix_row",)),
+    Mutant("e3bm39", "E3B2 (a): a mutant run never sweeps another run's infrx-e2-* temp files",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           "    if mutant.dirties" "_database:\n",
+           "    for stray in Path(tempfile.gettempdir()).glob('infrx-e2-*'):\n"
+           "        shutil.rmtree(stray) if stray.is_dir() else stray.unlink()\n"
+           "    if mutant.dirties" "_database:\n",
+           "tests/integration/test_run.py", "litter_private",
+           cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
+                  "files",)),
+    Mutant("e3bm40", "E3B2 R3-1: E3B's cutover pendings are keyed on G2-R1, never on merged G2",
+           "tests/integration/backend/test_journey.py",
+           'BY_MODE = {"sync": ("G2-R1",),', 'BY_MODE = {"sync": ("G2",),',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm41", "E3B2 R3-1: RESIDUAL excuses a merged id only in I3B's recovery cases",
+           "tests/integration/run.py",
+           "                  and not (task in residual and all(_is_recovery(name) for name in "
+           "names)))\n",
+           "                  and task not in residual)\n",
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm42", "E3B2 (I3B R2-A): the copy carries I2B's deploy scripts rc10 runs",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           'OWNED_TREES += ("apps/infrx-api/' 'deploy",)\n', "",
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
+    Mutant("e3bm43", "E3B2 (I3B R2-B): a D-mode recovery run keeps the parent's TMPDIR (lock)",
+           "tests/integration/mutants.py",
+           '        if (os.environ.get("INFRX_I3B_PG") == "d"\n',
+           "        if (False\n",
+           "tests/integration/test_run.py", "d_mode_recovery",
+           cases=("test_a_d_mode_recovery_run_keeps_the_parents_tmpdir_for_the_pgharness_lock",)),
+    Mutant("e3bm44", "E3B2 round 3 (G-B1): a baseline is not reused across copy kinds",
+           "tests/integration/mutants.py",
+           "        key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)\n",
+           "        key = (mutant.suite, mutant.select)\n",
+           "tests/integration/test_run.py", "reused_only_for_the_same",
+           cases=("test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind",)),
+    Mutant("e3bm45", "E3B2 round 3 (HON-2): a baseline is not reused across selectors",
+           "tests/integration/mutants.py",
+           "        key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)\n",
+           "        key = 0\n",
+           "tests/integration/test_run.py", "reused_only_for_the_same",
+           cases=("test_a_baseline_is_reused_only_for_the_same_suite_selector_and_copy_kind",)),
+    Mutant("e3bm46", "E3B2 round 3 (G-B1): a baseline-red control is a problem, not dropped",
+           "tests/integration/mutants.py",
+           '"no-cases",\n' + " " * 35 + '"baseline-red"))]\n',
+           '"no-cases"))]\n',
+           "tests/integration/test_run.py", "baseline_red",
+           cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
+    Mutant("e3bm47", "E3B2 round 3 (G-B2): a report's dirty flag is measured, not constant",
+           "tests/integration/run.py",
+           '            "dirty": bool(git("status", "--porcelain"))}\n',
+           '            "dirty": False}\n',
+           "tests/integration/test_run.py", "start_and_at_the_end",
+           cases=("test_the_report_records_the_tree_at_the_start_and_at_the_end",)),
+    Mutant("e3bm48", "E3B2 round 3 (G-B2): the tree is recorded at the START of the run too",
+           "tests/integration/run.py",
+           '        return json.dumps({"git_head": self.head, "git_head_end": git_head(),\n',
+           '        return json.dumps({"git_head": git_head(), "git_head_end": git_head(),\n',
+           "tests/integration/test_run.py", "start_and_at_the_end",
+           cases=("test_the_report_records_the_tree_at_the_start_and_at_the_end",)),
+    Mutant("e3bm49", "E3B2 round 3 (G-B3): a SKIPPED line mid-output is parsed (re.M)",
+           "tests/integration/run.py",
+           ':\\d+: (.*)$", output, re.M))),\n',
+           ':\\d+: (.*)$", output))),\n',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm50", "E3B2 round 3 (G-B3): a skip count with no parsed reason fails the stage",
+           "tests/integration/run.py",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else "
+           "PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm51", "E3B2 round 3 (G-B4): dr11 pends on the held cutover, never passes empty",
+           "tests/integration/backend/test_drills.py",
+           '    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect',
+           '    (lambda *a, **k: None)("G2-R1", why="the sync/SSE relay that sees the disconnect',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm52", "E3B2 round 3 (HON-6): an INTEGRATED task is stale too, not only implemented",
+           "tests/integration/run.py",
+           '                  if tasks.get(task) in ("implemented", "integrated")\n',
+           '                  if tasks.get(task) in ("implemented",)\n',
+           "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
+           cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
+    Mutant("e3bm53", "E3B2 round 3 (G-N1): a red make target names its failing cases",
+           "tests/integration/run.py",
+           'SUITE_ADDOPTS = "-rfEs"\n', 'SUITE_ADDOPTS = "-rs"\n',
+           "tests/integration/test_run.py", "names_its_failures",
+           cases=("test_a_red_make_target_names_its_failures_and_its_skips",)),
+    Mutant("e3bm56", "E3B2 round 4 (GATE-B1): the anchor guard covers EVERY list the stage runs",
+           "tests/integration/test_run.py",
+           "    checked = mutants.all_mutants()\n", "    checked = mutants.MUTANTS\n",
+           "tests/integration/test_run.py", "anchor_occurs_as_declared",
+           cases=("test_every_mutant_anchor_occurs_as_declared_on_the_checkout",)),
+    Mutant("e3bm54", "E3B2 round 4 (GATE-B2): the skip count is read from pytest's summary line",
+           "tests/integration/run.py",
+           '("skipped", r"(\\d+) skipped")', '("skipped", r"^SKIPPED \\[(\\d+)\\]")',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm55", "E3B2 round 4 (GATE-B2): the skip count is read wherever it sits in it",
+           "tests/integration/run.py",
+           '("skipped", r"(\\d+) skipped")', '("skipped", r"(\\d+) skipped in")',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm57", "E3B2 round 4 (GATE-N1): the backend suite runs with -rfEs (its failures)",
+           "tests/integration/run.py",
+           '"no:cacheprovider", SUITE_ADDOPTS, f"--junitxml={junit}"],',
+           '"no:cacheprovider", "-rs", f"--junitxml={junit}"],',
+           "tests/integration/backend/test_stage.py", "reports_the_summary",
+           cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
+    Mutant("e3bm58", "E3B2 round 4 (GATE-N2): RESIDUAL is excused by the recovery MODULE PATH",
+           "tests/integration/run.py",
+           '    return "recovery" in case.split("::")[0].split(".")\n',
+           '    return "recovery" in case\n',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
 )
+
+
+def all_mutants() -> tuple[Mutant, ...]:
+    """E's list plus I3B's (`backend/recovery/mutants_i3b.py`, I3B request 8): one runner,
+    one mutation stage. Imported here, not at module level: that list imports this module."""
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
+    import mutants_i3b
+    return MUTANTS + tuple(mutants_i3b.MUTANTS)
 
 
 def _copy_trees(destination: Path) -> None:
@@ -681,28 +981,38 @@ def _copy_trees(destination: Path) -> None:
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
-def _temp_litter() -> set:
-    """Files in the temp directory carrying our prefix, minus the state file, which is ours."""
-    root = Path(tempfile.gettempdir())
-    return {path for path in root.glob(f"{harness.PROJECT}-*") if path != harness.STATE_FILE}
-
-
 def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     if mutant.layer == 2 and not stack_available:
         return {"id": mutant.id, "status": "pending", "why": "layer 2: no live stack",
                 "invariant": mutant.invariant}
     # A mutant is broken code by construction, so it may leak what the real code cannot: e2m54
     # reintroduces the leaked server log, and every server the copy starts then leaves a file
-    # behind, not only the one the guarded case watches. Anything new under our own prefix is
-    # removed afterwards - never anything that was there before, and never the state file.
-    litter_before = _temp_litter()
-    with tempfile.TemporaryDirectory(prefix=f"infrx-e2-{mutant.id}-") as tmp:
+    # behind. E3B phase 2: the run gets a PRIVATE TMPDIR inside its own copy, so whatever it
+    # leaks goes with the copy - nothing in the shared temp directory is ever swept (sweeping
+    # it by name deleted another lane's live mutant copy). One exception: suites under
+    # apps/infrx-api (tests/d) keep the shared TMPDIR, because their port lock lives there.
+    with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
+        private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"
+        # I3B's D mode (INFRX_I3B_PG=d): its restore and rc10 cases run D's pgharness, whose
+        # port lock lives in the shared TMPDIR too - a private one gives each run its own lock
+        # on the one shared port, and a second run removes the first's container (DR-2).
+        # ponytail: this shares the lock only among runs with the SAME TMPDIR (I3B DRL-4);
+        # a TMPDIR-independent lock path is D's (I3B request R3-2).
+        if (os.environ.get("INFRX_I3B_PG") == "d"
+                and mutant.suite.startswith("tests/integration/backend/recovery/")):
+            private = None
+        if private is not None:
+            private.mkdir()
         # E3B: a defect in module code is injected into a copy of `infrx`, which the suite
         # then imports through PYTHONPATH instead of the checkout's.
         api_root = harness.API_ROOT
-        if mutant.path.startswith(API_TREE + "/"):
+        # E3B phase 2 (found by the pristine baseline, review H1): a suite under
+        # apps/infrx-api/tests resolves `infrx` beside ITSELF (tests/d spawns children with
+        # PYTHONPATH=<its api root>), so the copy needs the package too, or the unmutated
+        # case fails in the copy and every "kill" of it was vacuous (e2m64-66).
+        if mutant.path.startswith(API_TREE + "/") or mutant.suite.startswith("apps/infrx-api/"):
             shutil.copytree(harness.REPO_ROOT / API_TREE, root / API_TREE,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             api_root = root / "apps" / "infrx-api"
@@ -713,34 +1023,58 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
             return {"id": mutant.id, "status": "stale", "invariant": mutant.invariant,
                     "why": f"the mutated text occurs {found} times, expected "
                            f"{mutant.occurrences}: the mutant no longer describes the code"}
+        # R83 pristine baseline (E3B phase 2, review H1): the named cases must PASS on this
+        # copy BEFORE the edit, or a "kill" is only the case's own red. Once per distinct
+        # (suite, selector, copy kind) in this process.
+        key = (mutant.suite, mutant.select, api_root != harness.API_ROOT)
+        if key not in BASELINES:
+            BASELINES[key] = _baseline(mutant, *_pytest(root, mutant, api_root, private))
+        red = BASELINES[key]
+        if red is not None:
+            return {"id": mutant.id, "status": "baseline-red", "invariant": mutant.invariant,
+                    "must_survive": mutant.must_survive, "why": red}
         target.write_text(source.replace(mutant.before, mutant.after, mutant.occurrences))
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
-             "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
-            cwd=str(root), capture_output=True, text=True, timeout=240,
-            env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
-                 # `infrx` (the pinned contracts package) always comes from the real
-                 # checkout; only the owned trees above are the copy's.
-                 "PYTHONPATH": str(api_root),
-                 # The copy must claim the provisioning checkout's identity or B1's ownership
-                 # label correctly makes the live stack foreign, and every layer-2 mutant is
-                 # skipped instead of killed.
-                 "INFRX_E2_CHECKOUT": harness.working_dir(),
-                 "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
-        output = result.stdout + result.stderr
-        verdict = _verdict(mutant, result.returncode, output)
-    litter = sorted(str(path) for path in _temp_litter() - litter_before)
-    for path in litter:
-        pathlib_path = Path(path)
-        if pathlib_path.is_dir():
-            shutil.rmtree(pathlib_path, ignore_errors=True)
-        else:
-            pathlib_path.unlink(missing_ok=True)
-    if litter:
-        verdict["temp_litter_removed"] = litter
+        verdict = _verdict(mutant, *_pytest(root, mutant, api_root, private))
     if mutant.dirties_database:
         verdict["reprovisioned"] = _reprovision()
     return verdict
+
+
+BASELINES: dict[tuple, str | None] = {}
+
+
+def _pytest(root: Path, mutant: Mutant, api_root: Path,
+            tmpdir: Path | None) -> tuple[int, str]:
+    """The mutant's named cases, run in the copy; (exit code, output). `tmpdir` is the run's
+    private temp directory (None: the shared one), with the state file pointed back at ours."""
+    private = {} if tmpdir is None else {"TMPDIR": str(tmpdir),
+                                         "INFRX_E2_STATE_FILE": str(harness.STATE_FILE)}
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
+         "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
+        cwd=str(root), capture_output=True, text=True, timeout=240,
+        env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
+             # `infrx` (the pinned contracts package) always comes from the real
+             # checkout; only the owned trees above are the copy's.
+             "PYTHONPATH": str(api_root),
+             # The copy must claim the provisioning checkout's identity or B1's ownership
+             # label correctly makes the live stack foreign, and every layer-2 mutant is
+             # skipped instead of killed.
+             "INFRX_E2_CHECKOUT": harness.working_dir(),
+             "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1", **private})
+    return result.returncode, result.stdout + result.stderr
+
+
+def _baseline(mutant: Mutant, code: int, output: str) -> str | None:
+    """None when the unmutated cases pass; else why this mutant cannot be judged."""
+    summary = _summary(output)
+    ran = re.search(r"\d+ (passed|failed|errors?)\b", summary)
+    if not ran and summary:
+        return None               # the selector matched nothing: `_verdict` says no-cases
+    if code == 0 and not re.search(r"\d+ (failed|errors?)\b", summary):
+        return None
+    return (f"the unmutated copy is already red on {mutant.select!r} ({summary or 'no '
+            f'summary, exit {code}'}): a failure under the mutant would prove nothing")
 
 
 def _reprovision() -> str:
@@ -827,7 +1161,8 @@ def summarise(results: list[dict]) -> dict:
     bad = [r for r in results
            if r not in pending
            and ((r["status"] != "killed" and not r.get("must_survive"))
-                or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases"))]
+                or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases",
+                                   "baseline-red"))]
     controls = [r for r in results if r.get("must_survive") and r["status"] == "SURVIVED"]
     return {"mutants": len(results),
             "killed": sum(1 for r in results if r["status"] == "killed"),
@@ -846,14 +1181,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
-        for mutant in MUTANTS:
+        for mutant in all_mutants():
             print(f"{mutant.id}  layer {mutant.layer}  "
                   f"{'CONTROL ' if mutant.must_survive else ''}{mutant.path}\n"
                   f"        {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants")
+        print(f"\n{len(all_mutants())} mutants")
         return 0
 
-    wanted = [m for m in MUTANTS
+    wanted = [m for m in all_mutants()
               if (args.layer == "all" or m.layer == int(args.layer))
               and (args.only is None or m.id == args.only)]
     stack = bool(harness.load_state()) and bool(harness.docker_available()[0]) \

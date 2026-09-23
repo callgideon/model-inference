@@ -98,6 +98,9 @@ class Relay:
     clock: Callable[[], float] = time.time
     sleep: Callable = asyncio.sleep
     registry: Any = None
+    # G3: the explicit-async answer. `jobs.register` installs its 202 hook here; None (no jobs
+    # router mounted) keeps explicit async refused before anything durable happens.
+    on_async: Callable | None = None
     # ponytail: a bounded poll of the store (and of the journal, for SSE). LISTEN/NOTIFY
     # inside D4's append transaction replaces it if per-stream queries ever matter.
     poll_s: float = 0.05
@@ -126,10 +129,12 @@ class Relay:
 
     async def _accept(self, auth, request, idem) -> Response:
         if request.execution_mode is ExecutionMode.async_:
-            # G3's (POST /v1/jobs, Prefer: respond-async). Refused before anything durable
-            # happens, and this route never answers 202.
-            raise errors.UnsupportedParameter("respond-async is not served on this route",
-                                              param="Prefer")
+            # G3's (POST /v1/jobs, Prefer: respond-async). Without its hook it is refused
+            # before anything durable happens, so the relay alone never answers 202.
+            if self.on_async is None:
+                raise errors.UnsupportedParameter("respond-async is not served on this route",
+                                                  param="Prefer")
+            return await self.on_async(*await self.admit(auth, request, idem))
         job, admission, headers = await self.admit(auth, request, idem)
         if request.execution_mode is ExecutionMode.stream:
             return _Stream(self, job, headers)
@@ -394,11 +399,17 @@ class Relay:
         return JSONResponse(body.model_dump(mode="json", exclude_none=True))
 
     # --- the SSE relay (item 3) -------------------------------------------------
-    async def pump(self, job: _Job, emit, gone: asyncio.Task) -> None:
-        """Relay the committed journal until a terminal commit is known, then end on it."""
-        cursor, ending, first = None, None, True
+    async def pump(self, job: _Job, emit, gone: asyncio.Task, *, cursor=None,
+                   cancel_on_gone: bool = True) -> None:
+        """Relay the committed journal until a terminal commit is known, then end on it.
+
+        G3: `cursor` resumes after a client's `Last-Event-ID`; an events observer passes
+        `cancel_on_gone=False`, because an observer that leaves detaches - it never cancels."""
+        ending, first = None, True
         delay, quiet_since = self.poll_s, self._now()
         while True:
+            if gone.done() and not cancel_on_gone:
+                return
             if gone.done():
                 await self.cancel(job.org_id, job.handle,
                                   cause=TerminalCause.client_disconnected, quiet=True)

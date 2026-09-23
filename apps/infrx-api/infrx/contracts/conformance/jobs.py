@@ -1430,6 +1430,41 @@ async def dur_output__every_requeued_candidate_carries_the_right_kind(factory):
     del other_admission, admission, lease
 
 
+async def dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row(factory):
+    """DUR-OUTBOX / R93 (D2 OB-5b): a lapsed lease is redispatched by a FRESH outbox row,
+    and the index event `recover` returns for an inference requeue carries THAT row's id.
+
+    Two ids for one dispatch (the relay's row, the reaper's event) let a replay-safe index
+    run the job twice; re-publishing the old, acknowledged row instead is dropped as a
+    replay of an id it has already seen. A lapsed preparation lease publishes no event
+    (the case above) but still gets a fresh `prepare_dispatch` row of its own.
+    """
+    harness = factory()
+    outbox = harness.extra["outbox"]
+
+    def ids(job_id, kind):
+        return [event.event_id for event in outbox(job_id) if event.kind is kind]
+
+    request, _admission, _lease = await _running(harness)
+    first = ids(request.request_id, OutboxKind.inference_dispatch)
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    events = [item for item in await harness.port.recover() if isinstance(item, IndexEvent)]
+    assert len(events) == 1, f"one requeue expected, got {events}"
+    fresh = [event_id for event_id in ids(request.request_id, OutboxKind.inference_dispatch)
+             if event_id not in first]
+    assert fresh == [events[0].event_id], \
+        f"the requeue event {events[0].event_id} is not its fresh dispatch row {fresh}"
+
+    other, _other_admission = await _admit(harness, key="fresh-prep")
+    before = ids(other.request_id, OutboxKind.prepare_dispatch)
+    await harness.port.claim_preparation(other.request_id, "prep-a")
+    harness.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+    await harness.port.recover()
+    after = ids(other.request_id, OutboxKind.prepare_dispatch)
+    assert len(after) == len(before) + 1 and len(set(after)) == len(after), \
+        f"a lapsed preparation lease was not redispatched by a fresh row: {before} -> {after}"
+
+
 async def dur_output__recovery_requeues_only_before_publication(factory):
     """DUR-OUTPUT: a lost attempt with no committed output may run again."""
     harness = factory()
@@ -2755,6 +2790,7 @@ def jobstore_cases():
         dur_fence__a_stale_generation_is_rejected,
         dur_output__recovery_requeues_only_before_publication,
         dur_output__every_requeued_candidate_carries_the_right_kind,
+        dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row,
         dur_output__loss_after_publication_is_a_terminal_failure,
         dur_output__prepublication_retries_are_bounded,
         dur_output__queue_wait_does_not_restart_on_a_requeue,
@@ -2998,6 +3034,63 @@ async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
     assert [chunk.payload["content"] for chunk in page] == ["c"]
 
 
+async def dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark(factory):
+    """DUR-OUTPUT / D4 J4 (0017): pruning is a prefix and the watermark only grows. When a
+    running job's journal is pruned to nothing, the next append - and later the terminal
+    event - continues PAST the watermark, never restarting at 1 below it (a restarted
+    journal reissues cursors that named pruned events), and the journal is live again: a
+    replay from the start is an explicit gap, a replay from the watermark is the new tail."""
+    harness = factory(limits=DEFAULTS.replace(journal_chunk_ttl_s=30))
+    jobs = hook(harness, "jobs")
+    request, admission, lease = await _stream_job(harness)
+    await harness.port.append(lease, b.events("a", "b"))
+    harness.clock.advance(31)
+    assert await harness.port.expire(harness.clock.now()) == 2
+    # "expired" is a watermark and NO chunk left: an empty batch stores nothing, so the
+    # journal stays expired
+    assert await harness.port.append(lease, ()) == (), "an empty batch committed a chunk"
+    try:
+        await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    except errors.JournalExpired:
+        pass
+    except errors.DomainError as other:
+        raise AssertionError(f"an empty batch revived a journal pruned to nothing: "
+                             f"{other.code}") from other
+    else:
+        raise AssertionError("an empty batch revived a journal pruned to nothing")
+    chunks = await harness.port.append(lease, b.events("c"))
+    assert [(chunk.generation, chunk.sequence) for chunk in chunks] == [(1, 3)], \
+        "the journal restarted below its prune watermark"
+    try:
+        await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    except errors.ReplayGap as exc:
+        assert errors.http_status(exc.code) == 410
+    else:
+        raise AssertionError("a replay from the start hid the pruned prefix")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle,
+                                            Cursor.parse("1-2"), 10)
+    assert [chunk.payload["content"] for chunk in page] == ["c"]
+    # and the settling transaction's terminal event after a second full prune
+    harness.clock.advance(31)
+    assert await harness.port.expire(harness.clock.now()) == 1
+    await jobs.cancel(request.org_id, admission.job_handle)
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle,
+                                            Cursor.parse("1-3"), 10)
+    assert [(chunk.event_type, chunk.generation, chunk.sequence) for chunk in page] == \
+        [(ChunkEventType.terminal, 1, 4)], "the terminal event restarted below the watermark"
+    # its TTL (0017, D4 Limit 2): with no chunk left the frozen 3600 s, not the store's 30 s;
+    # with chunks, the newest chunk's, whatever the store is configured with by then
+    assert page[0].expires_at - page[0].persisted_at == timedelta(seconds=3600), \
+        f"a chunkless terminal event lives {page[0].expires_at - page[0].persisted_at}"
+    other, admitted, lease = await _stream_job(harness, key="terminal-ttl")
+    await harness.port.append(lease, b.events("d"))
+    hook(harness, "retune")(journal_chunk_ttl_s=600)
+    await jobs.cancel(other.org_id, admitted.job_handle)
+    page, _ = await harness.port.read_owned(other.org_id, admitted.job_handle, None, 10)
+    assert [chunk.expires_at - chunk.persisted_at for chunk in page] == \
+        [timedelta(seconds=30)] * 2, "the terminal event did not take the newest chunk's TTL"
+
+
 async def dur_output__expiry_never_runs_on_a_callers_clock(factory):
     """DUR-OUTPUT / r1 R7: `expire` reads the database clock. A caller passing a time a
     year ahead must prune nothing that is still live, or a client could have another
@@ -3096,6 +3189,58 @@ async def dur_output__an_oversize_event_is_refused(factory):
     assert page == ()
 
 
+async def dur_output__an_unjournalable_event_refuses_the_whole_batch(factory):
+    """DUR-OUTPUT / D4 review M1: what jsonb cannot store - a NUL character in a string or a
+    key at any depth, a lone UTF-16 surrogate, NaN or an infinity - is `journal_write_failed`
+    for the WHOLE batch wherever the bad event sits, and nothing is stored or charged (the
+    job's stored bytes after terminalization are its terminal event's alone). The literal
+    text `\\u0000`, -0.0 and 1e308 are ordinary JSON and are stored."""
+    from ..records import EngineEvent
+    harness = factory()
+    jobs = hook(harness, "jobs")
+    journal_bytes = hook(harness, "journal_bytes")
+    request, admission, lease = await _stream_job(harness)
+    for payload in ({"content": "a\x00b"}, {"a\x00b": "key"}, {"top": [["\x00"]]},
+                    {"content": "x\ud800"}, {"\udc00": 1}, {"top": ["\udfff"]},
+                    {"logprob": float("nan")}, {"logprob": float("inf")},
+                    {"top": [{"logprob": float("-inf")}]}):
+        bad = EngineEvent(type=ChunkEventType.delta, payload=payload)
+        for batch in ((*b.events("a"), bad), (bad, *b.events("b")),
+                      (*b.events("a"), bad, *b.events("b"))):
+            try:
+                await harness.port.append(lease, batch)
+            except errors.JournalWriteFailed:
+                pass
+            else:
+                raise AssertionError(f"the journal stored an unjournalable payload {payload!r}")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert page == (), "a refused batch committed part of itself"
+    await jobs.cancel(request.org_id, admission.job_handle)
+    # refused BEFORE the fence, as `PgStreamStore` refuses before it sends anything: a
+    # terminal or superseded lease changes nothing about the answer (and the fence, which
+    # can terminalize a job past its deadline, never runs for a batch that stores nothing)
+    nul = EngineEvent(type=ChunkEventType.delta, payload={"x": "\x00"})
+    for stale in (lease, lease.model_copy(update={"generation": lease.generation + 1})):
+        try:
+            await harness.port.append(stale, (nul,))
+        except errors.JournalWriteFailed:
+            pass
+        except errors.DomainError as fenced:
+            raise AssertionError(f"an unjournalable batch was fenced first: {fenced.code}") \
+                from fenced
+        else:
+            raise AssertionError("a fenced-out lease stored an unjournalable payload")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert journal_bytes() == sum(chunk.bytes for chunk in page), \
+        "a refused batch charged journal bytes"
+    _other, _admitted, lease = await _stream_job(harness, key="journalable")
+    # (jsonb re-renders 1e308 in fixed point, so only the text is compared on the way back)
+    stored = await harness.port.append(lease, (EngineEvent(type=ChunkEventType.delta, payload={
+        "content": "\\u0000", "zero": -0.0, "big": 1e308}),))
+    assert [chunk.payload["content"] for chunk in stored] == ["\\u0000"], \
+        "a journalable event was refused"
+
+
 async def dur_cap__a_job_cannot_store_past_its_journal_reservation(factory):
     """DUR-CAP: 02 requires per-job *and* global byte limits, so one job's journal
     cannot grow into the global budget past the bytes reserved for it."""
@@ -3177,11 +3322,13 @@ def streamstore_cases():
         dur_output__no_terminal_event_anywhere_in_a_batch,
         dur_output__expiry_never_runs_on_a_callers_clock,
         dur_output__a_pruned_prefix_is_an_explicit_replay_gap,
+        dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark,
         dur_output__an_expired_journal_is_gone_not_regenerated,
         dur_cap__stored_unexpired_bytes_keep_counting,
         dur_cap__a_job_cannot_store_past_its_journal_reservation,
         dur_fence__a_stale_worker_cannot_append,
         dur_output__an_oversize_event_is_refused,
+        dur_output__an_unjournalable_event_refuses_the_whole_batch,
         dur_output__the_terminal_event_is_written_once_with_the_settlement,
         dur_settle__the_terminal_event_belongs_to_the_settling_transaction,
     ]

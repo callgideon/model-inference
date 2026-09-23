@@ -32,24 +32,51 @@ OWNED_FILES = sorted(p for p in harness.HERE.rglob("*")
 
 # ------------------------------------------------------------------ ports and names
 
-def test_every_port_is_inside_the_range_tasklocal_grants_this_task():
-    """08 §8 / R48: E2's compose range is 55500-55599 and nothing else. A port outside it
-    is a collision with another session's worktree waiting to happen."""
-    granted = tasklocal.local_services("e2")["compose"]
+def _rendered(namespace: str) -> str:
+    """compose.yaml as compose sees it for `namespace`: every `${VAR}` / `${VAR:?why}` replaced
+    from `harness.compose_env(namespace)`, so a literal left behind in one derived place shows
+    up as the wrong value in the other namespace."""
+    env = harness.compose_env(namespace)
+    return re.sub(r"\$\{(\w+)(?::\?[^}]*)?\}", lambda match: env[match.group(1)], COMPOSE_TEXT)
+
+
+@pytest.mark.parametrize("namespace", sorted(harness.NAMESPACES))
+def test_every_port_is_inside_the_range_tasklocal_grants_this_task(namespace):
+    """08 §8 / R48: each namespace's compose range is its tasklocal block and nothing else (E2:
+    55500-55599). A port outside it is a collision with another session's worktree waiting to
+    happen."""
+    granted = tasklocal.local_services(namespace)["compose"]
     allowed = {granted.host_port, *granted.extra_ports}
-    assert allowed == set(harness.PORT_RANGE), "the harness copy drifted from tasklocal"
-    for service, port in harness.PORTS.items():
-        assert port in allowed, f"{service} on {port} is outside E2's range"
-    assert len(set(harness.PORTS.values())) == len(harness.PORTS), "two services, one port"
+    assert allowed == set(harness.range_for(namespace)), "the harness copy drifted from tasklocal"
+    ports = harness.ports_for(namespace)
+    for service, port in ports.items():
+        assert port in allowed, f"{service} on {port} is outside {namespace}'s range"
+    assert len(set(ports.values())) == len(ports), "two services, one port"
 
 
-def test_the_compose_file_publishes_exactly_those_ports_on_loopback():
-    published = re.findall(r'"127\.0\.0\.1:(\d+):(\d+)"', COMPOSE_TEXT)
+@pytest.mark.parametrize("namespace", sorted(harness.NAMESPACES))
+def test_a_namespace_block_overlaps_no_other_reservation(namespace):
+    """Whatever tasklocal can express today: no port another task or track reserved lies inside
+    a namespace's block, and every port the namespace publishes lies inside it."""
+    owner = "e" if namespace == "e2" else namespace
+    block = harness.range_for(namespace)
+    intruders = {port: who for port, who in tasklocal.all_host_ports().items()
+                 if port in block and who.split("/")[0] != owner}
+    assert intruders == {}, intruders
+    assert set(harness.ports_for(namespace).values()) <= set(block)
+    assert (harness.PORTS, harness.PORT_RANGE) == (harness.ports_for(harness.NAMESPACE),
+                                                   harness.range_for(harness.NAMESPACE))
+
+
+@pytest.mark.parametrize("namespace", sorted(harness.NAMESPACES))
+def test_the_compose_file_publishes_exactly_those_ports_on_loopback(namespace):
+    text = _rendered(namespace)
+    published = re.findall(r'"127\.0\.0\.1:(\d+):(\d+)"', text)
     assert published, "no published ports found; the regex or the file changed"
     host_ports = sorted(int(host) for host, _ in published)
-    assert host_ports == sorted(port for name, port in harness.PORTS.items()
+    assert host_ports == sorted(port for name, port in harness.ports_for(namespace).items()
                                 if name != "fake_vllm"), host_ports
-    assert re.search(r"ports:\s*\n\s*-\s*\"\d+:", COMPOSE_TEXT) is None, \
+    assert re.search(r"ports:\s*\n\s*-\s*\"\d+:", text) is None, \
         "every published port must be bound to 127.0.0.1, never to every interface"
 
 
@@ -64,13 +91,15 @@ def test_every_image_is_pinned_by_digest():
         assert ":" not in reference.split("@", 1)[0], f"{service} carries a tag as well"
 
 
-def test_every_container_is_named_in_the_namespace_and_volumes_are_project_scoped():
-    names = re.findall(r"container_name:\s*(\S+)", COMPOSE_TEXT)
+@pytest.mark.parametrize("namespace", sorted(harness.NAMESPACES))
+def test_every_container_is_named_in_the_namespace_and_volumes_are_project_scoped(namespace):
+    text = _rendered(namespace)
+    names = re.findall(r"container_name:\s*(\S+)", text)
     assert len(names) == len(harness.SERVICES)
-    assert all(name.startswith(harness.PREFIX) for name in names), names
-    assert re.search(r"^name:\s*infrx-e2\s*$", COMPOSE_TEXT, re.MULTILINE), \
-        "the compose project must be infrx-e2, which is what scopes the teardown"
-    binds = [line for line in COMPOSE_TEXT.splitlines()
+    assert all(name.startswith(f"infrx-{namespace}-") for name in names), names
+    assert re.search(rf"^name:\s*infrx-{namespace}\s*$", text, re.MULTILINE), \
+        f"the compose project must be infrx-{namespace}, which is what scopes the teardown"
+    binds = [line for line in text.splitlines()
              if re.match(r"\s+- (\.|/|\$)", line) and ":" in line]
     assert binds == [], f"no host bind mount: a disposable volume cannot be a host path: {binds}"
 
@@ -103,7 +132,7 @@ def test_a_destructive_helper_refuses_anything_outside_the_namespace():
             harness.assert_ours(foreign)
     with pytest.raises(harness.HarnessError, match="unknown service"):
         harness.container_of("not-a-service")
-    assert harness.container_of("postgres") == "infrx-e2-postgres"
+    assert harness.container_of("postgres") == f"infrx-{harness.NAMESPACE}-postgres"
 
 
 def test_nothing_in_this_directory_points_at_production():
@@ -195,7 +224,7 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     checks = pgstate.role_matrix(fixtures)
     assert {check.role for check in checks} == {"anon", "authenticated", "service_role",
                                                 "postgres"}
-    assert {check.expect[0] for check in checks} == {"value", "rowcount", "error"}
+    assert {check.expect[0] for check in checks} == {"value", "rowcount", "error", "rows"}
     assert len({check.case for check in checks}) == len(checks), "duplicate case id"
     assert all(check.why for check in checks), "every case states the invariant it pins"
     assert sum(1 for check in checks if check.expect == ("error", pgstate.PERMISSION_DENIED)) >= 8
@@ -213,10 +242,20 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     assert {"permission denied for table", "violates row-level security policy",
             "not a member of organization",
             "permission denied for function org_balance"} <= causes, causes
-    assert {cause for cause in causes if cause.startswith("permission denied for table ")} == {
+    assert {check.message_contains for check in denials if check.case.startswith("E2-")
+            and check.message_contains.startswith("permission denied for table ")} == {
         "permission denied for table organizations", "permission denied for table api_keys",
         "permission denied for table credit_ledger",
         "permission denied for table models"}, causes
+    # E3B phase 2 item 7: every relation and SECURITY DEFINER function has a row per API role
+    # (`test_services.py` holds the list itself to the migrated catalog); D4's 0017 adds the
+    # invoker `chunk_doc`, the watermark columns per role, their CHECK and the trigger.
+    generated = {check.case for check in checks if check.case.startswith("E3B-RLS-")}
+    assert generated == {f"E3B-RLS-{name}-{role}" for name in (
+        *pgstate.RELATIONS, *pgstate.FUNCTIONS, *pgstate.INVOKER_FUNCTIONS,
+        "0017-watermark-columns") for role in pgstate.API_ROLES} | {
+        f"E3B-RLS-W-{name}-{role}" for name in pgstate.RELATIONS for role in pgstate.API_ROLES
+    } | {"E3B-RLS-0017-watermark-check", "E3B-RLS-0017-terminal-trigger"}
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)
