@@ -446,17 +446,27 @@ def check_cancel(conn) -> str:
         assert code is None and again["cause"] == "client_cancelled", \
             f"a repeated cancel did not answer the committed outcome: {code} {again}"
         assert len(kinds(conn, busy.request_id)) == count, "a repeated cancel wrote again"
-        # H-4: the terminalization itself refuses a terminal job (a caller that forgot)
-        try:
-            with conn.transaction():
-                conn.execute("select infrx.terminalize_no_usage(%s, 'client_cancelled', "
-                             "'cancelled', %s)", (busy.request_id,
-                                                  DEFAULTS.unknown_usage_reconcile_s))
-            code = None
-        except psycopg.Error as failed:
-            code = getattr(domain_error(failed), "code", f"untyped {failed.sqlstate}")
+        # H-4: the terminalization itself refuses a terminal job (a caller that forgot) -
+        # in any terminal state, not only `cancelled` (confirmation CM-1)
+        def terminalize(request_id, cause, state):
+            try:
+                with conn.transaction():
+                    conn.execute("select infrx.terminalize_no_usage(%s, %s, %s, %s)",
+                                 (request_id, cause, state,
+                                  DEFAULTS.unknown_usage_reconcile_s))
+                return None
+            except psycopg.Error as failed:
+                return getattr(domain_error(failed), "code", f"untyped {failed.sqlstate}")
+
+        code = terminalize(busy.request_id, "client_cancelled", "cancelled")
         assert code == "already_terminal" and len(kinds(conn, busy.request_id)) == count, \
             f"a terminal job was terminalized again: {code}, {kinds(conn, busy.request_id)}"
+        lapsed = queued(conn, world)
+        assert terminalize(lapsed.request_id, "queue_wait_expired", "expired") is None
+        count = len(kinds(conn, lapsed.request_id))
+        code = terminalize(lapsed.request_id, "queue_wait_expired", "expired")
+        assert code == "already_terminal" and len(kinds(conn, lapsed.request_id)) == count, \
+            f"an expired job was terminalized again: {code}, {kinds(conn, lapsed.request_id)}"
         # tenancy: ORG_B cannot cancel ORG_A's job, and it is untouched
         other = queued(conn, world)
         assert d3(conn, "cancel", org_id=b.ORG_B, job_handle=handle(other))[0] == \

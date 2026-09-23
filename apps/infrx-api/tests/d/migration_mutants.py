@@ -1828,6 +1828,13 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  if false then\n    perform infrx.refuse('already_terminal', 'job ' || p_request_id",
        "admission", "cancel",
        "a caller that forgot the terminal check writes a second terminalization (H-4)"),
+    _m("d3_terminal_check_only_cancelled", LEASES,
+       "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| p_request_id",
+       "  if j.state = 'cancelled' then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| p_request_id",
+       "admission", "cancel",
+       "an expired or failed job is terminalized a second time (confirmation CM-1)"),
     _m("d3_published_output_released", LEASES,
        "  if j.published then\n    -- Output was committed",
        "  if false then\n    -- Output was committed",
