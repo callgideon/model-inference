@@ -1229,15 +1229,17 @@ class FakeJobStore:
             job.state = JobState.queued
             job.lease = None
             self._enter_queued(job, now)          # r1 R38: only the remainder is left
-            event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,
+            # R93 (D2 OB-5b): the published event IS the fresh dispatch row, by its id, as on
+            # PostgreSQL - two ids for one dispatch would let a replay-safe index run it twice.
+            dispatch = self._emit(job.id, OutboxKind.inference_dispatch, now,
+                                  {"request_id": job.id, "attempt": job.attempts})
+            event = IndexEvent(event_id=dispatch.event_id, job_id=job.id,
                                org_id=job.request.org_id, key_id=job.request.key_id,
                                # r1 R52: a requeue after a lost inference attempt is an
                                # inference candidate, and says so.
                                kind=OutboxKind.inference_dispatch,
                                execution_mode=job.request.execution_mode, available_at=now,
                                attempt=job.attempts)
-            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,
-                                                                    "attempt": job.attempts})
             return [event]
         return []
 

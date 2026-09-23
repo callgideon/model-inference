@@ -686,11 +686,21 @@ MUTANTS: tuple[Mutant, ...] = (
           "                               execution_mode=job.request.execution_mode, available_at=now,",
        "dur_output__every_requeued_candidate_carries_the_right_kind"),
     _m("lost_inference_emits_a_prepare_dispatch", "a lost attempt dispatches for its own phase (s18)",
-       S, '            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,\n'
-          '                                                                    "attempt": job.attempts})',
-       '            self._emit(job.id, OutboxKind.prepare_dispatch, now, {"request_id": job.id,\n'
-          '                                                               "attempt": job.attempts})',
+       S, "            dispatch = self._emit(job.id, OutboxKind.inference_dispatch, now,",
+       "            dispatch = self._emit(job.id, OutboxKind.prepare_dispatch, now,",
        "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    # R93 (E3B2 request 3, D2 OB-5b): the requeue event and its fresh outbox row are one id.
+    _m("requeue_event_id_minted_apart", "a requeue event carries its fresh row's id (R93)",
+       S, "            event = IndexEvent(event_id=dispatch.event_id, job_id=job.id,",
+       "            event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,",
+       "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"),
+    _m("lapsed_preparation_reopens_its_old_row", "a lapsed preparation gets a fresh row (OB-5b)",
+       S, "            self._emit(job.id, OutboxKind.prepare_dispatch, now,\n"
+          "                       {\"request_id\": job.id, \"attempt\": job.preparation_attempts})",
+       "            self.outbox.append(next(event for event in self.outbox\n"
+          "                                    if event.aggregate_id == job.id\n"
+          "                                    and event.kind is OutboxKind.prepare_dispatch))",
+       "dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row"),
     # --- r1 R55: untrusted store inputs -----------------------------------------
     _m("attach_trusts_a_caller_supplied_org", "attach reads the org from the job row (R55)",
        M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',

@@ -1387,6 +1387,41 @@ async def dur_output__every_requeued_candidate_carries_the_right_kind(factory):
     del other_admission, admission, lease
 
 
+async def dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row(factory):
+    """DUR-OUTBOX / R93 (D2 OB-5b): a lapsed lease is redispatched by a FRESH outbox row,
+    and the index event `recover` returns for an inference requeue carries THAT row's id.
+
+    Two ids for one dispatch (the relay's row, the reaper's event) let a replay-safe index
+    run the job twice; re-publishing the old, acknowledged row instead is dropped as a
+    replay of an id it has already seen. A lapsed preparation lease publishes no event
+    (the case above) but still gets a fresh `prepare_dispatch` row of its own.
+    """
+    harness = factory()
+    outbox = harness.extra["outbox"]
+
+    def ids(job_id, kind):
+        return [event.event_id for event in outbox(job_id) if event.kind is kind]
+
+    request, _admission, _lease = await _running(harness)
+    first = ids(request.request_id, OutboxKind.inference_dispatch)
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    events = [item for item in await harness.port.recover() if isinstance(item, IndexEvent)]
+    assert len(events) == 1, f"one requeue expected, got {events}"
+    fresh = [event_id for event_id in ids(request.request_id, OutboxKind.inference_dispatch)
+             if event_id not in first]
+    assert fresh == [events[0].event_id], \
+        f"the requeue event {events[0].event_id} is not its fresh dispatch row {fresh}"
+
+    other, _other_admission = await _admit(harness, key="fresh-prep")
+    before = ids(other.request_id, OutboxKind.prepare_dispatch)
+    await harness.port.claim_preparation(other.request_id, "prep-a")
+    harness.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+    await harness.port.recover()
+    after = ids(other.request_id, OutboxKind.prepare_dispatch)
+    assert len(after) == len(before) + 1 and len(set(after)) == len(after), \
+        f"a lapsed preparation lease was not redispatched by a fresh row: {before} -> {after}"
+
+
 async def dur_output__recovery_requeues_only_before_publication(factory):
     """DUR-OUTPUT: a lost attempt with no committed output may run again."""
     harness = factory()
@@ -2711,6 +2746,7 @@ def jobstore_cases():
         dur_fence__a_stale_generation_is_rejected,
         dur_output__recovery_requeues_only_before_publication,
         dur_output__every_requeued_candidate_carries_the_right_kind,
+        dur_outbox__a_requeue_publishes_its_own_fresh_dispatch_row,
         dur_output__loss_after_publication_is_a_terminal_failure,
         dur_output__prepublication_retries_are_bounded,
         dur_output__queue_wait_does_not_restart_on_a_requeue,
