@@ -23,11 +23,12 @@ from datetime import timedelta
 import httpx
 import pytest
 
+from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors, fixtures, wire
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      JobState, OutboxKind, SettlementState, TerminalCause,
                                      TerminalOutcome)
-from infrx.gateway.routes import jobs as jobs_router
+from infrx.gateway.routes import ingress, jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
 from infrx.observe.metrics import Registry
 from infrx.operations import service
@@ -801,3 +802,51 @@ def test_api_modes__the_client_examples_async_flow_is_served(monkeypatch, capsys
     assert row["completion_tokens"] == job.outcome.usage.completion_tokens
     assert job.request.execution_mode is ExecutionMode.async_ and len(job.request.media) == 1
     assert job.outcome.settlement_state is SettlementState.settled and secret not in out
+
+
+# --- item 8: composition and the route table ----------------------------------------------
+def test_f_base__the_jobs_router_mounts_only_over_a_relay():
+    """M-FAILCLOSED: without `rt.relay` the jobs router mounts nothing (there is no fake to
+    fall back on) and the route table stays valid; over a relay it mounts the five routes,
+    installs its 202 hook, and refuses to start without the ingress's dependencies."""
+    app, _ = rs.support.cutover_app()
+    rt = app.state.runtime
+    assert jobs_router.register(app, rt) is None
+    assert not [r for r in app.routes if getattr(r, "path", "").startswith(JOBS)]
+    ingress.assert_route_table(app)
+    world = JobsWorld()
+    served = {(method, r.path) for r in world.app.routes if r.path.startswith(JOBS)
+              for method in r.methods}
+    assert served == set(ingress.JOBS_ROUTES)
+    assert world.relay.on_async == world.router.accepted
+    bare, _ = rs.support.cutover_app()
+    bare.state.runtime.relay = world.relay
+    with pytest.raises(RuntimeMisconfigured):
+        jobs_router.register(bare, bare.state.runtime)             # no rt.ingress
+
+
+def test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers():
+    """The composition root's route-table assertion covers the jobs routes: all five or none,
+    each served by exactly one handler, this module's. A second handler, or a partial mount,
+    refuses to start."""
+    world = JobsWorld()
+    for method, path in ingress.JOBS_ROUTES:
+        (route,) = [r for r in world.app.routes if r.path == path and method in r.methods]
+        assert route.endpoint.__module__ == jobs_router.__name__
+    ingress.assert_route_table(world.app)
+
+    @world.app.post(JOBS)
+    async def shadow():
+        return {}
+
+    with pytest.raises(RuntimeMisconfigured):
+        ingress.assert_route_table(world.app)
+    partial, _ = rs.support.cutover_app()
+
+    @partial.get(jobs_router.JOB_PATH)
+    async def lone():
+        return {}
+
+    lone.__module__ = jobs_router.__name__
+    with pytest.raises(RuntimeMisconfigured):
+        ingress.assert_route_table(partial)

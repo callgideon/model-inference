@@ -65,6 +65,8 @@ BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
 MATRIX = "test_api_modes__the_async_matrix_end_to_end"
 EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result"
 CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
+COMPOSE = "test_f_base__the_jobs_router_mounts_only_over_a_relay"
+TABLE = "test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -233,6 +235,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("poll_ignores_retry_after", "the client polls at the 202's Retry-After",
        X, '        await SLEEP(min(wait, MAX_RETRY_AFTER_S) if wait is not None else cfg["poll_s"])',
        '        await SLEEP(cfg["poll_s"])', CLIENT),
+    # === item 8: composition and the route table (F-BASE, M-FAILCLOSED) ==================
+    # Registering over no relay reaches the ingress intake, which refuses to start without a
+    # catalog (`RuntimeMisconfigured`): the router tried to mount with nothing to answer for.
+    _m("mounted_without_relay", "no relay, no jobs routes (no fake fallback)",
+       J, "    if relay is None:\n        return None", "    if False:\n        return None",
+       COMPOSE, dies_by=("RuntimeMisconfigured",)),
+    _m("second_jobs_route_tolerated", "each jobs route has exactly one handler",
+       N, "    if any(jobs) and any(found != [JOBS_MODULE] for found in jobs):",
+       "    if any(jobs) and any(JOBS_MODULE not in found for found in jobs):", TABLE),
+    _m("partial_jobs_mount_tolerated", "the jobs routes are mounted all or none",
+       N, "    if any(jobs) and any(found != [JOBS_MODULE] for found in jobs):",
+       "    if all(jobs) and any(found != [JOBS_MODULE] for found in jobs):", TABLE),
+    _m("jobs_routes_unnamed", "the route table names the jobs router as their handler",
+       J, "        endpoint.__module__ = __name__", "        pass", TABLE),
 )
 
 
