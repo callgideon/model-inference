@@ -495,8 +495,8 @@ def check_recover_requeue(conn) -> str:
     queue remainder, R38) with exactly one NEW inference_dispatch row (a fresh event id the
     relay delivers, never an old row reopened - D2 OB-5b), returned as an IndexEvent
     carrying that row's own id; after MAX_PREPUBLICATION_RETRIES requeues it is
-    `retries_exhausted`; AFTER publication it is `lost_after_publication` and never
-    requeued; past the generation instant (lease live) it is `deadline_exceeded`; a queued
+    `retries_exhausted`; AFTER publication it is `lost_after_publication` (even with its
+    retries spent) and never requeued; past the generation instant (lease live) it is `deadline_exceeded`; a queued
     job is left alone until its queue instant, then `queue_wait_expired` (released_free)."""
     world = ca.World(conn)
 
@@ -550,6 +550,19 @@ def check_recover_requeue(conn) -> str:
             ("lost_after_publication", "held_unknown"), out
         assert kinds(conn, shown.request_id).count("inference_dispatch") == 1, \
             "a published job was redispatched"
+        # ... and when its retry counter is spent too, the cause is still the publication's
+        # (FE-3: publication is decided before the counter)
+        spent, lease = running(conn, world)
+        for _ in range(DEFAULTS.max_prepublication_retries):
+            advance(conn, TTL)
+            reaped(_recover(conn), "index_event")
+            lease = lease_of(d3(conn, "claim", job_id=spent.request_id, worker_id="w1")[1])
+        assert row(conn, spent.request_id)["attempts"] == DEFAULTS.max_prepublication_retries
+        publish(conn, lease)
+        advance(conn, TTL)
+        out = reaped(_recover(conn))
+        assert out["cause"] == "lost_after_publication", \
+            f"a publication lost with its retries spent was not lost_after_publication: {out}"
         # the generation instant ends a run whose lease is still live
         slow, lease = running(conn, world)
         conn.execute("update infrx.attempts set expires_at = expires_at + interval '1 day' "

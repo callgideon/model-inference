@@ -1639,6 +1639,15 @@ MUTANTS = MUTANTS + D2_MUTANTS
 LEASES = "0016_fenced_leases.sql"
 _REFUSAL_RETURN = ("  if v_refusal is not null then\n"
                    "    return jsonb_build_object('refusal', v_refusal);\n  end if;\n")
+#: FE-3: recover_job decides publication BEFORE the retry counter.
+_PUBLISHED_CHECK = (
+    "  if j.published then\n"
+    "    return jsonb_build_array(jsonb_build_object('outcome', infrx.terminalize_no_usage(\n"
+    "      p_id, 'lost_after_publication', 'failed', p_reconcile_s)));\n  end if;\n")
+_RETRY_CHECK = (
+    "  if j.attempts >= p_retries then\n"
+    "    return jsonb_build_array(jsonb_build_object('outcome', infrx.terminalize_no_usage(\n"
+    "      p_id, 'retries_exhausted', 'failed', p_reconcile_s)));\n  end if;\n")
 D3_MUTANTS: tuple[Mutant, ...] = (
     # --- the fence ---------------------------------------------------------------------
     _m("d3_fence_accepts_any_kind", LEASES,
@@ -1866,6 +1875,10 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  if j.published then\n    return jsonb_build_array(",
        "  if false then\n    return jsonb_build_array(",
        "admission", "recover_requeue", "published output is regenerated (02 §6)"),
+    _m("d3_retries_checked_before_publication", LEASES,
+       _PUBLISHED_CHECK + _RETRY_CHECK, _RETRY_CHECK + _PUBLISHED_CHECK,
+       "admission", "recover_requeue",
+       "a publication lost with its retries spent is booked retries_exhausted (FE-3)"),
     _m("d3_retries_unbounded", LEASES, "  if j.attempts >= p_retries then", "  if false then",
        "admission", "recover_requeue", "a failing job is retried for ever"),
     _m("d3_one_retry_too_many", LEASES, "  if j.attempts >= p_retries then",
