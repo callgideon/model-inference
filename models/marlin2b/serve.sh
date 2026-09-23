@@ -56,12 +56,19 @@ for arg in "$@"; do
       exit 2 ;;
   esac
 done
+[[ $ENGINE_MAX_NUM_SEQS =~ ^[1-9][0-9]*$ ]] || {
+  echo "serve.sh: ENGINE_MAX_NUM_SEQS must be a positive integer" >&2; exit 2; }
 
 media=() flags=()
 if [ -n "${PROCESSING_CACHE_DIR:-}" ]; then
+  # The engine may open any file under it by file://: absolute and canonical (no `..`,
+  # `//` or trailing `/` to walk out of the checks below; realpath of a relative path is
+  # absolute, so it never compares equal), never a system directory or the weights mount.
+  [ "$(realpath -m -s -- "$PROCESSING_CACHE_DIR")" = "$PROCESSING_CACHE_DIR" ] || {
+    echo "serve.sh: PROCESSING_CACHE_DIR must be an absolute, canonical path" >&2; exit 2; }
   case "$PROCESSING_CACHE_DIR" in
-    /*) ;;
-    *) echo "serve.sh: PROCESSING_CACHE_DIR must be an absolute path" >&2; exit 2 ;;
+    /|/etc|/etc/*|/home|/home/*|/model|/model/*)
+      echo "serve.sh: PROCESSING_CACHE_DIR may not be $PROCESSING_CACHE_DIR" >&2; exit 2 ;;
   esac
   test -d "$PROCESSING_CACHE_DIR" || { echo "serve.sh: no directory at PROCESSING_CACHE_DIR" >&2; exit 1; }
   media=(-v "$PROCESSING_CACHE_DIR:$PROCESSING_CACHE_DIR:ro")

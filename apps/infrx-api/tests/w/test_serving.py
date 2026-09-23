@@ -117,6 +117,9 @@ def check_one_source_per_setting(models: pathlib.Path, tmp: pathlib.Path) -> Non
         assert status == 2 and argv is None, (extra, status)
     status, argv, _ = launch(models, tmp, ENGINE_MAX_NUM_SEQS="32")
     assert status == 0 and values_of(argv, "--max-num-seqs") == ["32"]
+    for bad in ("0", "-1", "abc", "08", "8 --api-key k"):          # review PIN-3
+        status, argv, _ = launch(models, tmp, ENGINE_MAX_NUM_SEQS=bad)
+        assert status == 2 and argv is None, (bad, status)
     # unset root: no mount beyond the weights and no allowed local path at all
     status, argv, _ = launch(models, tmp)
     assert status == 0 and "--allowed-local-media-path" not in argv
@@ -125,6 +128,14 @@ def check_one_source_per_setting(models: pathlib.Path, tmp: pathlib.Path) -> Non
     assert status == 2 and argv is None
     status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=str(tmp / "absent"))
     assert status == 1 and argv is None
+    # a root the engine could read the host through, refused before its existence is checked
+    for root in ("/", "/etc", "/home", "/model/cache", "/opt/../etc"):
+        status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=root)
+        assert status == 2 and argv is None, (root, status)
+    (tmp / "cache").mkdir(exist_ok=True)
+    for walked in (f"{tmp}/cache/../cache", f"{tmp}/cache/", f"{tmp}//cache"):
+        status, argv, _ = launch(models, tmp, PROCESSING_CACHE_DIR=walked)
+        assert status == 2 and argv is None, (walked, status)
 
 
 def check_record_matches_the_code(models: pathlib.Path, tmp: pathlib.Path) -> None:
