@@ -914,6 +914,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool}",
        "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
        dies_by=("RuntimeMisconfigured",)),        # the given store dropped, then refused
+    _m("stores_on_an_unnamed_database", "a store is built only on a named DATABASE_URL",
+       P, "        if not settings.pilot.database_url.strip():", "        if False:",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool"),
     _m("stores_on_two_pools", "the three stores share one pool",
        P, "        adapters = {\"catalog\": PgCatalogDirectory(connect),",
        "        adapters = {\"catalog\": PgCatalogDirectory(connection_pool(settings)[1]),",

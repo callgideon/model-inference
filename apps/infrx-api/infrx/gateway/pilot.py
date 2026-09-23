@@ -190,6 +190,10 @@ def adapters_from_env(settings, **injected):
     if "objects" not in adapters:
         adapters["objects"] = object_store(settings)
     if not {"catalog", "stream", "jobs"} <= adapters.keys():
+        if not settings.pilot.database_url.strip():
+            # Required in pilot by `validate_runtime`; in dev/test too once a store is built
+            # from it - an empty DSN is libpq's defaults, some other database.
+            raise RuntimeMisconfigured(runtime_mode(settings), ("DATABASE_URL",))
         pool, connect = connection_pool(settings)
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
