@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T22:05:47Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T22:09:07Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -70,7 +70,7 @@ Generated 2026-09-23T22:05:47Z from `tasks.json` (manifest v4) and `progress-sta
 - E4B: codex-e4b / codex/e4b-certify — fix round HANDED BACK 7b5dbd7 (F1–F9 + N1/N2 closed; 126 mutants); single verifier running → merge after M pilot-media; box half after the rollout (needs infrx_build_info from the gateway — cutover lane) since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — HANDED BACK 4ac1419 (all bodies; gate exit 3 = pending only M3-U1 ×3 + I2B-R4; api-test 3497 on the merged tree); one-round review running → merge with D5 (after cutover + objstore); M pilot-media merge closes M3-U1/U2 since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
-- M1-L2: codex-objstore / codex/m1l2-object-store — fix round HANDED BACK 0b9fc50 (A1–A7 closed; 42 mutants); single verifier running → merge after D5 + cutover since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
+- M1-L2: codex-objstore / codex/m1l2-object-store — verifier PASS at 0b9fc50 (4 nonblocking fixture items being folded in) → MERGE after cutover since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
 - M-pilot-media: codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
@@ -82,7 +82,7 @@ Generated 2026-09-23T22:05:47Z from `tasks.json` (manifest v4) and `progress-sta
 - review F-fakes-followup: MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z
 - review checkpoint-2-interim: whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z
 - review D5: fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) → fix round since 2026-09-23T20:43:27Z
-- review M1-L2: verifier at 0b9fc50 running since 2026-09-23T21:49:26Z
+- review M1-L2: verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json) since 2026-09-23T22:09:07Z
 - review E4B: verifier at 7b5dbd7 running since 2026-09-23T21:58:02Z
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
 - review E3B-phase3: review at 4ac1419 running (journey/money + honesty lenses + refuters) since 2026-09-23T22:05:47Z
