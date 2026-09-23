@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T00:57:32Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T01:01:48Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
@@ -69,7 +69,7 @@ Generated 2026-09-23T00:57:32Z from `tasks.json` (manifest v4) and `progress-sta
 - A1: codex-a1 / codex/a1-signup-grant — fix round 1 (negative-USD hold case; frozen-wallet acceptance cases; 12 fold-ins) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — implementing (software half) since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — independent review (3-lens workflow) at 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- Q3: codex-q3 / codex/q3-outbox-reconciler — implementing (software half) since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
+- Q3: codex-q3 / codex/q3-outbox-reconciler — independent review (3-lens workflow) at 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - G1R: codex-g1r / codex/g1r-audience-ingress — implementing since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
 - D3: codex-d3 / codex/d3-fenced-leases — implementing since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 - I3B: codex-i3b / codex/i3b-recovery-observe — independent review (3-lens workflow) at 48d3bb2 since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
