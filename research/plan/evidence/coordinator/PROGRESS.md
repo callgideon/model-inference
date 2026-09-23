@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:13:49Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:14:57Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
 
@@ -70,7 +70,7 @@ Generated 2026-09-23T03:13:49Z from `tasks.json` (manifest v4) and `progress-sta
 - W3: codex-w3 / codex/w3-drain-pin — confirmation review of fix round at d80c04d; box measurements pending since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — confirmation review of fix round at 0653c8a; merge with/after W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation review of fix round at 1ba884b since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
-- D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
+- D3: codex-d3 / codex/d3-fenced-leases — fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2's head after review of b4b1ec7 since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 
 ## Checkpoints
 
