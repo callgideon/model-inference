@@ -7,4 +7,6 @@
 # P-20 (MAX_VIDEO_SECONDS 82 or 72) is a configuration decision for the rollout.
 set -euo pipefail
 REF=${BOX_REF:-codex/box-measure}
+if git merge-base --is-ancestor "$REF" HEAD; then echo "box-measure: already merged (0117d48)"; exit 0; fi
+REF=${BOX_REF:-codex/box-measure}
 git merge --no-ff --no-edit -m "merge: box measurement, W4 phase B + E1B cells ($(git rev-parse --short "$REF"))" "$REF"

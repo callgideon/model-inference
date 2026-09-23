@@ -185,3 +185,12 @@ This is a fast-forward, never a merge commit.
 ## Verification log
 
 - 2026-09-23: Written by the MERGE-ANALYSIS lane from the scratch replay. Every count in §3 is quoted from a log of this session. The handback was enforced before the long suites finished; the unfinished ones are marked as such, not as passes. Containers `infrx-merge-analysis-{postgres,postgres-supabase,valkey,dharness-postgres,minio}` and `infrx-q3-valkey-55695` were removed, the run processes were killed, and the scratch clone was removed. The codex/merge-plan commit is kept as a bundle in the lane's session scratchpad.
+
+
+## Coordinator amendments (2026-09-23T23:5xZ)
+- Step 2(a) dropped: D5 request 4 (cli.build_operations) is superseded by the cutover's f7d9b03; the script now asserts the diff no longer applies forward.
+- Step 7 is idempotent: the box branch merged at 0117d48.
+- Step 8 accepts rollout-prep's code (f0a1a82: rehearse.sh step 8, release-bundle.sh, infra/rollout/steps, rollout.md, tests/i/test_rollout.py) and runs its tests instead of refusing.
+- Step 8b added: the worker composition root (branch codex/i2b-r4-worker, I2B-R4), gated on WORKER_VERIFY; it carries I's rehearse.sh change for the release tree (the G5 finding).
+- Heads moved since the analysis: D5 4bfdbf0 (code 8554b47), phase 3 ≥ 1fa825b (fix round running; contains M pilot 8b91648), cutover a1e88dc, M1-L2 ba26ca4 (contains cutover f7d9b03), M pilot 8b91648, E4B 4d9360c, rollout-prep f0a1a82. The scripts' SHA pins (Makefile line resolutions, 6a/6a2) are assert-guarded: re-run `git merge-tree` per step before replay and expect step 4's Makefile to already carry the s3 line.
+- The release carries D5's FINAL 0018 (only D5 changed it since the base); the rollout's plan digest is recomputed on the day (W6/W7).

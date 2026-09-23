@@ -29,8 +29,11 @@ for name, sha in want.items():
     assert hashlib.sha256(body.encode()).hexdigest() == sha, name
     pathlib.Path(os.environ["D5DIFFS"], name).write_text(body)
 PY
-git apply --index "$D5DIFFS/d5-cli-build-operations.diff"
-git commit -q -m "D5 integration request 4: cli.build_operations composes the PostgreSQL adapters from DATABASE_URL (refuses without it)"
+# 2(a) DROPPED 2026-09-23T23:5xZ (coordinator): D5 request 4 is superseded — the cutover's f7d9b03
+# implements cli.build_operations from DATABASE_URL; D5's own re-check found the diff applies
+# neither forward nor reverse on the phase-3 head. Guard: the diff must NOT apply forward.
+if git apply --check "$D5DIFFS/d5-cli-build-operations.diff" 2>/dev/null; then
+  echo "unexpected: the cli diff still applies — the cutover's build_operations is missing"; exit 1; fi
 git apply --index "$D5DIFFS/q3rig.diff"
 git commit -q -m "D5 integration request 6 (D3 request 5): q3rig INFRX_Q3_STORE=postgres runs the Q3 rig on the real store (default fake: unchanged; the 4 PostgreSQL rig failures are Q's)"
 rm -r "$D5DIFFS"
