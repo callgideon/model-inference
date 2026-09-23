@@ -1120,6 +1120,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("chat_route_names_intake", "the route table names the ingress as the chat handler",
        N, "    chat.__module__ = __name__\n", "",
        "test_f_base__exactly_one_chat_route_and_it_is_the_ingress"),
+    # === G2 item 6: the DUR-OUTPUT drills, through the contract store ====================
+    _m("prepublication_loss_not_retried", "a loss before any committed chunk is retried",
+       ST, "            if job.published:\n                # After the publication marker",
+       "            if True:\n                # After the publication marker",
+       "test_dur_output__a_kill_before_the_first_committed_chunk_is_retried_to_one_output"),
+    _m("published_output_regenerated", "a loss after the first committed chunk never reruns",
+       ST, "            if job.published:\n                # After the publication marker",
+       "            if False:\n                # After the publication marker",
+       "test_dur_output__a_kill_after_the_first_committed_chunk_is_never_regenerated"),
 )
 
 
