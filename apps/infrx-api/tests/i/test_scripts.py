@@ -59,6 +59,9 @@ elif name == "docker":
         print(spec["image"])
     elif args[0] == "exec" and spec["reload_fails"]:
         raise SystemExit(1)
+    elif args[0] == "run" and spec["validate_fails"] and any(
+            a.endswith("/" + spec["validate_fails"] + ":/etc/caddy/Caddyfile:ro") for a in args):
+        raise SystemExit(1)
     elif args[0] == "inspect":
         if spec["caddy_image"] is None:
             raise SystemExit(1)
@@ -104,7 +107,7 @@ class Host:
     def behave(self, **changes):
         spec = {"head": SHA, "dirty": "", "curl_fails": [], "systemctl": {},
                 "image": IMAGE, "caddy_image": None, "reload_fails": False,
-                "health_needs_engine": False}
+                "health_needs_engine": False, "validate_fails": None}
         spec.update(changes)
         (self.bin / "behaviour.json").write_text(json.dumps(spec))
 
@@ -241,7 +244,8 @@ def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
         tmp_path, monkeypatch):
     """Pilot order (infra/README.md §7): the index and the engine, then the runtime, then
     the gateway's and the worker's /readyz, and only then the edge - both sites, normal
-    and maintenance, validated with the pinned Caddy before either is served."""
+    and maintenance, validated with the pinned Caddy before either is installed: a site
+    that does not validate is exit 4 with no edge file written and nothing reloaded."""
     host = Host(tmp_path, monkeypatch)
     done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
     assert done.returncode == 0, done.stderr
@@ -267,6 +271,13 @@ def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
     assert host.file("etc/caddy/Caddyfile").read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
     assert host.file("etc/caddy/infrx/Caddyfile.maintenance").read_bytes() == (
         DEPLOY / "Caddyfile.maintenance").read_bytes()
+
+    bad = Host(tmp_path / "bad", monkeypatch)
+    bad.behave(validate_fails="Caddyfile.maintenance")
+    done = bad.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=bad.pilot_preflight())
+    assert done.returncode == 4 and "Caddyfile.maintenance does not validate" in done.stderr
+    assert not bad.file("etc/caddy").exists()
+    assert not [e for e in bad.of("docker") if "caddy reload" in e or "run -d" in e]
 
 
 def test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone(tmp_path,

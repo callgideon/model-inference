@@ -540,6 +540,11 @@ MUTANTS += (
     _m("maintenance_site_unvalidated", "the maintenance site is validated before install too",
        LIB, "  for f in Caddyfile Caddyfile.maintenance; do", "  for f in Caddyfile; do",
        "test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness"),
+    _m("validate_after_put", "no edge file is written before both sites validate",
+       LIB, "  for f in Caddyfile Caddyfile.maintenance; do",
+       '  mkdir -p "$CADDY_DIR/infrx"; put "$src/Caddyfile.maintenance" '
+       '"$CADDY_DIR/infrx/Caddyfile.maintenance"\n  for f in Caddyfile Caddyfile.maintenance; do',
+       "test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness"),
     _m("engine_restart_ignored", "the cutover can restart the engine onto its new pin",
        INSTALL, 'if [ "${ENGINE:-start}" = restart ]; then', "if false; then",
        "test_backend_deploy__a_dev_install_pins_the_image_it_probed"),

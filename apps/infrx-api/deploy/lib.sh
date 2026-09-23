@@ -65,7 +65,8 @@ edge_install() {
   # pause, whose failed reload leaves the edge open.
   for f in Caddyfile Caddyfile.maintenance; do
     docker run --rm --network none "${site[@]}" -v "$src/$f:/etc/caddy/Caddyfile:ro" \
-      "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+      "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null \
+      || die "$f does not validate with the pinned Caddy; the edge was not changed" 4
   done
   mkdir -p "$CADDY_DIR/infrx"
   put "$src/Caddyfile" "$CADDY_DIR/infrx/Caddyfile"
