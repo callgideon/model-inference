@@ -253,7 +253,10 @@ def test_q3_drain__one_call_reads_a_bounded_number_of_rows_and_the_next_continue
 
 
 def test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch(adapter):
+    """Two rows 2.5 s apart, read one batch each: the lag is the older one's, not the
+    last batch's (review DUR-3b), and 0 once nothing waits."""
     w = rig.world(adapter)
+    w.rec.batch = 1
 
     async def body():
         await rig.admit(w)

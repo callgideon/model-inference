@@ -114,6 +114,11 @@ MUTANTS: tuple[Mutant, ...] = (
        '        self.metrics["outbox_lag_s"] = 0.0',
        "        pass",
        "test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch"),
+    _m("the_outbox_lag_is_the_last_batchs",
+       "review DUR-3b: the lag is the oldest across all the drain's batches",
+       '                    self.metrics["outbox_lag_s"],\n',
+       "                    0.0,\n",
+       "test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch"),
     # --- (2) the reconciler --------------------------------------------------
     _m("dead_candidates_are_kept",
        "a candidate whose job no longer wants dispatch is removed",
