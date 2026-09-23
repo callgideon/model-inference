@@ -642,10 +642,12 @@ def test_e4b_scrape_reads_the_series_the_soak_judges(tmp_path):
                     'infrx_gpu_memory_bytes{gpu="0",state="used"} 2097152\n'
                     'infrx_gpu_memory_bytes{gpu="0",state="total"} 48318382080\n'
                     "infrx_reconciliation_drift 0\ninfrx_unsettleable_jobs 1\n"
-                    'vllm:num_requests_running{model_name="marlin2b"} 2\n')
+                    'vllm:num_requests_running{model_name="marlin2b"} 2\n'
+                    'infrx_build_info{process="gateway",revision="0123abc"} 1\n')
     assert certify.scrape(page.as_uri()) == {"rss_mib": 1024.0, "gpu_used_mib": 2.0,
                                              "drift": 0.0, "unsettleable": 1.0,
-                                             "running": 2.0, "waiting": None}
+                                             "running": 2.0, "waiting": None,
+                                             "revision": "0123abc"}
     assert certify.scrape((tmp_path / "absent").as_uri()) is None
 
 
@@ -750,6 +752,43 @@ def test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity(tmp_path
     with pytest.raises(SystemExit):
         certify.main(["--box", "--target", "http://gw/v1", "--engine-url", "http://engine",
                       "--report", str(out)])
+
+
+def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch):
+    """Review F3: on the box the report's hashes are the release the endpoint serves - the
+    gateway's own `infrx_build_info` revision is the report's tree, and it runs the image
+    install.sh built for that release. Anything unknown fails; nothing is typed in."""
+    sha, image = "0123abc" + "0" * 33, "sha256:" + "1" * 64
+    served = {"revision": "0123abc"}
+    assert certify.served_build_problems(served, sha, image, image) == []
+    assert certify.served_build_problems({"revision": "9999999"}, sha, image, image) == [
+        f"the gateway serves 9999999, the report's tree is {sha}"]
+    assert certify.served_build_problems(served, None, image, image) == [
+        "the gateway serves 0123abc, the report's tree is None"]
+    assert "publishes no infrx_build_info" in first(
+        certify.served_build_problems({"revision": None}, sha, image, image))
+    assert "unreadable" in first(certify.served_build_problems(None, sha, image, image))
+    assert certify.served_build_problems(served, sha, None, image) == [
+        "INFRX_CERTIFY_GATEWAY_IMAGE is unset: the serving image is unrecorded"]
+    assert certify.served_build_problems(served, sha, image, None) == [
+        "INFRX_CERTIFY_RELEASE_IMAGE is unset: the release image is unrecorded"]
+    other = "sha256:" + "2" * 64
+    assert certify.served_build_problems(served, sha, other, image) == [
+        f"the gateway runs {other}, not the release image {image}"]
+    monkeypatch.setattr(certify.run, "git_head", lambda: {"sha": sha, "dirty": False})
+    monkeypatch.setattr(certify, "scrape", lambda url: served)
+    monkeypatch.setenv("INFRX_CERTIFY_GATEWAY_IMAGE", image)
+    monkeypatch.setenv("INFRX_CERTIFY_RELEASE_IMAGE", image)
+    report = certify.Report(TARGET)
+    certify.served_build_check(report, "http://gw/metrics")
+    assert (report.stages[-1]["stage"], report.stages[-1]["status"]) == ("e4b.b.served-build",
+                                                                         certify.PASS)
+    monkeypatch.delenv("INFRX_CERTIFY_GATEWAY_IMAGE")
+    certify.served_build_check(report, "http://gw/metrics")
+    assert report.stages[-1]["status"] == certify.FAIL
+    with pytest.raises(SystemExit):
+        certify.main(["--box", "--release-sha", sha, "--target", "http://gw/v1",
+                      "--engine-url", "http://engine"])
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

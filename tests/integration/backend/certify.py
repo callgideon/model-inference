@@ -265,8 +265,10 @@ def release_hashes() -> dict:
         "uv_lock": sha256_file(api / "uv.lock"),
         "infrx_package": sha256_tree(api / "infrx", "*.py"),
         "published_release": published_release(),
-        "gateway_image": os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE")
-        or "⚠️ TO BE MEASURED on the box: `docker image inspect` of the image install.sh built",
+        # the box step reads both with `docker image inspect`; the served-build check
+        # (`--box`) compares them, and a run off the box records what it was given
+        "gateway_image": os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE"),
+        "release_image": os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"),
     }
 
 
@@ -698,7 +700,41 @@ def scrape(url: str) -> dict | None:
             "drift": total("infrx_reconciliation_drift"),
             "unsettleable": total("infrx_unsettleable_jobs"),
             "running": total("vllm:num_requests_running"),
-            "waiting": total("vllm:num_requests_waiting")}
+            "waiting": total("vllm:num_requests_waiting"),
+            "revision": next((dict(labels).get("revision") for (series, labels), value
+                              in samples.items() if series == "infrx_build_info" and value == 1),
+                             None)}
+
+
+def served_build_problems(scraped: dict | None, head_sha: str | None,
+                          gateway_image: str | None, release_image: str | None) -> list[str]:
+    """Review F3: the report's hashes are the release the box serves. The gateway names its
+    revision (`infrx_build_info`), which must be the report's tree, and it runs the image
+    install.sh built and tagged for that release (`infrx-runtime:<release>`)."""
+    problems = []
+    revision = (scraped or {}).get("revision")
+    if scraped is None:
+        problems.append("the gateway's /metrics is unreadable: its build is unknown")
+    elif revision is None:
+        problems.append("the gateway publishes no infrx_build_info{revision} (I3B request: "
+                        "set it at startup), so the build it serves is unknown")
+    elif not (head_sha and len(str(revision)) >= 7 and head_sha.startswith(str(revision))):
+        problems.append(f"the gateway serves {revision}, the report's tree is {head_sha}")
+    if not gateway_image:
+        problems.append("INFRX_CERTIFY_GATEWAY_IMAGE is unset: the serving image is unrecorded")
+    if not release_image:
+        problems.append("INFRX_CERTIFY_RELEASE_IMAGE is unset: the release image is unrecorded")
+    elif gateway_image and gateway_image != release_image:
+        problems.append(f"the gateway runs {gateway_image}, not the release image {release_image}")
+    return problems
+
+
+def served_build_check(report: Report, metrics_url: str) -> None:
+    problems = served_build_problems(scrape(metrics_url), report.head.get("sha"),
+                                     os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE"),
+                                     os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"))
+    report.check("e4b.b.served-build", FAIL if problems else PASS,
+                 problems or "the gateway serves the report's tree, from the release image")
 
 
 def preconditions_check(report: Report, target: dict, box: bool) -> None:
@@ -1023,6 +1059,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--target needs --engine-url (parity runs against the engine itself)")
     if args.box and not args.target:
         parser.error("--box certifies a deployed endpoint: give --target and --engine-url")
+    if args.box and not args.metrics_url:
+        parser.error("--box needs --metrics-url: the gateway's build is read from it (F3)")
     if args.box and not args.release_sha:
         parser.error("--box needs --release-sha: the release the box serves, compared with "
                      "this checkout's own SHA (review F2)")
@@ -1041,6 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
             preconditions_check(report, target, args.box)
             config_pin_check(report, args.inventory)
             if args.box:
+                served_build_check(report, args.metrics_url)
                 report.check("e4b.b.recovery-box", PENDING,
                              "I3B's runbook drills on the box (infra/runbooks: restart, "
                              "restore, rollback, index-loss, disk, reconcile) are the "

@@ -111,6 +111,7 @@ CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_can
 CRASH = "test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written"
 IDENTITY = "test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails"
 NOGIT = "test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity"
+SERVED = "test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -323,6 +324,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if False:\n", NOGIT),
     _m("box_without_release_sha_accepted", "a box run names the release it certifies",
        "    if args.box and not args.release_sha:\n", "    if False:\n", NOGIT),
+    # --- review F3: the build the gateway serves ---------------------------------------
+    _m("served_revision_unchecked", "the gateway serves the report's tree",
+       "    elif not (head_sha and len(str(revision)) >= 7 and head_sha.startswith(str(revision))):\n",
+       "    elif False:\n", SERVED),
+    _m("missing_build_info_accepted", "an unknown served build is a failure",
+       "    elif revision is None:\n", "    elif False:\n", SERVED),
+    _m("gateway_image_unset_accepted", "the serving image is recorded",
+       "    if not gateway_image:\n", "    if False:\n", SERVED),
+    _m("release_image_mismatch_accepted", "the gateway runs the image built for the release",
+       "    elif gateway_image and gateway_image != release_image:\n", "    elif False:\n",
+       SERVED),
+    _m("build_info_read_from_any_series", "the revision is infrx_build_info's",
+       'if series == "infrx_build_info" and value == 1),', "if value == 1),", SCRAPE),
+    _m("box_without_metrics_accepted", "a box run reads the gateway's build from /metrics",
+       "    if args.box and not args.metrics_url:\n", "    if False:\n", SERVED),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',
