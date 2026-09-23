@@ -63,31 +63,29 @@ class Reconciler:
                   reconcile_every_s: float = 10.0) -> None:
         """Drain every tick and reconcile every `reconcile_every_s` until `stop` is set.
 
-        A failure of either - Valkey restarting, PostgreSQL unreachable - is logged,
-        counted in `metrics["errors"]` and retried at the next tick (a failed pass stays
-        due): the relay has to outlive the outages it exists to repair. Each step fails on
-        its own: a pass that keeps failing (the unbounded snapshot timing out under a
-        backlog, a row the index rejects) never stops the drain behind it (review DUR-1).
-        The first tick reconciles, so a process starting against an index that lost its
-        data repairs it at once.
+        A failure of either - Valkey restarting, PostgreSQL unreachable, a row the index
+        rejects - is logged, counted in `metrics["errors"]` and retried at the next tick (a
+        failed pass stays due): the relay has to outlive the outages it exists to repair.
+        The two run as two concurrent loops, so a pass that keeps failing, however slowly
+        (the unbounded snapshot timing out under a backlog), never holds the drain back
+        (reviews DUR-1, DUR-1b). The first tick reconciles, so a process starting against
+        an index that lost its data repairs it at once.
         """
-        loop = asyncio.get_running_loop()
-        due = loop.time()
-        while not stop.is_set():
-            try:
-                if loop.time() >= due:
-                    await self.reconcile()
-                    due = loop.time() + reconcile_every_s
-            except Exception:
-                self._failed("reconcile")
-            try:
-                await self.drain()
-            except Exception:
-                self._failed("drain")
-            try:
-                await asyncio.wait_for(stop.wait(), drain_every_s)
-            except TimeoutError:
-                pass
+        async def every(step, period_s: float, retry_s: float) -> None:
+            while not stop.is_set():
+                try:
+                    await step()
+                    wait = period_s
+                except Exception:
+                    self._failed(step.__name__)
+                    wait = retry_s                     # a failed step stays due
+                try:
+                    await asyncio.wait_for(stop.wait(), wait)
+                except TimeoutError:
+                    pass
+
+        await asyncio.gather(every(self.reconcile, reconcile_every_s, drain_every_s),
+                             every(self.drain, drain_every_s, drain_every_s))
 
     def _failed(self, step: str) -> None:
         self.metrics["errors"] += 1

@@ -539,16 +539,21 @@ def test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass(adapter):
 
 
 class SnapshotDown:
-    """The store, except that `dispatch_snapshot` always fails (the unbounded snapshot
-    timing out under a backlog) and the first `dispatch_pending` fails once."""
+    """The store, except that `dispatch_snapshot` always fails - after `delay_s`, as a
+    statement timeout would (the unbounded snapshot under a backlog) - and the first
+    `dispatch_pending` fails once. Counts both."""
 
-    def __init__(self, store) -> None:
-        self.store, self.pending_failures = store, 1
+    def __init__(self, store, delay_s: float = 0.0) -> None:
+        self.store, self.delay_s, self.pending_failures = store, delay_s, 1
+        self.passes = self.drains = 0
 
     async def dispatch_snapshot(self):
+        self.passes += 1
+        await asyncio.sleep(self.delay_s)
         raise ConnectionError("snapshot timed out")
 
     async def dispatch_pending(self, **kw):
+        self.drains += 1
         if self.pending_failures:
             self.pending_failures -= 1
             raise ConnectionError("store unreachable")
@@ -578,6 +583,26 @@ def test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain(adapter):
         assert sorted((await rig.members(w)).values()) == sorted(jobs)
         assert w.outbox.unacknowledged() == []
         assert w.rec.metrics["errors"] >= 2          # the drain's one and the passes
+    run(body)
+
+
+def test_q3_run__a_slowly_failing_pass_does_not_hold_the_drain_back(adapter):
+    """Review DUR-1b: each failing pass takes 0.1 s (a statement timeout, scaled down).
+    The drain does not wait for it: it ticks many times per pass."""
+    w = rig.world(adapter)
+
+    async def body():
+        store = w.rec.store = SnapshotDown(w.outbox, delay_s=0.1)
+        stop = asyncio.Event()
+        task = asyncio.create_task(w.rec.run(stop, drain_every_s=0.001,
+                                             reconcile_every_s=0.01))
+        for _ in range(500):
+            if store.passes >= 4:
+                break
+            await asyncio.sleep(0.01)
+        stop.set()
+        assert await asyncio.gather(task, return_exceptions=True) == [None]
+        assert store.drains >= 10 * store.passes, (store.drains, store.passes)
     run(body)
 
 

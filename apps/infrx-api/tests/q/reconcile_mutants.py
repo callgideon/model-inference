@@ -210,41 +210,53 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q3_switch__a_delivery_into_the_old_index_during_the_switch_reaches_the_new_one"),
     # --- the loop ------------------------------------------------------------
     _m("the_loop_dies_on_an_outage",
-       "the relay outlives a failing pass",
-       "            except Exception:\n                self._failed(\"reconcile\")",
-       "            except errors.DomainError:\n                self._failed(\"reconcile\")",
+       "the relay outlives a failing pass or drain",
+       "                except Exception:\n                    self._failed(step.__name__)",
+       "                except errors.DomainError:\n                    self._failed(step.__name__)",
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass",
        "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
-    _m("the_loop_dies_on_a_failed_drain",
-       "the relay outlives a failing drain",
-       "            except Exception:\n                self._failed(\"drain\")",
-       "            except errors.DomainError:\n                self._failed(\"drain\")",
+    _m("the_drain_runs_behind_the_pass_loop",
+       "review DUR-1: the drain does not wait for the passes to end",
+       "        await asyncio.gather(every(self.reconcile, reconcile_every_s, drain_every_s),\n"
+       "                             every(self.drain, drain_every_s, drain_every_s))",
+       "        await every(self.reconcile, reconcile_every_s, drain_every_s)\n"
+       "        await every(self.drain, drain_every_s, drain_every_s)",
        "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
-    _m("a_failing_pass_skips_the_drain",
-       "review DUR-1: a pass that keeps failing never stops the drain (two try blocks)",
+    _m("the_pass_is_retried_in_the_drain_loop",
+       "review DUR-1b: a slowly failing pass does not serialise the drain (1ba884b's loop)",
+       "        await asyncio.gather(every(self.reconcile, reconcile_every_s, drain_every_s),\n"
+       "                             every(self.drain, drain_every_s, drain_every_s))",
+       "        loop = asyncio.get_running_loop()\n"
+       "        due = loop.time()\n"
+       "        while not stop.is_set():\n"
+       "            try:\n"
+       "                if loop.time() >= due:\n"
+       "                    await self.reconcile()\n"
        "                    due = loop.time() + reconcile_every_s\n"
        "            except Exception:\n"
        "                self._failed(\"reconcile\")\n"
        "            try:\n"
-       "                await self.drain()\n",
-       "                    due = loop.time() + reconcile_every_s\n"
        "                await self.drain()\n"
        "            except Exception:\n"
-       "                self._failed(\"reconcile\")\n"
+       "                self._failed(\"drain\")\n"
        "            try:\n"
-       "                pass\n",
-       "test_q3_run__a_pass_that_keeps_failing_never_stops_the_drain"),
+       "                await asyncio.wait_for(stop.wait(), drain_every_s)\n"
+       "            except TimeoutError:\n"
+       "                pass",
+       "test_q3_run__a_slowly_failing_pass_does_not_hold_the_drain_back"),
     _m("the_first_tick_does_not_reconcile",
        "a starting relay reconciles at once",
-       "        due = loop.time()\n",
-       "        due = loop.time() + reconcile_every_s\n",
+       "        async def every(step, period_s: float, retry_s: float) -> None:\n",
+       "        async def every(step, period_s: float, retry_s: float) -> None:\n"
+       "            try:\n"
+       "                await asyncio.wait_for(stop.wait(), period_s)\n"
+       "            except TimeoutError:\n"
+       "                pass\n",
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass"),
     _m("a_failed_pass_waits_a_whole_period",
        "a failed pass stays due and is retried at the next tick",
-       "                    await self.reconcile()\n"
-       "                    due = loop.time() + reconcile_every_s",
-       "                    due = loop.time() + reconcile_every_s\n"
-       "                    await self.reconcile()",
+       "                    wait = retry_s",
+       "                    wait = period_s",
        "test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass"),
     _m("errors_are_not_counted",
        "every failed pass is counted",
