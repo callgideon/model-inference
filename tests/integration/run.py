@@ -97,8 +97,9 @@ class Report:
         self.stages: list[dict] = []
         self.started = datetime.now(timezone.utc)
         self._last = time.monotonic()
-        # Confirmation G-B2: the tree as the run STARTS - a tree edited during the run and
-        # restored before its end must not read clean; `as_json` records the end as well.
+        # Confirmation G-B2: the tree as the run STARTS, and `as_json` records the end too. This
+        # catches a tree dirty at the start and cleaned before the end (or the reverse); an edit
+        # made AND undone between the two samples is not seen (verification RUN-N1).
         self.head = git_head()
 
     def add(self, stage: str, status: str, detail: object = None, **extra) -> dict:
