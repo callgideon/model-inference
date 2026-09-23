@@ -232,8 +232,8 @@ def check_dispatch_relay(conn) -> str:
         assert {a.request_id, c.request_id} <= ids(again), "a lost acknowledgment lost the job"
         event_a = next(e for e in again if e["job_id"] == a.request_id)
         assert event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0, 'failed: event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0'
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1'
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 1, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 1'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 0, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 0'
         advance(conn, 30)
         assert a.request_id not in ids(call(conn, "dispatch_pending", pending)), \
             "an acknowledged row was delivered again"
@@ -268,7 +268,8 @@ def check_dispatch_relay(conn) -> str:
         def deliver(job_):
             ev = next(e for e in call(conn, "dispatch_pending", pending)
                       if e["job_id"] == job_.request_id)
-            call(conn, "acknowledge_dispatch", {"event_ids": [ev["event_id"]]})
+            call(conn, "acknowledge_dispatch", {"event_ids": [ev["event_id"]],
+                                                "worker_id": "relay"})
 
         early = _admitted(conn, world)
         deliver(early)
@@ -276,6 +277,8 @@ def check_dispatch_relay(conn) -> str:
         since = conn.execute("select infrx.now()").fetchone()[0]
         late = _admitted(conn, world)
         deliver(late)
+        racing = _admitted(conn, world)       # relay B claims it; its ack arrives after reopen
+        call(conn, "dispatch_pending", dict(pending, worker_id="relay-b"))
         moved = _admitted(conn, world)                # queued since: its row superseded
         _, lease = claim(conn, moved.request_id)
         prepare(conn, lease["lease"])
@@ -287,6 +290,27 @@ def check_dispatch_relay(conn) -> str:
             (early.request_id, late.request_id, moved.request_id)).fetchall())
         assert state == {early.request_id: False, late.request_id: True,
                          moved.request_id: False}, f"reopen fenced the wrong rows: {state}"
+        # OB-6b: the reopen clears the claim itself, not only the acknowledgment
+        racing_ev, claimed_at, claimed_by = conn.execute(
+            "select event_id::text, claimed_at, claimed_by from infrx.outbox where "
+            "aggregate_id = %s and kind = 'prepare_dispatch'", (racing.request_id,)).fetchone()
+        assert (claimed_at, claimed_by) == (None, None), \
+            f"reopen left relay B's claim on the row: {(claimed_at, claimed_by)}"
+        # OB-1b: relay B's LATE acknowledgment (its index write was wiped by the rebuild)
+        # is refused, so the row stays pending for the rebuilding relay's pump
+        late_ack = call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                       "worker_id": "relay-b"})
+        assert late_ack == 0, "a late acknowledgment landed after the reopen: job stranded"
+        assert racing.request_id in {e["job_id"] for e in
+                                     call(conn, "dispatch_pending", pending)}, \
+            "the reopened row was not handed to the next pump"
+        # ...and only the relay now holding the claim may acknowledge it
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                   "worker_id": "relay-b"}) == 0, \
+            "a relay acknowledged a row another relay holds"
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                   "worker_id": "relay"}) == 1, \
+            "the claim holder could not acknowledge"
         return ("at-least-once with a redelivery window, superseded rows acked, snapshot "
                 "exact, rebuild fence reopens only rows acked since")
     return ca._in_rollback(conn, body)
@@ -461,11 +485,13 @@ def check_dispatch_details(conn) -> str:
                            "where event_id = %s", (ev["event_id"],)).fetchone()
         assert row == (True, "boom"), f"fail_dispatch acknowledged or lost the error: {row}"
         # acknowledgment is for dispatch rows only
+        # (claimed by this relay, so only the kind predicate can refuse it)
         proj = conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "
-                            "available_at) values (gen_random_uuid(), %s, %s, "
-                            "'usage_projection', infrx.now()) returning event_id::text",
-                            (first.request_id, b.ORG_A)).fetchone()[0]
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [proj]}) == 0, \
+                            "available_at, claimed_at, claimed_by) values (gen_random_uuid(), "
+                            "%s, %s, 'usage_projection', infrx.now(), infrx.now(), 'relay') "
+                            "returning event_id::text", (first.request_id, b.ORG_A)).fetchone()[0]
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [proj],
+                                                   "worker_id": "relay"}) == 0, \
             "the dispatch ack acknowledged a projection row"
         # the snapshot: the latest event, the phase's own attempt counter
         advance(conn, 1)

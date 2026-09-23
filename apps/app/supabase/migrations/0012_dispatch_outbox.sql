@@ -289,7 +289,10 @@ begin
   return v_out;
 end $$;
 
--- Args `{event_ids: [...]}`; returns how many were newly acknowledged. Idempotent.
+-- Args `{event_ids, worker_id}`. Only the relay that holds the claim may acknowledge
+-- (review OB-1b): `reopen_dispatch` and `release_dispatch` clear the claim, so a relay whose
+-- index write was wiped by a concurrent rebuild and whose acknowledgment arrives after the
+-- reopen is refused (0) and the row stays pending for the rebuilding relay's pump.
 create or replace function infrx.acknowledge_dispatch(p_args jsonb) returns int
 language sql security definer set search_path = infrx, public, pg_temp as $$
   with acked as (
@@ -298,6 +301,8 @@ language sql security definer set search_path = infrx, public, pg_temp as $$
                         from jsonb_array_elements(coalesce(p_args->'event_ids', '[]')))
        and kind in ('prepare_dispatch', 'inference_dispatch')
        and acknowledged_at is null
+       and claimed_at is not null
+       and claimed_by = p_args->>'worker_id'
     returning 1)
   select count(*)::int from acked;
 $$;

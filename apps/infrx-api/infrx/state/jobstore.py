@@ -239,10 +239,11 @@ class PgJobStore:
                                                      "redelivery_s": redelivery_s})
         return tuple(IndexEvent.model_validate(doc) for doc in docs)
 
-    async def acknowledge_dispatch(self, event_ids) -> int:
-        """Delivery acknowledgment: the index now holds these candidates."""
-        return await self._call("acknowledge_dispatch",
-                                {"event_ids": [str(event_id) for event_id in event_ids]})
+    async def acknowledge_dispatch(self, event_ids, *, worker_id: str) -> int:
+        """Delivery acknowledgment: the index now holds these candidates. Only the claim
+        holder's acknowledgment lands (OB-1b); a reopened or released row answers 0."""
+        return await self._call("acknowledge_dispatch", {
+            "event_ids": [str(event_id) for event_id in event_ids], "worker_id": worker_id})
 
     async def db_now(self):
         """The store clock (`infrx.now()`), e.g. the lower bound of a rebuild fence."""

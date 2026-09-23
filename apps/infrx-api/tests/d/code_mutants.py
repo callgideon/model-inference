@@ -73,9 +73,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if prompt_tokens is not None and (False",
        "test_prepared__a_prompt_count_must_be_an_integer"),
     _m("everything_read_is_acknowledged", "only what the index took is acknowledged", O,
-       "acknowledged = await self.store.acknowledge_dispatch(taken) if taken else 0",
-       "acknowledged = await self.store.acknowledge_dispatch("
-       "[e.event_id for e in events]) if events else 0",
+       "acknowledged = (await self.store.acknowledge_dispatch(taken, worker_id=self.worker_id)",
+       "acknowledged = (await self.store.acknowledge_dispatch("
+       "[e.event_id for e in events], worker_id=self.worker_id)",
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
     _m("a_full_index_is_a_failure", "a full index defers, it is not a row failure", O,
        "            except errors.CapacityExhausted:", "            except errors.RateLimited:",
@@ -102,8 +102,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if failures:\n            raise failures[0]\n", "",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
     _m("an_empty_pump_acknowledges", "no acknowledgment without an indexed row", O,
-       "if taken else 0", "if True else 0",
+       "                        if taken else 0)", "                        if True else 0)",
        "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
+    _m("the_ack_carries_another_workers_claim", "OB-1b: the relay acknowledges as the claim "
+       "holder", O, "acknowledge_dispatch(taken, worker_id=self.worker_id)",
+       'acknowledge_dispatch(taken, worker_id="any")',
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
     _m("a_rebuild_does_not_reopen", "OB-1: a rebuild reopens the acknowledgments it may "
        "have erased", O, "        await self.store.reopen_dispatch(since)\n", "",
        "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),

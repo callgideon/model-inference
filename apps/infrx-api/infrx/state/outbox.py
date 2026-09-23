@@ -16,7 +16,10 @@ do). So the relay's only duty is that no accepted job is ever missing from the i
   The fence: read the store clock BEFORE the snapshot, rebuild, `reopen_dispatch(since)`
   (every row acknowledged/claimed since then that still names wanted work is pending
   again), then pump. Two relays in two processes require this reopen; `enqueue` is
-  replay-safe on the stable event id, so re-sending costs nothing.
+  replay-safe on the stable event id, so re-sending costs nothing. The reopen also clears
+  the claim, and an acknowledgment lands only for the relay still holding the claim
+  (`acknowledge_dispatch(…, worker_id=)`), so the other relay's LATE ack - arriving after
+  the reopen - is refused and cannot mark the wiped row delivered (review OB-1b).
 
 A full index (`capacity_exhausted`) stops the pump and hands the unindexed rows back
 (`release_dispatch`) for the next pump: the index is a cache with a bound, never a place a
@@ -58,7 +61,8 @@ class OutboxRelay:
                 await self.store.record_dispatch_error(event.event_id, repr(failed)[:500])
                 continue
             taken.append(event.event_id)
-        acknowledged = await self.store.acknowledge_dispatch(taken) if taken else 0
+        acknowledged = (await self.store.acknowledge_dispatch(taken, worker_id=self.worker_id)
+                        if taken else 0)
         if deferred:
             await self.store.release_dispatch(deferred)
         if failures:

@@ -183,7 +183,8 @@ class _Store:
     async def dispatch_pending(self, **_):
         return tuple(self.events)
 
-    async def acknowledge_dispatch(self, ids):
+    async def acknowledge_dispatch(self, ids, *, worker_id):
+        assert worker_id == "relay", f"the ack did not carry the relay's claim: {worker_id}"
         self.acked.append(list(ids))
         return len(ids)
 
