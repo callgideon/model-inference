@@ -360,5 +360,290 @@ def test_e4b_the_protocol_file_states_the_numbers_the_runner_applies():
                .split(",")) == set(certify.OVERLOAD_CODES)
 
 
+
+# ------------------------------------------------------------------------------ E4B.b
+
+BOX_INVENTORY = certify.harness.REPO_ROOT / "research/plan/evidence/w/box/inventory-20260923T0319Z.txt"
+
+
+def test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence(monkeypatch):
+    """"Reject any optimization that invalidates earlier evidence": every declared setting is
+    read from its own source, and one that moved fails the check naming the evidence."""
+    from infrx.contracts.limits import DEFAULTS
+    current, record = certify.current_config(), certify.serving_record()
+    assert set(current) == set(certify.DECLARED)
+    assert current["engine_options_digest"] == certify.options_digest(certify.served_flags(record))
+    assert current["published_engine_options_digest"] == \
+        certify.published_release()["engine_options_digest"]
+    assert current["published_runtime_image"] == certify.published_release()["runtime_image_ref"]
+    assert (current["preparation_concurrency"], current["max_video_seconds"]) == (
+        DEFAULTS.preparation_concurrency, DEFAULTS.max_video_seconds)
+    declared = {name: value for name, (value, _) in certify.DECLARED.items()}
+    assert certify.config_problems(declared) == []
+    moved = certify.config_problems({**declared, "encoder_budget_tokens": 32768})
+    assert len(moved) == 1 and "encoder_budget_tokens: 32768" in moved[0] and "W4" in moved[0]
+    report = certify.Report(TARGET)
+    monkeypatch.setattr(certify, "current_config", lambda: dict(declared))
+    certify.config_pin_check(report, None)
+    assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
+                                                                          ["BOX"])
+    monkeypatch.setattr(certify, "current_config", lambda: {**declared, "profile_version": "v2"})
+    certify.config_pin_check(report, None)
+    assert report.stages[-1]["status"] == certify.FAIL
+
+
+def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monkeypatch):
+    """The committed W3 inventory is the box as it ran (the pre-pin serve.sh): its engine
+    does not run the pinned launch, which is exactly what the check reports. A deployed
+    engine with the pinned image and exactly the served flags passes."""
+    record = certify.serving_record()
+    assert certify.inventory_problems(BOX_INVENTORY.read_text(), record) == [
+        "pinned flags the engine does not run: [('--allowed-local-media-path', "
+        "'/opt/dlami/nvme/processing'), ('--max-num-seqs', '8')]",
+        "flags the engine runs beyond the pin: [('--max-num-seqs', '32')]"]
+    good = ("### engine\nimage_equals_pin=yes\nargs="
+            + json.dumps(["serve", "/model", *certify.served_flags(record)]) + "\n")
+    assert certify.inventory_problems(good, record) == []
+    assert certify.inventory_problems(good.replace("=yes", "=no"), record) == [
+        "image_equals_pin=no"]
+    assert certify.inventory_problems("image_equals_pin=yes\n", record) == [
+        "no readable args= line"]
+    declared = {name: value for name, (value, _) in certify.DECLARED.items()}
+    monkeypatch.setattr(certify, "current_config", lambda: dict(declared))
+    inventory = tmp_path / "inventory.txt"
+    inventory.write_text(good)
+    report = certify.Report(TARGET)
+    certify.config_pin_check(report, inventory)
+    assert report.stages[-1]["status"] == certify.PASS
+    certify.config_pin_check(report, BOX_INVENTORY)
+    assert report.stages[-1]["status"] == certify.FAIL
+    assert report.stages[-1]["detail"][0].startswith("deployed: pinned flags")
+
+
+def _proc(root: Path, pid: int, argv: list[str], cwd: Path) -> None:
+    entry = root / str(pid)
+    entry.mkdir()
+    (entry / "cmdline").write_bytes(b"\0".join(part.encode() for part in argv) + b"\0")
+    (entry / "cwd").symlink_to(cwd)
+
+
+def test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions(tmp_path,
+                                                                           monkeypatch):
+    """Protocol §2: a Next.js server whose working directory is in this repository (the
+    main checkout or a worktree under it) is a running App or Lab. A shell that merely
+    names one, and a Next.js server of another project, are not."""
+    repo, other, proc = tmp_path / "repo", tmp_path / "elsewhere", tmp_path / "proc"
+    for path in (repo / "apps/app", repo / ".claude/worktrees/x/apps/lab", other, proc):
+        path.mkdir(parents=True)
+    _proc(proc, 11, ["next-server (v16.3.5)"], repo / "apps/app")
+    _proc(proc, 12, ["node", "/r/node_modules/.bin/../next/dist/bin/next", "dev"],
+          repo / ".claude/worktrees/x/apps/lab")
+    _proc(proc, 13, ["next-server (v16.3.5)"], other)
+    _proc(proc, 14, ["bash", "-c", "pgrep -af next-server"], repo)
+    _proc(proc, 15, ["node", "server.js", "start"], repo)
+    found = certify.next_servers(proc, (str(repo),))
+    assert [server["pid"] for server in found] == [11, 12]
+    report = certify.Report(TARGET)
+    monkeypatch.setattr(certify, "next_servers", lambda: found)
+    certify.preconditions_check(report, TARGET, box=False)
+    assert report.stages[-1]["status"] == certify.FAIL
+    assert "pid 11" in report.stages[-1]["detail"][0]
+    monkeypatch.setattr(certify, "next_servers", lambda: [])
+    certify.preconditions_check(report, TARGET, box=False)
+    assert report.stages[-1]["status"] == certify.PASS
+    # the box half: the window, an idle engine, the parity clips
+    box = {**TARGET, "engine_url": "http://engine"}
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: {"exit": 0, "tail": ""})
+    monkeypatch.setattr(certify, "scrape", lambda url: {"running": 0.0, "waiting": 0.0})
+    monkeypatch.setenv("E4B_WINDOW_OK", "1")
+    certify.preconditions_check(report, box, box=True)
+    assert report.stages[-1]["status"] == certify.PASS
+    monkeypatch.setattr(certify, "scrape", lambda url: {"running": 1.0, "waiting": 0.0})
+    monkeypatch.delenv("E4B_WINDOW_OK")
+    certify.preconditions_check(report, box, box=True)
+    assert report.stages[-1]["detail"] == [
+        "E4B_WINDOW_OK=1 (a logged maintenance window) is not set",
+        "the engine is not idle (running+waiting = 1.0)"]
+
+
+def _clips():
+    return {"short": {"duration_s": 10.0, "width": 1280, "height": 720},
+            "short1080": {"duration_s": 10.0, "width": 1920, "height": 1080},
+            "long": {"duration_s": 60.0, "width": 1280, "height": 720},
+            "band": {"duration_s": 78.0, "width": 640, "height": 360},
+            "over": {"duration_s": 112.0, "width": 640, "height": 360}}
+
+
+def _attempt(clip, outcome="accepted", *, status=200, ttft=1.0, latency=5.0, code=None,
+             retry=None, error=None):
+    return {"clip_id": clip, "outcome": outcome, "http_status": status, "ttft_s": ttft,
+            "latency_s": latency, "error_code": code, "retry_after": retry,
+            "error_class": error}
+
+
+def _verdict(verdicts, name):
+    (row,) = [row for row in verdicts if row[0] == name]
+    return row[1]
+
+
+def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
+    """Protocol §4: attempts beyond the engine ceiling are the cap's (refused at admission,
+    never admitted and failed); a clip within the applied cap is never refused; platform
+    failures are judged over the rest; each tail needs 60 samples and meets its limit."""
+    clips = _clips()
+    ok = [_attempt("short") for _ in range(60)] + [_attempt("long", latency=20.0)] * 3
+    capped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
+    verdicts = certify.rung_verdicts(capped, clips, gateway=True)
+    assert {row[0]: row[1] for row in verdicts} == {
+        "duration_cap": "pass", "failure_rate": "pass", "rejections": "pass",
+        "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
+    engine_failed = [*ok, _attempt("over", "failed", error="stream_error_event")]
+    assert _verdict(certify.rung_verdicts(engine_failed, clips, gateway=True),
+                    "duration_cap") == "fail"
+    assert _verdict(certify.rung_verdicts(engine_failed, clips, gateway=True),
+                    "failure_rate") == "pass"
+    refused = [*capped, _attempt("long", "rejected", status=400)]
+    assert _verdict(certify.rung_verdicts(refused, clips, gateway=True), "duration_cap") == "fail"
+    band = [*capped, _attempt("band", "rejected", status=400)]
+    assert {row[1] for row in certify.rung_verdicts(band, clips, gateway=True)} == {"pass"}
+    assert _verdict(certify.rung_verdicts(ok, clips, gateway=True), "duration_cap") == "unknown"
+    assert certify.rung_verdicts(capped, clips, gateway=False)[0] == (
+        "duration_cap", "unknown", "an engine target has no admission", "G2-R1")
+    failing = [*ok[2:], *[_attempt("short", "failed", status=502, error="http_502")] * 2]
+    assert _verdict(certify.rung_verdicts(failing, clips, gateway=True), "failure_rate") == "fail"
+    busy = [*ok, _attempt("short", "rejected", status=429, code="capacity_exhausted", retry=2)]
+    assert _verdict(certify.rung_verdicts(busy, clips, gateway=True), "rejections") == "fail"
+    # the TTFT row's class is clips <= 30 s at <= 720p: long or 1080p clips are not in it
+    for other in ("long", "short1080"):
+        mixed = [*ok, *[_attempt(other, ttft=20.0)] * 5]
+        assert _verdict(certify.rung_verdicts(mixed, clips, gateway=True),
+                        "ttft_p95_short") == "pass", other
+    slow = [_attempt("short", ttft=7.0) for _ in range(60)]
+    assert _verdict(certify.rung_verdicts(slow, clips, gateway=True), "ttft_p95_short") == "fail"
+    dragging = [_attempt("short", latency=8.0) for _ in range(60)]
+    assert _verdict(certify.rung_verdicts(dragging, clips, gateway=True),
+                    "e2e_p95_per_clip_minute") == "fail"
+    few = certify.rung_verdicts(ok[:10], clips, gateway=True)
+    assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
+        "unknown"
+
+
+def test_e4b_the_supported_rate_is_the_highest_rung_climbing_from_the_lowest():
+    """The envelope is contiguous from the bottom: a failing rung ends the climb, whatever
+    passes above it; latency unknowns pend, and a cap failure on any rung fails the cell."""
+    good = [("failure_rate", "pass", "", "BOX"), ("rejections", "pass", "", "BOX"),
+            ("ttft_p95_short", "pass", "", "BOX"), ("duration_cap", "pass", "", "BOX")]
+    bad = [("failure_rate", "fail", "", "BOX"), *good[1:]]
+    assert certify.envelope_summary([(0.5, good), (1.0, bad), (2.0, good)]) == (
+        certify.PASS, (), 0.5)
+    assert certify.envelope_summary([(0.5, bad), (1.0, good)]) == (certify.FAIL, (), None)
+    tail = [*good[:2], ("ttft_p95_short", "unknown", "", "BOX"), good[3]]
+    assert certify.envelope_summary([(0.5, good), (1.0, tail)]) == (certify.PENDING, ("BOX",),
+                                                                   1.0)
+    capped = [*good[:3], ("duration_cap", "fail", "", "BOX")]
+    assert certify.envelope_summary([(0.5, good), (1.0, bad), (2.0, capped)])[0] == certify.FAIL
+
+
+def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples():
+    """Protocol §4 soak: growth (second half over first, `decide.growth`) within W4's
+    memory limits, a reconciled store at the end, the last third's p50 within 1.5x the
+    first's; no samples is unknown, never a pass."""
+    clips = _clips()
+    rows = [dict(_attempt("short", latency=2.0), send_s=i) for i in range(18)]
+    flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
+    assert {row[0]: row[1] for row in certify.soak_verdicts(rows, flat, clips)} == {
+        "failure_rate": "pass", "host_growth_mib": "pass", "gpu_growth_mib": "pass",
+        "reconciled_at_end": "pass", "latency_drift": "pass"}
+    leak = flat[:4] + [{**flat[0], "rss_mib": 1500.0}] * 4
+    assert _verdict(certify.soak_verdicts(rows, leak, clips), "host_growth_mib") == "fail"
+    vram = flat[:4] + [{**flat[0], "gpu_used_mib": 40300.0}] * 4
+    assert _verdict(certify.soak_verdicts(rows, vram, clips), "gpu_growth_mib") == "fail"
+    drifted = [*flat[:-1], {**flat[0], "drift": 2}]
+    assert _verdict(certify.soak_verdicts(rows, drifted, clips), "reconciled_at_end") == "fail"
+    slower = [dict(row, latency_s=2.0 if row["send_s"] < 12 else 3.5) for row in rows]
+    assert _verdict(certify.soak_verdicts(slower, flat, clips), "latency_drift") == "fail"
+    blind = certify.soak_verdicts(rows, [], clips)
+    assert [row[1] for row in blind[1:4]] == ["unknown"] * 3
+    assert certify.summarise(blind) == (certify.PENDING, ("BOX",))
+    assert _verdict(certify.soak_verdicts(rows[:17], flat, clips), "latency_drift") == "unknown"
+
+
+def test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx():
+    """Protocol §4 overload: something accepted, something refused, every refusal a 429 with
+    a numeric Retry-After and an overload code; no 5xx, no broken stream. Clips over the
+    applied cap answer for the duration cap, not for overload."""
+    clips = _clips()
+    honest = [_attempt("short")] * 8 + [_attempt("short", "rejected", status=429,
+                                                 code="capacity_exhausted", retry=2.0)] * 24
+    capped = [*honest, _attempt("over", "rejected", status=400, code="invalid_request")]
+    assert certify.overload_problems(capped, clips) == []
+    assert certify.overload_problems(honest[:8], clips) == [
+        "nothing was refused: admission never reached its limit"]
+    assert certify.overload_problems(honest[8:], clips) == ["nothing was accepted under the burst"]
+    for bad in (dict(honest[-1], retry_after=None), dict(honest[-1], http_status=503),
+                dict(honest[-1], error_code="dependency_unavailable")):
+        assert "without 429" in first(certify.overload_problems([*honest, bad], clips))
+    stream = _attempt("short", "failed", error="stream_error_event")
+    assert "5xx or platform" in first(certify.overload_problems([*honest, stream], clips))
+
+
+def test_e4b_scrape_reads_the_series_the_soak_judges(tmp_path):
+    """One read of the gateway's /metrics (and the engine's): memory in MiB, the GPU's used
+    memory only, the reconciler's drift and unsettleable jobs, vLLM's running and waiting."""
+    page = tmp_path / "metrics"
+    page.write_text("# TYPE infrx_process_resident_bytes gauge\n"
+                    "infrx_process_resident_bytes 1073741824\n"
+                    'infrx_gpu_memory_bytes{gpu="0",state="used"} 2097152\n'
+                    'infrx_gpu_memory_bytes{gpu="0",state="total"} 48318382080\n'
+                    "infrx_reconciliation_drift 0\ninfrx_unsettleable_jobs 1\n"
+                    'vllm:num_requests_running{model_name="marlin2b"} 2\n')
+    assert certify.scrape(page.as_uri()) == {"rss_mib": 1024.0, "gpu_used_mib": 2.0,
+                                             "drift": 0.0, "unsettleable": 1.0,
+                                             "running": 2.0, "waiting": None}
+    assert certify.scrape((tmp_path / "absent").as_uri()) is None
+
+
+def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge(
+        tmp_path, monkeypatch):
+    """The cells as the protocol shapes them: one envelope run per rate, the soak at its
+    rate, and overload only against a gateway - an engine target pends it on the cutover."""
+    seen = []
+
+    def fake_client(argv, env=None):
+        name = Path(argv[argv.index("--raw") + 1]).name
+        seen.append((name, float(argv[argv.index("--rate") + 1]),
+                     int(argv[argv.index("--requests") + 1])))
+        rows = [dict(_attempt("c039-bbb1080p30-1080-square"), send_s=i) for i in range(20)]
+        if name.startswith("overload"):
+            rows = [_attempt("c039-bbb1080p30-1080-square")] + [
+                _attempt("c039-bbb1080p30-1080-square", "rejected", status=429,
+                         code="rate_limited", retry=1.0)]
+        Path(argv[argv.index("--raw") + 1]).write_text(
+            "".join(json.dumps({**row, "item_key": f"k{i}"}) + "\n" for i, row in enumerate(rows)))
+        return {"exit": 0, "tail": ""}
+    monkeypatch.setattr(certify, "client", fake_client)
+    engine = {**TARGET, "bench_target": "direct", "base_url": "http://e/v1", "model": "m"}
+    report = certify.Report(engine)
+    certify.load_cells(report, engine, tmp_path, None)
+    tiny = certify.MATRIX["tiny"]
+    assert seen == [(f"envelope-r{tiny['envelope']['rates'][0]}-raw.jsonl",
+                     tiny["envelope"]["rates"][0], tiny["envelope"]["requests"]),
+                    ("soak-raw.jsonl", tiny["soak"]["rate"],
+                     round(tiny["soak"]["rate"] * tiny["soak"]["seconds"]))]
+    assert [(e["stage"], e["status"], e["owners"]) for e in report.stages] == [
+        ("e4b.b.envelope", certify.PENDING, ["BOX", "G2-R1"]),
+        ("e4b.b.soak", certify.PENDING, ["BOX"]),
+        ("e4b.b.overload", certify.PENDING, ["G2-R1"])]
+    gateway = {**engine, "bench_target": "gateway", "scale": "box", "label": certify.MEAS}
+    seen.clear()
+    certify.load_cells(report, gateway, tmp_path, None)
+    box = certify.MATRIX["box"]
+    assert [name for name, *_ in seen] == [
+        *(f"envelope-r{rate}-raw.jsonl" for rate in box["envelope"]["rates"]), "soak-raw.jsonl",
+        "overload-raw.jsonl"]
+    assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
+    assert seen[-1][2] == box["overload"]["burst"]
+    assert report.stages[-1]["status"] == certify.PASS
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

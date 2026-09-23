@@ -40,7 +40,8 @@ Mutant, Outcome, Result = shared.Mutant, shared.Outcome, shared.Result
 # What the E4B cases read, relative to the repository root. Directories are copied whole.
 COPIED = ("tests/integration", "models/marlin2b", "apps/infrx-api/infrx",
           "apps/infrx-api/deploy", "apps/infrx-api/uv.lock", "apps/app/supabase/migrations",
-          "infra", "research/plan/tasks.json")
+          "infra", "research/plan/tasks.json",
+          "research/plan/evidence/w/box/inventory-20260923T0319Z.txt")
 SUITES = ("tests/integration/backend/test_certify.py",)
 
 
@@ -84,6 +85,15 @@ RESUME = "test_e4b_the_resume_drill_counts_a_run_that_was_not_interrupted_as_pro
 LEDGER = "test_e4b_the_ledger_reconciles_item_by_item_with_no_duplicate_accepted_item"
 DATASET = "test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_reconciled"
 PROTOCOL = "test_e4b_the_protocol_file_states_the_numbers_the_runner_applies"
+PIN = "test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence"
+INVENTORY = "test_e4b_the_deployed_engine_is_judged_from_the_box_inventory"
+APPS = "test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions"
+RUNG = "test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures"
+CLIMB = "test_e4b_the_supported_rate_is_the_highest_rung_climbing_from_the_lowest"
+SOAK = "test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples"
+OVERLOAD = "test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx"
+SCRAPE = "test_e4b_scrape_reads_the_series_the_soak_judges"
+CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -169,6 +179,92 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("matrix_drifts_from_protocol", "the local cell shapes are the predeclared ones",
        '"dataset": {"items": 12, "interrupt_after": 4, "rate": 4.0}},',
        '"dataset": {"items": 12, "interrupt_after": 6, "rate": 4.0}},', PROTOCOL),
+    # --- E4B.b: the config pin ---------------------------------------------------------
+    _m("moved_setting_accepted", "a setting that moved past its evidence fails the pin",
+       "for name, (value, source) in declared.items() if current.get(name) != value]",
+       "for name, (value, source) in declared.items() if False]", PIN),
+    _m("published_digest_read_from_the_record", "the published release is read from G6B's record",
+       '"published_engine_options_digest": published["engine_options_digest"],',
+       '"published_engine_options_digest": record["engine_options_digest"],', PIN),
+    _m("unread_box_passes", "a pin with the deployed engine unread is PENDING, never PASS",
+       'report.check("e4b.b.config-pin", PENDING,', 'report.check("e4b.b.config-pin", PASS,',
+       PIN),
+    _m("image_pin_unchecked", "the deployed engine runs the pinned image",
+       'if lines.get("image_equals_pin") != "yes":', "if False:", INVENTORY),
+    _m("missing_flags_accepted", "every pinned flag runs on the deployed engine",
+       "    if missing:\n", "    if False:\n", INVENTORY),
+    _m("extra_flags_accepted", "nothing runs beyond the pinned flags",
+       "    if extra:\n", "    if False:\n", INVENTORY),
+    # --- E4B.b: preconditions ----------------------------------------------------------
+    _m("any_next_server_counts", "only this repository's App/Lab servers count",
+       "if is_next and any(cwd == root or cwd.startswith(root + os.sep) for root in roots):",
+       "if is_next:", APPS),
+    _m("a_shell_naming_next_counts", "a process is a Next.js server by what it runs",
+       'is_next = head == "next-server" or (', 'is_next = "next-server" in " ".join(argv) or (',
+       APPS),
+    _m("window_consent_unchecked", "the box run needs the maintenance window's consent",
+       'if os.environ.get("E4B_WINDOW_OK") != "1":', "if False:", APPS),
+    _m("busy_engine_accepted", "the box run starts on an idle engine",
+       "        if busy != 0:\n", "        if False:\n", APPS),
+    # --- E4B.b: the envelope -----------------------------------------------------------
+    _m("within_cap_refusal_accepted", "a clip within the applied cap is never refused",
+       "verdict = decide.FAIL if admitted or refused else", "verdict = decide.FAIL if admitted else",
+       RUNG),
+    _m("admitted_long_clip_accepted", "a clip past the ceiling is refused at admission",
+       "verdict = decide.FAIL if admitted or refused else", "verdict = decide.FAIL if refused else",
+       RUNG),
+    _m("over_ceiling_judged_as_failures", "the cap's attempts are no one's failures",
+       "    return [row for row in rows if _duration(row, clips) <= ceiling]",
+       "    return list(rows)", RUNG),
+    _m("failure_rate_loosened", "platform failures stay under 1 %",
+       'decide.PASS if rate < CRITERIA["max_failure_rate"] else decide.FAIL',
+       "decide.PASS if rate < 1 else decide.FAIL", RUNG),
+    _m("refusals_below_the_rate_accepted", "a refusal at an envelope rate fails the rung",
+       'out.append(("rejections", decide.FAIL if refusals else decide.PASS,',
+       'out.append(("rejections", decide.PASS,', RUNG),
+    _m("tail_limit_ignored", "each tail meets its predeclared limit",
+       "decide.PASS if tail <= limit else decide.FAIL", "decide.PASS", RUNG),
+    _m("short_class_unfiltered", "the 6 s TTFT row is judged on clips <= 30 s only",
+       '<= CRITERIA["short_clip_max_s"]', '<= 10 ** 6', RUNG),
+    _m("short_class_any_resolution", "the 6 s TTFT row is judged on clips <= 720p only",
+       '<= CRITERIA["short_clip_max_edge_px"]]', '<= 10 ** 6]', RUNG),
+    _m("climb_skips_a_failed_rung", "the envelope is contiguous from the lowest rung",
+       "        if any(v != decide.PASS for v in core):\n            break",
+       "        if any(v != decide.PASS for v in core):\n            continue", CLIMB),
+    _m("other_rungs_cap_ignored", "a cap failure on any rung fails the envelope",
+       'summarise([row for row in chosen if row[0] != "duration_cap"] + caps)',
+       "summarise(chosen)", CLIMB),
+    _m("unknown_is_pass", "an unjudged criterion pends; it never passes",
+       "    if UNKNOWN in states:\n", "    if False:\n", CLIMB, SOAK),
+    # --- E4B.b: the soak ---------------------------------------------------------------
+    _m("memory_growth_limit_ignored", "memory growth stays within W4's limits",
+       "decide.PASS if grew <= limit else decide.FAIL", "decide.PASS", SOAK),
+    _m("unreconciled_end_accepted", "the store is reconciled at the end of the soak",
+       "decide.PASS if ends == [0, 0] else decide.FAIL", "decide.PASS", SOAK),
+    _m("latency_drift_ignored", "the last third's p50 stays within 1.5x the first's",
+       'decide.PASS if late <= CRITERIA["soak_latency_drift"] * early',
+       "decide.PASS if True", SOAK),
+    _m("thin_thirds_judged", "a p50 per third needs 6 samples",
+       "    if third < 6:\n", "    if third < 1:\n", SOAK),
+    # --- E4B.b: overload ---------------------------------------------------------------
+    _m("refusal_without_retry_after_accepted", "an overload refusal carries Retry-After",
+       'if r.get("http_status") != 429 or not (r.get("retry_after") or 0) > 0',
+       'if r.get("http_status") != 429', OVERLOAD),
+    _m("refusal_code_unchecked", "an overload refusal names an overload code",
+       '             or r.get("error_code") not in OVERLOAD_CODES]', "             ]", OVERLOAD),
+    _m("overload_5xx_accepted", "overload is never a 5xx or a broken stream",
+       "    if broken:\n", "    if False:\n", OVERLOAD),
+    _m("unreached_limit_accepted", "a burst that admission never refuses is a defect",
+       "    if not refused:\n", "    if False:\n", OVERLOAD),
+    _m("gpu_total_read_as_used", "the soak judges the GPU's used memory",
+       'total("infrx_gpu_memory_bytes", state="used")', 'total("infrx_gpu_memory_bytes")',
+       SCRAPE),
+    _m("engine_target_overload_run", "overload against an engine target pends on the cutover",
+       "    if not gateway:\n        report.check(\"e4b.b.overload\"",
+       "    if False:\n        report.check(\"e4b.b.overload\"", CELLS),
+    _m("soak_at_the_full_rate", "the box soak runs at the declared fraction of the envelope",
+       'rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)',
+       'rate = soak.get("rate") or supported', CELLS),
 )
 
 

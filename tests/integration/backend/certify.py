@@ -4,7 +4,8 @@
     apps/infrx-api/.venv/bin/python tests/integration/backend/certify.py --report <path>
     # the box, inside the coordinator's maintenance window (E4B box protocol):
     E4B_WINDOW_OK=1 INFRX_API_KEY=... python tests/integration/backend/certify.py --no-stack \\
-        --target http://127.0.0.1:8001/v1 --engine-url http://127.0.0.1:8000 \\
+        --box --target http://127.0.0.1:8001/v1 --engine-url http://127.0.0.1:8000 \\
+        --metrics-url http://127.0.0.1:8001/metrics --inventory <inventory.sh output> \\
         --parity-baseline <W4 E0 parity.jsonl> --report <path>
 
 The protocol - checks, cells, criteria, shapes - is predeclared in
@@ -16,6 +17,14 @@ The protocol - checks, cells, criteria, shapes - is predeclared in
   e4b.a.sop-parity      MARLIN-SOP: W4's parity.py against the engine, `decide.parity_verdict`
   e4b.a.dataset-resume  E1B's bench.py interrupted by SIGINT, then `--resume`; the client's
                         invariants, and the tenant's ledger reconciled through G6B's Operations
+  e4b.b.preconditions   App/Lab stopped; box: window consent, engine idle, parity clips
+  e4b.b.config-pin      the tree against W3/W4/M4's declared settings (`DECLARED`), the published
+                        release record, and on the box the deployed engine (`--inventory`)
+  e4b.b.envelope        bench.py open loop per rate of the ladder: failures, refusals, tails,
+                        and the P-20 duration cap at admission
+  e4b.b.soak            one open-loop run at half the supported rate, /metrics sampled
+  e4b.b.overload        one burst from one key: refusals are 429 + Retry-After, never 5xx
+  e4b.b.recovery        I3B's rc*/bk* drills (the backend suite's `recovery/` half)
 
 Every check is PASS, FAIL, or PENDING/SKIP naming owners from `OWNERS` - an untyped skip is
 recorded as a FAIL. Exit 0 = every entry PASS, 1 = any FAIL, 3 = otherwise. Nothing here
@@ -31,10 +40,14 @@ import hashlib
 import json
 import os
 import signal
+import re
+import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -55,6 +68,7 @@ for _path in (MARLIN / "measure", MARLIN):
 
 import bench                                            # noqa: E402
 import decide                                           # noqa: E402
+import parity                                           # noqa: E402
 
 PASS, FAIL, PENDING, SKIP = run.PASS, run.FAIL, run.PENDING, run.SKIP
 FAKE, MEAS = "fake-engine, not a measurement", "meas."
@@ -505,6 +519,398 @@ def dataset_check(report: Report, target: dict, workdir: Path, ledger=None) -> N
                  measured=measured, label=target["label"])
 
 
+# ------------------------------------------------------------------------------ E4B.b
+
+# The settings the earlier evidence was measured under. A tree (or a box) that differs has
+# moved past that evidence: the check fails, naming it, until it is re-measured and
+# re-declared here ("reject any optimization that invalidates earlier evidence").
+PINNED_DIGEST = "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147"
+PINNED_IMAGE = ("vllm/vllm-openai@sha256:"
+                "4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42")
+DECLARED = {
+    "engine_options_digest": (PINNED_DIGEST, "W3 serving-version.json; W4-ecacd50 phase A "
+                                             "adopted no candidate, so E0 (the W3 pin) stands"),
+    "runtime_image": (PINNED_IMAGE, "W3 serving-version.json runtime_image; W4's sweep image"),
+    "engine_max_num_seqs": ("8", "W3 settings; no c* measured (W4-ecacd50 request 3)"),
+    "contract_engine_max_num_seqs": (8, "contracts limits, equal to the W3 setting"),
+    "encoder_budget_tokens": (16384, "W4 P-20 record: no --max-num-batched-tokens pinned"),
+    "profile_version": ("v1", "S2M profile v1; M4-8179144's MEDIA-PARITY oracle"),
+    "preparation_concurrency": (2, "M4-8179144 'Measured, not taken': stays 2"),
+    "max_preparing_jobs": (8, "contracts limits, untouched by M4"),
+    "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 applies 72 as config"),
+    "published_engine_options_digest": (PINNED_DIGEST, "R76/R78: the serving revision every "
+                                                       "admission pins is the measured one"),
+    "published_runtime_image": (PINNED_IMAGE, "R76/R78, as above"),
+}
+
+
+def current_config() -> dict:
+    """The same settings, read from the tree (and the release G6B publishes)."""
+    from infrx.contracts.limits import DEFAULTS
+    record, published = serving_record(), published_release()
+    flags = served_flags(record)
+    batched = [int(flags[i + 1]) for i, flag in enumerate(flags[:-1])
+               if flag == "--max-num-batched-tokens"]
+    return {"engine_options_digest": options_digest(flags),
+            "runtime_image": record["runtime_image"]["ref"],
+            "engine_max_num_seqs": record["settings"]["ENGINE_MAX_NUM_SEQS"],
+            "contract_engine_max_num_seqs": DEFAULTS.engine_max_num_seqs,
+            "encoder_budget_tokens": max([16384, *batched]),
+            "profile_version": record["profile_version"],
+            "preparation_concurrency": DEFAULTS.preparation_concurrency,
+            "max_preparing_jobs": DEFAULTS.max_preparing_jobs,
+            "max_video_seconds": DEFAULTS.max_video_seconds,
+            "published_engine_options_digest": published["engine_options_digest"],
+            "published_runtime_image": published["runtime_image_ref"]}
+
+
+def config_problems(current: dict, declared: dict = DECLARED) -> list[str]:
+    return [f"{name}: {current.get(name)!r} is not the declared {value!r} ({source}) - "
+            f"re-measure and re-declare, or restore it"
+            for name, (value, source) in declared.items() if current.get(name) != value]
+
+
+def _pairs(flags: list[str]) -> set[tuple[str, str | None]]:
+    return {(flag, flags[i + 1] if i + 1 < len(flags) and not flags[i + 1].startswith("--")
+             else None) for i, flag in enumerate(flags) if flag.startswith("--")}
+
+
+def inventory_problems(text: str, record: dict) -> list[str]:
+    """The deployed engine (W3's `measure/inventory.sh` output) against the pinned launch:
+    the image is the pin, and its flags are exactly the served flags, nothing more."""
+    lines = dict(line.split("=", 1) for line in text.splitlines()
+                 if re.match(r"^[a-z_]+=", line))
+    problems = []
+    if lines.get("image_equals_pin") != "yes":
+        problems.append(f"image_equals_pin={lines.get('image_equals_pin')}")
+    try:
+        args = json.loads(lines["args"])
+    except (KeyError, ValueError):
+        return problems + ["no readable args= line"]
+    expected = served_flags(record)
+    missing, extra = sorted(_pairs(expected) - _pairs(args)), sorted(_pairs(args) - _pairs(expected))
+    if missing:
+        problems.append(f"pinned flags the engine does not run: {missing}")
+    if extra:
+        problems.append(f"flags the engine runs beyond the pin: {extra}")
+    return problems
+
+
+def config_pin_check(report: Report, inventory: Path | None) -> None:
+    problems = config_problems(current_config())
+    measured = {"current": current_config()}
+    if inventory is not None:
+        problems += [f"deployed: {p}" for p in inventory_problems(inventory.read_text(),
+                                                                  serving_record())]
+        measured["inventory_sha256"] = sha256_file(inventory)
+    if problems:
+        report.check("e4b.b.config-pin", FAIL, problems, measured=measured)
+    elif inventory is None:
+        report.check("e4b.b.config-pin", PENDING, "the tree matches the declared settings; the "
+                     "deployed engine is unread (pass --inventory with inventory.sh's output)",
+                     owners=("BOX",), measured=measured)
+    else:
+        report.check("e4b.b.config-pin", PASS, "tree and deployed engine match", measured=measured)
+
+
+def repo_roots() -> tuple[str, ...]:
+    """This checkout and the main checkout its worktrees hang off."""
+    main = bench.shared_repo_root(str(harness.REPO_ROOT))
+    return tuple(sorted({str(harness.REPO_ROOT), *([main] if main else [])}))
+
+
+def next_servers(proc: Path = Path("/proc"), roots: tuple[str, ...] | None = None) -> list[dict]:
+    """Next.js servers (the App or the Lab) of this repository running on this host."""
+    roots = roots if roots is not None else repo_roots()
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = [part.decode(errors="replace")
+                    for part in (entry / "cmdline").read_bytes().split(b"\0") if part]
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            continue
+        head = os.path.basename(argv[0]).split()[0] if argv else ""
+        is_next = head == "next-server" or (
+            head in ("node", "next") and {"start", "dev"} & set(argv[1:])
+            and any("next" in part for part in argv[:3]))
+        if is_next and any(cwd == root or cwd.startswith(root + os.sep) for root in roots):
+            found.append({"pid": int(entry.name), "cwd": cwd, "command": " ".join(argv)[:80]})
+    return sorted(found, key=lambda server: server["pid"])
+
+
+def scrape(url: str) -> dict | None:
+    """One read of a Prometheus endpoint, the series this runner judges (MiB for memory)."""
+    from infrx.observe import alerts
+    try:
+        with urllib.request.urlopen(url, timeout=5) as answer:
+            samples = alerts.parse(answer.read().decode(errors="replace"))
+    except (OSError, ValueError):
+        return None
+
+    def total(name, **labels):
+        values = [value for (series, have), value in samples.items()
+                  if series == name and set(labels.items()) <= set(have)]
+        return sum(values) if values else None
+    mib = (lambda value: None if value is None else round(value / 2 ** 20, 1))
+    return {"rss_mib": mib(total("infrx_process_resident_bytes")),
+            "gpu_used_mib": mib(total("infrx_gpu_memory_bytes", state="used")),
+            "drift": total("infrx_reconciliation_drift"),
+            "unsettleable": total("infrx_unsettleable_jobs"),
+            "running": total("vllm:num_requests_running"),
+            "waiting": total("vllm:num_requests_waiting")}
+
+
+def preconditions_check(report: Report, target: dict, box: bool) -> None:
+    """Protocol §2: App/Lab stopped everywhere; on the box also the window consent, an idle
+    engine and every parity clip in the cache."""
+    servers = next_servers()
+    problems = [f"App/Lab running: pid {s['pid']} in {s['cwd']} ({s['command']})"
+                for s in servers]
+    if box:
+        if os.environ.get("E4B_WINDOW_OK") != "1":
+            problems.append("E4B_WINDOW_OK=1 (a logged maintenance window) is not set")
+        engine = scrape(f"{target['engine_url'].rstrip('/')}/metrics")
+        busy = None if engine is None or engine["running"] is None \
+            else (engine["running"] or 0) + (engine["waiting"] or 0)
+        if busy != 0:
+            problems.append(f"the engine is not idle (running+waiting = {busy})")
+        clips = client([sys.executable, str(MARLIN / "measure" / "parity.py"), "--check",
+                        "--cache", str(corpus_cache())])
+        if clips["exit"] != 0:
+            problems.append(f"parity clips missing: {clips['tail'][-200:]}")
+    report.check("e4b.b.preconditions", FAIL if problems else PASS,
+                 problems or "App and Lab stopped" + (", window open, engine idle, clips present"
+                                                      if box else ""),
+                 measured={"next_servers": servers, "roots": list(repo_roots())})
+
+
+# --- the bench cells -------------------------------------------------------------------
+
+UNKNOWN = decide.UNKNOWN
+
+
+def summarise(verdicts: list[tuple]) -> tuple[str, tuple[str, ...]]:
+    """(status, owners) of a cell from its (criterion, verdict, detail, owner) rows."""
+    states = {verdict for _, verdict, _, _ in verdicts}
+    if decide.FAIL in states:
+        return FAIL, ()
+    if UNKNOWN in states:
+        return PENDING, tuple(sorted({owner for _, v, _, owner in verdicts if v == UNKNOWN}))
+    return PASS, ()
+
+
+def _duration(row: dict, clips: dict) -> float:
+    return clips.get(row.get("clip_id"), {}).get("duration_s", 0.0)
+
+
+def judged(rows: list[dict], clips: dict) -> list[dict]:
+    """The attempts a cell judges: clips the engine can hold at all (the rest are the
+    duration cap's, P-20)."""
+    ceiling = engine_ceiling_s(serving_record())
+    return [row for row in rows if _duration(row, clips) <= ceiling]
+
+
+def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool) -> list[tuple]:
+    """Protocol §4 envelope criteria for one rate. Attempts on clips beyond the engine's
+    ceiling are the duration cap's: they must be refused at admission and are no one's
+    failures; a clip between the applied cap and the ceiling may be either."""
+    ceiling, cap = engine_ceiling_s(serving_record()), CRITERIA["applied_cap_s"]
+    counted = judged(rows, clips)
+    over = [r for r in rows if r not in counted]
+    out = []
+    if not gateway:
+        out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "G2-R1"))
+    else:
+        admitted = sorted({r["clip_id"] for r in over if not (
+            r.get("outcome") == "rejected" and 400 <= (r.get("http_status") or 0) < 500)})
+        refused = sorted({r["clip_id"] for r in counted if _duration(r, clips) <= cap
+                          and r.get("outcome") == "rejected"
+                          and r.get("http_status") in (400, 413, 422)})
+        verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
+        out.append(("duration_cap", verdict, {"over_ceiling_not_refused": admitted,
+                                              "within_cap_refused": refused,
+                                              "ceiling_s": ceiling, "cap_s": cap}, "BOX"))
+    platform = [r for r in counted if bench.is_platform_failure(r)]
+    rate = len(platform) / len(counted) if counted else None
+    out.append(("failure_rate", UNKNOWN if rate is None else
+                decide.PASS if rate < CRITERIA["max_failure_rate"] else decide.FAIL,
+                f"{len(platform)}/{len(counted)}", "BOX"))
+    refusals = [r for r in counted if r.get("outcome") == "rejected"
+                and _duration(r, clips) <= cap]
+    out.append(("rejections", decide.FAIL if refusals else decide.PASS,
+                f"{len(refusals)} refused within the cap", "BOX"))
+    accepted = [r for r in counted if r.get("outcome") == "accepted"]
+    short = [r["ttft_s"] for r in accepted if r.get("ttft_s") is not None
+             and _duration(r, clips) <= CRITERIA["short_clip_max_s"]
+             and max(clips.get(r.get("clip_id"), {}).get("width", 0),
+                     clips.get(r.get("clip_id"), {}).get("height", 0))
+             <= CRITERIA["short_clip_max_edge_px"]]
+    per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
+                  if r.get("latency_s") is not None and _duration(r, clips) > 0]
+    for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
+                                ("e2e_p95_per_clip_minute", per_minute,
+                                 CRITERIA["e2e_p95_s_per_clip_minute"])):
+        tail = decide.p95(values)
+        out.append((name, UNKNOWN if tail is None else
+                    decide.PASS if tail <= limit else decide.FAIL,
+                    f"p95 {tail} over {len(values)} samples (needs {decide.P95_MIN_ACCEPTED})",
+                    "BOX"))
+    return out
+
+
+def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple, float | None]:
+    """The supported rate is the highest rung, climbing from the lowest, whose failures and
+    refusals pass; the check is that rung's verdicts plus every rung's duration cap."""
+    supported, chosen = None, None
+    for rate, verdicts in sorted(rungs):
+        core = [v for name, v, _, _ in verdicts if name in ("failure_rate", "rejections")]
+        if any(v != decide.PASS for v in core):
+            break
+        supported, chosen = rate, verdicts
+    if chosen is None:
+        return FAIL, (), None
+    caps = [row for _, verdicts in rungs for row in verdicts if row[0] == "duration_cap"]
+    status, owners = summarise([row for row in chosen if row[0] != "duration_cap"] + caps)
+    return status, owners, supported
+
+
+def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict) -> list[tuple]:
+    """Protocol §4 soak criteria: failures, memory growth from /metrics, the reconciler's
+    drift at the end, and the latency of the last third against the first."""
+    counted = judged(rows, clips)
+    platform = [r for r in counted if bench.is_platform_failure(r)]
+    out = [("failure_rate", UNKNOWN if not counted else
+            decide.PASS if len(platform) / len(counted) < CRITERIA["max_failure_rate"]
+            else decide.FAIL, f"{len(platform)}/{len(counted)}", "BOX")]
+    for name, key, limit in (("host_growth_mib", "rss_mib", CRITERIA["max_host_growth_mib"]),
+                             ("gpu_growth_mib", "gpu_used_mib", CRITERIA["max_gpu_growth_mib"])):
+        grew = decide.growth([sample.get(key) for sample in samples])
+        out.append((name, UNKNOWN if grew is None else
+                    decide.PASS if grew <= limit else decide.FAIL,
+                    f"+{grew} MiB over {len(samples)} samples", "BOX"))
+    last = samples[-1] if samples else {}
+    ends = [last.get("drift"), last.get("unsettleable")]
+    out.append(("reconciled_at_end", UNKNOWN if None in ends else
+                decide.PASS if ends == [0, 0] else decide.FAIL,
+                f"drift {ends[0]}, unsettleable {ends[1]}", "BOX"))
+    ordered = [r["latency_s"] for r in sorted(counted, key=lambda r: r.get("send_s") or 0)
+               if r.get("outcome") == "accepted" and r.get("latency_s") is not None]
+    third = len(ordered) // 3
+    if third < 6:
+        out.append(("latency_drift", UNKNOWN, f"{len(ordered)} accepted: a p50 per third "
+                                              f"needs 6", "BOX"))
+    else:
+        early, late = statistics.median(ordered[:third]), statistics.median(ordered[-third:])
+        out.append(("latency_drift", decide.PASS if late <= CRITERIA["soak_latency_drift"] * early
+                    else decide.FAIL, f"p50 {early} -> {late}", "BOX"))
+    return out
+
+
+def overload_problems(rows: list[dict], clips: dict) -> list[str]:
+    """Protocol §4 overload: admission refuses honestly - 429, a Retry-After, an overload
+    code - and nothing is a 5xx or a broken stream. Clips over the applied cap are the
+    duration cap's answer, not overload's."""
+    rows = [r for r in rows if _duration(r, clips) <= CRITERIA["applied_cap_s"]]
+    accepted = [r for r in rows if r.get("outcome") == "accepted"]
+    refused = [r for r in rows if r.get("outcome") == "rejected"]
+    problems = []
+    if not accepted:
+        problems.append("nothing was accepted under the burst")
+    if not refused:
+        problems.append("nothing was refused: admission never reached its limit")
+    wrong = [(r.get("http_status"), r.get("retry_after"), r.get("error_code")) for r in refused
+             if r.get("http_status") != 429 or not (r.get("retry_after") or 0) > 0
+             or r.get("error_code") not in OVERLOAD_CODES]
+    if wrong:
+        problems.append(f"refusals without 429 + Retry-After + an overload code: {wrong[:5]}")
+    broken = [(r.get("http_status"), r.get("error_class")) for r in rows
+              if (r.get("http_status") or 0) >= 500 or bench.is_platform_failure(r)]
+    if broken:
+        problems.append(f"5xx or platform-caused failures under overload: {broken[:5]}")
+    return problems
+
+
+def sampled_run(argv: list[str], env: dict, metrics_url: str | None,
+                every_s: float) -> tuple[dict, list[dict]]:
+    """A client run with the target's /metrics read every `every_s` seconds alongside."""
+    samples, stop = [], threading.Event()
+
+    def sample():
+        while True:
+            answer = scrape(metrics_url)
+            if answer is not None:
+                samples.append(answer)
+            if stop.wait(every_s):
+                return
+    worker = threading.Thread(target=sample, daemon=True) if metrics_url else None
+    if worker:
+        worker.start()
+    try:
+        done = client(argv, env)
+    finally:
+        stop.set()
+        if worker:
+            worker.join(timeout=every_s + 10)
+    if metrics_url and (answer := scrape(metrics_url)) is not None:
+        samples.append(answer)                  # the end state, after the last request
+    return done, samples
+
+
+def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | None) -> None:
+    """E4B.b's envelope, soak and overload cells (protocol §4, shapes §5)."""
+    shape, clips, env = MATRIX[target["scale"]], parity.clips(), bench_env(target)
+    gateway = target["bench_target"] == "gateway"
+    version = f"e4b-{(report.head.get('sha') or 'nosha')[:7]}-" \
+              f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
+    rungs, runs = [], {}
+    for rate in shape["envelope"]["rates"]:
+        name = f"envelope-r{rate}"
+        runs[name] = client(bench_argv(target, workdir, name, rate=rate,
+                                       requests=shape["envelope"]["requests"],
+                                       dataset_version=f"{version}-{name}"), env)["exit"]
+        rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
+                                          gateway=gateway)))
+    status, owners, supported = envelope_summary(rungs)
+    report.check("e4b.b.envelope", status,
+                 {"supported_rate_per_s": supported, "client_exits": runs,
+                  "rungs": {str(rate): verdicts for rate, verdicts in rungs}},
+                 owners=owners, label=target["label"])
+    soak = shape["soak"]
+    rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)
+    if rate is None:
+        report.check("e4b.b.soak", FAIL, "no supported envelope rate to soak at",
+                     label=target["label"])
+    else:
+        done, samples = sampled_run(
+            bench_argv(target, workdir, "soak", rate=rate,
+                       requests=max(1, round(rate * soak["seconds"])),
+                       dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
+        verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips)
+        status, owners = summarise(verdicts)
+        report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
+                                            "client_exit": done["exit"], "verdicts": verdicts,
+                                            "samples": len(samples)},
+                     owners=owners, label=target["label"])
+    if not gateway:
+        report.check("e4b.b.overload", PENDING, "overload is admission's answer, and the local "
+                     "target is the engine: it has no admission to refuse with",
+                     owners=("G2-R1",), label=target["label"])
+        return
+    burst = shape["overload"]["burst"]
+    client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
+                      dataset_version=f"{version}-overload", extra=("--burst", str(burst))), env)
+    rows = raw_rows(workdir / "overload-raw.jsonl")
+    problems = overload_problems(rows, clips)
+    report.check("e4b.b.overload", FAIL if problems else PASS, problems or "honest refusals",
+                 measured={"attempts": len(rows),
+                           "accepted": sum(r.get("outcome") == "accepted" for r in rows),
+                           "refused": sum(r.get("outcome") == "rejected" for r in rows)},
+                 label=target["label"])
+
+
 # ------------------------------------------------------------------------------ the run
 
 def local_target(scale: str, engine_port: int) -> dict:
@@ -549,6 +955,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-url", help="the engine, for parity (box: http://127.0.0.1:8000)")
     parser.add_argument("--parity-baseline", type=Path,
                         help="parity.jsonl to pair with (box: W4's E0 run)")
+    parser.add_argument("--metrics-url", help="the gateway's /metrics, read during the soak "
+                                               "(box: http://127.0.0.1:8001/metrics)")
+    parser.add_argument("--inventory", type=Path,
+                        help="measure/inventory.sh's output from the box (the deployed engine)")
+    parser.add_argument("--box", action="store_true",
+                        help="the maintenance-window preconditions (E4B_WINDOW_OK=1 etc.)")
     parser.add_argument("--scale", choices=sorted(MATRIX), help="tiny (local) or box")
     parser.add_argument("--no-stack", action="store_true",
                         help="skip the E2-stack suite (a box run; the dev host runs it)")
@@ -562,14 +974,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.target and not args.engine_url:
         parser.error("--target needs --engine-url (parity runs against the engine itself)")
+    if args.box and not args.target:
+        parser.error("--box certifies a deployed endpoint: give --target and --engine-url")
     workdir = args.workdir or Path(tempfile.mkdtemp(prefix=f"{harness.PROJECT}-e4b-"))
     workdir.mkdir(parents=True, exist_ok=True)
     target = remote_target(args) if args.target else \
         local_target(args.scale or "tiny", harness.PORTS["fake_vllm"])
-    report = Report({**target, "workdir": str(workdir)})
+    report = Report({**target, "workdir": str(workdir), "box": args.box,
+                     "inventory": args.inventory and rel(args.inventory),
+                     "parity_baseline": args.parity_baseline and rel(args.parity_baseline)})
     with run.signals_handled():
         try:
             report.hashes = release_hashes()
+            preconditions_check(report, target, args.box)
+            config_pin_check(report, args.inventory)
+            if args.box:
+                report.check("e4b.b.recovery-box", PENDING,
+                             "I3B's runbook drills on the box (infra/runbooks: restart, "
+                             "restore, rollback, index-loss, disk, reconcile) are the "
+                             "coordinator's, recorded in E4B-release-decision.md",
+                             owners=("BOX",))
             if args.no_stack:
                 for check_id in ("e4b.a.protocol", "e4b.b.recovery"):
                     report.check(check_id, SKIP, "--no-stack", owners=("STACK",))
@@ -600,6 +1024,7 @@ def engine_checks(report: Report, target: dict, workdir: Path, args) -> None:
                      baseline=args.parity_baseline, label=target["label"],
                      local=target["kind"] == "local")
         dataset_check(report, target, workdir)
+        load_cells(report, target, workdir, args.metrics_url)
     finally:
         if server is not None:
             server.stop()
