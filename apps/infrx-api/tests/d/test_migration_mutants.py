@@ -95,7 +95,16 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           # D3 review fix round: the CREDIT unknown-usage path and the guard's source side.
           "d3_quarantine_releases_the_credit_hold",
           "d3_published_credit_released_not_quarantined",
-          "d3_unknown_release_keeps_the_credit_hold", "d3_settled_usage_may_become_absorbed")
+          "d3_unknown_release_keeps_the_credit_hold", "d3_settled_usage_may_become_absorbed",
+          # D4: fencing, publication, R30, tenant isolation, the byte budget and the clock.
+          "d4_append_without_the_fence", "d4_append_accepts_a_preparation_lease",
+          "d4_r29_refusal_raised_rolls_back", "d4_append_without_the_row_lock",
+          "d4_terminal_event_accepted_when_last", "d4_oversize_event_stored",
+          "d4_job_ceiling_ignores_the_terminal_reserve", "d4_published_not_set",
+          "d4_stored_counted_beside_the_reservation", "d4_terminal_payload_from_the_old_row",
+          "d4_no_terminal_event_on_cancel", "d4_terminal_event_legacy_regime_only",
+          "d4_read_any_tenant", "d4_gap_is_an_empty_page", "d4_expire_on_the_callers_clock",
+          "d4_prune_frees_twice", "d4_append_granted_to_authenticated")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 

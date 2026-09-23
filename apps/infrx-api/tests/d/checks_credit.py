@@ -133,7 +133,9 @@ FILLED_BOUNDARIES = frozenset({("function", "infrx", "infrx.admit(jsonb)"),
                                ("function", "infrx", "infrx.claim(jsonb)"),
                                ("function", "infrx", "infrx.heartbeat(jsonb)"),
                                ("function", "infrx", "infrx.cancel(jsonb)"),
-                               ("function", "infrx", "infrx.terminalize(jsonb)")})
+                               ("function", "infrx", "infrx.terminalize(jsonb)"),
+                               # D4 (0017): the journal append.
+                               ("function", "infrx", "infrx.append(jsonb)")})
 
 
 def _same_boundary(old: str, new: str | None) -> bool:
