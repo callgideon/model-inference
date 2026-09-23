@@ -133,6 +133,8 @@ behind `e4b.b.recovery-box`. The protocol below is what the coordinator runs.
 
 ## The coordinator's box protocol (an executable checklist)
 
+**Superseded by Round 2's box protocol below** (review F2/F3/N2): kept as written.
+
 Run from the coordinator host, never from an implementation session. It reuses W3's SSM
 helpers `wrap`, `ssm`, `out` verbatim ([W3-d8a7878.md](../w/W3-d8a7878.md), "The measurement
 half") and W4's `candidate.sh` preconditions. **No secret in any command text**: the API key
@@ -366,3 +368,116 @@ the dev host's App (request 2) and B1 (request 3). After the run, `docker ps -a 
 
 - 2026-09-23 (addendum): command 9 quoted from `report.json` and `certify.log`; nothing
   earlier in this file was rewritten.
+
+## Round 2 — review fix round (`E4B-review-37a4652.json`: 9 blocking, 5 nonblocking)
+
+One commit per finding, each with its case and its mutants through this lane's list (the
+shared R83 runner), on top of `37a4652`. No rebase, reset, amend, stash or push. Every death
+line below was **re-derived at the head**: each mutant applied alone to a throwaway copy by the
+shared runner's own `_copy`/`_prepare`, its named case run with `--tb=line` (51 mutants, every
+death an `AssertionError` or `Failed` in a test file; `killtexts-final.tsv` sha256
+`4f6d2eca03a92831`). Doing that found one real problem, fixed in `0158b7d` and listed under F2.
+
+| Finding | Commit | Change | Killing case | Mutant → death line |
+|---|---|---|---|---|
+| **F1** | `36e4dd0` | `certify.identity_problems` + a `release-identity` entry added at `as_json`: FAIL when a SHA is missing, either end is dirty or of **unknown** state, or the tree moved. `run.git_head` records `dirty: None` when git cannot answer (E's e3bm47 re-anchored on the new line, still killed: `mutants.py --only e3bm47` → killed) | `test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails` | `missing_sha_accepted` → `test_certify.py:74: AssertionError: assert ['the tree at...nknown state'] == ['no git SHA ...nknown state']`<br>`dirty_tree_accepted` → `test_certify.py:71: AssertionError: assert [] == ['the tree at...art is dirty']`<br>`unknown_state_accepted` → `test_certify.py:72: AssertionError: assert [] == ['the tree at...nknown state']`<br>`moved_tree_accepted` → `test_certify.py:76: AssertionError: assert [] == ['the tree mo...dddddddddddd']`<br>`identity_never_fails` → `test_certify.py:83: AssertionError: assert ('release-identity', 'PASS') == ('release-identity', 'FAIL')`<br>`unknown_tree_recorded_clean` → `test_certify.py:90: AssertionError: assert {'dirty': False, 'sha': None} == {'dirty': None, 'sha': None}` |
+| **F2** | `77eacbe, 0158b7d` | `run.git_head` catches `OSError` (no git binary: the runtime image), so `Report()` cannot crash and the report is written with the tree unknown (→ F1's FAIL). `--box` requires `--release-sha`, and the checkout's SHA must be it. `0158b7d` moves the two `--box` argument rules into one case that stops before any network: F3's rule had made F2's refusal case pass for the wrong reason (found by re-deriving each death line) | `test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity; test_e4b_a_box_run_names_its_release_and_reads_its_metrics` | `missing_git_crashes` → `test_certify.py:838: Failed: no git crashed git_head: FileNotFoundError(2, 'No such file or directory')`<br>`release_sha_unchecked` → `test_certify.py:853: AssertionError: assert [] == ['the tree is...eeeeeeeeeeee']`<br>`box_without_release_sha_accepted` → `test_certify.py:980: Failed: DID NOT RAISE <class 'SystemExit'>` |
+| **F3** | `b4d8182` | `--box` adds `e4b.b.served-build`: FAIL unless the gateway's `infrx_build_info` revision is the report's tree, and `INFRX_CERTIFY_GATEWAY_IMAGE` (the running gateway's image) equals `INFRX_CERTIFY_RELEASE_IMAGE` (`infrx-runtime:<release>`), both read with `docker image inspect`; `--box` requires `--metrics-url`. The refuters' correction is taken: nothing emits `infrx_build_info` today, so this check FAILs on any box until the gateway sets it (integration request 1) | `test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves; test_e4b_scrape_reads_the_series_the_soak_judges; test_e4b_a_box_run_names_its_release_and_reads_its_metrics` | `served_revision_unchecked` → `test_certify.py:865: assert [] == ['the gateway...000000000000']`<br>`missing_build_info_accepted` → `test_certify.py:869: assert 'publishes no infrx_build_info' in "the gateway serves None, the report's tree is 0123abc000000000000000000000000000000…`<br>`gateway_image_unset_accepted` → `test_certify.py:872: AssertionError: assert [] == ['INFRX_CERTI...s unrecorded']`<br>`release_image_mismatch_accepted` → `test_certify.py:877: AssertionError: assert [] == ['the gateway...111111111111']`<br>`build_info_read_from_any_series` → `test_certify.py:751: AssertionError: assert {'drift': 0.0...: 1024.0, ...} == {'drift': 0.0...: 1024.0, ...}`<br>`box_without_metrics_accepted` → `test_certify.py:980: Failed: DID NOT RAISE <class 'SystemExit'>` |
+| **F4** | `4b01d4d` | `failures()`: every attempt with outcome `failed` counts (transport timeouts and resets with 5xx and broken streams; the platform-caused share stays in the detail); `answered()`: a rung or soak that accepted nothing fails and ends the envelope climb; under overload a reset is a failure | `test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause` | `transport_failures_uncounted` → `test_certify.py:656: AssertionError: assert 'pass' == 'fail'`<br>`nothing_accepted_passes` → `test_certify.py:660: AssertionError: assert 'pass' == 'fail'`<br>`climb_ignores_answers` → `test_certify.py:668: AssertionError: assert ('FAIL', (), 0.5) == ('FAIL', (), None)`<br>`overload_resets_accepted` → `test_certify.py:35: AssertionError: no problem was reported` |
+| **F5** | `9d73835` | `target_label`: `meas.` only for a `--box` run whose preconditions passed; the local target stays `fake-engine, not a measurement`; any other target is `unverified target, not a measurement` (`remote_target` starts there); the label is decided after the preconditions | `test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement` | `local_run_labelled_measured` → `test_certify.py:898: AssertionError: assert 'meas.' == 'fake-engine,...a measurement'`<br>`remote_run_measured_by_default` → `test_certify.py:901: AssertionError: assert 'meas.' == 'unverified t...a measurement'`<br>`unready_box_measured` → `test_certify.py:903: AssertionError: assert 'meas.' == 'unverified t...a measurement'`<br>`label_never_decided` → `test_certify.py:922: AssertionError: ('PASS', {'label': 'unverified target, not a measurement', 'reported': 'unverified target, not a measurement'})` |
+| **F6** | `f34b2cc` | `declared()` reads the W3/W4 values from `serving-version.json` (digest, `runtime_image.ref`, `ENGINE_MAX_NUM_SEQS`, the flag-derived encoder budget); the published release must be that record; `serve_sh_pins()` makes `serve.sh` the second source held against it. No literal, so W4 phase B's digest change moves `declared()` with the record | `test_e4b_the_declared_settings_are_the_serving_record_read_never_typed` | `published_digest_declared_as_the_placeholder` → `test_certify.py:476: AssertionError: assert ('sha256:4444...5fd4ed020b42') == ('sha256:3c4b...5fd4ed020b42')`<br>`published_image_declared_as_the_tag` → `test_certify.py:476: AssertionError: assert ('sha256:3c4b...enai:nightly') == ('sha256:3c4b...5fd4ed020b42')`<br>`seqs_declared_as_a_literal` → `test_certify.py:471: AssertionError: assert ('sha256:3c4b...b42', '32', 8) == ('sha256:3c4b...0b42', '8', 8)`<br>`digest_declared_as_a_literal` → `test_certify.py:482: AssertionError: assert ('sha256:3c4b...55555', 32768) == ('sha256:5555...55555', 32768)`<br>`encoder_budget_declared_as_a_literal` → `test_certify.py:482: AssertionError: assert ('sha256:5555...55555', 16384) == ('sha256:5555...55555', 32768)`<br>`image_read_from_the_record_not_serve_sh` → `test_certify.py:499: AssertionError: ['engine_max_num_seqs', 'published_engine_options_digest', 'published_runtime_image']`<br>`seqs_read_from_the_record_not_serve_sh` → `test_certify.py:499: AssertionError: ['runtime_image', 'published_engine_options_digest', 'published_runtime_image']` |
+| **F7** | `63876db` | `next_servers`: a Next.js process in an `apps/app` or `apps/lab` package of **any** checkout, by working directory or command line; an unreadable working directory counts (unknown is not stopped); `repo_roots` deleted | `test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions` | `unreadable_cwd_skipped` → `test_certify.py:560: assert [11, 12, 17, 18] == [11, 12, 16, 17, 18]`<br>`package_path_in_cmdline_ignored` → `test_certify.py:560: assert [11, 12, 16, 18] == [11, 12, 16, 17, 18]`<br>`only_this_checkout_counts` → `test_certify.py:560: assert [16] == [11, 12, 16, 17, 18]`<br>`any_next_server_counts` → `test_certify.py:560: assert [11, 12, 13, 16, 17, 18] == [11, 12, 16, 17, 18]` |
+| **F8** | `1ffdc86` | one assertion per stated rule: `--retries 0` and `--subset full` at the box scale; a quarantined 4xx item is never re-sent; an accepted item without an Inference-Id is unreconcilable; a signal answered with exit 0 is no interruption; an unreadable engine is not idle | `test_e4b_each_stated_client_rule_holds_one_assertion_each` | `retries_hide_refusals` → `test_certify.py:939: AssertionError: assert '3' == '0'`<br>`box_runs_the_fast_subset` → `test_certify.py:940: AssertionError: box`<br>`quarantined_item_resent_ok` → `test_certify.py:942: assert [] == ["terminal it...sume: ['i7']"]`<br>`accepted_without_id_ok` → `test_certify.py:946: assert 'Σ charged 2....dger fall 2.5' == "items accept...e-Id): ['i5']"`<br>`signalled_exit_unchecked` → `test_certify.py:958: AssertionError: assert 'PENDING' == 'FAIL'`<br>`unreadable_engine_is_idle` → `test_certify.py:966: AssertionError: assert 'A' == 'the engine i...iting = None)'` |
+| **F9** | `8cb994c` | the endpoint doc's cited statuses come from `errors.http_status` (descriptions and examples; a case checks every citation, and the success statuses against the modules), DELETE's cause from the jobs module's call, the no-key routes from the modules' sources; `Location` joins the Headers list; the `POST /v1/jobs` streaming refusal is documented; the committed doc regenerated | `test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers; test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_modules_implement; test_e4b_the_examples_call_only_mounted_routes_with_the_headers_the_contract_needs` | `description_status_hand_typed` → `test_endpoint_doc.py:126: AssertionError: [('result_pending', '404'), ('result_expired', '410'), ('invalid_request', '400'), ('idempotency_conflict…`<br>`example_status_hand_typed` → `test_endpoint_doc.py:126: AssertionError: [('result_pending', '409'), ('result_expired', '410'), ('invalid_request', '400'), ('idempotency_conflict…`<br>`cancel_cause_hand_typed` → `test_endpoint_doc.py:141: AssertionError: assert ('`client_cancelled`' in 'cancel (`sync_deadline`), answering the committed outcome')`<br>`models_listed_as_authenticated` → `test_endpoint_doc.py:142: AssertionError: assert [] == ['/v1/models']`<br>`location_header_dropped` → `test_endpoint_doc.py:146: AssertionError: assert '`Location`' in '\n\n`Authorization`, `Idempotency-Key`, `Idempotency-Replayed`, `Inference-Id`, `…`<br>`stream_refusal_dropped` → `test_endpoint_doc.py:148: assert '`POST /v1/jobs` is always async: a body with `"stream": true` is refused `invalid_request` (400) with `param` `st…`<br>`r94_example_dropped` → `test_endpoint_doc.py:86: AssertionError: the R94 cross-mode rule is shown` |
+| **N1** | `e1a4eef` | `attributed_exit`: the halves are judged with pytest's own exit code (1 is the failed case the split attributes; any other code fails both); a backend suite that never ran is `backend=not run` | `test_e4b_the_suite_halves_carry_pytests_own_exit_code` | `exit_code_ignored` → `test_certify.py:195: AssertionError: assert 'PASS' == 'FAIL'`<br>`exit_one_never_attributed` → `test_certify.py:183: AssertionError: assert 1 == 0`<br>`unexplained_exit_one_accepted` → `test_certify.py:184: AssertionError: assert 0 == 1`<br>`unrun_backend_accepted` → `test_certify.py:197: AssertionError: assert None == ['backend=not run']` |
+
+**Nonblocking.**
+- **N1:** fixed (row above).
+- **N2:** fixed in the box protocol below. `E4B_WINDOW_OK` is no longer hard-coded; it
+  comes from the window record that step 1 writes.
+- **N3 (B1):** routed to the cutover lane (the fixture placeholder), as the review says.
+  `e4b.b.config-pin` keeps failing on it until that lands, and F6 reads the record so the
+  pin follows the fix.
+- **N4 (B2):** routed to the box (W4 phase B decides the value; the rollout deploys it).
+- **N5, noted:** with D5's branch merged, layer 0 fails
+  `test_harness::test_the_migration_set_is_the_console_one…` on `0018_terminal_settlement.sql`.
+  That is D5's (the pinned migration list; the phase-3 lane owns the merge), not E4B's. D5
+  does not change `cli.build_operations`, which still refuses. The owner of that wiring is
+  named in request 4 below.
+
+**What changed for the list:** 126 mutants over 37 named cases (77 before). Three existing
+mutants were re-anchored on lines this round changed:
+- `moved_setting_accepted` (F6, `pinned` for `declared`);
+- `any_next_server_counts` (F7);
+- `r94_example_dropped` (F9).
+
+E's `e3bm47` was re-anchored in `tests/integration/mutants.py` (F1).
+
+### Round 2's box protocol (supersedes the one above)
+
+Changes from the first version:
+- the runner runs in an image **with git**, so `release-identity` can be computed on the box;
+- `--release-sha` names the release;
+- `--metrics-url` reads the served build;
+- both image ids come from `docker`;
+- `E4B_WINDOW_OK` comes from the window record (N2).
+
+- [ ] 0.1-0.5 as above, and additionally:
+  - 0.6 the gateway publishes `infrx_build_info{revision}` (request 1). Without it,
+    `e4b.b.served-build` FAILs by design.
+  - 0.7 once per release, outside the window, build the certify image (the runtime image
+    has no git; review F2):
+    `printf 'FROM infrx-runtime:%s\nUSER 0\nRUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*\n' "$RELEASE" | docker build -t "infrx-certify:$RELEASE" -`.
+    ⚠️ Unverified: the box's Debian mirror access; the runtime image's imports for the runner.
+- [ ] 1. The window opens (`30-pause.sh`). Only when its output shows the maintenance site,
+      write the window record: `umask 077; mkdir -p /opt/dlami/nvme/e4b;
+      printf 'E4B_WINDOW_OK=1\nE4B_WINDOW_OPENED=%s\n' "$(date -u +%FT%TZ)" > /opt/dlami/nvme/e4b/window.env`.
+      Remove it when the window closes (step 7).
+- [ ] 2-4 as above.
+- [ ] 5. The certification run (detached):
+      ```bash
+      # step: e4b-certify.sh (SSM), RELEASE=<sha>
+      set -euo pipefail
+      out=/opt/dlami/nvme/e4b/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$out"
+      test -s /opt/dlami/nvme/e4b/window.env || { echo "no window record: step 1 first"; exit 2; }
+      gateway=$(docker inspect --format '{{.Image}}' infrx-gateway)
+      release=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$RELEASE")
+      nohup docker run --rm --network host --pid host --user 0 \
+        -v /opt/dlami/nvme/w3-checkout:/repo:ro -v /opt/dlami/nvme/w3-corpus:/corpus:ro \
+        -v /opt/dlami/nvme/e4b:/e4b -v "$out":/out -w /repo \
+        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+        --env-file /etc/marlin2b-gateway.env --env-file /opt/dlami/nvme/e4b/key.env \
+        --env-file /opt/dlami/nvme/e4b/window.env \
+        -e CORPUS_CACHE=/corpus -e INFRX_CERTIFY_GATEWAY_IMAGE="$gateway" \
+        -e INFRX_CERTIFY_RELEASE_IMAGE="$release" \
+        "infrx-certify:$RELEASE" python tests/integration/backend/certify.py --no-stack --box \
+          --release-sha "$RELEASE" \
+          --target http://127.0.0.1:8001/v1 --engine-url http://127.0.0.1:8000 \
+          --metrics-url http://127.0.0.1:8001/metrics --inventory /e4b/inventory.txt \
+          --parity-baseline /e4b/parity-e0.jsonl --workdir /out/work --report /out/report.json \
+        > "$out/certify.log" 2>&1 &
+      echo "out=$out"
+      ```
+      Inside the container the host's `/proc/<pid>/cwd` is usually unreadable. A Next.js
+      process on the box therefore counts as a running App/Lab (F7: unknown is not stopped).
+      The box runs none today.
+- [ ] 6. as above.
+- [ ] 7. as above. The report must show `release-identity` and `e4b.b.served-build` PASS,
+      every number labelled `meas.`, and only the typed SKIPs/PENDINGs of the first
+      version. Remove `window.env` when the window closes.
+
+### Integration requests after round 2 (replacing the list above; 1 of the first list stays withdrawn)
+
+1. **Coordinator / I3B - `infrx_build_info`.** The gateway (and the worker) must set
+   `infrx_build_info{process, revision=<release sha>} 1` at startup. It is declared in
+   `infrx/observe/metrics.py:153` and on the dashboard, and emitted by nobody (I3B request 1).
+   Until it is set, `e4b.b.served-build` FAILs on every box run, by design.
+2. **Coordinator / user - the dev host's App.** Unchanged (pids `3907004`, `3969240`).
+3. **Cutover lane - B1.** In progress per the review. After it lands, the tree half of
+   `e4b.b.config-pin` passes: `declared()` reads the record, so no E4B change is needed.
+4. **The `build_operations` wiring.** `infrx.operations.cli.build_operations` still refuses
+   after D5 (review N5). The owner is the coordinator's cutover lane, not D5 alone. Until it is
+   wired, `e4b.a.dataset-resume` pends on a metered target.
+5. **W4 phase B / the box - B2.** Unchanged. A new digest or flag lands in
+   `serving-version.json` and `serve.sh` together; the pin follows the record.
+6. **Coordinator - ports.** Unchanged.

@@ -15,7 +15,7 @@ What was built and the runs: the E4B implementation evidence (`E4B-<sha>.md`, th
 | Field | Value |
 |---|---|
 | Decision | ⚠️ **PENDING** — not BACKEND-READY |
-| Release SHA | ⚠️ TO BE FILLED: the integration SHA the box runs (the box report's `git_head` and `git_head_end`, both clean and equal) |
+| Release SHA | ⚠️ TO BE FILLED: the integration SHA the box runs, given as `--release-sha`; the box report's `release-identity` (the checkout's SHA is it, clean at both ends) and `e4b.b.served-build` (the gateway's `infrx_build_info` revision is it, and its image is `infrx-runtime:<release>`) must both PASS |
 | Dev-host report | ⚠️ TO BE FILLED: `certify.py --report` at the release SHA, sha256 of the JSON |
 | Box report | ⚠️ TO BE MEASURED: the box protocol's `certify.py --box …` report, sha256 of the JSON |
 | Decided by, at | the coordinator, after §3's checklist is complete |
@@ -42,7 +42,7 @@ authoritative**: recompute at the release SHA.
 | `apps/infrx-api/uv.lock` | sha256 `cc572b804a41a86caeeff8e612da3a54730ea4cf84737662a8325ac9c93ec24d` |
 | `infrx` package (`*.py`) | tree sha256 `6b7d5ae7421b7bf2e83cdcac4ebde05b02f9af9671f5cb41f42f7383c4705131` |
 | published release (G6B `marlin_release`) | `nemostation/marlin-2b@2026-09-01`, card `rc_marlin2b_20260901T000000Z_provisional_p01`, engine-options digest `sha256:4444…4444`, image `vllm/vllm-openai:nightly` — **finding B1 below** |
-| gateway image | ⚠️ TO BE MEASURED on the box: `docker image inspect` of the image `install.sh` built (`INFRX_CERTIFY_GATEWAY_IMAGE` carries it into the report) |
+| gateway image | ⚠️ TO BE MEASURED on the box: `INFRX_CERTIFY_GATEWAY_IMAGE` (the running `infrx-gateway`'s image) and `INFRX_CERTIFY_RELEASE_IMAGE` (`infrx-runtime:<release>`), both read with `docker image inspect` in the box step; `e4b.b.served-build` FAILs unless they are equal |
 
 ## 3. Certification checklist
 
@@ -54,6 +54,8 @@ from the box report.
 
 | Check | Oracle | Local | Box |
 |---|---|---|---|
+| `release-identity` (review F1/F2) | all | PASS only on a clean, unmoved tree | the checkout is `--release-sha`, clean at both ends |
+| `e4b.b.served-build` (review F3) | BACKEND-DEPLOY | not run (box only) | ⚠️ TO BE MEASURED; FAILs today: no gateway publishes `infrx_build_info` yet (input below) |
 | `e4b.a.protocol` — the gate's stack suite (preflight, services, migrate, rls, backend minus `recovery/`) | BACKEND-JOURNEY, DUR-*, MEDIA-SEC, API-* | PENDING[D5, G2-R1] at `37da3b3`: 87 passed, 0 failed (rls 696 cases PASS) | SHA-bound: the dev-host report at the release SHA |
 | `e4b.a.sop-parity` | MARLIN-SOP, MEDIA-PARITY | PASS, 9 clips (fake engine) | ⚠️ TO BE MEASURED: paired with W4's E0 `parity.jsonl` |
 | `e4b.a.dataset-resume` | MARLIN-SOP, BACKEND-JOURNEY | PENDING[BOX]; the client half holds (SIGINT after 4 of 12, resume sent 8) | ⚠️ TO BE MEASURED: needs the metered route (G2-R1) and the ledger adapters (D5) |
@@ -67,14 +69,15 @@ from the box report.
 ## 4. Measured limits, SLOs, cost and quality — coverage
 
 Nothing below is measured yet. Every criterion is provisional (P-18) unless it says otherwise;
-none is an SLO.
+none is an SLO. A value fills this table only from the box report, labelled `meas.` (a `--box`
+run whose preconditions passed; anything else is `unverified target, not a measurement`).
 
 | Quantity | Measured by | Criterion (protocol §5) | Value |
 |---|---|---|---|
 | supported arrival rate (req/s and video-s/s) | `e4b.b.envelope` | highest rung, from 0.5 req/s up, with platform failures < 1 % and no refusal within the cap | ⚠️ TO BE MEASURED |
 | TTFT p95, clips ≤ 30 s at ≤ 720p | `e4b.b.envelope` | ≤ 6.0 s (01 §2.3 proposal), ≥ 60 samples | ⚠️ TO BE MEASURED |
 | end-to-end p95 per clip-minute | `e4b.b.envelope` | ≤ 45 s | ⚠️ TO BE MEASURED |
-| platform-caused failure rate | envelope, soak | < 1 % (`decide.MAX_FAILURE_RATE`) | ⚠️ TO BE MEASURED |
+| failure rate: every attempt that got no answer (platform-caused share alongside) | envelope, soak | < 1 % (`decide.MAX_FAILURE_RATE`); a rung that accepted nothing fails | ⚠️ TO BE MEASURED |
 | memory growth over the soak (gateway RSS, GPU used) | `e4b.b.soak` | ≤ 512 MiB host, ≤ 256 MiB GPU (W4's limits) | ⚠️ TO BE MEASURED |
 | reconciliation at the end of the soak | `e4b.b.soak` | drift 0, unsettleable 0 | ⚠️ TO BE MEASURED |
 | overload answer | `e4b.b.overload` | every refusal 429 + Retry-After + an overload code; no 5xx | ⚠️ TO BE MEASURED |
@@ -90,8 +93,9 @@ none is an SLO.
 
 | Id | What | Owner | Blocks |
 |---|---|---|---|
-| **B1** | The published serving revision (`service.marlin_release`) carries the fixture placeholder engine-options digest `sha256:4444…` and the moving tag `vllm/vllm-openai:nightly`, while W3/W4's evidence pins `sha256:3c4bb…` and the digest-pinned image. Every CREDIT admission pins that revision (R76/R78), so accepted jobs would name a serving version that is not the one measured. `e4b.b.config-pin` fails on it | G6B / coordinator: `marlin_release` reads `serving-version.json` (or the publish step passes both values) | cutover, BACKEND-READY |
+| **B1** | The published serving revision (`service.marlin_release`) carries the fixture placeholder engine-options digest `sha256:4444…` and the moving tag `vllm/vllm-openai:nightly`, while W3/W4's evidence pins `sha256:3c4bb…` and the digest-pinned image. Every CREDIT admission pins that revision (R76/R78), so accepted jobs would name a serving version that is not the one measured. `e4b.b.config-pin` fails on it | G6B / coordinator; being fixed by the cutover lane (the fixture placeholder), per the review (N3) | cutover, BACKEND-READY |
 | **B2** | The box's engine runs `--max-num-seqs 32` and no `--allowed-local-media-path` (W3 inventory 2026-09-23T03:19Z, the pre-pin `serve.sh`); the pin is 8 and the media root. I2B's cutover keeps 32 on purpose (FC-1) until W4 phase B | W4 phase B decides the value; then either the pin or the deploy is re-declared | BACKEND-READY |
+| build_info | the gateway never sets `infrx_build_info{revision}` (declared in `infra/alerts`, emitted by nobody; I3B request 1), so `e4b.b.served-build` cannot pass on any box | coordinator / I3B: set it at startup from the release SHA | BACKEND-READY |
 | P-20 | the duration cap: raise the encoder budget (E1) or cap admission; the cutover applies `MAX_VIDEO_SECONDS` | W4 decides, the cutover applies | E4B certification (15-pending-inputs) |
 | P-04 / box window | the coordinator's maintenance window: W4 E0/E1, E1B L0–L8, then the E4B box run | coordinator | every box row |
 | G2-R1 | the held cutover that mounts the metered ingress | coordinator | the journeys, dataset ledger, overload, dr11 |
@@ -146,3 +150,6 @@ none is an SLO.
 - 2026-09-23 (E4B, addendum): the stack rows filled from the full local report at `37da3b3`
   (sha256 `84643e5bce3cc35ed9884b4873c7a8c06f12c5b8f88679e1e9f1f5d453406ad3`), once the e2
   namespace was free.
+- 2026-09-23 (E4B review fix round): release identity, served build, labels and the failure
+  rate follow protocol amendment 3; B1 is routed to the cutover lane, B2 to the box (review
+  N3/N4); the `infrx_build_info` input added. No box value filled.

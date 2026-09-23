@@ -120,3 +120,26 @@ run closed, and the coordinator's decision recorded in
   (b) the dataset ledger is re-read for up to 300 s after the resumed run, because a debit
   may land after the answer; (c) a check the local target (an engine) can never judge pends
   on `BOX`, not on a task id. None of the §5 numbers moved.
+- 2026-09-23 (E4B), **amendment 3**, the review fix round (`E4B-review-37a4652.json`), after
+  the local runs of `9aa7ffe`/`37da3b3` (so appended, not edited in place; §5's numbers are
+  unchanged and the test still holds them):
+  (a) §6.3 is enforced by the runner: a `release-identity` entry FAILs unless both git
+  samples carry the same SHA and a clean tree; git that cannot answer (no git in the runtime
+  image, not a tree) is an **unknown** tree, never a clean one. A box run names its release
+  (`--release-sha`) and the checkout's SHA must be it (F1/F2).
+  (b) A box run also reads the served build (`--metrics-url`): `e4b.b.served-build` FAILs
+  unless the gateway's `infrx_build_info` revision is the report's tree and the gateway runs
+  the image built for the release (`INFRX_CERTIFY_GATEWAY_IMAGE` = `INFRX_CERTIFY_RELEASE_IMAGE`,
+  both read with `docker image inspect` in the box step) (F3).
+  (c) §4's failure rate counts **every** attempt that got no answer - transport timeouts and
+  resets as well as 5xx and broken streams (the platform-caused share stays in the detail) -
+  and a rung or soak that accepted nothing fails; a reset under overload is a failure (F4).
+  (d) `meas.` only from a `--box` run whose preconditions passed; the local target stays
+  `fake-engine, not a measurement` and any other target is `unverified target, not a
+  measurement` (F5).
+  (e) The config pin's W3/W4 values are read from `serving-version.json` (never typed), and
+  `serve.sh` is the second source held against it (F6).
+  (f) §2.1: an App or Lab is a Next.js process in an `apps/app` or `apps/lab` package of any
+  checkout, found by its working directory or its command line; one whose working directory
+  cannot be read counts as running - unknown is not stopped (F7).
+  (g) The stack halves are judged with the backend run's own pytest exit code (N1).
