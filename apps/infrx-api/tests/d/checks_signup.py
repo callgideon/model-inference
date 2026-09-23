@@ -216,7 +216,9 @@ def check_eligibility(conn) -> str:
     individual(conn, long, "long1@example.com")
     refused(conn, "a 101-character campaign",
             f"select * from public.claim_signup_grant('{long}', '{'c' * 101}')", "22023")
-    assert claim(conn, long, campaign="c" * 100)[0] == "granted", "a 100-character campaign"
+    # 100 characters, 200 bytes: the limit counts characters, as 0006's CHECK does.
+    assert claim(conn, long, campaign="\u00e9" * 100)[0] == "granted", \
+        "a 100-character (200-byte) campaign"
     return ("eligibility: 1 grant per individual, 3 replays, unverified/soft-deleted/unknown "
             "alike, identity reuse, 4 rollout holds (+, -, 2nd org), USD untouched, flag and null "
             "refused")
