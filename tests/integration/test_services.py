@@ -197,6 +197,41 @@ def test_the_role_matrix_holds_for_every_role():
     assert any(row["expected"] == "rowcount=1" for row in rows)
 
 
+def test_the_role_matrix_has_a_row_for_every_relation_and_security_definer_function():
+    """E3B phase 2 item 7 (E2R handback): the matrix is complete against the migrated
+    catalog - every relation and every SECURITY DEFINER function of `infrx`/`public` has a
+    row per API role, and no row names an object that does not exist. A new migration's
+    object fails this until its expected access is written down."""
+    stack_or_skip()
+    with connect() as conn:
+        relations, functions = pgstate.catalog_objects(conn)
+    assert sorted(relations - set(pgstate.RELATIONS)) == [], "relations with no matrix row"
+    assert sorted(functions - set(pgstate.FUNCTIONS)) == [], \
+        "security definer functions with no matrix row"
+    assert sorted(set(pgstate.RELATIONS) - relations) == [], "rows for relations that are gone"
+    assert sorted(set(pgstate.FUNCTIONS) - functions) == [], "rows for functions that are gone"
+
+
+def test_a_live_grant_inversion_fails_its_matrix_row():
+    """E3B phase 2 item 7: the rows are live. `anon` given the schema and `infrx.jobs`, and
+    `service_role` stripped of `infrx.admit`, inside a transaction that is rolled back: both
+    rows must come back failed, and pass again once it is."""
+    fixtures = stack_or_skip()
+    rows = {check.case: check for check in pgstate.role_matrix(fixtures)}
+    anon_jobs, service_admit = (rows["E3B-RLS-infrx.jobs-anon"],
+                                rows["E3B-RLS-infrx.admit(jsonb)-service_role"])
+    with connect() as conn:
+        with conn.transaction(force_rollback=True):
+            conn.execute("grant usage on schema infrx to anon; "
+                         "grant select on infrx.jobs to anon; "
+                         "revoke execute on function infrx.admit(jsonb) from service_role")
+            inverted = [pgstate.run_check(conn, row, fixtures)["passed"]
+                        for row in (anon_jobs, service_admit)]
+        restored = [pgstate.run_check(conn, row, fixtures)["passed"]
+                    for row in (anon_jobs, service_admit)]
+    assert (inverted, restored) == ([False, False], [True, True])
+
+
 def test_a_check_that_should_fail_does_fail():
     """The matrix runner itself is the thing under test here: if `run_check` could not
     report a failure, every row above would be worthless. One deliberately wrong

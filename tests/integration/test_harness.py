@@ -232,7 +232,7 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     checks = pgstate.role_matrix(fixtures)
     assert {check.role for check in checks} == {"anon", "authenticated", "service_role",
                                                 "postgres"}
-    assert {check.expect[0] for check in checks} == {"value", "rowcount", "error"}
+    assert {check.expect[0] for check in checks} == {"value", "rowcount", "error", "rows"}
     assert len({check.case for check in checks}) == len(checks), "duplicate case id"
     assert all(check.why for check in checks), "every case states the invariant it pins"
     assert sum(1 for check in checks if check.expect == ("error", pgstate.PERMISSION_DENIED)) >= 8
@@ -250,10 +250,17 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     assert {"permission denied for table", "violates row-level security policy",
             "not a member of organization",
             "permission denied for function org_balance"} <= causes, causes
-    assert {cause for cause in causes if cause.startswith("permission denied for table ")} == {
+    assert {check.message_contains for check in denials if check.case.startswith("E2-")
+            and check.message_contains.startswith("permission denied for table ")} == {
         "permission denied for table organizations", "permission denied for table api_keys",
         "permission denied for table credit_ledger",
         "permission denied for table models"}, causes
+    # E3B phase 2 item 7: every relation and SECURITY DEFINER function has a row per API role
+    # (`test_services.py` holds the list itself to the migrated catalog).
+    generated = {check.case for check in checks if check.case.startswith("E3B-RLS-")}
+    assert generated == {f"E3B-RLS-{name}-{role}" for name in (*pgstate.RELATIONS,
+                                                               *pgstate.FUNCTIONS)
+                         for role in pgstate.API_ROLES}
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)

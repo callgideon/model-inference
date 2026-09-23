@@ -722,6 +722,11 @@ MUTANTS: tuple[Mutant, ...] = (
            "                pass\n",
            "tests/integration/backend/test_drills.py", "dr04 and postgres", layer=2,
            cases=("test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once[postgres]",)),
+    Mutant("e3bm21", "E3B2 item 7: a relation with no matrix row fails the completeness case",
+           "tests/integration/pgstate.py", '    "infrx.jobs": SERVICE,\n', "",
+           "tests/integration/test_services.py", "row_for_every_relation", layer=2,
+           cases=("test_the_role_matrix_has_a_row_for_every_relation_and_security_definer_"
+                  "function",)),
 )
 
 
