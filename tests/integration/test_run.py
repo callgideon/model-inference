@@ -911,6 +911,11 @@ def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
     assert {m.id for m in mutants_i3b.MUTANTS if m.layer == 1} <= set(seen), seen
     copied = tuple(f"{tree}/" for tree in (*mutants.OWNED_TREES, mutants.API_TREE))
     assert [m.id for m in mutants.all_mutants() if not m.path.startswith(copied)] == []
+    # I3B R2-A: rc10 runs I2B's deploy scripts (rollback.sh, lib.sh) from the COPY, and
+    # I3B's i3bm94/97/98/104 edit them there - so the copy must carry them.
+    scripts = sorted(path.relative_to(harness.REPO_ROOT).as_posix()
+                     for path in (harness.API_ROOT / "deploy").glob("*.sh"))
+    assert scripts and [path for path in scripts if not path.startswith(copied)] == []
 
 
 def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():

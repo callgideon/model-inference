@@ -38,6 +38,9 @@ import harness                                          # noqa: E402
 # E3B phase 2 (I3B req 8): `infra/` joins them, because I3B's alert rules and runbooks are
 # claims too and its mutants (`all_mutants()`) now run here.
 OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d", "infra")
+# I3B follow-up round 2 (DR-1/DR-3): rc10 runs I2B's rollback.sh and lib.sh from the
+# copy, and i3bm94/i3bm97/i3bm98 mutate them.
+OWNED_TREES += ("apps/infrx-api/deploy",)
 # E3B.c only: module code a defect mutant may edit, copied per mutant and never in place.
 API_TREE = "apps/infrx-api/infrx"
 
@@ -858,6 +861,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "                  and task not in residual)\n",
            "tests/integration/backend/test_stage.py", "held_cutover",
            cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm42", "E3B2 (I3B R2-A): the copy carries I2B's deploy scripts rc10 runs",
+           "tests/integration/mutants.py",
+           # split so this definition is not a second occurrence of its own anchor
+           'OWNED_TREES += ("apps/infrx-api/' 'deploy",)\n', "",
+           "tests/integration/test_run.py", "every_list_through_one_runner",
+           cases=("test_the_mutation_stage_runs_every_list_through_one_runner",)),
 )
 
 
