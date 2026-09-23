@@ -14,7 +14,8 @@ PostgreSQL will hand it:
 * `acknowledge_dispatch(event_ids, *, worker_id)` - newly acknowledged count, and only
   for rows this worker still claims (OB-1b): a released or reopened row answers 0.
 * `dispatch_snapshot` - every `preparing`/`queued` job without a live lease of either
-  kind (OB-5), with its latest wanted dispatch event, ordered by `(available_at,
+  kind (OB-5), with its latest wanted dispatch event (the largest `(available_at,
+  event_id)`: SQL's `created_at desc, event_id desc`), ordered by `(available_at,
   event_id)`.
 * `release_dispatch` (OB-4) - clears the claim of unacknowledged rows: pending now.
 * `record_dispatch_error` (SQL `fail_dispatch`, OB-7) - records `last_error`; the row
@@ -125,10 +126,13 @@ class FakeDispatchOutbox:
         for job in self.jobs.jobs.values():
             if job.state not in (JobState.preparing, JobState.queued) or leased(job, now):
                 continue
-            latest = [row for row in self.jobs.outbox
-                      if row.aggregate_id == job.id and wanted(row.kind, job.state)]
-            if latest:
-                out.append(self._event(latest[-1], job))
+            wanted_rows = [row for row in self.jobs.outbox
+                           if row.aggregate_id == job.id and wanted(row.kind, job.state)]
+            if wanted_rows:
+                # SQL: `order by created_at desc, event_id desc limit 1`; a dispatch row's
+                # `available_at` is its creation time here (no `created_at` column).
+                latest = max(wanted_rows, key=lambda row: (row.available_at, row.event_id))
+                out.append(self._event(latest, job))
         return tuple(sorted(out, key=lambda event: (event.available_at, event.event_id)))
 
     async def release_dispatch(self, event_ids) -> int:

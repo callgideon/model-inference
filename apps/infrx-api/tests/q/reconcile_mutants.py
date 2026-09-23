@@ -364,6 +364,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "test_q3_relay__a_blank_worker_id_is_refused_by_the_store",
        file=OUTBOX_FAKE),
+    # FID-C: the snapshot's event is the job's LATEST wanted one (SQL `created_at desc`).
+    _m("the_store_snapshots_the_oldest_event",
+       "the snapshot names a job's latest wanted dispatch event",
+       "                latest = max(wanted_rows, key=lambda row: (row.available_at, row.event_id))",
+       "                latest = min(wanted_rows, key=lambda row: (row.available_at, row.event_id))",
+       "test_q3_reconcile__a_job_redispatched_during_the_pass_keeps_its_new_candidate",
+       file=OUTBOX_FAKE),
     # FID-3: the two `dispatch_pending` rules only the SIGKILL drill used to reach.
     _m("the_store_leaves_a_superseded_row_pending",
        "a row whose job moved on is acknowledged by the store as superseded",
