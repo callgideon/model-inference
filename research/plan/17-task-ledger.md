@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**119 records; 113 active; 6 retired; 81 planned; 27 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 80 planned; 28 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
@@ -13,7 +13,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | F1 | integrated / F | [Extract current gateway behind an application factory](handoffs/F-foundation.md) | — | — |
 | F2 | integrated / F | [Freeze typed contracts, pins and executable fixtures](handoffs/F-foundation.md) | F1 | — |
 | D2 | implemented / D | [Atomic admission, durable preparation and dispatch outbox](handoffs/D-durable-state.md) | D1R | — |
-| D3 | planned / D | [Fenced leases, recovery and cancellation](handoffs/D-durable-state.md) | D2, F2P | — |
+| D3 | implemented / D | [Fenced leases, recovery and cancellation](handoffs/D-durable-state.md) | D2, F2P | — |
 | D4 | planned / D | [Persistent stream journal and replay](handoffs/D-durable-state.md) | D3, F2P | — |
 | D5 | planned / D | [Terminal transaction, grants and reconciliation](handoffs/D-durable-state.md) | D4, F2P | — |
 | M1 | implemented / M | [Bound and secure URL/base64 materialization](handoffs/M-media.md) | F2 | — |

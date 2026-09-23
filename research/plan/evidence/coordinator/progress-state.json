@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:33:41Z",
+  "updated": "2026-09-23T04:38:47Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -33,11 +33,11 @@
       "since": "2026-09-22T22:37:58Z",
       "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
     },
-    "D3": {
-      "lane": "codex-d3 / codex/d3-fenced-leases",
-      "phase": "confirmation PASS at 41e5cef; five test-strength fold-ins then merge (after D2+A1)",
-      "since": "2026-09-22T22:40:37Z",
-      "note": "stacked on D2's head; leases, reaper, cancellation"
+    "A1-followup": {
+      "lane": "codex-a1 / codex/a1-signup-grant",
+      "phase": "round 5: public.claim_signup_grant trips D1R's cross-unit scan on the merged tree (Supabase run of the D2 merged sweep); fix as an A1 follow-up merge",
+      "since": "2026-09-23T04:38:47Z",
+      "note": "A1 is merged (2d9d9c5); this is a post-merge follow-up"
     }
   },
   "reviews": {},
@@ -249,6 +249,11 @@
       "merged": "A1 @ fb3a5a1 merged --no-ff (2d9d9c5) + follow-up (harness 0015, api-mutants += tests/d/test_signup.py, R85)",
       "at": "2026-09-23T04:18:26Z",
       "note": "four review rounds (abbf066 review; 47b0382, d8a3e84, dc3cb9c confirmations; round 4 tests/notes only); D list 228 = 193 + 35; merged-tree tests/d verification pending on the D2 sweep's port"
+    },
+    "D3": {
+      "merged": "D3 @ 92687f8 merged --no-ff (f237237) + follow-up d57e04e (harness 0016, TASK_PORTS d3)",
+      "at": "2026-09-23T04:38:47Z",
+      "note": "review fix_required \u2192 fix round confirmed pass \u2192 five residuals folded (87 mutants); merged-tree tests/d both images running; CREDIT jobs not claimable until WorkV2 (MY-3); complete() past the fence is D5's"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

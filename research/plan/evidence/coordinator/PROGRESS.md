@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T04:33:41Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T04:38:47Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 17 done · 6 in progress · 7 remaining (of 30).**
+**Backend packages: 18 done · 5 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -14,7 +14,7 @@ Generated 2026-09-23T04:33:41Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **done** | implemented |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **done** | implemented |  |
-| B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **in-progress** | planned | stacked on D2's head; leases, reaper, cancellation |
+| B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **done** | implemented |  |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **done** | implemented |  |
@@ -57,7 +57,7 @@ Generated 2026-09-23T04:33:41Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (9 packages): ~13 h at observed cadence, ~1.1 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (8 packages): ~11 h at observed cadence, ~23 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -68,7 +68,7 @@ Generated 2026-09-23T04:33:41Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - W3: codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — round 2 handed back d620f14 (RB-1/RB-2 closed); needs an Opus confirmation, then merge with W3 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- D3: codex-d3 / codex/d3-fenced-leases — confirmation PASS at 41e5cef; five test-strength fold-ins then merge (after D2+A1) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
+- A1-followup: codex-a1 / codex/a1-signup-grant — round 5: public.claim_signup_grant trips D1R's cross-unit scan on the merged tree (Supabase run of the D2 merged sweep); fix as an A1 follow-up merge since 2026-09-23T04:38:47Z — A1 is merged (2d9d9c5); this is a post-merge follow-up
 
 ## Checkpoints
 

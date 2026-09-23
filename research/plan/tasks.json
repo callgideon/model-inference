@@ -367,7 +367,7 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "keep",
       "product": "shared",
       "milestone": "APP-M1",
