@@ -2,3 +2,6 @@
 2026-09-23T19:39:49Z	c1a0b401-d895-4490-809e-ad37d0e50edb	step1 capability.sh on the live engine (data: URL media, no HF)
 2026-09-23T19:40:31Z	fb16bf96-97f6-4641-88cf-1da82edfbef7	step1 read-only inspection (units, caddy, Caddyfile hash, checkout, disk)
 2026-09-23T19:42:25Z	fe06b414-dbf5-43f0-83a6-407de2e4828d	step2 fetch bundle 37a0d8a into /opt/dlami/nvme/w3-checkout, detach at 37a0d8a
+2026-09-23T19:43:25Z	bfead862-8db8-408f-8724-99fa4ff72593	step3 launch synth.py build + verify (nohup, log w4-logs/synth-build.log)
+2026-09-23T19:43:52Z	8fc62e42-12b3-4703-962e-800c2c3acf27	step3 poll synth-build.log
+2026-09-23T19:44:33Z	588864fb-33b1-423f-b9da-ee0ce9200240	step6-prep read-only: modeling_marlin.py caption()/find() source (vendor file) + synth poll
