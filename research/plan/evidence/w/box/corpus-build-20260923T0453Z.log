@@ -1,0 +1,112 @@
+start=2026-09-23T04:53:57Z
+fetching https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz
+fetching source bbb1080p30
+  source bbb1080p30 unavailable: HTTPError: HTTP Error 403: Forbidden
+fetching source tos720p
+  source tos720p unavailable: HTTPError: HTTP Error 403: Forbidden
+fetching source sintel1080p
+  source sintel1080p unavailable: HTTPError: HTTP Error 403: Forbidden
+fetching source nasasteve
+  clip c000-bbb1080p30-1080p-16x9 unbuilt: source unavailable
+  clip c001-tos720p-720p-16x9 unbuilt: source unavailable
+  clip c002-sintel1080p-480p-16x9 unbuilt: source unavailable
+  clip c004-bbb1080p30-1080x1920-portrait unbuilt: source unavailable
+  clip c005-tos720p-720x1280-portrait unbuilt: source unavailable
+  clip c006-sintel1080p-480x854-portrait unbuilt: source unavailable
+  clip c007-nasasteve-1080-square sha256_mismatch: cached bytes sha256 8c1e0706c8ba42d2a9729288c54617742e610e8d6baf21ea8706e7e9be4f9d70 != pinned 6897d2ecea8d98c96c009eddad1f0a7475d7c093059dd0e3c4992584107a7286
+  clip c008-bbb1080p30-512-square unbuilt: source unavailable
+  clip c009-tos720p-2560x1080-ultrawide unbuilt: source unavailable
+  clip c010-sintel1080p-1920x800-scope unbuilt: source unavailable
+  clip c012-bbb1080p30-1024x768-4x3 unbuilt: source unavailable
+  clip c013-tos720p-1920x480-extreme-wide unbuilt: source unavailable
+  clip c014-sintel1080p-480x1920-extreme-tall unbuilt: source unavailable
+  clip c016-bbb1080p30-1080p-16x9 unbuilt: source unavailable
+  clip c017-tos720p-720p-16x9 unbuilt: source unavailable
+  clip c018-sintel1080p-480p-16x9 unbuilt: source unavailable
+  clip c019-nasasteve-360p-16x9 sha256_mismatch: cached bytes sha256 5212217122b077064e31384c4aa48c2344c72436057a06cc3cde60449e7291cf != pinned d2c5ab815774c0f38db6810daac90796b5c656d3ffe6a69446578781dee8bc72
+  clip c020-bbb1080p30-1080x1920-portrait-rot90cw unbuilt: source unavailable
+  clip c021-tos720p-720x1280-portrait unbuilt: source unavailable
+  clip c022-sintel1080p-480x854-portrait unbuilt: source unavailable
+  clip c023-bbb1080p30-1080-square unbuilt: source unavailable
+  clip c024-bbb1080p30-512-square unbuilt: source unavailable
+  clip c025-tos720p-2560x1080-ultrawide-rot180 unbuilt: source unavailable
+  clip c026-sintel1080p-1920x800-scope unbuilt: source unavailable
+  clip c027-nasasteve-640x480-4x3 sha256_mismatch: cached bytes sha256 a0c364db45e53ba6ae0ddf31336025dcf7040fa731c6411463a939bbe6dc2232 != pinned b0fc4176cb771b76026fac3a3fc75afa14f019c915f4d541effe9e32b057f501
+  clip c028-bbb1080p30-1024x768-4x3 unbuilt: source unavailable
+  clip c029-tos720p-1920x480-extreme-wide unbuilt: source unavailable
+  clip c030-sintel1080p-480x1920-extreme-tall-rot90ccw unbuilt: source unavailable
+  clip c031-bbb1080p30-240p-tiny unbuilt: source unavailable
+  clip c032-bbb1080p30-1080p-16x9 unbuilt: source unavailable
+  clip c033-tos720p-720p-16x9 unbuilt: source unavailable
+  clip c034-sintel1080p-480p-16x9 unbuilt: source unavailable
+  clip c035-bbb1080p30-360p-16x9 unbuilt: source unavailable
+  clip c036-bbb1080p30-1080x1920-portrait unbuilt: source unavailable
+  clip c037-tos720p-720x1280-portrait unbuilt: source unavailable
+  clip c038-sintel1080p-480x854-portrait unbuilt: source unavailable
+  clip c039-bbb1080p30-1080-square unbuilt: source unavailable
+  clip c040-bbb1080p30-512-square unbuilt: source unavailable
+  clip c041-tos720p-2560x1080-ultrawide unbuilt: source unavailable
+  clip c042-sintel1080p-1920x800-scope unbuilt: source unavailable
+  clip c043-bbb1080p30-640x480-4x3 unbuilt: source unavailable
+  clip c044-bbb1080p30-1024x768-4x3 unbuilt: source unavailable
+  clip c045-tos720p-1920x480-extreme-wide unbuilt: source unavailable
+  clip c046-sintel1080p-480x1920-extreme-tall unbuilt: source unavailable
+  clip c047-bbb1080p30-240p-tiny unbuilt: source unavailable
+  clip c048-bbb1080p30-1080p-16x9 unbuilt: source unavailable
+  clip c049-tos720p-720p-16x9 unbuilt: source unavailable
+  clip c050-sintel1080p-480p-16x9 unbuilt: source unavailable
+  clip c051-tos720p-360p-16x9 unbuilt: source unavailable
+  clip c052-bbb1080p30-1080x1920-portrait unbuilt: source unavailable
+  clip c053-tos720p-720x1280-portrait unbuilt: source unavailable
+  clip c054-sintel1080p-480x854-portrait unbuilt: source unavailable
+  clip c055-bbb1080p30-1080-square unbuilt: source unavailable
+  clip c056-bbb1080p30-512-square unbuilt: source unavailable
+  clip c057-tos720p-2560x1080-ultrawide unbuilt: source unavailable
+  clip c058-sintel1080p-1920x800-scope unbuilt: source unavailable
+  clip c059-bbb1080p30-640x480-4x3 unbuilt: source unavailable
+  clip c060-bbb1080p30-1024x768-4x3 unbuilt: source unavailable
+  clip c061-tos720p-1920x480-extreme-wide unbuilt: source unavailable
+  clip c062-sintel1080p-480x1920-extreme-tall unbuilt: source unavailable
+  clip c063-tos720p-240p-tiny unbuilt: source unavailable
+built 3/64 clips, 2/4 negatives
+build_exit=1
+verified 6 file(s), 0 missing, 12 error(s)
+  ERROR only 3 built clips, need >= 64
+  ERROR fast subset has 3 built clips, need >= 32
+  ERROR c007-nasasteve-1080-square cached bytes differ from the pinned sha256: cached bytes sha256 8c1e0706c8ba42d2a9729288c54617742e610e8d6baf21ea8706e7e9be4f9d70 != pinned 6897d2ecea8d98c96c009eddad1f0a7475d7c093059dd0e3c4992584107a7286
+  ERROR c019-nasasteve-360p-16x9 cached bytes differ from the pinned sha256: cached bytes sha256 5212217122b077064e31384c4aa48c2344c72436057a06cc3cde60449e7291cf != pinned d2c5ab815774c0f38db6810daac90796b5c656d3ffe6a69446578781dee8bc72
+  ERROR c027-nasasteve-640x480-4x3 cached bytes differ from the pinned sha256: cached bytes sha256 a0c364db45e53ba6ae0ddf31336025dcf7040fa731c6411463a939bbe6dc2232 != pinned b0fc4176cb771b76026fac3a3fc75afa14f019c915f4d541effe9e32b057f501
+  ERROR fewer than 8 distinct resolutions among built clips
+  ERROR fewer than 6 distinct derived aspect ratios among built clips
+  ERROR fewer than 8 distinct durations among built clips
+  ERROR no 1080-line clip: 1080p decode is the measured bottleneck
+  ERROR no extreme-tall clip (derived w/h <= 0.3): MEDIA-PARITY injects orientation extremes
+  ERROR no extreme-wide clip (derived w/h >= 3.0): MEDIA-PARITY injects orientation extremes
+  ERROR fewer than 8 distinct prompts among built clips
+verify_exit=1
+ models/marlin2b/corpus/manifest.json | 1198 ++++++----------------------------
+ 1 file changed, 193 insertions(+), 1005 deletions(-)
+-   "status": "fetched"
++   "status": "unfetched",
++   "error": "HTTPError: HTTP Error 403: Forbidden"
+-   "status": "fetched"
++   "status": "unfetched",
++   "error": "HTTPError: HTTP Error 403: Forbidden"
+-   "status": "fetched"
++   "status": "unfetched",
++   "error": "HTTPError: HTTP Error 403: Forbidden"
+-   "derived": {
+-    "duration_s": 2.0,
+-    "bytes": 795140,
+-    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+-    "codec": "h264",
+-    "width": 1920,
+-    "height": 1080,
+-    "fps": 30.0,
+-    "pix_fmt": "yuv420p",
+-    "frames": 60,
+-    "aspect": "16:9",
+diff_other_lines=1196
+505247205	/opt/dlami/nvme/w3-corpus
+end=2026-09-23T04:54:23Z
+

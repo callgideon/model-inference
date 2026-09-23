@@ -817,6 +817,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     engine = root / "models" / "marlin2b"
     engine.mkdir(parents=True)
     shutil.copy2(REPO / "models" / "marlin2b" / "serve.sh", engine / "serve.sh")
+    # W3: the pin record beside serve.sh, which the real-script case now requires (pilot gate)
+    shutil.copy2(REPO / "models" / "marlin2b" / "serving-version.json", engine / "serving-version.json")
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
