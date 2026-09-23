@@ -25,6 +25,9 @@ def test_the_harness_measures_one_clip_end_to_end(tmp_path):
     assert row["parity"]["v1_identity"] is True
     assert row["prepare_warm_ms"]["n"] == 2 and set(row["peak_mib"]) == {
         "materialize_url", "materialize_inline", "prepare_cold"}
+    # Review H1: the numbers are measured, not merely present.
+    assert row["fetch_ms"]["p50"] > 0 and row["probe_s"] > 0
+    assert row["peak_mib"]["materialize_url"] > 0
 
 
 def test_a_parity_or_manifest_disagreement_fails_the_run():
