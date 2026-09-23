@@ -294,11 +294,13 @@ MUTANTS: tuple[Mutant, ...] = (
        X, '        await SLEEP(min(wait, MAX_RETRY_AFTER_S) if wait is not None else cfg["poll_s"])',
        '        await SLEEP(cfg["poll_s"])', CLIENT),
     # === item 8: composition and the route table (F-BASE, M-FAILCLOSED) ==================
-    # Registering over no relay reaches the ingress intake, which refuses to start without a
-    # catalog (`RuntimeMisconfigured`): the router tried to mount with nothing to answer for.
+    # Review N1: with `rt.ingress` set (the cutover's shape) and no relay, the mutated router
+    # mounts its five routes over nothing and then fails installing its hook on `None`
+    # (`AttributeError` from `relay.on_async = ...`): that death IS the router mounting
+    # without a relay, so it is declared.
     _m("mounted_without_relay", "no relay, no jobs routes (no fake fallback)",
        J, "    if relay is None:\n        return None", "    if False:\n        return None",
-       COMPOSE, dies_by=("RuntimeMisconfigured",)),
+       COMPOSE, dies_by=("AttributeError",)),
     _m("second_jobs_route_tolerated", "each jobs route has exactly one handler",
        N, "    if any(jobs) and any(found != [JOBS_MODULE] for found in jobs):",
        "    if any(jobs) and any(JOBS_MODULE not in found for found in jobs):", TABLE),

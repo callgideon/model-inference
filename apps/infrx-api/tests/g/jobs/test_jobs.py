@@ -1079,6 +1079,7 @@ def test_f_base__the_jobs_router_mounts_only_over_a_relay():
     installs its 202 hook, and refuses to start without the ingress's dependencies."""
     app, _ = rs.support.cutover_app()
     rt = app.state.runtime
+    rt.ingress = rs.support.deps()                    # the cutover's shape: ingress deps set
     assert jobs_router.register(app, rt) is None
     assert not [r for r in app.routes if getattr(r, "path", "").startswith(JOBS)]
     ingress.assert_route_table(app)
