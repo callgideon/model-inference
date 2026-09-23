@@ -1137,18 +1137,23 @@ def test_the_report_records_the_tree_at_the_start_and_at_the_end(monkeypatch, tm
 def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
     known, attributed set fails the stage - a skip is never a pass."""
-    parsed = runner.shell([sys.executable, "-c", "print('SKIPPED [3] tests/d/x.py:110: "
-                           "missing optional hook stream')"], cwd=harness.REPO_ROOT)
+    # Confirmation G-B3: the SKIPPED line sits mid-output, as in a real run (re.M matters).
+    parsed = runner.shell([sys.executable, "-c", "print('x\\nSKIPPED [3] tests/d/x.py:110: "
+                           "missing optional hook stream\\n1 passed, 3 skipped in 1s')"],
+                          cwd=harness.REPO_ROOT)
     assert parsed["skips"] == ["missing optional hook stream"], parsed
+    assert parsed["counts"]["skipped"] == 3, parsed
     named = runner.shell([sys.executable, "-c", "print('FAILED tests/a.py::t1 - boom'); "
                           "print('ERROR tests/b.py::t2')"], cwd=harness.REPO_ROOT)
     assert named["failures"] == ["tests/a.py::t1", "tests/b.py::t2"], named
 
-    def stage(skips):
+    def stage(skips, skipped=None):
         def fake_shell(argv, **kw):
             if "api-test" in argv:
                 assert kw.get("env", {}).get("PYTEST_ADDOPTS") == "-rs", kw
-            return {"argv": " ".join(argv), "exit": 0, "counts": {"passed": 5},
+            counts = {"passed": 5, **({"skipped": skipped} if skipped and "api-test" in argv
+                                      else {})}
+            return {"argv": " ".join(argv), "exit": 0, "counts": counts,
                     "skips": skips if "api-test" in argv else [], "seconds": 1.0, "tail": ""}
         monkeypatch.setattr(runner, "shell", fake_shell)
         report = runner.Report()
@@ -1162,6 +1167,10 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     assert other["status"] == runner.FAIL
     assert other["detail"]["unexpected_skips"] == [
         "task-local PostgreSQL unavailable: docker is not installed"]
+    # A skip count whose reasons were not read (no `-rs` line parsed) fails the stage too.
+    unread = stage([], skipped=1)
+    assert (unread["status"], unread["detail"]["skips_without_reasons"]) == (
+        runner.FAIL, ["make api-test"]), unread["detail"]
 
 
 def test_a_suite_under_the_api_tree_runs_against_a_copied_infrx(monkeypatch):

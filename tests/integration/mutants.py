@@ -817,8 +817,9 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_the_report_names_its_tree_its_namespace_and_each_stages_duration",)),
     Mutant("e3bm35", "E3B2 review F6-findings: an unattributed api-test skip fails the stage",
            "tests/integration/run.py",
-           "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
-           "    report.add(\"suites\", FAIL if (failed or silent) else PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else "
+           "PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent or unread) else PASS,\n",
            "tests/integration/test_run.py", "unexpected_skip",
            cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
     Mutant("e3bm36", "E3B2 review F2: a relation's table-level write grants are pinned",
@@ -903,6 +904,19 @@ MUTANTS: tuple[Mutant, ...] = (
            '        return json.dumps({"git_head": git_head(), "git_head_end": git_head(),\n',
            "tests/integration/test_run.py", "start_and_at_the_end",
            cases=("test_the_report_records_the_tree_at_the_start_and_at_the_end",)),
+    Mutant("e3bm49", "E3B2 round 3 (G-B3): a SKIPPED line mid-output is parsed (re.M)",
+           "tests/integration/run.py",
+           ':\\d+: (.*)$", output, re.M))),\n',
+           ':\\d+: (.*)$", output))),\n',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm50", "E3B2 round 3 (G-B3): a skip count with no parsed reason fails the stage",
+           "tests/integration/run.py",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected or unread) else "
+           "PASS,\n",
+           "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
 )
 
 

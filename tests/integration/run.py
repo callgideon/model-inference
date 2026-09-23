@@ -438,12 +438,17 @@ def suites(report: Report, *, own_only: bool) -> None:
     unexpected = sorted({reason for run in runs if run["argv"] == "make api-test"
                          for reason in run.get("skips", ())
                          if not any(known in reason for known in KNOWN_API_SKIPS)})
-    report.add("suites", FAIL if (failed or silent or unexpected) else PASS,
+    # Confirmation G-B3: a skip COUNT with no parsed reason is a skip nobody attributed (the
+    # reasons come from `-rs` lines; if they cannot be read, the count still fails the stage).
+    unread = [run["argv"] for run in runs if run["argv"] == "make api-test"
+              and run["counts"].get("skipped") and not run.get("skips")]
+    report.add("suites", FAIL if (failed or silent or unexpected or unread) else PASS,
                {"runs": [{k: run.get(k) for k in ("argv", "exit", "counts", "skips", "failures")}
                          for run in runs],
                 "nonzero_exit": failed or None,
                 "reported_no_tests": silent or None,
-                "unexpected_skips": unexpected or None}, runs=runs)
+                "unexpected_skips": unexpected or None,
+                "skips_without_reasons": unread or None}, runs=runs)
 
 
 def mutation(report: Report, *, layer: str) -> None:
