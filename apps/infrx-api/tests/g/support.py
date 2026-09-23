@@ -38,7 +38,10 @@ ORG = "1a1a1a1a-0000-4000-8000-000000000001"
 KEY = "3c3c3c3c-0000-4000-8000-000000000003"
 USER = "2b2b2b2b-0000-4000-8000-000000000002"
 # A consumer key as 0009 stores it: the audience and the individual it belongs to.
-ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "consumer", "user_id": USER}
+# PostgREST answers every selected column, null or not, so the stand-in rows carry all of
+# `auth.context.KEY_COLUMNS` (a row missing one is a narrower cached read: a miss).
+ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "consumer", "user_id": USER,
+       "created_by": USER, "provider_org_id": None, "endpoint_id": None}
 REQUEST_ID = "4d4d4d4d-0000-4000-8000-000000000004"
 TOKEN = "sk-infrx-g1-test"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
@@ -118,7 +121,7 @@ PROVIDER_ROW = {"id": IDS.provider_dev_key, "org_id": IDS.provider_org, "revoked
                 "audience": "provider_dev", "user_id": None, "created_by": IDS.provider_member,
                 "provider_org_id": IDS.provider_org, "endpoint_id": IDS.dev_endpoint}
 OPERATOR_ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "operator",
-                "user_id": None}
+                "user_id": None, "created_by": USER, "provider_org_id": None, "endpoint_id": None}
 
 
 def preview_card():

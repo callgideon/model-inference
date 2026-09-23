@@ -30,7 +30,8 @@ PROD = IDS.prod_deployment
 NONE = ({}, {}, {}, {})                       # no job, hold, replay record or reservation
 # The fixture consumer, whose wallet the seeded directories hold (10,000 CREDIT).
 CONSUMER_ROW = {"id": IDS.consumer_key, "org_id": IDS.consumer_org, "revoked_at": None,
-                "audience": "consumer", "user_id": IDS.consumer_user}
+                "audience": "consumer", "user_id": IDS.consumer_user,
+                "created_by": IDS.consumer_user, "provider_org_id": None, "endpoint_id": None}
 
 
 class World:

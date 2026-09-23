@@ -7,6 +7,7 @@ sessions with it too). The resolver is driven directly, as in `test_auth`.
 """
 import asyncio
 
+import httpx
 import pytest
 
 from infrx.auth.context import KEY_COLUMNS, AuthResolver
@@ -84,3 +85,26 @@ def test_api_auth__a_row_without_a_usable_audience_is_not_a_credential(name, row
     with pytest.raises(error) as raised:
         context_of(row)
     assert "admin" not in str(raised.value) and CREATOR not in str(raised.value)
+
+
+def projecting(row, seen):
+    """A PostgREST stand-in that answers exactly the columns `select` names."""
+    def handler(request):
+        columns = request.url.params["select"].split(",")
+        seen.append(columns)
+        return httpx.Response(200, json=[{column: row.get(column) for column in columns}])
+
+    return httpx.AsyncClient(base_url="https://fake.supabase.co/rest/v1",
+                             transport=httpx.MockTransport(handler))
+
+
+def test_api_auth__a_row_cached_by_the_legacy_select_is_not_an_identity_without_audience():
+    """One Runtime, two readers: F1's three-column read caches the key first; the ingress
+    must look it up again with its own columns, not answer 401 until KEY_TTL."""
+    seen = []
+    rt = support.runtime(sb=projecting(CONSUMER, seen))
+    row, status = asyncio.run(rt.auth.authenticate(Req()))
+    assert status is None and "audience" not in row
+    auth = asyncio.run(AuthResolver(rt).context(Req()))
+    assert (auth.audience, auth.user_id) == (CredentialAudience.consumer, support.USER)
+    assert len(seen) == 2 and "audience" in seen[1]

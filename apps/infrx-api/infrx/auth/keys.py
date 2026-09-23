@@ -42,6 +42,10 @@ class Auth:
             return None, 401
         h = hashlib.sha256(token.encode()).hexdigest()
         hit = self.keys.get(h) or self.misses.get(h)
+        if hit is not None and hit[1] is not None and not set(select.split(",")) <= hit[1].keys():
+            # Cached by a narrower `select` (the legacy route's three columns): a miss for
+            # this caller, not an identity without an audience until KEY_TTL.
+            hit = None
         if hit is None or hit[0] < now():
             try:
                 r = await self.rt.sb.get("/api_keys", params={"key_hash": f"eq.{h}", "select": select})
