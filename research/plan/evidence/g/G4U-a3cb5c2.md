@@ -57,7 +57,7 @@ the route; `tests/m/test_uploads.py` proves them (M3 at `e2188f3`).
 | MEDIA-SEC (enablement, 09) | No store → every upload path, and a wrong method, is a 404 `not_found` envelope with `Inference-Id` (`…no_store_mounts_no_upload_route`); `register(app, rt)` finds `rt.media_store` and shares `rt.large_bodies` (`…mount_over_the_runtime_store_and_its_shared_slots`) |
 | MEDIA-SEC (bounded bytes) | A chunked destination body over `MAX_MEDIA_BYTES` is 413 after at most one chunk past the cap, nothing stored, slot released (`…a_chunked_upload_over_the_cap_stops_reading`, with `max_media_bytes=4096` and a 16 KiB body); a create or complete body over 4096 bytes is 413 after at most one chunk (`…a_control_body_is_bounded`) |
 | MEDIA-SEC (bounded time) | A body arriving 20 s per chunk on the app's clock is 504 `deadline_exceeded`, nothing stored, slot released (`…a_slow_upload_is_cut_at_the_deadline`) |
-| MEDIA-SEC (per-process bound) | With the one slot held, a large PUT is 429 `capacity_exhausted` + `Retry-After` before its body is read; otherwise the slot is held while the store takes the bytes (a store spy sees `in_flight == 1`) and `in_flight == 0` after (`…large_uploads_hold_a_shared_slot_until_stored`) |
+| MEDIA-SEC (per-process bound) | With the one slot held, a large PUT is 429 `capacity_exhausted` + `Retry-After`, before its body is read when it declares its length and after at most the threshold plus one chunk when it is chunked (round 2 R4); otherwise the slot is held while the store takes the bytes (a store spy sees `in_flight == 1`) and `in_flight == 0` after (`…large_uploads_hold_a_shared_slot_until_stored`) |
 | MEDIA-SEC (handle) | `upl_short`, `infrx-upload:upl_…`, `<org>:upl_…`, `upl_……`, `upl_…%2F..`, `..%2Fupl_…` on PUT and complete: 404 envelope equal (modulo request id) to an unknown well-formed handle's, no body byte read, not echoed (`…a_malformed_handle_is_not_found_before_any_byte`) |
 | MEDIA-SEC (type) | `application/json`, `text/plain`, `video/mp4x`, no type → 400 `unsupported_media`, no byte read, nothing stored (`…the_destination_takes_only_media_types`) |
 | MEDIA-SEC (immutability over HTTP) | Same bytes twice 204/204; other bytes 409 `state_conflict`; PUT after complete 409; after the window 410 `upload_expired` / `gone_error` (R22) (`…the_destination_is_write_once_over_http`); complete before any byte 400 and still completable; digest mismatch 400 `unsupported_media`, retry 409 (stays refused); oversize behind the destination 413 (`…completion_refusals_leave_in_the_envelope`); completion fields 400 and still completable (`…completion_takes_no_fields`) |
@@ -157,7 +157,9 @@ commits; nothing is mounted.
    answers deep nesting as 400, and the call would be an unkillable line (R32).
 2. The PUT slot is released after `store.put_upload`, not before it: the bytes are this
    process's until the store has them, so the per-process bound covers the write too
-   (`slot_released_before_the_store` kills the brief's order).
+   (`slot_released_before_the_store`, which inserts `slot.release()` before the store call, is
+   killed by the invariant's own assertion; round 2 H1 corrected the first edit, which died
+   by a crash).
 3. The operator refusal applies to PUT and complete as well as create: an operator key
    shares its org with consumer keys (`OPERATOR_ROW`), and "owns no upload" has to hold
    on every route.
@@ -184,7 +186,8 @@ commits; nothing is mounted.
    bytes travel through the gateway. An S3 adapter or presigned destination is M's (M1
    limit 2).
 4. **Timeout.** The PUT deadline is `INTAKE_TIMEOUT_S` (30 s ⇒ ≥ ~2.2 MB/s for 64 MiB). A
-   separate name only with a measured need (§7 default).
+   separate name only with a measured need (§7 default). Since round 2 the store call has its
+   own `INTAKE_TIMEOUT_S` after the read, so a PUT can hold a slot for at most two deadlines.
 5. **No per-upload early cut-off.** The route stops at `MAX_MEDIA_BYTES`; the upload's own
    smaller `max_bytes` is enforced by `put_upload` after the read. An early cut needs a
    public cap read on `MediaUploads` (optional M request).
@@ -316,6 +319,53 @@ Until then, a lane's `make check` should export `INFRX_Q_VALKEY_PORT=<a free por
 the harness start and remove `infrx-q3-valkey-<port>` itself (this report's runs used 55487;
 it is not in `TASK_PORTS` — register it for g4u if lanes should reserve it).
 
+## Round 2 (review `G4U-review-f3c8055.json`: fix_required)
+
+The review is `research/plan/evidence/g/G4U-review-f3c8055.json` on `claude/backend-impl`.
+The tenant lens passed. The fix round is on this branch, one commit per finding, with no
+rebase, reset, amend, push or Docker. The round-2 implementation SHA is `6ad81ba`.
+
+| Finding | Commit | Change | Named case → mutant (all killed) |
+|---|---|---|---|
+| R1/H3 (blocking) | `176c76f` | none in code; the control-body deadline was untested | `test_media_sec__a_slow_control_body_is_cut_at_the_deadline`: create and complete get a body arriving 20 s per chunk on the app's clock → 504 `deadline_exceeded`, nothing created or finalized → `control_deadline_stretched` |
+| H1 (blocking) | `0a87585` | `slot_released_before_the_store` is now the brief's order (`slot.release()` inserted before the store call). The old edit moved the store call into `finally`, still before the release, and died only by an `UnboundLocalError` on the 429 path, which the guard turned into a 500 | `…large_uploads_hold_a_shared_slot_until_stored` dies at `AssertionError: the slot was not held while the store took the bytes` |
+| T1 | `30a03d4` | create renders the validated JSON dump only if `upload_handle` matches `UPLOAD_HANDLE_RE` and `destination_ref == "infrx-upload:" + upload_handle`; otherwise `internal_error` | `test_media_sec__no_store_value_outside_the_frozen_ticket_leaves` (a store writing an object key with the org into `destination_ref`; a store issuing `upl_x`) → `ticket_destination_unchecked`, `ticket_handle_unchecked`; `ticket_not_rendered_through_the_wire_model` re-anchored on the validation line (`ticket = created`) |
+| T3 | `5fc011d` | the routes' guard wraps `intake.guard` and sets `Connection: close` on every answer ≥ 400, including the pre-read 403 operator, 404 handle and 400 media-type refusals. `intake.py` is unchanged | `test_media_sec__every_refusal_closes_the_connection` → `refusals_keep_the_connection` |
+| H2 | `a4b0387` | `destination_unguarded` and `completion_unguarded` (dropping `@guarded` made `request_id` a query parameter, so every call answered 422) are replaced by `refusals_not_translated`: the translation is gone and a minted request id is still passed | dies on the store's typed refusal escaping the route: `Conflict` in `…the_destination_is_write_once_over_http`, `InvalidRequest` in `…completion_refusals_leave_in_the_envelope` |
+| T4 | `6d520f5` | tests only | `…the_body_names_no_org_and_nothing_the_contract_lacks` also creates with `?org_id=ORG_B`, `x-org-id` and `x-infrx-org` → 201 in ORG_A. `…another_orgs_upload_is_the_unknown_handles_404` sends org B's PUT and complete naming ORG_A in the query and both headers → still the unknown-handle envelope. Mutants: `create_org_from_query`, `put_org_from_header`, `complete_org_from_header` (the reviewer's R12/R13 shape) |
+| R2 | `ef2d08f` | `slots = large_bodies or rt.large_bodies or rt.ingress.large_bodies or LargeBodies()` | `test_media_sec__without_a_runtime_pool_uploads_count_against_the_ingress_pool` → `ingress_pool_ignored` |
+| R3 | `5ec093c` | `store.put_upload` runs under `asyncio.wait_for(limits.intake_timeout_s)`; a timeout becomes `deadline_exceeded`, and the slot is still released in `finally` | `test_media_sec__a_hung_store_is_cut_at_the_deadline` (a store 1 s slow against a 0.2 s deadline: 504, nothing stored, `in_flight == 0`; this uses real time because `wait_for` has no injectable clock) → `store_call_undeadlined` |
+| R4 | `6ad81ba` | wording: with every slot taken, a PUT is 429 before its body is read when it declares its length, and after at most the threshold plus one chunk when it is chunked. Now asserted | `…large_uploads_hold_a_shared_slot_until_stored` (a chunked PUT: 429, `read <= threshold + 30`), killed by that case's existing mutants |
+
+**Recorded as requests, not code**
+
+- **T2 + R5 → M request.** Add a public `MediaUploads.check_open(org_id, handle) -> int` that
+  runs `_owned` and `_still_open` and returns the upload's `max_bytes`. The PUT would call it
+  before claiming the slot and would then read at most `min(max_bytes, MAX_MEDIA_BYTES)`.
+  **Cost today:** the write-once, tenant, finalized and expired refusals on PUT are decided
+  only after the whole body is read. A foreign, unknown, finalized or expired handle costs a
+  full read of up to `MAX_MEDIA_BYTES` (64 MiB), bounded by the cap, the deadline and one
+  shared slot. The 404 stays identical for a foreign and an unknown handle, so it gives away
+  nothing about existence.
+- **H4.** The Docker-backed rows (legacy-first, the track-first runs, the `tests/d` DB-half
+  runs and `make check`) are this lane's own runs. The coordinator's gate confirms them;
+  the review, which used no Docker, did not reproduce them.
+
+**Round-2 runs** (head `6ad81ba`; tails quoted from `.claude-logs/r2/`)
+
+| Command (head `6ad81ba`) | Exit | Tail (quoted) |
+|---|---|---|
+| `uv run --frozen pytest -q tests/g/uploads/test_uploads.py` (09:52Z) | 0 | `26 passed in 0.73s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/uploads/test_uploads_mutants.py` (09:52–09:54Z) | 0 | `39 passed in 97.60s (0:01:37)` (36 mutants plus 3 list tests) |
+| `uv run --frozen python -m tests.g.uploads.uploads_mutants` | 0 | `36/36 killed` |
+| `uv run --frozen python -m tests.g.uploads.uploads_mutants --list` | 0 | `36 mutants over 26 named cases` (killed = declared) |
+| `uv run --frozen pytest -q tests/g tests/m tests/contracts` (09:55–10:00Z) | 0 | `1792 passed, 2 warnings in 282.15s (0:04:42)` (1787 + the 5 new cases) |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py` (G's list and coverage rule, 10:00–10:10Z) | 0 | `199 passed in 611.42s (0:10:11)` |
+
+Not re-run in round 2: the orderings, `tests/d`, `tests/q` and `make check` (the fixes touch only
+`gateway/routes/uploads.py` and `tests/g/uploads/`; Docker was not used in this round, per the
+coordinator's instruction).
+
 ## Verification log
 
 - 2026-09-23: Report written at implementation SHA `a3cb5c2` on base `740bebf`; all tails
@@ -324,3 +374,7 @@ it is not in `TASK_PORTS` — register it for g4u if lanes should reserve it).
   coordinator's instruction, and its only reds were `HarnessBusy`, rerun green. The lane's
   own retry loop and its children were stopped; this lane's containers (`infrx-g4u-valkey`,
   `infrx-q3-valkey-55487`) were removed and no container of this lane is left.
+- 2026-09-23: Round 2 (review `G4U-review-f3c8055.json`, fix_required): blocking R1/H3 and H1
+  plus T1, T3, H2, T4, R2, R3 and R4 fixed in `176c76f..6ad81ba`, one commit each. T2/R5 filed
+  as an M request, H4 left to the coordinator's gate. Deviation 2's parenthetical and the 429
+  wording are corrected in place. The round-2 runs are quoted from `.claude-logs/r2/`.
