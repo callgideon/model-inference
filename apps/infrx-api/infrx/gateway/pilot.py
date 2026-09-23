@@ -77,7 +77,11 @@ class Probe:
     def __call__(self) -> bool:
         if self.value is None:
             # `_answer` is bounded and never raises, so the thread always ends: a refusal
-            # to start can finish (review C3) and no worker is left behind.
+            # to start can finish (review C3) and no worker is left behind. The bound is
+            # `wait_for`'s, so it holds for a check that awaits and lets its cancellation
+            # through: one that blocks its thread, or suppresses or delays CancelledError
+            # (3.12's wait_for waits for the cancelled check), holds this call with it
+            # (review r2 COMP-N1; today's checks are cooperative).
             with ThreadPoolExecutor(1) as pool:
                 self.value = pool.submit(asyncio.run, self._answer()).result()
         return self.value
