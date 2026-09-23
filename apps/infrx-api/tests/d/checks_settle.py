@@ -994,8 +994,9 @@ def lookup(conn, org, idem, ttl: float = DEFAULTS.idempotency_ttl_s):
 def check_lookup(conn) -> str:
     """R91 on D2's mapping: `lookup` answers the job an idempotency scope maps to - its own
     regime's admission (a CREDIT job with its pins), `replayed`, and its committed outcome -
-    and writes nothing (every relation an admission owns unchanged). No key, an unmapped key
-    and another org's own unmapped scope answer None; a changed payload is
+    and writes nothing (every relation an admission owns unchanged). No key, an unmapped key,
+    the same key under another operation and another org's own unmapped scope answer None;
+    a changed payload is
     `idempotency_conflict`; a scope naming another org than the caller is `forbidden`
     (R10); an ACTIVE job's mapping never expires; a terminal one's expires
     `idempotency_ttl_s` after its terminal state (01), then answers None."""
@@ -1013,6 +1014,11 @@ def check_lookup(conn) -> str:
         assert ca.footprint(conn) == before, "lookup wrote something"
         assert lookup(conn, request.org_id, b.idem(request, None)) == (None, None)
         assert lookup(conn, request.org_id, b.idem(request, "never-used")) == (None, None)
+        # review N2: the scope is org + OPERATION + key - the same key under another
+        # operation is another (unmapped) scope, never this job or a false conflict
+        assert lookup(conn, request.org_id, b.idem(request, "look-1", operation="jobs",
+                                                   payload="changed")) == (None, None), \
+            "the same key under another operation answered this operation's job"
         code, _ = lookup(conn, request.org_id, b.idem(request, "look-1", payload="changed"))
         assert code == "idempotency_conflict", f"a changed payload: {code}"
         other = b.request(world, org_id=b.ORG_B, key_id=b.KEY_B)

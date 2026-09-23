@@ -2656,6 +2656,13 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  end if;\n  return infrx.job_admission(i.request_id) || '{\"replayed\": true}';",
        "  return infrx.job_admission(i.request_id) || '{\"replayed\": true}';",
        "admission", "lookup", "a changed body is answered another request's job (R6)"),
+    _m("d5_lookup_ignores_operation", SETTLE,
+       "   where org_id = (v_idem->>'org_id')::uuid and operation = v_idem->>'operation'\n"
+       "     and key = v_idem->>'key';",
+       "   where org_id = (v_idem->>'org_id')::uuid\n     and key = v_idem->>'key';",
+       "admission", "lookup",
+       "a key reused under another operation answers that operation's job, or a false "
+       "idempotency_conflict (review N2, the reviewer's rv_lookup_ignores_operation)"),
     _m("d5_lookup_expired_answers", SETTLE,
        "  if v_expires is not null and infrx.now() >= v_expires then\n    return null;",
        "  if false then\n    return null;", "admission", "lookup",
