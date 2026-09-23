@@ -126,6 +126,10 @@ MIGRATION_MUTANTS = (
        "     set email = 'retired+' || p_user || '@invalid', full_name = null, avatar_url = null",
        "     set email = email, full_name = full_name, avatar_url = avatar_url",
        "signup_retirement", "personal data survives an account deletion"),
+    _m("a1_retired_org_keeps_the_name",
+       "    update public.organizations set name = 'retired' where id = v_org;",
+       "    update public.organizations set name = name where id = v_org;",
+       "signup_retirement", "the personal org keeps the deleted individual's name"),
     _m("a1_retirement_not_idempotent",
        "  if v_at is not null then\n    return v_at;\n  end if;\n  insert into "
        "infrx.retired_individuals",

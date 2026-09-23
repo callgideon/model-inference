@@ -460,6 +460,8 @@ def check_retirement(conn) -> str:
                      "revoked_at is null", (t,)) == 0, "a retired individual's key still works"
     assert one(conn, "select suspended from public.organizations where id = %s", (ot,)), \
         "the personal organization is not suspended"
+    assert one(conn, "select name from public.organizations where id = %s", (ot,)) == \
+        "retired", "the personal organization still carries the individual's name"
     assert one(conn, "select count(*) from infrx.audit_entries where target_org_id = %s and "
                      "action = 'admin_set_suspension'", (ot,)) == 1, "suspension not audited"
     refused(conn, "a retired wallet reserves", spend, "23514", "frozen")

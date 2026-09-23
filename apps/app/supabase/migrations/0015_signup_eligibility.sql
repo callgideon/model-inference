@@ -242,7 +242,8 @@ begin
   -- Legacy keys predate `api_keys.user_id`; their individual is `created_by`.
   update public.api_keys set revoked_at = infrx.now()
    where coalesce(user_id, created_by) = p_user and revoked_at is null;
-  -- The personal organizations this individual alone owns: suspended, audited.
+  -- The personal organizations this individual alone owns: renamed (0001 names one after
+  -- the address's local part), suspended, audited.
   for v_org in
     select o.id from public.organizations o
       join public.org_members m on m.org_id = o.id and m.user_id = p_user and m.role = 'owner'
@@ -250,6 +251,7 @@ begin
        and not exists (select 1 from public.org_members x
                        where x.org_id = o.id and x.user_id <> p_user)
   loop
+    update public.organizations set name = 'retired' where id = v_org;
     perform infrx.set_suspension(v_org, true, 'operator_request', p_actor, p_reason,
                                  p_idempotency_key || ':' || v_org);
   end loop;
