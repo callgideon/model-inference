@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T05:40:38Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T06:26:07Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>21</b><span>done</span></div>
 <div class="tile prog"><b>6</b><span>in progress</span></div>
@@ -100,7 +100,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>G2</code> — codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md</li>
 <li><code>G4U</code> — codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3&#x27;s MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md</li>
 <li><code>W4</code> — codex-w4 / codex/w4-measured-tuning — phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement since 2026-09-23T05:40:38Z — base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window</li>
-<li><code>F-cancel-cause</code> — codex-fcancel / codex/f-cancel-cause — additive JobStore.cancel(cause=) port + fake + conformance + Pg typed refusal (ahead of D5&#x27;s 0018 and G2&#x27;s relay) since 2026-09-23T05:40:38Z — base a237d6f; merged before G2 and D5</li>
+<li><code>F-cancel-cause</code> — codex-fcancel / codex/f-cancel-cause — review (Opus) at b691add; merge with the PENDING partition line since 2026-09-23T05:40:38Z — base a237d6f; merged before G2 and D5</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>

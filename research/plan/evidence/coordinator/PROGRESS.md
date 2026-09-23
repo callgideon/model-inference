@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T05:40:38Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T06:26:07Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
 
@@ -70,7 +70,7 @@ Generated 2026-09-23T05:40:38Z from `tasks.json` (manifest v4) and `progress-sta
 - G2: codex-g2 / codex/g2-chat-relay — implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md
 - G4U: codex-g4u / codex/g4u-upload-adapter — implementing (upload routes over M3's MediaUploads; new files only) since 2026-09-23T05:12:27Z — base 9c1c6ed; fakes only; brief G4U.md
 - W4: codex-w4 / codex/w4-measured-tuning — phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement since 2026-09-23T05:40:38Z — base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window
-- F-cancel-cause: codex-fcancel / codex/f-cancel-cause — additive JobStore.cancel(cause=) port + fake + conformance + Pg typed refusal (ahead of D5's 0018 and G2's relay) since 2026-09-23T05:40:38Z — base a237d6f; merged before G2 and D5
+- F-cancel-cause: codex-fcancel / codex/f-cancel-cause — review (Opus) at b691add; merge with the PENDING partition line since 2026-09-23T05:40:38Z — base a237d6f; merged before G2 and D5
 
 ## Checkpoints
 

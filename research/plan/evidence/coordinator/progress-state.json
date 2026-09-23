@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T05:40:38Z",
+  "updated": "2026-09-23T06:26:07Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "F-cancel-cause": {
       "lane": "codex-fcancel / codex/f-cancel-cause",
-      "phase": "additive JobStore.cancel(cause=) port + fake + conformance + Pg typed refusal (ahead of D5's 0018 and G2's relay)",
+      "phase": "review (Opus) at b691add; merge with the PENDING partition line",
       "since": "2026-09-23T05:40:38Z",
       "note": "base a237d6f; merged before G2 and D5"
     }
