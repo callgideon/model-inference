@@ -96,7 +96,7 @@ declare
   v_refusal jsonb;
   v_count int;
   v_bytes bigint;
-  v_widest bigint;
+  v_largest bigint;
   v_next int;
   v_chunks jsonb;
   j infrx.jobs%rowtype;
@@ -114,6 +114,14 @@ begin
   if v_refusal is not null then
     return jsonb_build_object('refusal', v_refusal);
   end if;
+  select * into j from infrx.jobs where request_id = (v_lease->>'job_id')::uuid;
+  -- Under the row lock the fence holds: the generation's next sequence, never at or below
+  -- the prune watermark (a fully pruned journal must not reissue a pruned cursor).
+  select greatest(coalesce(max(c.sequence), 0),
+                  case when j.journal_pruned_generation = (v_lease->>'generation')::int
+                       then j.journal_pruned_sequence else 0 end)
+    into v_next from infrx.stream_chunks c
+   where c.job_id = j.request_id and c.generation = (v_lease->>'generation')::int;
   -- R30: a worker never appends a terminal event, anywhere in the batch - the terminal
   -- event is derived from the stored outcome by the trigger below. Only events are stored.
   if exists (select 1 from jsonb_array_elements(v_events) with ordinality as e(event, n)
@@ -127,17 +135,16 @@ begin
   -- batch: nothing is stored, not a prefix.
   select count(*), coalesce(sum(octet_length((e->'payload')::text)), 0),
          coalesce(max(octet_length((e->'payload')::text)), 0)
-    into v_count, v_bytes, v_widest
+    into v_count, v_bytes, v_largest
     from jsonb_array_elements(v_events) e;
-  if v_widest > v_max_event then
-    perform infrx.refuse('journal_write_failed', 'an event of ' || v_widest
+  if v_largest > v_max_event then
+    perform infrx.refuse('journal_write_failed', 'an event of ' || v_largest
                          || ' bytes exceeds journal_event_max_bytes ' || v_max_event);
   end if;
   -- An empty batch commits nothing, so it must not forbid a prepublication requeue.
   if v_count = 0 then
     return jsonb_build_object('chunks', '[]'::jsonb);
   end if;
-  select * into j from infrx.jobs where request_id = (v_lease->>'job_id')::uuid;
   -- DUR-CAP: the reservation minus the bytes held back for the terminal event (header).
   if j.journal_stored_bytes + v_bytes
        > j.journal_reserved_bytes - least(1024, j.journal_reserved_bytes / 2) then
@@ -145,8 +152,6 @@ begin
                          || ' would store ' || (j.journal_stored_bytes + v_bytes)
                          || ' bytes, past what its journal reservation leaves an append', 30);
   end if;
-  select coalesce(max(sequence), 0) into v_next from infrx.stream_chunks
-   where job_id = j.request_id and generation = (v_lease->>'generation')::int;
   with written as (
     insert into infrx.stream_chunks as c (job_id, generation, sequence, event_type, payload,
                                           bytes, committed_at, expires_at)
@@ -170,8 +175,9 @@ end $$;
 -- with the default JOURNAL_CHUNK_TTL_S (08 §5); otherwise with its newest chunk's TTL, so a
 -- job's chunks expire in cursor order. Its bytes are counted like any chunk's, so pruning it
 -- later frees exactly what was added. The settling write may use the held-back bytes and
--- is refused (the whole terminalization with it) only if even they do not fit (the fake's
--- `check_terminal_capacity`; never at production sizes, where 1024 bytes are held back).
+-- is refused (the whole terminalization with it) only if even they cannot fit the WIDEST
+-- terminal payload any state, cause and settlement makes (107 bytes; the fake's
+-- `check_terminal_capacity`, R39), which never happens at production sizes (1024 held back).
 -- A job with NO journal reservation has no journal (an append can store nothing in it
 -- either): every admitted job has one (0011), so only D1's raw fixture rows are skipped.
 create or replace function infrx.journal_terminal_event() returns trigger
@@ -180,12 +186,15 @@ declare
   v_payload jsonb := jsonb_build_object('state', new.state, 'cause', new.outcome_cause,
                                         'settlement_state', new.settlement_state);
   v_bytes int := octet_length(v_payload::text);
+  -- The widest `{cause, state, settlement_state}` text over the 0003 vocabularies
+  -- (tests/d/checks_journal computes it and pins it at the boundary).
+  v_widest constant int := 107;
   v_now timestamptz := infrx.now();
   v_generation int;
   v_sequence int;
   v_ttl interval;
 begin
-  if new.journal_stored_bytes + v_bytes > new.journal_reserved_bytes then
+  if new.journal_stored_bytes + v_widest > new.journal_reserved_bytes then
     perform infrx.refuse('journal_capacity_exhausted', 'job ' || new.request_id
                          || ' has no journal room for its terminal event', 30);
   end if;

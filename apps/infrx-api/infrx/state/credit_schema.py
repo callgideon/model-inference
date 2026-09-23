@@ -74,6 +74,16 @@ SEAMS.update({
     "infrx.recover(jsonb)": (_SERVICE, ()),
 })
 
+# --- D4 (0017): the stream journal (`infrx/state/journal.py`). `append` takes ONE job row
+# (through D3's fence) and never the admission scope lock; `expire_journal` takes job rows
+# SKIP LOCKED; the terminal event is a trigger inside the terminalizing transaction.
+SEAMS.update({
+    "infrx.append(jsonb)": (_SERVICE, ()),                # 06 boundary, body D4
+    "infrx.read_journal(jsonb)": (_SERVICE, ()),
+    "infrx.expire_journal(jsonb)": (_SERVICE, ()),
+    "infrx.journal_usage()": (_SERVICE, ()),
+})
+
 #: The admission lock order (0011). Every D writer takes these in this order; a grant
 #: takes only the last; settlement (D5) takes the wallet without the scope lock.
 LOCK_ORDER = ("pg_advisory_xact_lock(infrx.admission_lock_key())  -- capacity scope",

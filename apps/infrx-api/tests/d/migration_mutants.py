@@ -2058,6 +2058,94 @@ D3_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D3_MUTANTS
 
 
+#: D4 (0017, plus one 0011 accounting edit; scenario "admission"). One per claimed invariant,
+#: each killed by its named `checks_journal` check.
+from . import checks_journal  # noqa: E402
+JOURNAL = "0017_stream_journal.sql"
+_J_FENCE = ("  v_refusal := infrx.fence_lease(v_lease, array['inference'],\n"
+            "                                 infrx.lease_limit(p_args, "
+            "'unknown_usage_reconcile_s'));\n"
+            "  if v_refusal is not null then\n"
+            "    return jsonb_build_object('refusal', v_refusal);\n  end if;\n")
+_J_SEQUENCE = (
+    "  select * into j from infrx.jobs where request_id = (v_lease->>'job_id')::uuid;\n"
+    "  -- Under the row lock the fence holds: the generation's next sequence, never at or below\n"
+    "  -- the prune watermark (a fully pruned journal must not reissue a pruned cursor).\n"
+    "  select greatest(coalesce(max(c.sequence), 0),\n"
+    "                  case when j.journal_pruned_generation = (v_lease->>'generation')::int\n"
+    "                       then j.journal_pruned_sequence else 0 end)\n"
+    "    into v_next from infrx.stream_chunks c\n"
+    "   where c.job_id = j.request_id and c.generation = (v_lease->>'generation')::int;\n")
+_J_CEILING = ("       > j.journal_reserved_bytes - least(1024, j.journal_reserved_bytes / 2) then")
+_J_TERMINAL_ROOM = ("  if new.journal_stored_bytes + v_widest > new.journal_reserved_bytes then")
+_J_WHEN = "                    and new.journal_reserved_bytes > 0)"
+_J_PRUNE_BYTES = "journal_stored_bytes = journal_stored_bytes - v_bytes,"
+D4_MUTANTS: tuple[Mutant, ...] = (
+    # --- item 1: the fenced append -------------------------------------------------------
+    _m("d4_append_without_the_fence", JOURNAL,
+       "  v_refusal := infrx.fence_lease(v_lease, array['inference'],\n"
+       "                                 infrx.lease_limit(p_args, "
+       "'unknown_usage_reconcile_s'));",
+       "  v_refusal := null;",
+       "admission", "append_fenced", "a stale, foreign or expired worker appends output"),
+    _m("d4_append_accepts_a_preparation_lease", JOURNAL,
+       "infrx.fence_lease(v_lease, array['inference'],",
+       "infrx.fence_lease(v_lease, array['preparation', 'inference'],",
+       "admission", "append_fenced", "a preparation worker publishes output (R46)"),
+    _m("d4_r29_refusal_raised_rolls_back", JOURNAL,
+       "    return jsonb_build_object('refusal', v_refusal);",
+       "    perform infrx.refuse(v_refusal->>'code', v_refusal->>'detail');",
+       "admission", "append_past_the_instant",
+       "an overdue append's terminalization is rolled back with its refusal (R39)"),
+    _m("d4_terminal_event_accepted_when_last", JOURNAL,
+       "              where not coalesce(e.event->>'type'",
+       "              where e.n < jsonb_array_length(v_events) and not coalesce(e.event->>'type'",
+       "admission", "append_terminal_refused", "a worker forges the settlement's event (R30)"),
+    _m("d4_event_limit_off_by_one", JOURNAL, "  if v_largest > v_max_event then",
+       "  if v_largest >= v_max_event then",
+       "admission", "append_oversize", "an event of exactly the limit is refused (R25)"),
+    _m("d4_oversize_event_stored", JOURNAL, "  if v_largest > v_max_event then", "  if false then",
+       "admission", "append_oversize", "an event over the limit is journalled (R25)"),
+    _m("d4_only_the_first_event_is_measured", JOURNAL,
+       "         coalesce(max(octet_length((e->'payload')::text)), 0)\n",
+       "         coalesce(octet_length((v_events->0->'payload')::text), 0)\n",
+       "admission", "append_oversize", "an oversize event behind a small one is stored"),
+    _m("d4_job_ceiling_ignores_the_terminal_reserve", JOURNAL, _J_CEILING,
+       "       > j.journal_reserved_bytes then",
+       "admission", "append_job_ceiling", "output leaves no room for the terminal event (R39)"),
+    _m("d4_terminal_event_waved_through", JOURNAL, _J_TERMINAL_ROOM, "  if false then",
+       "admission", "append_job_ceiling", "a terminal event past the reservation is stored"),
+    _m("d4_terminal_reserve_sized_to_this_outcome", JOURNAL, _J_TERMINAL_ROOM,
+       "  if new.journal_stored_bytes + v_bytes > new.journal_reserved_bytes then",
+       "admission", "append_job_ceiling",
+       "the settlement's room depends on its outcome, not the widest one (R39)"),
+    _m("d4_empty_batch_publishes", JOURNAL, "  if v_count = 0 then", "  if false then",
+       "admission", "append_empty", "an empty batch forbids a prepublication requeue"),
+    _m("d4_sequence_restarts_per_batch", JOURNAL, "v_next + e.n", "e.n",
+       "admission", "append", "the second batch collides with the first's cursors"),
+    _m("d4_published_not_set", JOURNAL, "                        published = true\n",
+       "                        published = published\n",
+       "admission", "append", "published output is regenerated after a loss (02 §6)"),
+    _m("d4_stored_bytes_not_counted", JOURNAL,
+       "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes + v_bytes,\n"
+       "                        published = true",
+       "  update infrx.jobs set journal_stored_bytes = journal_stored_bytes,\n"
+       "                        published = true",
+       "admission", "append", "stored output is never charged to the journal budget"),
+    _m("d4_chunk_ttl_from_the_callers_clock", JOURNAL,
+       "           v_now + make_interval(secs => v_ttl)",
+       "           (v_lease->>'acquired_at')::timestamptz + make_interval(secs => v_ttl)",
+       "admission", "append", "a chunk's retention runs from the worker's lease record (R7)"),
+    # --- item 2: the global budget --------------------------------------------------------
+    # --- item 3: the terminal event -------------------------------------------------------
+    # --- item 4: replay -------------------------------------------------------------------
+    # --- item 5: pruning and usage --------------------------------------------------------
+    # --- item 6 ---------------------------------------------------------------------------
+    # --- item 9b: privileges --------------------------------------------------------------
+)
+MUTANTS = MUTANTS + D4_MUTANTS
+
+
 #: R83: an anchor that appears zero or twice is `misdeclared` - an edit landing on
 #: whichever line came first is not the declared defect (D2 review H4).
 MISDECLARED = "misdeclared"
@@ -2166,6 +2254,14 @@ _CHECKS = {
     "recover_isolation": checks_leases.check_recover_isolation,
     "lease_privileges": checks_leases.check_lease_privileges,
     "lease_races": lambda conn: checks_leases.check_lease_races(pgharness.connect, MUT_DB),
+    # D4, scenario "admission".
+    "append": checks_journal.check_append,
+    "append_oversize": checks_journal.check_append_oversize,
+    "append_terminal_refused": checks_journal.check_append_terminal_refused,
+    "append_job_ceiling": checks_journal.check_append_job_ceiling,
+    "append_empty": checks_journal.check_append_empty,
+    "append_fenced": checks_journal.check_append_fenced,
+    "append_past_the_instant": checks_journal.check_append_past_the_instant,
 }
 
 
