@@ -81,9 +81,9 @@ $$;
 
 -- ================================================== terminalize without usage ===
 -- A nonterminal job -> terminal, with no usage and no debit, in the caller's transaction.
--- Every caller has checked, under the job row lock, that the job is not terminal; a caller
--- that forgot would be refused by `jobs_guard` (a terminal job is immutable). Returns the
--- committed outcome (`records.TerminalOutcome`).
+-- A terminal job is refused here as well as by every caller (review H-4): `jobs_guard`
+-- refuses only a CHANGED settled fact, so a repeat in the same instant would pass it and
+-- write the projections twice. Returns the committed outcome (`records.TerminalOutcome`).
 create or replace function infrx.terminalize_no_usage(p_request_id uuid, p_cause text,
                                                       p_state text, p_reconcile_s float8)
 returns jsonb language plpgsql security definer set search_path = infrx, public, pg_temp as $$
@@ -94,6 +94,9 @@ declare
   v_reconcile timestamptz;
 begin
   select * into j from infrx.jobs where request_id = p_request_id for update;
+  if j.settled_at is not null then
+    perform infrx.refuse('already_terminal', 'job ' || p_request_id || ' is ' || j.state);
+  end if;
   if j.published then
     -- Output was committed and nobody counted it: reconcile, never bill later (02, R21).
     v_settlement := 'held_unknown';

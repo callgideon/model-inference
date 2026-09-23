@@ -1822,6 +1822,12 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "   for update;",
        "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid;",
        "admission", "lease_races", "cancel and complete race to a second terminal write"),
+    _m("d3_terminalization_of_a_terminal_job", LEASES,
+       "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| p_request_id",
+       "  if false then\n    perform infrx.refuse('already_terminal', 'job ' || p_request_id",
+       "admission", "cancel",
+       "a caller that forgot the terminal check writes a second terminalization (H-4)"),
     _m("d3_published_output_released", LEASES,
        "  if j.published then\n    -- Output was committed",
        "  if false then\n    -- Output was committed",

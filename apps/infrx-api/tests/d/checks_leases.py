@@ -443,8 +443,20 @@ def check_cancel(conn) -> str:
         # a terminal job answers the committed outcome and writes nothing
         count = len(kinds(conn, busy.request_id))
         code, again = d3(conn, "cancel", org_id=busy.org_id, job_handle=handle(busy))
-        assert code is None and again["cause"] == "client_cancelled", again
+        assert code is None and again["cause"] == "client_cancelled", \
+            f"a repeated cancel did not answer the committed outcome: {code} {again}"
         assert len(kinds(conn, busy.request_id)) == count, "a repeated cancel wrote again"
+        # H-4: the terminalization itself refuses a terminal job (a caller that forgot)
+        try:
+            with conn.transaction():
+                conn.execute("select infrx.terminalize_no_usage(%s, 'client_cancelled', "
+                             "'cancelled', %s)", (busy.request_id,
+                                                  DEFAULTS.unknown_usage_reconcile_s))
+            code = None
+        except psycopg.Error as failed:
+            code = getattr(domain_error(failed), "code", f"untyped {failed.sqlstate}")
+        assert code == "already_terminal" and len(kinds(conn, busy.request_id)) == count, \
+            f"a terminal job was terminalized again: {code}, {kinds(conn, busy.request_id)}"
         # tenancy: ORG_B cannot cancel ORG_A's job, and it is untouched
         other = queued(conn, world)
         assert d3(conn, "cancel", org_id=b.ORG_B, job_handle=handle(other))[0] == \
