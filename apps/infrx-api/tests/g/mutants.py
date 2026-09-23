@@ -1044,6 +1044,28 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("restart_cancels_a_named_stream", "a stream whose identity was sent is left to its worker",
        R, "            if not named:", "            if True:",
        "test_api_stream__a_gateway_restart_mid_stream_leaves_the_job_to_its_worker"),
+    # === G2 item 4: rendering the committed outcome (D3 request 2) =======================
+    _m("held_unknown_rendered_as_its_settlement", "the state is rendered, never the settlement",
+       R, '    detail = {"state": outcome.state.value}',
+       '    detail = {"state": outcome.settlement_state.value}',
+       "test_api_modes__a_replay_of_a_cancelled_job_is_rendered_cancelled_never_failed",
+       "test_api_modes__a_credit_job_that_expires_unclaimed_is_rendered_expired"),
+    _m("cancel_rendered_as_failure", "a cancelled job is rendered cancelled, never failed",
+       R, "    if outcome.state is JobState.cancelled:\n        return errors.StateConflict",
+       "    if False:\n        return errors.StateConflict",
+       "test_api_modes__a_replay_of_a_cancelled_job_is_rendered_cancelled_never_failed",
+       "test_api_stream__without_a_terminal_event_the_committed_outcome_ends_the_stream"),
+    _m("expired_rendered_failed", "an expired job is rendered as its deadline, never billed",
+       R, "    if outcome.state is JobState.expired or outcome.cause in DEADLINE_CAUSES:",
+       "    if outcome.cause in (TerminalCause.deadline_exceeded, TerminalCause.sync_deadline):",
+       "test_api_modes__a_credit_job_that_expires_unclaimed_is_rendered_expired"),
+    _m("foreign_cancel_swallowed", "another tenant's handle is not_found, like an unknown one",
+       R, "    async def cancel(self, org_id: str, handle: str, *, quiet: bool = False):",
+       "    async def cancel(self, org_id: str, handle: str, *, quiet: bool = True):",
+       "test_api_modes__a_foreign_or_unknown_handle_is_not_found_and_changes_nothing"),
+    _m("already_terminal_not_read", "after already_terminal the outcome is read (D3 delta)",
+       R, "        except errors.AlreadyTerminal:", "        except errors.StaleLease:",
+       "test_api_modes__already_terminal_on_cancel_reads_the_committed_outcome"),
 )
 
 
