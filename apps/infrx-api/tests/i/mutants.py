@@ -342,6 +342,11 @@ MUTANTS += (
     _m("unknown_setting_accepted", "a name outside the schema is refused",
        P, "        if name not in TUNABLE:", "        if False:",
        "test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing"),
+    _m("tunable_shape_unchecked", "a --set value passes the same trust boundary as a read one",
+       P, '            problem = shape_problem(Key(name, "tunable", TUNABLE_SHAPES.get(name, "tunable")),\n'
+          '                                    value)',
+       "            problem = None",
+       "test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing"),
     _m("setting_given_twice_accepted", "a tunable is set at most once",
        P, "        elif name in values:", "        elif False:",
        "test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing"),

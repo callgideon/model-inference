@@ -260,8 +260,10 @@ def test_backend_deploy__the_config_schema_is_every_name_the_runtime_reads():
 def test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing(
         tmp_path, monkeypatch, capsys):
     """A mistyped name would be ignored by the runtime and believed by the operator; a
-    manifest or never-written name would bypass SSM or an authorization. Each is a
-    refusal with the previous file byte-identical and no restart."""
+    manifest or never-written name would bypass SSM or an authorization; a value with a
+    newline would write a second variable - a non-loopback UPSTREAM after the checked one,
+    and the last line wins. Each is a refusal with the previous file byte-identical, no
+    restart, and a message that names the setting but never echoes its value."""
     made = support.stubs(tmp_path, monkeypatch)
     for pair in ("MAX_ACTIVE_JOB=4", "CONSOLE_CURSOR_SECRET=" + "x" * 32,
                  "DATABASE_URL=postgresql://a@b/c", "JUDGE_MODE=live"):
@@ -273,6 +275,12 @@ def test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing(
     cfg = support.config(tmp_path, settings=("MAX_ACTIVE_JOBS=4", "MAX_ACTIVE_JOBS=5"))
     assert preflight.apply(cfg) == preflight.REFUSED
     assert "given twice" in capsys.readouterr().err and made.systemctl_calls == []
+    cfg = support.config(tmp_path, settings=("MAX_ACTIVE_JOBS=4\nUPSTREAM=http://10.0.0.5:8000",))
+    before = cfg.env_file.read_bytes()
+    assert preflight.apply(cfg) == preflight.REFUSED
+    err = capsys.readouterr().err
+    assert cfg.env_file.read_bytes() == before and made.systemctl_calls == []
+    assert "MAX_ACTIVE_JOBS: the value contains a newline" in err and "10.0.0.5" not in err
 
 
 def test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime(
