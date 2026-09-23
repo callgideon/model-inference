@@ -41,7 +41,8 @@ from ...contracts.records import (Budgets, Cursor, ExecutionMode, JobState, Sett
 from ...contracts.v2.records import CredentialAudience
 from . import intake
 from .ingress import Ingress
-from .relay import CREDIT, PROGRESS_EVENT, SSE_MEDIA_TYPE, _error_frame, _identity, _Job, _watch
+from .relay import (CREDIT, PROGRESS_EVENT, SSE_MEDIA_TYPE, _dependency, _error_frame,
+                    _identity, _Job, _watch)
 
 log = logging.getLogger("infrx.gateway")
 
@@ -74,8 +75,9 @@ class Jobs:
         and a fresh job's staged refs are attached. Nothing after this watches the client."""
         replayed, outcome = admission.replayed, None
         if replayed:
-            # The original acceptance as it stands now (job_idempotent_replay.json).
-            admission, outcome = await self.relay._owned(job.org_id, job.handle)
+            # The original acceptance as it stands now (job_idempotent_replay.json). A store
+            # that fails this read is a retryable 503 and the job is left for the retry.
+            admission, outcome = await _dependency(self.relay._owned(job.org_id, job.handle))
         body = wire.JobAccepted(job_handle=job.handle, request_id=job.request_id,
                                 state=self.state_of(admission, outcome),
                                 execution_mode=ExecutionMode.async_,

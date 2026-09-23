@@ -156,6 +156,23 @@ def test_dur_admit__a_lost_202_retried_with_its_key_answers_the_same_job():
     assert world.jobs.holds[job.id].state is HoldState.settled
 
 
+def test_dur_admit__a_store_outage_answering_a_replay_leaves_the_job_for_the_retry():
+    """The retry's read of the job fails for want of the database: a retryable 503 with
+    `Retry-After` (the driver's text in no answer), nothing cancelled or admitted, and the
+    next retry answers the same job."""
+    world = JobsWorld()
+    assert post(world, key="order-10").status == 202
+    job = world.only_job()
+    world.failures.fail("get_owned", error=ConnectionError(
+        "connection to postgresql://infrx:secret@db:5432 refused"))
+    down = post(world, key="order-10")
+    assert refusal(down) == (503, "dependency_unavailable")
+    assert down.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in down.body
+    assert list(world.jobs.jobs) == [job.id] and not job.terminal
+    assert world.jobs.holds[job.id].state is HoldState.held
+    again = post(world, key="order-10")
+    assert again.status == 202 and again.json()["job_handle"] == job.admission.job_handle
+
 def test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing():
     """Same org, operation and key, another canonical payload: 409 `idempotency_conflict`,
     and the store holds exactly the first job and its one hold."""

@@ -46,6 +46,7 @@ TWICE = "test_dur_admit__two_concurrent_submissions_with_one_key_admit_once"
 DETACHED = "test_api_modes__a_detached_202_never_cancels_its_job"
 CREDIT_202 = "test_api_modes__a_credit_async_job_is_admitted_on_its_wallet"
 NO_SURPRISE = "test_api_modes__plain_chat_is_never_a_surprise_202"
+REPLAY_OUTAGE = "test_dur_admit__a_store_outage_answering_a_replay_leaves_the_job_for_the_retry"
 STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
 OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
@@ -121,6 +122,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("async_acceptance_uncounted", "an async acceptance is counted by mode (I3B request 3)",
        R, '            self._count("infrx_jobs_accepted_total", mode=request.execution_mode,\n'
           "                        tenant=auth.org_id)", "            pass", ACCEPT),
+    _m("replay_outage_is_a_500", "a store outage answering a replay is a retryable 503",
+       J, "            admission, outcome = await _dependency(self.relay._owned(job.org_id, "
+          "job.handle))",
+       "            admission, outcome = await self.relay._owned(job.org_id, job.handle)",
+       REPLAY_OUTAGE),
     _m("replay_readmits", "a retry with the same key is the same job, one hold",
        ST, "            replay = self._replay(idem, now, credit=credit)",
        "            replay = None", LOST_202, TWICE),
