@@ -38,6 +38,8 @@ C2_KEY = "c7000000-0000-4000-8000-000000000002"
 UNGRANTED_KEY = "c7000000-0000-4000-8000-000000000003"
 OPERATOR_KEY = "c7000000-0000-4000-8000-000000000004"
 STRAY_KEY = "c7000000-0000-4000-8000-000000000005"
+NAMED_KEY = "c7000000-0000-4000-8000-000000000006"     # created by C2, names C1 (M6)
+PROVIDER_KEY = "c7000000-0000-4000-8000-000000000007"  # a provider_dev key in ORG_A (M4)
 ALIAS = "nemostation/marlin-2b"
 PIN = "nemostation/marlin-2b@2026-09-01"
 
@@ -242,6 +244,18 @@ def check_admission_accepts(conn) -> str:
         assert after[7] - before[7] == want_hold and after[6] == before[6], (before, after)
         assert cdoc["pins"]["rate_card_version"] == pins["rate_card_version"], 'failed: cdoc["pins"]["rate_card_version"] == pins["rate_card_version"]'
         assert cdoc["rate_card"]["input_rate_per_million"] == "400.00000000", 'failed: cdoc["rate_card"]["input_rate_per_million"] == "400.00000000"'
+        # Review M6: the wallet is the key's INDIVIDUAL (`api_keys.user_id`), not whoever
+        # created the key row: CONSUMER_2 files a key that names CONSUMER_1.
+        conn.execute("insert into public.api_keys (id, org_id, created_by, user_id, name, "
+                     "prefix, key_hash) values (%s, %s, %s, %s, 'k', 'sk-infrx-named000', "
+                     "'hash-named')", (NAMED_KEY, org, cc.CONSUMER_2, cc.CONSUMER_1))
+        named = credit_request(world, NAMED_KEY, org)
+        got = refusal(conn, named, b.idem(named, "accept-named"), regime="credit")
+        assert got is None, f"a key naming CONSUMER_1 could not spend CONSUMER_1's wallet: {got}"
+        spent, = conn.execute("select wallet_id::text from infrx.jobs where request_id = %s",
+                              (named.request_id,)).fetchone()
+        assert spent == cc.wallet_of(conn, cc.CONSUMER_1), \
+            f"the key's creator's wallet was spent, not its individual's: {spent}"
         return f"one USD admission owns job/hold/3 reservations/dispatch/mapping; one CREDIT " \
                f"admission owns the pins and a {want_hold} CREDIT hold"
     return _in_rollback(conn, body)
@@ -278,6 +292,14 @@ def check_admission_refusals(conn) -> str:
                       "where name = 'legacy_usd_admission'",
         "expensive listing": _listing(2, "rc_expensive", "100000000", "100000000"),
         "zero listing": _listing(3, "rc_free", "0", "0"),
+        "zero price": "insert into infrx.price_versions (price_version, model_revision, "
+                      "input_rate_per_million, output_rate_per_million, token_rules_version, "
+                      "effective_from) values ('pv_free', 'free/model@1', 0, 0, 'tr_v1', "
+                      "'2026-01-01T00:00:00Z')",
+        "provider key": f"insert into public.api_keys (id, org_id, name, prefix, key_hash, "
+                        f"audience, provider_org_id, endpoint_id) values ('{PROVIDER_KEY}', "
+                        f"'{b.ORG_A}', 'p', 'sk-infrx-prov0000', 'hash-prov', 'provider_dev', "
+                        f"'{cc.NEMO}', '{cc.DEV_ENDPOINT}')",
         "withdrawn price": "alter table infrx.price_versions disable trigger "
                            "price_versions_immutable; update infrx.price_versions set "
                            "effective_to = infrx.now() where price_version = 'pv_test'; "
@@ -315,6 +337,19 @@ def check_admission_refusals(conn) -> str:
         ("a hold past the available USD", lambda: req(org_id=b.ORG_B, key_id=b.KEY_B,
                                                       max_input_tokens=30_000), None,
          "legacy_usd", "drain org b", "insufficient_credit"),
+        # Review M2: the gate is AVAILABLE, not the ledger: org B holds 0.01 USD and one
+        # 0.0072288 hold; the next hold fits the ledger but not what is available.
+        ("a hold past the available USD but within the ledger",
+         lambda: req(org_id=b.ORG_B, key_id=b.KEY_B), None, "legacy_usd", "one hold in org b",
+         "insufficient_credit"),
+        # Review M3: never a zero hold in the USD regime either.
+        ("a zero USD hold", lambda: req(model_revision="free/model@1"), None, "legacy_usd",
+         "zero price", "invalid_request"),
+        # Review M4: the CREDIT body's audience rule, in the USD body.
+        ("an operator key in the USD regime", lambda: req(org_id=c2_org, key_id=OPERATOR_KEY),
+         None, "legacy_usd", None, "forbidden"),
+        ("a provider_dev key in the USD regime", lambda: req(key_id=PROVIDER_KEY), None,
+         "legacy_usd", "provider key", "not_found"),
         ("another organization's idempotency scope", req, "foreign idem", "legacy_usd", None,
          "forbidden"),
         ("another organization's media", lambda: req(refs=(b.media(b.ORG_B),)), None,
@@ -356,6 +391,16 @@ def check_admission_refusals(conn) -> str:
                     conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
                                  "reason) values (%s, -24.999, 'adjustment', 'drain')",
                                  (b.ORG_B,))
+                elif setup == "one hold in org b":
+                    conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
+                                 "reason) values (%s, -24.99, 'adjustment', 'drain')",
+                                 (b.ORG_B,))
+                    first = req(org_id=b.ORG_B, key_id=b.KEY_B)
+                    admit(conn, first, b.idem(first, str(uuid.uuid4())))
+                    left = conn.execute("select ledger_total, available from infrx.wallets "
+                                        "where org_id = %s", (b.ORG_B,)).fetchone()
+                    assert left[1] < b.hold_for(first) <= left[0], \
+                        f"the case needs a hold between available and the ledger: {left}"
                 elif setup:
                     conn.execute(staged[setup])
                 request = make()
@@ -461,6 +506,16 @@ def check_admission_idempotency(conn) -> str:
         assert refusal(conn, request, b.idem(request, None)) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, None)) == "state_conflict"'
         assert refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict"'
         assert footprint(conn) == mark, 'failed: footprint(conn) == mark'
+        # Review M7: one key never answers across regimes - a CREDIT caller replaying a
+        # USD admission's key (same org, same payload) is a state_conflict, not its job.
+        c1 = cc.personal_org(conn, cc.CONSUMER_1)
+        conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
+                     "values (%s, 25, 'grant', 'm7')", (c1,))
+        usd = credit_request(world, C1_KEY, c1)
+        crossed = b.idem(usd, "crossed")
+        admit(conn, usd, crossed)                             # a USD job in C1's org
+        got = refusal(conn, usd, crossed, regime="credit")
+        assert got == "state_conflict", f"a CREDIT replay answered a USD admission: {got}"
         # the tombstone runs from the TERMINAL state (D5's settlement stands in as a row),
         # which here is an hour after admission
         ttl = DEFAULTS.idempotency_ttl_s
