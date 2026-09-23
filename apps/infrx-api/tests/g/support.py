@@ -17,7 +17,7 @@ import tempfile
 import httpx
 from fastapi import FastAPI
 
-from infrx.config import Settings, validate_runtime
+from infrx.config import DEPLOYMENT_DEFAULTS, Settings, validate_runtime
 from infrx.contracts.conformance.v2_fakes import fake_v2_harness
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.limits import DEFAULTS
@@ -75,6 +75,9 @@ def upstream():
 
 
 PILOT_FIELDS = {f.name for f in dataclasses.fields(DEFAULTS)}
+# What install.sh/preflight write for E4B's served-build check (`pilot.build_info`).
+RELEASE, IMAGE = "c0ffee" + "0" * 34, "sha256:" + "b" * 64
+BUILD = DEPLOYMENT_DEFAULTS.replace(infrx_release_sha=RELEASE, infrx_image=IMAGE)
 
 
 def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase.co",
@@ -83,6 +86,7 @@ def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase
     owns the name, so a case can set `max_request_bytes` and `key_cache_max` alike."""
     pilot = {"infrx_mode": mode, "database_url": "postgresql:///infrx_g1",
              **{k: v for k, v in overrides.items() if k in PILOT_FIELDS}}
+    overrides.setdefault("deployment", BUILD)
     return Settings(usage_log=USAGE_LOG, legacy_key=legacy_key, supabase_url=supabase_url,
                     supabase_key=supabase_key, pilot=DEFAULTS.replace(**pilot),
                     **{k: v for k, v in overrides.items() if k not in PILOT_FIELDS})

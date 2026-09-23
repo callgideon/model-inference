@@ -72,7 +72,7 @@ echo "backup $backup"
 sets=()
 for pair in ${INFRX_SET:-}; do sets+=(--set "$pair"); done
 "$PYTHON" "$PREFLIGHT" apply --mode "$mode" --env-file "$ROOT$ENV_FILE" --owner "$ENV_OWNER" \
-  --region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}" \
+  --region "$REGION" --image "$image" --release "$sha" --serve-script "$SERVE_SCRIPT" "${sets[@]}" \
   || { code=$?; rm -rf "$backup"; exit "$code"; }
 
 # 5. state directories, units, the index and the engine

@@ -73,3 +73,30 @@ def test_api_ops__the_secret_file_is_created_exclusively(tmp_path):
     with pytest.raises(FileExistsError):
         cli._write_secret_once(str(path), "sk-infrx-" + "x" * 40)
     assert path.read_text() == "keep me\n"
+
+
+def test_api_ops__the_operator_tool_builds_the_postgres_adapters_from_the_environment(
+        monkeypatch):
+    """D5 request 4 / E4B request 4: `build_operations()` composes D5/A1's PostgreSQL
+    adapters over the deployment's `DATABASE_URL`, read through `config.from_env` like the
+    gateway's (no connection is opened to build them); without one it refuses rather than
+    run on an in-memory store."""
+    from infrx.config import Settings
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.state import jobstore, operations as pg
+    from infrx.state.catalog import PgCatalogDirectory
+
+    dialled = []
+    real = jobstore.connector
+    monkeypatch.setattr(jobstore, "connector", lambda dsn: dialled.append(dsn) or real(dsn))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for settings in (None, Settings(pilot=DEFAULTS.replace(database_url="  "))):
+        with pytest.raises(SystemExit, match="DATABASE_URL is not set"):
+            cli.build_operations(settings)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://ops@127.0.0.1:5432/infrx")
+    ops = cli.build_operations()
+    assert dialled == ["postgresql://ops@127.0.0.1:5432/infrx"]
+    assert (type(ops.tenants), type(ops.ledger), type(ops.audit), type(ops.registry),
+            type(ops.wallets), type(ops.accounts), type(ops.catalog), type(ops.jobs)) == (
+        pg.PgTenantStore, pg.PgLedger, pg.PgAuditLog, pg.PgRegistry, pg.PgWalletDirectory,
+        pg.PgAccountView, PgCatalogDirectory, jobstore.PgJobStore)

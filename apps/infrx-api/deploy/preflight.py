@@ -133,6 +133,11 @@ MANIFEST: tuple[Key, ...] = (
     # never runs on a host interpreter.
     Key("INFRX_IMAGE", "runtime image pin (built image id)", "image_id",
         required_in=("pilot",)),
+    # E4B's served-build check: the commit install.sh deployed ("the checkout is exactly a
+    # commit"); with INFRX_IMAGE it is `infrx_build_info` on /metrics, and a pilot gateway
+    # refuses to start without either (`pilot.build_info`).
+    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",
+        required_in=("pilot",)),
     # The engine is never public (I2B.b): whatever the flags say, the gateway only ever
     # dials it on loopback, and so does the scheduling index.
     Key("UPSTREAM", "engine address, loopback only", "loopback_url"),
@@ -242,6 +247,7 @@ SHAPES = {
     "pg_dsn": _matches(r"postgres(?:ql)?://[^\s]+"),
     # `docker image inspect --format {{.Id}}`: a content address, never a tag.
     "image_id": _matches(r"sha256:[0-9a-f]{64}"),
+    "git_sha": _matches(r"[0-9a-f]{40}"),
     "loopback_url": _matches(r"http://(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}/?"),
     "loopback_valkey_url": _matches(r"(?:valkey|redis)://(?:127\.0\.0\.1|localhost):\d{1,5}(?:/\d{1,2})?"),
     # A shared secret shorter than this is a typo, a placeholder or a truncated read.
@@ -330,6 +336,7 @@ class Config:
     # Row M-SCRATCH: the usage spill survives a stop only on the root EBS volume.
     usage_log: str = "/var/lib/infrx/usage/usage.jsonl"
     image: str = ""                   # INFRX_IMAGE; set, the probe runs inside it
+    release: str = ""                 # INFRX_RELEASE_SHA: the commit install.sh deploys
     upstream: str = "http://127.0.0.1:8000"
     valkey_url: str = "valkey://127.0.0.1:6379/0"
     media_root: str = "/opt/dlami/nvme/processing"
@@ -345,7 +352,8 @@ def local_values(cfg: Config) -> dict[str, str]:
     """The keys the installer supplies rather than reading from SSM."""
     return {"INFRX_MODE": cfg.mode, "MODEL_ID": cfg.model_id,
             "MAX_INFLIGHT": cfg.max_inflight, "USAGE_LOG": cfg.usage_log,
-            "INFRX_IMAGE": cfg.image, "UPSTREAM": cfg.upstream,
+            "INFRX_IMAGE": cfg.image, "INFRX_RELEASE_SHA": cfg.release,
+            "UPSTREAM": cfg.upstream,
             "VALKEY_URL": cfg.valkey_url, "PROCESSING_CACHE_DIR": cfg.media_root}
 
 
@@ -793,7 +801,8 @@ def build(args) -> Config:
                   serve_script=pathlib.Path(args.serve_script) if args.serve_script else None,
                   units=tuple(args.restart), model_id=args.model_id,
                   max_inflight=args.max_inflight, usage_log=args.usage_log,
-                  image=args.image, upstream=args.upstream, valkey_url=args.valkey_url,
+                  image=args.image, release=args.release, upstream=args.upstream,
+                  valkey_url=args.valkey_url,
                   media_root=args.media_root, settings=tuple(args.set),
                   disk=DISK_BUDGET)
 
@@ -818,6 +827,8 @@ def main(argv=None) -> int:
     apply_parser.add_argument("--usage-log", default="/var/lib/infrx/usage/usage.jsonl")
     apply_parser.add_argument("--image", default="",
                               help="runtime image id (sha256:...); the probe runs in it")
+    apply_parser.add_argument("--release", default="",
+                              help="the deployed commit (40 hex); install.sh passes its HEAD")
     apply_parser.add_argument("--upstream", default="http://127.0.0.1:8000")
     apply_parser.add_argument("--valkey-url", default="valkey://127.0.0.1:6379/0")
     apply_parser.add_argument("--media-root", default="/opt/dlami/nvme/processing")

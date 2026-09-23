@@ -14,6 +14,7 @@ from ..config import from_env, validate_runtime
 from ..media.video import Media
 from ..usage import Usage
 from . import pilot
+from ..observe import route as metrics
 from .routes import health, ingress, jobs, models, uploads
 
 # The composition root's router list, fixed and documented (r1 R44). A track's router is
@@ -23,8 +24,9 @@ from .routes import health, ingress, jobs, models, uploads
 # G2 cutover: the metered ingress in place of the legacy chat route. `health` stays: Caddy
 # proxies the public `/health` to it (deploy/Caddyfile), and the edge hides what it echoes.
 # G4U uploads and G3 jobs come after the ingress, over the media store and the relay its
-# composition put on `rt` (G3 request (a), G4U request (a)).
-ROUTERS = (health, models, ingress, uploads, jobs)
+# composition put on `rt` (G3 request (a), G4U request (a)); I3B's loopback-only /metrics
+# over the composition's registry last (I3B request 1).
+ROUTERS = (health, models, ingress, uploads, jobs, metrics)
 
 
 def upstream_client(settings):
@@ -75,6 +77,7 @@ def create_app(settings=None, client=None, sb=None, clock=time.time, **adapters)
     app.state.runtime = rt
     rt.app = app
     rt.ingress = pilot.build_ingress_deps(rt, **pilot.adapters_from_env(rt.settings, **adapters))
+    pilot.build_info(rt)
     for module in ROUTERS:
         module.register(app, rt)
     ingress.assert_route_table(app)

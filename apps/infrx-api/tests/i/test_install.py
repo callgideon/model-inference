@@ -18,6 +18,7 @@ the deployed host**; it fixes the script a later, separately scoped deployment r
 from __future__ import annotations
 
 import errno
+import re
 import os
 import stat
 import subprocess
@@ -525,3 +526,24 @@ def test_deploy_failclosed__the_old_installer_published_an_open_gateway(tmp_path
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+# --- E4B's served-build check: the release the installer deploys --------------------
+def test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys(
+        tmp_path, monkeypatch):
+    """`install.sh` passes its checked-out commit (`--release "$sha"`, "the checkout is
+    exactly a commit") and preflight writes it as `INFRX_RELEASE_SHA` - with `INFRX_IMAGE`,
+    the gateway's `infrx_build_info`. A pilot without it, or with anything but a 40-hex
+    commit id, installs nothing; dev may omit it."""
+    support.stubs(tmp_path, monkeypatch)
+    values, problems = preflight.collect(support.config(tmp_path, mode="pilot"))
+    assert values.get("INFRX_RELEASE_SHA") == support.RELEASE
+    assert not [p for p in problems if "INFRX_RELEASE_SHA" in p]
+    for release in ("", "c0ffee", support.RELEASE.upper()):
+        _values, problems = preflight.collect(support.config(tmp_path, mode="pilot",
+                                                             release=release))
+        assert [p for p in problems if "INFRX_RELEASE_SHA" in p], release
+    assert preflight.collect(support.config(tmp_path, mode="dev"))[1] == []
+    install = (support.API_DIR / "deploy" / "install.sh").read_text()
+    assert re.search(r'"\$PREFLIGHT" apply .*\n.*--release "\$sha"', install), \
+        "install.sh does not hand preflight the commit it deploys"
