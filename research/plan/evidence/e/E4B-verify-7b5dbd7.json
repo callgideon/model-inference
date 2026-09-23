@@ -1,0 +1,560 @@
+{
+ "verdict": "pass",
+ "head": "7b5dbd7",
+ "reviews": [
+  {
+   "verdict_hint": "fix_required",
+   "findings": [
+    {
+     "id": "V1",
+     "severity": "blocking",
+     "file": "tests/integration/backend/test_endpoint_doc.py",
+     "line": "115-129 (test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers); endpoint_doc.py 70,79,80,177,191,194",
+     "claim_broken": "F9 is only partly closed. The new case's docstring says 'a success status a description cites is the one its module answers'. The review's F9 was that HTTP statuses in the prose are unchecked. The success statuses (202 JobAccepted, 201 UploadCreated, 204) are still typed by hand in DESCRIPTIONS and the examples. The case only greps each module's source for `status_code=N` and never links N to the status the doc cites.",
+     "evidence": "Own mutant own_upload_201_typed_200: endpoint_doc.py:79 '\"create an upload from its constraints: 201 `UploadCreated`\"' -> '200', regenerated with `endpoint_doc.py --write`: test_endpoint_doc.py SURVIVED, '8 passed in 0.92s'. Own mutant own_example_202_typed_200: endpoint_doc.py:177 '# 202 JobAccepted: job_handle' -> '# 200 …', regenerated: SURVIVED, '8 passed in 0.99s'. The error statuses do work: my own_prose_409_typed_404 (endpoint_doc.py:252) was KILLED at test_endpoint_doc.py:126.",
+     "minimal_fix": "Render the 2xx statuses from the mounted routes (each APIRoute's status_code, or the jobs/uploads constants), as code() does for errors. Or make the case pull every '\\b(2\\d\\d) ' citation per route out of render() and assert it equals that route's status_code. Add a mutant for a hand-typed 2xx."
+    },
+    {
+     "id": "V2",
+     "severity": "blocking",
+     "file": "tests/integration/backend/certify.py",
+     "line": "611-619 (serve_sh_pins encoder_budget), test_certify.py 491-499",
+     "claim_broken": "F6 / amendment 3(e) says 'serve.sh is the second source held against [the record]', and the case says 'a launch script that drifted from the record fails the pin by name'. Only the image and the seqs are held. The serve.sh encoder-budget read has no killing case. It also fails open when the flag is not a digit literal.",
+     "evidence": "Own mutant own_serve_sh_budget_ignored: certify.py:619 '\"encoder_budget\": max([16384, *map(int, batched)])}' -> '\"encoder_budget\": 16384}'. test_certify.py SURVIVED, '29 passed in 0.72s'. Probe at 7b5dbd7: a serve.sh with a literal '--max-num-batched-tokens 32768' is read as 32768, so the pin FAILs on encoder_budget_tokens (correct). A serve.sh with '--max-num-batched-tokens \"$BATCHED\"' (BATCHED=32768) is read as 16384, so a raised budget in serve.sh, with the record unchanged, passes the pin. This matters tonight: W4 phase B's P-20 decision B (82 s, merged at 0117d48) is an encoder-budget change.",
+     "minimal_fix": "In the drift block of test_e4b_the_declared_settings_are_the_serving_record_read_never_typed, also append '--max-num-batched-tokens 32768' to the copied serve.sh and assert 'encoder_budget_tokens' in names. Make serve_sh_pins return None (so the pin fails) when --max-num-batched-tokens is present without a literal integer. Add the mutant to e4b_mutants.py."
+    },
+    {
+     "id": "V3",
+     "severity": "nonblocking",
+     "file": "research/plan/evidence/e/E4B-9aa7ffe.md",
+     "line": "Round 2 box protocol steps 1 and 5; certify.py preconditions_check (E4B_WINDOW_OK)",
+     "claim_broken": "N2 says E4B_WINDOW_OK now comes from the window record step 1 writes. Nothing checks the record's content or time.",
+     "evidence": "Step 5 only checks `test -s /opt/dlami/nvme/e4b/window.env`. certify reads only E4B_WINDOW_OK == '1'. E4B_WINDOW_OPENED is written but never read or recorded in the report. A record written by hand before the maintenance swap, or a stale one left behind when step 7's manual removal is skipped, passes the precondition. N2's minimal fix (pass it through from the operator's environment) is met, so this is not blocking.",
+     "minimal_fix": "certify: require E4B_WINDOW_OPENED, no older than N hours and not in the future, and record it in the preconditions detail. Step 5: check that the edge serves the maintenance site (the 503 dependency_unavailable that 30-pause.sh shows) before launching."
+    },
+    {
+     "id": "V4",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/certify.py",
+     "line": "1064-1068 (target_label), 1136-1142",
+     "claim_broken": "The label is decided from the preconditions alone. A --box run whose served-build or release-identity FAILs still labels its numbers `meas.`.",
+     "evidence": "Probe through main() with --box: scrape returned the right revision, INFRX_CERTIFY_GATEWAY_IMAGE=sha256:22…, RELEASE_IMAGE=sha256:11…. Result: e4b.b.served-build FAIL ('the gateway runs sha256:2222…, not the release image sha256:1111…'), exit 1, target label 'meas.'. The exit code is 1, so there is no false pass, and amendment 3(d) states exactly this rule.",
+     "minimal_fix": "Optional: decide the label after served_build_check and require it PASS too. Or leave it and say so in amendment 3(d)."
+    },
+    {
+     "id": "V5",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/certify.py",
+     "line": "176 (release_sha equality), 760 (revision len >= 7), 691 (APP_OR_LAB anchors)",
+     "claim_broken": "Three strictness rules have no killing case. All three fail closed today.",
+     "evidence": "Own mutants that SURVIVED test_certify ('29 passed' each): own_release_sha_prefix_accepted (equality -> startswith, so `--release-sha c` would pass), own_short_revision_accepted (>= 7 -> >= 1), own_app_path_substring_matches (regex -> r\"apps/(?:app|lab)\", which matches myapps/app and apps/application; that direction is fail-closed). Related operator hazard: identity needs the full 40-character SHA. If RELEASE is a short SHA (for example, the infrx-runtime:<tag>), every box run FAILs release-identity. The box protocol does not say RELEASE must be the full SHA.",
+     "minimal_fix": "Add one assertion each: a 7-character release_sha is a problem, a 6-character revision is a problem, and a myapps/app cwd is not a server. Have the box protocol state that RELEASE is the full commit id (as cutover's infrx_release_sha is)."
+    },
+    {
+     "id": "V6",
+     "severity": "nonblocking",
+     "file": "tests/integration/backend/endpoint_doc.py",
+     "line": "225-229 (Model table notes); Makefile api-mutants",
+     "claim_broken": "Merging with the cutover lane (origin/codex/cutover-mount f7d9b03) takes follow-up work. This is not a defect of the fix round. The F6 pin itself survives the cutover's fixture change.",
+     "evidence": "gh backend-impl 3301f36 + 7b5dbd7 + cutover f7d9b03: (a) a Makefile api-mutants textual conflict (E4B's e4b line vs M1-L2's s3 line; the fix is to union both lines); (b) E4B-endpoint.md goes stale: test_endpoint_doc.py:25 'stale: run … --write', and the 3 default-subset e4b mutants fail on a red baseline. After `endpoint_doc.py --write`, 42 passed. (c) The regenerated Model table shows the measured sha256:3c4bb… and the digest-pinned image, but keeps the hand-typed notes '⚠️ the fixture placeholder, not W3's measured pin' and '⚠️ a moving tag'. Those notes are now false, and no case catches them. They predate this round (they are in 37a4652's endpoint_doc.py:190). F6 check: config_problems(current_config()) == [] with the cutover fixtures.",
+     "minimal_fix": "Derive the two notes from published_release() == serving_record() values. Whoever merges second regenerates E4B-endpoint.md and unions the Makefile line."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "missing_sha_accepted (declared, hand)",
+     "edit": "certify.py:169 'if not head.get(\"sha\"):' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:74: AssertionError: assert ['the tree at...nknown state'] == ['no git SHA ...nknown state']"
+    },
+    {
+     "name": "dirty_tree_accepted (declared, hand)",
+     "edit": "certify.py:171 'if head.get(\"dirty\") is not False:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:71: AssertionError: assert [] == ['the tree at...art is dirty']"
+    },
+    {
+     "name": "unknown_state_accepted (declared, hand)",
+     "edit": "certify.py:171 'is not False' -> 'if head.get(\"dirty\"):'",
+     "result": "killed",
+     "killed_by": "test_certify.py:72: AssertionError: assert [] == ['the tree at...nknown state']"
+    },
+    {
+     "name": "moved_tree_accepted (declared, hand)",
+     "edit": "certify.py:174 moved-SHA condition -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:76: AssertionError: assert [] == ['the tree mo...dddddddddddd']"
+    },
+    {
+     "name": "identity_never_fails (declared, hand)",
+     "edit": "certify.py:151 'FAIL if problems else PASS' -> 'PASS'",
+     "result": "killed",
+     "killed_by": "test_certify.py:83: AssertionError: assert ('release-identity', 'PASS') == ('release-identity', 'FAIL')"
+    },
+    {
+     "name": "unknown_tree_recorded_clean (declared, hand)",
+     "edit": "run.py:152 '\"dirty\": None if status is None else bool(status)}' -> '\"dirty\": bool(status)}'",
+     "result": "killed",
+     "killed_by": "test_certify.py:90: AssertionError: assert {'dirty': False, 'sha': None} == {'dirty': None, 'sha': None}"
+    },
+    {
+     "name": "missing_git_crashes (declared, hand)",
+     "edit": "run.py:147 'except (OSError, subprocess.SubprocessError)' -> 'except subprocess.SubprocessError'",
+     "result": "killed",
+     "killed_by": "test_certify.py:838: Failed: no git crashed git_head: FileNotFoundError(2, 'No such file or directory')"
+    },
+    {
+     "name": "release_sha_unchecked (declared, hand)",
+     "edit": "certify.py:176 release_sha comparison -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:853: AssertionError: assert [] == ['the tree is...eeeeeeeeeeee']"
+    },
+    {
+     "name": "box_without_release_sha_accepted (declared, hand)",
+     "edit": "certify.py:1124 'if args.box and not args.release_sha:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:980: Failed: DID NOT RAISE SystemExit. It dies on its own rule: the first loop iteration's argv carries --metrics-url, so F3's rule cannot refuse it. The run then reaches release_hashes, which the case stubs to raise, so it stops before any network. remote_target, published_release and git_head are local."
+    },
+    {
+     "name": "served_revision_unchecked (declared, hand)",
+     "edit": "certify.py:760 revision check -> 'elif False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:865: assert [] == ['the gateway...000000000000']"
+    },
+    {
+     "name": "missing_build_info_accepted (declared, hand)",
+     "edit": "certify.py:757 'elif revision is None:' -> 'elif False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:869: assert 'publishes no infrx_build_info' in \"the gateway serves None, …\""
+    },
+    {
+     "name": "gateway_image_unset_accepted (declared, hand)",
+     "edit": "certify.py:762 'if not gateway_image:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:872: AssertionError: assert [] == ['INFRX_CERTI...s unrecorded']"
+    },
+    {
+     "name": "release_image_mismatch_accepted (declared, hand)",
+     "edit": "certify.py:766 image inequality -> 'elif False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:877: AssertionError: assert [] == ['the gateway...111111111111']"
+    },
+    {
+     "name": "box_without_metrics_accepted (declared, hand)",
+     "edit": "certify.py:1122 metrics rule -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:980: Failed: DID NOT RAISE SystemExit (second iteration, whose argv carries --release-sha)"
+    },
+    {
+     "name": "transport_failures_uncounted (declared, hand)",
+     "edit": "certify.py:835 outcome=='failed' -> bench.is_platform_failure(r)",
+     "result": "killed",
+     "killed_by": "test_certify.py:656: AssertionError: assert 'pass' == 'fail'"
+    },
+    {
+     "name": "nothing_accepted_passes (declared, hand)",
+     "edit": "certify.py:846 answered -> always PASS",
+     "result": "killed",
+     "killed_by": "test_certify.py:660: AssertionError: assert 'pass' == 'fail'"
+    },
+    {
+     "name": "climb_ignores_answers (declared, hand)",
+     "edit": "certify.py:899 drop 'answered' from the core criteria",
+     "result": "killed",
+     "killed_by": "test_certify.py:668: AssertionError: assert ('FAIL', (), 0.5) == ('FAIL', (), None)"
+    },
+    {
+     "name": "overload_resets_accepted (declared, hand)",
+     "edit": "certify.py:957 outcome=='failed' -> is_platform_failure",
+     "result": "killed",
+     "killed_by": "test_certify.py:35: AssertionError: no problem was reported"
+    },
+    {
+     "name": "local_run_labelled_measured (declared, hand)",
+     "edit": "certify.py:1052 local label FAKE -> MEAS",
+     "result": "killed",
+     "killed_by": "test_certify.py:898: AssertionError: assert 'meas.' == 'fake-engine,...a measurement'"
+    },
+    {
+     "name": "remote_run_measured_by_default (declared, hand)",
+     "edit": "certify.py:1060 UNVERIFIED -> MEAS",
+     "result": "killed",
+     "killed_by": "test_certify.py:901: AssertionError: assert 'meas.' == 'unverified t...a measurement'"
+    },
+    {
+     "name": "unready_box_measured (declared, hand)",
+     "edit": "certify.py:1068 drop 'and preconditions == PASS'",
+     "result": "killed",
+     "killed_by": "test_certify.py:903: AssertionError: assert 'meas.' == 'unverified t...a measurement'"
+    },
+    {
+     "name": "label_never_decided (declared, hand)",
+     "edit": "certify.py:1140 label assignment deleted",
+     "result": "killed",
+     "killed_by": "test_certify.py:922: AssertionError: ('PASS', {'label': 'unverified target, …'})"
+    },
+    {
+     "name": "published_digest_declared_as_the_placeholder (declared, hand)",
+     "edit": "certify.py:606 published digest -> 'sha256:'+'44'*32",
+     "result": "killed",
+     "killed_by": "test_certify.py:476: AssertionError: assert ('sha256:4444...') == ('sha256:3c4b...')"
+    },
+    {
+     "name": "published_image_declared_as_the_tag (declared, hand)",
+     "edit": "certify.py:608 image -> vllm/vllm-openai:nightly",
+     "result": "killed",
+     "killed_by": "test_certify.py:476: AssertionError"
+    },
+    {
+     "name": "digest_declared_as_a_literal (declared, hand)",
+     "edit": "certify.py:595 digest -> literal 3c4bb…",
+     "result": "killed",
+     "killed_by": "test_certify.py:482: AssertionError: assert ('sha256:3c4b...55555', 32768) == ('sha256:5555...55555', 32768)"
+    },
+    {
+     "name": "image_read_from_the_record_not_serve_sh (declared, hand)",
+     "edit": "certify.py:628 pins['image'] -> record ref",
+     "result": "killed",
+     "killed_by": "test_certify.py:499: AssertionError: ['engine_max_num_seqs', …]"
+    },
+    {
+     "name": "seqs_read_from_the_record_not_serve_sh (declared, hand)",
+     "edit": "certify.py:629 pins['seqs'] -> record settings",
+     "result": "killed",
+     "killed_by": "test_certify.py:499: AssertionError: ['runtime_image', …]"
+    },
+    {
+     "name": "unreadable_cwd_skipped (declared, hand)",
+     "edit": "certify.py:716 'cwd = None' -> 'continue'",
+     "result": "killed",
+     "killed_by": "test_certify.py:560: assert [11, 12, 17, 18] == [11, 12, 16, 17, 18]"
+    },
+    {
+     "name": "package_path_in_cmdline_ignored (declared, hand)",
+     "edit": "certify.py:718 drop the argv clause",
+     "result": "killed",
+     "killed_by": "test_certify.py:560: assert [11, 12, 16, 18] == [11, 12, 16, 17, 18]"
+    },
+    {
+     "name": "only_this_checkout_counts (declared, hand)",
+     "edit": "certify.py:691 regex rooted at REPO_ROOT",
+     "result": "killed",
+     "killed_by": "test_certify.py:560: assert [16] == [11, 12, 16, 17, 18]"
+    },
+    {
+     "name": "retries_hide_refusals (declared, hand)",
+     "edit": "certify.py:476 --retries 0 -> 3",
+     "result": "killed",
+     "killed_by": "test_certify.py:939: AssertionError: assert '3' == '0'"
+    },
+    {
+     "name": "box_runs_the_fast_subset (declared, hand)",
+     "edit": "certify.py:472 subset always fast",
+     "result": "killed",
+     "killed_by": "test_certify.py:940: AssertionError: box"
+    },
+    {
+     "name": "quarantined_item_resent_ok (declared, hand)",
+     "edit": "certify.py:394 terminal = accepted only",
+     "result": "killed",
+     "killed_by": "test_certify.py:942: assert [] == [\"terminal it...sume: ['i7']\"]"
+    },
+    {
+     "name": "accepted_without_id_ok (declared, hand)",
+     "edit": "certify.py:418 drop 'or None in seen'",
+     "result": "killed",
+     "killed_by": "test_certify.py:946: assert 'Σ charged 2....dger fall 2.5' == \"items accept...e-Id): ['i5']\""
+    },
+    {
+     "name": "signalled_exit_unchecked (declared, hand)",
+     "edit": "certify.py:543 drop 'and first[\"exit\"] == 130'",
+     "result": "killed",
+     "killed_by": "test_certify.py:958: AssertionError: assert 'PENDING' == 'FAIL'"
+    },
+    {
+     "name": "unreadable_engine_is_idle (declared, hand)",
+     "edit": "certify.py:790 busy None -> 0",
+     "result": "killed",
+     "killed_by": "test_certify.py:966: AssertionError: assert 'A' == 'the engine i...iting = None)'"
+    },
+    {
+     "name": "description_status_hand_typed (declared, hand)",
+     "edit": "endpoint_doc.py:73 result_pending -> '(404)'",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:126: AssertionError: [('result_pending', '404'), …]"
+    },
+    {
+     "name": "example_status_hand_typed (declared, hand)",
+     "edit": "endpoint_doc.py:181 example -> '404 result_pending'",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:126: AssertionError"
+    },
+    {
+     "name": "cancel_cause_hand_typed (declared, hand)",
+     "edit": "endpoint_doc.py:77 cause -> sync_deadline",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:141: AssertionError: assert ('`client_cancelled`' in 'cancel (`sync_deadline`), …')"
+    },
+    {
+     "name": "models_listed_as_authenticated (declared, hand)",
+     "edit": "endpoint_doc.py:135 -> 'if False:'",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:142: AssertionError: assert [] == ['/v1/models']"
+    },
+    {
+     "name": "location_header_dropped (declared, hand)",
+     "edit": "endpoint_doc.py:145 drop jobs.HEADER_LOCATION",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:146: AssertionError: assert '`Location`' in …"
+    },
+    {
+     "name": "stream_refusal_dropped (declared, hand)",
+     "edit": "endpoint_doc.py:256 'refused …' -> 'accepted'",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:148: assert '`POST /v1/jobs` is always async …' in …"
+    },
+    {
+     "name": "exit_code_ignored / exit_one_never_attributed / unexplained_exit_one_accepted / unrun_backend_accepted (declared, hand)",
+     "edit": "certify.py:334 exit_code -> 0; :317 'return code'; :317 drop 'and cases[\"failed\"]'; :327 append -> pass",
+     "result": "killed (4/4)",
+     "killed_by": "test_certify.py:195 'assert PASS == FAIL'; :183 'assert 1 == 0'; :184 'assert 0 == 1'; :197 'assert None == ['backend=not run']'"
+    },
+    {
+     "name": "hand-run coverage",
+     "edit": "48 of the 49 new or re-anchored declared mutants, applied one at a time to a separate clone of 7b5dbd7 (anchor count asserted == 1). Each named case was run with --tb=line.",
+     "result": "48/48 killed. Every death line (file:line and message) matches the lane's Round-2 table.",
+     "killed_by": "see entries above"
+    },
+    {
+     "name": "own_upload_201_typed_200",
+     "edit": "endpoint_doc.py:79 '201 `UploadCreated`' -> '200 `UploadCreated`', then endpoint_doc.py --write",
+     "result": "SURVIVED (test_endpoint_doc 8 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_example_202_typed_200",
+     "edit": "endpoint_doc.py:177 '# 202 JobAccepted' -> '# 200 JobAccepted', then --write",
+     "result": "SURVIVED (8 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_prose_409_typed_404",
+     "edit": "endpoint_doc.py:252 '`409 idempotency_conflict`' -> '`404 …`', then --write",
+     "result": "killed",
+     "killed_by": "test_endpoint_doc.py:126: AssertionError: [… ('idempotency_conflict', '404') …]"
+    },
+    {
+     "name": "own_serve_sh_budget_ignored",
+     "edit": "certify.py:619 encoder_budget -> constant 16384",
+     "result": "SURVIVED (test_certify 29 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_refusal_counted_as_failure",
+     "edit": "certify.py:835 failed = outcome in ('failed','rejected')",
+     "result": "killed",
+     "killed_by": "test_certify.py:625: AssertionError: assert {'fail', 'pass'} == {'pass'}"
+    },
+    {
+     "name": "own_identity_skipped_when_end_sampled",
+     "edit": "certify.py:148 'if self.head_end is None:' -> '… and False:'",
+     "result": "killed",
+     "killed_by": "test_certify.py:850: AssertionError (runner-error vs release-identity)"
+    },
+    {
+     "name": "own_release_sha_prefix_accepted",
+     "edit": "certify.py:176 != release_sha -> not startswith(release_sha)",
+     "result": "SURVIVED (29 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_short_revision_accepted",
+     "edit": "certify.py:760 len >= 7 -> len >= 1",
+     "result": "SURVIVED (29 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_app_path_substring_matches",
+     "edit": "certify.py:691 regex -> r\"apps/(?:app|lab)\"",
+     "result": "SURVIVED (29 passed); fail-closed direction",
+     "killed_by": ""
+    },
+    {
+     "name": "own_skip_preconditions_measured",
+     "edit": "certify.py:1068 '== PASS' -> '!= FAIL'",
+     "result": "SURVIVED; equivalent in practice, because preconditions_check only emits PASS or FAIL (an untyped SKIP becomes FAIL)",
+     "killed_by": ""
+    },
+    {
+     "name": "own_build_info_any_value",
+     "edit": "certify.py:744 drop 'and value == 1'",
+     "result": "SURVIVED; near-equivalent (the build_info gauge is always 1)",
+     "killed_by": ""
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git clone --shared … /tmp/claude-1000/verify-e4b-v1 && git fetch origin && git checkout 7b5dbd7; make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py",
+     "exit": 0,
+     "tail": "128 passed in 293.01s (0:04:53) (126 mutants + 2 list checks; 126 = 77 at 37a4652 + 49 new)"
+    },
+    {
+     "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/integration (layer 0, no stack)",
+     "exit": 0,
+     "tail": "195 passed, 99 skipped, 2 warnings in 35.65s; 0 FAILED/ERROR lines"
+    },
+    {
+     "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider -rfEs tests/i",
+     "exit": 0,
+     "tail": "143 passed in 144.79s (0:02:24)"
+    },
+    {
+     "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_endpoint_doc.py",
+     "exit": 0,
+     "tail": "8 passed in 0.88s"
+    },
+    {
+     "cmd": "docker ps -a --format {{.Names}} | grep infrx-e2- (checked before each stack run)",
+     "exit": 1,
+     "tail": "empty: e2 free"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e2 certify.py --workdir …/stack/work --report …/stack/report.json (attempt 1, no CORPUS_CACHE)",
+     "exit": 1,
+     "tail": "release-identity PASS; rls 696; backend 165/17/0. dataset-resume, envelope ('11/11 (0 platform-caused)', answered fail) and soak ('19/19', '0 accepted') FAIL: the clips are missing (FileNotFoundError), because a --shared clone's corpus cache resolves to the clone itself. Not the lane's environment. It does show the F4 criteria biting."
+    },
+    {
+     "cmd": "CORPUS_CACHE=<main checkout>/.claude/corpus-cache INFRX_E2_NAMESPACE=e2 certify.py … (attempt 2)",
+     "exit": 1,
+     "tail": "services PENDING 'port bind failed twice (ephemeral-range collision)'; runner-error 'fake vLLM … address already in use' on 55580 (transient; nothing was listening on 55580 afterwards); e4b.a.protocol FAIL ['services=PENDING','backend=not run'] (N1 visible); release-identity PASS; torn down"
+    },
+    {
+     "cmd": "CORPUS_CACHE=<main checkout>/.claude/corpus-cache INFRX_E2_NAMESPACE=e2 certify.py --workdir …/stack3/work --report …/stack3/report.json (attempt 3)",
+     "exit": 1,
+     "tail": "report sha256 6bd27c605fb8c066146407f91944aacf3b37de4c9082b406a7fa4cfd60ea73fe. [FAIL] preconditions (App pids 3907004, 3969240); [FAIL] config-pin (published digest sha256:4444…, B1); rls 696 PASS; backend passed 165, pending 17, failed 0; e4b.a.protocol PEND {G2-R1: 11, D5: 12}, 98 passed; e4b.b.recovery PEND, 67 passed; sop-parity PASS 9 clips; dataset-resume, envelope (supported 4.0), soak (0/19, 19 accepted) and overload PEND; [ok] release-identity: one clean tree: 7b5dbd784ebf…; teardown clean"
+    },
+    {
+     "cmd": "hand mutants: 48 declared (see mutants) + 11 own, each applied alone in a separate clone and its case(s) run with --tb=line",
+     "exit": 0,
+     "tail": "48/48 declared killed with the lane's exact death lines; own: 3 killed, 8 survived (2 blocking V1/V2, 4 nonblocking V5, 2 equivalent)"
+    },
+    {
+     "cmd": "attack probes (python, 7b5dbd7)",
+     "exit": 0,
+     "tail": "A1: main --box, right revision, different image -> served-build FAIL, exit 1 (label still meas.: V4); same image -> served-build PASS, exit 3. A3: target_label with SKIP/PENDING/FAIL/PASS -> unverified ×3, meas. A4: 100 accepted + one 429 with Retry-After -> failure_rate pass '0/101', rejections fail '1 refused within the cap' (per protocol), overload_problems [] for honest 429s. A5: record digest edited to 44… -> engine_options_digest FAIL (published passes). A6: cwd …/myapps/app, apps/application, apps/app-old, notapps/lab -> not found; apps/app/sub -> found"
+    },
+    {
+     "cmd": "merge sim: git fetch github claude/backend-impl (3301f36, newer than local 4da7a7f) && git merge 7b5dbd7",
+     "exit": 0,
+     "tail": "clean merge; tests/integration/run.py and tests/integration/mutants.py identical to 7b5dbd7 (no git_head/e3bm47 conflict)"
+    },
+    {
+     "cmd": "(merge) pytest -q tests/integration ; pytest test_run.py backend/test_stage.py backend/test_certify.py backend/test_endpoint_doc.py ; mutants.py --only e3bm47",
+     "exit": 0,
+     "tail": "195 passed, 99 skipped; 98 passed in 13.39s; [killed] e3bm47"
+    },
+    {
+     "cmd": "(merge + origin/codex/cutover-mount f7d9b03) merge; resolve Makefile; config_problems(current_config()); pytest test_endpoint_doc/test_e4b_mutants/test_certify",
+     "exit": 1,
+     "tail": "CONFLICT Makefile (api-mutants line); pin problems: [] (F6 holds with the cutover fixtures); test_endpoint_doc.py:25 'stale: run … --write' and 3 subset e4b mutants fail; after endpoint_doc.py --write: 42 passed, but the Model-table notes still say 'fixture placeholder' / 'moving tag' (V6). The other 17 layer-0 failures (journey/drills/stage/harness) are cutover or D5 staleness, not E4B."
+    },
+    {
+     "cmd": "docker ps -a | grep 'infrx-e2-|infrx-e3b-postgrest'; docker volume/network ls | grep infrx-e2; git -C codex-e4b status --short",
+     "exit": 1,
+     "tail": "no containers, 0 volumes, 0 networks; codex-e4b clean at 7b5dbd7"
+    }
+   ],
+   "fabrication_check": "Every count, SHA, line number and tail above comes from a command I ran in this session, in scratch clones of 7b5dbd7 and in merge simulations.\n\nThe lane's claims all reproduced:\n- list 128 = 126 mutants\n- layer 0 195/99\n- tests/i 143\n- test_endpoint_doc 8\n- local runner: release-identity PASS; rls 696; backend 165/17/0; protocol {G2-R1 11, D5 12} with 98 passed; recovery 67; parity PASS on 9 clips; soak 0/19 with 19 accepted; the same two FAILs (the dev host's App pids 3907004/3969240, and B1)\n\nMy report's sha256 is 6bd27c60…a73fe, not the lane's 379a4a0a…. The path, the timestamps and the head differ (5afe3d9 vs 7b5dbd7; that commit changes only the evidence doc).\n\nDeath lines: for all 48 declared mutants I hand-ran, the file:line and message are identical to the lane's Round-2 table.\n\n\"51 mutants\" in the lane's table = 49 new names (the list went from 77 to 126) plus 2 re-anchored ones (any_next_server_counts, r94_example_dropped). This is consistent, not inflated.\n\nThe lane's claim that 0158b7d fixed the case F3 had masked is consistent with the code as it stands. box_without_release_sha_accepted's argv carries --metrics-url, so it dies only on its own rule, before any network. I did not re-run the pre-0158b7d state.\n\nThings I had to work around:\n- Local runs 1 and 2 did not match the lane. Run 1 had no corpus cache in the --shared clone. Run 2 hit a transient port-bind collision on the e2 ports. Run 3 matched.\n- origin/claude/backend-impl was stale in the local clone (4da7a7f), so I fetched the GitHub head, 3301f36, for the merge simulation. The cutover branch used is origin/codex/cutover-mount f7d9b03 (WIP, not merged).\n\nThe box protocol v2's certify image (apt-get git on infrx-runtime) and the runtime image's imports are not verified. The lane marks them ⚠️ too.",
+   "cleanup": "What I removed:\n- the scratch clones /tmp/claude-1000/verify-e4b-v1, -hand, -merge and -cut\n- the out dir /tmp/claude-1000/verify-e4b-out\n- the probe script and the diff file\n- the scratchpad helper scripts hand.py and own.py\n\nWhat was left clean:\n- The runner tore down each of my three e2 stacks (infrx-e2-* and infrx-e3b-postgrest). Afterwards `docker ps -a` showed none, and there were 0 infrx-e2 volumes or networks.\n- The worktree .claude/worktrees/codex-e4b was only read: git status is clean at 7b5dbd7.\n\nWhat I did not do:\n- I touched no other lane's container or port. I did not use port 55432 and ran no D harness.\n- No AWS, box or secret was used. The GitHub fetches were read-only, into the scratch clones.\n\nWhat I left in place: /tmp/infrx-e2-e4b-ypve6q6j is dated 21:08, before this session started, and is not mine."
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [
+  {
+   "id": "V1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/test_endpoint_doc.py",
+   "line": "115-129 (test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers); endpoint_doc.py 70,79,80,177,191,194",
+   "claim_broken": "F9 is only partly closed. The new case's docstring says 'a success status a description cites is the one its module answers'. The review's F9 was that HTTP statuses in the prose are unchecked. The success statuses (202 JobAccepted, 201 UploadCreated, 204) are still typed by hand in DESCRIPTIONS and the examples. The case only greps each module's source for `status_code=N` and never links N to the status the doc cites.",
+   "evidence": "Own mutant own_upload_201_typed_200: endpoint_doc.py:79 '\"create an upload from its constraints: 201 `UploadCreated`\"' -> '200', regenerated with `endpoint_doc.py --write`: test_endpoint_doc.py SURVIVED, '8 passed in 0.92s'. Own mutant own_example_202_typed_200: endpoint_doc.py:177 '# 202 JobAccepted: job_handle' -> '# 200 …', regenerated: SURVIVED, '8 passed in 0.99s'. The error statuses do work: my own_prose_409_typed_404 (endpoint_doc.py:252) was KILLED at test_endpoint_doc.py:126.",
+   "minimal_fix": "Render the 2xx statuses from the mounted routes (each APIRoute's status_code, or the jobs/uploads constants), as code() does for errors. Or make the case pull every '\\b(2\\d\\d) ' citation per route out of render() and assert it equals that route's status_code. Add a mutant for a hand-typed 2xx.",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed from the code and by one experiment. At test_endpoint_doc.py:127-129, the success-status part of test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers only checks that the string `status_code=202/201/204` appears in the source of jobs.py and uploads.py. It never reads a 2xx number from render() or examples(), so the docstring's claim that \"a success status a description cites is the one its module answers\" is not tested. The error-status half does work: it pulls `code (NNN)` and `NNN code` citations out of the rendered doc and checks each against errors.http_status. Success strings like \"201 `UploadCreated`\" (endpoint_doc.py:79), \"204\" (:80) and \"# 202 JobAccepted\" (:177) are typed by hand, and test 1 only compares the committed doc with render(), so a hand-typed wrong number passes once the doc is regenerated.\n\nExperiment: I made a shared clone of codex-e4b at 7b5dbd7 in my scratchpad and left the worktree untouched (git status there was clean afterwards). I changed endpoint_doc.py:79 from `201 \\`UploadCreated\\`` to `200 \\`UploadCreated\\``, then ran:\n`PYTHONPATH=$S/apps/infrx-api $PY tests/integration/backend/endpoint_doc.py --write; PYTHONPATH=$S/apps/infrx-api $PY -m pytest -q -p no:cacheprovider tests/integration/backend/test_endpoint_doc.py | tail -3`\nThe tail was `........ [100%]` and `8 passed in 1.07s`. The regenerated E4B-endpoint.md diff showed `-... 201 \\`UploadCreated\\` |` / `+... 200 \\`UploadCreated\\` |`, so the mutant survived. The scratch clone has been removed.\n\nSeverity if real: nonblocking. The committed document's 2xx statuses are correct today (201/204/202 match the modules), so nothing wrong ships. The gap is a test that overstates its own coverage, which lets 2xx prose drift in future. The fix is small: render the 2xx statuses from the route decorators' status_code, or have the case pull each route's 2xx citations out of render() and examples() and compare them with that route's status_code. Add a hand-typed-2xx mutant as well. Record F9 as partly closed, not closed.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. The code and a mutant both confirm the finding. In test_endpoint_doc.py:115-129 the only 2xx check is `assert f\"status_code={status}\" in Path(source.__file__).read_text()` for the constant pairs (jobs,202), (uploads,201), (uploads,204). It never reads render() for 2xx citations. The 201/202/204 in endpoint_doc.py DESCRIPTIONS (lines 70, 79, 80) and in the examples (lines 177, 191, 194) are typed by hand. So the docstring's promise that \"a success status a description cites is the one its module answers\" is not enforced. The error-status half works, because code() and errors.http_status render those and the regex checks them.\n\nExperiment: a scratch `git clone --shared` of 7b5dbd7, with the worktree's venv symlinked in. I changed line 79 to \"200 `UploadCreated`\" and line 177 to \"# 200 JobAccepted\", then ran:\n`apps/infrx-api/.venv/bin/python tests/integration/backend/endpoint_doc.py --write && python -m pytest -q tests/integration/backend/test_endpoint_doc.py`\nThe regenerated E4B-endpoint.md showed `create an upload from its constraints: 200 \\`UploadCreated\\`` at line 35 and `# 200 JobAccepted: job_handle` at line 181. The test tail was `........ [100%]` / `8 passed in 0.99s`, so the mutant survived. I removed the clone afterwards, and the codex-e4b worktree is clean.\n\nSeverity: nonblocking. The committed doc is correct today: 202 JobAccepted, 201 UploadCreated and 204 all match the routes' status_code. So no wrong status reaches a reader. The defect is a test that claims more than it checks, plus an F9 fix that is only partly closed for 2xx. The minimal fix is to render the 2xx statuses from the route status_code or the module constants, or to assert each 2xx citation in render() against its route, and to add a mutant for a hand-typed 2xx. It should be tracked, but it does not make the backend wrong.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  },
+  {
+   "id": "V2",
+   "severity": "blocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "611-619 (serve_sh_pins encoder_budget), test_certify.py 491-499",
+   "claim_broken": "F6 / amendment 3(e) says 'serve.sh is the second source held against [the record]', and the case says 'a launch script that drifted from the record fails the pin by name'. Only the image and the seqs are held. The serve.sh encoder-budget read has no killing case. It also fails open when the flag is not a digit literal.",
+   "evidence": "Own mutant own_serve_sh_budget_ignored: certify.py:619 '\"encoder_budget\": max([16384, *map(int, batched)])}' -> '\"encoder_budget\": 16384}'. test_certify.py SURVIVED, '29 passed in 0.72s'. Probe at 7b5dbd7: a serve.sh with a literal '--max-num-batched-tokens 32768' is read as 32768, so the pin FAILs on encoder_budget_tokens (correct). A serve.sh with '--max-num-batched-tokens \"$BATCHED\"' (BATCHED=32768) is read as 16384, so a raised budget in serve.sh, with the record unchanged, passes the pin. This matters tonight: W4 phase B's P-20 decision B (82 s, merged at 0117d48) is an encoder-budget change.",
+   "minimal_fix": "In the drift block of test_e4b_the_declared_settings_are_the_serving_record_read_never_typed, also append '--max-num-batched-tokens 32768' to the copied serve.sh and assert 'encoder_budget_tokens' in names. Make serve_sh_pins return None (so the pin fails) when --max-num-batched-tokens is present without a literal integer. Add the mutant to e4b_mutants.py.",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The finding is real. I checked it in a scratch shared clone at 7b5dbd7, then deleted the clone.\n\n(1) The mutant survives. I applied sed to certify.py:619, changing `\"encoder_budget\": max([16384, *map(int, batched)])}` to `\"encoder_budget\": 16384}`, and ran `apps/infrx-api/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py`. The tail was `29 passed in 1.01s`. The only encoder-budget cases change the dict or the record's flags (test_certify.py:452 and :481). The serve.sh drift block (:487-499) edits only the image and ENGINE_MAX_NUM_SEQS, and asserts only {runtime_image, engine_max_num_seqs}. Nothing in the tests reads the budget from serve.sh.\n\n(2) The pin fails open. I copied models/marlin2b into scratch, added a flag after `--max-num-seqs \"$ENGINE_MAX_NUM_SEQS\"`, and called config_problems(current_config()). Output: `base 16384` / `literal 32768 True` / `var 16384 False`. With `--max-num-batched-tokens \"$BATCHED\"`, the regex `--max-num-batched-tokens[ =]+\\\"?(\\d+)` finds no digits, so the reader falls back to 16384 and the pin passes. That quoted-variable form is how serve.sh already writes `--max-num-seqs \"$ENGINE_MAX_NUM_SEQS\"`, so it is the likely way decision B would be written.\n\nWhy it is not blocking:\n- At 7b5dbd7 and on claude/backend-impl, serve.sh and serving-version.json have no --max-num-batched-tokens flag.\n- 0117d48 (decision B at 82 s) adds only evidence and result rows. No launch-script change has landed yet.\n- The main pins do not depend on serve.sh: the record's digest is recomputed and the published release is checked against the record.\n- A deployed engine running a different batched value would still fail `inventory_problems`, which requires exactly the served flags (\"flags the engine runs beyond the pin\").\n\nSo what is exposed is only the tree-level second source. It is a coverage gap and a latent fail-open against the F6 docstring, not a wrong result today. It should still be fixed before the decision-B serve.sh change lands. The proposed fix is right:\n- add a batched-tokens drift in the test and assert 'encoder_budget_tokens' is in the names;\n- make serve_sh_pins return None when the flag has no integer literal;\n- register the mutant in e4b_mutants.py.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The facts are confirmed, but the finding is nonblocking. I tested a shared scratch clone at 7b5dbd7 and have since removed it; the codex-e4b worktree was not touched.\n\n(1) The mutant survives. Replacing the end of certify.py:619 with `\"encoder_budget\": 16384}` and running `$PY -m pytest -q -p no:cacheprovider tests/integration/backend/test_certify.py` ends with '29 passed in 1.00s'. In test_certify.py (lines 488-499) the drift block only changes the image and the seqs, so nothing tests how serve_sh_pins reads the budget.\n\n(2) The read fails open. With serve.sh and serving-version.json copied to a temporary MARLIN directory, I added one flag line to serve.sh and called config_problems(current_config()). A literal `--max-num-batched-tokens 32768` was read as 32768 and the problem names included 'encoder_budget_tokens'. With `--max-num-batched-tokens \"$BATCHED\"` it was read as 16384 and there was no encoder_budget_tokens problem. So the certify config pin passes a raised budget when serve.sh sets it through a variable.\n\nWhy it is nonblocking: the property that matters is that serve.sh cannot drift from the record, and another test already enforces it. The shipped serve.sh has no --max-num-batched-tokens flag. apps/infrx-api/tests/w/test_serving.py::check_pinned_launch runs serve.sh itself and requires the flags after the image to equal served_flags(record) exactly (line 114). I added `BATCHED=32768` and `--max-num-batched-tokens \"$BATCHED\"` to serve.sh and ran `$PY -m pytest -q -p no:cacheprovider tests/w/test_serving.py`. The tail was 'tests/w/test_serving.py:114: AssertionError ... FAILED tests/w/test_serving.py::test_perf_pilot__the_engine_starts_pinned_on_loopback_with_the_recorded_flags ... 1 failed, 7 passed in 5.97s'. A serve.sh that raises the budget while the record stays unchanged therefore fails make api-test whichever way the flag is written.\n\nThe certify serve.sh read was never a complete flag comparison anyway: current_config recomputes engine_options_digest from the record, not from serve.sh. What remains is a missing killing test and a lenient regex in certify's secondary check, not a way for drift to get through the checks. The proposed fix is still worth doing: add the drift case, return None when the flag value is not a literal integer, and add the mutant to e4b_mutants.py.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "V3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E4B-9aa7ffe.md",
+   "line": "Round 2 box protocol steps 1 and 5; certify.py preconditions_check (E4B_WINDOW_OK)",
+   "claim_broken": "N2 says E4B_WINDOW_OK now comes from the window record step 1 writes. Nothing checks the record's content or time.",
+   "evidence": "Step 5 only checks `test -s /opt/dlami/nvme/e4b/window.env`. certify reads only E4B_WINDOW_OK == '1'. E4B_WINDOW_OPENED is written but never read or recorded in the report. A record written by hand before the maintenance swap, or a stale one left behind when step 7's manual removal is skipped, passes the precondition. N2's minimal fix (pass it through from the operator's environment) is met, so this is not blocking.",
+   "minimal_fix": "certify: require E4B_WINDOW_OPENED, no older than N hours and not in the future, and record it in the preconditions detail. Step 5: check that the edge serves the maintenance site (the 503 dependency_unavailable that 30-pause.sh shows) before launching."
+  },
+  {
+   "id": "V4",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "1064-1068 (target_label), 1136-1142",
+   "claim_broken": "The label is decided from the preconditions alone. A --box run whose served-build or release-identity FAILs still labels its numbers `meas.`.",
+   "evidence": "Probe through main() with --box: scrape returned the right revision, INFRX_CERTIFY_GATEWAY_IMAGE=sha256:22…, RELEASE_IMAGE=sha256:11…. Result: e4b.b.served-build FAIL ('the gateway runs sha256:2222…, not the release image sha256:1111…'), exit 1, target label 'meas.'. The exit code is 1, so there is no false pass, and amendment 3(d) states exactly this rule.",
+   "minimal_fix": "Optional: decide the label after served_build_check and require it PASS too. Or leave it and say so in amendment 3(d)."
+  },
+  {
+   "id": "V5",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/certify.py",
+   "line": "176 (release_sha equality), 760 (revision len >= 7), 691 (APP_OR_LAB anchors)",
+   "claim_broken": "Three strictness rules have no killing case. All three fail closed today.",
+   "evidence": "Own mutants that SURVIVED test_certify ('29 passed' each): own_release_sha_prefix_accepted (equality -> startswith, so `--release-sha c` would pass), own_short_revision_accepted (>= 7 -> >= 1), own_app_path_substring_matches (regex -> r\"apps/(?:app|lab)\", which matches myapps/app and apps/application; that direction is fail-closed). Related operator hazard: identity needs the full 40-character SHA. If RELEASE is a short SHA (for example, the infrx-runtime:<tag>), every box run FAILs release-identity. The box protocol does not say RELEASE must be the full SHA.",
+   "minimal_fix": "Add one assertion each: a 7-character release_sha is a problem, a 6-character revision is a problem, and a myapps/app cwd is not a server. Have the box protocol state that RELEASE is the full commit id (as cutover's infrx_release_sha is)."
+  },
+  {
+   "id": "V6",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/endpoint_doc.py",
+   "line": "225-229 (Model table notes); Makefile api-mutants",
+   "claim_broken": "Merging with the cutover lane (origin/codex/cutover-mount f7d9b03) takes follow-up work. This is not a defect of the fix round. The F6 pin itself survives the cutover's fixture change.",
+   "evidence": "gh backend-impl 3301f36 + 7b5dbd7 + cutover f7d9b03: (a) a Makefile api-mutants textual conflict (E4B's e4b line vs M1-L2's s3 line; the fix is to union both lines); (b) E4B-endpoint.md goes stale: test_endpoint_doc.py:25 'stale: run … --write', and the 3 default-subset e4b mutants fail on a red baseline. After `endpoint_doc.py --write`, 42 passed. (c) The regenerated Model table shows the measured sha256:3c4bb… and the digest-pinned image, but keeps the hand-typed notes '⚠️ the fixture placeholder, not W3's measured pin' and '⚠️ a moving tag'. Those notes are now false, and no case catches them. They predate this round (they are in 37a4652's endpoint_doc.py:190). F6 check: config_problems(current_config()) == [] with the cutover fixtures.",
+   "minimal_fix": "Derive the two notes from published_release() == serving_record() values. Whoever merges second regenerates E4B-endpoint.md and unions the Makefile line."
+  }
+ ]
+}

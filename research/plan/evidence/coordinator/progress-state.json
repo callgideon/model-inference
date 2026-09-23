@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:22:23Z",
+  "updated": "2026-09-23T22:24:46Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "fix round HANDED BACK 7b5dbd7 (F1\u2013F9 + N1/N2 closed; 126 mutants); single verifier running \u2192 merge after M pilot-media; box half after the rollout (needs infrx_build_info from the gateway \u2014 cutover lane)",
+      "phase": "verifier PASS at 7b5dbd7 (V1/V2/V5/V6 being folded in) \u2192 MERGE at step 6 after the D5/phase-3/cutover/M1-L2 unit and M pilot-media; box half after the rollout",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },
@@ -92,8 +92,8 @@
       "since": "2026-09-23T22:09:07Z"
     },
     "E4B": {
-      "phase": "verifier at 7b5dbd7 running",
-      "since": "2026-09-23T21:58:02Z"
+      "phase": "verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json)",
+      "since": "2026-09-23T22:24:46Z"
     },
     "W4-phaseB": {
       "phase": "MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted \u2192 B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md",
