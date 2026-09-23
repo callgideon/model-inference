@@ -34,6 +34,10 @@ N = "gateway/routes/ingress.py"
 A = "auth/context.py"
 K = "auth/keys.py"                      # F1's caches: G owns the file, and the bounds
 C = "gateway/routes/catalog.py"         # G1R: model resolution for a credential's audience
+R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and the SSE relay
+P = "gateway/pilot.py"                  # G2: the pilot composition
+OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
+ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -877,6 +881,57 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers",
        "test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route",
        dies_by=("RuntimeMisconfigured",)),
+    # === G2 item 1: durable acceptance (DUR-ADMIT G half, API-MODES) =====================
+    _m("admits_the_validation_record", "admission takes prepare_request's record (S2M D1)",
+       R, "            else self.jobs.admit(prepared, idem)",
+       "            else self.jobs.admit(request, idem)",
+       "test_dur_admit__admission_takes_the_prepared_record_never_the_validation_record"),
+    _m("stages_the_validation_record", "the staged payload is the prepared record",
+       R, "        refs = await _dependency(self.media.stage(auth.org_id, prepared))",
+       "        refs = await _dependency(self.media.stage(auth.org_id, request))",
+       "test_dur_admit__admission_takes_the_prepared_record_never_the_validation_record"),
+    _m("staged_refs_never_attached", "the staged refs are bound to the admitted job",
+       R, "                await _dependency(self.media.attach(job.request_id, refs))",
+       "                pass",
+       "test_dur_admit__admission_takes_the_prepared_record_never_the_validation_record",
+       "test_api_modes__the_sync_and_sse_matrix_answers_from_committed_state"),
+    _m("attach_without_the_jobs_org", "attach reads the job's org from the admission (R55)",
+       R, "            self._attaching[job.request_id] = job.org_id", "            pass",
+       "test_dur_admit__admission_takes_the_prepared_record_never_the_validation_record"),
+    _m("async_admitted", "explicit async is refused before anything durable (G3's)",
+       R, "        if request.execution_mode is ExecutionMode.async_:", "        if False:",
+       "test_api_modes__explicit_async_is_refused_before_anything_durable"),
+    _m("pin_drift_ignored", "the pinned revision must still serve what was asked (G1R L2)",
+       R, "                check_capability(serving, prepared.messages, prepared.execution_mode)",
+       "                pass",
+       "test_api_modes__a_capability_drift_after_validation_cancels_the_admitted_job"),
+    _m("unapproved_card_admitted", "a pinned card other than ACTIVE_RATE_CARD_VERSION refuses",
+       R, "                if pins.rate_card_version != self.active_rate_card_version:",
+       "                if False:",
+       "test_api_modes__a_card_this_deployment_did_not_approve_is_refused_and_released"),
+    _m("refused_admission_left_running", "a refusal after admission cancels the job it admitted",
+       R, "            await self.cancel(job.org_id, job.handle, quiet=True)\n"
+          "            raise\n\n    def job_org",
+       "            raise\n\n    def job_org",
+       "test_api_modes__a_capability_drift_after_validation_cancels_the_admitted_job",
+       "test_api_modes__a_card_this_deployment_did_not_approve_is_refused_and_released"),
+    _m("outage_is_a_500", "a dependency failing at acceptance is a typed, retryable 503",
+       R, '    except Exception:\n        log.exception("a durable dependency failed at acceptance")',
+       "    except Exception:\n        raise",
+       "test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_no_side_effects"),
+    _m("replay_header_dropped", "a replay says so (Idempotency-Replayed, E1B 5 / I2B 7)",
+       R, '            headers[wire.HEADER_IDEMPOTENCY_REPLAYED] = "true"', "            pass",
+       "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement",
+       "test_api_modes__a_replay_of_a_cancelled_job_is_rendered_cancelled_never_failed",
+       "test_api_stream__a_gateway_restart_mid_stream_leaves_the_job_to_its_worker"),
+    _m("replay_names_a_new_job", "a replay answers for the job it replays, never a new one",
+       R, "                   request_id=admission.request_id, model=request.model_revision,",
+       "                   request_id=request.request_id, model=request.model_revision,",
+       "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement",
+       "test_api_modes__success_is_answered_only_after_the_terminal_commit"),
+    _m("replay_reaccepted", "a replay re-runs nothing of acceptance",
+       R, "        if admission.replayed:", "        if False:",
+       "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement"),
 )
 
 

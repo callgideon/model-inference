@@ -57,7 +57,7 @@ def test_api_modes__the_sync_and_sse_matrix_answers_from_committed_state(kind, m
         assert answer["usage"] == usage and answer["object"] == "chat.completion"
     else:
         assert reply.text() == world.results[job.id]
-        assert reply.data()[-2]["usage"] == usage
+        assert reply.data()[-2].get("usage") == usage
         token = terminal_chunk(world, job.id).cursor.token
         assert reply.frames[-1] == f"id: {token}\ndata: [DONE]"
     if kind == "video_url":
@@ -114,7 +114,7 @@ def test_dur_output__a_kill_after_the_first_committed_chunk_is_never_regenerated
         assert reply.status == 200 and reply.text() == "Two people"
         error = [item["error"] for item in reply.data()
                  if isinstance(item, dict) and "error" in item]
-        assert [(e["code"], e["infrx"]["state"]) for e in error] == [("stream_interrupted",
+        assert [(e["code"], rs.state_of(e)) for e in error] == [("stream_interrupted",
                                                                       "failed")]
         assert reply.data()[-1] == "[DONE]"
 
@@ -133,7 +133,7 @@ def test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement():
     ledger = world.jobs.wallet(world.org).ledger_total
     again = rs.run(rs.call(world.app, rs.body(), key="order-7"))
     assert again.status == 200 and again.json() == first.json()
-    assert again.headers[wire.HEADER_IDEMPOTENCY_REPLAYED] == "true"
+    assert again.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
     assert wire.HEADER_IDEMPOTENCY_REPLAYED not in first.headers
     assert again.headers[wire.HEADER_INFERENCE_ID] == first.headers[wire.HEADER_INFERENCE_ID]
     assert world.only_job() is job and world.jobs.wallet(world.org).ledger_total == ledger
@@ -216,8 +216,8 @@ def test_api_stream__a_gateway_restart_mid_stream_leaves_the_job_to_its_worker()
     rs.run(worker_finishes())
     world.restart()
     reply = rs.run(rs.call(world.app, rs.body(stream=True), key="resume-1"))
-    assert reply.headers[wire.HEADER_IDEMPOTENCY_REPLAYED] == "true"
-    assert reply.data()[0]["job_handle"] == job.admission.job_handle
+    assert reply.headers.get(wire.HEADER_IDEMPOTENCY_REPLAYED) == "true"
+    assert reply.data()[0].get("job_handle") == job.admission.job_handle
     assert reply.text() == "Two people unload boxes."
     token = terminal_chunk(world, job.id).cursor.token
     assert reply.frames[-1] == f"id: {token}\ndata: [DONE]"

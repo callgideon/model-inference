@@ -105,6 +105,7 @@ def test_f_base__the_composed_pilot_admits_in_the_configured_regime(regime):
         jobs.grant(rs.CONSUMER_ROW["org_id"], "100")
     rt.relay.sleep = lambda _s: asyncio.sleep(0, jobs.clock.advance(3_600))
     reply = rs.run(rs.call(served(rt, deps), rs.body()))
+    assert len(jobs.jobs) == 1, reply.body
     (job,) = jobs.jobs.values()
     assert (job.credit is not None) == (regime == "credit"), reply.body
     assert job.state is JobState.cancelled and reply.status == 504      # the wait's bound
@@ -184,11 +185,11 @@ def test_f_base__the_lifespan_runs_the_dispatch_relay_until_shutdown():
 
     async def body():
         async with pilot.lifespan(app):
-            while not outbox.reads:
+            for _ in range(200):                  # bounded: a relay that never runs fails
+                if event.event_id in await index.members():
+                    break
                 await asyncio.sleep(0)
-            for _ in range(20):
-                await asyncio.sleep(0)
-            assert event.event_id in await index.members()
+            assert outbox.reads and event.event_id in await index.members()
         assert all(task.done() for task in rt.lifetime.tasks)
 
     rs.run(body())

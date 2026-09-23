@@ -278,6 +278,11 @@ class Reply:
                        for choice in item.get("choices", ()))
 
 
+def state_of(error: dict):
+    """The committed state an error envelope names, if it names one."""
+    return (error.get("infrx") or {}).get("state")
+
+
 def body(messages=TEXT, *, stream: bool = False, model: str = support.MODEL_REVISION, **extra):
     return {"model": model, "messages": messages, "stream": stream, **extra}
 
