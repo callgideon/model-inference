@@ -705,6 +705,10 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
             admissions.append(admission)
         drained = await relay.drain()
         assert (drained.get("indexed"), drained.get("acknowledged")) == (4, 4), drained
+        # Review F1: the premise, on the store itself - the count `acknowledge_dispatch`
+        # answers is the rows it matched, not the value it wrote.
+        assert unacknowledged([a.request_id for a in admissions]) == 0, \
+            "the drained dispatch rows are not acknowledged on the store"
         early = await h.extra["store"].dispatch_snapshot()     # before the terminal job
         assert len(early) == 4, early
         first = await port.claim_candidate("w1")
@@ -720,6 +724,8 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
         assert await port.depth() == 0, "the index survived a SIGKILL: not a loss drill"
 
         assert await relay.rebuild() == 3
+        # Past the redelivery window, so a claimed-but-unacknowledged row WOULD come back.
+        h.clock.advance(relay.redelivery_s + 1)
         assert (await relay.drain()).get("read", 0) == 0, "the acknowledged rows came back"
         dispatched = []
         for _ in range(len(admissions) + 1):         # bounded: a duplicate cannot loop
@@ -734,6 +740,32 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
         assert sorted(dispatched) == sorted(expected), dispatched
         await assert_conserved(h, b.ORG_A, [a.job_handle for a in admissions])
     run(body)
+
+
+def unacknowledged(job_ids, kind="inference_dispatch") -> int:
+    """Dispatch rows of these jobs the store has NOT marked acknowledged (read on the clone)."""
+    with stack.connect() as conn:
+        return conn.execute("select count(*) from infrx.outbox where aggregate_id = "
+                            "any(%s::uuid[]) and kind = %s and acknowledged_at is null",
+                            (list(job_ids), kind)).fetchone()[0]
+
+
+def _acknowledgment_does_not_land():
+    """`infrx.acknowledge_dispatch` still matching and counting its rows but writing NULL:
+    the relay believes it acknowledged, and nothing is recorded."""
+    source = stack.function_source("infrx.acknowledge_dispatch", "jsonb")
+    ack = "set acknowledged_at = infrx.now()"
+    assert source.count(ack) == 1, "0012's acknowledgment moved: the drill is stale"
+    stack.defect(source.replace(ack, "set acknowledged_at = null"))
+
+
+def test_e3b_db10_detects_an_outbox_acknowledgment_that_does_not_land(valkey_index,
+                                                                       monkeypatch):
+    """Intentional defect on the REAL store (DUR-OUTBOX, review F1): an acknowledgment that
+    answers its count but records nothing. dr13's own premise assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _acknowledgment_does_not_land)
+    with pytest.raises(AssertionError, match="not acknowledged on the store"):
+        test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index)
 
 
 def _event(h, job_id):
