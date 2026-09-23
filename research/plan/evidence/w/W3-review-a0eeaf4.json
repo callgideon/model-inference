@@ -730,5 +730,57 @@
       "minimal_fix": "One sentence under step 1: 'HF_TOKEN: export it on the box from an SSM SecureString (`aws ssm get-parameter --with-decryption` inside the command), never in the send-command text.'",
       "lens": "honesty"
     }
-  ]
+  ],
+  "_refuter_verdicts": [
+    {
+      "task": "W3",
+      "id": "PIN-1",
+      "votes": [
+        {
+          "refuted": true,
+          "reason": "The reviewer's probe reproduces exactly at a0eeaf4 (scratch archive, stub docker): `--dtype float16`, `--max-model-len 4096`, `--served-model-name x`, `--port 9000` all exit 0 and land as a trailing duplicate after the pinned flags; only --max-num-seqs/--allowed-local-media-path/--api-key exit 2. But the claim that this breaks a stated invariant does not hold. (1) serve.sh's header defines \"settings\" as the two env-named values the gateway also reads (ENGINE_MAX_NUM_SEQS, PROCESSING_CACHE_DIR) \u2014 \"two settings are read under the names the gateway reads, so each fact has one place\" \u2014 and the guard comment \"a pinned setting has one source\" is scoped to those; the header explicitly advertises `./marlin2b/serve.sh --enable-log-requests    # other vLLM flags pass through`. (2) The handback (W3-2785101.md \u00a7What was built 1, and the owned-paths table) claims only \"a second command-line value for either, or an --api-key, is refused (exit 2)\" \u2014 the reviewer's \"refuses caller overrides of pinned flags\" is a paraphrase broader than what was written. That narrow claim is tested (check_one_source_per_setting) and killable (mutants caller_overrides_a_pinned_flag, api_key_passes_through). (3) The record's engine_options_digest was never a per-launch identity: serve.sh already lets the operator deviate via env (`GPU_MEM=0.5`, `MAX_MODEL_LEN=4096` change the served flags while the record hard-codes 0.90/32768; `IMAGE=` overrides the digest pin itself) \u2014 verified in scratch \u2014 and the design's per-launch identity is measure/inventory.sh (\"container args/ports/mounts (the flags as served today)\"). No box-safety hazard: -p binds 127.0.0.1 regardless of --host, --api-key is refused, --port only makes the engine unreachable. What remains is a wording overstatement in serving-version.json `about` (\"exactly what serve.sh passes\"), which the reviewer's own minimal_fix already offers to narrow; extending the case pattern is an optional hardening, not a task-claim breach.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": true,
+          "reason": "The probe reproduces (scratch archive of a0eeaf4, stub docker): `--dtype float16`, `--max-model-len 4096`, `--hf-overrides {}` exit 0 with argv tail `--dtype bfloat16 --dtype float16` etc.; only --max-num-seqs/--allowed-local-media-path/--api-key exit 2. But it is not a defect against what a0eeaf4 claims. (1) The handback (W3-2785101.md lines 14-20) claims exactly: \"a second command-line value for either [ENGINE_MAX_NUM_SEQS/PROCESSING_CACHE_DIR], or an --api-key, is refused (exit 2)\" \u2014 the reviewer's \"refuses caller overrides of pinned flags\" is a paraphrase broader than the text. (2) serve.sh's header defines \"setting\" as those two env-named values (lines 12-19) and advertises \"other vLLM flags pass through\" (line 25), so the line-47 comment is consistent with the guard. (3) The same script deliberately exposes IMAGE=, MAX_MODEL_LEN=, GPU_MEM=, PORT=, GPU= env knobs (`${VAR:-default}`; verified IMAGE=\u2026:nightly MAX_MODEL_LEN=4096 GPU_MEM=0.5 all reach docker argv), which break engine_options_digest identity just as much \u2014 the design is \"pinned defaults, verified by check_pinned_launch's flag equality on a bare launch\" (test_serving.py line 129 says so explicitly), not \"enforced pin on every invocation\"; the tested invariant is killable (caller_overrides_a_pinned_flag, max_num_seqs_ignores_its_setting mutants). (4) No box-safety angle: loopback is enforced by docker `-p 127.0.0.1:$PORT:8000`, so `--host 0.0.0.0` inside the container exposes nothing and `--port 9000` only breaks the mapping; the sole production caller is deploy/marlin2b-vllm.service (`serve.sh --max-num-seqs 32`), which the guard already refuses. What remains is a wording looseness in serving-version.json `about` (\"exactly what serve.sh passes\"), already false for the documented `--enable-log-requests` pass-through \u2014 a nonblocking nit (narrow the `about`, or extend the case pattern; extending it consistently would also mean locking the env knobs, which the reviewer does not ask for).",
+          "severity_if_real": "nonblocking"
+        }
+      ],
+      "real": false
+    },
+    {
+      "task": "W3",
+      "id": "S1",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "Confirmed at a0eeaf4 by code and by reproduce. Code: loop.py:113-116 only extends `failures` after `gather(*self._tasks)` returns, i.e. after the last runner ends; service.py:144-149 `_loop_state` checks only `self._pool.done()`, so a pool with some runners dead reports loop=idle/busy, live=True, ready=True, failures=0. loop.py:119-126 `_runner` has no try; attempt.py:172-174 catches only `errors.DomainError` around `jobs.claim` (same for `load_work` at 185-187), so any non-DomainError (ConnectionError from claim_candidate, jobs.claim or load_work) propagates and permanently ends that runner. serve() (service.py:136) waits on `self._pool`, which only completes when every runner has ended, so the process does not exit and Restart=always never fires. Reproduce (scratch copy of a0eeaf4, stub scheduler whose first claim_candidate raises ConnectionError, concurrency=2, engine ready): {\"dead_runners\": 1, \"pool_done\": false, \"serve_done\": false, \"ready\": true, \"live\": true, \"loop\": \"idle\", \"failures\": 0}; after stop: failures_after_stop 1. Evidence W3-2785101.md Limit 7 (\"one runner of several dying shows as `failures`, not as 503\") is therefore false during the service's life. tests/w/test_service.py has no partly-dead-pool case, so the invariant has no killable test. Blocking: real defect that silently reduces the pilot's single worker (default concurrency 10) to fewer runners on any transient store blip, with no health signal and no restart. Scratch removed."
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at a0eeaf4 by code reading and by reproducing the reviewer's probe in a scratch archive (concurrency=2, first claim_candidate raises ConnectionError once): {dead_runners: 1, alive: 1, pool_done: False, ready: True, live: True, loop: 'idle', failures: 0} while running; failures becomes 1 only after stop(). Mechanism: WorkerLoop._runner (loop.py:119-126) has no try, so any non-DomainError from claim_one kills that runner task; loop.failures is only filled at loop.py:113-116 after gather over ALL runners returns; WorkerService._loop_state (service.py:144-149) inspects only self._pool.done() and loop.draining, so a partly dead pool reads idle/busy, readyz 200, livez 200, failures 0, and serve() (service.py:136) does not return, so Restart=always never fires. Evidence W3-2785101.md Limit 7 ('one runner of several dying shows as failures, not as 503') is therefore false: it shows as nothing until the last runner dies. Side effect also observed: the drain report counts the already-dead runner as 'finished' (2 finished, 0 released). No case in tests/w/test_service.py exercises a partly dead pool (the only dead-pool case kills every runner via a permanently broken claim_candidate). Severity: a real defect in the delivered liveness surface plus a false evidence claim with no killable test; not an immediate box hazard since WorkerService is mounted nowhere at a0eeaf4, but the rubric (real defect / invariant with no killable test) makes it blocking. Root cause is W2's _runner; the W3-side minimal fix (count dead runner tasks in readiness(), make live false when >0, or end serve() on any runner completion) and the Limit 7 correction are both small.",
+          "severity_if_real": "blocking"
+        }
+      ],
+      "real": true
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "S1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "144-166 (_loop_state/readiness); evidence W3-2785101.md Limits item 7",
+      "claim_broken": "Evidence Limit 7: 'one runner of several dying shows as failures, not as 503'. Measured: it shows as nothing. loop.failures is only populated when WorkerLoop.run's gather returns (loop.py:113-116), i.e. after the LAST runner ends, so a partly dead pool reports readyz 200 / failures 0 / livez 200 for its whole life. A runner dies permanently on any non-DomainError from claim_candidate, jobs.claim or load_work (a transient Valkey/PostgreSQL blip; _runner has no try), the process never exits, the unit's Restart=always never fires, and the pilot's single worker silently runs at reduced concurrency until the last runner dies.",
+      "evidence": "Probe P6 (concurrency=2, first claim_candidate raises ConnectionError once): {dead_runners: 1, readyz: [200, failures=0, ready=True], livez: [200, True], surviving_runner_completed: True, failures_after_stop: 1}. No case in tests/w/test_service.py exercises a partly dead pool; my mutants R14/R16 (drain/serve behaviour on a dead pool) survived.",
+      "minimal_fix": "In readiness(): dead = sum(1 for t in self.loop._tasks if t.done() and not t.cancelled() and t.exception() is not None); report it as 'runners_dead' and make 'live' false when dead > 0 (or end serve() when any runner task completes: asyncio.wait({waiting, *self.loop._tasks}, FIRST_COMPLETED)), so the unit restarts to full concurrency; add a case that kills one of two runners and asserts 503 on /livez. Root cause is W2's _runner not surviving a transient claim error; note it as a W follow-up and correct Limit 7.",
+      "lens": "service"
+    }
+  ],
+  "refuted_blocking": [
+    "PIN-1"
+  ],
+  "verdict": "fix_required"
 }

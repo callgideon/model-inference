@@ -173,6 +173,156 @@
       ],
       "fabrication_check": "Verified against the implementer's claims: unreviewed digest refused (exit 2, nothing changed); a failing second file rolls back the first, including a runtime (not just syntax) failure and partial execution inside the failing file; a history gap and an unknown/hosted-shaped version refused before anything runs; 0001\u20130009 apply, then 'nothing pending' on plan and on a second apply; concurrent applies serialize on pg_advisory_xact_lock (one applies, the other reports nothing pending; PK+lock leave one row per version); digest covers version, name and sha256 of content (mutant list has digest_blind_to_content; my digest_check_removed killed). Worker drain 330 s < TimeoutStopSec 360 s > GENERATION_TIMEOUT_S 300 s; gateway 120/150; engine 30/60; valkey 10/30 (units + test_packaging). rollback.sh refuses before any stop/write; exact-string attestation; typo values refused; ENV_FILE override refused (silently, exit 2). ssm.sh base64 round trip and dash execution verified locally. Not verified: nothing was run against the box, AWS or hosted Supabase; the runtime image was not built (would need PyPI) \u2014 migrate.py ran from the scratch .venv with the same pinned psycopg 3.3.6 against the pinned supabase/postgres digest, not inside infrx-runtime. The '235 passed' figure is INFRX_MUTANTS=all; the default run is 135, consistent with the evidence's own breakdown. Rehearsal step 8's 'failing migration' uses a syntax error, which PostgreSQL rejects at parse time for the whole file \u2014 it still proves the prior file's rollback (D2), and D2b proves the runtime-error case. The rehearsal (rehearse.sh) itself was not re-run under this lens; the D2/D10 drills reproduce its step 8 on the same image. Unverified claim in the evidence: '`plan` is read-only' (M3 shows the statement is inert in the plan's transaction).",
       "cleanup": "Removed: container infrx-review-i2b-migrate-postgres (docker ps -a/network ls/volume ls show 0 infrx-review-i2b-migrate-* entries; no network or volume was created), the scratch tree /tmp/claude-1000/review-i2b-migrate-3654730 including its .venv, drill dirs, logs, the fake aws, and the reviewer test file tests/i/test_review_lens.py (existed only in the scratch). No file in any worktree was edited or committed (git status --porcelain empty in codex-i2b). Untouched: other sessions' infrx-* containers, pytest's rotating /tmp/pytest-of-rey basetemp."
+    },
+    "i2b-failclosed": {
+      "lens": "i2b-failclosed",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "vllm_unit_passes_max_num_seqs",
+          "edit": "marlin2b-vllm.service: `ExecStart=.../serve.sh` -> `ExecStart=.../serve.sh --max-num-seqs 32` (the base unit's line)",
+          "result": "NOT RUN (authored in scratchpad own_mutants.py); by reading, killed by test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file (`engine[\"ExecStart\"] == [serve.sh]`) and by the listed `engine_second_setting_source`",
+          "killed_by": "expected: test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file"
+        },
+        {
+          "name": "tunable_shape_unchecked",
+          "edit": "preflight.py tunables(): `problem = shape_problem(Key(name, \"tunable\", \"tunable\"), value)` -> `problem = None`",
+          "result": "NOT RUN; by reading, no case sets a --set value with a forbidden character -> expected SURVIVED (finding FC-3)",
+          "killed_by": "none in the suite; scratch test_review__tunable_newline_is_refused would kill it"
+        },
+        {
+          "name": "install_mode_guard_removed",
+          "edit": "install.sh: `*) die \"INFRX_MODE must be ...\" 2 ;;` -> `*) ;;`",
+          "result": "NOT RUN; expected SURVIVED (no tests/i case; preflight still refuses, finding FC-5)",
+          "killed_by": "none"
+        },
+        {
+          "name": "pause_stops_before_edge / resume_reopens_before_ready / install_edge_before_ready / worker_readiness_port_drift / gateway_readiness_is_only_health / valkey_not_started_in_pilot / rollback_skips_readiness / engine_stop_timeout_shorter_than_docker / worker_not_after_engine / maintenance_site_unparsable / install_env_file_read_by_engine_dropped",
+          "edit": "drain.sh order swaps; install.sh edge_install moved before wait_ready; lib.sh 8002->8003 and /readyz->/health; install.sh valkey start removed; rollback.sh wait_ready removed; vllm TimeoutStopSec 60->20; worker After= without the engine; a syntax error in Caddyfile.maintenance; vllm EnvironmentFile removed",
+          "result": "NOT RUN (the full list was still copying the scratch tree; editing it would have corrupted that run). By reading the assertions in test_scripts.py/test_packaging.py all are expected KILLED except maintenance_site_unparsable (expected SURVIVED, FC-4)",
+          "killed_by": "expected: test_ops_recover__drain_closes_the_edge_before_stopping_the_worker, test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness, test_ops_recover__rollback_restores_every_replaced_file, test_ops_recover__every_container_unit_stops_later_than_docker_does, test_ops_recover__the_worker_drains_before_the_engine_stops, test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-i2b archive 5d68e50 | tar -x -C /tmp/claude-1000/review-i2b-failclosed-711371 && make api-env (scratch)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -p no:cacheprovider tests/i --ignore=tests/i/test_mutants.py (scratch)",
+          "exit": 0,
+          "tail": "92 passed in 27.16s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all .venv/bin/python -m pytest -q -p no:cacheprovider tests/i/test_mutants.py (scratch, detached, ~10 min)",
+          "exit": -1,
+          "tail": "still RUNNING when the structured output was enforced: '........ [ 50%] .......................................................' = 127/143 tests, no F or E so far; the summary line was not seen, so no pass claim is made"
+        },
+        {
+          "cmd": "stub-docker drill on W3's serve.sh at a0eeaf4 (git archive models/marlin2b/{serve.sh,model.env} + common/env.sh): (a) `serve.sh --max-num-seqs 32`; (b) no argv, no ENGINE_MAX_NUM_SEQS; (c) ENGINE_MAX_NUM_SEQS=0; (d) PROCESSING_CACHE_DIR missing",
+          "exit": 0,
+          "tail": "(a) 'serve.sh: --max-num-seqs is pinned here; set ENGINE_MAX_NUM_SEQS or PROCESSING_CACHE_DIR' exit=2, docker not run; (b) DOCKER ARGV ... [--max-num-seqs] [8] ... [--allowed-local-media-path] [<dir>] exit=0; (c) [--max-num-seqs] [0] exit=0; (d) 'serve.sh: no directory at PROCESSING_CACHE_DIR' exit=1"
+        },
+        {
+          "cmd": "git -C .../codex-i2b show d18177e:apps/infrx-api/deploy/marlin2b-vllm.service; grep on claude/backend-impl HEAD 83fdf68 and codex-w3 HEAD (a0eeaf4)",
+          "exit": 0,
+          "tail": "base/box unit: `ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh --max-num-seqs 32`, `ExecStop=/usr/bin/docker stop marlin2b-8000` (10 s default); backend-impl HEAD still carries it; codex-w3 clean at a0eeaf4, serve.sh unchanged since"
+        },
+        {
+          "cmd": ".venv/bin/python (scratch) - enumerate tests/i/mutants.py MUTANTS with file and anchor",
+          "exit": 0,
+          "tail": "136 mutants; anchors read for every deploy/*.service, lib.sh, install.sh, drain.sh, rollback.sh, Caddyfile* and rollout step mutant"
+        }
+      ],
+      "fabrication_check": "Verified by running: tests/i 92 passed in the scratch at 5d68e50 (the evidence's 92 suite cases); the serve.sh/unit hazard on W3's actual a0eeaf4 script with a stub docker (exit 2 with the base unit's argv; default 8 and a verbatim 0 with I2B's flag-less unit); the base unit's text and the integration branch's current copy. Verified by reading only: the readiness gate - install.sh pilot waits gateway /readyz then worker /readyz (lib.sh WORKER_READY 8002, W3's default) before edge_install, drain.sh resume the same before caddy_site, rollback.sh wait_ready before its reload, 91-abort reopens through drain.sh resume; worker unit PartOf=+After= the engine (stop order worker -> engine), TimeoutStopSec 360 > docker stop -t 330 > GENERATION_TIMEOUT_S 300, engine 30/60 as W3 request 3 asked, KillMode left at control-group (W3's KillMode=mixed proposal was for a host-process unit; here ExecStop stops the container and only the docker client remains); every TUNABLE name is refused when misspelled, doubled, or a manifest/NOT_SETTABLE name, and values are typed by validate_runtime(from_env) in the probe - except that 0 is accepted for engine/worker counts (FC-2) and the forbidden-character rule on --set values has no case (FC-3); drain.sh pause/resume are idempotent by construction (put + reload, systemctl stop/start are no-ops when repeated); Caddyfile trace: install -> rollback without a pause restores the pre-install active file (the monolith's site, rollback reloads it), pause -> install -> rollback ends on the maintenance site - which is exactly the migrate lens's M1, not repeated here; rehearse.sh's in-image probe uses `docker run --rm -i --network none ... --env-file /dev/stdin` (line 341) and preflight.probe_command the same (mutant probe_online listed). NOT verified: the full mutant list's summary (still running, 127/143 with no failure marks when output was enforced); my 14 own mutants and 7 review-test drills were authored (scratchpad own_mutants.py, test_review_lens.py) but never executed, because running them meant editing the scratch tree the shared runner was copying - every 'expected KILLED/SURVIVED' above is a reading of the assertions, not a run; nothing was run against the box, AWS, hosted Supabase, real systemd or the runtime image; the rehearsal was not re-run. The task text's premise that 'the deployed vLLM unit passes --max-num-seqs 32' is true of the box/base unit, not of I2B's unit at 5d68e50 (ff74e4c removed the flag) - the evidence's request 3 wording in the W3 review JSON ('I2B unit passes no flags') is accurate.",
+      "cleanup": "Scratch tree /tmp/claude-1000/review-i2b-failclosed-711371 (archive, .venv, drill/, suite.log, mutants-all.log) is still present with one detached pytest (the full mutant list) running in it; it must be removed after that process ends (`pkill -f review-i2b-failclosed-711371; rm -rf /tmp/claude-1000/review-i2b-failclosed-711371`). Scratchpad files own_mutants.py and test_review_lens.py live only in the session scratchpad. No docker container, network or volume was created (no infrx-review-i2b-failclosed-* exists); no worktree was edited or committed (codex-i2b, codex-w3 and infrx-impl were read only; codex-i2b/codex-w3 `git status --porcelain` empty at start)."
+    },
+    "i2b-secrets": {
+      "lens": "i2b-secrets",
+      "verdict_hint": "fix_required",
+      "mutants": [
+        {
+          "name": "refusal_echoes_value",
+          "edit": "preflight.py collect(): `problems.append(problem)` -> `problems.append(f\"{problem}: {value!r}\")`",
+          "result": "KILLED (1 failed, 41 passed)",
+          "killed_by": "test_deploy_failclosed__a_value_cannot_write_a_second_variable"
+        },
+        {
+          "name": "probe_failure_echoes_value",
+          "edit": "preflight.py probe(): `f\"the staged configuration does not start: {failure}\"` -> `\u2026 {failure} {staged_env}`",
+          "result": "KILLED (2 failed, 40 passed)",
+          "killed_by": "test_deploy_failclosed__the_staged_bytes_are_what_the_runtime_validates, test_deploy_failclosed__pilot_never_writes_the_shared_legacy_key"
+        },
+        {
+          "name": "backup_dir_world_readable",
+          "edit": "install.sh: `chmod 0700 \"$BACKUPS\" \"$backup\"` -> `chmod 0755 \u2026`",
+          "result": "SURVIVED (8 passed) - finding S3",
+          "killed_by": "none"
+        },
+        {
+          "name": "readme_inline_env_value",
+          "edit": "infra/rollout/README.md step 6: `-e MIGRATE_DATABASE_URL -v` -> `-e MIGRATE_DATABASE_URL=pgpass-literal-0123456789 -v`",
+          "result": "SURVIVED (3 passed) - finding S5",
+          "killed_by": "none"
+        },
+        {
+          "name": "verify_local_prints_values",
+          "edit": "infra/rollout/steps/60-verify-local.sh: `cut -d= -f1 /etc/marlin2b-gateway.env` -> `cat /etc/marlin2b-gateway.env`",
+          "result": "SURVIVED (3 passed) - finding S5",
+          "killed_by": "none"
+        },
+        {
+          "name": "admin_api_widened",
+          "edit": "deploy/Caddyfile: `admin localhost:2019` -> `admin 0.0.0.0:2019`",
+          "result": "SURVIVED (20 passed) - finding S1",
+          "killed_by": "none"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C \u2026/codex-i2b archive 5d68e50 | tar -x -C /tmp/claude-1000/review-i2b-i2b-secrets-713302 && make api-env (in the scratch)",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/i -p no:cacheprovider (scratch, default mutant subset)",
+          "exit": 0,
+          "tail": "135 passed in 164.49s (0:02:44)"
+        },
+        {
+          "cmd": "Caddy admin drill: docker run caddy@sha256:14a9c0\u2026 (real deploy/Caddyfile, INFRX_SITE=http://:8080, cap-drop ALL/+NET_BIND_SERVICE, read-only) in a --network none box named infrx-review-i2b-i2b-secrets-box; then from `--network container:<box> --user 10001:10000`: wget GET /metrics, POST /load, GET /health /metrics, GET :2019/config/",
+          "exit": 0,
+          "tail": "before: HTTP/1.1 404 Not Found | load exit=0 | after: EDGE-REPLACED-BY-UID-10001 (could be reverse_proxy 127.0.0.1:8000 or file_server /data) twice | GET /config/ returns the live config | cleaned, 0 objects left"
+        },
+        {
+          "cmd": "MIGRATE_DATABASE_URL='postgresql://infrx:MARKER-pw@[::1:5432/infrx' .venv/bin/python deploy/migrate.py plan --dir ../app/supabase/migrations (and the %zz variant)",
+          "exit": 1,
+          "tail": "psycopg.ProgrammingError: end of string reached when looking for matching \"]\" in IPv6 host address in URI: \"postgresql://infrx:MARKER-pw@[::1:5432/infrx\" | MARKER in stderr: 1 | invalid percent-encoded token: \"MARKER-pw%zz\" | MARKER in stderr: 1"
+        },
+        {
+          "cmd": "PATH=fakecurl:$PATH INFRX_TEST_KEY=MARKER-scoped-key INFRX_REVOKED_KEY=MARKER-revoked-key LEGACY_KEY=MARKER-legacy-key bash infra/rollout/verify-external.sh (fake curl records argv, answers 000)",
+          "exit": 16,
+          "tail": "curl argv lines carrying a key: 5 | curl -s -o /tmp/infrx-verify.body -w %{http_code} --max-time 30 -H Content-Type: application/json -H Authorization: Bearer MARKER-legacy-key"
+        },
+        {
+          "cmd": "mutants.py (6 own mutants, edit/run/restore in a second archive copy, same venv)",
+          "exit": 0,
+          "tail": "refusal_echoes_value KILLED; probe_failure_echoes_value KILLED; backup_dir_world_readable SURVIVED; readme_inline_env_value SURVIVED; verify_local_prints_values SURVIVED; admin_api_widened SURVIVED"
+        },
+        {
+          "cmd": "umask 022; tar -cpf probe.tar --files-from /dev/null mutants.py; stat -c %a probe.tar",
+          "exit": 0,
+          "tail": "644"
+        },
+        {
+          "cmd": "docker ps -a/volume ls/network ls --filter name=infrx-review-i2b-i2b-secrets; rm -rf scratch; git status --porcelain in codex-i2b and infrx-impl",
+          "exit": 0,
+          "tail": "containers left: 0 volumes: 0 networks: 0 | scratch removed: yes | codex-i2b porcelain lines: 0 | infrx-impl porcelain lines: 0"
+        }
+      ],
+      "fabrication_check": "Verified by reading every changed script line by line and by the drills above. Holds as claimed: no shell script ever holds a secret in a variable (install.sh/drain.sh/rollback.sh/lib.sh/steps/ssm.sh - a `set -x` on any of them would trace no value); `read_parameter` captures the value on a pipe and the in-image probe gets the staged bytes on stdin (`docker run --rm -i --network none <id> \u2026 --env-file /dev/stdin`, no mount, no `-e`); `report()`/`shape_problem`/`tunables` name keys only and the two echo mutants were killed; `config._coerce`/`RuntimeMisconfigured` messages name variables only, so the probe's `{failure}` interpolation is safe for the runtime's own errors; `run_probe`'s non-JSON fallback prints one stderr line, type-only on import failure; the staged file is O_EXCL 0600, chowned before the rename; unit files 0644 hold no values; `--env-file` passes secrets to docker (root) not the container uid; the vllm container gets only `-e VLLM_LOGGING_LEVEL` from serve.sh (base and W3), so the engine container never sees the service-role key (the serve.sh shell as ubuntu does - Limit 6, same owner as the 0600 file); Caddy dir mounted `:ro`, Caddy validate offline; every image by digest; ssm.sh carries only NAME=VALUE exports it is told to (RELEASE/BACKUP/ROLLBACK_TO_UNMETERED in the runbook) and SSM output is names-only by construction; 60-verify-local's `docker inspect --format` prints no env; rollback.sh's attestation is an exact-string compare before any stop/write (M4/M5 already recorded by the migrate lens, not repeated); the rehearsal's root containers mount only sandbox paths (the docker wrapper maps /etc,/var/lib/infrx,/var/backups/infrx,/opt/dlami/nvme under INFRX_ROOT) and its literals are local. Not verified: nothing ran against the box, AWS or hosted Supabase; rehearse.sh was not re-run under this lens; the admin drill used a plain-HTTP site (the admin API does not depend on TLS) and demonstrated whole-config replacement, not the follow-on `file_server /data` read of the certificate keys (asserted from Caddy running as in-container root over the rw `caddy_data` volume); migrate.py's leak was reproduced with the scratch venv's psycopg (same lock, 3.3.6), not inside the built image; only the default mutant subset (135) was run, not INFRX_MUTANTS=all. W3 request 3-5: the deployed vllm unit at 5d68e50 passes no arguments (`ExecStart=\u2026/serve.sh`, comment lines 10-13), so W3's `--max-num-seqs` refusal is not triggered by this branch's unit; the base serve.sh at d18177e still publishes `${BIND:-127.0.0.1}` and the pilot refusal for its floating tag is live, as the evidence says.",
+      "cleanup": "Removed: containers infrx-review-i2b-i2b-secrets-box and -caddy (docker ps -a/volume ls/network ls with that name filter: 0/0/0; no volume or network was created), the scratch tree /tmp/claude-1000/review-i2b-i2b-secrets-713302 including its .venv, the second archive copy `mut/`, caddy-drill/, fakecurl/, mutants.py and the logs. No file in any worktree was edited or committed (git status --porcelain empty in codex-i2b and infrx-impl). Untouched: other sessions' containers, the pilot box, AWS, hosted projects."
     }
   },
   "_unverified_blocking": [
@@ -257,6 +407,151 @@
       "evidence": "Drill D5: `update \u2026 set name='something_else' where version='0002'` -> `plan` exit 0, `applied: 0001, 0002, \u2026`. Hosted-shaped rows are otherwise refused: a timestamp version `20250901120000` -> exit 2 'versions this repository does not'; a gap row 0009 without 0008 -> exit 2 'a gap'.",
       "minimal_fix": "None required (matches CLI semantics); optionally print applied rows as `version name` in `describe` so the reviewer sees the mismatch.",
       "lens": "migrate"
+    },
+    {
+      "id": "FC-1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/marlin2b-vllm.service",
+      "line": "17 (I2B) vs base d18177e line 12; infra/rollout/steps/40-checkout.sh, 50-install.sh",
+      "claim_broken": "Merge-order hazard, stated precisely: the unit installed on the box today (base d18177e, `ExecStart=.../serve.sh --max-num-seqs 32`) and W3's serve.sh at a0eeaf4 (`--max-num-seqs*` on argv -> exit 2 before docker) cannot coexist. I2B's unit passes no flag and reads ENGINE_MAX_NUM_SEQS from the env file, so I2B's own tree is consistent (tests/i `test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file` asserts `ExecStart == [serve.sh]`, so re-adding the flag is killable). The hazard lives in (a) the integration branch after W3 merges and before I2B merges: `deploy/marlin2b-vllm.service` still passes `--max-num-seqs 32` and no suite on that tree reads the unit against serve.sh; (b) the box between step 7 (40-checkout: tree = RELEASE with W3's serve.sh) and step 8 (50-install installs the new unit): any engine restart in that window (crash, reboot, a hand `systemctl restart`) runs old unit + new serve.sh -> exit 2 -> Restart=always/RestartSec=5 -> start-limit hit after ~25 s, engine down until 50-install's `systemctl restart marlin2b-vllm`; (c) anyone running I0's install.sh (base deploy/) from a post-W3 checkout. 90-revert is consistent (old tree + old unit restored before `systemctl restart marlin2b-vllm`); 91-abort does not touch the engine. Second half of the same hazard: the box runs 32 today; 50-install.sh exports no INFRX_SET, the env file then carries no ENGINE_MAX_NUM_SEQS, and W3's serve.sh defaults to 8, so the cutover silently cuts engine concurrency 4x and W3's concurrency.sh (which refuses unless the engine runs 32) exits 2 afterwards. I2B did not adopt W3 request 3's `Environment=ENGINE_MAX_NUM_SEQS=8` literally (it reads the validated file instead), which is fine, but the runbook never decides the value.",
+      "evidence": "Drill with a stub docker on W3's serve.sh at a0eeaf4 (git archive to scratch): (a) `serve.sh --max-num-seqs 32` -> `serve.sh: --max-num-seqs is pinned here; set ENGINE_MAX_NUM_SEQS or PROCESSING_CACHE_DIR`, exit 2, docker not run; (b) no argv, env without ENGINE_MAX_NUM_SEQS -> docker argv `[--max-num-seqs] [8] ... [--allowed-local-media-path] [<dir>]`, exit 0. By reading: base unit line 12 passes `--max-num-seqs 32`; claude/backend-impl HEAD 83fdf68 still carries that unit and the unpinned serve.sh; codex-w3 HEAD == a0eeaf4 (serve.sh diff vs a0eeaf4 empty); 50-install.sh line 11 sets INFRX_MODE/RELEASE/ENGINE/ENV_OWNER only; serving-version.json `settings.ENGINE_MAX_NUM_SEQS = \"8\"` with the \u26a0\ufe0f that the box ran 32.",
+      "minimal_fix": "Merge I2B's deploy/ in the same integration step as W3 (or I2B first), and add to infra/rollout/README.md step 8 an explicit decision line: `INFRX_SET=ENGINE_MAX_NUM_SEQS=32` (today's box value, until W3's sweep decides) exported through ssm.sh, plus one sentence in 40-checkout.sh's header: 'do not restart marlin2b-vllm between this step and 50-install: the installed unit still passes --max-num-seqs 32, which the checked-out serve.sh refuses'.",
+      "lens": "i2b-failclosed"
+    },
+    {
+      "id": "FC-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/preflight.py",
+      "line": "235 (SHAPES 'tunable'), and infrx/config.py _coerce (~line 112-128)",
+      "claim_broken": "Evidence: 'a value the runtime cannot read (`abc`, `-1`, a zero pool) is refused by the probe before anything changes'. For the engine's own setting it is not: `ENGINE_MAX_NUM_SEQS=0` passes the 'tunable' shape (len<=4096) and `_coerce` (int, refuses only negatives), is written to the env file, and W3's serve.sh passes `--max-num-seqs 0` verbatim; vLLM rejects it, so after 50-install's `ENGINE=restart` the running engine is gone, the new engine crash-loops, and install.sh exits 4 only after ENGINE_READY_S=900 s with the env file already committed. Fail-closed in the end (R2), but 15 minutes of engine downtime from a value the preflight was supposed to refuse.",
+      "evidence": "Drill (c) with a stub docker: `ENGINE_MAX_NUM_SEQS=0 serve.sh` -> docker argv `[--max-num-seqs] [0]`, exit 0 (serve.sh does not validate it either). By reading: config._coerce refuses `value < 0` and non-int only; contracts/limits.py `engine_max_num_seqs: int = 8`; preflight SHAPES['tunable'] is a length check. The `preflight.apply --set ENGINE_MAX_NUM_SEQS=0` case was authored (scratchpad test_review_lens.py::test_review__engine_max_num_seqs_values) but NOT run: the full mutant list was still copying the scratch tree when the output was demanded.",
+      "minimal_fix": "Give ENGINE_MAX_NUM_SEQS and WORKER_CONCURRENCY the existing `positive_int` shape in preflight (a small `TUNABLE_SHAPES = {..: 'positive_int'}` lookup in `tunables()`), or make `_coerce` refuse 0 for those two names; add the `=0` case to test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime.",
+      "lens": "i2b-failclosed"
+    },
+    {
+      "id": "FC-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/preflight.py",
+      "line": "~336 (tunables(): shape_problem on a --set value)",
+      "claim_broken": "The FORBIDDEN_CHARS rule ('refused for every key, secret or not: this is the trust boundary of the whole module') is enforced for `--set` values, but no case exercises it: every tunable case uses plain values, so a mutant replacing `problem = shape_problem(Key(name, 'tunable', 'tunable'), value)` with `problem = None` survives while `--set MAX_ACTIVE_JOBS=$'4\\nUPSTREAM=http://10.0.0.5:8000'` would write a second UPSTREAM line after the loopback-checked one (last line wins in systemd and docker --env-file).",
+      "evidence": "By reading: tests/i/test_packaging.py lines 260-295 use `MAX_ACTIVE_JOB=4`, secrets/manifest names, `abc`, `-1`, `DATABASE_POOL_MAX_SIZE=0` only; the existing mutant `validation_skipped` anchors the manifest loop's `shape_problem(key, value)` (collect), not the tunables line. Own mutant `tunable_shape_unchecked` and the killing case were authored but not run (see fabrication_check).",
+      "minimal_fix": "One loop iteration in test_deploy_failclosed__a_setting_outside_the_schema_installs_nothing with a value containing a newline (assert REFUSED, bytes unchanged, message names MAX_ACTIVE_JOBS and not the injected value), and list the mutant.",
+      "lens": "i2b-failclosed"
+    },
+    {
+      "id": "FC-4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/lib.sh",
+      "line": "56-62 (edge_install) and drain.sh 22-24",
+      "claim_broken": "'validated with the pinned Caddy before it is served' is true of the normal site only: Caddyfile.maintenance is installed unvalidated. A broken maintenance file is discovered at `drain.sh pause`, whose `caddy reload` fails under `set -e` before `systemctl stop`, so the edge keeps serving the previous normal site: the pause silently does not pause (admission continues) and the runtime is not drained.",
+      "evidence": "By reading: edge_install runs `caddy validate` on `$src/Caddyfile` only, then `put`s both files; drain.sh pause = caddy_site (put + reload) then systemctl stop. The suite's maintenance test parses the file with regexes (test_packaging.py 409+), no Caddy; only rehearse.sh step 6 exercises the real file. Own mutant `maintenance_site_unparsable` authored, not run.",
+      "minimal_fix": "Validate both files in edge_install (second `caddy validate` line on Caddyfile.maintenance) and, in drain.sh pause, keep the existing order but say in the error that the edge is still open.",
+      "lens": "i2b-failclosed"
+    },
+    {
+      "id": "FC-5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/install.sh",
+      "line": "26-29",
+      "claim_broken": "The 'unusable mode must not leave half a deploy behind' guard has no tests/i case (only rehearse.sh's 'no mode' drill): with the case removed, `INFRX_MODE=` still ends in preflight's REFUSED (exit 2, env/units untouched) but only after `docker build` and a backup directory were made.",
+      "evidence": "By reading: test_scripts.py covers dirty tree, RELEASE mismatch, denied read and pilot-today refusals; none runs install.sh with an empty or unknown mode. Behaviour unmutated is closed (die before git/docker). Own mutant `install_mode_guard_removed` authored, not run.",
+      "minimal_fix": "Add `INFRX_MODE=\"\"` and `INFRX_MODE=prod` to test_deploy_failclosed__only_a_committed_checkout_is_deployed asserting exit 2 and no git/docker/systemctl event.",
+      "lens": "i2b-failclosed"
+    },
+    {
+      "id": "S2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "103-109 (and 170-172)",
+      "claim_broken": "'never an argument: it carries a credential' / 'The message names files and versions only'. Only `Refused` is caught in `main`; a `psycopg.connect` failure propagates as a raw traceback, and libpq's URI-parse messages quote the DSN - including the password - so a mistyped `MIGRATE_DATABASE_URL` prints the credential into the coordinator's terminal and the runbook's recorded 'apply output' (step 6 Record column). Not covered by tests/i: every test_migrate case monkeypatches `connect` wholesale except the no-DSN case, which refuses before connecting.",
+      "evidence": "Scratch venv (make api-env, psycopg 3.3.6): `MIGRATE_DATABASE_URL='postgresql://infrx:MARKER-pw@[::1:5432/infrx' python deploy/migrate.py plan --dir ../app/supabase/migrations` -> exit 1, stderr last line `psycopg.ProgrammingError: end of string reached when looking for matching \"]\" in IPv6 host address in URI: \"postgresql://infrx:MARKER-pw@[::1:5432/infrx\"` (MARKER count 1); `\u2026MARKER-pw%zz@db.invalid\u2026` -> `psycopg.ProgrammingError: invalid percent-encoded token: \"MARKER-pw%zz\"` (MARKER count 1). Host/auth failures do not leak (`failed to resolve host 'db.invalid'`).",
+      "minimal_fix": "In `connect()`: `try: return psycopg.connect(dsn, autocommit=False) except Exception as failure: raise Refused(f\"{DSN_ENV}: connection failed ({type(failure).__name__}); the value is not echoed\") from None`; one test_migrate case with the real `connect` and the IPv6-malformed marker DSN asserting exit 2 and MARKER not in stderr; list it as a mutant (`connect_error_unwrapped`).",
+      "lens": "i2b-secrets"
+    },
+    {
+      "id": "S3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/install.sh",
+      "line": "52-63",
+      "claim_broken": "Secret handling as documented ('written only into the 0600 staged file') stops at the installer: step 3 runs before step 4, so every install.sh run - including every refused one (evidence: 'the backup dir made [is] inert') - copies `/etc/marlin2b-gateway.env` with SUPABASE_SERVICE_ROLE_KEY and DATABASE_URL into `/var/backups/infrx/<UTC>-<sha>/files.tar`, mode 0644 (umask) under a 0700 directory, with no retention, so rotated secrets persist indefinitely; the 0700 is the only guard and no test asserts it (own mutant `backup_dir_world_readable` 0700->0755: `8 passed`, SURVIVED); infra/README.md \u00a75.2 and the runbook do not say the backup directory holds secrets.",
+      "evidence": "By reading: lines 53-62 (`mkdir -p \u2026 chmod 0700`, `tar -C / -cpf $backup/files.tar \u2026 etc/marlin2b-gateway.env`) precede line 68 (`preflight.py apply`); `umask 022; tar -cpf probe.tar \u2026` -> `644`. test_scripts.py opens files.tar (line 210) for members only; grep `0o700|st_mode` in tests/i/test_scripts.py: none.",
+      "minimal_fix": "`( umask 077; tar -C \u2026 -cpf \"$backup/files.tar\" \u2026 )` (or `chmod 0600` after), assert `stat(BACKUPS).st_mode & 0o777 == 0o700` and files.tar 0600 in `test_ops_recover__rollback_restores_every_replaced_file`, list the mutant; either take the backup only after `apply` succeeds or `rm -rf \"$backup\"` on its refusal; one sentence in infra/README.md \u00a75.2 that `/var/backups/infrx` holds past env files (secrets) and who prunes them.",
+      "lens": "i2b-secrets"
+    },
+    {
+      "id": "S4",
+      "severity": "nonblocking",
+      "file": "infra/rollout/verify-external.sh",
+      "line": "22, 36-48 (and README.md steps 2 and 6)",
+      "claim_broken": "'Key material comes from the environment (names only here) and is never printed' / runbook step 10 'never typed'. The keys are handed to curl as `-H 'Authorization: Bearer <key>'` arguments, i.e. in curl's argv (`ps`, `/proc/*/cmdline`, any `set -x`) on the coordinator host, five times per run. Likewise the runbook's two coordinator-side secret handoffs - step 2 `printf '%s' \"$DSN\"` and step 6 `export MIGRATE_DATABASE_URL=<\u2026>` - do not say how the value enters the shell without landing in shell history, while step 2 is careful about the `--value` path.",
+      "evidence": "Fake `curl` on PATH recording argv: `INFRX_TEST_KEY=MARKER-scoped-key INFRX_REVOKED_KEY=MARKER-revoked-key LEGACY_KEY=MARKER-legacy-key bash infra/rollout/verify-external.sh` -> `curl argv lines carrying a key: 5`, e.g. `curl -s -o /tmp/infrx-verify.body \u2026 -H Authorization: Bearer MARKER-legacy-key`. Coordinator host only, transient; nothing reaches the box.",
+      "minimal_fix": "`auth() { printf 'Authorization: Bearer %s\\n' \"$1\" > \"$hdr\"; }` with a 0600 mktemp and `-H @\"$hdr\"` (curl >= 7.55), or `-K -` with the header on stdin; README steps 2/6: `read -rs DSN` / `MIGRATE_DATABASE_URL=$(aws ssm get-parameter --with-decryption --name \u2026 --query Parameter.Value --output text)` and `HISTCONTROL=ignorespace`, so no value is typed.",
+      "lens": "i2b-secrets"
+    },
+    {
+      "id": "S5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_rollout.py",
+      "line": "22-23, 40-59",
+      "claim_broken": "'every rollout step \u2026 names no secret' / 'prints names, never values' is checked by four static regexes over the file text; a step that prints values at runtime or inlines a non-URI value is not caught, so the runbook's names-only property of 10-inventory/60-verify-local is a claim without a killable test.",
+      "evidence": "Own mutants: `readme_inline_env_value` (README step 6 `-e MIGRATE_DATABASE_URL` -> `-e MIGRATE_DATABASE_URL=pgpass-literal-0123456789`): `3 passed`, SURVIVED; `verify_local_prints_values` (60-verify-local.sh `cut -d= -f1 /etc/marlin2b-gateway.env` -> `cat /etc/marlin2b-gateway.env`): `3 passed`, SURVIVED.",
+      "minimal_fix": "Add `r\"-e\\s+[A-Z_]+=\\S\"` and `r\"(cat|less|grep -v\\S*)\\s+/etc/marlin2b-gateway.env\"` to SECRET_SHAPES (or run 10-inventory/60-verify-local under the test_scripts Host harness with a MARKER env file and assert MARKER not in stdout), and list the two mutants.",
+      "lens": "i2b-secrets"
     }
-  ]
+  ],
+  "_refuter_verdicts": [
+    {
+      "task": "I2B",
+      "id": "M1",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at 5d68e50 by code and by reproduction in the suite's own Host harness (scratch copy, removed). Code path: infra/rollout/steps/30-pause.sh runs `edge_install` then `drain.sh pause`, whose `caddy_site Caddyfile.maintenance` makes /etc/caddy/Caddyfile the maintenance site. apps/infrx-api/deploy/install.sh step 3 then backs up `etc/caddy/Caddyfile` as it is at that moment (maintenance). infra/rollout/steps/90-revert.sh calls rollback.sh, which `tar -xpf`s that backup and `caddy reload`s onto it, and 90-revert.sh never calls `drain.sh resume` (unlike 91-abort.sh, which does). `pre-$RELEASE.Caddyfile` saved by 30-pause is written by nothing else in the tree (git grep). Reproduction: monolith host -> edge_install + drain.sh pause -> install.sh pilot (exit 0, backup taken) -> rollback.sh <backup> ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted exit 0, env file == monolith bytes, active /etc/caddy/Caddyfile == deploy/Caddyfile.maintenance bytes, last event `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`. So the documented R2 revert (README \u00a72) ends with the public endpoint answering 503 on every request and no runbook step to resume. Fail-closed, so not a box-safety hazard, but a real OPS-RECOVER defect with no killable test: apps/infrx-api/tests/i/test_rollout.py only checks string ordering in 90-revert.sh and no test asserts the edge state after R2. Reviewer's minimal fix (append `\"$d/drain.sh\" resume` to 90-revert.sh, note it in README R2, drop or use the unused pre-$RELEASE.Caddyfile) is consistent with the code.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "severity_if_real": "blocking",
+          "reason": "M1 is real at 5d68e50. By reading: infra/rollout/steps/30-pause.sh runs edge_install then `drain.sh pause`, whose caddy_site (deploy/lib.sh:37-40) copies Caddyfile.maintenance over /etc/caddy/Caddyfile. install.sh step 3 then backs up etc/caddy/Caddyfile as it is at that moment (maintenance). rollback.sh does `tar -xpf` of that backup and `docker exec caddy caddy reload` on it, and 90-revert.sh ends with `rollback.sh` + `systemctl restart marlin2b-vllm` with no `drain.sh resume` (contrast 91-abort.sh, which does call resume). README \u00a72 row R2 promises 'previous gateway' restored with no mention of reopening the edge; the `pre-$RELEASE.Caddyfile` saved by 30-pause is read by nothing (git grep). Reproduced in scratch with the suite's Host harness (tests/i/test_scripts.py) in runbook order: monolith host -> edge_install + drain pause -> install.sh pilot (backup taken) -> rollback.sh with ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted exits 0 with the monolith env restored, and the active /etc/caddy/Caddyfile == Caddyfile.maintenance with last event `docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`. So the documented R2 revert leaves the public endpoint answering 503 for every request until an operator improvises `drain.sh resume`. Fail-closed, so not a box-safety hazard, but it is a real OPS-RECOVER defect in the runbook's revert path with no test covering it; the reviewer's minimal fix (append `\"$d/drain.sh\" resume` to 90-revert.sh and say so in README R2; drop or use the unused pre-$RELEASE.Caddyfile) is correct and small."
+        }
+      ],
+      "real": true
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "M1",
+      "severity": "blocking",
+      "file": "infra/rollout/steps/90-revert.sh",
+      "line": "14-16 (and infra/rollout/README.md \u00a72 row R2)",
+      "claim_broken": "R2 'previous checkout, the backed-up env/unit/Caddy files, previous gateway' restores service. It does not: the backup rollback.sh restores was taken at step 8, AFTER step 5 (30-pause) made the maintenance site the active /etc/caddy/Caddyfile, so rollback.sh restores the maintenance Caddyfile and reloads Caddy onto it. After R2 the public endpoint answers 503 for every request and no runbook step says to run `drain.sh resume`. The `pre-$RELEASE.Caddyfile` that 30-pause saves is consumed by nothing.",
+      "evidence": "Reproduced with the suite's own Host harness (scratch test test_review__r2_revert_puts_the_edge_back_into_maintenance): monolith host -> edge_install + `drain.sh pause` -> `install.sh` pilot (backup taken) -> `rollback.sh <backup> ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` exit 0, env file == monolith bytes, then `ACTIVE SITE AFTER R2 == maintenance`, `LAST EVENT: docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`. By reading: install.sh backs up etc/caddy/Caddyfile when present (line ~50), rollback.sh `tar -xpf` + `caddy reload` (lines 36-49). Fail-closed (503), but a documented revert that leaves the endpoint down is a real OPS-RECOVER defect.",
+      "minimal_fix": "Append `\"$d/drain.sh\" resume` as the last line of 90-revert.sh (after `systemctl restart marlin2b-vllm`; with the restored no-mode env it starts the dev units, waits /health and puts the release's normal site back), and say so in README R2. Delete the unused `pre-$RELEASE.Caddyfile` save in 30-pause.sh or make the revert use it.",
+      "lens": "migrate"
+    },
+    {
+      "id": "S1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/deploy/Caddyfile",
+      "line": "6 (and Caddyfile.maintenance 6; lib.sh 39; rollback.sh 48)",
+      "claim_broken": "'The engine (127.0.0.1:8000) has no route here at all', 'Caddy is the only public listener', and the units' least-privilege claims (per-uid, read-only, cap-drop). The edge's control plane is Caddy's admin API on `localhost:2019`, unauthenticated, and every runtime container runs `--network host` - so the gateway and worker processes (uid 10001/10002, the ones that decode untrusted media) can replace the whole public edge config: a `reverse_proxy 127.0.0.1:8000` on the real :443/certificate makes the private engine public, and a `file_server` on `/data` (the `caddy_data` volume, readable by Caddy's in-container root) serves the TLS private keys. The Caddyfile comment 'stated so nobody widens it' is not pinned by any test (own mutant `admin_api_widened` survived), and infra/README.md records no such residual risk (grep '2019|admin' empty).",
+      "evidence": "Drill on the pinned caddy@sha256:14a9c0\u2026 with the real deploy/Caddyfile (INFRX_SITE=http://:8080, `--cap-drop ALL --cap-add NET_BIND_SERVICE --read-only`, in a `--network none` box; a sibling container `--network container:<box> --user 10001:10000`): before `GET /metrics` = `HTTP/1.1 404 Not Found`; `wget --post-data '{\"apps\":{\"http\":{\"servers\":{\"srv0\":{\"listen\":[\":8080\"],\"routes\":[{\"handle\":[{\"handler\":\"static_response\",\"body\":\"EDGE-REPLACED-BY-UID-10001 \u2026\",\"status_code\":200}]}]}}}}}' http://127.0.0.1:2019/load` -> `load exit=0`; after: `GET /health` and `GET /metrics` both answer `EDGE-REPLACED-BY-UID-10001 (could be reverse_proxy 127.0.0.1:8000 or file_server /data)`; `GET http://127.0.0.1:2019/config/` returns the live config. Pre-I2B the monolith gateway (a host process as ubuntu) could do the same, so the exposure is not new on the box, but I2B packages the containers as sandboxed while leaving their sandbox a loopback POST away from the public edge and the certificate store.",
+      "minimal_fix": "Move the admin endpoint off the shared network namespace: `admin unix//config/admin.sock` in both Caddyfiles (the `/config` volume is rw and private to the Caddy container's mount namespace); in lib.sh `caddy_site` and rollback.sh line 48 add `--address unix//config/admin.sock` to `caddy reload` (`caddy validate` needs no admin). Pin it: in `test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health` assert both files contain `admin unix/` and that every `caddy reload` in deploy/*.sh carries `--address unix/`; add mutant `admin_api_widened` (`admin unix//config/admin.sock` -> `admin localhost:2019`). Keep verify-external's external :2019 check.",
+      "lens": "i2b-secrets",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed by code and by a reproduced drill. Code (codex-i2b @ 5d68e50): deploy/Caddyfile:6 and Caddyfile.maintenance:6 set `admin localhost:2019` (Caddy's unauthenticated admin API); lib.sh:68 runs Caddy with `--network host`; marlin2b-gateway.service:23 and infrx-worker.service:17 run the gateway (uid 10001) and worker (uid 10002) with `--network host` too, so all share the host loopback. No test, mutant or README pins the admin address (`grep -rn '2019|admin' deploy tests` hits only the two Caddyfile lines). Drill in own namespace infrx-review-verify-0-0 (pinned caddy@sha256:14a9c0\u2026, the real Caddyfile, INFRX_SITE=http://:8080, --cap-drop ALL --cap-add NET_BIND_SERVICE --read-only, --network none; sibling busybox `--network container:` as --user 10001:10000): before, GET /metrics = 404 and GET 127.0.0.1:2019/config/ returned the live config; POST to 127.0.0.1:2019/load with a static_response config exited 0; after, GET /metrics and /health both returned `EDGE-REPLACED-BY-UID-10001`. So a compromised gateway/worker process can rewrite the public edge (e.g. reverse_proxy 127.0.0.1:8000 or file_server /data with the TLS keys), which breaks the Caddyfile's own 'engine has no route here' and the units' 'Caddy is the only public listener' claims. The proposed fix is viable: with `admin unix//config/admin.sock` the config validates on the pinned image, :2019 refuses connections from the sibling uid, and `docker exec caddy caddy reload --config \u2026 --adapter caddyfile --address unix//config/admin.sock` succeeds (exit 0) with the /config volume mounted. Note: the exposure predates I2B on the box (Caddy on host net with the monolith gateway), but I2B is the lane that packages these processes as sandboxed and ships the Caddyfile, so the fix belongs here.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "reason": "Confirmed, not refuted. All load-bearing facts check out in the I2B worktree (head 5d68e50): both Caddyfiles declare `admin localhost:2019` (Caddy's default, unauthenticated); lib.sh:68 runs Caddy with `--network host`; marlin2b-gateway.service:23 (uid 10001) and infrx-worker.service:17 (uid 10002) \u2014 the processes that decode untrusted media \u2014 also run `--network host`, sharing the same host loopback; edge_install starts Caddy with no `--user` (so root in-container) and mounts `-v caddy_data:/data`, the TLS key store. Caddy's admin `/load` replaces the running config (documented behavior). So a compromised gateway/worker can POST to 127.0.0.1:2019/load and replace the public :443 config \u2014 reverse_proxy to the private engine (127.0.0.1:8000) or file_server on /data to serve the TLS private keys \u2014 defeating the very least-privilege sandboxing I2B introduces and contradicting the units' 'loopback only - Caddy is the only public listener' claims. Nothing pins it: grep '2019|admin' over infra/README.md and deploy scripts finds no residual-risk note, no test isolates the admin socket, and verify-external.sh:28 only checks external reachability of 2019, which does not cover a container in the shared host netns. The proposed fix (admin over unix socket in the /config volume, which is not mounted into the runtime containers) is sound. The live drill was interrupted by a safety classifier, but it would only re-demonstrate documented Caddy admin-API behavior already established by the code.",
+          "refuted": false,
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "verdict": "fix_required"
 }

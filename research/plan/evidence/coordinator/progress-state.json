@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T02:06:42Z",
+  "updated": "2026-09-23T02:29:34Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,25 +35,25 @@
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "review at a0eeaf4: honesty pass; PIN-1/S1 blocking awaiting refuters (sofia died)",
+      "phase": "fix round (S1 partly-dead pool liveness) after review of a0eeaf4",
       "since": "2026-09-22T22:37:58Z",
       "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
     },
     "I2B": {
       "lane": "codex-i2b / codex/i2b-deployment",
-      "phase": "review at 5d68e50: migrate lens M1 blocking awaiting refuters; failclosed/secrets lenses rerunning",
+      "phase": "fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50",
       "since": "2026-09-22T22:37:58Z",
       "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
     },
     "Q3": {
       "lane": "codex-q3 / codex/q3-outbox-reconciler",
-      "phase": "review at 152de7e: DUR-1 blocking awaiting refuters; honesty lens rerunning",
+      "phase": "fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e",
       "since": "2026-09-22T22:37:58Z",
       "note": "outbox drain/ack, PG reconciler, index-loss recovery"
     },
     "G1R": {
       "lane": "codex-g1r / codex/g1r-audience-ingress",
-      "phase": "fold-in: 10 commits landed (6905d13); verification runs pending; lane re-dispatched",
+      "phase": "review PASS + fold-in verified at 3552ce3; merging",
       "since": "2026-09-22T22:40:37Z",
       "note": "audience ingress on accepted v2 contracts; rebase at wire-in merge"
     },

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T02:06:42Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T02:29:34Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
@@ -67,10 +67,10 @@ Generated 2026-09-23T02:06:42Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — round 2: 5 fix commits landed (30d614d); tails/addendum/sweep pending; lane re-dispatched since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — closure review rerun at 47b0382 (sofia run died) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
-- W3: codex-w3 / codex/w3-drain-pin — review at a0eeaf4: honesty pass; PIN-1/S1 blocking awaiting refuters (sofia died) since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
-- I2B: codex-i2b / codex/i2b-deployment — review at 5d68e50: migrate lens M1 blocking awaiting refuters; failclosed/secrets lenses rerunning since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- Q3: codex-q3 / codex/q3-outbox-reconciler — review at 152de7e: DUR-1 blocking awaiting refuters; honesty lens rerunning since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
-- G1R: codex-g1r / codex/g1r-audience-ingress — fold-in: 10 commits landed (6905d13); verification runs pending; lane re-dispatched since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
+- W3: codex-w3 / codex/w3-drain-pin — fix round (S1 partly-dead pool liveness) after review of a0eeaf4 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
+- I2B: codex-i2b / codex/i2b-deployment — fix round (M1 rollback restores maintenance edge; S1 Caddy admin API reachable from runtime containers) after review of 5d68e50 since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
+- Q3: codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
+- G1R: codex-g1r / codex/g1r-audience-ingress — review PASS + fold-in verified at 3552ce3; merging since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
 - D3: codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 - I3B: codex-i3b / codex/i3b-recovery-observe — fix round re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
 - M4: codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
