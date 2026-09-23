@@ -21,6 +21,13 @@ from infrx.gateway.routes import chat, health, ingress, models
 from . import support
 
 BOTH_OK = {"price_source": lambda: True, "journal": lambda: True}
+# G2 item 5: readiness answers the host's own direct loopback probe (I2B's `wait_ready`).
+LOOPBACK = ("127.0.0.1", 50000)
+
+
+def local(app):
+    """A client that is a direct loopback peer, as `deploy/lib.sh wait_ready` is."""
+    return TestClient(app, client=LOOPBACK)
 
 
 def boom():
@@ -52,7 +59,7 @@ def test_f_base__dev_starts_with_unreachable_components_and_says_so():
     app, mounted = support.cutover_app(support.settings("dev"),
                                        ingress_deps=support.deps(checks={}))
     assert mounted.startup_state == {"price_source": "unavailable", "journal": "unavailable"}
-    response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
+    response = local(app).get(support.READY_PATH)
     assert response.status_code == 503, response.text
     error = support.error_of(response)
     assert error["code"] == "dependency_unavailable"
@@ -60,10 +67,12 @@ def test_f_base__dev_starts_with_unreachable_components_and_says_so():
                                             "journal": "unavailable"}
 
 
-def test_f_base__readiness_explains_component_state_to_an_authenticated_caller():
+def test_f_base__readiness_explains_component_state_to_a_direct_loopback_peer():
+    """G2 item 5: I2B's `deploy/lib.sh wait_ready` polls `127.0.0.1:8001/readyz` with no key
+    and needs a 2xx, so the host's own direct probe gets component state - no tenant key."""
     app, mounted = support.cutover_app()
     assert mounted.startup_state == {"price_source": "ok", "journal": "ok"}
-    response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
+    response = local(app).get(support.READY_PATH)
     assert response.status_code == 200, response.text
     assert response.json() == {"status": "ok", "mode": "pilot",
                                "components": {"price_source": "ok", "journal": "ok"}}
@@ -71,12 +80,17 @@ def test_f_base__readiness_explains_component_state_to_an_authenticated_caller()
 
 
 def test_dur_rls__readiness_is_protected():
-    """Component state is operational detail: it needs a tenant, and an unknown key
-    gets the same 401 the ingress gives."""
+    """Component state is operational detail, for the host only: any other peer - a valid
+    tenant key included - and a loopback peer the edge relayed (a proxy header) get the
+    unknown-path answer, the same 404 the edge gives `/readyz` (observe/route.py's rule)."""
     app, _ = support.cutover_app()
-    response = TestClient(app).get(support.READY_PATH)
-    assert response.status_code == 401, response.text
-    assert support.error_of(response)["code"] == "invalid_api_key"
+    for client, headers in ((TestClient(app), support.AUTH),
+                            (local(app), {"X-Forwarded-For": "203.0.113.9"}),
+                            (local(app), {"Via": "1.1 caddy"})):
+        response = client.get(support.READY_PATH, headers=headers)
+        assert response.status_code == 404, response.text
+        assert support.error_of(response)["code"] == "not_found"
+        assert "components" not in response.text
 
 
 def test_f_base__public_health_is_generic():
@@ -93,7 +107,7 @@ def test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500():
     app, _ = support.cutover_app(support.settings("dev"),
                                  ingress_deps=support.deps(checks={**BOTH_OK,
                                                                          "journal": boom}))
-    response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
+    response = local(app).get(support.READY_PATH)
     assert response.status_code == 503
     assert support.error_of(response)["infrx"]["components"]["journal"] == "unavailable"
     assert "postgresql" not in response.text
@@ -284,7 +298,7 @@ def test_f_base__a_request_id_source_that_misbehaves_never_reaches_a_header():
                 lambda: "4d4d4d4d-0000-4000-8000-000000000004\r\nX-Evil: 1",
                 lambda: 17):
         app, _ = support.cutover_app(ingress_deps=support.deps(new_request_id=bad))
-        response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
+        response = local(app).get(support.READY_PATH)
         assert response.status_code == 200, response.text[:120]
         minted = response.headers[wire.HEADER_INFERENCE_ID]
         assert "\r" not in minted and "\n" not in minted and len(minted) == 36

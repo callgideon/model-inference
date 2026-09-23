@@ -384,8 +384,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "            state[name] = OK if probe is None or probe() else UNAVAILABLE",
        "test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable",
        "test_f_base__dev_starts_with_unreachable_components_and_says_so"),
-    _m("readiness_is_public", "readiness needs a tenant",
-       N, "        await ingress.auth.context(request)", "        pass",
+    _m("readiness_is_public", "readiness answers a direct loopback peer only (G2 item 5)",
+       N, "        if not is_direct_loopback(request):", "        if False:",
        "test_dur_rls__readiness_is_protected"),
     _m("health_explains_components", "public health is generic",
        N, '        return JSONResponse({"status": OK})',
@@ -696,7 +696,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("readiness_hides_the_components", "readiness explains component state",
        N, '        return JSONResponse({"status": OK, "mode": rt.mode, "components": state}, headers=headers)',
        '        return JSONResponse({"status": OK}, headers=headers)',
-       "test_f_base__readiness_explains_component_state_to_an_authenticated_caller"),
+       "test_f_base__readiness_explains_component_state_to_a_direct_loopback_peer"),
     _m("probe_exception_escapes", "a probe that raises is unavailable, not a 500",
        N, "        except Exception:\n"
           '            intake.log.exception("readiness probe %s failed", name)\n'
