@@ -1,0 +1,10 @@
+-rw-r--r-- 1 ubuntu ubuntu 991017 Sep 19 22:52 /opt/dlami/nvme/samples/Big_Buck_Bunny_360_10s_1MB.mp4
+utc=2026-09-23T03:20:49Z engine=http://127.0.0.1:8000 model=marlin2b
+probe=stop_token_ids_accepted result=pass status=200 finish_reason="stop" stop_reason=null completion_tokens=232
+probe=stop_token_ids_honoured result=pass status=200 greedy_ids=[9723, 25, 561, 5918, 369, 716, 303, 264] stop_on=561 finish_reason="stop" stop_reason=561 completion_tokens=3
+probe=cache_salt result=known status=200 wrong_type_status=400 ignored_log=[] wrong_type_error="Parameter 'cache_salt' must be a non-empty string if provided. (parameter=cache_salt)"
+probe=mm_uuids_top_level result=accepted_but_ignored status=200 wrong_type_status=200 ignored_log=[] media="data_url" error=""
+probe=mm_uuids_per_part result=accepted_but_ignored status=200 wrong_type_status=200 ignored_log=[] media="data_url" error=""
+probe=file_url_under_allowed_path result=not_run reason="MEDIA_ROOT unset or CLIP not under it"
+probe=file_url_outside_refused result=not_run reason="MEDIA_ROOT unset or CLIP not under it"
+probe=cancellation result=pass chunks_read=5 running_during=1.0 running_after=0.0 seconds_to_zero=0.11 abort_log=[]

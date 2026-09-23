@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:18:54Z",
+  "updated": "2026-09-23T03:21:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "confirmation PASS at d80c04d; fold-in (5 nonblocking) then box measurements (P-04) then merge with I2B",
+      "phase": "confirmation PASS; fold-in running; box inventory + capability done (image equals pin); concurrency sweep held (P-04); merge with I2B",
       "since": "2026-09-22T22:37:58Z",
       "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
     },
@@ -109,7 +109,8 @@
       "what": "Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md",
       "blocks": "publishing any cost-per-video-hour figure (S2M \u00a75.2, E1B protocol)",
       "owner": "pricing owner / user"
-    }
+    },
+    "P-04 concurrency sweep on the box: needs a checkout with bench.py + corpus build (~12 min) \u2014 held per user instruction (no new work); ENGINE_MAX_NUM_SEQS stays 32"
   ],
   "checkpoints": [
     {
