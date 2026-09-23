@@ -54,11 +54,38 @@ Linux 7.0.0-1010-aws x86_64; Python 3.12.3 (`make api-env`, uv 0.11.8, pydantic 
 
 ## Commands and results
 
-@@RESULTS@@
+All times UTC. Python commands in `apps/infrx-api`, console commands at the repository root. "At" names the commit the run saw; later commits are listed with what they re-ran.
+
+| Command | At | Exit | Result (quoted) |
+|---|---|---|---|
+| `make api-env` | `0cc4936` | 0 | `uv sync --frozen --all-extras` completed |
+| `make console-test` | `91b4a83` (23:25Z) | 2 | `# tests 288` / `# pass 286` / `# fail 2` / `# skipped 0`; the two are `not ok 13 - every conformance case C1 owns passes against the real services` and `not ok 14 - every failing case fails only because an operation is not implemented in C1` (IR-C1). Re-run at `2925d63` (00:38Z): identical |
+| same, with IR-C1 applied on an uncommitted scratch edit (reverted) | `2a22176` | 0 | `# tests 288` / `# pass 288` / `# fail 0`; `node tests/c/run-mutants.mjs`: `104 mutants: 104 killed by a named declared case, 0 survived, 0 stale, 0 runner errors` |
+| `make console-lint` | `91b4a83` | 0 | `✖ 2 problems (0 errors, 2 warnings)` (the two pre-existing warnings) |
+| `make console-typecheck` | `91b4a83` | 0 | `next typegen` then `tsc --noEmit`, no diagnostics |
+| `make console-mutants` (first run) | `91b4a83` | 2 | runner self-tests `14 self-tests, 14 passed, 0 failed`; then `195 mutants: 191 killed by a named declared case, 0 survived, 4 stale, 0 runner errors` — V2-GRANT-01/02, V2-ROLE-03, XJUDGE-02 stale after this lane's own edits; fixed in `092960f` |
+| `make console-mutants` (every line, each also run on its own) | `092960f` | 0 | contracts runner: `14 self-tests, 14 passed, 0 failed`, baselines `conformance: 49`, `fixtures: 5`, `v2: 19` cases pass unmutated, `195 mutants: 195 killed by a named declared case, 0 survived, 0 stale, 0 runner errors`; `tests/v`: `40/40 mutants killed by a declared case.`; `tests/u`: `2 self-checks, 2 as expected; 64 mutants, 64 killed, 0 not killed`; `tests/c`: `4 self-tests, 0 failed`, `baseline: 85 cases pass unmutated, 32 fail (C2/C3 operations this task does not implement)`, `104 mutants: 104 killed by a named declared case, 0 survived, 0 stale, 0 runner errors` |
+| `uv run --frozen pytest -q tests/contracts` (v1 + v2) | `91b4a83` (23:26Z) | 1 | `3 failed, 1034 passed` — the three are `test_v1_projection_pg.py`, each `HarnessBusy: another run holds /tmp/infrx-d1-postgres-55432.lock (… checkout …/codex-g1r)` |
+| `… pytest -q tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py` | `2925d63` (00:38Z) | 0 | `1034 passed in 145.51s` |
+| `… pytest -q tests/contracts/v2/test_v1_projection_pg.py`, retried while `HarnessBusy` (17 busy attempts from 23:54Z) | `2e6538e`…`2925d63` (same projection code) | 0 | `3 passed in 3.67s` (00:03Z); the container it created was removed at exit |
+| legacy-first: `pytest -q -p no:cacheprovider tests/test_app_factory.py tests/test_gateway_auth.py tests/test_inflight.py tests/test_media.py tests/contracts tests/g tests/i tests/j tests/m tests/q tests/t tests/w` | `91b4a83` | 1 | `3 failed, 2365 passed, 2 warnings in 648.90s` — the same three `HarnessBusy` (holder `codex-g1r`) |
+| track-first: `pytest -q -p no:cacheprovider tests/g tests/i tests/j tests/m tests/q tests/t tests/w tests/contracts tests/test_app_factory.py tests/test_gateway_auth.py tests/test_inflight.py tests/test_media.py` | `91b4a83` | 1 | `3 failed, 2365 passed, 2 warnings in 883.96s` — the same three `HarnessBusy` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py` (the one Python list, v1 + folded v2 + this lane's) | `91b4a83` | 1 | `1 failed, 392 passed in 1380.57s` — `the_pin_hardcodes_a_rate_card_version is broken_runner … undeclared exception deaths ['ValidationError@v2_contracts.py']` (a mutant of the folded additive list; fixed in `2925d63`) |
+| same | `2925d63` (00:18Z–00:37Z) | 0 | `393 passed in 1179.52s` |
+| `make integration INTEGRATION_ARGS="--layer 1 --canary"` | `2925d63` (00:18Z–00:33Z) | 2 | `[skip] preflight: layer 1 only`; `[ok  ] engine: … "cases": 8, "transport": "http"`; `[FAIL] suites`: `pytest tests/integration` exit 0 `passed 90, skipped 54`, `make api-test` exit 2 with tail `129 failed, 2371 passed` (the failing names shown are `tests/d/test_schema_postgres.py::…` and one `tests/q/test_valkey_scheduler.py::…[dur_outbox__a_candidate_carries_its_dispatch_kind]`), `make console-test` exit 2 `node_pass 286, node_fail 2` (IR-C1), `make bench-test` exit 0 `67 passed`; `[ok  ] mutants: {"mutants": 67, "killed": 65, "controls_survived": 2, "not_killed": 0}`; `[ok  ] canary: both runners fail and name the canary`; `exit 1 (see the stages above)` |
+| probes after the integration run | `2925d63` (00:34Z) | 0 / 1 | `pytest -q tests/q/test_valkey_scheduler.py`: `45 passed in 3.19s`; `pytest -q tests/d/test_schema_postgres.py -x`: `HarnessBusy: another run holds /tmp/infrx-d1-postgres-55432.lock (pid … checkout …/codex-d3)` |
+@@TESTSD@@
 
 ## Failure drill
 
-Not a durable-state task; the drills here are the mutants (each a single edit whose named case must fail by assertion or declared death) and the PostgreSQL projection run, whose first execution **failed** on a real defect (`UsageRecordV2.outcome` required, D1R's legacy rows carry NULL) before the contract fix — the failing assertion is quoted in `2e6538e`'s message context above. The D harness container this run created was removed at exit (`docker ps -a --filter label=ai.infrx.d1.checkout` showed only another checkout's container afterwards).
+Not a durable-state task; the drills are the mutants (each a single edit whose named case must fail by assertion or by a declared death) and the PostgreSQL projection run. Its first execution, before the contract fix, **failed** on a real defect in the v2 record against D1R's real rows:
+
+```
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for UsageRecordV2
+E       outcome
+E         Input should be 'settled', 'released_free', 'held_unknown' or 'released_platform_absorbed' [type=enum, input_value=None, input_type=NoneType]
+FAILED tests/contracts/v2/test_v1_projection_pg.py::test_every_pre_cutover_usage_row_reads_as_a_legacy_usd_dto
+``` The D harness container this run created was removed at exit (`docker ps -a --filter label=ai.infrx.d1.checkout` showed only another checkout's container afterwards).
 
 ## Changes
 
@@ -69,7 +96,7 @@ Contract changes a reviewer should see: v1 `Work` gains an optional field; v2 `U
 ## Limits
 
 1. **Item 10's DTO swap is not done.** `WalletBalance`/`LedgerEntry`/`UsageRow` stay v1 in `services.ts`: the swap needs C1 (`lib/services/console.ts`, `query.ts`) to read D1R's `console_wallet_summary`/`console_legacy_usd_statement`/`console_credit_ledger` and `console_usage`'s appended columns, and U1 (`app/(console)/billing|usage/*`, `tests/u`) to render CREDIT beside the legacy statement. Those are other tracks' files and App work (P-17 orders App after the backend) — IR-DTO.
-2. **`make console-test` is red on two C1 cases until IR-C1** (three literals in `tests/c/harness.ts` still seed the old audit spellings). Verified, on an uncommitted scratch edit that was reverted: `pnpm test` 288/288 and `node tests/c/run-mutants.mjs` 104/104 killed. For the same reason `make console-mutants` stops at the `tests/c` line; its other lines are quoted above.
+2. **`make console-test` is red on two C1 cases until IR-C1** (two lines in `tests/c/harness.ts` still seed the old audit spellings). Verified, on an uncommitted scratch edit that was reverted: `pnpm test` 288/288 and `node tests/c/run-mutants.mjs` 104/104 killed. `make console-mutants` is green without it (the `tests/c` runner's baseline records 32 unimplemented-or-failing cases and still kills all 104). `make integration --layer 1 --canary` is red for the same reason plus the shared-port `HarnessBusy` failures of `tests/d` inside `make api-test`.
 3. **Fake-only.** The CREDIT JobStore suite passes against the fake store; D2/D5 must run `run_credit_jobstore_conformance` against PostgreSQL. The v1 read projection is the one thing here proven against a real database.
 4. The fake's lifecycle row for a CREDIT job is a v1 `Admission` built with `model_construct` and `price_snapshot=None` (marked `ponytail:` in `fakes/state.py`): it never leaves the store (every v1 read of a CREDIT job is refused), but the clean fix is a v1 revision making `Admission.price_snapshot` optional, as D1R already made the column nullable — requested below.
 5. `NormalizedRequestV2.wallet_id` has a single writer in the fake (`resolve_wallet` inside `_credit_terms`), proven by `credit_wallet_by_organization`; nothing in the tree outside the fake constructs a `NormalizedRequestV2` yet, so the rule binds G1R/D2 at composition.
@@ -82,7 +109,7 @@ Next unblocked: **G1R** (composition), **D2/D3/D5** (the CREDIT port on PostgreS
 
 ### integration_requests
 
-- **IR-C1** (`apps/app/tests/c/harness.ts`, C1/C0): `action: "entitlements_set"` → `action: "admin_set_entitlements"`; `action: i % 2 === 0 ? "grant" : "suspension_set"` → `action: i % 2 === 0 ? "admin_grant" : "admin_set_suspension"`. Verified green on a scratch edit (above).
+- **IR-C1** (`apps/app/tests/c/harness.ts`, C1/C0), two lines: `action: "entitlements_set"` → `action: "admin_set_entitlements"`; `action: i % 2 === 0 ? "grant" : "suspension_set"` → `action: i % 2 === 0 ? "admin_grant" : "admin_set_suspension"`. Verified green on a scratch edit (above).
 - **IR-DTO** (C0/C1 + U1R, App phase): `WalletBalance` → `v2.BalanceV2` (the individual's CREDIT wallet, `legacy_usd: LegacyUsdStatement | null` beside it; the session must carry the individual's user id for `console_wallet_summary(user)`); `LedgerEntry` → the `console_credit_ledger` row (`kind: v2.LedgerEntryKindV2`, `amount: Credit`, `unit: "CREDIT"`, keyset `(created_at desc, entry_id desc)` per wallet), USD history read only through the legacy statement; `UsageRow` gains `unit`, v2 `accounting_regime` (`legacy_usd`\|`credit`, D1R's column) beside the v1 settlement regime, `charged_credits: Credit | null`, `rate_card_version`, `serving_version_id`, `deployment_revision_id` (all appended to `console_usage` by 0008; column list in `infrx/state/credit_schema.py`), totals one per unit; `AdminGrantResult`/`AdminOrgSummary.balance` follow `WalletBalance`. `v2.projectV1UsageRow` is the adapter for pre-cutover rows.
 - **G1R composition** (`gateway/app.py`, G's): dispatch admission on `settings.deployment.accounting_regime` — `legacy_usd` → `JobStore.admit`, `credit` → `CreditJobStore.admit_credit` (and `get_owned_credit`/`load_work_credit`/`complete_credit` for those jobs; a CREDIT job's charge is `SettlementV2.charged`, never `TerminalOutcome.debit`); pass `pilot.max_index_items`/`max_index_bytes` to `MemoryScheduler(max_items=…, max_bytes=…)`; startup already refuses `ACCOUNTING_REGIME=credit` without `ACTIVE_RATE_CARD_VERSION` (`validate_runtime`). G1R's own factories should run `V2_SUITES`.
 - **D2 cutover**: `PgJobStore.admit_credit`/`get_owned_credit` already match `ports.CreditJobStore`; adopt `run_credit_jobstore_conformance` with a factory exposing `credit_balance(wallet_id)`, `credit_grant(wallet_id, amount)`, `register_credential(auth)` (a key row with its audience), `publish_rate_card(card)` beside v1's `balance`/`active_jobs`. **D3**: `load_work_credit(lease) -> WorkV2` and `Work.prompt_tokens`/`WorkV2.prompt_tokens` from `jobs.prepared_prompt_tokens`. **D5**: `complete_credit` returns `(TerminalOutcome with debit 0, SettlementV2 | None)`, settlement at the admitted card only.
