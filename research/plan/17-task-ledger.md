@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**119 records; 113 active; 6 retired; 84 planned; 24 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 83 planned; 25 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
@@ -21,7 +21,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | M3 | implemented / M | [Owned uploads, expiry and orphan collection](handoffs/M-media.md) | F2P, M1 | D2 |
 | Q1 | implemented / Q | [Deterministic memory scheduler and fairness model](handoffs/Q-scheduling.md) | F2 | — |
 | Q2 | implemented / Q | [Valkey adapter with atomic tested scripts](handoffs/Q-scheduling.md) | Q1, F2P | — |
-| Q3 | planned / Q | [Outbox/reconciler integration and index loss recovery](handoffs/Q-scheduling.md) | Q2, F2P | D2, D3 |
+| Q3 | implemented / Q | [Outbox/reconciler integration and index loss recovery](handoffs/Q-scheduling.md) | Q2, F2P | D2, D3 |
 | W1 | implemented / W | [Engine adapter and deterministic execution fakes](handoffs/W-worker.md) | F2 | — |
 | W2 | implemented / W | [Lease-aware execution, cancellation and completion](handoffs/W-worker.md) | W1, F2P | D5, M2, Q3 |
 | W3 | planned / W | [Drain, engine pin and measured concurrency](handoffs/W-worker.md) | W2, F2P | E1, S2M |

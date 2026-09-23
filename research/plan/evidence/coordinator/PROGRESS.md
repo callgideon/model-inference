@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T03:43:23Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T03:57:39Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 14 done · 9 in progress · 7 remaining (of 30).**
+**Backend packages: 15 done · 8 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -21,7 +21,7 @@ Generated 2026-09-23T03:43:23Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **done** | implemented |  |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
-| B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **in-progress** | planned | outbox drain/ack, PG reconciler, index-loss recovery |
+| B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **done** | implemented |  |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **in-progress** | planned | engine pin by digest, drain, readiness; measurements coordinator-run |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **done** | implemented |  |
@@ -57,20 +57,19 @@ Generated 2026-09-23T03:43:23Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (12 packages): ~17 h at observed cadence, ~1.4 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (11 packages): ~16 h at observed cadence, ~1.3 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
-- F2P: codex-f2p — wire-in fix round (M-1, M-2, M-3/CFG-1 blocking) after review of e307084 since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
+- F2P: codex-f2p — wire-in fix round IN PROGRESS when the session ended (agent killed; worktree WIP-snapshotted); re-dispatch from evidence/f/F2P-wirein-review-e307084.json since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — re-confirmation PASS at 6a8cc8d; round 3 (4 nonblocking incl. per-process relay id, dispatch_pending worker-id guard) then merge since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
-- A1: codex-a1 / codex/a1-signup-grant — re-confirmation of round 3 at dc3cb9c; merge after D2 since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
+- A1: codex-a1 / codex/a1-signup-grant — round 4 needed: RV3-1 delete/move race case + mutant (or narrow docstring); RV3-2/RV3-3 wording — then merge after D2 (JSON evidence/a/A1-confirm-dc3cb9c.json) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
 - W3: codex-w3 / codex/w3-drain-pin — merge-ready at c81ef36 (measured box values written); merges with I2B's deploy/ after I2B round 2 since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
-- Q3: codex-q3 / codex/q3-outbox-reconciler — confirmation PASS at 1ba884b; nonblocking fold-in then merge since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 - D3: codex-d3 / codex/d3-fenced-leases — fix round (FE-1/MY-1 CREDIT held_unknown path untested) + merge of D2's head after review of b4b1ec7 since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
 
 ## Checkpoints

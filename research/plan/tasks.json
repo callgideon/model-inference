@@ -610,7 +610,7 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "keep",
       "product": "shared",
       "milestone": "APP-M1",

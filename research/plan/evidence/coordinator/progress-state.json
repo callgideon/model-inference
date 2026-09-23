@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-23T03:43:23Z",
+  "updated": "2026-09-23T03:57:39Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in fix round (M-1, M-2, M-3/CFG-1 blocking) after review of e307084",
+      "phase": "wire-in fix round IN PROGRESS when the session ended (agent killed; worktree WIP-snapshotted); re-dispatch from evidence/f/F2P-wirein-review-e307084.json",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -29,7 +29,7 @@
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "re-confirmation of round 3 at dc3cb9c; merge after D2",
+      "phase": "round 4 needed: RV3-1 delete/move race case + mutant (or narrow docstring); RV3-2/RV3-3 wording \u2014 then merge after D2 (JSON evidence/a/A1-confirm-dc3cb9c.json)",
       "since": "2026-09-22T22:35:57Z",
       "note": "new files only; migrations 0015+; D2 in flight"
     },
@@ -44,12 +44,6 @@
       "phase": "round 2 (RB-1 revert order when the engine is down; RB-2 positive-int grammar) after confirmation of 0653c8a",
       "since": "2026-09-22T22:37:58Z",
       "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
-    },
-    "Q3": {
-      "lane": "codex-q3 / codex/q3-outbox-reconciler",
-      "phase": "confirmation PASS at 1ba884b; nonblocking fold-in then merge",
-      "since": "2026-09-22T22:37:58Z",
-      "note": "outbox drain/ack, PG reconciler, index-loss recovery"
     },
     "D3": {
       "lane": "codex-d3 / codex/d3-fenced-leases",
@@ -252,6 +246,11 @@
       "merged": "I3B @ 9250eec merged --no-ff (8e01fe0)",
       "at": "2026-09-23T03:06:53Z",
       "note": "review fix_required at 48d3bb2 \u2192 fix round 5ec6f40 confirmed pass \u2192 residuals folded (10bfd90); mutants_i3b 78 = 77 + control; merged-tree layer-2 run detached; hosted backup rehearsal (restore.md A0\u2013A9) still a coordinator operation; five PENDING drills wait on G2/D3/M3/W3/I2B"
+    },
+    "Q3": {
+      "merged": "Q3 @ 6fa13bf merged --no-ff (25de7ab) + Makefile follow-up 88a48d7",
+      "at": "2026-09-23T03:57:39Z",
+      "note": "review + confirmation pass; 14 residuals folded; tests/q 169 on the merged tree; Q lists detached (.claude-logs/q3-merged-88a48d7.log) \u2014 read the tail next session"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
