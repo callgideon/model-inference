@@ -900,26 +900,32 @@ def test_api_modes__a_credit_job_replays_its_events_in_its_committed_phase():
     assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
     assert "infrx.error" in reply.events()
 
-def test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job():
-    """The other ways an observer ends: its send fails after the identity frame (a peer gone
-    without a disconnect message), or a prune lands between the pre-header probe and the pump's
-    first read (a `replay_gap` frame after the headers). Neither cancels: the job is still
-    running and its worker completes it."""
+# The observer's sends, in order: the headers, the identity frame, the first committed delta.
+FAILING_SEND = {"start": 1, "identity": 2, "first_delta": 3}
+
+
+@pytest.mark.parametrize("failing", sorted(FAILING_SEND))
+def test_api_modes__an_observer_whose_stream_fails_never_cancels_the_job(failing):
+    """The other ways an observer ends: a send fails (a peer gone without a disconnect
+    message) - on the headers, on the identity frame or on the first delta (review
+    stream-C4) - or a prune lands between the pre-header probe and the pump's first read (a
+    `replay_gap` frame after the headers). None cancels: no store cancel is issued, the job is
+    still running and its worker completes it."""
     world = JobsWorld()
     assert post(world).status == 202
     job = world.only_job()
     lease = rs.run(world.lease())
     rs.run(world.commit(lease, "Two people"))
-    bodies = []
+    sent, cancels = [], world.failures.count("cancel")
 
     def peer_gone(message):
-        if message["type"] == "http.response.body":
-            bodies.append(message)
-            if len(bodies) == 2:
-                raise OSError("connection reset by peer")
+        sent.append(message)
+        if len(sent) == FAILING_SEND[failing]:
+            raise OSError("connection reset by peer")
 
     failed = events(world, on_send=peer_gone)
-    assert failed.status == 200 and len(bodies) >= 2
+    assert failed.status == 200 and len(sent) > FAILING_SEND[failing]
+    assert world.failures.count("cancel") == cancels
     assert job.state is JobState.running and not job.terminal
     world.failures.fail("read_owned", on_call=world.failures.count("read_owned") + 2,
                         error=errors.ReplayGap("pruned between the probe and the pump"))

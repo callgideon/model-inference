@@ -296,6 +296,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except Exception as failure:\n"
        "            await self.relay.cancel(self.job.org_id, self.job.handle, quiet=True)\n",
        OBSERVER_FAILS),
+    _m("start_failure_cancels", "an observer whose headers fail to send never cancels the job "
+       "(review stream-C4)",
+       J, '            await send({"type": "http.response.start", "status": 200,\n'
+          '                        "headers": self.raw_headers})\n',
+       "            try:\n"
+       '                await send({"type": "http.response.start", "status": 200,\n'
+       '                            "headers": self.raw_headers})\n'
+       "            except Exception:\n"
+       "                await self.relay.cancel(self.job.org_id, self.job.handle, quiet=True)\n"
+       "                raise\n", OBSERVER_FAILS),
     _m("events_outside_cancel_cancels", "an observer stopped from outside never cancels the job",
        J, "        finally:\n            gone.cancel()\n",
        "        except BaseException:\n"
