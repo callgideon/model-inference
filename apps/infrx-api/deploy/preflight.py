@@ -480,6 +480,11 @@ def engine_problems(script: pathlib.Path | None, mode: str) -> list[str]:
     return problems
 
 
+# How long an install waits for the host's HeadBucket (the aws CLI retries on its own):
+# an endpoint that accepts and never answers held an install for 3 minutes (review A4).
+BUCKET_PROBE_TIMEOUT_S = 60
+
+
 def bucket_problems(cfg: Config, values: dict[str, str]) -> list[str]:
     """M1-L2: a pilot stages media in `S3_MEDIA_BUCKET`, and the gateway refuses to start
     unless it answers HeadBucket. Asked here, from the host, with the credentials the units
@@ -492,10 +497,14 @@ def bucket_problems(cfg: Config, values: dict[str, str]) -> list[str]:
         return ["S3_MEDIA_BUCKET: not set (--set S3_MEDIA_BUCKET=<bucket>); a pilot stages "
                 "media there and refuses to start without it"]
     endpoint = values.get("S3_ENDPOINT_URL")
-    done = subprocess.run([*cfg.aws, "s3api", "head-bucket", "--bucket", bucket,
-                           "--region", cfg.region,
-                           *(["--endpoint-url", endpoint] if endpoint else [])],
-                          capture_output=True, text=True)
+    try:
+        done = subprocess.run([*cfg.aws, "s3api", "head-bucket", "--bucket", bucket,
+                               "--region", cfg.region,
+                               *(["--endpoint-url", endpoint] if endpoint else [])],
+                              capture_output=True, text=True, timeout=BUCKET_PROBE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return [f"S3_MEDIA_BUCKET: HeadBucket did not answer within "
+                f"{BUCKET_PROBE_TIMEOUT_S} s; the gateway would refuse to start"]
     if done.returncode == 0:
         return []
     code = re.search(r"\(([A-Za-z0-9]+)\)", done.stderr or "")

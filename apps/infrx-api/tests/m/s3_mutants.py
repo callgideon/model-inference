@@ -58,6 +58,8 @@ CLEANUP = "test_what_a_case_writes_is_removed_after_it"
 STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
 NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
 WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
+TWO_ATTEMPTS = "test_a_failing_call_is_tried_twice_and_no_more"
+INSTALL_WAIT = "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -160,6 +162,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("own_404_absent_everywhere", "a 404 from a write or a listing is an error, not absence",
        S3, "            if absent_ok and code in MISSING:", "            if code in MISSING:",
        WRITE_404),
+    # === review A4: bounded time per call and per install =================================
+    _m("own_retries_count_retries", "an S3 call is attempted twice in all",
+       S3, '"total_max_attempts": ATTEMPTS}', '"max_attempts": 3}', TWO_ATTEMPTS),
+    _m("own_install_waits_unbounded", "an install waits for HeadBucket a bounded time",
+       D, "capture_output=True, text=True, timeout=BUCKET_PROBE_TIMEOUT_S)",
+       "capture_output=True, text=True)", INSTALL_WAIT),
 )
 
 

@@ -509,6 +509,50 @@ def test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing(monkeypatch)
             run(call)
 
 
+# --- how long a call may take (review A4) ------------------------------------------------
+def test_a_failing_call_is_tried_twice_and_no_more(monkeypatch):
+    """A retryable failure (503) is retried once: two attempts in all, so a store that
+    accepts and never answers costs about a minute per call (2 x 30 s), startup included -
+    not the four attempts botocore's `max_attempts: 3` meant."""
+    import http.server
+    import threading
+
+    seen = []
+
+    class Unavailable(http.server.BaseHTTPRequestHandler):
+        def _answer(self):
+            seen.append(self.command)
+            self.send_response(503)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_HEAD = do_GET = do_PUT = _answer
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Unavailable)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        s3_env(monkeypatch, local=True)
+        objects = S3ObjectStore.connect("infrx-m1l2", "test/m1l2/",
+                                        f"http://127.0.0.1:{server.server_address[1]}")
+        with pytest.raises(errors.DependencyUnavailable):
+            run(objects.head(SOURCE))
+    finally:
+        server.shutdown()
+    assert seen == ["HEAD", "HEAD"]
+
+
+def test_a_pilot_install_waits_for_the_bucket_a_bounded_time(tmp_path, monkeypatch):
+    from ..i.support import preflight
+    monkeypatch.setattr(preflight, "BUCKET_PROBE_TIMEOUT_S", 0.5)
+    slow = (sys.executable, "-c", "import time; time.sleep(3)")
+    cfg = preflight.Config(mode="pilot", env_file=tmp_path / "gateway.env", aws=slow)
+    refused = preflight.bucket_problems(cfg, {"S3_MEDIA_BUCKET": "infrx-media-pilot"})
+    assert len(refused) == 1 and "did not answer within 0.5 s" in refused[0]
+
+
 # --- the harness itself (review A1) -------------------------------------------------------
 def test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones(
         monkeypatch):

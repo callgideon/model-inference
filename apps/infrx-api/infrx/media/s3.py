@@ -29,6 +29,8 @@ from ..contracts import errors
 #: "No such object": HeadObject's bodiless 404 and GetObject's code - absent only where the
 #: call asks for one object (`absent_ok`); from a write or a listing they are errors.
 MISSING = ("404", "NoSuchKey")
+#: Attempts per S3 call, the first one included.
+ATTEMPTS = 2
 #: `head` of an object stored without our checksum: present, and no digest's match.
 NO_DIGEST = "sha256:"
 
@@ -51,8 +53,11 @@ class S3ObjectStore:
         S3-compatible store (MinIO in tests), addressed path-style; unset is AWS S3."""
         import botocore.session
         from botocore.config import Config
+        # Two attempts in all (`max_attempts` would count retries: 3 was 4 attempts, ~2 min
+        # against an endpoint that accepts and never answers - review A4). Worst case per
+        # call, startup's HeadBucket included: 2 x 30 s read + backoff, about a minute.
         config = Config(connect_timeout=5, read_timeout=30,
-                        retries={"mode": "standard", "max_attempts": 3},
+                        retries={"mode": "standard", "total_max_attempts": ATTEMPTS},
                         s3={"addressing_style": "path"} if endpoint_url else None)
         client = botocore.session.get_session().create_client(
             "s3", endpoint_url=endpoint_url or None, config=config)
