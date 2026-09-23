@@ -1,0 +1,37 @@
+run=w3-L1-20260923T050411Z utc=2026-09-23T05:04:11Z repo_sha=517e09d
+image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"]
+level=1 peak_running=1 peak_waiting= peak_kv_usage=0.00573436921938586 peak_gpu_mem_mib=44251
+level=2 peak_running=2 peak_waiting= peak_kv_usage=0.007029226785053688 peak_gpu_mem_mib=44251
+level=4 peak_running=4 peak_waiting= peak_kv_usage=0.012393636699962962 peak_gpu_mem_mib=45139
+level=8 peak_running=8 peak_waiting= peak_kv_usage=0.02219755826859049 peak_gpu_mem_mib=45139
+level=16 peak_running=13 peak_waiting= peak_kv_usage=0.03311135775064744 peak_gpu_mem_mib=45139
+level=32 peak_running=24 peak_waiting=2 peak_kv_usage=0.05937846836847949 peak_gpu_mem_mib=45139
+### report
+# Marlin-2B sweep report — bench.jsonl
+
+6 cell(s); 1 distinct workload profile(s)
+
+| label | mode | rate/conc | acc | rej | fail | canc | video-s/s | req/s | TTFT p50 | TTFT p95 | latency p50 | latency p95 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| w3-l1-20260923t050411z-c1 | closed-loop | 1 | 60 | 0 | 4 | 0 | 7.439 | 0.353 | 0.6804 | 3.046 | 2.185 | 6.2907 |
+| w3-l1-20260923t050411z-c2 | closed-loop | 2 | 60 | 0 | 4 | 0 | 17.112 | 0.812 | 0.3911 | 1.7052 | 2.0444 | 5.5045 |
+| w3-l1-20260923t050411z-c4 | closed-loop | 4 | 60 | 0 | 4 | 0 | 27.425 | 1.301 | 0.5151 | 2.4332 | 2.4581 | 6.3195 |
+| w3-l1-20260923t050411z-c8 | closed-loop | 8 | 60 | 0 | 4 | 0 | 39.798 | 1.888 | 0.8353 | 3.773 | 3.2358 | 8.5095 |
+| w3-l1-20260923t050411z-c16 | closed-loop | 16 | 60 | 0 | 4 | 0 | 46.503 | 2.206 | 1.6717 | 7.0806 | 5.1164 | 13.4532 |
+| w3-l1-20260923t050411z-c32 | closed-loop | 32 | 120 | 0 | 8 | 0 | 50.09 | 2.376 | 5.9727 | 11.7668 | 10.089 | 22.453 |
+
+`—` is a percentile the sample count cannot support; it is never replaced by a smaller quantile or by the maximum.
+
+## Per-cell limits
+
+- **w3-l1-20260923t050411z-c1** (2026-09-23T05:07:02Z): request_latency_s p99 needs >= 300 samples, have 60; tpot_s p99 needs >= 300 samples, have 60; ttft_s p99 needs >= 300 samples, have 60; platform-attributed failures 4/64 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+- **w3-l1-20260923t050411z-c2** (2026-09-23T05:08:16Z): request_latency_s p99 needs >= 300 samples, have 60; tpot_s p99 needs >= 300 samples, have 60; ttft_s p99 needs >= 300 samples, have 60; platform-attributed failures 4/64 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+- **w3-l1-20260923t050411z-c4** (2026-09-23T05:09:02Z): request_latency_s p99 needs >= 300 samples, have 60; tpot_s p99 needs >= 300 samples, have 60; ttft_s p99 needs >= 300 samples, have 60; platform-attributed failures 4/64 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+- **w3-l1-20260923t050411z-c8** (2026-09-23T05:09:34Z): request_latency_s p99 needs >= 300 samples, have 60; tpot_s p99 needs >= 300 samples, have 60; ttft_s p99 needs >= 300 samples, have 60; platform-attributed failures 4/64 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+- **w3-l1-20260923t050411z-c16** (2026-09-23T05:10:02Z): request_latency_s p99 needs >= 300 samples, have 60; tpot_s p99 needs >= 300 samples, have 60; ttft_s p99 needs >= 300 samples, have 60; platform-attributed failures 4/64 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+- **w3-l1-20260923t050411z-c32** (2026-09-23T05:10:52Z): request_latency_s p99 needs >= 300 samples, have 120; tpot_s p99 needs >= 300 samples, have 120; ttft_s p99 needs >= 300 samples, have 120; platform-attributed failures 8/128 exceed the provisional 1 % criterion (P-18, provisional); cold/warm split reported with engine_state='warm': a cold claim needs a restarted engine or clips the target has never seen; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+
+Provisional criteria (marlin-sop.md §5.2, P-18) are **provisional**: quoting a row of this report without its label promotes it to a target, which it is not.
+### kv capacity at start-up (engine log)
+(EngineCore pid=151) INFO 09-20 01:17:20 [kv_cache_utils.py:2404] GPU KV cache size: 2,644,426 tokens, Maximum concurrency for 32,768 tokens per request: 80.70x
+artifacts=/opt/dlami/nvme/w3-measure/w3-L1-20260923T050411Z
