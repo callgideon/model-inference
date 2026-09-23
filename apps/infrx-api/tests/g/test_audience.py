@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from infrx.auth.context import KEY_COLUMNS, AuthResolver
-from infrx.contracts import errors
+from infrx.contracts import errors, wire
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.v2.records import CredentialAudience
 
@@ -114,3 +114,40 @@ def test_api_auth__a_row_cached_by_the_legacy_select_is_not_an_identity_without_
     auth = asyncio.run(AuthResolver(rt).context(Req()))
     assert (auth.audience, auth.user_id) == (CredentialAudience.consumer, support.USER)
     assert len(seen) == 2 and "audience" in seen[1]
+
+
+PRE_0009 = {"code": "42703", "message": "column api_keys.audience does not exist"}
+
+
+def pre_0009(error_body):
+    """A pre-0009 schema: PostgREST refuses a `select` naming `audience`, and still answers
+    F1's three columns."""
+    def handler(request):
+        columns = request.url.params["select"]
+        if "audience" in columns:
+            return httpx.Response(400, json=error_body)
+        return httpx.Response(200, json=[{c: CONSUMER.get(c) for c in columns.split(",")}])
+
+    return httpx.AsyncClient(base_url="https://fake.supabase.co/rest/v1",
+                             transport=httpx.MockTransport(handler))
+
+
+def test_api_auth__a_pre_0009_schema_fails_closed_and_retryable():
+    """Limit 4 driven: against a schema without 0009 the ingress answers 503 with retry
+    guidance and no identity - never an open door and never a cached 401 - while the legacy
+    route's three-column read still works. An HTTP error is a failed lookup even when its
+    body happens to parse as an (empty) list of rows."""
+    from fastapi.testclient import TestClient
+
+    for body in (PRE_0009, []):
+        calls, accept = support.recorder()
+        app, _ = support.cutover_app(sb=pre_0009(body), ingress_deps=support.deps(accept=accept))
+        response = TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
+                                        json=support.BODY)
+        assert response.status_code == 503, (body, response.text)
+        assert support.error_of(response)["code"] == "dependency_unavailable"
+        assert response.headers[wire.HEADER_RETRY_AFTER]
+        assert calls == []
+    rt = support.runtime(sb=pre_0009(PRE_0009))
+    row, status = asyncio.run(rt.auth.authenticate(Req()))
+    assert status is None and row["id"] == support.KEY
