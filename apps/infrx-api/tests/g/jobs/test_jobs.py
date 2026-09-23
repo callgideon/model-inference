@@ -624,9 +624,11 @@ def test_dur_rls__a_provider_dev_key_owns_its_own_jobs():
     assert job.outcome.cause is TerminalCause.client_cancelled
 
 def test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503():
-    """Every handle route's store read - the owned row (status, result, events, DELETE) and
-    the events' pre-header journal probe - that fails for want of the database is a
-    retryable 503 with `Retry-After`, the driver's text in no answer, and nothing is changed."""
+    """Every handle route's store read - the owned row (status, result, events, DELETE), the
+    events' pre-header journal probe, the store clock (status, result, DELETE) and the
+    committed result object (result) - that fails for want of the database is a retryable 503
+    with `Retry-After`, the driver's text in no answer, and nothing is changed (review S4,
+    stream-C1: the clock and the result object read a succeeded job)."""
     world = JobsWorld()
     assert post(world).status == 202
     job = world.only_job()
@@ -641,6 +643,30 @@ def test_api_modes__a_store_outage_on_a_handle_read_is_a_retryable_503():
         assert reply.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in reply.body
     assert not job.terminal and world.jobs.holds[job.id].state is HoldState.held
     assert status(world).status == 200
+    rs.run(world.work())
+    db_now, read_result = world.jobs.db_now, world.read_result
+
+    async def clock_down():
+        raise outage
+
+    async def object_down(org_id, ref):
+        raise OSError("GET https://infrx:secret@objects.internal/results refused")
+
+    for down, method, tail in (("db_now", "GET", ""), ("db_now", "GET", "/result"),
+                               ("db_now", "DELETE", ""), ("read_result", "GET", "/result")):
+        world.jobs.db_now, world.read_result = db_now, read_result
+        if down == "db_now":
+            world.jobs.db_now = clock_down
+        else:
+            world.read_result = object_down
+        reply = rs.run(send(world.app, method, job_path(world.handle(), tail)))
+        assert refusal(reply) == (503, "dependency_unavailable"), (down, method, tail)
+        assert reply.headers.get(wire.HEADER_RETRY_AFTER) and b"secret" not in reply.body
+    world.jobs.db_now, world.read_result = db_now, read_result
+    assert job.outcome.state is JobState.succeeded
+    assert world.jobs.holds[job.id].state is HoldState.settled
+    assert result(world).json()["response"]["choices"][0]["message"]["content"] \
+        == world.results[job.id]
 
 def test_dur_rls__an_operator_key_owns_no_job():
     """R33 / R66: an operator credential of the very organization owns no job - every handle

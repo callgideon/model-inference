@@ -198,6 +198,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("probe_outage_is_a_500", "the events' journal probe failing is a retryable 503",
        J, "        await _dependency(relay.stream.read_owned(org, handle, cursor, 1))\n",
        "        await relay.stream.read_owned(org, handle, cursor, 1)\n", READ_OUTAGE),
+    _m("now_outage_is_a_500", "a store clock read that fails is a retryable 503 (stream-C1)",
+       J, "        return await _dependency(self.relay.jobs.db_now())",
+       "        return await self.relay.jobs.db_now()", READ_OUTAGE),
+    _m("result_object_outage_is_a_500", "a result object read that fails is a retryable 503 "
+       "(stream-C1)",
+       J, "            text = await _dependency(relay.results.read_result(org, outcome.result_ref))",
+       "            text = await relay.results.read_result(org, outcome.result_ref)", READ_OUTAGE),
     _m("status_state_invented", "a job not yet terminal reports its committed state",
        J, "        return admission.state", "        return JobState.preparing", STATUS),
     _m("updated_at_is_created", "updated_at is the settlement instant once terminal",
