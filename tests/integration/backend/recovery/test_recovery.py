@@ -13,14 +13,14 @@ What is real in each drill, and what stands in for a component that is missing:
 |---|---|---|
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
-| rc03 gateway restart | - | PENDING G1R, G2 (route); the store half is E3B dr01 |
-| rc04 database loss | - | PENDING D2, D3 here; the PostgreSQL half is `test_restore.py` bk03 |
-| rc05 object store | M2's preparation; an outage in front of the object store | PENDING M3 for MinIO |
+| rc03 gateway restart | - | PENDING G2-R1 (G2's cutover that mounts the relay, held); the store half is E3B dr01 |
+| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim | rc04b: settlement, PENDING on terminalize's stub owner (D5); the database's own boundary is `test_restore.py` bk03 |
+| rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
-| rc08 drain | W2's drain over real Valkey | PENDING W3 for the process's SIGTERM path |
+| rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
-| rc10 rollback | - | PENDING I2B (its rollback script) |
+| rc10/rc10b/rc10c rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
 The emulated glue (dispatcher, preparation worker, reaper tick) is `recoverykit.World`.
 A drill that passes on a stand-in is *implemented*, never *integrated*.
@@ -38,6 +38,7 @@ import sys
 import tempfile
 import time
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -238,21 +239,119 @@ def test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route():
     """OPS-RECOVER (gateway restart): a restart between durable acceptance and the answer
     must replay the same accepted identity, and a restart mid-stream must leave the job to
     the worker. The store half is E3B's dr01 (crash after commit, idempotent retry); the
-    route half needs the mounted pilot ingress, and fails the day it is mounted."""
+    route half waits on the cutover that mounts G2's (merged) relay - G2 integration request
+    1, held by the coordinator - and fails the day the ingress is mounted."""
     if stack.ingress_is_mounted():
         pytest.fail("the pilot ingress is mounted: write the gateway restart drill body now")
-    kit.pending("G1R", "G2", why="no metered route is mounted to restart under load")
+    kit.pending("G2-R1", why="no metered route is mounted to restart under load (G2's cutover "
+                             "is held)")
 
 
-def test_i3b_rc04_a_database_loss_under_the_job_store_is_pending_on_its_adapter():
-    """OPS-RECOVER (DB interruption) with the product's store: admission, claim and settle
-    across a PostgreSQL restart. Needs the PostgreSQL JobStore; the RPCs are still stubs,
-    and the day they are not this fails. What the database itself guarantees across a
-    SIGKILL is measured now, in `test_restore.py` bk03."""
-    stubs = stack.unimplemented_rpcs()
-    if stubs == 0:
-        pytest.fail("the D RPCs are implemented: drive the DB loss through the real adapter")
-    kit.pending("D2", "D3", why=f"{stubs} infrx RPCs are still infrx.unimplemented stubs")
+def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobstore(
+        monkeypatch, record_property):
+    """OPS-RECOVER (DB interruption) through the product's store (DRL-3): D's PgJobStore on a
+    migrated PostgreSQL (the D harness, or E2's), and PostgreSQL SIGKILLed and restarted
+    after a claim. The store object built before the kill is used after it - PgJobStore's
+    connector opens a connection per operation, so none is open across the kill (a pooled
+    store, DATABASE_POOL_*, is not covered): the claimed job is still running with its pins
+    and the queued one still queued, a replayed admission is the same job, a second claim is
+    fenced, a new admission is accepted and prepared, the reaper requeues the claimed job
+    after the lease TTL and the next claim is generation 2; the wallet's summary reserves
+    exactly the three holds and debits nothing, and it agrees with the ledger and the holds
+    themselves (`infrx.wallet_reconciliation`: zero drift, and the runbook's detector finds
+    none - and names ORG_A once a hold is released behind the summary's back). Settling
+    across the loss is rc04b's (terminalize is still D5's stub)."""
+    import pgstate
+
+    import test_restore as bk
+    from infrx.contracts import errors
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.records import ExecutionMode, IndexEvent
+    from infrx.state import migrations as d_migrations
+    from infrx.state import pgtesting
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    started = "select pg_postmaster_start_time()"
+
+    def request(h):          # async: a 10 s interactive queue budget is not this drill's case
+        return b.request(h, mode=ExecutionMode.async_, max_output_tokens=256)
+
+    async def body(database: str, factory) -> None:
+        h = factory()
+        h.extra["grant"](b.ORG_A, kit.GRANT)
+        store = h.port
+        first_request = request(h)
+        first = await store.admit(first_request, b.idem(first_request, "rc04a-1"))
+        second_request = request(h)
+        second = await store.admit(second_request, b.idem(second_request, "rc04a-2"))
+        for admission in (first, second):
+            lease = await store.claim_preparation(admission.request_id, "prep-a")
+            await store.prepared(lease, ())
+        claimed = await store.claim(first.request_id, "worker-a")
+        with bk.connect(database) as conn:
+            before = conn.execute(started).fetchone()[0]
+
+        record_property("postgres_kill_to_connection_s", round(bk.kill_postgres(database), 2))
+
+        with bk.connect(database) as conn:
+            assert conn.execute(started).fetchone()[0] > before, "PostgreSQL was not restarted"
+        rig = factory()                 # the hooks' and the clock's own connection, anew
+        replay = await store.admit(first_request, b.idem(first_request, "rc04a-1"))
+        assert (replay.request_id, replay.job_handle) == (first.request_id, first.job_handle)
+        for admission, state in ((first, JobState.running), (second, JobState.queued)):
+            now, outcome = await store.get_owned(b.ORG_A, admission.job_handle)
+            assert (now.state, outcome) == (state, None), (admission.request_id, now.state)
+            for pin in ("price_snapshot", "maximum_hold", "deadline_at", "budgets"):
+                assert getattr(now, pin) == getattr(admission, pin), (admission.request_id, pin)
+        with pytest.raises(errors.NotClaimable):
+            await store.claim(first.request_id, "worker-b")
+        third_request = request(h)
+        third = await store.admit(third_request, b.idem(third_request, "rc04a-3"))
+        lease = await store.claim_preparation(third.request_id, "prep-b")
+        await store.prepared(lease, ())       # else the reaper fails it free, correctly
+        rig.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        produced = await store.recover()
+        assert [(str(event.job_id), event.attempt) for event in produced
+                if isinstance(event, IndexEvent)] == [(first.request_id, 1)], produced
+        again = await store.claim(first.request_id, "worker-b")
+        assert again.generation == claimed.generation + 1
+        holds = first.maximum_hold + second.maximum_hold + third.maximum_hold
+        balance = rig.extra["balance"](b.ORG_A)
+        assert (balance["ledger"], balance["reserved"]) == (Decimal(kit.GRANT), holds), balance
+        with bk.connect(database) as conn:       # DRL-R3-2: the holds, not only the summary
+            drifts = conn.execute("select ledger_drift, reserved_drift, active_holds from "
+                                  "infrx.wallet_reconciliation where org_id = %s",
+                                  (b.ORG_A,)).fetchone()
+        assert drifts == (0, 0, holds), drifts
+        assert bk.drift(database) == [], "the reconcile runbook's detector reports drift"
+        # DRL-R4-3: and it does report one - a hold released behind the summary's back (this
+        # scratch database is dropped afterwards)
+        with bk.connect(database) as conn:
+            conn.execute("update infrx.credit_holds set state = 'released' "
+                         "where request_id = %s", (first.request_id,))
+        assert {str(row[0]) for row in bk.drift(database)} == {b.ORG_A}, \
+            "the detector missed a released hold"
+
+    with bk.scratch("infrx_i3b_jobs") as (database,):
+        with bk.connect(database) as conn:
+            pgstate.apply_migrations(conn)
+            pgstate.install_test_clock(conn)
+            pgtesting.seed(conn)
+            conn.execute(d_migrations.SEED_MARLIN.read_text())
+        factory = pgtesting.make_jobstore_factory(lambda: database, bk.conninfo)
+        kit.run(lambda: body(database, factory))
+
+
+def test_i3b_rc04b_settlement_across_a_database_loss_is_pending_on_terminalize():
+    """The other half of rc04: a job SETTLED across the PostgreSQL kill needs
+    `infrx.terminalize`, still an `infrx.unimplemented` stub. It pends on the task the stub
+    names (E3B's per-drill probe, measured on the stack; D5 today) and fails the day
+    terminalize is implemented."""
+    kit.needs_stack()
+    stubs = stack.stubbed(("terminalize",))
+    if not stubs:
+        pytest.fail("terminalize is implemented: settle a job across rc04a's PostgreSQL kill now")
+    kit.pending(*sorted(set(stubs.values())),
+                why=f"{sorted(stubs)} is still an infrx.unimplemented stub")
 
 
 # ------------------------------------------------------------------ media: object store, disk
@@ -379,7 +478,7 @@ def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter(
     names = _object_store_adapters()
     if names:
         pytest.fail(f"an S3 object store exists ({names}): pause MinIO under it now")
-    kit.pending("M3", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
+    kit.pending("M1-L2", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
 
 
 @contextlib.contextmanager
@@ -553,7 +652,8 @@ def test_i3b_rc08_a_drain_releases_in_flight_work_to_the_store_and_keeps_the_que
 
 def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
     """The same drain driven by SIGTERM to the worker PROCESS, bounded by the unit's
-    `TimeoutStopSec`: needs W3's worker entry point (and I2B's unit). Fails the day
+    `TimeoutStopSec`: W3's WorkerService and I2B's unit exist; the composition root the
+    unit starts (`python -m infrx.worker`, I2B request 4) does not. Fails the day
     `infrx.worker` grows one, in any of the shapes a process can start from here: an
     `infrx.worker.__main__` module (`python -m infrx.worker`), a `main` attribute of the
     package, or a worker module with an `if __name__ == "__main__":` guard. A console
@@ -567,7 +667,41 @@ def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
             if re.search(r"^if __name__ == .__main__.:", path.read_text(), re.M)]
     if entry:
         pytest.fail("infrx.worker has a process entry point: SIGTERM it mid-attempt now")
-    kit.pending("W3", "I2B", why="no worker process entry point or unit to SIGTERM")
+    kit.pending("I2B-R4", why="no worker process entry point (python -m infrx.worker) to "
+                             "SIGTERM")
+
+
+def _outcome(call) -> str:
+    """What a pending drill did, as text: its skip reason, its failure, or its refusal."""
+    try:
+        call()
+    except pytest.skip.Exception as skipped:
+        return str(skipped)
+    except pytest.fail.Exception as failed:
+        return f"failed: {failed}"
+    except AssertionError as refused:
+        return f"refused: {refused}"
+    return "returned"
+
+
+def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is_refused(
+        monkeypatch):
+    """DR-4: a pending count is only honest if the id is. `kit.pending` refuses an id outside
+    the vocabulary (and none at all); each pending drill pends on exactly the id pinned here,
+    so a swapped or misspelt owner fails instead of being counted; and rc03's probe fails the
+    day the ingress is mounted. Layer 0 (rc04 needs E2's stack: its ids come from
+    `stack.stubbed`)."""
+    assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
+    assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
+    pinned = {test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route: "G2-R1",
+              test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter:
+                  "M1-L2",
+              test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
+    for case, owner in pinned.items():
+        assert _outcome(case).startswith(f"PENDING[{owner}] "), (case.__name__, _outcome(case))
+    monkeypatch.setattr(stack, "ingress_is_mounted", lambda: True)
+    assert _outcome(test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route) \
+        .startswith("failed: the pilot ingress is mounted")
 
 
 def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepted_job(
@@ -621,12 +755,224 @@ def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepte
 
 # ------------------------------------------------------------------ rollout
 
-def test_i3b_rc10_a_rollout_rollback_is_pending_on_the_deploy_scripts():
-    """OPS-RECOVER (rollout rollback): roll the runtime back with admission paused and jobs
-    drained/fenced, never onto the unmetered legacy runtime once CREDIT is enabled
-    (maintenance 503 instead). The scripts are I2B's; this fails the day they exist."""
-    deploy = harness.REPO_ROOT / "apps" / "infrx-api" / "deploy"
-    scripts = sorted(path.name for path in deploy.glob("rollback*"))
-    if scripts:
-        pytest.fail(f"I2B's rollback exists ({scripts}): drive it through a rollback drill now")
-    kit.pending("I2B", why="no rollback script in apps/infrx-api/deploy")
+# The copy's, under the mutation runner: i3bm94/i3bm97/i3bm98 mutate rollback.sh and lib.sh.
+DEPLOY = kit.ROOT / "apps" / "infrx-api" / "deploy"
+ENV_FILE = "etc/marlin2b-gateway.env"
+UNITS = ("marlin2b-vllm.service", "marlin2b-gateway.service", "infrx-worker.service",
+         "infrx-valkey.service")
+# What install.sh step 3 backs up (and rollback.sh restores): the env file, the edge, the units.
+BACKED_UP = (ENV_FILE, "etc/caddy/Caddyfile", "etc/caddy/infrx/Caddyfile",
+             "etc/caddy/infrx/Caddyfile.maintenance", *(f"etc/systemd/system/{u}" for u in UNITS))
+# The host's binaries rollback.sh calls, stubbed: each records its argv and succeeds, except
+# a call naming $INFRX_I3B_FAIL, which fails - always (rc10b: a readiness probe that never
+# answers), or only its first $INFRX_I3B_FAILS times (rc10c: one that answers late).
+STUB = ('#!/usr/bin/env bash\necho "$(basename "$0") $*" >> "$INFRX_I3B_EVENTS"\n'
+        'case "$*" in *"${INFRX_I3B_FAIL:-<none>}"*)\n'
+        '  [ "$(grep -cF -- "$*" "$INFRX_I3B_EVENTS")" -gt "${INFRX_I3B_FAILS:-999999}" ] '
+        '|| exit 1 ;;\nesac\n')
+IMAGE = {"previous": "sha256:" + "a" * 64, "current": "sha256:" + "b" * 64}
+
+
+def release(image: str | None) -> dict[str, str]:
+    """A host's backed-up files at one release: the pilot env file pinning `image` (None: the
+    pre-I2B monolith's, no mode) and I2B's units and edge, EACH marked with the release, so a
+    rollback that leaves any one of them (the edge included: i3bm94) in place is caught."""
+    files = {ENV_FILE: f"INFRX_MODE=pilot\nINFRX_IMAGE={image}\n" if image
+             else "MODEL_ID=nemostation/marlin-2b\n"}
+    for unit in UNITS:
+        files[f"etc/systemd/system/{unit}"] = (DEPLOY / unit).read_text() + f"# {image}\n"
+    for site in ("Caddyfile", "Caddyfile.maintenance"):
+        files[f"etc/caddy/infrx/{site}"] = (DEPLOY / site).read_text() + f"# {image}\n"
+    files["etc/caddy/Caddyfile"] = files["etc/caddy/infrx/Caddyfile"]
+    return files
+
+
+def install(root: Path, files: dict[str, str]) -> None:
+    for relative, text in files.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text)
+
+
+def backup(root: Path, into: Path) -> Path:
+    """install.sh step 3, as it runs it: the present files in files.tar, the rest in absent."""
+    into.mkdir(parents=True)
+    present = [path for path in BACKED_UP if (root / path).exists()]
+    subprocess.run(["tar", "-C", str(root), "-cpf", str(into / "files.tar"), *present],
+                   check=True)
+    (into / "absent").write_text("".join(f"{path}\n" for path in BACKED_UP
+                                         if path not in present))
+    return into
+
+
+def on_host(root: Path) -> dict[str, str]:
+    return {path: (root / path).read_text() for path in BACKED_UP if (root / path).exists()}
+
+
+def rollback_sh(tmp_path: Path, root: Path, target: Path, fail: str = "",
+                fails: int | None = None,
+                ready_s: int = 1) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """I2B's `deploy/rollback.sh <backup>`, unmodified, against the sandbox root, with the
+    stubs first on PATH (a call naming `fail` exits 1: always, or its first `fails` times).
+    Returns its result and the commands it issued, in order."""
+    stubs, events = tmp_path / "stub-bin", tmp_path / "events.log"
+    if not stubs.exists():
+        stubs.mkdir()
+        for name in ("systemctl", "docker", "curl"):
+            (stubs / name).write_text(STUB)
+            (stubs / name).chmod(0o755)
+    events.unlink(missing_ok=True)
+    done = subprocess.run(["bash", str(DEPLOY / "rollback.sh"), str(target)],
+                          capture_output=True, text=True, timeout=60,
+                          env={**os.environ, "INFRX_ROOT": str(root),
+                               "PATH": f"{stubs}:{os.environ['PATH']}",
+                               "INFRX_I3B_EVENTS": str(events), "INFRX_I3B_FAIL": fail,
+                               "INFRX_I3B_FAILS": "" if fails is None else str(fails),
+                               "POLL_S": "0.01",
+                               "READY_S": str(ready_s)})
+    return done, (events.read_text().splitlines() if events.exists() else [])
+
+
+# The commands rollback.sh issues for a pilot -> pilot rollback, in order: stop the runtime
+# (the worker drains), restore the files (tar, real), reload the units, restart the restored
+# runtime, wait for BOTH readiness probes, and only then reload the edge.
+ROLLBACK_COMMANDS = [
+    "systemctl stop infrx-worker marlin2b-gateway",
+    "systemctl daemon-reload",
+    "systemctl restart infrx-worker marlin2b-gateway",
+    "curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8001/readyz",
+    "curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8002/readyz",
+    "docker inspect caddy",
+    "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile "
+    "--address unix//config/admin.sock",
+]
+
+
+def test_i3b_rc10_a_rollout_rollback_loses_no_job_and_restores_the_previous_runtime(
+        tmp_path, monkeypatch):
+    """OPS-RECOVER (rollout rollback), rollback.md's procedure end to end. A host serves
+    pilot at the current release with accepted work (one done, one mid-attempt, two queued);
+    the previous release is a pilot (metered) runtime, backed up by install.sh step 3.
+
+    2. maintenance: bk04's statement, as service_role, on PostgreSQL - admission refuses
+       with 55000; 3. drain and fence: W2's drain releases the attempt, settles nothing;
+    4. I2B's rollback.sh: to the pre-pilot backup it is REFUSED (exit 2, nothing run or
+       written: a pilot host is never handed to an unmetered runtime); to the previous
+       release it issues exactly `ROLLBACK_COMMANDS` and the env file (the image pin) and
+       every unit and edge file are the previous release's, byte for byte;
+    5. the restored runtime's reaper requeues the released job after the lease TTL and the
+       index is rebuilt from the durable snapshot; 6. maintenance off: admission accepted;
+    7. the restored worker finishes everything and `reconcile()` holds: no accepted job
+       lost, one settlement each.
+
+    Stubbed: systemctl, docker and curl (argv recorded, exit 0) and the host root (a
+    sandbox, `INFRX_ROOT`). The worker's stop is W2's drain run in process, and the
+    restored runtime is a new WorkerLoop started after rollback.sh restarted its unit."""
+    import psycopg
+
+    import test_restore as bk
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    world = kit.World()
+    root = tmp_path / "root"
+    # the premise of "byte for byte": no backed-up file is the same in both releases (DR-1)
+    assert [path for path in BACKED_UP
+            if release(IMAGE["previous"])[path] == release(IMAGE["current"])[path]] == []
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))              # the rollout being rolled back
+    install(tmp_path / "monolith", release(None))
+    monolith = backup(tmp_path / "monolith", tmp_path / "backups" / "monolith")
+    admission = "select infrx.require_feature('credit_admission')"
+
+    async def body(conn):
+        jobs = [await world.queued(n % 2) for n in range(4)]
+        await world.dispatch(*(job.request_id for job in jobs))
+        await world.loop(worker_id="worker-current").run(concurrency=1, stop_when_idle=True,
+                                                         max_claims=1)
+        engine = Hanging(world.clock, publish=False)
+        current = world.loop(engine, "worker-current")
+        running = asyncio.create_task(current.run(concurrency=1, stop_when_idle=False))
+        await until(lambda: len(engine.running) == 1)
+
+        with conn.transaction():                                            # 2. maintenance
+            bk.as_role(conn, "service_role", bk.MAINTENANCE, (False,))
+        with pytest.raises(psycopg.Error) as refused:
+            with conn.transaction():
+                bk.as_role(conn, "service_role", admission)
+        assert refused.value.sqlstate == "55000", refused.value
+
+        report = await asyncio.wait_for(current.drain(within_s=0.05), 5)    # 3. drain, fence
+        await asyncio.wait_for(running, 5)
+        assert (report.released, world.jobs.jobs[engine.running[0]].outcome) == (1, None)
+
+        written = on_host(root)                                             # 4. rollback.sh
+        done, issued = rollback_sh(tmp_path, root, monolith)
+        assert done.returncode == 2 and "drain.sh pause" in done.stderr, done.stderr
+        assert (issued, on_host(root)) == ([], written), "a refused rollback changed the host"
+        done, issued = rollback_sh(tmp_path, root, previous)
+        assert done.returncode == 0, done.stderr
+        assert issued == ROLLBACK_COMMANDS, issued
+        assert on_host(root) == release(IMAGE["previous"])
+
+        world.clock.advance(DEFAULTS.lease_ttl_s + 1)                       # 5. reap, rebuild
+        assert len(await world.reap()) == 1
+        assert await world.scheduler.rebuild(world.snapshot()) == 3
+        with conn.transaction():                                            # 6. resume
+            bk.as_role(conn, "service_role", bk.MAINTENANCE, (True,))
+        with conn.transaction():
+            bk.as_role(conn, "service_role", admission)
+        await world.finish(world.loop(worker_id="worker-restored"))         # 7. reconcile
+        summary = await world.reconcile()
+        assert summary["terminal"] == {"succeeded/completed": 4}, summary
+
+    with bk.scratch("infrx_i3b_rollback") as (database,):
+        bk.apply(database, bk.migrations(1, 9999))
+        with bk.connect(database) as conn:
+            kit.run(lambda: body(conn))
+
+
+@pytest.mark.parametrize("probe", ("8001", "8002"))
+def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_the_edge(
+        tmp_path, probe):
+    """rollback.md step 4, exit 4 (DR-3): the restored runtime restarts but one readiness
+    probe never answers - the gateway's (8001) or the worker's (8002). rollback.sh polls it
+    for READY_S (3 s here: at least 2 s of wall time, bash's SECONDS being whole seconds),
+    then gives up with exit 4 and never touches the edge (no `docker` call, so the running
+    Caddy keeps serving what it served and the operator stays in maintenance); the probe
+    after a failed one is never reached. The files are already the previous release's: the
+    restore precedes the probe. Stubs and sandbox as rc10; no database."""
+    root = tmp_path / "root"
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))
+    ready = f"http://127.0.0.1:{probe}/readyz"
+    started = time.monotonic()
+    done, issued = rollback_sh(tmp_path, root, previous, fail=ready, ready_s=3)
+    waited = time.monotonic() - started
+    assert done.returncode == 4 and "the restored runtime is not ready" in done.stderr, \
+        (done.returncode, done.stderr)
+    head = ROLLBACK_COMMANDS[:3 + (probe == "8002")]      # stop, reload, restart (, 8001 ok)
+    assert issued[:len(head)] == head, issued
+    retries = issued[len(head):]
+    assert set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, issued
+    # DRL-1/R4-2: retried every POLL_S (0.01 s: ~150-200 probes in 3 s), not once or twice,
+    # not every READY_S/2 and not in a busy loop
+    assert 10 <= len(retries) < 400, f"{len(retries)} probes in {waited:.2f} s"
+    # DRL-R3-1/R4-1: for READY_S (between 2 and 4 s here), not a fixed budget of 1 s or 5 s+
+    assert 2 <= waited < 4, f"gave up after {waited:.2f} s of a 3 s READY_S ({len(retries)} probes)"
+    assert on_host(root) == release(IMAGE["previous"])
+
+
+def test_i3b_rc10c_a_gateway_that_answers_late_is_waited_for_and_the_edge_reloaded(tmp_path):
+    """rollback.md step 4 (DRL-1): the restored gateway's /readyz fails once and then
+    answers - a real gateway is rarely ready at its first probe. rollback.sh probes it again,
+    then the worker's, then reloads the edge: exit 0 and exactly rc10's commands with the
+    8001 probe issued twice. Stubs and sandbox as rc10; no database."""
+    root = tmp_path / "root"
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))
+    done, issued = rollback_sh(tmp_path, root, previous,
+                               fail="http://127.0.0.1:8001/readyz", fails=1)
+    assert done.returncode == 0, (done.returncode, done.stderr)
+    assert issued == ROLLBACK_COMMANDS[:4] + ROLLBACK_COMMANDS[3:], issued
+    assert on_host(root) == release(IMAGE["previous"])

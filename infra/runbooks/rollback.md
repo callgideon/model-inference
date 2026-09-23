@@ -1,9 +1,10 @@
 # Rollback — a rollout, the maintenance switch
 
 The rules are infra/README.md §8; this is the procedure. Conventions: [README.md](README.md).
-Drills: `test_i3b_bk04` (the maintenance switch, real PostgreSQL), `test_i3b_rc10` (the
-rollout rollback, **PENDING I2B**: it needs I2B's deploy/rollback scripts and fails the day
-`apps/infrx-api/deploy/rollback*` exists, so the drill gets written then).
+Drills: `test_i3b_bk04` (the maintenance switch, real PostgreSQL), `test_i3b_rc10` (this
+procedure, steps 2-7: maintenance on PostgreSQL, W2's drain, I2B's `rollback.sh` itself on a
+sandbox root with `systemctl`/`docker`/`curl` stubbed, the reaper, the index rebuild and the
+reconciliation), `test_i3b_rc10b` (step 4's exit 4: a `/readyz` that never answers).
 
 ## Rollout rollback
 
@@ -20,9 +21,22 @@ old gateway.
 3. **Drain and fence**: [restart.md](restart.md#drain). What cannot finish inside the drain
    bound is released to the store; the reaper requeues prepublication attempts after the
    lease TTL. Nothing is settled by the rollback itself.
-4. **Deploy the previous compatible runtime** with I2B's script (**PENDING I2B**; its name
-   and arguments go here when it lands). Schema changes are never rolled back to roll back
-   code: 0003-0009 are additive and the older runtime runs on them (`bk02`, restore.md A7).
+4. **Deploy the previous compatible runtime** with I2B's script, `BACKUP` being the backup
+   directory the rollout's `install.sh` printed on its `rollback:` line
+   (`/var/backups/infrx/<UTC>-<sha>`):
+
+   ```bash
+   sudo ./apps/infrx-api/deploy/rollback.sh "$BACKUP"
+   ```
+
+   It stops the runtime units (the worker drains), restores the env file (the image pin),
+   the units and the edge files byte for byte, restarts the restored runtime, waits for the
+   gateway's and the worker's `/readyz`, and only then reloads the edge. A backup whose
+   runtime cannot meter is refused on a pilot host (exit 2, nothing stopped or written):
+   stay in [maintenance](#maintenance) instead. Exit 4 is a restored runtime that is not
+   ready; the edge is not reloaded (its files on disk are already the backup's). Schema
+   changes are never rolled back to roll back code: 0003-0009 are additive and the older
+   runtime runs on them (`bk02`, restore.md A7).
 5. **Rebuild the index** from PostgreSQL ([index-loss.md](index-loss.md#index-loss)).
 6. **Resume admission** only after `/readyz` is ready: [maintenance](#maintenance), exit.
 7. **Reconcile** ([reconcile.md](reconcile.md#drift)) and append to the record: durable state
@@ -79,3 +93,9 @@ ledger, journal or job tables to roll back code.
 - 2026-09-23 (I3B fix round, RS-6): the SQL block runs under `set role service_role` like
   bk04's `set local role`, instead of as the pooler's `postgres` login (which succeeded by
   BYPASSRLS, not by 0006's policy); rb03 pins it.
+- 2026-09-23 (I3B follow-up, rc10): step 4 names I2B's `rollback.sh` and its argument (`rb08`
+  pins them to the script's own usage line); `rc10` drills steps 2-7 with the script itself on
+  a sandbox root (systemctl/docker/curl stubbed). Nothing run on the box.
+- 2026-09-23 (I3B follow-up round 2): `rc10` marks every restored file with its release, so
+  the edge files' "byte for byte" is checked (DR-1); `rc10b` drills exit 4 with the gateway's
+  or the worker's `/readyz` never answering: no edge reload (DR-3). Nothing run on the box.

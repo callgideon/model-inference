@@ -72,11 +72,18 @@ def m_support():
     return module
 
 
-# I2B is I3B's own start dependency (18 §I3B), which is why it is a pending id here although
-# E took it out of the backend vocabulary for E3B (a reverse edge there, review round 1).
-# Everything else, and the refusal of an unknown id, is E's `stack.PENDING`.
-PENDING = {**stack.PENDING,
-           "I2B": "deploy/drain/rollback scripts and units for the headless endpoint"}
+# Three drills wait on work no task in tasks.json schedules; their ids name the document that
+# defines it and its owner, and are the only ids here that are not tasks. Everything else,
+# and the refusal of an unknown id, is E's `stack.PENDING`.
+OWNERS = {"G2-R1": "the cutover that mounts the metered ingress in gateway.app.ROUTERS: G2 "
+                   "integration request 1 (G2-e5e7d3a.md), owned by the coordinator and HELD "
+                   "until the adapters exist (tasks.json, G2's disposition); G2 is merged",
+          "I2B-R4": "the worker composition root `python -m infrx.worker` "
+                    "(infrx/worker/__main__.py) that I2B's infrx-worker.service starts: I2B "
+                    "integration request 4, owned by the coordinator (G2 brief)",
+          "M1-L2": "an S3-backed ObjectStore in infrx.media: M1 limit 2, track M's; not "
+                   "scheduled in backend-first (the pilot's media root is local)"}
+PENDING = {**stack.PENDING, **OWNERS}
 
 
 def pending(*ids: str, why: str):
@@ -94,7 +101,7 @@ def needs_stack():
     hide a case in a container-free run, never in the gate)."""
     import pytest
     if not harness.load_state() or not harness.owned_containers():
-        pytest.skip("no infrx-e2 stack: run `tests/integration/run.py --layer 3`")
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
 
 
 @dataclass

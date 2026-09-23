@@ -5,17 +5,18 @@
     apps/infrx-api/.venv/bin/python tests/integration/backend/recovery/mutants_i3b.py
     apps/infrx-api/.venv/bin/python tests/integration/backend/recovery/mutants_i3b.py --layer all
 
-E's runner (`tests/integration/mutants.py`) does the work - temporary copy, one edit, the
-kill is a pytest *failure* on the named selector and never an error - so this file is only
-the list. Two additions, both local: the copy also carries `infra/` (the alert rules and
-runbooks are claims too), and a layer-3 mutant needs E2's live stack (`run.py --layer 3
---keep`), otherwise it is reported pending, never killed.
+E's runner (`tests/integration/mutants.py`) does the work - temporary copy (with `infra/`:
+the alert rules and runbooks are claims too), one edit, the kill is a pytest *failure* on the
+named selector and never an error - and runs this list in its mutation stage
+(`mutants.all_mutants()`), so this file is the list plus a thin CLI. A layer-2 mutant needs
+E2's live stack (`run.py --layer 3 --keep`), or `INFRX_I3B_PG=d` for the ones whose case runs
+on the D harness; otherwise it is reported pending, never killed.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
+import os
 import sys
 from pathlib import Path
 
@@ -36,6 +37,8 @@ ALERTS = "apps/infrx-api/infrx/observe/alerts.py"
 RULES = "infra/alerts/alerts.json"
 DASHBOARD = "infra/alerts/dashboard.json"
 PGRESTORE = "infra/runbooks/pgrestore.py"
+# I2B's scripts, which rc10 runs unmodified (the runner must copy apps/infrx-api/deploy)
+ROLLBACK = "apps/infrx-api/deploy/rollback.sh"
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bc01", "CONTROL: a comment-only edit in the metrics module must SURVIVE",
@@ -202,13 +205,66 @@ MUTANTS += (
            "    async def get(self, key): ...\n"
            "    async def put_if_absent(self, key, data, content_type): ...\n\n\n"
            "class InMemoryObjectStore:\n", DRILLS, "rc05b"),
+    # Anchored on the future import, not on loop.py's last line: W3's merge (65e2c99) changed
+    # that line and made this mutant stale; a module-level guard anywhere is the shape.
     Mutant("i3bm57", "D3: rc08b fails once any worker module runs as a script",
-           "apps/infrx-api/infrx/worker/loop.py", "                           claimed=self.claimed)\n",
-           "                           claimed=self.claimed)\n\n\nif __name__ == \"__main__\":\n"
+           "apps/infrx-api/infrx/worker/loop.py", "from __future__ import annotations\n",
+           "from __future__ import annotations\n\nif __name__ == \"__main__\":\n"
            "    pass\n", DRILLS, "rc08b"),
+    # DR-4: the pending ids are honest - refused when unknown, pinned per drill
+    Mutant("i3bm99", "DR-4: kit.pending refuses an id outside the vocabulary", KIT,
+           "    unknown = [task for task in ids if task not in PENDING]\n",
+           "    unknown = []\n", DRILLS, "rc00"),
+    Mutant("i3bm100", "DR-4: rc05b pends on its owner (M1-L2), not on another known id", DRILLS,
+           'kit.pending("M1-L2", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
+    Mutant("i3bm101", "DR-4: rc03 fails the day the ingress is mounted", DRILLS,
+           "    if stack.ingress_is_mounted():\n", "    if False:\n", DRILLS, "rc00"),
+    Mutant("i3bm105", "DRL-2: rc03 pends on the held cutover (G2-R1), not on G2, which merged",
+           DRILLS, 'kit.pending("G2-R1", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
+    Mutant("i3bm94", "rc10 (DR-1): rollback.sh restores the edge (the active Caddyfile and "
+                     "both infrx sites) with the env file and the units, byte for byte",
+           ROLLBACK, 'tar -C "${ROOT:-/}" -xpf "$backup/files.tar"',
+           'tar -C "${ROOT:-/}" -xpf "$backup/files.tar" --exclude=etc/caddy',
+           DRILLS, "rc10", layer=2),
+    Mutant("i3bm97", "rc10b (DR-3): a restored runtime that is not ready is exit 4 and the "
+                     "edge is never reloaded", ROLLBACK,
+           'wait_ready "${restored:-legacy}" \\\n', 'wait_ready "${restored:-legacy}" || true \\\n',
+           DRILLS, "rc10b"),
+    Mutant("i3bm98", "rc10b (DR-3): the worker's /readyz is probed only after the gateway's "
+                     "answered, and a gateway that never answers fails the wait",
+           "apps/infrx-api/deploy/lib.sh", '"${READY_S:-120}" && wait_http "$WORKER_READY"',
+           '"${READY_S:-120}"; wait_http "$WORKER_READY"', DRILLS, "rc10b and 8001"),
+    Mutant("i3bm104", "rc10c (DRL-1): wait_http polls a probe until READY_S, not once (the "
+                      "confirmation's H1)", "apps/infrx-api/deploy/lib.sh",
+           'until curl -fsS -o /dev/null --max-time 5 "$1"; do',
+           'until curl -fsS -o /dev/null --max-time 5 "$1" || return 1; do', DRILLS, "rc10c"),
+    Mutant("i3bm108", "rc10b (DRL-R3-1): wait_http's budget is its READY_S argument, not a "
+                      "fixed second (the verifier's V1)", "apps/infrx-api/deploy/lib.sh",
+           "  local deadline=$((SECONDS + $2))", "  local deadline=$((SECONDS + 1))",
+           DRILLS, "rc10b"),
+    Mutant("i3bm109", "rc10b (DRL-R3-1): wait_http polls until READY_S, not twice (the "
+                      "verifier's V2)", "apps/infrx-api/deploy/lib.sh",
+           'until curl -fsS -o /dev/null --max-time 5 "$1"; do',
+           'until curl -fsS -o /dev/null --max-time 5 "$1" '
+           '|| curl -fsS -o /dev/null --max-time 5 "$1" || return 1; do', DRILLS, "rc10b"),
+    Mutant("i3bm112", "rc10b (DRL-R4-1): wait_http's budget is READY_S, not a fixed 5 s (an "
+                      "upper bound too)", "apps/infrx-api/deploy/lib.sh",
+           "  local deadline=$((SECONDS + $2))", "  local deadline=$((SECONDS + 5))",
+           DRILLS, "rc10b"),
+    Mutant("i3bm113", "rc10b (DRL-R4-2): wait_http polls every POLL_S, not every READY_S/2",
+           "apps/infrx-api/deploy/lib.sh", '    sleep "${POLL_S:-2}"\n',
+           "    sleep $(( $2 / 2 ))\n", DRILLS, "rc10b"),
+    Mutant("i3bm114", "rc10b (DRL-R4-2): wait_http sleeps between probes (no busy loop "
+                      "next to the restoring gateway)", "apps/infrx-api/deploy/lib.sh",
+           '    [ "$SECONDS" -lt "$deadline" ] || return 1\n    sleep "${POLL_S:-2}"\n',
+           '    [ "$SECONDS" -lt "$deadline" ] || return 1\n', DRILLS, "rc10b"),
+    Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
+                     "snapshot of queued jobs, so the drained job and the queue come back once",
+           KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",
+           DRILLS, "rc10", layer=2),
     # ---------------- the restore procedure (the runbook's tool), on the real PostgreSQL
     Mutant("i3bm40", "a restore empties the template's default privileges first (else anon "
                      "gets ALL on the tenant tables)", PGRESTORE,
@@ -275,6 +331,73 @@ MUTANTS += (
     Mutant("i3bm66", "RS-3: the check compares a function's pinned configuration (search_path)",
            PGRESTORE, ", coalesce(p.proconfig::text, '') from pg_proc p", " from pg_proc p",
            RESTORE, "bk01f and functions_config", layer=2),
+    # R92: the check compares effective privileges; each normalisation is one mutant. The
+    # `'{}'` edit puts back exactly what the check did before R92 (NULL read as no privilege).
+    Mutant("i3bm86", "R92: a relation's NULL ACL compares as its owner's default "
+                     "(infrx.job_results after a restore)", PGRESTORE,
+           "unnest(coalesce(c.relacl, acldefault(", "unnest(coalesce(c.relacl, '{}', acldefault(",
+           RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm87", "R92: a function's NULL ACL compares as its owner's default", PGRESTORE,
+           "unnest(coalesce(p.proacl, acldefault('f', ",
+           "unnest(coalesce(p.proacl, '{}', acldefault('f', ", RESTORE, "bk01g", layer=2),
+    Mutant("i3bm88", "R92: a schema's NULL ACL compares as its owner's default", PGRESTORE,
+           "unnest(coalesce(nspacl, acldefault('n', ",
+           "unnest(coalesce(nspacl, '{}', acldefault('n', ", RESTORE, "bk01g", layer=2),
+    Mutant("i3bm89", "R92: a sequence's default is a sequence's (acldefault 's'), not a table's",
+           PGRESTORE, "when 'S' then 's' else 'r' end", "when 'S' then 'r' else 'r' end",
+           RESTORE, "bk01g", layer=2),
+    Mutant("i3bm90", "R92: an ACL emptied by a revoke from the owner is still a loss", PGRESTORE,
+           "unnest(coalesce(c.relacl, acldefault(",
+           # measured: a revoked-to-empty ACL is not `= '{}'` (1 dimension, 0 items)
+           "unnest(coalesce(case when cardinality(c.relacl) > 0 then c.relacl end, acldefault(",
+           RESTORE, "bk01g", layer=2),
+    Mutant("i3bm95", "RST-1: the check compares a schema's ACL (USAGE on infrx is the tenant "
+                     "boundary's first gate)", PGRESTORE,
+           "unnest(coalesce(nspacl, acldefault('n', ", "unnest(coalesce(null, acldefault('n', ",
+           RESTORE, "bk01f and schemas", layer=2),
+    Mutant("i3bm96", "RST-4: the check compares sequences (relkind 'S'), not only tables and "
+                     "views", PGRESTORE, "c.relkind in ('r','p','v','m','S')",
+           "c.relkind in ('r','p','v','m')", RESTORE, "bk01g", layer=2),
+    Mutant("i3bm103", "RST-3: the check compares column privileges (the family's rows "
+                      "dropped, not its key renamed: RST-R2-1)", PGRESTORE,
+           '"and a.attnum > 0 and not a.attisdropped',
+           '"and false and a.attnum > 0 and not a.attisdropped', RESTORE,
+           "bk01f and column_acls", layer=2),
+    Mutant("i3bm106", "RST-R2-2: a column grant is compared by what it grants (a grantee "
+                      "swap at the same cardinality is named)", PGRESTORE,
+           "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
+           "cardinality(a.attacl)::text from pg_attribute a", RESTORE, "bk01f and column_acls",
+           layer=2),
+    Mutant("i3bm110", "RST-R3-1: a column grant is compared by its privileges too, not by "
+                      "its grantees alone (the verifier's R9)", PGRESTORE,
+           "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
+           "array(select split_part(x::text, '=', 1) from unnest(a.attacl) x order by 1)::text "
+           "from pg_attribute a", RESTORE, "bk01f and column_acls_privilege", layer=2),
+    Mutant("i3bm115", "RST-R4-1: a column grant's grant option is compared (w vs w*)",
+           PGRESTORE,
+           "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
+           "array(select replace(x::text, '*', '') from unnest(a.attacl) x order by 1)::text "
+           "from pg_attribute a", RESTORE, "bk01f and column_acls_grantopt", layer=2),
+    Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
+                     "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
+           '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',
+           '        if " ACL " in line:', RESTORE, "bk01h", layer=2),
+    Mutant("i3bm102", "RST-2: D's plain image is refused by name, not run into 17.6-client "
+                      "restore failures", RESTORE,
+           "    if not d_harness().ON_SUPABASE:\n        pytest.skip(PLAIN_IMAGE)\n", "",
+           RESTORE, "bk00"),
+    Mutant("i3bm107", "DRL-3: rc04a really kills PostgreSQL under the store (the drill's loss "
+                      "is injected, not assumed)", RESTORE,
+           '        d._docker("kill", container)\n', '        d._docker("inspect", container)\n',
+           DRILLS, "rc04a", layer=2),
+    Mutant("i3bm111", "DRL-R3-2: rc04a's last word is the reconcile runbook's own drift "
+                      "detector (pgrestore.drift), and any row it reports fails the drill",
+           PGRESTORE, 'f"select * from {view} where ledger_drift <> 0 "',
+           'f"select * from {view} where ledger_drift = 0 "', DRILLS, "rc04a", layer=2),
+    Mutant("i3bm116", "DRL-R4-3: the reconcile runbook's drift detector reports a real "
+                      "drift (never a vacuous [])", PGRESTORE,
+           "            found += conn.execute(", "            found += [] and conn.execute(",
+           DRILLS, "rc04a", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),
@@ -307,24 +430,22 @@ MUTANTS += (
     Mutant("i3bm56", "RS-6: rollback.md runs the maintenance switch as service_role, as bk04",
            "infra/runbooks/rollback.md", "set role service_role;\n", "\n",
            RUNBOOK_CASES, "rb03"),
+    Mutant("i3bm93", "rc10: rollback.md step 4 runs I2B's rollback.sh as its usage line says",
+           "infra/runbooks/rollback.md", 'sudo ./apps/infrx-api/deploy/rollback.sh "$BACKUP"',
+           'sudo ./apps/infrx-api/deploy/rollback.sh --backup "$BACKUP"', RUNBOOK_CASES, "rb08"),
     Mutant("i3bm54", "links between runbooks resolve", "infra/runbooks/rollback.md",
            "[restart.md](restart.md#drain)", "[restart.md](restart.md#draining)",
            RUNBOOK_CASES, "rb05"),
 )
 
 
-def _copy_with_infra(destination: Path, _copy=mutants._copy_trees) -> None:
-    """E's owned trees plus `infra/`, so a mutated rule or runbook is the one read."""
-    _copy(destination)
-    shutil.copytree(harness.REPO_ROOT / "infra", destination / "infra",
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-
-
 def run(selected, *, stack_available: bool) -> dict:
-    mutants._copy_trees = _copy_with_infra
     results = []
+    # INFRX_I3B_PG=d: the PostgreSQL cases (test_restore, rc10) run on the D harness, so a
+    # layer-2 mutant naming one of them can run without E2's stack (the others: no-cases).
+    on_d = os.environ.get("INFRX_I3B_PG") == "d"
     for mutant in selected:
-        result = mutants.run_one(mutant, stack_available=stack_available)
+        result = mutants.run_one(mutant, stack_available=stack_available or on_d)
         print(f"[{result['status']:>13}] {result['id']}  {result['invariant']}", flush=True)
         results.append(result)
     return mutants.summarise(results)
