@@ -2017,6 +2017,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "        metadata = 0 if envelope.metadata_bytes == 0 else "
        "self.metadata_charge(envelope, serialized)",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    # --- F cancel-cause: `JobStore.cancel(..., *, cause)` (R21; G2 D-new, D5 item 3) ----
+    _m("cancel_port_default_is_not_the_client", "an existing cancel(org, handle) still means client_cancelled",
+       "contracts/ports.py",
+       "                     cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:",
+       "                     cause: TerminalCause = TerminalCause.client_disconnected) -> TerminalOutcome:",
+       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"),
+    _m("cancel_causes_widened", "only the client's causes and sync_deadline may be named",
+       R, "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n})",
+       "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n"
+       "    TerminalCause.completed,\n})",
+       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"),
 )
 
 
@@ -2428,7 +2439,8 @@ CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.
                                               "tests/contracts/test_fixtures.py",
                                               "tests/contracts/test_money.py",
                                               "tests/contracts/test_config_and_imports.py",
-                                              "tests/contracts/v2/test_conformance_v2.py"))
+                                              "tests/contracts/v2/test_conformance_v2.py",
+                                              "tests/contracts/test_cancel_cause.py"))
 
 
 def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,
