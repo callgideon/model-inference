@@ -283,3 +283,28 @@ def test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased() -> Non
 
     asyncio.run(OutboxRelay(_Fenced([]), _Rebuilding()).rebuild())
     assert calls == ["since", "snapshot", "rebuild", "reopen:t0", "pump"], calls
+
+
+def test_the_harness_never_steps_around_a_guard_outside_a_test_database() -> None:
+    """SEC-1: `unrevoke_key` and `set_price` refuse before any ALTER unless the database is
+    a task-local infrx_<task> one."""
+    from infrx.state import pgtesting
+
+    class _Prod:
+        def __init__(self):
+            self.sent = []
+
+        def execute(self, sql, params=()):
+            self.sent.append(sql)
+            return SimpleNamespace(fetchone=lambda: (False, "postgres"))
+
+        def transaction(self):
+            raise AssertionError("a transaction was opened before the gate")
+
+    conn = _Prod()
+    extra = pgtesting.hooks(conn, None)
+    for call in (lambda: extra["unrevoke_key"](b.KEY_A),
+                 lambda: extra["set_price"](b.MODEL, None)):
+        with pytest.raises(RuntimeError):
+            call()
+    assert not [sql for sql in conn.sent if "alter table" in sql.lower()], conn.sent

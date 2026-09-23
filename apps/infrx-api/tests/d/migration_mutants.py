@@ -1562,16 +1562,28 @@ D2_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D2_MUTANTS
 
 
-def _mutate(directory: Path, mutant: Mutant) -> None:
+#: R83: an anchor that appears zero or twice is `misdeclared` - an edit landing on
+#: whichever line came first is not the declared defect (D2 review H4).
+MISDECLARED = "misdeclared"
+
+
+def anchor_count(mutant: Mutant) -> int:
+    source = migrations.DIR / mutant.file if mutant.file != SEED else migrations.SEED_MARLIN
+    return source.read_text().count(mutant.old)
+
+
+def _mutate(directory: Path, mutant: Mutant) -> str | None:
+    """Apply the edit to a copy; the reason it cannot be applied, or None."""
     for path in (*migrations.migrations(), migrations.SEED_MARLIN):
         shutil.copy(path, directory / path.name)
     target = directory / mutant.file
     text = target.read_text()
     found = text.count(mutant.old)
-    assert found == mutant.occurrences, (
-        f"mutant {mutant.name}: its target appears {found} times in {mutant.file}, "
-        f"expected {mutant.occurrences}")
+    if found != mutant.occurrences:
+        return (f"its anchor appears {found} times in {mutant.file}, expected "
+                f"{mutant.occurrences}")
     target.write_text(text.replace(mutant.old, mutant.new))
+    return None
 
 
 #: The runner self-test (R40/B10): a mutant that deliberately breaks the SQL must be
@@ -1672,7 +1684,9 @@ def kill(mutant: Mutant) -> tuple[str, str]:
     pgharness.ensure()
     with TemporaryDirectory(prefix=f"infrx-d1-{mutant.name}-") as tmp:
         directory = Path(tmp)
-        _mutate(directory, mutant)
+        refused = _mutate(directory, mutant)
+        if refused is not None:
+            return MISDECLARED, refused
         files = migrations.sql_for(shim=pgharness.NEEDS_SHIM, directory=directory)
         if mutant.scenario in ("credit", "upgrade05", "credit_volume", "admission"):
             seed, migrations.SEED_MARLIN = migrations.SEED_MARLIN, directory / SEED
@@ -1758,4 +1772,7 @@ def _run(check, *args) -> tuple[str, str]:
     return (KILLED if result.killed else SURVIVED), result.detail
 
 def _first_line(error: BaseException) -> str:
-    return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"
+    # An `AssertionError()` with no message is still a failure to report, not a crash of
+    # the runner reading it (D2 review H3).
+    lines = str(error).strip().splitlines()
+    return f"{type(error).__name__}: {(lines[0] if lines else '(no message)')[:160]}"

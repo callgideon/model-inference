@@ -115,6 +115,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "        since = await self.store.db_now()\n"
        "        indexed = await self.scheduler.rebuild(snapshot)\n",
        "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
+    _m("the_harness_alters_production", "SEC-1: guards are stepped around only in a test "
+       "database", T, "    if not ok:\n        raise RuntimeError(", "    if False:\n"
+       "        raise RuntimeError(",
+       "test_the_harness_never_steps_around_a_guard_outside_a_test_database"),
     _m("the_crash_happens_before_the_commit", "crash_after_commit loses the answer, not "
        "the commit", T,
        "            result = await target(*args, **kw)\n            self.plan.after_commit(name)",

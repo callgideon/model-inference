@@ -114,7 +114,18 @@ class FailingJobStore:
         return call
 
 
+def assert_test_database(conn) -> None:
+    """The same gate as the movable clock (0003): only a task-local `infrx_<task>`
+    database may have a production guard stepped around (review SEC-1)."""
+    ok, name = conn.execute("select current_database() like 'infrx@_%' escape '@', "
+                            "current_database()").fetchone()
+    if not ok:
+        raise RuntimeError(f"refusing to disable a guard in {name!r}: not a task-local "
+                           "infrx_<task> test database")
+
+
 def _without_trigger(conn, table: str, trigger: str, sql: str, params: tuple) -> None:
+    assert_test_database(conn)
     with conn.transaction():
         conn.execute(f"alter table {table} disable trigger {trigger}")
         conn.execute(sql, params)
@@ -203,6 +214,7 @@ def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
     def set_price(model_revision: str, snapshot: PriceSnapshot | None) -> None:
         """Withdraw every effective price of `model_revision`, then make `snapshot` the
         effective one (its row is inserted, or restored and corrected in place)."""
+        assert_test_database(conn)
         with conn.transaction():
             conn.execute("alter table infrx.price_versions disable trigger "
                          "price_versions_immutable")
