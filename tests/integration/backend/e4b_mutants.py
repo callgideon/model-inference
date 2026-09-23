@@ -115,6 +115,7 @@ SERVED = "test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves"
 UNANSWERED = "test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause"
 LABELS = "test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement"
 RECORD = "test_e4b_the_declared_settings_are_the_serving_record_read_never_typed"
+RULES = "test_e4b_each_stated_client_rule_holds_one_assertion_each"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -403,6 +404,25 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("seqs_read_from_the_record_not_serve_sh", "serve.sh's concurrency is held against the record",
        '            "engine_max_num_seqs": pins["seqs"],',
        '            "engine_max_num_seqs": record["settings"]["ENGINE_MAX_NUM_SEQS"],', RECORD),
+    # --- review F8: one assertion per stated rule -------------------------------------
+    _m("retries_hide_refusals", "the client never retries: a retry may not hide a refusal",
+       '"--max-tokens", "128,512,1024", "--retries", "0",',
+       '"--max-tokens", "128,512,1024", "--retries", "3",', RULES),
+    _m("box_runs_the_fast_subset", "the box scale runs the full corpus",
+       '"--subset", "full" if target["scale"] == "box" else "fast",', '"--subset", "fast",',
+       RULES),
+    _m("quarantined_item_resent_ok", "a quarantined 4xx item is terminal and never re-sent",
+       '    terminal = {row["item_key"] for row in first if bench.is_terminal(row)}',
+       '    terminal = {row["item_key"] for row in first if row.get("outcome") == "accepted"}',
+       RULES),
+    _m("accepted_without_id_ok", "an accepted item with no Inference-Id cannot be reconciled",
+       "if len(seen) != 1 or None in seen)", "if len(seen) != 1)", RULES),
+    _m("signalled_exit_unchecked", "a signal the client answered with exit 0 interrupted nothing",
+       'first_interrupted=first["signalled"] and first["exit"] == 130)',
+       'first_interrupted=first["signalled"])', RULES),
+    _m("unreadable_engine_is_idle", "an engine whose metrics cannot be read is not idle",
+       '        busy = None if engine is None or engine["running"] is None \\\n',
+       '        busy = 0 if engine is None or engine["running"] is None \\\n', RULES),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

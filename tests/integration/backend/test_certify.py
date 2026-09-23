@@ -902,5 +902,49 @@ def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path
         certify.main(box)
         assert seen == {"label": label, "reported": label}, (ready, seen)
 
+
+def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypatch):
+    """Review F8, one assertion per stated rule: no retries (a retry may not hide a refusal)
+    and the full corpus at the box scale; a quarantined 4xx item is terminal and never
+    re-sent; an accepted item without an Inference-Id is unreconcilable; a signal the client
+    answered with exit 0 was no interruption; an engine whose metrics cannot be read is not
+    idle."""
+    import argparse
+    local = certify.local_target("tiny", 1)
+    box = certify.remote_target(argparse.Namespace(target="http://gw/v1", engine_url="http://e",
+                                                   scale=None, box=True))
+    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    for target, subset in ((local, "fast"), (box, "full")):
+        argv = certify.bench_argv(target, tmp_path, "cell", rate=1.0, requests=4,
+                                  dataset_version="v")
+        assert argv[argv.index("--retries") + 1] == "0"
+        assert argv[argv.index("--subset") + 1] == subset, target["scale"]
+    quarantined = _row("i7", "rejected", status=400)
+    assert certify.resume_problems([*FIRST, quarantined], [*SECOND, _row("i7")], items=7,
+                                   first_interrupted=True) == [
+        "terminal items re-sent by the resume: ['i7']"]
+    blank = [dict(row, inference_id=None) if row["item_key"] == "i5" else row for row in ROWS]
+    assert first(certify.reconcile_problems(blank, USAGE, HOLDS, BEFORE, AFTER)) == (
+        "items accepted as more than one job (or with no Inference-Id): ['i5']")
+    monkeypatch.setattr(certify, "interrupted_run", lambda argv, raw, **_: (
+        raw.write_text("".join(json.dumps(r) + "\n" for r in FIRST)),
+        {"exit": 0, "signalled": True})[1])
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: (
+        Path(argv[argv.index("--raw") + 1]).write_text(
+            "".join(json.dumps(r) + "\n" for r in SECOND)), {"exit": 0, "tail": ""})[1])
+    monkeypatch.setitem(certify.MATRIX["tiny"], "dataset",
+                        {"items": 6, "interrupt_after": 2, "rate": 4.0})
+    report = certify.Report(TARGET)
+    certify.dataset_check(report, {**local, "base_url": "http://e/v1"}, tmp_path)
+    assert report.stages[-1]["status"] == certify.FAIL
+    assert "not interrupted" in first(report.stages[-1]["detail"])
+    monkeypatch.setenv("E4B_WINDOW_OK", "1")
+    monkeypatch.setattr(certify, "next_servers", lambda: [])
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: {"exit": 0, "tail": ""})
+    for unreadable in (None, {"running": None, "waiting": None}):
+        monkeypatch.setattr(certify, "scrape", lambda url, answer=unreadable: answer)
+        certify.preconditions_check(report, {**TARGET, "engine_url": "http://e"}, box=True)
+        assert report.stages[-1]["detail"][0] == "the engine is not idle (running+waiting = None)"
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
