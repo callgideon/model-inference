@@ -384,9 +384,14 @@ MUTANTS += (
                       "restore failures", RESTORE,
            "    if not d_harness().ON_SUPABASE:\n        pytest.skip(PLAIN_IMAGE)\n", "",
            RESTORE, "bk00"),
+    # E3B phase 3 (the layer-3 gate: i3bm107 SURVIVED): `kill_postgres` has two paths, D's
+    # container (INFRX_I3B_PG=d) and E2's compose service, and a run takes exactly one. The
+    # mutant edits the path of the mode it runs in, so neither mode leaves it dead code.
     Mutant("i3bm107", "DRL-3: rc04a really kills PostgreSQL under the store (the drill's loss "
                       "is injected, not assumed)", RESTORE,
-           '        d._docker("kill", container)\n', '        d._docker("inspect", container)\n',
+           *(('        d._docker("kill", container)\n', '        d._docker("inspect", container)\n')
+             if os.environ.get("INFRX_I3B_PG") == "d" else
+             ('        faults.kill_container("postgres")\n', '        pass\n')),
            DRILLS, "rc04a", layer=2),
     Mutant("i3bm111", "DRL-R3-2: rc04a's last word is the reconcile runbook's own drift "
                       "detector (pgrestore.drift), and any row it reports fails the drill",

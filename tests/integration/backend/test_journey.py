@@ -288,9 +288,12 @@ def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property)
     env = {**os.environ, "INFRX_API_KEY": beta.secret}
     trip.engine.control(delta_gap_s=0.05)            # a generation long enough to interrupt
     try:
+        # SIGINT back to its default in the client: a runner started in the background can
+        # hand its children SIGINT ignored, and then the ctrl-c below would be no interruption.
         first = subprocess.Popen(bench("raw-1.jsonl"), env=env, cwd=str(tmp_path),
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
-                                 start_new_session=True)
+                                 start_new_session=True, preexec_fn=lambda: signal.signal(
+                                     signal.SIGINT, signal.SIG_DFL))
         end, raw = time.monotonic() + 60, tmp_path / "raw-1.jsonl"
 
         def recorded() -> int:            # the client flushes one row per finished attempt
