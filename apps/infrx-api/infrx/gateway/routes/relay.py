@@ -260,6 +260,12 @@ class Relay:
             log.exception("cancel of job %s failed; its stored deadline still ends it", handle)
             return None
 
+    async def drain(self, timeout_s: float) -> None:
+        """Wait, bounded, for the shielded cancels still in flight: a process must not exit
+        with a durable cancel half done (review stream-S1; `pilot.lifespan` on shutdown)."""
+        if self._cancels:
+            await asyncio.wait(set(self._cancels), timeout=timeout_s)
+
     async def _cancel(self, org_id: str, handle: str, cause: TerminalCause):
         try:
             return await self.jobs.cancel(org_id, handle, cause=cause)
@@ -334,12 +340,16 @@ class Relay:
         if outcome.state is not JobState.succeeded:
             raise _refusal(outcome, stream=False)
         text = await self.results.read_result(job.org_id, outcome.result_ref)
-        body = wire.ChatCompletionResponse(
-            id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
-            choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(role="assistant",
-                                                                       content=text),
-                                     finish_reason=_finish_reason(job, outcome)),),
-            usage=wire.ChatUsage.of(outcome.usage))
+        fields = dict(id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
+                      choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(
+                          role="assistant", content=text),
+                          finish_reason=_finish_reason(job, outcome)),))
+        if outcome.usage is None:
+            # A committed success whose usage is unknown (held_unknown, money-N2): the
+            # result, no counts - `usage` is left out rather than invented.
+            body = wire.ChatCompletionResponse.model_construct(**fields, usage=None)
+        else:
+            body = wire.ChatCompletionResponse(**fields, usage=wire.ChatUsage.of(outcome.usage))
         return JSONResponse(body.model_dump(mode="json", exclude_none=True))
 
     # --- the SSE relay (item 3) -------------------------------------------------
@@ -439,6 +449,8 @@ def _refusal(outcome, *, stream: bool) -> errors.DomainError:
 
 
 def _finish_reason(job: _Job, outcome) -> str:
+    if outcome.usage is None:
+        return "stop"
     return "length" if outcome.usage.completion_tokens >= job.max_output_tokens else "stop"
 
 

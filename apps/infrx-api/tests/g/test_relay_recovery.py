@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G2 review round 2: acceptance that recovers.
+"""G2 review round 2: acceptance that recovers, and waits that end on the stored bound.
 
     uv run --frozen pytest -q tests/g/test_relay_recovery.py
 
@@ -8,6 +8,10 @@
 - An acceptance cut short after admission is completed by the same-key retry its 503
   invites, not cancelled (money-B2).
 - A refusal whose cancel is unconfirmed is not final (money-N1).
+- A success whose usage is unknown is answered without counts (money-N2).
+- A status read that fails once is retried (money-N4).
+- The bound is the stored deadline plus the grace (money-N5, honesty-H-N3).
+- The defensive paths (honesty-H-N4) have cases.
 """
 from __future__ import annotations
 
@@ -161,3 +165,138 @@ def test_api_modes__a_refusal_whose_cancel_is_unconfirmed_is_not_final():
     again = rs.run(rs.call(world.app, rs.body(), key="k-4"))
     assert (again.status, again.json()["error"]["code"]) == (400, "invalid_request")
     assert job.state is JobState.cancelled and world.released(job)
+
+
+# --- money-N2: a success whose usage is unknown -------------------------------------------
+def test_api_modes__a_success_with_unknown_usage_is_answered_without_counts():
+    """A committed success whose usage is unknown (published, `held_unknown`) is still the
+    customer's result: 200 with the text, finish `stop`, and no invented counts."""
+    world = rs.World()
+
+    async def settle_without_usage():
+        lease = await world.lease()
+        await world.commit(lease, "Two people")
+        ref = await world.put_result(lease.job_id, "Two people.")
+        await world.jobs.complete(lease, TerminalOutcome(
+            job_id=lease.job_id, state=JobState.succeeded, cause=TerminalCause.completed,
+            usage=None, result_ref=ref, settlement_state=SettlementState.released_free,
+            settled_at=world.clock.now()))
+
+    world.during.append(settle_without_usage)
+    reply = rs.run(rs.call(world.app, rs.body()))
+    assert reply.status == 200, reply.body
+    answer = reply.json()
+    assert world.only_job().outcome.settlement_state is SettlementState.held_unknown
+    assert answer["choices"][0]["message"]["content"] == "Two people."
+    assert answer["choices"][0]["finish_reason"] == "stop" and "usage" not in answer
+
+
+# --- money-N4 / honesty-H-N4(b): a status read that fails once ----------------------------
+def test_api_modes__a_status_read_that_fails_once_is_retried_not_the_end():
+    """One failed status read during a sync wait is the database, not the job: the wait
+    polls again and answers the result; the job is not cancelled."""
+    world = rs.World()
+    world.failures.fail("get_owned", on_call=1,
+                        error=ConnectionError("postgresql://infrx:secret@db/infrx reset"))
+    world.during.append(world.work)
+    reply = rs.run(rs.call(world.app, rs.body()))
+    assert reply.status == 200, reply.body
+    assert world.only_job().outcome.state is JobState.succeeded
+    assert b"secret" not in reply.body
+
+
+# --- money-N5 / honesty-H-N3: the stored bound plus the grace ------------------------------
+def test_api_modes__the_wait_ends_at_the_stored_deadline_plus_the_grace():
+    """Legacy: admission clamps the request's deadline to the store's own budgets, and
+    the gateway's bound is that stored instant plus the grace. It is not the request's
+    later deadline, and it is not the stored instant itself."""
+    world = rs.World(limits=rs.DEFAULTS.replace(generation_timeout_s=10.0))
+    admit, cancel = world.jobs.admit, world.jobs.cancel
+    at, requested = [], []
+
+    async def admitted(request, idem):
+        requested.append(request.deadline_at)
+        return await admit(request, idem)
+
+    world.jobs.admit = admitted
+
+    async def recorded(org_id, handle, **cause):
+        at.append(world.clock.now())
+        return await cancel(org_id, handle, **cause)
+
+    world.jobs.cancel = recorded
+    grace = world.relay.grace_s
+
+    def to(seconds):
+        return lambda: world.clock.advance(
+            (world.only_job().admission.deadline_at - world.clock.now()).total_seconds()
+            + seconds)
+
+    world.during += [to(grace / 2), to(grace + 1), lambda: world.clock.advance(3_600)]
+    reply = rs.run(rs.call(world.app, rs.body()))
+    admission = world.only_job().admission
+    assert admission.deadline_at < requested[0]         # the store clamped it (R79)
+    assert reply.status == 504 and len(at) == 1, (reply.status, at)
+    assert (at[0] - admission.deadline_at).total_seconds() == pytest.approx(grace + 1)
+
+
+def test_api_modes__a_pinned_revision_missing_from_the_catalog_is_not_found():
+    """CREDIT: the revision admission pinned is gone from the catalog by the recheck.
+    That is the contract's `not_found`, and the admitted job is cancelled (nothing ran)."""
+    world = rs.World(regime=CREDIT)
+    admit = world.jobs.admit_credit
+
+    async def then_retired(request, idem):
+        admission = await admit(request, idem)
+        world.catalog.servings.pop(admission.pins.serving_version_id)
+        return admission
+
+    world.jobs.admit_credit = then_retired
+    reply = rs.run(rs.call(world.app, rs.body()))
+    assert (reply.status, reply.json()["error"]["code"]) == (404, "not_found")
+    job = world.only_job()
+    assert job.state is JobState.cancelled and world.released(job)
+
+
+# --- honesty-H-N4(a)(c): the defensive paths -------------------------------------------------
+def test_api_modes__a_task_cancelled_while_attaching_cancels_the_job():
+    """The handler is cancelled while the refs are being bound to the admitted job (the
+    process stopping). No identity reached the caller, so the job is cancelled."""
+    world = rs.World()
+    attach = world.media.attach
+
+    async def interrupted(job_id, refs):
+        asyncio.current_task().cancel()
+        await asyncio.sleep(0)
+        return await attach(job_id, refs)
+
+    world.media.attach = interrupted
+
+    async def body():
+        with pytest.raises(asyncio.CancelledError):
+            await rs.call(world.app, rs.body())
+        await world.relay.drain(1.0)
+
+    rs.run(body())
+    job = world.only_job()
+    assert job.state is JobState.cancelled
+    assert world.jobs.holds[job.id].state is HoldState.released
+
+
+def test_api_modes__an_invalid_media_outcome_is_rendered_as_unsupported_media():
+    """A job whose media could not be prepared (`invalid_media`, free) is answered as the
+    contract's `unsupported_media`, not as a server failure."""
+    world = rs.World()
+
+    async def refused_media():
+        lease = await world.lease()
+        await world.jobs.complete(lease, TerminalOutcome(
+            job_id=lease.job_id, state=JobState.failed, cause=TerminalCause.invalid_media,
+            usage=None, settlement_state=SettlementState.released_free,
+            settled_at=world.clock.now()))
+
+    world.during.append(refused_media)
+    reply = rs.run(rs.call(world.app, rs.body()))
+    error = reply.json()["error"]
+    assert (reply.status, error["code"], rs.state_of(error)) == (400, "unsupported_media",
+                                                                 "failed")
