@@ -1927,6 +1927,11 @@ MUTANTS: tuple[Mutant, ...] = (
            file="config.py", old="            and not _configured(pilot.active_rate_card_version):",
            new="            and not bool(pilot.active_rate_card_version):",
            cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-10", invariant="a deployment text value is measured stripped (review CFG-6)",
+           file="config.py",
+           old="        values[f.name] = (raw.strip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           new="        values[f.name] = (raw if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",

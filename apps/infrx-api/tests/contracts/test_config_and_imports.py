@@ -540,6 +540,11 @@ def test_the_cursor_secret_bound_is_exactly_sixteen_characters():
     except config.RuntimeMisconfigured:
         refused = True
     assert refused, "a 15-character cursor secret was accepted"
+    # F2P review CFG-6: the bound is measured after stripping, so padding cannot make a
+    # 14-character key look like 16.
+    with pytest.raises(config.RuntimeMisconfigured, match="CONSOLE_CURSOR_SECRET"):
+        config.validate_deployment(config.deployment_from_env(
+            {"CONSOLE_CURSOR_SECRET": " " + "s" * 14 + " "}))
     try:
         config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": "s" * 16}))
     except config.RuntimeMisconfigured:
