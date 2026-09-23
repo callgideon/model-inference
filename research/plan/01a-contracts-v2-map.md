@@ -253,3 +253,10 @@ Numbered by the coordinator at the additive merge (2026-09-22): V1–V15 are **R
   `projectV1UsageRow` drops a half-recorded token pair instead of refusing it. Python is the
   enforcing side; the console reads rows the database already constrains. To close with the
   console DTO swap (IR-DTO).
+- 2026-09-23: F2P wire-in confirmation (MONEY-N3) corrects the note above. The database does
+  **not** constrain the pair: `usage_events.prompt_tokens`/`completion_tokens` are independent
+  nullable columns (0001), no later CHECK couples them or requires tokens on a `credit` row,
+  and the legacy chat writer records each count independently. `projectV1UsageRow` now refuses
+  a half-recorded pair with a `TypeError`, like Python (console mutant `PROJ-04`). Still open
+  until IR-DTO: the TS `UsageRecordV2` has no runtime rule that a `credit` row carries `usage`
+  and `outcome`.

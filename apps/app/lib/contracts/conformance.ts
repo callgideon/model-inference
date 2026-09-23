@@ -3172,6 +3172,13 @@ export function runConsoleServicesConformance(
         "a legacy row has no settlement state, and its projection must not invent one",
       );
       assert.deepEqual(v2.usageTotalsByUnit(projected), { USD: cost }, "one USD total, no CREDIT figure");
+      // 0001 constrains neither token column: a row that recorded one count is refused, never
+      // read as "no usage" (F2P confirmation MONEY-N3).
+      for (const half of [{ prompt_tokens: 1000, completion_tokens: null },
+                          { prompt_tokens: null, completion_tokens: 250 }]) {
+        assert.throws(() => v2.projectV1UsageRow({ ...rows[0], ...half }, harness.ids.orgId), TypeError,
+                      "a half-recorded token pair was projected");
+      }
     });
 
     it("legacy and key-less usage rows keep their nulls and are still counted", async (t) => {

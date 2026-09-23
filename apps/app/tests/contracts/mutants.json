@@ -2066,6 +2066,16 @@
       "cases": [
         "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
       ]
+    },
+    {
+      "id": "PROJ-04",
+      "note": "the projection drops a half-recorded token pair instead of refusing it (F2P confirmation MONEY-N3)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if ((row.prompt_tokens === null) !== (row.completion_tokens === null)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
     }
   ]
 }

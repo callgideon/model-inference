@@ -381,6 +381,11 @@ export function projectV1UsageRow(row: UsageRow, orgId: string): UsageRecordV2 {
     charged_amount: parseAmount(row.cost, "USD"),
     settled_at: row.created_at,
   };
+  if ((row.prompt_tokens === null) !== (row.completion_tokens === null)) {
+    // Half a usage report: dropping the recorded count would lose history, completing it
+    // would invent the other. Python's `project_v1_usage` refuses it the same way.
+    throw new TypeError(`usage row ${row.request_id} records only one token count`);
+  }
   if (row.prompt_tokens !== null && row.completion_tokens !== null) {
     record.usage = {
       prompt_tokens: row.prompt_tokens,
