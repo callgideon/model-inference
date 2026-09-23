@@ -497,6 +497,17 @@ def test_e4b_the_declared_settings_are_the_serving_record_read_never_typed(tmp_p
     assert (drifted["image"], drifted["seqs"]) == ("vllm/vllm-openai:nightly", "32")
     names = [problem.split(":")[0] for problem in certify.config_problems(certify.current_config())]
     assert {"runtime_image", "engine_max_num_seqs"} <= set(names), names
+    # review V2: a raised encoder budget in serve.sh alone is a drift too, and one given as
+    # a variable is an unknown budget, never the default
+    script = (marlin / "serve.sh").read_text()
+    for line, budget in (("  --max-num-batched-tokens 32768 \\\n", 32768),
+                         ('  --max-num-batched-tokens "$BATCHED" \\\n', None)):
+        (marlin / "serve.sh").write_text(script + line)
+        assert certify.serve_sh_pins()["encoder_budget"] == budget, line
+        names = [p.split(":")[0] for p in certify.config_problems(certify.current_config())]
+        assert "encoder_budget_tokens" in names, (line, names)
+    (marlin / "serve.sh").write_text(script + "# a comment naming --max-num-batched-tokens\n")
+    assert certify.serve_sh_pins()["encoder_budget"] == 16384
 
 
 def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monkeypatch):

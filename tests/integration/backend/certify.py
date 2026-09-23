@@ -614,9 +614,15 @@ def serve_sh_pins() -> dict:
     text = (MARLIN / "serve.sh").read_text()
     image = re.search(r"^IMAGE=\$\{IMAGE:-(\S+)\}$", text, re.M)
     seqs = re.search(r"^ENGINE_MAX_NUM_SEQS=\$\{ENGINE_MAX_NUM_SEQS:-(\d+)\}$", text, re.M)
-    batched = re.findall(r"--max-num-batched-tokens[ =]+\"?(\d+)", text)
+    # Review V2: every mention outside a comment must be a literal integer - a variable
+    # (`"$BATCHED"`) is a budget this read cannot know, so the pin fails on None.
+    batched = [match.group(1) for line in text.splitlines()
+               if not line.lstrip().startswith("#")
+               for match in re.finditer(r"--max-num-batched-tokens(?:[ =]+(\S+))?", line)]
+    literal = [re.fullmatch(r'"?(\d+)"?', value or "") for value in batched]
+    budget = None if None in literal else max([16384, *(int(m.group(1)) for m in literal)])
     return {"image": image and image.group(1), "seqs": seqs and seqs.group(1),
-            "encoder_budget": max([16384, *map(int, batched)])}
+            "encoder_budget": budget}
 
 
 def current_config() -> dict:

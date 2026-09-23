@@ -439,6 +439,14 @@ MUTANTS: tuple[Mutant, ...] = (
        '    return 0 if code == 1 else code', EXIT),
     _m("unrun_backend_accepted", "a backend suite that never ran fails the halves",
        '        down.append("backend=not run")', "        pass", EXIT),
+    # --- verifier V2: serve.sh's encoder budget ----------------------------------------
+    _m("serve_sh_budget_ignored", "a raised encoder budget in serve.sh fails the pin",
+       '            "encoder_budget": budget}', '            "encoder_budget": 16384}', RECORD),
+    _m("non_literal_budget_accepted", "a budget serve.sh gives as a variable is unknown",
+       "    budget = None if None in literal else max([16384, *(int(m.group(1)) for m in literal)])",
+       "    budget = max([16384, *(int(m.group(1)) for m in literal if m)])", RECORD),
+    _m("commented_budget_counted", "a comment naming the flag is not a budget",
+       '               if not line.lstrip().startswith("#")\n', "", RECORD),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',
