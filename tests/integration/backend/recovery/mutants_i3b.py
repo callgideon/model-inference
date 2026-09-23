@@ -374,6 +374,10 @@ MUTANTS += (
                       "is injected, not assumed)", RESTORE,
            '        d._docker("kill", container)\n', '        d._docker("inspect", container)\n',
            DRILLS, "rc04a", layer=2),
+    Mutant("i3bm111", "DRL-R3-2: rc04a's last word is the reconcile runbook's own drift "
+                      "detector (pgrestore.drift), and any row it reports fails the drill",
+           PGRESTORE, 'f"select * from {view} where ledger_drift <> 0 "',
+           'f"select * from {view} where ledger_drift = 0 "', DRILLS, "rc04a", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),

@@ -251,13 +251,15 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
         monkeypatch, record_property):
     """OPS-RECOVER (DB interruption) through the product's store (DRL-3): D's PgJobStore on a
     migrated PostgreSQL (the D harness, or E2's), and PostgreSQL SIGKILLed and restarted
-    after a claim. The SAME store object carries on - it opens a connection per operation:
-    the claimed job is still running with its pins and the queued one still queued, a
-    replayed admission is the same job, a second claim is fenced, a new admission is
-    accepted and prepared, the reaper requeues the claimed job after the lease TTL and the
-    next claim is generation 2, and the wallet reserves exactly the three holds and debits
-    nothing.
-    Settling across the loss is rc04b's (terminalize is still D5's stub)."""
+    after a claim. The store object built before the kill is used after it - PgJobStore's
+    connector opens a connection per operation, so none is open across the kill (a pooled
+    store, DATABASE_POOL_*, is not covered): the claimed job is still running with its pins
+    and the queued one still queued, a replayed admission is the same job, a second claim is
+    fenced, a new admission is accepted and prepared, the reaper requeues the claimed job
+    after the lease TTL and the next claim is generation 2; the wallet's summary reserves
+    exactly the three holds and debits nothing, and it agrees with the ledger and the holds
+    themselves (`infrx.wallet_reconciliation`: zero drift, and the runbook's detector finds
+    none). Settling across the loss is rc04b's (terminalize is still D5's stub)."""
     import pgstate
 
     import test_restore as bk
@@ -311,10 +313,15 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
                 if isinstance(event, IndexEvent)] == [(first.request_id, 1)], produced
         again = await store.claim(first.request_id, "worker-b")
         assert again.generation == claimed.generation + 1
+        holds = first.maximum_hold + second.maximum_hold + third.maximum_hold
         balance = rig.extra["balance"](b.ORG_A)
-        assert (balance["ledger"], balance["reserved"]) == (
-            Decimal(kit.GRANT), first.maximum_hold + second.maximum_hold + third.maximum_hold), \
-            balance
+        assert (balance["ledger"], balance["reserved"]) == (Decimal(kit.GRANT), holds), balance
+        with bk.connect(database) as conn:       # DRL-R3-2: the holds, not only the summary
+            drifts = conn.execute("select ledger_drift, reserved_drift, active_holds from "
+                                  "infrx.wallet_reconciliation where org_id = %s",
+                                  (b.ORG_A,)).fetchone()
+        assert drifts == (0, 0, holds), drifts
+        assert bk.drift(database) == [], "the reconcile runbook's detector reports drift"
 
     with bk.scratch("infrx_i3b_jobs") as (database,):
         with bk.connect(database) as conn:
