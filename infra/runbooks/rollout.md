@@ -23,8 +23,8 @@ HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscg
 |---|---|---|
 | P1 | Gates G1-G4 and G6 of [../rollout/README.md](../rollout/README.md) at `RELEASE` | as there |
 | P2 | G5 `apps/infrx-api/deploy/rehearse.sh` | `REHEARSAL PASSED`. On the cutover tree its dev deploy cannot start: `create_app` needs `S3_MEDIA_BUCKET` (answering HeadBucket), `DATABASE_URL` and Valkey in every mode (owner: I / cutover lane) |
-| P3 | The in-image pilot probe (G3) on `RELEASE` | `"ok": true`. At the cutover + M1-L2 merge its only refusal was `PENDING(W3): infrx.worker.__main__` - the worker composition root (I2B-R4), on no branch yet: **install refuses (exit 2) until it lands** |
-| P4 | SSM holds every manifest key (§1) | `/model-inference/pg_journal_url` was **absent** at prep time (a coordinator input: the session-pooler DSN of the login role D's 0004 note names) |
+| P3 | The in-image pilot probe (G3) on `RELEASE` | `"ok": true`. At the cutover + M1-L2 merge (`0645e65`), fed the real SSM values plus §1's settings, it refused `requires DATABASE_URL` (P4) and `PENDING(W3): infrx.worker.__main__`; with a placeholder DSN the worker root was the **only** refusal - the worker composition root (I2B-R4), on no branch at prep time (checked: backend-impl, cutover-mount, e3b-phase3-bodies, m-pilot-media): **install refuses (exit 2) until it lands** |
+| P4 | SSM holds every manifest key (§1): `aws ssm describe-parameters --parameter-filters Key=Name,Option=BeginsWith,Values=/model-inference/ --query 'Parameters[].[Name,Type]'` (names only) | `/model-inference/pg_journal_url` was **absent** at prep time (a coordinator input: the session-pooler DSN of the login role D's 0004 note names); `supabase_url`, `supabase_service_role_key` present, HeadBucket on the media bucket answered |
 | P5 | Two G6B keys for the smoke: one scoped, one revoked | pasted at W12 with `read -rs`, never typed |
 | P6 | Deployment lock taken; session-record entry: purpose, cost (none beyond the running box), rollback (this page §3) | recorded |
 
@@ -36,10 +36,12 @@ it into `INFRX_SET` itself (default 32, the old box value), and a name given twi
 
 | Name | Value | Source |
 |---|---|---|
+| `INFRX_MODE` | `pilot`, explicit (50-install runs install.sh in pilot mode; unset refuses to start since the cutover) | R44 |
+| `MODEL_ID`, `MAX_INFLIGHT`, `USAGE_LOG`, `UPSTREAM`, `VALKEY_URL`, `PROCESSING_CACHE_DIR` | installer defaults (`VALKEY_URL=valkey://127.0.0.1:6379/0`, loopback only) | preflight `local_values` |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | SSM `supabase_url`, `supabase_service_role_key` | present |
 | `DATABASE_URL` | SSM `pg_journal_url` | **missing** (P4) |
 | `GATEWAY_API_KEY` | never (R51: forbidden in pilot, not read) | - |
-| `INFRX_IMAGE`, `INFRX_RELEASE_SHA` | written by install.sh/preflight from the build and `RELEASE` | cutover lane |
+| `INFRX_IMAGE`, `INFRX_RELEASE_SHA` | written by install.sh/preflight from the build and `RELEASE` (`--release`); both required in pilot: `infrx_build_info{revision,image}` on `/metrics`, which the edge keeps private (404) | cutover lane |
 | `S3_MEDIA_BUCKET` | `llm-bootcamp-641134885443` (prefix default `infrx/`, `S3_ENDPOINT_URL` unset) | session-02, 2026-09-23T20:59Z; the instance role already permits |
 | `MAX_VIDEO_SECONDS` | `82` (code default 120) | P-20, W4 phase B |
 | `ENGINE_MAX_NUM_SEQS` | `8` (the box unit runs 32 until the release's serve.sh replaces it) | W3/W4 pin |
@@ -66,11 +68,49 @@ Each row: what runs, what proves it, and the way back. Box rows are
 | W6 | host | **Hosted backup, fresh, and its restore check** (block below) - after the drain, so nothing writes between it and W7 | `"equal": true`; `SHA256SUMS` recorded; the copy's `migrate.py plan` digest | read-only: nothing to undo. Check red → stop: `91-abort.sh`, `93-restore-edge.sh` |
 | W7 | host | **Hosted migrations** (block below): `plan`, which must print the copy's digest, then `apply --expect` | `nothing pending`; flags and drift as on the copy | exit 2/3: nothing changed → `91-abort.sh` + `93-restore-edge.sh`. Exit 4, or a problem after commit: [restore.md A8](restore.md#a8-then-and-only-then-the-hosted-apply) (maintenance, never a hand edit) |
 | W8 | box | `40-checkout.sh RELEASE=$RELEASE` - from here to W10 no engine restart | HEAD = `RELEASE` | `91-abort.sh` returns the previous checkout |
-| W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready | `passed`, no failure; `test/m1l2/` empty afterwards | red → `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
+| W9 | box | **Real-bucket check**: `45-s3-check.sh RELEASE=$RELEASE` (tests/m/test_s3.py, instance role, image built from `RELEASE`) - before the install, because install.sh opens the edge itself once ready. The role needs Get/Put/Delete on `<bucket>/test/m1l2/*` (and `s3:ListBucket` for that prefix: the cases list); the bootcamp role allows the whole bucket | `passed`, no failure; `test/m1l2/` empty afterwards | red → `91-abort.sh` + `93-restore-edge.sh` (nothing installed) |
 | W10 | box | **Install**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh "${INSTALL_ARGS[@]}" MIGRATION_DIGEST=<W7 digest>` - image, preflight (SSM + host HeadBucket), units, engine restart (start-to-ready meas. 168-181 s on this box, `ENGINE_READY_S` 900), gateway + worker `/readyz`, **then the edge goes live** | exit 0, `deployed …`, backup dir recorded | exit 2 → R1; exit 4 → R2 |
 | W11 | box | `60-verify-local.sh` | units active, `/readyz` 200, least privilege as applied, `INFRX_MODE=pilot`, no `GATEWAY_API_KEY` | R2 |
 | W12 | host | **Smoke**: `read -rs INFRX_TEST_KEY; read -rs INFRX_REVOKED_KEY; export INFRX_TEST_KEY INFRX_REVOKED_KEY` then `infra/rollout/verify-external.sh` (+ `LEGACY_KEY` as step 10 there) | `failures: 0`, `PENDING` lines are not passes | before any pilot request was accepted: R2; after: R3 |
 | W13 | host | Record `RELEASE`, image id, engine digest, snapshot, backup dir, `SHA256SUMS`, migration digest, command ids; release the lock | - | - |
+
+### W4/W5 and the abort — the edge swap (the box lane's pattern)
+
+What `25-save-edge.sh` and `93-restore-edge.sh` do, as the box lane ran it by hand
+(session-02 record, `codex/box-measure` d35a2c8 and its close at eea17d8):
+
+```bash
+# box, as root, before the maintenance site goes in
+saved=/opt/dlami/nvme/w4-logs/Caddyfile.live-$(date -u +%Y%m%dT%H%M%SZ)
+cp -p /etc/caddy/Caddyfile "$saved"; sha256sum "$saved"        # record path + sha256
+# ... the window (maintenance site, admin on unix//config/admin.sock) ...
+# restore: check, rewrite in place (the single-file bind mount keeps its inode), reload
+echo "<sha256>  $saved" | sha256sum -c - && cat "$saved" > /etc/caddy/Caddyfile
+docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --address unix//config/admin.sock
+```
+
+The reload is addressed to the admin endpoint of the config that is **running** (the
+release's sites put it on the socket); the restored live file moves admin back to
+`localhost:2019`, so any later manual reload uses the default address. Measured there: the
+restore brought the live file back (sha256 `ff47f706…` on the host and in the container) and
+public `/health` 200 within 8 s; each engine restart was ready in 168-171 s, and the
+start-to-ready across the lane 168-181 s (the I2B figure `ENGINE_READY_S` 900 bounds it).
+
+### W9 from the coordinator host — the same conformance with the operator's credentials
+
+Before the window, from a checkout at `RELEASE` (the box step then only proves the role):
+
+```bash
+cd apps/infrx-api && uv sync --frozen --all-extras      # = make api-env; botocore is the traces extra
+env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u INFRX_M_S3_LOCAL_CREDS \
+  AWS_DEFAULT_REGION=us-east-1 INFRX_M_S3_ENDPOINT=https://s3.us-east-1.amazonaws.com \
+  INFRX_M_S3_BUCKET=llm-bootcamp-641134885443 uv run --frozen pytest -q -rs tests/m/test_s3.py
+```
+
+At prep (tree `0645e65`, default profile): **40 passed in 91 s**, `test/m1l2/` empty after.
+A venv without the extras fails every S3 case at `import botocore` before any S3 call. The
+in-image mechanism of `45-s3-check.sh` (the five hash-pinned wheels, `--network host`) ran
+locally on the same tree's image without an endpoint: 25 passed, 15 skipped (M1-L2's count).
 
 ### W6 — the fresh hosted backup and its restore check
 
@@ -159,3 +199,9 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
 - 2026-09-23 (ROLLOUT-PREP): written; W1's script and the W6 block were run by the lane
   (backup, GoTrue-migrated template, restore, check equal, copy apply of 0003-0018), W7's
   `plan` read-only against hosted. Nothing ran against the box; no hosted write.
+- 2026-09-23T23:30Z (ROLLOUT-PREP, resumed): W1 round trip through the real bucket
+  (`releases/test-20260923T231945Z.{bundle,sha256}`, 12.5 MB, fetched by the box step into
+  an empty repository on the coordinator host, then deleted; the bucket is unversioned);
+  the edge-swap and W9 blocks added; W9's host command run on the real bucket (40 passed);
+  P3/P4 re-checked by a preflight dry-run on `0645e65` with the real SSM values (names only
+  printed). Steps 25/45/93 tested against stubs (`tests/i/test_rollout.py`, 8 mutants).
