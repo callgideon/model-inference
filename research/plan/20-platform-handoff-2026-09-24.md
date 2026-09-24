@@ -984,7 +984,8 @@ gaps) and M4 — §4.1). Keep them.
 
 - TOKCOST: fix round 293ddcb verified PASS (`research/plan/evidence/w/TOKCOST-verify-293ddcb.json`) and MERGED at **95fbb90** (step 12); ruling **R107 numbered** (08 §10, commit 25e60c5). Next free ruling R108.
 - CERTIFY-POLISH: handed back complete at **88adae2** (N1–N5, N7, N9–N15, p50 rows; E4B list 219); targeted verifier running → step 13 merge on pass.
-- INTAKE-DRAIN: lane running (wrap-up asked); step 14 merge script ready.
+- INTAKE-DRAIN: handed back at **d502c90** (bounded drain before a mid-body refusal; six real-socket cases; 5 new + 4 re-anchored mutants; tests/g 581, G list 340; `LARGE_BODY_LIMIT=8` proposed for the pilot with the 3× parse-memory model; ruling proposal for R108); targeted verifier running → step 14 merge on pass.
+- E1B finding (protocol defect): every gateway cell after the first REPLAYED (one seed + one dataset identity for all cells → shared idempotency keys → the durable gateway answered from the journal); only the r=0.25 cell measured the engine. Rerun with per-cell dataset identity in `models/marlin2b/results/E1B-box-4226315/run2-distinct-keys/`; E1B-protocol.md needs a per-cell/per-run dataset identity and bench must flag `replayed > 0` cells. The first pass still proved L5 (cancels billable, 0 failures) and L6 (resume: 27 skipped as terminal, no second acceptance, 0 conflicts) and exposed 9 ReadErrors under an 8-burst (the intake close-on-refusal loss).
 - gate-3 (focused gate on 95fbb90) running; `main` fast-forwards on green; the third install follows.
 - Step-6 drills 1–3 measured on the box (engine restart 172 s to ready; worker SIGKILL 8 s; index loss ~6 s; drift 0/0) — see §14.2 and the session record; restore B1 listed; the rollback/forward drill is folded into the third install.
 - E1B L2 ladder measured through the public edge (0.25 / 0.5 / 1.0 clips/s) — §14.2; L3/L5/L6 running; L4 (paired direct) and L7 (4 h soak) not run.

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T19:08:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T19:32:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -91,9 +91,11 @@ Generated 2026-09-24T19:08:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review TOKCOST: fix round 293ddcb (B1/N1 pinned); targeted verifier running -> step 12 (R107 numbered) since 2026-09-24T19:40:00Z
 - review CERTIFY-TREE: MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z
 - review LONGCLIP: SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip since 2026-09-24T19:10:00Z
-- review INTAKE-DRAIN: lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row since 2026-09-24T19:20:00Z
+- review INTAKE-DRAIN: handed back d502c90 (bounded drain; real-socket cases; LARGE_BODY_LIMIT=8 row); targeted verifier running -> step 14 + R108 since 2026-09-24T19:28:00Z
 - review FLEET: TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z
 - review CERTIFY-POLISH: handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -> step 13 since 2026-09-24T19:04:00Z
+- review E1B-gateway: first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run since 2026-09-24T19:27:00Z
+- review gate-3: running on 95fbb90 (suites 1260 green; lists...); main fast-forwards on green since 2026-09-24T19:09:00Z
 
 ## Checkpoints
 

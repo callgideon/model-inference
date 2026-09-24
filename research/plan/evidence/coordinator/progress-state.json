@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T19:08:00Z",
+  "updated": "2026-09-24T19:32:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -114,8 +114,8 @@
       "since": "2026-09-24T19:10:00Z"
     },
     "INTAKE-DRAIN": {
-      "phase": "lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row",
-      "since": "2026-09-24T19:20:00Z"
+      "phase": "handed back d502c90 (bounded drain; real-socket cases; LARGE_BODY_LIMIT=8 row); targeted verifier running -> step 14 + R108",
+      "since": "2026-09-24T19:28:00Z"
     },
     "FLEET": {
       "phase": "TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost",
@@ -124,6 +124,14 @@
     "CERTIFY-POLISH": {
       "phase": "handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -> step 13",
       "since": "2026-09-24T19:04:00Z"
+    },
+    "E1B-gateway": {
+      "phase": "first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run",
+      "since": "2026-09-24T19:27:00Z"
+    },
+    "gate-3": {
+      "phase": "running on 95fbb90 (suites 1260 green; lists...); main fast-forwards on green",
+      "since": "2026-09-24T19:09:00Z"
     }
   },
   "gates": {
