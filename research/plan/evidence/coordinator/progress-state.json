@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T01:18:27Z",
+  "updated": "2026-09-24T01:29:18Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -14,12 +14,6 @@
       "phase": "software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; box half + release decision after the rollout (BACKEND-READY not claimed)",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
-    },
-    "CUTOVER": {
-      "lane": "codex-cutover / codex/cutover-mount",
-      "phase": "code MERGED daeff13 (1bed457); tests-only fix round 141e169 under single verification → step 3b before checkpoint 2",
-      "since": "2026-09-23T19:29:02Z",
-      "note": "d3 ports, Q 55492; merges together with E3B phase 3"
     },
     "I2B-R4-worker": {
       "lane": "codex-worker / codex/i2b-r4-worker",
@@ -94,8 +88,8 @@
       "since": "2026-09-24T00:59:03Z"
     },
     "CUTOVER": {
-      "phase": "code MERGED daeff13; fix round HANDED BACK 141e169 (tests/docs only: shape pins in every mode, site-wide edge scan, one gauge line, one worker/drain pins) → single verifier → step 3b",
-      "since": "2026-09-24T01:14:54Z"
+      "phase": "MERGED: code daeff13 + fix round 865d352 (verifier pass at 141e169; JSON evidence/g/CUTOVER-verify-141e169.json)",
+      "since": "2026-09-24T01:29:18Z"
     },
     "ROLLOUT-PREP": {
       "phase": "MERGED 22761a4 (f0a1a82)",
@@ -434,6 +428,11 @@
       "merged": "M pilot-media @ e5c02f7 merged --no-ff (4fd4cdc); R99",
       "at": "2026-09-24T01:18:27Z",
       "note": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head)"
+    },
+    "CUTOVER": {
+      "merged": "cutover code 1bed457 merged daeff13 (unit) + fix round 141e169 merged 865d352 (step 3b); R98",
+      "at": "2026-09-24T01:29:18Z",
+      "note": "review fix_required on 3 test gaps at a1e88dc → one fix round → verifier pass at 141e169 (VER-N1 nonblocking: longer-than-shape values unpinned)"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
