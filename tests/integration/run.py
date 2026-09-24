@@ -428,6 +428,10 @@ def make_env() -> dict[str, str]:
     env = {"PYTEST_ADDOPTS": SUITE_ADDOPTS}
     if harness.load_state():
         env.update(INFRX_M_S3_ENDPOINT=harness.s3_endpoint(), INFRX_M_S3_LOCAL_CREDS="1")
+        # IR3F-2(b): the D suites inside `make api-test` get the gate's own D task (tasklocal
+        # "e3b2d") and lock/queue Valkeys, never the stack's PostgreSQL or another lane's
+        env.update(INFRX_D_TASK="e3b2d", INFRX_D2_VALKEY_PORT="55468",
+                   INFRX_D2_VALKEY_CONTAINER="infrx-e3b2d-valkey", INFRX_Q_VALKEY_PORT="55469")
     return env
 
 

@@ -33,6 +33,9 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     # not a single port, so the PostgreSQL port the harness actually derives for it is mirrored here)
     "d5": {"postgres": 55436, "valkey": 55467},
     "e3b2": {"postgres": 56732},
+    # E3B phase 3 IR3F-2(b): the gate's `make api-test` runs the D suites while the e3b2 stack
+    # holds 56732, so they get a D task of their own outside the block (containers infrx-e3b2d-*)
+    "e3b2d": {"postgres": 55438, "valkey": 55468},
 }
 
 # A task's own block of a track service, replacing the track's (host port, extra ports).

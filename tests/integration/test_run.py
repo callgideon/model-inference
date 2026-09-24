@@ -1172,7 +1172,10 @@ def test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio(monkeypatch):
     runner.suites(runner.Report(), own_only=False)
     assert seen["api-test"] == {"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS,
                                 "INFRX_M_S3_ENDPOINT": harness.s3_endpoint(),
-                                "INFRX_M_S3_LOCAL_CREDS": "1"}, seen
+                                "INFRX_M_S3_LOCAL_CREDS": "1",
+                                "INFRX_D_TASK": "e3b2d", "INFRX_D2_VALKEY_PORT": "55468",
+                                "INFRX_D2_VALKEY_CONTAINER": "infrx-e3b2d-valkey",
+                                "INFRX_Q_VALKEY_PORT": "55469"}, seen
     monkeypatch.setattr(harness, "load_state", lambda: None)
     runner.suites(runner.Report(), own_only=False)
     assert seen["api-test"] == {"PYTEST_ADDOPTS": runner.SUITE_ADDOPTS}, seen
