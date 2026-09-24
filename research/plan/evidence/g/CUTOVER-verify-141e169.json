@@ -1,0 +1,53 @@
+{
+  "verdict": "pass",
+  "head": "141e169",
+  "checks": [
+    {
+      "id": "V1",
+      "result": "confirmed",
+      "evidence": "At 141e169, test_startup.py::test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as uses malformed={'infrx_release_sha': ('c0ffee', RELEASE[:7], RELEASE[:-1], RELEASE.upper()), 'infrx_image': ('c0ffee', 'sha256:c0ffee', 'sha256:'+'b'*63, IMAGE.removeprefix('sha256:'))}. test_install.py's release loop is ('', 'c0ffee', RELEASE[:7], RELEASE[:-1], RELEASE.upper()). I hand-applied each mutant to a separate --shared clone at 141e169, one at a time, and reverted with git checkout; a no-op baseline gave '1 passed, 21 deselected'. O4 (RELEASE_SHA_RE [0-9a-f]{7,40}): 'DID NOT RAISE', value='c0ffee0', mode='dev', '1 failed, 21 deselected'. O6 (IMAGE_ID_RE sha256:\\S+): DID NOT RAISE, value='sha256:c0ffee', 1 failed. {6,64} image digest: DID NOT RAISE, value='sha256:c0ffee', 1 failed. O5 (preflight git_sha [0-9a-f]{7,40}): test_install.py:546 'AssertionError: c0ffee0', '1 failed, 42 deselected'. Through the list runner, `python -m tests.g.mutants <13 names>` printed '[killed] release_sha_accepts_a_short_id: 1 failed, 21 deselected', 'image_id_accepts_a_short_digest: 1 failed, 21 deselected' and 'image_id_accepts_any_sha256: 1 failed, 21 deselected', ending '13/13 killed'. `python -m tests.i.mutants` printed '[killed] release_shape_accepts_a_short_id: 1 failed, 42 deselected'. `INFRX_MUTANTS=all pytest tests/g/test_mutants.py -k <names>` gave '13 passed, 322 deselected'. The same run over tests/i/test_mutants.py gave '18 passed, 191 deselected'."
+    },
+    {
+      "id": "V2",
+      "result": "confirmed",
+      "evidence": "The case loops `itertools.product(values, MODES)`, and limits.MODES == ('dev', 'test', 'pilot'). In config.py, validate_runtime calls validate_deployment(..., mode) before it dispatches on the mode. I hand-applied these mutants and ran with -l. H16 release_shape_refused_only_in_pilot: DID NOT RAISE, mode='dev', value='c0ffee'. H6 image_shape_refused_only_in_pilot: DID NOT RAISE, mode='dev'. My own `mode != \"test\"` guard on the release check: DID NOT RAISE, mode='test'. My own `mode != \"dev\"` on the image check: mode='dev'. My own `validate_deployment(...) if mode == \"pilot\" else settings.deployment`: DID NOT RAISE, mode='dev'. Each gave '1 failed, 21 deselected'. The list runner printed '[killed] release_shape_refused_only_in_pilot: 1 failed, 21 deselected' and '[killed] image_shape_refused_only_in_pilot: 1 failed, 21 deselected'."
+    },
+    {
+      "id": "V3",
+      "result": "confirmed",
+      "evidence": "PASSTHROUGH includes 'Server-Timing'. The scan runs over `code = [line.split('#')[0].strip() for line in text.splitlines()]` for the whole Caddyfile, and any line whose first token is in REWRITES (header, header_up, header_down, encode, request/response_buffers, buffer_*) must equal 'header Content-Type application/json' with the next non-empty line starting with 'respond '. I hand-applied each edit below to a copy of deploy/Caddyfile and ran test_packaging -k test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered; the baseline passed. O1 (site-level `encode gzip zstd`): 'AssertionError: encode gzip zstd', 1 failed. O2 (site-level `header -Server-Timing`): 'AssertionError: header -Server-Timing'. `request_buffers 1MB` at site level: 'AssertionError: request_buffers 1MB'. `header_up X-Foo bar` inside handle /health's reverse_proxy: 'AssertionError: header_up X-Foo bar'. The same edit inside `handle @oversized`: same assertion. The list runner printed '[killed] edge_site_encodes_streams: 1 failed, 21 deselected' and '[killed] edge_site_strips_server_timing: 1 failed, 21 deselected'."
+    },
+    {
+      "id": "V4",
+      "result": "confirmed",
+      "evidence": "The case asserts `exposed == [build]` over lines starting with 'infrx_build_info{' (value '1.0'). Hand-applied O3 (a second rt.metrics.set with revision=sha[:7] in gateway/pilot.py) failed with 'Left contains one more item', '1 failed, 21 deselected'. The factory case asserts flag(--workers)==['1'], flag(--timeout-graceful-shutdown)==['110'], and `110 < stop_seconds(name) < TimeoutStopSec`; the unit has docker stop -t 120 and TimeoutStopSec=150. Hand-applied O9 (--workers 2): \"assert ['2'] == ['1']\". O10 (30): \"assert ['30'] == ['110']\". My own `docker stop -t 100`: 'assert 110 < 100'. My own TimeoutStopSec=120: 'assert 120 < 120'. The list runner printed '[killed] build_info_exposed_twice: 1 failed, 21 deselected', '[killed] unit_two_workers: 1 failed, 21 deselected' and '[killed] unit_drain_shortened: 1 failed, 21 deselected'."
+    },
+    {
+      "id": "V5",
+      "result": "confirmed",
+      "evidence": "`git diff --stat 1bed457 e0b97f8 -- apps/infrx-api/infrx apps/infrx-api/deploy infra` gives only 'apps/infrx-api/infrx/config.py | 4 ++--'. The hunk rewrites a comment only: '-# gateway.py's directory, i.e. apps/infrx-api: MODELS_DOC used to be' / '-# against it, and that is this package's parent, not the package itself.' became '+# apps/infrx-api (the retired gateway.py shim's directory): MODELS_DOC used to be' / '+# resolved against it, and that is this package's parent, not the package itself.' The code line `_API_DIR = ...` is unchanged. `git diff --name-only e0b97f8 141e169` lists only research/plan/evidence/g/CUTOVER-60dd799.md. By commit: c5c5395 touches tests/g only, fa881cf tests/i only, e0b97f8 docs/comments only (apps/README.md, infrx-api README, config.py comment, pyproject comment, tests/d docstring)."
+    },
+    {
+      "id": "V6",
+      "result": "confirmed",
+      "evidence": "All runs were on the scratch clone at 141e169 with `uv sync --frozen --all-extras` and INFRX_D_TASK=verify-nopg, with no PostgreSQL and no Valkey started. `pytest -q tests/g/test_startup.py`: '22 passed, 2 warnings in 1.10s'. `pytest -q tests/i` (detached): '154 passed in 169.58s'. `pytest -q tests/g` (detached): '575 passed, 2 warnings in 179.68s'. G by-name on the build case: 13/13 killed. I by-name on the edge, factory and release cases: 18/18 killed. The name sets I computed from the lists match the lane's counts exactly. `python -m tests.g.mutants --list` gives '328 mutants over 224 named cases', and the I list gives '202 mutants over 84 named cases'. At 1bed457 the lists had 322 and 197, which matches the claimed 322->328 and 197->202. test_the_list_is_well_formed and test_every_case_is_covered_by_a_mutant passed for G and I (4 passed). Spot-checked evidence kill lines: 'release_sha_accepts_a_short_id 1 failed, 21 deselected', 'release_shape_accepts_a_short_id 1 failed, 42 deselected' and 'edge_site_encodes_streams 1 failed, 21 deselected' all match my runner output. Commits c5c5395, fa881cf and e0b97f8 exist with the stated scopes. I did not run the contracts quick suite, which the task marked optional."
+    },
+    {
+      "id": "V7",
+      "result": "confirmed",
+      "evidence": "`git grep -i 'no adapter yet' -- apps README.md` finds nothing. `git grep -i 'no s3 adapter|M1 limit 2|until it does' -- apps` also finds nothing. The remaining 'gateway.py' hits under apps/ are all historical or retired wording: apps/README.md §7 '(`apps/infrx-api/infrx/gateway/`; the `gateway.py` shim is retired)', infrx/__init__.py 'Lifted out of the single-file gateway.py (F1)', config.py 'the legacy gateway.py shim forwarded', routes/chat.py 'Lifted from gateway.py', and test_packaging asserting the shim is gone. None describes a live shim. The root README has no hit. H-N5: the ruling paragraph (evidence line 370) reads 'The coordinator numbers it at the merge (R98, review H-N5)'. The 'next free R95' literal that 1bed457 had at line 341 is gone, and the text gains the build-info and VALKEY_URL clauses. Limits 2 states the in-memory upload state and the one-worker invariant (COMP-N1, now pinned). Limits 5 leaves the closed VALKEY_URL open for G2/Q (COMP-N5). Limits 4 discloses the unmodelled handle block (H10d) and the --extra traces backstop (H8) (H-N6)."
+    }
+  ],
+  "findings": [
+    {
+      "id": "VER-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_startup.py",
+      "line": "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as (malformed set); tests/i/test_install.py test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys",
+      "claim_broken": "The new docstring says 'anything but the full shape (a whole 40-hex commit, sha256:<64 hex>) is refused ... in every mode'. The malformed sets test only values too short, wrong case or unprefixed. Nothing longer than the full shape is tried, and nothing with trailing text. A rule that accepts over-long or suffixed values passes every test that references the shapes. The shipped code is correct (fullmatch with exact counts), so this is a test gap only. Downstream it fails closed, because E4B compares the whole sha, so it is not blocking.",
+      "evidence": "Hand-applied on a scratch clone at 141e169, each run over tests/g/test_startup.py, tests/g/test_composition.py, tests/contracts/test_config_and_imports.py, tests/i/test_install.py, tests/i/test_packaging.py and tests/i/test_scripts.py. config.RELEASE_SHA_RE -> [0-9a-f]{40,64}: '368 passed in 54.42s'. config.IMAGE_ID_RE -> sha256:[0-9a-f]{64,}: '368 passed in 49.88s'. validate_deployment `RELEASE_SHA_RE.fullmatch(` -> `.match(` (so RELEASE+'-dirty' is accepted): '368 passed in 44.15s'. Preflight SHAPES git_sha -> [0-9a-f]{40,64}, over tests/i/test_install.py, test_prereqs.py, test_packaging.py and test_scripts.py: '92 passed in 29.36s'.",
+      "minimal_fix": "Add RELEASE+'0' and RELEASE+'-dirty' to the release values, and 'sha256:'+'b'*65 and IMAGE+'x' to the image values, in the build case. Add RELEASE+'0' to test_install's release loop. Declare the matching G and I mutants: release_sha_accepts_a_longer_id, image_id_accepts_a_longer_digest, release_sha_prefix_match and release_shape_accepts_a_longer_id."
+    }
+  ],
+  "cleanup": "No Valkey, PostgreSQL or other container was started; `docker ps -a` shows none of mine. Every process I started (the detached tests/g and tests/i runs, the by-name mutant runs and the -k list runs) has exited. I deleted the scratch tree /tmp/claude-1000/verify-cutover-1996351, which held the head, mut and old --shared clones, the private TMPDIR, the logs and the pycache. Both clones were clean before deletion. I did not touch the codex-cutover worktree, the infrx-impl worktree, AWS, the pilot box or any secret."
+}
