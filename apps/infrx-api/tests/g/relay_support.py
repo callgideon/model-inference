@@ -118,6 +118,8 @@ class World:
         self.media = MediaUploads(self.objects, limits=self.limits, fetcher=fetcher,
                                   probe=probe, job_org=self.relay.job_org)
         self.relay.media = self.media
+        # `PgJobStore.db_now` (the store clock every expiry is judged on), over the fake's.
+        self.jobs.db_now = self.db_now
         self.app, _ = support.cutover_app(
             self.config, clock=self.now_s, sb=support.supabase(rows=(self.row,)),
             ingress_deps=support.deps(accept=self.relay.accept, catalog=self.catalog))
@@ -127,6 +129,9 @@ class World:
         return [PUBLIC]
 
     # --- the relay's collaborators -------------------------------------------
+    async def db_now(self):
+        return self.clock.now()
+
     def now_s(self) -> float:
         return self.clock.now().timestamp()
 

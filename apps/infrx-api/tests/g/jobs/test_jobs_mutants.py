@@ -22,7 +22,9 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per item (the whole list runs with INFRX_MUTANTS=all).
 SUBSET = ("replay_readmits", "handle_grammar_unchecked", "result_ttl_on_gateway_clock",
           "observer_disconnect_cancels", "delete_unshielded", "expired_job_served_as_running",
-          "poll_ignores_retry_after", "second_jobs_route_tolerated")
+          "poll_ignores_retry_after", "second_jobs_route_tolerated",
+          # G7: the persisted expiry, on status and on a sync replay
+          "expiry_recomputed_from_settings", "sync_replay_ignores_expiry")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
 J = mutation_list.J

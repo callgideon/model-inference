@@ -386,6 +386,12 @@ class Relay:
         """200 with the committed result, or the envelope the outcome maps to."""
         if outcome.state is not JobState.succeeded:
             raise _refusal(outcome, stream=False)
+        # G7 (RESULT-EXPIRY): a sync answer - a replay by key above all - is a read of the
+        # result like any other: only before its PERSISTED expiry, on the store clock, and
+        # never for a success with none persisted (F2C.b; never recomputed from settings).
+        expires = outcome.result_expires_at
+        if expires is None or await _dependency(self.jobs.db_now()) >= expires:
+            raise errors.ResultExpired("the result passed its retention")
         text = await self.results.read_result(job.org_id, outcome.result_ref)
         fields = dict(id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
                       choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(
