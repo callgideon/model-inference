@@ -1,0 +1,84 @@
+{
+  "task": "F2C",
+  "slice": "c",
+  "activity": "review",
+  "head": "d414607d",
+  "worktree": ".claude/worktrees/codex-f2c-catalog",
+  "branch": "codex/f2c-catalog",
+  "owned_paths": [
+    "apps/infrx-api/infrx/contracts/v2/published_model.py",
+    "apps/infrx-api/infrx/contracts/v2/published_fixtures.py",
+    "apps/infrx-api/infrx/contracts/v2/published/",
+    "apps/infrx-api/tests/contracts/v2/test_published_model.py",
+    "apps/app/lib/contracts/v2/published-model.ts",
+    "apps/app/tests/contracts/v2/published-model.test.ts",
+    "research/plan/evidence/f/F2C-catalog-d414607.md",
+    "research/plan/evidence/coordinator/updates/F2C-C-20260924T2215Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/v2/test_published_model.py",
+      "exit": 0,
+      "summary": "89 passed (new)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts --deselect tests/contracts/v2/test_v1_projection_pg.py",
+      "exit": 0,
+      "summary": "1164 passed (1075 existing + 89 new), 3 deselected"
+    },
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts",
+      "exit": 1,
+      "summary": "1164 passed, 3 failed: test_v1_projection_pg HarnessBusy (port 55432 held by codex-e2c-verify; nothing altered); environment, not product"
+    },
+    {
+      "cmd": "cd apps/app && node --test tests/contracts/v2/published-model.test.ts",
+      "exit": 0,
+      "summary": "52/52 (new)"
+    },
+    {
+      "cmd": "make console-test",
+      "exit": 0,
+      "summary": "341/341 (289 existing + 52 new)"
+    },
+    {
+      "cmd": "make console-typecheck",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "make console-lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "python3 scratchpad/f2c-c/mutate.py <worktree>",
+      "exit": 0,
+      "summary": "18/18 ad-hoc mutants killed (12 py, 6 ts)"
+    },
+    {
+      "cmd": "G7 seam regression (evidence appendix A) against dff31efc GET /v1/models",
+      "exit": 1,
+      "summary": "2 failed as intended: 25 validation errors; tools + 120 s vs 82 s violations; zdr refused"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1.5,
+    "pessimistic_h": 4,
+    "confidence": "med",
+    "basis": "contract, fixtures and both suites done; left: review fixes and applying wiring requests",
+    "at": "2026-09-24T22:15Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "apps/infrx-api/infrx/contracts/v2/__init__.py: _SUBMODULES += published_fixtures, published_model (evidence \u00a79.1)",
+    "apps/app/lib/contracts/v2/types.ts: export * from \"./published-model.ts\" after the money-units re-export (evidence \u00a79.2)",
+    "15-pending-inputs.md P-22 amendment (evidence \u00a74); 08 \u00a710 R109 (evidence \u00a75)",
+    "G7: adopt the seam regression (appendix A) in tests/g; D10: run alias_compatibility.json against real PostgreSQL",
+    "coordinator box check: hosted listing names rc_marlin2b_2026_09_provisional; price_versions holds the two HOSTED_USD_ROWS"
+  ],
+  "evidence": [
+    "research/plan/evidence/f/F2C-catalog-d414607.md"
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "aliases": [
+    "nemostation/marlin-2b",
+    "nemostation/marlin-2b@2026-09-01"
+  ],
+  "availability": "available",
+  "availability_as_of": "2026-09-22T12:00:00Z",
+  "capability": {
+    "execution_modes": [
+      "async",
+      "stream",
+      "sync"
+    ],
+    "input_modalities": [
+      "text",
+      "video"
+    ],
+    "max_context_tokens": 32768,
+    "max_input_tokens": 30720,
+    "max_output_tokens": 2048,
+    "max_request_bytes": 100663296,
+    "output_modalities": [
+      "text"
+    ],
+    "parameters": [
+      "frequency_penalty",
+      "max_completion_tokens",
+      "max_tokens",
+      "messages",
+      "model",
+      "n",
+      "presence_penalty",
+      "seed",
+      "stop",
+      "stream",
+      "temperature",
+      "top_p"
+    ],
+    "schema_version": 2,
+    "unsupported_parameters": [
+      "function_call",
+      "functions",
+      "logit_bias",
+      "logprobs",
+      "parallel_tool_calls",
+      "price_snapshot",
+      "response_format",
+      "tool_choice",
+      "tools",
+      "top_logprobs"
+    ],
+    "video": {
+      "fps": 2,
+      "live_stream": false,
+      "max_bytes": 67108864,
+      "max_frames": 240,
+      "max_per_request": 1,
+      "max_pixels_per_frame": 200704,
+      "max_seconds": 82,
+      "mime_types": [
+        "video/mp4",
+        "video/quicktime",
+        "video/webm"
+      ],
+      "min_frames": 4,
+      "profile_version": "marlin2b.video.v1",
+      "schema_version": 2
+    }
+  },
+  "created": 1788220800,
+  "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+  "id": "nemostation/marlin-2b",
+  "listing_version": 1,
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "object": "model",
+  "owned_by": "nemostation",
+  "pricing": {
+    "credit": {
+      "effective_at": "2026-09-01T00:00:00Z",
+      "input_rate_per_million": "400.00000000",
+      "meter": "tokens-v1",
+      "output_rate_per_million": "1200.00000000",
+      "provisional": true,
+      "rate_card_version": "rc_marlin2b_2026_09_provisional",
+      "schema_version": 2,
+      "unit": "CREDIT"
+    },
+    "legacy_usd": {
+      "input_rate_per_million": "0.10000000",
+      "model_revision": "nemostation/marlin-2b@2026-09-01",
+      "output_rate_per_million": "0.30000000",
+      "price_version": "pv_marlin2b_usd_2026_09_r1",
+      "schema_version": 2,
+      "token_rules_version": "tr-1",
+      "unit": "USD"
+    },
+    "regime": "credit",
+    "schema_version": 2
+  },
+  "retention": {
+    "capture_off_deletes_serving_content": false,
+    "content_stored": [
+      "prepared_media",
+      "request_payload",
+      "result",
+      "source_media",
+      "stream_journal"
+    ],
+    "idempotency_ttl_s": 86400,
+    "processing_cache_ttl_s": 604800,
+    "result_ttl_s": 86400,
+    "schema_version": 2,
+    "stream_journal_ttl_s": 3600,
+    "trace_capture_default": "off",
+    "zero_data_retention": false
+  },
+  "schema_version": 2,
+  "serving": {
+    "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+    "digest_source": "served_bytes",
+    "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+    "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+    "model_repo": "NemoStation/Marlin-2B",
+    "precision": "bfloat16",
+    "preprocessor_profile_version": "marlin2b.video.v1",
+    "prompt_harness_ref": "marlin2b.chat.v1",
+    "revision_label": "2026-09-01",
+    "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "schema_version": 2,
+    "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+    "tokenizer_digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "weight_shard_digests": [
+      "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+      "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+    ]
+  }
+}

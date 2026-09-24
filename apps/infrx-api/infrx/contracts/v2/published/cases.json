@@ -1,0 +1,562 @@
+{
+  "base": "published_marlin_credit.json",
+  "profile": "serving_profile_marlin.json",
+  "refusals": [
+    {
+      "name": "zero data retention claimed",
+      "patches": [
+        [
+          [
+            "retention",
+            "zero_data_retention"
+          ],
+          true
+        ]
+      ]
+    },
+    {
+      "name": "trace-off claimed as deletion",
+      "patches": [
+        [
+          [
+            "retention",
+            "capture_off_deletes_serving_content"
+          ],
+          true
+        ]
+      ]
+    },
+    {
+      "name": "an unknown video feature",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "native_streaming"
+          ],
+          true
+        ]
+      ]
+    },
+    {
+      "name": "an unknown tool feature",
+      "patches": [
+        [
+          [
+            "capability",
+            "tools"
+          ],
+          true
+        ]
+      ]
+    },
+    {
+      "name": "USD parsed as CREDIT: unit",
+      "patches": [
+        [
+          [
+            "pricing",
+            "credit",
+            "unit"
+          ],
+          "USD"
+        ]
+      ]
+    },
+    {
+      "name": "USD parsed as CREDIT: a USD block in the credit slot",
+      "patches": [
+        [
+          [
+            "pricing",
+            "credit"
+          ],
+          {
+            "input_rate_per_million": "0.10000000",
+            "model_revision": "nemostation/marlin-2b@2026-09-01",
+            "output_rate_per_million": "0.30000000",
+            "price_version": "pv_marlin2b_usd_2026_09_r1",
+            "schema_version": 2,
+            "token_rules_version": "tr-1",
+            "unit": "USD"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "CREDIT parsed as USD: unit",
+      "patches": [
+        [
+          [
+            "pricing",
+            "legacy_usd",
+            "unit"
+          ],
+          "CREDIT"
+        ]
+      ]
+    },
+    {
+      "name": "an amount that is not canonical",
+      "patches": [
+        [
+          [
+            "pricing",
+            "credit",
+            "input_rate_per_million"
+          ],
+          "400"
+        ]
+      ]
+    },
+    {
+      "name": "an amount as a JSON number",
+      "patches": [
+        [
+          [
+            "pricing",
+            "credit",
+            "input_rate_per_million"
+          ],
+          400
+        ]
+      ]
+    },
+    {
+      "name": "unpriced credit regime",
+      "patches": [
+        [
+          [
+            "pricing",
+            "credit"
+          ],
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a CREDIT rate shown in the legacy regime",
+      "patches": [
+        [
+          [
+            "pricing",
+            "regime"
+          ],
+          "legacy_usd"
+        ]
+      ]
+    },
+    {
+      "name": "USD keyed by a spelling, not the revision",
+      "patches": [
+        [
+          [
+            "pricing",
+            "legacy_usd",
+            "model_revision"
+          ],
+          "nemostation/marlin-2b"
+        ]
+      ]
+    },
+    {
+      "name": "an alias that resolves elsewhere",
+      "patches": [
+        [
+          [
+            "aliases"
+          ],
+          [
+            "marlin2b",
+            "nemostation/marlin-2b",
+            "nemostation/marlin-2b@2026-09-01"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a revision that is not <id>@<label>",
+      "patches": [
+        [
+          [
+            "model_revision"
+          ],
+          "nemostation/marlin-2b@latest"
+        ]
+      ]
+    },
+    {
+      "name": "a cap as a string",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "max_seconds"
+          ],
+          "82"
+        ]
+      ]
+    },
+    {
+      "name": "a flag as a number",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "live_stream"
+          ],
+          0
+        ]
+      ]
+    },
+    {
+      "name": "a parameter both accepted and refused",
+      "patches": [
+        [
+          [
+            "capability",
+            "unsupported_parameters"
+          ],
+          [
+            "tools",
+            "top_p"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "video input without video limits",
+      "patches": [
+        [
+          [
+            "capability",
+            "video"
+          ],
+          null
+        ]
+      ]
+    },
+    {
+      "name": "more input and output than the context",
+      "patches": [
+        [
+          [
+            "capability",
+            "max_output_tokens"
+          ],
+          4096
+        ]
+      ]
+    },
+    {
+      "name": "a missing required field",
+      "patches": [
+        [
+          [
+            "retention",
+            "result_ttl_s"
+          ],
+          null
+        ]
+      ]
+    },
+    {
+      "name": "an unsorted allow-list",
+      "patches": [
+        [
+          [
+            "capability",
+            "parameters"
+          ],
+          [
+            "top_p",
+            "model",
+            "messages"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "an availability outside the vocabulary",
+      "patches": [
+        [
+          [
+            "availability"
+          ],
+          "ready"
+        ]
+      ]
+    },
+    {
+      "name": "a v1 schema version",
+      "patches": [
+        [
+          [
+            "schema_version"
+          ],
+          1
+        ]
+      ]
+    }
+  ],
+  "violations": [
+    {
+      "expected": [
+        "capability.video.max_seconds"
+      ],
+      "name": "the stale 120 s video cap",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "max_seconds"
+          ],
+          120
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.parameters"
+      ],
+      "name": "tool calling advertised",
+      "patches": [
+        [
+          [
+            "capability",
+            "parameters"
+          ],
+          [
+            "frequency_penalty",
+            "max_completion_tokens",
+            "max_tokens",
+            "messages",
+            "model",
+            "n",
+            "presence_penalty",
+            "seed",
+            "stop",
+            "stream",
+            "temperature",
+            "tools",
+            "top_p"
+          ]
+        ],
+        [
+          [
+            "capability",
+            "unsupported_parameters"
+          ],
+          [
+            "function_call",
+            "functions",
+            "logit_bias",
+            "logprobs",
+            "parallel_tool_calls",
+            "price_snapshot",
+            "response_format",
+            "tool_choice",
+            "top_logprobs"
+          ]
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.video.live_stream"
+      ],
+      "name": "native live-video input advertised",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "live_stream"
+          ],
+          true
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.video.mime_types"
+      ],
+      "name": "a MIME type preparation refuses",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "mime_types"
+          ],
+          [
+            "video/mp4",
+            "video/mpeg",
+            "video/quicktime",
+            "video/webm"
+          ]
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.unsupported_parameters"
+      ],
+      "name": "a refusal the deployment does not make",
+      "patches": [
+        [
+          [
+            "capability",
+            "parameters"
+          ],
+          [
+            "frequency_penalty",
+            "max_completion_tokens",
+            "max_tokens",
+            "messages",
+            "model",
+            "n",
+            "presence_penalty",
+            "stop",
+            "stream",
+            "temperature",
+            "top_p"
+          ]
+        ],
+        [
+          [
+            "capability",
+            "unsupported_parameters"
+          ],
+          [
+            "function_call",
+            "functions",
+            "logit_bias",
+            "logprobs",
+            "parallel_tool_calls",
+            "price_snapshot",
+            "response_format",
+            "seed",
+            "tool_choice",
+            "tools",
+            "top_logprobs"
+          ]
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "retention.result_ttl_s"
+      ],
+      "name": "a longer result lifetime than enforced",
+      "patches": [
+        [
+          [
+            "retention",
+            "result_ttl_s"
+          ],
+          172800
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "retention.result_ttl_s"
+      ],
+      "name": "a shorter result lifetime than enforced",
+      "patches": [
+        [
+          [
+            "retention",
+            "result_ttl_s"
+          ],
+          3600
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "retention.physical_deletion_bound_s"
+      ],
+      "name": "a physical deletion bound nobody committed",
+      "patches": [
+        [
+          [
+            "retention",
+            "physical_deletion_bound_s"
+          ],
+          86400
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.video.fps"
+      ],
+      "name": "a different sampling rate",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "fps"
+          ],
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.max_output_tokens"
+      ],
+      "name": "more output than the deployment allows",
+      "patches": [
+        [
+          [
+            "capability",
+            "max_input_tokens"
+          ],
+          28672
+        ],
+        [
+          [
+            "capability",
+            "max_output_tokens"
+          ],
+          4096
+        ]
+      ]
+    },
+    {
+      "expected": [],
+      "name": "a lower cap than enforced is honest",
+      "patches": [
+        [
+          [
+            "capability",
+            "video",
+            "max_seconds"
+          ],
+          60
+        ]
+      ]
+    },
+    {
+      "expected": [],
+      "name": "a refusal left unnamed is not a claim",
+      "patches": [
+        [
+          [
+            "capability",
+            "unsupported_parameters"
+          ],
+          []
+        ]
+      ]
+    }
+  ]
+}
