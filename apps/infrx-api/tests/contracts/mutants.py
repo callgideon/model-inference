@@ -88,6 +88,7 @@ V2_INIT = "contracts/v2/__init__.py"
 V2_FAKE = "contracts/conformance/v2_fakes.py"
 LC = "contracts/v2/lifecycle.py"            # F2C.a records and ports
 LCF = "contracts/fakes/lifecycle.py"        # F2C.a reference adapter
+ACC = "contracts/conformance/acceptance.py" # F2C.d transcripts
 
 # --- how a mutant is allowed to die (r1 round-3 review; enforced since F2R item 9) ----
 # A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
@@ -2509,6 +2510,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if False:",
        # the defect IS the untyped error: the receipt record raises ValidationError
        "upload_restart__one_handle_names_one_set_of_bytes", dies_by=("ValidationError",)),
+    # --- F2C.d: the acceptance transcripts ------------------------------------------------
+    _m("acc_replay_accepts_anything", "a replay reports every diverging case",
+       ACC, "        if mine == steps:\n            continue", "        if True:\n            continue",
+       "test_a_diverging_adapter_is_reported_not_accepted"),
+    _m("acc_strict_ignores_times", "a strict replay compares the relative instants",
+       ACC, "        if not strict_times:\n            steps, mine", "        if True:\n            steps, mine",
+       "test_a_diverging_adapter_is_reported_not_accepted"),
+    _m("acc_identities_leak", "transcripts carry no adapter-specific identity",
+       ACC, "            return _UUID.sub(lambda m: self.alias(m.group(0), \"id\"), value)",
+       "            return value",
+       "test_the_acceptance_transcript_is_exactly_what_the_fakes_produce_now"),
     _m("lc_not_ready_rendered_public", "an internal refusal never has an HTTP status",
        LC, "    LifecycleRefusal.not_ready: errors.NotClaimable,",
        "    LifecycleRefusal.not_ready: errors.NotFound,",

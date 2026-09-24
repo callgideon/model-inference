@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import inspect
+import json
 import re
 from pathlib import Path
 
@@ -237,6 +238,44 @@ def test_every_read_outcome_is_the_committed_cross_language_table():
         outcome = v1.TerminalOutcome.model_validate(row["outcome"]) if "outcome" in row else None
         assert lc.read_outcome(outcome, _at(row["now"])).value == row["expected"], row["name"]
     assert {row["expected"] for row in table} == {r.value for r in lc.ReadOutcome}
+
+
+# --- F2C.d: versioned acceptance transcripts ----------------------------------------------
+def test_the_acceptance_transcript_is_exactly_what_the_fakes_produce_now():
+    from infrx.contracts.conformance import acceptance
+    assert acceptance.build() == acceptance.PATH.read_bytes(), (
+        "stale: run `uv run --frozen python -m infrx.contracts.conformance.acceptance --write`")
+    body = acceptance.committed()
+    assert body["version"] == acceptance.VERSION and body["config"] == acceptance.CONFIG
+    assert "raised" not in json.dumps(body["cases"]), "the reference fakes fail a case"
+    recorded = set(body["cases"]) | set(body["unrecorded"])
+    assert recorded == {case.__name__ for case in CASES}, "a case is neither recorded nor excused"
+    processes = {step["p"] for steps in body["cases"].values() for step in steps if "p" in step}
+    assert {"p1", "p2", "jobs"} <= processes, "no multi-process sequence was recorded"
+
+
+def test_the_fakes_replay_the_committed_transcript():
+    from infrx.contracts.conformance import acceptance
+    assert acceptance.replay(lifecycle_factory) == []
+
+
+def test_a_diverging_adapter_is_reported_not_accepted():
+    """Oracle: a replay that accepts a per-process store (RV-02), or other configured
+    windows under strict times, would pass anything."""
+    from infrx.contracts.conformance import acceptance
+
+    def forgetful(**kw):                       # every process starts from nothing
+        harness = lifecycle_factory(**kw)
+        store = harness.port
+        harness.extra["reopen"] = lambda: type(store)(store.jobs, store.clock, store.ids)
+        return harness
+
+    def slower(**kw):
+        return lifecycle_factory(**{**kw, "grace_s": 90.0})
+    problems = acceptance.replay(forgetful)
+    assert any(p.startswith("upload_restart__every_step_survives_a_new_process") for p in problems)
+    assert acceptance.replay(slower) != []
+    assert acceptance.replay(slower, strict_times=False) == []
 
 
 # --- TypeScript parity ---------------------------------------------------------------------
