@@ -43,6 +43,8 @@ ADMISSION = "0011_admission.sql"
 DISPATCH = "0012_dispatch_outbox.sql"
 GC = "0013_outbox_gc.sql"
 RESULTS = "0014_job_results.sql"
+# D10
+READY = "0019_upload_readiness.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -1583,11 +1585,12 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "                                         profile_version) = 0)),",
        "    true),", "admission", "media_uploads",
        "an unfinalized upload already names content"),
-    _m("d2_finalized_upload_rewritable", MEDIA,
+    # D10: 0019 redefines `media_uploads_guard` (the receipt is written once, too).
+    _m("d2_finalized_upload_rewritable", READY,
        "  if old.state <> 'created' and row(new.*) is distinct from row(old.*) then",
        "  if false then", "admission", "media_uploads",
        "a finalized upload's content changes under the refs that name it"),
-    _m("d2_finalized_upload_deleted_early", MEDIA,
+    _m("d2_finalized_upload_deleted_early", READY,
        "    if old.state = 'finalized' and infrx.now() < old.expires_at then",
        "    if false then", "admission", "media_uploads",
        "a live upload record vanishes and its handle stops resolving (R82)"),
@@ -3047,3 +3050,4 @@ def _first_line(error: BaseException) -> str:
     lines = str(error).strip().splitlines()
     return f"{type(error).__name__}: {(lines[0] if lines else '(no message)')[:160]}"
 from . import signup_mutants  # noqa: E402,F401  A1 (0015): appends its mutants and checks
+from . import d10_mutants  # noqa: E402,F401  D10 (0019+): appends its mutants and checks

@@ -124,6 +124,8 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           # the D5 verifier's pins: the replay rule's actor half, the drift detector's holds
           "d5_grant_actor_is_part_of_the_movement", "d5_credit_reserved_drift_blind")
 
+# D10: every failure oracle of consumer-v1/01 §D10.d (`d10_mutants.NAMES`) is in the subset.
+ALWAYS = ALWAYS + mutation_list.d10_mutants.NAMES
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
 _reason = pgharness.unavailable()
