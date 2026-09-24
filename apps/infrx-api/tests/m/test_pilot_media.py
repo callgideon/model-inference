@@ -300,17 +300,43 @@ def test_mpilot__a_second_process_resolves_the_attach_and_the_local_file(tmp_pat
 
 
 def test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served(tmp_path):
-    """The disk is found by the path the key builds and trusted only for the key's content
-    hash: other bytes at that path (a 64-bit prefix collision, a botched copy) are a miss,
-    never another tenant's or another clip's frames."""
+    """The disk is found by the path the key builds and trusted only for the key's WHOLE
+    content hash: a ref whose digest shares the file's first 16 hex (the path's name, a
+    64-bit prefix collision) is a miss, and so are other bytes at that path (a botched copy),
+    a symlink there, and a file dated in the future (a touch or a restore without -p would
+    otherwise extend the retention) - never another clip's frames."""
     gateway, worker = two_processes(tmp_path, support.Durable())
     job_id, _ = attach(gateway)
     ref = run(gateway.prepare(job_id, "v1"))[0]
     path = gateway.local_uri(ref).removeprefix("file://")
+    collided = ref.model_copy(update={"digest": ref.digest[:23] + "0" * 48})
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(collided)                                  # same path, other hash
+    outside = tmp_path.parent / f"{tmp_path.name}-elsewhere.mp4"
+    os.replace(path, outside)
+    os.symlink(outside, path)                                        # the right bytes, linked
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(ref)
+    os.remove(path)
+    os.replace(outside, path)
+    later = worker.cache.clock() + 10 * TTL
+    os.utime(path, (later, later))                                   # the right bytes, "future"
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(ref)
     with open(path, "wb") as handle:
         handle.write(support.mp4(seconds=11.0))
     with pytest.raises(errors.NotFound):
         worker.local_uri(ref)
+
+
+def test_mpilot__with_no_cache_root_a_prepared_ref_is_not_found():
+    """Review H-N4: with no processing cache configured the disk lookup is off, so
+    `local_uri` answers `not_found` for a prepared ref (the engine's refusal), not the
+    cache's `dependency_unavailable` from building a path under no root."""
+    adapter = adapter_for()                                          # no cache root
+    ref = run(adapter.materialize(b.ORG_A, data_url(CLIP)))
+    with pytest.raises(errors.NotFound):
+        adapter.local_uri(ref)
 
 
 def test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process(tmp_path):
@@ -586,7 +612,9 @@ def test_mpilot_pg__an_attach_is_write_once_and_tenant_bound(tmp_path):
 def test_mpilot_pg__an_attach_waits_for_the_job_row(tmp_path):
     """Attaches of one job are serialized on its row (`for update`): while another
     transaction holds it, an attach waits instead of reading a binding that is about to
-    change - two concurrent attaches of different refs cannot both commit (review PAR-1)."""
+    change - two concurrent attaches of different refs cannot both commit (review PAR-1).
+    The holder takes `for no key update`, which the binding's foreign-key check (`for key
+    share`) does not wait for, so only the attach's own row lock can make it wait."""
     import psycopg
     harness, durable = postgres()
     gateway, _ = two_processes(tmp_path, durable)
@@ -597,8 +625,8 @@ def test_mpilot_pg__an_attach_waits_for_the_job_row(tmp_path):
 
     async def contended():
         with psycopg.connect(pgharness.dsn(harness.extra["database"])) as holder:
-            holder.execute("select 1 from infrx.jobs where request_id = %s for update",
-                           (job.request_id,))
+            holder.execute("select 1 from infrx.jobs where request_id = %s "
+                           "for no key update", (job.request_id,))
             putting = asyncio.create_task(durable.put(job.request_id, (ref,)))
             await asyncio.sleep(0.5)
             waited = not putting.done()
