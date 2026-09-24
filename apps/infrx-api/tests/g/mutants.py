@@ -74,9 +74,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__the_cap_is_an_upper_bound_not_an_off_by_one"),
     # --- INTAKE-DRAIN: a mid-body refusal is read by the caller (real sockets) ----
     _m("refusal_not_drained", "a refused declared body is drained before the close",
-       I, "                    await drain(receive, request.headers, error.code, limits.max_request_bytes,\n"
-          "                                started + limits.intake_timeout_s)",
-       "                    pass",
+       I, "                        and await drain(receive, request.headers, error.code,",
+       "                        and False and await drain(receive, request.headers, error.code,",
        "test_media_sec__a_refused_video_body_is_drained_so_the_client_reads_the_429",
        "test_media_sec__a_drained_refusal_still_closes_the_connection",
        "test_media_sec__an_unauthenticated_caller_is_drained_only_up_to_1_mib"),
@@ -1610,6 +1609,22 @@ MUTANTS: tuple[Mutant, ...] = (
        V, '"messages", "stream", "max_tokens", "max_completion_tokens",',
        '"messages", "stream", "max_completion_tokens",',
        "test_api_modes__every_documented_example_answers_what_the_document_says"),
+    # WR-I8-3 (I8): the large-body gate and the drain on the gateway's /metrics
+    _m("held_slot_not_published", "a held large-body slot is visible on /metrics",
+       I, "        self.held = True\n        self.slots.publish()", "        self.held = True",
+       "test_ops_alert__the_large_body_gauges_move_under_a_held_slot"),
+    _m("slot_refusal_not_counted", "a large body refused for want of a slot is counted",
+       I, '            record(self.slots.registry, "inc", SLOTS_REFUSED)\n', "",
+       "test_ops_alert__the_large_body_gauges_move_under_a_held_slot"),
+    _m("drain_not_counted", "a drained refusal is counted by its code",
+       I, '                    record(getattr(runtime, "metrics", None), "inc", DRAINED, '
+          "code=error.code)", "                    pass",
+       "test_ops_alert__the_large_body_gauges_move_under_a_held_slot"),
+    _m("undeclared_family_recorded", "an undeclared family is never written on the request path",
+       I, "    if registry is not None and name in metrics.FAMILIES:",
+       "    if registry is not None:",
+       "test_ops_alert__without_the_declarations_the_intake_records_nothing",
+       dies_by=("KeyError",)),
 )
 
 

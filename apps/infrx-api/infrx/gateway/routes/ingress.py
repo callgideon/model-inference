@@ -129,6 +129,9 @@ class Ingress:
         self.validator = Validator(rt, catalog=self.deps.catalog,
                                    consent_for=self.deps.consent_for)
         self.slots = self.deps.large_bodies or intake.LargeBodies()
+        if self.slots.registry is None:      # WR-I8-3: the gate on the gateway's /metrics
+            self.slots.registry = getattr(rt, "metrics", None)
+        self.slots.publish()
         self.startup_state = assert_startup(rt, self.deps)
 
     async def validated(self, request: Request, request_id: str):
