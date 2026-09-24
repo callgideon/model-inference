@@ -1,0 +1,305 @@
+{
+ "verdict": "pass",
+ "head": "4bfdbf0",
+ "reviews": [
+  {
+   "verdict_hint": "pass",
+   "findings": [
+    {
+     "id": "V-N1",
+     "severity": "nonblocking",
+     "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+     "line": "719-760 (infrx.reconcile)",
+     "claim_broken": "The 0018 header says 'the same id for another request is `idempotency_conflict`'. The fix round typed only grant_credit's concurrent unique violation (N5). It did not type reconcile's: when two requests race with one operation id, the loser fails on audit_entries_idempotency_key_idx (0009) as untyped 23505.",
+     "evidence": "Own probe tests/d/test_zz_verifier_probe.py ran cl.lockstep with two held_unknown CREDIT jobs A and B past the window and reconcile(op='probe-op') on each, on both images: `PROBE one (None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'}) two ('untyped 23505', None) holds(B?,state) [(False, 'released'), (True, 'unknown')]`. B's hold stays unknown and nothing moves, so this fails safe with a 500. The sequential case is typed and pinned (d5_reconcile_replay_any_request is killed).",
+     "minimal_fix": "Wrap reconcile's audit insert in `begin ... exception when unique_violation then perform infrx.refuse('idempotency_conflict', ...)`, as grant_credit now does. Add a lock-step reconcile pair to check_settle_races plus a mutant. Alternatively, qualify the header sentence to 'sequentially'."
+    },
+    {
+     "id": "V-N2",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/d/checks_operations.py",
+     "line": "87-104 (check_adjust)",
+     "claim_broken": "grant_credit's replay rule is stated as 'another movement (wallet, kind or amount) is idempotency_conflict', which implies that the same wallet, kind and amount with a different actor or reason REPLAYS. Nothing pins that half of the rule.",
+     "evidence": "Own mutant om1 adds `or l.actor <> btrim(p_args->>'actor')` to the conflict test. It SURVIVED check adjust, settle_races and allocation on both images, and SURVIVED tests/d/test_operations_pg.py + test_settle_races.py (`23 passed`). Every replay in the suite reuses the same actor ('ops@test' / the same principal).",
+     "minimal_fix": "In check_adjust, replay the op with actor='other@test' (and another reason). Assert replayed=True with the first entry, whose actor is unchanged. Register om1 as a D5 mutant on adjust."
+    },
+    {
+     "id": "V-N3",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/d/test_operations_units.py",
+     "line": "133-151 (test_catalog__every_lookup_opens_and_closes_its_own_connection)",
+     "claim_broken": "CF-4 claims 'one connection opened and closed per statement'. The spy covers only statements that succeed, so a connection leaked when a statement raises goes unnoticed.",
+     "evidence": "Own mutant om6 changes operations._Db.connection from try/yield/finally close to `yield conn; await conn.close()`, so there is no close when the body raises (the typed-error path in rows()). It SURVIVED test_catalog_pg.py + test_operations_pg.py + test_operations_units.py (`58 passed, 1 xfailed`) on both images, and survived test_settle_units/test_operations_units in the unit-only run.",
+     "minimal_fix": "Add a spy case in which conn.execute raises a psycopg Error (the _db_error helper). Assert the typed error is raised AND closed == opened. Register om6 in code_mutants_d5."
+    },
+    {
+     "id": "V-N4",
+     "severity": "nonblocking",
+     "file": "apps/infrx-api/tests/d/checks_settle.py",
+     "line": "57-81 (check_drift_detected)",
+     "claim_broken": "H-N1's positive control induces only LEDGER drift (ledger_total + 1). The reserved_drift half of both detectors has no control, so assert_no_drift going blind to hold drift is unobservable.",
+     "evidence": "Own mutant om8 replaces 0006 credit_wallet_reconciliation's reserved_drift expression with `0::numeric`. It SURVIVED credit_settle, settle_releases, reconcile_clock, credit_regimes, settle_unknown and settle_races on both images. No D1R mutant covers that view either. The ledger half is controlled: om10 (USD ledger_drift→0) and om11 (CREDIT ledger_drift→0) are both KILLED by test_dur_settle__assert_no_drift_fails_on_an_induced_drift ('USD [] CREDIT [...]' / 'USD [...] CREDIT []').",
+     "minimal_fix": "In check_drift_detected, also bump reserved_total by 1 on both wallets (guards off, rolled back) and assert that both detectors report the reserved_drift."
+    },
+    {
+     "id": "V-N5",
+     "severity": "nonblocking",
+     "file": "research/plan/evidence/d/D5-4bcac3b.md",
+     "line": "8, 400, 697",
+     "claim_broken": "The evidence cites a 'section \"Fix round\"' (l.8) and 'Fix round runs' (l.400), and neither exists at 4bfdbf0. Per-item closure (B1..H-N7 to commit/test/mutant) lives only in commit messages. None of the fix-round run results are quoted: code mutants + units 53, contracts 1033+23, tests/g 559, tests/w 180, the tests/d sweeps. The Verification log has no fix-round entry.",
+     "evidence": "`grep -n 'Fix round' D5-4bcac3b.md` finds only l.8/400/412, and the headings list has no such section. The lane's own logs show the runs exist: r4-code-mutants `53 passed`, r4-contracts `23 failed, 1033 passed`, r4-g `559 passed`, r4-w `180 passed`, r4-sweep-plain (INFRX_MUTANTS=all tests/d at 4bfdbf0) `1051 passed, 5 xfailed ... exit=0`. The Supabase sweep and r5 kills had not started when harvested.",
+     "minimal_fix": "Add the 'Fix round' section: a review-id → commit → test → mutant table, and the runs table quoting the r4/r5 tails. Append a Verification log line."
+    },
+    {
+     "id": "V-N6",
+     "severity": "nonblocking",
+     "file": "research/plan/evidence/coordinator/merge-plan/2-e3b-phase3-bodies.sh",
+     "line": "32",
+     "claim_broken": "Merge readiness: the merge plan still applies D5 request 4's cli diff. The lane says it is superseded, and it no longer applies on the merged tree.",
+     "evidence": "On scratch origin/claude/backend-impl d365048 + 4bfdbf0 + origin/codex/e3b-phase3-bodies 1fa825b (both merges clean), the evidence-extracted d5-cli-build-operations.diff (sha256 d2a26348…, the script's pin) fails: `git apply --check` gives `error: patch failed: apps/infrx-api/infrx/operations/cli.py:10`, and it fails in reverse too. q3rig.diff (4b69278e…) still applies. The superseding build_operations works on the merged tree: tests/g/ops/test_cli.py `5 passed`, and test_operations_pg's service case (now composed via cli.build_operations(Settings(database_url=…))) passes on Supabase within `215 passed, 5 xfailed`.",
+     "minimal_fix": "The coordinator drops step 2(a) (`git apply --index d5-cli-build-operations.diff`) from 2-e3b-phase3-bodies.sh, as the lane's handback asks."
+    }
+   ],
+   "mutants": [
+    {
+     "name": "om1_actor_is_part_of_the_movement",
+     "edit": "0018 grant_credit: conflict test += `or l.actor <> btrim(p_args->>'actor')` (same wallet/kind/amount, another actor refuses instead of replaying)",
+     "result": "SURVIVED both images: adjust, settle_races, allocation; test_operations_pg + test_settle_races 23 passed (V-N2)"
+    },
+    {
+     "name": "om2_wallet_lock_after_the_replay_lookup",
+     "edit": "0018 grant_credit: wallet select without FOR UPDATE, then `perform 1 from infrx.credit_wallets where wallet_id = w.wallet_id for update;` after the replay block",
+     "result": "KILLED both images",
+     "killed_by": "settle_races: 'AssertionError: a racing replay was refused: idempotency_conflict' (with N5's handler the lost race is typed, but it still is not a replay; no double row)"
+    },
+    {
+     "name": "om3_reconcile_conflict_falls_through",
+     "edit": "0018 reconcile: the idempotency_conflict refusal becomes `null; else return … replayed; end if` (a reused op on another request goes on to release it)",
+     "result": "KILLED both images",
+     "killed_by": "reconcile_clock: 'an operation id reused for another request answered: untyped 23505' (the audit key's unique index stops it, and nothing moves)"
+    },
+    {
+     "name": "om4_reconcile_binds_the_org_not_the_request",
+     "edit": "0018 reconcile: `a.after->>'request_id' is distinct from j.request_id::text` -> `a.target_org_id is distinct from j.org_id`",
+     "result": "KILLED both images",
+     "killed_by": "reconcile_clock: 'an operation id reused for another request answered: None' (the check's other request is same-org, so request binding is pinned)"
+    },
+    {
+     "name": "om7_credit_float_and_trunc",
+     "edit": "0018 debit_credit: round(numeric) -> trunc(float8 arithmetic ::numeric, 8) (N1's point: exact 1273.913568534998, identical under round and trunc)",
+     "result": "KILLED both images",
+     "killed_by": "credit_grid: \"AssertionError: ('rc_d5_tie', 0, 1, Decimal('1E-8'))\" (other grid points catch trunc; the N1 point alone does not distinguish trunc)"
+    },
+    {
+     "name": "om8_credit_reserved_drift_blind",
+     "edit": "0006 credit_wallet_reconciliation: reserved_drift expression -> 0::numeric",
+     "result": "SURVIVED both images: credit_settle, settle_releases, reconcile_clock, credit_regimes, settle_unknown, settle_races (V-N4)"
+    },
+    {
+     "name": "om10_usd_ledger_drift_blind",
+     "edit": "0003 wallet_reconciliation: ledger_drift -> 0::numeric",
+     "result": "KILLED both images",
+     "killed_by": "test_settle.py::test_dur_settle__assert_no_drift_fails_on_an_induced_drift: 'induced: … USD [] CREDIT [(UUID(…), Decimal('1.00000000'), …)]'"
+    },
+    {
+     "name": "om11_credit_ledger_drift_blind",
+     "edit": "0006 credit_wallet_reconciliation: ledger_drift -> 0::numeric",
+     "result": "KILLED both images",
+     "killed_by": "same positive control: 'induced: … USD [(UUID(…), Decimal('1.00000000'), …)] CREDIT []'"
+    },
+    {
+     "name": "om5_public_resolves_a_retired_deployment",
+     "edit": "catalog._PUBLIC: `d.state = 'active'` -> `d.state <> 'draining'` (a public+retired deployment would resolve)",
+     "result": "KILLED (units); PG draining case alone would not catch it",
+     "killed_by": "test_operations_units.py:172 \"assert \\\"d.visibility = 'public' and d.state = 'active'\\\" in …\""
+    },
+    {
+     "name": "om6_connection_leaks_on_error",
+     "edit": "operations._Db.connection: try/yield/finally close -> `yield conn; await conn.close()` (no close when a statement raises)",
+     "result": "SURVIVED both images: test_catalog_pg + test_operations_pg + test_operations_units 58 passed, 1 xfailed (V-N3)"
+    },
+    {
+     "name": "om12_alias_tie_oldest_created",
+     "edit": "PgRegistry.move_alias: `c.created_at desc` -> `c.created_at asc` (two cards effective at the same instant)",
+     "result": "KILLED",
+     "killed_by": "test_operations_units.py:127 test_registry__the_alias_moves_at_the_deployments_newest_effective_card (sent-SQL assertion); the PG case uses distinct effective_at, so the tie is pinned only by the unit"
+    },
+    {
+     "name": "om9_always_name_wrong_case",
+     "edit": "test_migration_mutants.ALWAYS: 'd5_grant_replay_ignores_wallet' -> 'D5_Grant_Replay_Ignores_Wallet'",
+     "result": "KILLED",
+     "killed_by": "test_the_mutant_list_is_well_formed: \"ALWAYS names mutants the list does not declare: ['D5_Grant_Replay_Ignores_Wallet']\" (exact-match guard, consistent with SELECTED's exact `in`)"
+    },
+    {
+     "name": "hand: 13 named mutants (both images, applied to the real files, pytest modules not the runner)",
+     "edit": "d5_grant_replay_ignores_wallet/_kind, d5_grant_without_wallet_lock, d5_grant_concurrent_reuse_untyped, d5_reconcile_replay_any_request, d5_credit_debit_in_float, d5_legacy_debit_in_float, d5_lookup_ignores_operation, d5_lookup_not_stable, d5_amount_through_float; code: alias_moves_at_the_oldest_card, adjust_sends_another_actor, reconcile_sends_another_actor, public_resolves_an_inactive_deployment, private_resolves_a_retired_deployment, a_connection_cached_across_calls",
+     "result": "ALL KILLED on plain and Supabase, each by the declared assertion",
+     "killed_by": "e.g. checks_operations.py:101 'the operation id reused for another wallet answered (None, {…})' / '…another kind answered'; checks_settle.py:1012 'a racing replay was refused: idempotency_conflict'; checks_settle.py:1021 'one operation id on two wallets at once: None, untyped 23505'; checks_operations.py:200 'an operation id reused for another request answered: None'; checks_settle.py:763 \"('rc_d5_float', 17318, 1176, Decimal('1273.91356854'))\"; :209 legacy (…1273.91356854 vs …53); :1063 'the same key under another operation answered this operation's job'; checks_operations.py:275 'infrx.idempotency_lookup is not STABLE'; :141 amount '123456789012.12300000'; test_catalog_pg.py:210 'the alias moved at an old card'; test_operations_pg.py:258 \"assert 'system' == 'ops@test'\" and :381 ('admin_adjust','system'); test_catalog_pg.py:152/153 'a draining deployment still resolves its public alias' / 'a retired private deployment still resolves'; test_catalog_pg.py:242 'assert {} == {0: RateCardSnapshot…}' (psycopg 'the connection is closed'); units: test_operations_units.py:127/107/172/150"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C codex-d5 diff --quiet 8554b47 4bfdbf0 -- apps infra Makefile",
+     "exit": 0,
+     "tail": "SAME_CODE (code at 4bfdbf0 == 8554b47); fix-round code diff c807bb5..8554b47: 12 files, 0018 SQL + tests/d only (no infrx/state change)"
+    },
+    {
+     "cmd": "git archive 4bfdbf0 | tar -x -C /tmp/claude-1000/verify-d5-v1/tree && UV_OFFLINE=1 make api-env",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0"
+    },
+    {
+     "cmd": "python: len(MUTANTS), d5_ count, ALWAYS subset, code list",
+     "exit": 0,
+     "tail": "547 declared, 166 default subset, 70 d5_ migration mutants, 37 code mutants (claims match)"
+    },
+    {
+     "cmd": "[plain, private task infrx-verify-d5-postgres:55761] pytest -q tests/d/test_settle.py test_settle_races.py test_settle_units.py test_operations_pg.py test_operations_units.py test_catalog_pg.py test_credit_jobstore_conformance.py test_jobstore_conformance.py",
+     "exit": 0,
+     "tail": "175 passed, 5 xfailed in 206.53s (5 XFAIL = the strict partitions: 1 catalog, 3 CREDIT, 1 F2 jobstore dur_cap)"
+    },
+    {
+     "cmd": "[plain] INFRX_MUTANTS=all pytest -q -s tests/d/test_migration_mutants.py -k 'd5_ or d3_'",
+     "exit": 0,
+     "tail": "156 passed, 396 deselected in 347.00s; 156 'killed by' lines, e.g. d5_settle_before_the_fence: killed by settle_late_data -> 'a foreign worker settled: None'; d5_adjust_replay_appends -> 'a replayed adjustment was refused: idempotency_conflict'"
+    },
+    {
+     "cmd": "[supabase] same focused files",
+     "exit": 0,
+     "tail": "175 passed, 5 xfailed in 426.13s"
+    },
+    {
+     "cmd": "[supabase] pytest -q -s tests/d/test_migration_mutants.py -k 'd5_ or d3_' (default subset)",
+     "exit": 0,
+     "tail": "51 passed, 120 deselected in 90.03s"
+    },
+    {
+     "cmd": "[both images, port 55763] python -m tests.d.hand_run <mutant> <pytest files> x22",
+     "exit": 1,
+     "tail": "all 16 lane-named mutants and om5/om10/om11/om12 fail their named case (exit 1 = killed); om1 '23 passed' and om6 '58 passed, 1 xfailed' (exit 0 = survived)"
+    },
+    {
+     "cmd": "[both images] python -m tests.d.own_mutants om1 om2 om3 om4 om7 om8 (runner kill() per check)",
+     "exit": 0,
+     "tail": "om2/om3/om4/om7 KILLED; om1 and om8 SURVIVED every listed check; identical on plain and Supabase"
+    },
+    {
+     "cmd": "[unit, no DB] mut.py leak (om6) -> pytest test_operations_units.py test_settle_units.py test_code_mutants_d5.py",
+     "exit": 1,
+     "tail": "3 failed, 50 passed: the only failures are the anchor/misdeclared checks of a_connection_cached_across_calls/a_connection_never_closed (my edit removed their anchor); every unit case passed = om6 survives the units"
+    },
+    {
+     "cmd": "[test code] ALWAYS name upper-cased -> pytest -k well_formed tests/d/test_migration_mutants.py",
+     "exit": 1,
+     "tail": "AssertionError: ALWAYS names mutants the list does not declare: ['D5_Grant_Replay_Ignores_Wallet']; 1 failed, 169 deselected"
+    },
+    {
+     "cmd": "[both images] pytest -s tests/d/test_zz_verifier_probe.py (lock-step reconcile, one op id, two requests)",
+     "exit": 0,
+     "tail": "PROBE one (None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'}) two ('untyped 23505', None) holds [(False,'released'),(True,'unknown')]"
+    },
+    {
+     "cmd": "git clone --shared; fetch up claude/backend-impl codex/e3b-phase3-bodies; checkout d365048; merge 4bfdbf0; merge 1fa825b",
+     "exit": 0,
+     "tail": "both merges clean, no conflict; merged tree: test_harness lists 0018, Makefile api-mutants has test_code_mutants_d5.py, stack.PENDING has no D5, only D5 file deltas vs 4bfdbf0 are phase-3's test_operations_pg (build_operations), seed_marlin, test_composition_pg"
+    },
+    {
+     "cmd": "[merged, repo root, no stack] pytest tests/integration/test_harness.py test_run.py test_fake_vllm.py tests/integration/backend (tasks.json D5 planned)",
+     "exit": 1,
+     "tail": "2 failed, 151 passed, 79 skipped: test_every_mutant_anchor_occurs_as_declared_on_the_checkout {'e3bm62': 0} and test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task ('M3-U1 is fixed …')"
+    },
+    {
+     "cmd": "[merged, D5 flipped to implemented in tasks.json] same layer-0 set",
+     "exit": 1,
+     "tail": "2 failed, 151 passed, 79 skipped: the same two; test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual passes (no stale D5 pending)"
+    },
+    {
+     "cmd": "[phase-3 head 1fa825b alone] same layer-0 set",
+     "exit": 1,
+     "tail": "3 failed, 150 passed, 79 skipped: the same two (pre-existing on the phase-3 head: ROUTERS gained `metrics`; M3-U1 fixed by the m-pilot-media merge) + a flaky test_busy_ports; so D5 adds no layer-0 failure"
+    },
+    {
+     "cmd": "[merged, supabase, 55763] pytest focused 8 files + test_composition_pg.py + test_code_mutants_d5.py",
+     "exit": 0,
+     "tail": "215 passed, 5 xfailed, 2 warnings in 662.26s"
+    },
+    {
+     "cmd": "[merged, supabase] pytest tests/d/test_migration_mutants.py -k 'd5_ or well_formed or superseded'",
+     "exit": 0,
+     "tail": "36 passed, 135 deselected in 92.66s"
+    },
+    {
+     "cmd": "[merged] pytest tests/g/ops/test_cli.py; git apply --check d5-cli-build-operations.diff (fwd/rev); git apply --check q3rig.diff",
+     "exit": 1,
+     "tail": "5 passed; cli diff: 'patch failed: apps/infrx-api/infrx/operations/cli.py:10' both directions; q3rig applies"
+    },
+    {
+     "cmd": "harvest lane logs r4-*",
+     "exit": 0,
+     "tail": "r4-count-all 1 passed 551 deselected; r4-count-subset 170 deselected; r4-code-mutants 53 passed; r4-contracts 23 failed, 1033 passed; r4-g 559 passed; r4-w 180 passed; r4-typo-proof 1 failed (ALWAYS typo refused); r4-sweep-plain (INFRX_MUTANTS=all tests/d @4bfdbf0) 1051 passed, 5 xfailed exit=0. The Supabase sweep and r5 per-mutant kills had not started at harvest. These cross-check with mine"
+    }
+   ],
+   "fabrication_check": "Every tail above is copied from a log file I produced in the scratch tree or from the lane's r4 logs. I did not edit or kill the lane's runs. The lane's claims check out as follows:\n- Counts: 547/166/70/37 recomputed from the lists. Lane logs: 53, 1033+23, 559.\n- B1, B2, N5, CF-1 to CF-4, N1 to N4, N6 and H-N1: every named mutant was applied by hand to the real files and dies with the quoted assertion on both images.\n- The downgraded B3/H-B2 item: d5_reconcile_replay_any_request, hand-killed.\n- H-N5: the ALWAYS typo guard is proven; wrong case is also refused.\n- 'The fix round changes only grant_credit/reconcile bodies': confirmed by the SQL diff.\n- The request-4 supersession: confirmed on the merged tree.\n- The N1 '(float: .54)' claim is true only through PostgreSQL's 15-significant-digit float8→numeric cast. Python float rounds to .53, and the hand kill shows .54 from PG.\n- The evidence's 'Fix round' and 'Fix round runs' sections, which the file itself references, do not exist (V-N5).\n- Limits 12/13 and the restated requests 1/3/4 match the merged tree.",
+   "cleanup": "Containers: my harness created infrx-verify-d5-postgres(-supabase) on 55761 and infrx-verify-d5-hand-postgres(-supabase) / infrx-verify-d5-merge-postgres-supabase on 55763, my allocated decoy port, since test_pgharness was not run. It removed each at exit, and `docker ps -a | grep verify-d5` returns 0. No Valkey was started; INFRX_Q_VALKEY_PORT=55765 was set with no container. I never touched 55432 or any infrx-d5-*, cutover, d2/d3, e3b2, review or gideon container. The scratch at /tmp/claude-1000/verify-d5-v1 (tree, hand, merge clone, phase-3 worktree removed first, private TMPDIR with the lock files, logs) is deleted. The codex-d5 worktree is untouched (`git status --short` is empty). The lane's detached battery (driver4/driver5) was left running."
+  }
+ ],
+ "confirmed_blocking": [],
+ "downgraded_to_nonblocking": [],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "V-N1",
+   "severity": "nonblocking",
+   "file": "apps/app/supabase/migrations/0018_terminal_settlement.sql",
+   "line": "719-760 (infrx.reconcile)",
+   "claim_broken": "The 0018 header says 'the same id for another request is `idempotency_conflict`'. The fix round typed only grant_credit's concurrent unique violation (N5). It did not type reconcile's: when two requests race with one operation id, the loser fails on audit_entries_idempotency_key_idx (0009) as untyped 23505.",
+   "evidence": "Own probe tests/d/test_zz_verifier_probe.py ran cl.lockstep with two held_unknown CREDIT jobs A and B past the window and reconcile(op='probe-op') on each, on both images: `PROBE one (None, {'replayed': False, 'settlement_state': 'released_platform_absorbed'}) two ('untyped 23505', None) holds(B?,state) [(False, 'released'), (True, 'unknown')]`. B's hold stays unknown and nothing moves, so this fails safe with a 500. The sequential case is typed and pinned (d5_reconcile_replay_any_request is killed).",
+   "minimal_fix": "Wrap reconcile's audit insert in `begin ... exception when unique_violation then perform infrx.refuse('idempotency_conflict', ...)`, as grant_credit now does. Add a lock-step reconcile pair to check_settle_races plus a mutant. Alternatively, qualify the header sentence to 'sequentially'."
+  },
+  {
+   "id": "V-N2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_operations.py",
+   "line": "87-104 (check_adjust)",
+   "claim_broken": "grant_credit's replay rule is stated as 'another movement (wallet, kind or amount) is idempotency_conflict', which implies that the same wallet, kind and amount with a different actor or reason REPLAYS. Nothing pins that half of the rule.",
+   "evidence": "Own mutant om1 adds `or l.actor <> btrim(p_args->>'actor')` to the conflict test. It SURVIVED check adjust, settle_races and allocation on both images, and SURVIVED tests/d/test_operations_pg.py + test_settle_races.py (`23 passed`). Every replay in the suite reuses the same actor ('ops@test' / the same principal).",
+   "minimal_fix": "In check_adjust, replay the op with actor='other@test' (and another reason). Assert replayed=True with the first entry, whose actor is unchanged. Register om1 as a D5 mutant on adjust."
+  },
+  {
+   "id": "V-N3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/test_operations_units.py",
+   "line": "133-151 (test_catalog__every_lookup_opens_and_closes_its_own_connection)",
+   "claim_broken": "CF-4 claims 'one connection opened and closed per statement'. The spy covers only statements that succeed, so a connection leaked when a statement raises goes unnoticed.",
+   "evidence": "Own mutant om6 changes operations._Db.connection from try/yield/finally close to `yield conn; await conn.close()`, so there is no close when the body raises (the typed-error path in rows()). It SURVIVED test_catalog_pg.py + test_operations_pg.py + test_operations_units.py (`58 passed, 1 xfailed`) on both images, and survived test_settle_units/test_operations_units in the unit-only run.",
+   "minimal_fix": "Add a spy case in which conn.execute raises a psycopg Error (the _db_error helper). Assert the typed error is raised AND closed == opened. Register om6 in code_mutants_d5."
+  },
+  {
+   "id": "V-N4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/d/checks_settle.py",
+   "line": "57-81 (check_drift_detected)",
+   "claim_broken": "H-N1's positive control induces only LEDGER drift (ledger_total + 1). The reserved_drift half of both detectors has no control, so assert_no_drift going blind to hold drift is unobservable.",
+   "evidence": "Own mutant om8 replaces 0006 credit_wallet_reconciliation's reserved_drift expression with `0::numeric`. It SURVIVED credit_settle, settle_releases, reconcile_clock, credit_regimes, settle_unknown and settle_races on both images. No D1R mutant covers that view either. The ledger half is controlled: om10 (USD ledger_drift→0) and om11 (CREDIT ledger_drift→0) are both KILLED by test_dur_settle__assert_no_drift_fails_on_an_induced_drift ('USD [] CREDIT [...]' / 'USD [...] CREDIT []').",
+   "minimal_fix": "In check_drift_detected, also bump reserved_total by 1 on both wallets (guards off, rolled back) and assert that both detectors report the reserved_drift."
+  },
+  {
+   "id": "V-N5",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/d/D5-4bcac3b.md",
+   "line": "8, 400, 697",
+   "claim_broken": "The evidence cites a 'section \"Fix round\"' (l.8) and 'Fix round runs' (l.400), and neither exists at 4bfdbf0. Per-item closure (B1..H-N7 to commit/test/mutant) lives only in commit messages. None of the fix-round run results are quoted: code mutants + units 53, contracts 1033+23, tests/g 559, tests/w 180, the tests/d sweeps. The Verification log has no fix-round entry.",
+   "evidence": "`grep -n 'Fix round' D5-4bcac3b.md` finds only l.8/400/412, and the headings list has no such section. The lane's own logs show the runs exist: r4-code-mutants `53 passed`, r4-contracts `23 failed, 1033 passed`, r4-g `559 passed`, r4-w `180 passed`, r4-sweep-plain (INFRX_MUTANTS=all tests/d at 4bfdbf0) `1051 passed, 5 xfailed ... exit=0`. The Supabase sweep and r5 kills had not started when harvested.",
+   "minimal_fix": "Add the 'Fix round' section: a review-id → commit → test → mutant table, and the runs table quoting the r4/r5 tails. Append a Verification log line."
+  },
+  {
+   "id": "V-N6",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/coordinator/merge-plan/2-e3b-phase3-bodies.sh",
+   "line": "32",
+   "claim_broken": "Merge readiness: the merge plan still applies D5 request 4's cli diff. The lane says it is superseded, and it no longer applies on the merged tree.",
+   "evidence": "On scratch origin/claude/backend-impl d365048 + 4bfdbf0 + origin/codex/e3b-phase3-bodies 1fa825b (both merges clean), the evidence-extracted d5-cli-build-operations.diff (sha256 d2a26348…, the script's pin) fails: `git apply --check` gives `error: patch failed: apps/infrx-api/infrx/operations/cli.py:10`, and it fails in reverse too. q3rig.diff (4b69278e…) still applies. The superseding build_operations works on the merged tree: tests/g/ops/test_cli.py `5 passed`, and test_operations_pg's service case (now composed via cli.build_operations(Settings(database_url=…))) passes on Supabase within `215 passed, 5 xfailed`.",
+   "minimal_fix": "The coordinator drops step 2(a) (`git apply --index d5-cli-build-operations.diff`) from 2-e3b-phase3-bodies.sh, as the lane's handback asks."
+  }
+ ]
+}

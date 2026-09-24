@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T23:43:44Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T00:04:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-23T23:43:44Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- D5: codex-d5 / codex/d5-terminal-transaction — fix round HANDED BACK 4bfdbf0 (code final 8554b47; 70 migration + 37 code mutants); battery running; single verifier running → merge unit step 1 (with phase 3) since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
+- D5: codex-d5 / codex/d5-terminal-transaction — verifier PASS at 4bfdbf0 → CLEARED for merge unit step 1 (with phase 3); evidence fill + V-N2/3/4 test pins pending the battery (~00:30Z) since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
 - E4B: codex-e4b / codex/e4b-certify — software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3 since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
@@ -82,7 +82,7 @@ Generated 2026-09-23T23:43:44Z from `tasks.json` (manifest v4) and `progress-sta
 - review I3B-followup: MERGED 90b81c7 (+ 08725c0 IR2-2); merged-tree checks green: layer 0 exit 0, recovery 62/9, I3B list 109/107, tests/i 143 since 2026-09-23T18:25:08Z
 - review F-fakes-followup: MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z
 - review checkpoint-2-interim: whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z
-- review D5: verifier at 4bfdbf0 running (money on both images + refuters) since 2026-09-23T23:26:57Z
+- review D5: verifier pass at 4bfdbf0 (wf_0a7ebbf4-7ec; JSON evidence/d/D5-verify-4bfdbf0.json); V-N1 concurrent reconcile reuse untyped → follow-up since 2026-09-24T00:04:02Z
 - review M1-L2: verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json) since 2026-09-23T22:09:07Z
 - review E4B: verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json) since 2026-09-23T22:24:46Z
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
