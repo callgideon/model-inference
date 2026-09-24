@@ -294,6 +294,9 @@ TEXT_ANSWERS = {
     "text-count": {"count": "12"},
     "disagreeing": {"count": 3, "tokens": [1, 2]},
     "no-tokens": {"count": 5},                    # review L4: vLLM always answers both
+    # counts whose tokens agree in Python (True == 1, 3.0 == 3): only the shape check refuses
+    "bool-with-its-token": {"count": True, "tokens": [1]},
+    "float-with-its-tokens": {"count": 3.0, "tokens": [1, 1, 1]},
 }
 # a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches, at most 13 x 196
 VIDEO_ANSWERS = {"unexpanded": counted(40, 1), "below-one-per-patch": counted(40, 12),
