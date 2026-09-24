@@ -290,30 +290,34 @@ def test_ops_continuous__the_runtime_sends_no_other_session_only_statement():
         assert not re.search(r"\bLISTEN\s+\w", text, re.I), sql.name
 
 
-@pytest.mark.xfail(strict=True, reason="WR-I8-1: pilot.connection_pool SETs role/timeout per "
-                                       "session and auto-prepares; unsafe on 6543 until fixed")
-def test_ops_continuous__the_composed_runtime_pool_is_safe_on_the_transaction_pooler(txn):
+def test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_pooler_today(txn):
+    """WR-I8-1, as the gateway and the worker build their pool (`pilot.connection_pool`,
+    its configure hook and psycopg's default auto-prepare): on the transaction pooler the
+    twelfth-or-sooner statement served by the other server fails on a prepared statement
+    that server never saw. A characterization of today's defect: when WR-I8-1 lands this
+    case must be rewritten to "every answer has the same identity and a timeout"."""
+    import psycopg
     dsn = txn
 
     async def run():
         pool, connect = pilot.connection_pool(_settings(dsn))
         await pool.open(wait=True, timeout=10)
-        answers, last = [], None
+        last = None
         ask = ("select pg_backend_pid(), current_user, current_setting('statement_timeout'), "
                "count(*) from infrx.jobs where state = %s")
         try:
             for _ in range(12):
                 conn = await connect()
-                if last is None:
-                    row = await (await conn.execute(ask, ("queued",))).fetchone()
-                else:
-                    with divert(dsn, avoid=last):
+                try:
+                    if last is None:
                         row = await (await conn.execute(ask, ("queued",))).fetchone()
-                await conn.close()
+                    else:
+                        with divert(dsn, avoid=last):
+                            row = await (await conn.execute(ask, ("queued",))).fetchone()
+                finally:
+                    await conn.close()
                 last = row[0]
-                answers.append(row[1:3])
         finally:
             await pool.close()
-        return answers
-    answers = asyncio.run(run())
-    assert len(set(answers)) == 1 and answers[0][1] != "0"
+    with pytest.raises(psycopg.errors.InvalidSqlStatementName):
+        asyncio.run(run())

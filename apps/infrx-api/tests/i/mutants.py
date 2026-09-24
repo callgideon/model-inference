@@ -936,9 +936,10 @@ MUTANTS += (
 BUDGET_PY, POOLER_PY = "../../infra/runbooks/pool_budget.py", "tests/i/pooler.py"
 PROBE_PY = "../../infra/runbooks/privilege_probe.py"
 ADMITS = "test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits"
+COMPOSED = "test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_pooler_today"
 TXN_CASES = ("test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler",
              "test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler",
-             "test_ops_continuous__the_composed_runtime_pool_is_safe_on_the_transaction_pooler")
+             COMPOSED)
 ENVCHECK_REFUSES = "test_deploy_failclosed__envcheck_refuses_a_file_the_runtime_would_start_on"
 UNIT_REFUSES = "test_deploy_failclosed__each_runtime_unit_refuses_to_start_on_a_refused_env_file"
 LEAST = "test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail"
@@ -954,10 +955,14 @@ MUTANTS += (
     _m("stand_in_pooler_in_session_mode", "the stand-in hands server connections between "
        "clients at transaction boundaries, as 6543 does",
        POOLER_PY, "dbname={DATABASE} pool_mode=transaction pool_size=2",
-       "dbname={DATABASE} pool_mode=session pool_size=2", *TXN_CASES),
+       "dbname={DATABASE} pool_mode=session pool_size=2", *TXN_CASES,
+       # a session pooler keeps each client on its server: the case's second client then
+       # waits for a server that never frees (query_wait_timeout) - the defect's absence,
+       # observed as the pooler's refusal
+       dies_by=("ProtocolViolation", "OperationalError")),
     _m("stand_in_pooler_replays_prepares", "the stand-in, like 6543, supports no prepared "
        "statements", POOLER_PY, "max_prepared_statements = 0", "max_prepared_statements = 100",
-       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler"),
+       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler", COMPOSED),
     _m("runtime_adds_a_session_statement", "no new session-only statement reaches the pool",
        "infrx/gateway/pilot.py", '        await conn.execute("set role service_role")\n',
        '        await conn.execute("set role service_role")\n'
@@ -1049,8 +1054,7 @@ MUTANTS += (
        OBS + "canary.sh", "( umask 077; printf", "( printf",
        "test_ops_continuous__the_canary_sends_one_text_and_one_video_request_with_a_hidden_key"),
     _m("canary_failure_exits_zero", "a failed synthetic request fails the run",
-       OBS + "canary.sh", 'request text 60 "$work/text.json" || failed=1',
-       'request text 60 "$work/text.json" || true',
+       OBS + "canary.sh", 'publish\nexit "$failed"', "publish\nexit 0",
        "test_ops_continuous__the_canary_sends_one_text_and_one_video_request_with_a_hidden_key"),
     _m("delivery_blocked_reads_as_success", "no destination is BLOCKED, never a success",
        OBS + "deliver.py", "        return BLOCKED if status == 0 else SEND_FAILED\n    current",
