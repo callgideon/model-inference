@@ -204,7 +204,9 @@ def test_junit_counts_keep_xfails_apart_from_skips(tmp_path):
     ("import pytest\ndef test_ok():\n    pass\ndef test_s():\n    pytest.skip('no db')\n",
      "BLOCKED"),
     ("def test_bad():\n    assert False\n", "FAIL"),
-], ids=["pass", "skip-is-blocked", "fail"])
+    ("import pytest\n@pytest.mark.xfail(strict=True, reason='known gap')\n"
+     "def test_q():\n    assert False\n", "BLOCKED"),
+], ids=["pass", "skip-is-blocked", "fail", "quarantine-is-blocked"])
 def test_a_pytest_stage_that_skipped_is_not_a_pass(tmp_path, body, verdict):
     (tmp_path / "test_probe.py").write_text(body)
     out = tmp_path / "out"

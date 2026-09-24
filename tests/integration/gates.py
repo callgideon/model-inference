@@ -9,8 +9,9 @@
 Each writes `<out>/verdict.json` and exits 0 PASS, 1 FAIL, 3 BLOCKED or NOT RUN, 4 INVALID.
 The gate is the WORST stage: FAIL > INVALID > BLOCKED > NOT RUN > PASS. A stage that could
 not run (missing tool, image, busy namespace) is BLOCKED; a pytest stage that passed with
-skips is BLOCKED too, because a required case that did not run cannot certify anything.
-Strict xfails are reported with their reasons and do not change the verdict.
+skips is BLOCKED too, because a required case that did not run cannot certify anything; and
+so is one with strict xfails - they are the suite's quarantine (known gaps), and a quarantine
+prevents claiming the gate passed. Both are listed with their reasons.
 Nothing here provisions, pulls or deletes: the runners it calls own their own resources.
 """
 from __future__ import annotations
@@ -115,8 +116,9 @@ def pytest_stage(name: str, argv: list[str], cwd: Path, out: Path,
         verdict = FAIL
     elif counts["tests"] == 0:
         verdict, row["detail"] = BLOCKED, "no test ran"
-    elif counts["skipped"]:
-        verdict, row["detail"] = BLOCKED, f"{counts['skipped']} required case(s) skipped"
+    elif counts["skipped"] or counts["xfailed"]:
+        verdict, row["detail"] = BLOCKED, (f"{counts['skipped']} required case(s) skipped, "
+                                           f"{counts['xfailed']} quarantined (strict xfail)")
     else:
         verdict = PASS
     return {**row, "verdict": verdict, "counts": counts}

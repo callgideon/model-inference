@@ -75,11 +75,12 @@ Exit codes: **0** PASS, **1** FAIL, **3** BLOCKED or NOT RUN, **4** INVALID. Ord
 FAIL > INVALID > BLOCKED > NOT RUN > PASS.
 
 - A pytest stage that exits 0 **with skips** is BLOCKED: a required case that did not run
-  certifies nothing. Strict `xfail`s (tests/d's declared "no real store can pass this as
-  written" cases) are listed with their reasons and do not change the verdict.
-- **Quarantine** has no mechanism of its own: a quarantined case is a skip, so the gate it
-  belongs to cannot be PASS. Record owner, reason and expiry in the skip reason and the lane
-  evidence.
+  certifies nothing.
+- **Quarantine** is a strict `xfail` (or a skip): the stage is BLOCKED and lists the reasons, so
+  the gate cannot be PASS while one stands. tests/d carries five today (0007 public-listing
+  case, two unbuilt provider_dev admissions, the 0011 `state_conflict` vs fake
+  `idempotency_conflict` delta, the F2 two-organization case); none records an owner or expiry
+  yet - add them to the reason when quarantining.
 - pytest stages run with `--basetemp=<out>/basetemp/<stage>`: pytest < 9.0.3 roots its
   temporary directories in the shared `/tmp/pytest-of-<user>` (GHSA-6w46-j5rx-g56g). `TMPDIR`
   is deliberately not moved: the D/Q harnesses take their host-wide `flock`s under it.
