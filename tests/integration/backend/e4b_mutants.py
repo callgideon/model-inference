@@ -556,6 +556,10 @@ MUTANTS: tuple[Mutant, ...] = (
        PARITY_CAP),
     _m("over_cap_refusal_untyped", "an over-cap refusal must be the typed one",
        "if answer != OVER_CAP)", 'if answer["http_status"] != 400)', PARITY_CAP),
+    _m("v_parity_param_ignored", "the over-cap refusal is admission's, param included",
+       "if answer != OVER_CAP)",
+       'if (answer["http_status"], answer["code"]) != (OVER_CAP["http_status"], '
+       'OVER_CAP["code"]))', PARITY_CAP),
     _m("engine_target_over_cap_passes", "an engine target cannot judge the over-cap clips",
        "    elif over and not gateway and status == PASS:\n", "    elif False:\n", PARITY_CAP),
     _m("acceptance_read_as_a_refusal", "an admitted over-cap clip is recorded as admitted",

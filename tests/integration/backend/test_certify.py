@@ -324,7 +324,10 @@ def test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_re
     assert sorted(asked) == sorted(Path(clips[clip]["file"]).name for clip in over)
     c051 = Path(clips["c051-tos720p-360p-16x9"]["file"]).name
     for answer in ({"http_status": 200, "code": None, "param": None},
-                   {"http_status": 400, "code": "invalid_request", "param": None}):
+                   {"http_status": 400, "code": "invalid_request", "param": None},
+                   # the relay's answer for an ADMITTED job that then failed preparation
+                   # (`_refusal`, cause invalid_media): admission let the clip through
+                   {"http_status": 400, "code": "unsupported_media", "param": None}):
         replies[c051] = answer
         entry = cell()
         assert (entry["status"], entry["detail"]["not refused as over the cap"]) == (
