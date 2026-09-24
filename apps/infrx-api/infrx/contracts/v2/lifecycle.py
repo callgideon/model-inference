@@ -38,13 +38,14 @@ serialized: a route renders the code only (`refusal_of(error)` reads it back).
 from __future__ import annotations
 
 import enum
+from datetime import timedelta
 from typing import Protocol, runtime_checkable
 
 from pydantic import Field, StrictInt, ValidationError, model_validator
 
 from .. import errors, ids
-from ..records import (Admission, IdempotencyRef, Lease, MediaRef, NormalizedRequest,
-                       UploadState)
+from ..records import (Admission, IdempotencyRef, JobState, Lease, MediaRef, NormalizedRequest,
+                       SettlementState, TerminalOutcome, UploadState)
 from .records import AccountingRegime, AdmissionV2, RecordV2, Sha256, Timestamp, UuidStr
 
 # The one reference form a caller may name (R61(1)); media/uploads.py and
@@ -513,6 +514,19 @@ class ContentLifecycle(Protocol):
     a terminal one before its `retain_until`; its own `job_id`'s job is non-terminal (or
     before that job's `retain_until`); it is an upload destination whose ticket is open and
     unexpired; it is the source a finalized, unexpired ticket names.
+
+    `retain_until` per kind (F2C.b), set once at terminalization: a `result` lasts exactly
+    until the outcome's persisted `result_expires_at` (a job with none keeps no result);
+    every other kind until settlement + the configured serving retention for it (P-25).
+
+    Deleting `database` content is a SCRUB (D3): the tombstoned row's body is emptied in
+    one transaction and the acknowledgement records it; the job row, idempotency tombstone,
+    terminal outcome, usage, settlement and ledger rows and the content's digest and size
+    stay. A scrubbed result reads `result_expired` (never empty text, never regenerated),
+    and because a result is eligible only from its persisted expiry, `read_outcome` already
+    answers `expired` for it. D10 replaces 0014's `job_results_immutable` trigger with a
+    guard allowing exactly that scrub (body -> empty, `scrubbed_at` null -> now, only when
+    `now >= jobs.result_expires_at` or the job keeps no result) and nothing else.
     """
 
     async def register(self, identity: ContentIdentity) -> ContentObject:
@@ -549,12 +563,81 @@ class ContentLifecycle(Protocol):
         newer claim superseded is `claim_lost`."""
 
 
+# --- F2C.b: terminal/read consistency ----------------------------------------------------
+class ReadOutcome(enum.StrEnum):
+    """Every answer a committed job can give a reader (status, result, replay, console).
+
+    | read | when | result route | status `result_available` / `result_expires_at` |
+    |---|---|---|---|
+    | `pending` | not terminal | 409 `result_pending` | false / absent |
+    | `available` | success with a result and authoritative usage, `now < result_expires_at` | 200 with the response | true / the persisted instant |
+    | `no_result` | failed, cancelled or expired job; a success the store rewrote (R30) | 200, no response | false / absent |
+    | `held_unknown` | usage unknown, reservation held for reconciliation | 200, no response | false / absent |
+    | `expired` | success past its PERSISTED expiry (scrubbed or not) | 410 `result_expired` | false / absent |
+    | `unavailable` | success with no persisted expiry (a record from before F2C.b) | 410 `result_expired` | false / absent |
+
+    `unavailable` is fail-closed: an expiry is never recomputed from configuration.
+    Metadata (state, cause, usage, settlement) stays readable in every row.
+    """
+
+    pending = "pending"
+    available = "available"
+    no_result = "no_result"
+    held_unknown = "held_unknown"
+    expired = "expired"
+    unavailable = "unavailable"
+
+
+def read_outcome(outcome: TerminalOutcome | None, now) -> ReadOutcome:
+    """The one classification every read path applies, `now` being the STORE clock
+    (`db_now`). Content is served only for `available`; scrubbing happens only after the
+    persisted expiry, so a scrubbed body is always `expired` here."""
+    if outcome is None:
+        return ReadOutcome.pending
+    if outcome.settlement_state is SettlementState.held_unknown:
+        return ReadOutcome.held_unknown
+    if outcome.state is not JobState.succeeded or not outcome.result_ref \
+            or outcome.usage is None:
+        return ReadOutcome.no_result
+    if outcome.result_expires_at is None:
+        return ReadOutcome.unavailable
+    return ReadOutcome.available if now < outcome.result_expires_at else ReadOutcome.expired
+
+
+def result_case_table() -> list[dict]:
+    """`fixtures/v2/result_read_cases.json`: the table both languages must classify
+    identically, built from the v1 terminal fixtures - `terminal_success.json` is a record
+    written before F2C.b (no expiry) and `terminal_success_expiring.json` the same success
+    as the store now commits it."""
+    from ..fixtures import model as v1_model
+    tick = timedelta(microseconds=1)
+    old = v1_model("terminal_success.json")
+    new = v1_model("terminal_success_expiring.json")
+    expires = new.result_expires_at
+    rows = [("not terminal", None, new.settled_at),
+            ("success at settlement", new, new.settled_at),
+            ("success one microsecond before its expiry", new, expires - tick),
+            ("success AT its expiry: equality has passed", new, expires),
+            ("success after its expiry", new, expires + tick),
+            ("pre-F2C.b success at settlement: no expiry is invented", old, old.settled_at),
+            ("pre-F2C.b success before the old TTL would end", old, expires - tick)]
+    rows += [(name.removesuffix(".json"), v1_model(name), new.settled_at)
+             for name in ("terminal_cancelled.json", "terminal_platform_error.json",
+                          "terminal_expired.json", "terminal_unknown_usage.json")]
+    return [{"name": name, "now": now.isoformat().replace("+00:00", "Z"),
+             "expected": read_outcome(outcome, now).value,
+             **({"outcome": outcome.model_dump(mode="json", exclude_none=True)}
+                if outcome is not None else {})}
+            for name, outcome, now in rows]
+
+
 __all__ = [
     "AdmissionExpectation", "ContentIdentity", "ContentKind",
     "ContentLifecycle", "ContentLocation", "ContentObject", "ContentOrigin", "ContentPage",
     "ContentReference", "DESTINATION_SCHEME", "DeletionClaim", "ExecutionReadiness",
     "FinalizedSource", "LifecycleRefusal", "LifecycleState", "MAX_PAGE", "ManifestSource",
     "REFUSAL_ERRORS", "ReadinessState", "ReadinessStore", "ReadinessView", "Tombstone",
-    "UploadConstraints", "UploadReceipt", "UploadRepository", "UploadTicket",
-    "readiness_view", "refusal_of", "refusal_table", "refuse",
+    "ReadOutcome", "UploadConstraints", "UploadReceipt", "UploadRepository", "UploadTicket",
+    "read_outcome", "readiness_view", "refusal_of", "refusal_table", "refuse",
+    "result_case_table",
 ]

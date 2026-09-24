@@ -232,7 +232,7 @@ def lifecycle_factory(limits: PilotSettings | None = None, **_: object) -> Harne
             "capability": {**capability, "input_modalities": list(input_modalities)}})
 
     hooks = {"reopen": store.reopen, "jobs": jobs, "set_capability": set_capability,
-             "credit_balance": credit.extra["credit_balance"]}
+             "credit_balance": credit.extra["credit_balance"], "retune": credit.extra["retune"]}
     return Harness(port=store, clock=credit.clock, ids=credit.ids, failures=credit.failures,
                    extra=hooks)
 

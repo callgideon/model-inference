@@ -46,7 +46,7 @@ class Durable:
     by_key: dict[tuple[str, str], str] = field(default_factory=dict)
     references: dict[str, list[ContentReference]] = field(default_factory=dict)
     readiness: dict[str, ExecutionReadiness] = field(default_factory=dict)
-    retain: dict[str, datetime] = field(default_factory=dict)     # job -> retain_until
+    retain: dict[tuple, datetime] = field(default_factory=dict)   # (job, kind) -> until
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -260,16 +260,21 @@ class FakeLifecycle:
         return await self.jobs.claim_preparation(job_id, worker_id)
 
     # --- ContentLifecycle ----------------------------------------------------------------
-    def _job_live(self, job_id: str, now: datetime) -> bool:
+    def _job_live(self, job_id: str, now: datetime,
+                  kind: ContentKind = ContentKind.source) -> bool:
         """Non-terminal, or terminal and before its retain_until - set once, here, from the
-        persisted settlement instant (never recomputed)."""
+        job's persisted facts (never recomputed): a result lasts exactly until the outcome's
+        persisted `result_expires_at` (a job without one keeps no result), anything else
+        the configured serving retention after settlement."""
         job = self.jobs.jobs.get(job_id)
         if job is None:
             return False
         if job.outcome is None:
             return True
-        until = self.d.retain.setdefault(
-            job_id, job.outcome.settled_at + timedelta(seconds=self.retention_s))
+        outcome = job.outcome
+        until = self.d.retain.setdefault((job_id, kind), (
+            outcome.result_expires_at or outcome.settled_at if kind is ContentKind.result
+            else outcome.settled_at + timedelta(seconds=self.retention_s)))
         return now < until
 
     def _referenced(self, row: ContentObject, now: datetime) -> bool:
@@ -277,7 +282,7 @@ class FakeLifecycle:
         if any(ref.generation == row.generation and self._job_live(ref.job_id, now)
                for ref in self.d.references.get(row.content_id, ())):
             return True
-        if identity.job_id is not None and self._job_live(identity.job_id, now):
+        if identity.job_id is not None and self._job_live(identity.job_id, now, identity.kind):
             return True
         if identity.kind is ContentKind.upload_destination:
             ticket = self.d.tickets.get(identity.upload_handle)
@@ -327,7 +332,8 @@ class FakeLifecycle:
             for ref in refs:
                 self._job_live(ref.job_id, self.clock.now())    # persists retain_until once
             return tuple(ContentReference.model_validate(
-                {**ref.model_dump(), "retain_until": self.d.retain.get(ref.job_id)})
+                {**ref.model_dump(), "retain_until": self.d.retain.get(
+                    (ref.job_id, ContentKind.source))})
                 for ref in refs)
 
     def _claimable(self, row: ContentObject, now: datetime) -> bool:
