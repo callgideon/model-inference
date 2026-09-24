@@ -145,6 +145,12 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeyp
     # ... which are no task, and which the stage's PENDING[..] parser reads whole.
     assert owners.isdisjoint(tasks) and all(run.PENDING_MARK.fullmatch(f"PENDING[{o}]")
                                             for o in owners)
+    # Review H-N2: ... and each is still named by a case (a `pending("<id>"` call in a case
+    # module of this tree), or it is dead vocabulary that lets a retired reference linger.
+    here = Path(__file__).resolve()
+    cases = "".join(path.read_text() for path in here.parent.rglob("test_*.py") if path != here)
+    unnamed = sorted(o for o in owners if f'pending("{o}"' not in cases)
+    assert unnamed == [], f"owner references no case names: {unnamed}"
     assert set(vocabulary) - owners <= set(tasks), set(vocabulary) - owners - set(tasks)
     merged = {task for task in vocabulary if tasks.get(task) in ("implemented", "integrated")}
     assert merged <= set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
@@ -188,13 +194,12 @@ def test_a_pending_id_naming_a_merged_task_fails_the_stage():
 
 
 def test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task(monkeypatch):
-    """R3-1, after the cutover (E3B phase 3): no E3B case waits on a held cutover any more
-    (`G2-R1` is retired), and a merged task is never a pending owner. The journey matrix is
-    run here without a stack: exactly the three `video_upload` cells pend - on the owner
-    reference `M3-U1` (the coordinator's ruling: the real media staging refuses an upload
-    reference) - and the six others RUN (they reach the journey stack, which a sentinel stands
-    in for). `stale_pending` states the rule for any skip: RESIDUAL excuses a merged id only
-    in I3B's recovery cases."""
+    """R3-1, after the cutover and M's pilot-media merge (E3B phase 3): no E3B case waits on a
+    held cutover (`G2-R1`) or on M (`M3-U1`, `M3-U2`) any more, and a merged task is never a
+    pending owner. The journey matrix is run here without a stack: all NINE cells RUN (they
+    reach the journey stack, which a sentinel stands in for) and none pends. `stale_pending`
+    states the rule for any skip: RESIDUAL excuses a merged id only in I3B's recovery
+    cases."""
     import pytest
     import test_journey
 
@@ -219,27 +224,16 @@ def test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task(monkey
             for task in run.PENDING_MARK.search(skipped.value.msg).group(1).split(","):
                 pended.setdefault(task, []).append(f"b.test_journey::{kind}-{mode}")
     assert refused == [], f"E3B cases keyed on an unknown or merged id: {refused}"
-    assert pended == {"M3-U1": [f"b.test_journey::video_upload-{mode}"
-                                for mode in test_journey.MODES]}, pended
-    assert len(ran) == 6 and all(kind != "video_upload" for kind, _ in ran), ran
-    assert "M3-U1" in stack.OWNERS and "G2-R1" not in stack.OWNERS
-    # review H-N1: M3-U1's tripwire. The probe measures today's refusal on M's real store, and
-    # the day it reports the reference resolved the cells FAIL, asking for the owner to go.
-    assert stack.upload_refs_refused() is True
-    monkeypatch.setattr(stack, "upload_refs_refused", lambda: False)
-    try:
-        with pytest.raises(pytest.fail.Exception, match="M3-U1 is fixed"):
-            test_journey.test_backend_journey(Unreachable(), "video_upload", "sync")
-    except pytest.skip.Exception as pended:          # a skip would hide the missing tripwire
-        raise AssertionError(f"M3-U1 pended with its blocker gone: {pended}") from None
-    monkeypatch.undo()
-    assert run.stale_pending({"pending": pended}) == [], pended
+    assert pended == {}, pended
+    assert sorted(ran) == sorted((kind, mode) for kind in test_journey.INPUTS
+                                 for mode in test_journey.MODES), ran
+    assert not {"G2-R1", "M3-U1", "M3-U2"} & set(stack.OWNERS), stack.OWNERS
     # The rule itself, on an id merged on every tree (G1R), made RESIDUAL for the check.
     monkeypatch.setitem(stack.RESIDUAL, "G1R", "a merged task I3B still names")
     e3b = "b.test_journey::test_backend_journey[sync-text]"
     i3b = "tests.integration.backend.recovery.test_recovery::test_i3b_rc03"
     assert run.stale_pending({"pending": {"G1R": [e3b, i3b]}}) == ["G1R"]
-    assert run.stale_pending({"pending": {"G1R": [i3b], "M3-U1": [e3b]}}) == []
+    assert run.stale_pending({"pending": {"G1R": [i3b], "I2B-R4": [e3b]}}) == []
     # Verification GATE-N2/RUN-N4: "recovery" must be the MODULE PATH's component - an E3B case
     # merely named like one is still stale.
     assert run.stale_pending({"pending": {"G1R": ["b.test_drills::test_e3b_recovery_like"]}}) \

@@ -976,17 +976,12 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("e3bm62", "E3B3 dr17: the pilot mounts G4U's uploads router beside the ingress and "
                      "G3's jobs router",
            "apps/infrx-api/infrx/gateway/app.py",
-           "ROUTERS = (health, models, ingress, uploads, jobs)",
-           "ROUTERS = (health, models, ingress, jobs)",
+           "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+           "ROUTERS = (health, models, ingress, jobs, metrics)",
            "tests/integration/backend/test_drills.py", "dr17", layer=2,
            cases=("test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_"
                   "routers",)),
-    Mutant("e3bm63", "E3B3: the video_upload cells pend on their owner reference (M3-U1), "
-                     "never on a merged task",
-           "tests/integration/backend/test_journey.py",
-           'stack.pending("M3-U1", why=', 'stack.pending("G4U", why=',
-           "tests/integration/backend/test_stage.py", "owner_reference",
-           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
+    # e3bm63 (the M3-U1 key) retired with M3-U1: the video_upload cells run (e3bm75).
     Mutant("e3bm64", "E3B3 journeys: a same-key replay is answered as a replay "
                      "(Idempotency-Replayed)",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
@@ -1029,12 +1024,17 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_i3b_rc05b_an_object_store_outage_on_minio_through_the_s3_adapter",)),
 
     # ---------------- E3B phase 3, the review fix round (E3B3-review-4ac1419.json)
-    Mutant("e3bm69", "E3B3 review J2: a video job on a separate worker process PENDS on M3-U2, "
-                     "never passes",
+    # e3bm69 (the M3-U2 pending) retired: M's pilot-media merge fixed M3-U2, and every
+    # journey cell now runs on a separate worker process (e3bm74 proves the crossing).
+    Mutant("e3bm74", "E3B3 review J2: the video cells cross two processes - the worker finds "
+                     "the file the gateway's preparation wrote by content hash (M's disk "
+                     "lookup), not through the gateway's in-memory index",
+           "apps/infrx-api/infrx/media/prepare.py",
+           "        entry = self.entries.get(key) or (self._load(key, mime) if mime else None)\n",
+           "        entry = self.entries.get(key)\n",
            "tests/integration/backend/test_journey.py",
-           '    stack.pending("M3-U2", why=', '    (lambda *a, **k: None)("M3-U2", why=',
-           "tests/integration/backend/test_journey.py", "separate_worker", layer=2,
-           cases=("test_backend_journey__video_url_on_a_separate_worker_process",)),
+           "backend_journey and video_url and sync", layer=2,
+           cases=("test_backend_journey[video_url-sync]",)),
     Mutant("e3bm70", "E3B3 review J1 (the reviewer's mutant A): a keyed replay is answered by "
                      "the R91 lookup, preparing and staging nothing",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
@@ -1062,12 +1062,40 @@ MUTANTS: tuple[Mutant, ...] = (
            "        pass\n",
            "tests/integration/test_run.py", "s3_cases_on_this_stacks_minio",
            cases=("test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio",)),
-    Mutant("e3bm73", "E3B3 review H-N1: the M3-U1 pending fails the day its blocker is gone",
+    # e3bm73 (M3-U1's structural probe, review H-N1) retired with M3-U1.
+    Mutant("e3bm75", "E3B3 (M3-U1 retired): a chat naming a finalized infrx-upload: reference "
+                     "is prepared from the store on the mounted gateway (M's gap 1), not a 400",
+           "apps/infrx-api/infrx/media/uploads.py",
+           "        if not source.startswith(UPLOAD_REF_SCHEME):\n",
+           "        if True:\n",
            "tests/integration/backend/test_journey.py",
-           "        if not stack.upload_refs_refused():\n",
-           "        if False:\n",
-           "tests/integration/backend/test_stage.py", "owner_reference",
-           cases=("test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task",)),
+           "backend_journey and video_upload and sync", layer=2,
+           cases=("test_backend_journey[video_upload-sync]",)),
+    Mutant("e3bm76", "E3B3 review H-N2: every owner reference is still named by a case",
+           "tests/integration/backend/stack.py",
+           "OWNERS: dict[str, str] = {}\n",
+           "OWNERS: dict[str, str] = {\"X9\": \"a reference no case names\"}\n",
+           "tests/integration/backend/test_stage.py", "named_residual",
+           cases=("test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual",)),
+    Mutant("e3bm77", "E3B3 review J9: a same-key retry reaching a restarted gateway while the "
+                     "job is IN FLIGHT is answered as it stands (R91), never refused because "
+                     "the new process did not stage it",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "            return                              # staged by another process: as it "
+           "stands\n",
+           "            raise\n",
+           "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
+           cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
+                  "its_identity",)),
+    Mutant("e3bm78", "E3B3 review H-N5: the execution mode ALONE is part of a key's identity "
+                     "(R94) - sync and async send the identical body, so only the mode tells "
+                     "them apart",
+           "apps/infrx-api/infrx/gateway/routes/ingress.py",
+           "    if request.execution_mode is not ExecutionMode.async_:\n",
+           "    if True:\n",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
 )
 
 

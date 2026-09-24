@@ -57,67 +57,17 @@ if importlib.util.find_spec("infrx") is None:
 # `test_stage.py` holds all of them to tasks.json.
 #
 # E3B's own owner references (R3-1): work no task schedules, named by what it is and who
-# owns it - never stale, never a task. E3B phase 3: `G2-R1` (the held cutover) is retired, the
-# cutover mounted the ingress; `M3-U1` is the coordinator's ruling (the M lane
-# `codex/m-pilot-media` fixes it, and its merge retires the reference).
-OWNERS = {"M3-U1": "M: the real media staging (MediaStaging.materialize) must resolve "
-                   "finalized infrx-upload:upl_… refs from the object store as the contract "
-                   "fake does; today it accepts only http(s)/data: sources",
-          # E3B phase 3 review J2: the coordinator's text; the M lane retires it too.
-          "M3-U2": "M: persist the attach (MediaUploads.by_job) and the processing-cache "
-                   "index (ProcessingCache.entries) so a worker process resolves local_uri for "
-                   "media the gateway prepared; today both are process memory (G2 R2-4, "
-                   "I2B-R4)"}
+# owns it - never stale, never a task. E3B phase 3: `G2-R1` (the held cutover) retired with
+# the mount; `M3-U1` (upload refs refused by the real staging) and `M3-U2` (media prepared in
+# one process unreadable in another) retired with M's pilot-media merge - every journey cell
+# runs. A new one is added only with a case that names it (test_stage holds both ways).
+OWNERS: dict[str, str] = {}
 # E3B phase 3: D5 merged (terminalize, grant_credit, reconcile, the G6B adapters), so it is
 # no id here; the cases that pended on it (dr07c, dr07[postgres], every journey) run.
 PENDING = {**OWNERS}
 # Merged tasks still in the vocabulary, and why. Integration request #2 asks I3B to rename
 # its blockers; E3B's own cases may not name these (`pending()` refuses them).
 RESIDUAL: dict[str, str] = {}
-
-
-def upload_refs_refused() -> bool:
-    """M3-U1's structural probe (review H-N1), in process, no stack: M's REAL media store
-    (`MediaUploads` over the in-memory object store) finalizes an upload of M's synthetic clip,
-    then prepares a chat that names it. True while the staging still refuses the reference as
-    "a media source must be an http(s) or data: URL"; False the day it resolves it - and then
-    the video_upload cells must run, not pend. Anything else is raised."""
-    import hashlib
-
-    from infrx.contracts import errors
-    from infrx.contracts.conformance import builders as b
-    from infrx.contracts.fakes.support import FakeClock, SequentialIds
-    from infrx.media.store import InMemoryObjectStore
-    from infrx.media.uploads import MediaUploads
-    spec = importlib.util.spec_from_file_location(
-        "e3b3_probe_m_support", harness.API_ROOT / "tests" / "m" / "support.py")
-    support = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(support)
-    clip = support.mp4(seconds=10.0)
-
-    class Rig:
-        clock, ids = FakeClock(), SequentialIds()
-
-    async def probe() -> bool:
-        media = MediaUploads(InMemoryObjectStore())
-        ticket = await media.create_upload(b.ORG_A, {
-            "bytes": len(clip), "digest": "sha256:" + hashlib.sha256(clip).hexdigest(),
-            "accepted_mime": ["video/mp4"]})
-        handle = ticket["upload_handle"] if isinstance(ticket, dict) else ticket.upload_handle
-        await media.put_upload(b.ORG_A, handle, clip, "video/mp4")
-        await media.finalize_upload(b.ORG_A, handle)
-        request = b.request(Rig, org_id=b.ORG_A).model_copy(update={"messages": (
-            {"role": "user", "content": [
-                {"type": "text", "text": "What happens?"},
-                {"type": "video_url", "video_url": {"url": f"infrx-upload:{handle}"}}]},)})
-        try:
-            await media.prepare_request(b.ORG_A, request)
-        except errors.InvalidRequest as refused:
-            if "a media source must be an http(s) or data: URL" in str(refused):
-                return True
-            raise
-        return False
-    return asyncio.run(probe())
 
 
 def pending(*ids: str, why: str):
@@ -502,6 +452,9 @@ def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) ->
             "ACTIVE_RATE_CARD_VERSION": SEED_CARD, "MODEL_ID": CREDIT_ALIAS,
             "PROCESSING_CACHE_DIR": str(workdir / "cache"),
             "USAGE_LOG": str(workdir / "usage.jsonl"),
+            # The cutover's build labels (a pilot refuses to start without them): no release
+            # is installed and no image built here, so both are labels of this suite's own.
+            "INFRX_RELEASE_SHA": "e3b3" + "0" * 36, "INFRX_IMAGE": "sha256:" + "e3b3" * 16,
             "SUPABASE_URL": rest_url or postgrest_url(),
             # the name assembled from parts: test_harness's production-pointer guard scans it
             "SUPABASE_SERVICE" "_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}

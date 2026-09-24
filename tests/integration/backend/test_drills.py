@@ -645,21 +645,35 @@ def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
     run(body)
 
 
-def _newer_card() -> None:
-    """R68: an approved card published AFTER admission, effective now, and the listing that
-    points new admissions at it. It must never reach a job admitted before it."""
+# Review J3: dr07c's ADMITTED card has a fractional input rate, so the half-up rule is
+# exercised: 1200 x 400.0000125 + 340 x 1200 per million = 0.888000015 CREDIT, which is
+# 0.88800002 half up (and 0.88800001 truncated: db14).
+FRACTIONAL_CARD, FRACTIONAL_CHARGE = "rc_e3b3_fractional", Decimal("0.88800002")
+
+
+def _publish_card(card: str, input_rate: str, output_rate: str) -> None:
+    """R68: an approved card effective now, and the alias's next listing pointing new
+    admissions at it."""
     with stack.connect() as conn:
         conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
                      "deployment_revision_id, serving_version_id, input_rate_per_million, "
                      "output_rate_per_million, effective_at, approved_by, provisional) values "
-                     "('rc_e3b3_newer', %s, %s, %s, 4000, 12000, infrx.now(), 'e3b3 drill', "
-                     "true)", (stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING))
+                     "(%s, %s, %s, %s, %s, %s, infrx.now(), 'e3b3 drill', true)",
+                     (card, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING,
+                      input_rate, output_rate))
         conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
                      "deployment_revision_id, serving_version_id, rate_card_version, "
-                     "effective_at, approved_by) values (%s, 2, %s, %s, %s, 'rc_e3b3_newer', "
-                     "infrx.now(), 'e3b3 drill')",
+                     "effective_at, approved_by) select %s, max(version) + 1, %s, %s, %s, %s, "
+                     "infrx.now(), 'e3b3 drill' from infrx.catalog_listings "
+                     "where public_model_id = %s",
                      (stack.CREDIT_ALIAS, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT,
-                      stack.SEED_SERVING))
+                      stack.SEED_SERVING, card, stack.CREDIT_ALIAS))
+
+
+def _newer_card() -> None:
+    """R68: an approved card published AFTER admission, effective now, and the listing that
+    points new admissions at it. It must never reach a job admitted before it."""
+    _publish_card("rc_e3b3_newer", "4000", "12000")
 
 
 def settlement_writes(request_id) -> dict:
@@ -692,7 +706,8 @@ def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
     event, last. The identical retry replays it (the adapter's `SettlementV2` is
     `v2.settle(admission, usage, settled_at)`); a different proposal is `AlreadyTerminal`; a
     late cancel answers the same outcome and writes nothing. The legacy USD books never move;
-    the wallet is conserved per unit."""
+    the wallet is conserved per unit. The admitted card's rate is fractional (review J3), so
+    the charge is the half-up rounding of card x usage, not a truncation."""
     from infrx.contracts.v2 import records as v2
     h = rig("postgres", *RUN, "append", "terminalize", "cancel")
     world = credit_rig(h, "postgres")
@@ -701,8 +716,10 @@ def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
     async def body():
         usd = h.extra["balance"](alpha.org_id)
         before = world.wallet(alpha)
+        _publish_card(FRACTIONAL_CARD, "400.00001250", "1200")
         request = credit_request(h, alpha, world.alias)
         admission = await h.port.admit_credit(request, b.idem(request, "s1"))
+        assert admission.rate_card.rate_card_version == FRACTIONAL_CARD, admission.rate_card
         _newer_card()
         lease = await running(h, admission)
         await h.extra["stream"].append(lease, b.events("answer"))
@@ -719,6 +736,7 @@ def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
         assert settlement == v2.settle(admission, tokens, first.settled_at), \
             f"not the admitted card's settlement: {settlement}"
         charged = admission.rate_card.debit(1200, 340).raw("CREDIT")
+        assert charged == FRACTIONAL_CHARGE, charged
         with pytest.raises(errors.AlreadyTerminal):
             await h.port.complete_credit(lease, b.outcome(request.request_id, h,
                                                           tokens=b.usage(1, 1)))
@@ -729,7 +747,7 @@ def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
             f"not one debit at the admitted card in the settling transaction: {wrote}"
         assert wrote["hold"] == [("settled", tx)], \
             f"the hold was not released in the settling transaction: {wrote}"
-        assert wrote["usage"] == [("credit", charged, world.card, 1200, 340, tx)], wrote
+        assert wrote["usage"] == [("credit", charged, FRACTIONAL_CARD, 1200, 340, tx)], wrote
         assert wrote["projections"] == [("usage_projection", tx)], wrote
         assert [e for e in wrote["events"] if e[0] == "terminal"] == [("terminal", tx)] \
             and wrote["events"][-1][0] == "terminal", f"not one terminal event, last: {wrote}"
@@ -880,6 +898,21 @@ def test_e3b_db12_detects_a_credit_hold_left_held_beside_its_debit(monkeypatch):
     debits and leaves its hold reserved. dr07c's own assertion must report it."""
     monkeypatch.setattr(sys.modules[__name__], "DEFECT", _hold_left_held)
     with pytest.raises(AssertionError, match="hold was not released"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
+
+
+def _debit_truncated():
+    """`infrx.debit_credit` truncating card x usage instead of rounding it half up."""
+    source = stack.function_source("infrx.debit_credit", "text, integer, integer")
+    assert source.count("select round(") == 1, "the rounding moved: the drill is stale"
+    stack.defect(source.replace("select round(", "select trunc("))
+
+
+def test_e3b_db14_detects_a_credit_debit_truncated_instead_of_rounded(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-RATE, review J3): a debit that truncates
+    the admitted card x usage. dr07c's fractional card makes its own assertions report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _debit_truncated)
+    with pytest.raises(AssertionError, match="admitted card"):
         test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
 
 
@@ -1169,9 +1202,10 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
 def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_routers(tmp_path,
                                                                                    monkeypatch):
     """Forced fallback to legacy unmetered ingress, after the cutover: the pilot composition
-    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs)` - the
-    metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
-    uploads - and no route is the legacy F1 chat module (no durable admission, no hold). The
+    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs, metrics)` -
+    the metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
+    uploads, I3B's loopback `/metrics` last (the cutover's item 7, merged with M) - and no
+    route is the legacy F1 chat module (no durable admission, no hold). The
     composition's own module check refuses a second chat handler, the legacy one included.
 
     `create_app` builds EVERY adapter from the pilot environment - the stores on one pool,
@@ -1181,6 +1215,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     from infrx.config import RuntimeMisconfigured, from_env
     from infrx.gateway import app as composition
     from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+    from infrx.observe import route as metrics
     h = stack.pg_jobstore()
     env = stack.pilot_env(h.extra["database"], tmp_path)
     for name in stack.AWS_UNSET:                      # botocore reads the process environment
@@ -1188,7 +1223,8 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
     for name in stack.s3_env():
         monkeypatch.setenv(name, env[name])
     app = composition.create_app(from_env(env))
-    assert composition.ROUTERS == (health, models, ingress, uploads, jobs), composition.ROUTERS
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics), \
+        composition.ROUTERS
     assert app.state.runtime.mode == "pilot"
     served = {(method, route.path): route.endpoint.__module__ for route in app.routes
               for method in (getattr(route, "methods", None) or ())
@@ -1199,6 +1235,7 @@ def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_router
                                                 ingress.JOBS_ROUTES}, served
     assert {module for (_, path), module in served.items()
             if path.startswith("/v1/uploads")} == {uploads.__name__}, served
+    assert served[("GET", metrics.PATH)] == metrics.__name__, served
     assert chat.__name__ not in served.values(), served
     chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
     with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
