@@ -113,3 +113,35 @@ See [load protocol](consumer-v1/05-client-and-load-testing.md) for machine-check
 - **P-06:** add served-bytes digests of `processor_config.json` and `preprocessor_config.json` to the pinned serving record before E4C freezes the candidate.
 - **P-24:** target, window and stop rules exist (S3 §4.2); a versioned profile with numeric request/byte/spend caps does not. The two pre-cutover consumer keys recorded active on 2026-09-24 need a read-only inventory before the next `E4B_WINDOW_OK=1` run.
 - **P-25:** the only hosted backup on record is the coordinator-host dump `hosted-20260924T050746Z`; the hosted backup/PITR policy is ⚠️ TO BE VERIFIED. The box's newest install backup holds 27af05a, which is not a known-good rollback target.
+
+### P-22 — DECIDED (F2C.c, 2026-09-24; applied by the coordinator at the F2C-C merge)
+> **P-22 — DECIDED (proposed by F2C.c, 2026-09-24): resolve, then price.** A request's model
+> string is resolved exactly once, by the catalog grammar `<public_model_id>[@<revision_label>]`
+> (0008 `resolve_admission_pins`; contract `contracts.v2.published_model.split_model`/`resolve`),
+> before any price is read; the price is a property of the resolved revision, not of the
+> spelling. **CREDIT:** admission pins the resolved deployment revision and the card the
+> effective catalog listing names — the one public rate identity `(rate_card_version, CREDIT)`
+> (unchanged from 0011). **Legacy USD:** `infrx.price_versions` is read by the resolved canonical
+> `model_revision` (`<public_model_id>@<revision_label>`), never by the literal request string
+> and never by converting a CREDIT card; one row per revision. Every admitted job records the
+> caller's `requested_model` verbatim beside the immutable canonical `model_revision`,
+> deployment/serving revision and the one price identity of its regime (an omitted `model`
+> records the served default the ingress substituted). **Nothing is rewritten:** `price_versions`
+> rows are immutable and stay referenced by the jobs that snapshotted them; admitted jobs keep
+> their pinned snapshot or card. The W7c row (`pv_marlin2b_usd_2026_09`, keyed
+> `nemostation/marlin-2b`) is no longer read by new admissions (the operator may set its
+> `effective_to`); the W7e row (`pv_marlin2b_usd_2026_09_r1`, keyed
+> `nemostation/marlin-2b@2026-09-01`) is the canonical row, so W7e becomes the permanent rule
+> "one USD row per revision" and "one row per spelling" ends. **Compatibility**
+> (`published/alias_compatibility.json`, 11 spellings): both spellings that priced on the pilot
+> resolve to the same deployment at identical rates and token rules (0.10/0.30 USD per million,
+> tr-1); the unlabelled spelling's future requests record `…_r1` instead of
+> `pv_marlin2b_usd_2026_09`; every spelling refused before stays `not_found`. **Rate identity
+> (S3 F11):** the public identity is the listing's card, `rc_marlin2b_2026_09_provisional` on the
+> hosted catalog; `marlin_release()`'s `rc_marlin2b_<ts>_provisional_p01` is a locally computed
+> label, not persisted on the hosted catalog and not a public identity; history maps through each
+> job's pinned id. Owners: D10 (new migration: `admit_legacy_usd` resolves through the listing
+> before `price_versions`, records `requested_model` for legacy jobs; `CatalogDirectory`
+> returns the listing's card), G7 (discovery from the projection), G8 (publication moves the
+> listing to the published card atomically). Evidence:
+> `research/plan/evidence/f/F2C-catalog-d414607.md`.
