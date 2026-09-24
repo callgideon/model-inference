@@ -93,10 +93,19 @@ def check_namespace(name: str, spec: dict, containers: list[str] | None) -> dict
     ports, prefixes = namespace(spec)
     busy = [port for port in ports if not port_free(port)]
     stale = [c for c in containers or [] if c.startswith(tuple(prefixes))]
+    holders = {port: holder(port) for port in busy} if containers is not None else {}
     return {"check": f"namespace:{name}", "status": "busy" if busy or stale else "ok",
             "ports": ports, **({"busy_ports": busy} if busy else {}),
+            **({"held_by": holders} if holders else {}),
             **({"existing_containers": stale,
                 "detail": "another run (or a crashed one) holds this namespace"} if stale else {})}
+
+
+def holder(port: int) -> str:
+    """Which container publishes a busy port, for the report; '' = not a container."""
+    done = subprocess.run(["docker", "ps", "--filter", f"publish={port}", "--format",
+                           "{{.Names}}"], capture_output=True, text=True, timeout=30)
+    return done.stdout.strip()
 
 
 def containers() -> list[str] | None:
