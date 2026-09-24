@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T20:15:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T21:15:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-24T20:15:00Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — run2 measured (envelope 0.5/s; e2e p95 91 s/clip-min; soak 65 min clean; overload typed-429 loss -> INTAKE-DRAIN merged); drills 1-3 measured; E1B L2/L3/L5/L6 measured through the edge (real inference on the distinct-keys rerun); all fix lanes merged at bda1586; gates running -> main -> third install -> certification run3 -> release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — THIRD RELEASE bda1586 DEPLOYED (main b9ad1d8; rollback drill 5 s; W12 15/15; LARGE_BODY_LIMIT=8); run2 measured; drills 1-3 + rollback measured; E1B cells measured; certification run3 (corrected runner, certify image) next -> release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
@@ -95,7 +95,7 @@ Generated 2026-09-24T20:15:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review FLEET: TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z
 - review CERTIFY-POLISH: MERGED bda1586 (re-verify pass at 5b3c997; JSON evidence/e/CERTIFY-POLISH-verify-5b3c997.json) since 2026-09-24T20:12:00Z
 - review E1B-gateway: first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run since 2026-09-24T19:27:00Z
-- review gate-3: gate-3 on 95fbb90 in its last stages + delta gate on bda1586 running; main -> bda1586 on green; then the third install since 2026-09-24T20:15:00Z
+- review gate-3: gate-3 (95fbb90) + delta (bda1586) green; main -> b9ad1d8; third install done 20:06Z since 2026-09-24T20:45:00Z
 
 ## Checkpoints
 
@@ -131,6 +131,7 @@ Generated 2026-09-24T20:15:00Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-24T18:58:00Z: CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -> 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round
 - 2026-09-24T19:30:00Z: Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -> INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -> notes; step-6 drills started
 - 2026-09-24T20:15:00Z: All 2026-09-24 fix lanes merged on claude/backend-impl (CERTIFY-TREE 4db74b6, TOKCOST 95fbb90, INTAKE-DRAIN a163953, CERTIFY-POLISH bda1586); rulings R106-R108; platform handoff 20-platform-handoff-2026-09-24.md; drills 1-3 + E1B cells measured; gates running before main moves
+- 2026-09-24T21:00:00Z: main fast-forwarded to b9ad1d8 (gate-3 + delta green); THIRD RELEASE bda1586 deployed on the box (rollback drill 5 s to 27af05a and ready; install image cc2a80c9; W11/W12 15/15; LARGE_BODY_LIMIT=8); certify image built; run3 prepared
 
 ## Authorizations
 

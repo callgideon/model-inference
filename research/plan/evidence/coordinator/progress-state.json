@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T20:15:00Z",
+  "updated": "2026-09-24T21:15:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "run2 measured (envelope 0.5/s; e2e p95 91 s/clip-min; soak 65 min clean; overload typed-429 loss -> INTAKE-DRAIN merged); drills 1-3 measured; E1B L2/L3/L5/L6 measured through the edge (real inference on the distinct-keys rerun); all fix lanes merged at bda1586; gates running -> main -> third install -> certification run3 -> release decision",
+      "phase": "THIRD RELEASE bda1586 DEPLOYED (main b9ad1d8; rollback drill 5 s; W12 15/15; LARGE_BODY_LIMIT=8); run2 measured; drills 1-3 + rollback measured; E1B cells measured; certification run3 (corrected runner, certify image) next -> release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
@@ -130,8 +130,8 @@
       "since": "2026-09-24T19:27:00Z"
     },
     "gate-3": {
-      "phase": "gate-3 on 95fbb90 in its last stages + delta gate on bda1586 running; main -> bda1586 on green; then the third install",
-      "since": "2026-09-24T20:15:00Z"
+      "phase": "gate-3 (95fbb90) + delta (bda1586) green; main -> b9ad1d8; third install done 20:06Z",
+      "since": "2026-09-24T20:45:00Z"
     }
   },
   "gates": {
@@ -333,6 +333,10 @@
     {
       "at": "2026-09-24T20:15:00Z",
       "what": "All 2026-09-24 fix lanes merged on claude/backend-impl (CERTIFY-TREE 4db74b6, TOKCOST 95fbb90, INTAKE-DRAIN a163953, CERTIFY-POLISH bda1586); rulings R106-R108; platform handoff 20-platform-handoff-2026-09-24.md; drills 1-3 + E1B cells measured; gates running before main moves"
+    },
+    {
+      "at": "2026-09-24T21:00:00Z",
+      "what": "main fast-forwarded to b9ad1d8 (gate-3 + delta green); THIRD RELEASE bda1586 deployed on the box (rollback drill 5 s to 27af05a and ready; install image cc2a80c9; W11/W12 15/15; LARGE_BODY_LIMIT=8); certify image built; run3 prepared"
     }
   ],
   "cadence_windows": [

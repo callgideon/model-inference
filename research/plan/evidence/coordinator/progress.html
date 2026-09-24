@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T20:15:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T21:15:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>28</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -96,7 +96,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>E1B</code> — codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
-<li><code>E4B</code> — codex-e4b / codex/e4b-certify — run2 measured (envelope 0.5/s; e2e p95 91 s/clip-min; soak 65 min clean; overload typed-429 loss -&gt; INTAKE-DRAIN merged); drills 1-3 measured; E1B L2/L3/L5/L6 measured through the edge (real inference on the distinct-keys rerun); all fix lanes merged at bda1586; gates running -&gt; main -&gt; third install -&gt; certification run3 -&gt; release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
+<li><code>E4B</code> — codex-e4b / codex/e4b-certify — THIRD RELEASE bda1586 DEPLOYED (main b9ad1d8; rollback drill 5 s; W12 15/15; LARGE_BODY_LIMIT=8); run2 measured; drills 1-3 + rollback measured; E1B cells measured; certification run3 (corrected runner, certify image) next -&gt; release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
 <li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
@@ -125,7 +125,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>FLEET</code> — TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z</li>
 <li>review <code>CERTIFY-POLISH</code> — MERGED bda1586 (re-verify pass at 5b3c997; JSON evidence/e/CERTIFY-POLISH-verify-5b3c997.json) since 2026-09-24T20:12:00Z</li>
 <li>review <code>E1B-gateway</code> — first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run since 2026-09-24T19:27:00Z</li>
-<li>review <code>gate-3</code> — gate-3 on 95fbb90 in its last stages + delta gate on bda1586 running; main -&gt; bda1586 on green; then the third install since 2026-09-24T20:15:00Z</li>
+<li>review <code>gate-3</code> — gate-3 (95fbb90) + delta (bda1586) green; main -&gt; b9ad1d8; third install done 20:06Z since 2026-09-24T20:45:00Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
@@ -159,6 +159,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-24T18:58:00Z</span> — CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -&gt; 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round</li>
 <li><span class="meta">2026-09-24T19:30:00Z</span> — Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -&gt; INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -&gt; notes; step-6 drills started</li>
 <li><span class="meta">2026-09-24T20:15:00Z</span> — All 2026-09-24 fix lanes merged on claude/backend-impl (CERTIFY-TREE 4db74b6, TOKCOST 95fbb90, INTAKE-DRAIN a163953, CERTIFY-POLISH bda1586); rulings R106-R108; platform handoff 20-platform-handoff-2026-09-24.md; drills 1-3 + E1B cells measured; gates running before main moves</li>
+<li><span class="meta">2026-09-24T21:00:00Z</span> — main fast-forwarded to b9ad1d8 (gate-3 + delta green); THIRD RELEASE bda1586 deployed on the box (rollback drill 5 s to 27af05a and ready; install image cc2a80c9; W11/W12 15/15; LARGE_BODY_LIMIT=8); certify image built; run3 prepared</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
