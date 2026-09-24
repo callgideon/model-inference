@@ -2142,6 +2142,63 @@
       "cases": [
         "the refusal map is the committed table, reason for reason"
       ]
+    },
+    {
+      "id": "V2-LC-07",
+      "entry": "v2",
+      "note": "F2C.b: an expired result is rendered available at its expiry instant",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  return before(now, outcome.result_expires_at) ? \"available\" : \"expired\";",
+      "replace": "  return !before(outcome.result_expires_at, now) ? \"available\" : \"expired\";",
+      "cases": [
+        "every read outcome is the committed cross-language table",
+        "an old terminal record decodes with NO expiry and is never available"
+      ]
+    },
+    {
+      "id": "V2-LC-08",
+      "entry": "v2",
+      "note": "F2C.b: an old record is given an invented expiry (settled_at + 24 h)",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (outcome.result_expires_at === undefined) return \"unavailable\";",
+      "replace": "  if (outcome.result_expires_at === undefined) return Date.parse(now) < Date.parse(outcome.settled_at) + 86_400_000 ? \"available\" : \"expired\";",
+      "cases": [
+        "every read outcome is the committed cross-language table",
+        "an old terminal record decodes with NO expiry and is never available"
+      ]
+    },
+    {
+      "id": "V2-LC-09",
+      "entry": "v2",
+      "note": "F2C.b: a result expiry decodes on any outcome, or at settlement",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "    if (state !== \"succeeded\" || !(\"result_ref\" in obj) || !before(settled, expires)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "a terminal outcome decodes exactly, and the expiry only where it belongs"
+      ]
+    },
+    {
+      "id": "V2-LC-10",
+      "entry": "v2",
+      "note": "F2C.b: a held reservation reads as a plain failure",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (outcome.settlement_state === \"held_unknown\") return \"held_unknown\";",
+      "replace": "",
+      "cases": [
+        "every read outcome is the committed cross-language table"
+      ]
+    },
+    {
+      "id": "V2-LC-11",
+      "entry": "v2",
+      "note": "F2C slice-a finding F8: an aborted ticket decodes with an internal refusal",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (\"refusal\" in obj) member(obj, \"refusal\", UPLOAD_ABORT_REASONS);",
+      "replace": "  if (\"refusal\" in obj) member(obj, \"refusal\", LIFECYCLE_REFUSALS);",
+      "cases": [
+        "a missing required or an unexpected field throws, deterministically"
+      ]
     }
   ]
 }

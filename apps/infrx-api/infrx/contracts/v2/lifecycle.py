@@ -38,18 +38,20 @@ serialized: a route renders the code only (`refusal_of(error)` reads it back).
 from __future__ import annotations
 
 import enum
+from datetime import timedelta
 from typing import Protocol, runtime_checkable
 
-from pydantic import Field, StrictInt, ValidationError, model_validator
+from pydantic import Field, StrictFloat, StrictInt, ValidationError, model_validator
 
 from .. import errors, ids
-from ..records import (Admission, IdempotencyRef, Lease, MediaRef, NormalizedRequest,
-                       UploadState)
+from ..records import (Admission, IdempotencyRef, JobState, Lease, MediaRef, NormalizedRequest,
+                       SettlementState, TerminalOutcome, UploadState)
 from .records import AccountingRegime, AdmissionV2, RecordV2, Sha256, Timestamp, UuidStr
 
 # The one reference form a caller may name (R61(1)); media/uploads.py and
 # gateway/routes/validate.py spell the same string today.
 DESTINATION_SCHEME = "infrx-upload:"
+CONSTRAINT_NAMES = frozenset({"max_bytes", "bytes", "accepted_mime", "digest"})
 MAX_PAGE = 1000
 # ponytail: one fixed retry hint for `content_retiring`; a per-sweep estimate if clients
 # ever retry too hard. The window is normally one collector pass.
@@ -101,6 +103,7 @@ class LifecycleRefusal(enum.StrEnum):
     size_mismatch = "size_mismatch"
     digest_mismatch = "digest_mismatch"
     mime_not_accepted = "mime_not_accepted"
+    media_refused = "media_refused"                # M's probe refused the container
     invalid_manifest = "invalid_manifest"
     expectation_mismatch = "expectation_mismatch"  # the pinned card is not the runtime's
     not_ready = "not_ready"
@@ -123,6 +126,7 @@ REFUSAL_ERRORS: dict[LifecycleRefusal, type[errors.DomainError]] = {
     LifecycleRefusal.size_mismatch: errors.InvalidRequest,
     LifecycleRefusal.digest_mismatch: errors.UnsupportedMedia,
     LifecycleRefusal.mime_not_accepted: errors.UnsupportedMedia,
+    LifecycleRefusal.media_refused: errors.UnsupportedMedia,
     LifecycleRefusal.invalid_manifest: errors.InvalidRequest,
     LifecycleRefusal.expectation_mismatch: errors.InvalidRequest,
     LifecycleRefusal.not_ready: errors.NotClaimable,
@@ -132,6 +136,13 @@ REFUSAL_ERRORS: dict[LifecycleRefusal, type[errors.DomainError]] = {
     LifecycleRefusal.claim_held: errors.NotClaimable,
     LifecycleRefusal.claim_lost: errors.StaleLease,
 }
+
+
+# The only reasons an upload ticket may record as aborted: all public, all about the
+# caller's own bytes, so a browser-safe ticket can never carry an internal refusal.
+UPLOAD_ABORT_REASONS = frozenset({
+    LifecycleRefusal.too_large, LifecycleRefusal.size_mismatch, LifecycleRefusal.digest_mismatch,
+    LifecycleRefusal.mime_not_accepted, LifecycleRefusal.media_refused})
 
 
 def refuse(reason: LifecycleRefusal, detail: str) -> errors.DomainError:
@@ -180,7 +191,9 @@ class UploadConstraints(RecordV2):
         never ignored."""
         if not isinstance(body, dict):
             raise refuse(LifecycleRefusal.invalid_constraints, "constraints are an object")
-        # An unknown name is refused by the record itself (`extra="forbid"`).
+        if set(body) - CONSTRAINT_NAMES:            # `schema_version` is a field, not a name
+            raise refuse(LifecycleRefusal.invalid_constraints,
+                         f"unknown constraints {sorted(map(str, set(body) - CONSTRAINT_NAMES))}")
         values = {"max_bytes": max_media_bytes, "accepted_mime": tuple(sorted(allowed_mime)),
                   **{name: value for name, value in body.items() if value is not None}}
         try:
@@ -214,7 +227,7 @@ class FinalizedSource(RecordV2):
     bytes: StrictInt = Field(ge=0)
     mime: str = Field(min_length=1)
     profile_version: str = Field(min_length=1)
-    duration_s: float = Field(ge=0)
+    duration_s: StrictFloat = Field(ge=0, allow_inf_nan=False)
     finalized_at: Timestamp
 
 
@@ -230,7 +243,7 @@ class UploadTicket(RecordV2):
     expires_at: Timestamp
     received: UploadReceipt | None = None
     finalized: FinalizedSource | None = None
-    refusal: LifecycleRefusal | None = None       # why it was aborted
+    refusal: LifecycleRefusal | None = None       # why it was aborted: UPLOAD_ABORT_REASONS
 
     @model_validator(mode="after")
     def _one_fact(self) -> UploadTicket:
@@ -243,6 +256,8 @@ class UploadTicket(RecordV2):
             raise ValueError("finalized exactly when a finalized source is recorded")
         if (self.state is UploadState.aborted) != (self.refusal is not None):
             raise ValueError("aborted exactly when a refusal is recorded")
+        if self.refusal is not None and self.refusal not in UPLOAD_ABORT_REASONS:
+            raise ValueError("a ticket records only a public upload refusal")
         if received is not None and (received.bytes > c.max_bytes or not
                                      self.created_at <= received.received_at < self.expires_at):
             raise ValueError("a receipt is within the cap and the window")
@@ -290,8 +305,9 @@ class UploadRepository(Protocol):
 
     async def abort(self, org_id: str, upload_handle: str,
                     refusal: LifecycleRefusal) -> UploadTicket:
-        """M's own final refusal (an unreadable container, ...). Idempotent; a finalized
-        ticket is `upload_not_open`."""
+        """M's own final refusal, one of `UPLOAD_ABORT_REASONS` (else `invalid_request`).
+        Idempotent: an aborted ticket answers as it stands; a finalized or expired one is
+        `upload_not_open`."""
 
     async def resolve(self, org_id: str, upload_handle: str) -> UploadTicket:
         """The finalized ticket for use (R99): `not_found`, then `upload_expired` from
@@ -392,7 +408,10 @@ class ReadinessStore(Protocol):
         `content_retiring`, `invalid_manifest` for a repeat) - and (c) the manifest, its
         references and the marker. A refusal admits nothing: no job, hold or outbox. A
         replay answers the recorded pair; a job the previous runtime admitted replays with
-        `None` (it has no marker)."""
+        `None` (it has no marker). Both regimes: a legacy expectation names no card and has
+        no pinned revision to recheck. `JobStore.admit` and `CreditJobStore.admit_credit`
+        NEVER write a marker - a job they admit is `not_ready` until its preparation
+        deadline ends it (the cutover rule in 02)."""
 
     async def readiness(self, job_id: str) -> ExecutionReadiness | None:
         """The committed marker, or None when none was ever completed."""
@@ -513,6 +532,19 @@ class ContentLifecycle(Protocol):
     a terminal one before its `retain_until`; its own `job_id`'s job is non-terminal (or
     before that job's `retain_until`); it is an upload destination whose ticket is open and
     unexpired; it is the source a finalized, unexpired ticket names.
+
+    `retain_until` per kind (F2C.b), set once at terminalization: a `result` lasts exactly
+    until the outcome's persisted `result_expires_at` (a job with none keeps no result);
+    every other kind until settlement + the configured serving retention for it (P-25).
+
+    Deleting `database` content is a SCRUB (D3): the tombstoned row's body is emptied in
+    one transaction and the acknowledgement records it; the job row, idempotency tombstone,
+    terminal outcome, usage, settlement and ledger rows and the content's digest and size
+    stay. A scrubbed result reads `result_expired` (never empty text, never regenerated),
+    and because a result is eligible only from its persisted expiry, `read_outcome` already
+    answers `expired` for it. D10 replaces 0014's `job_results_immutable` trigger with a
+    guard allowing exactly that scrub (body -> empty, `scrubbed_at` null -> now, only when
+    `now >= jobs.result_expires_at` or the job keeps no result) and nothing else.
     """
 
     async def register(self, identity: ContentIdentity) -> ContentObject:
@@ -549,12 +581,81 @@ class ContentLifecycle(Protocol):
         newer claim superseded is `claim_lost`."""
 
 
+# --- F2C.b: terminal/read consistency ----------------------------------------------------
+class ReadOutcome(enum.StrEnum):
+    """Every answer a committed job can give a reader (status, result, replay, console).
+
+    | read | when | result route | status `result_available` / `result_expires_at` |
+    |---|---|---|---|
+    | `pending` | not terminal | 409 `result_pending` | false / absent |
+    | `available` | success with a result and authoritative usage, `now < result_expires_at` | 200 with the response | true / the persisted instant |
+    | `no_result` | failed, cancelled or expired job; a success the store rewrote (R30) | 200, no response | false / absent |
+    | `held_unknown` | usage unknown, reservation held for reconciliation | 200, no response | false / absent |
+    | `expired` | success past its PERSISTED expiry (scrubbed or not) | 410 `result_expired` | false / absent |
+    | `unavailable` | success with no persisted expiry (a record from before F2C.b) | 410 `result_expired` | false / absent |
+
+    `unavailable` is fail-closed: an expiry is never recomputed from configuration.
+    Metadata (state, cause, usage, settlement) stays readable in every row.
+    """
+
+    pending = "pending"
+    available = "available"
+    no_result = "no_result"
+    held_unknown = "held_unknown"
+    expired = "expired"
+    unavailable = "unavailable"
+
+
+def read_outcome(outcome: TerminalOutcome | None, now) -> ReadOutcome:
+    """The one classification every read path applies, `now` being the STORE clock
+    (`db_now`). Content is served only for `available`; scrubbing happens only after the
+    persisted expiry, so a scrubbed body is always `expired` here."""
+    if outcome is None:
+        return ReadOutcome.pending
+    if outcome.settlement_state is SettlementState.held_unknown:
+        return ReadOutcome.held_unknown
+    if outcome.state is not JobState.succeeded or not outcome.result_ref \
+            or outcome.usage is None:
+        return ReadOutcome.no_result
+    if outcome.result_expires_at is None:
+        return ReadOutcome.unavailable
+    return ReadOutcome.available if now < outcome.result_expires_at else ReadOutcome.expired
+
+
+def result_case_table() -> list[dict]:
+    """`fixtures/v2/result_read_cases.json`: the table both languages must classify
+    identically, built from the v1 terminal fixtures - `terminal_success.json` is a record
+    written before F2C.b (no expiry) and `terminal_success_expiring.json` the same success
+    as the store now commits it."""
+    from ..fixtures import model as v1_model
+    tick = timedelta(microseconds=1)
+    old = v1_model("terminal_success.json")
+    new = v1_model("terminal_success_expiring.json")
+    expires = new.result_expires_at
+    rows = [("not terminal", None, new.settled_at),
+            ("success at settlement", new, new.settled_at),
+            ("success one microsecond before its expiry", new, expires - tick),
+            ("success AT its expiry: equality has passed", new, expires),
+            ("success after its expiry", new, expires + tick),
+            ("pre-F2C.b success at settlement: no expiry is invented", old, old.settled_at),
+            ("pre-F2C.b success before the old TTL would end", old, expires - tick)]
+    rows += [(name.removesuffix(".json"), v1_model(name), new.settled_at)
+             for name in ("terminal_cancelled.json", "terminal_platform_error.json",
+                          "terminal_expired.json", "terminal_unknown_usage.json")]
+    return [{"name": name, "now": now.isoformat().replace("+00:00", "Z"),
+             "expected": read_outcome(outcome, now).value,
+             **({"outcome": outcome.model_dump(mode="json", exclude_none=True)}
+                if outcome is not None else {})}
+            for name, outcome, now in rows]
+
+
 __all__ = [
     "AdmissionExpectation", "ContentIdentity", "ContentKind",
     "ContentLifecycle", "ContentLocation", "ContentObject", "ContentOrigin", "ContentPage",
     "ContentReference", "DESTINATION_SCHEME", "DeletionClaim", "ExecutionReadiness",
     "FinalizedSource", "LifecycleRefusal", "LifecycleState", "MAX_PAGE", "ManifestSource",
-    "REFUSAL_ERRORS", "ReadinessState", "ReadinessStore", "ReadinessView", "Tombstone",
-    "UploadConstraints", "UploadReceipt", "UploadRepository", "UploadTicket",
-    "readiness_view", "refusal_of", "refusal_table", "refuse",
+    "REFUSAL_ERRORS", "ReadinessState", "UPLOAD_ABORT_REASONS", "CONSTRAINT_NAMES", "ReadinessStore", "ReadinessView", "Tombstone",
+    "ReadOutcome", "UploadConstraints", "UploadReceipt", "UploadRepository", "UploadTicket",
+    "read_outcome", "readiness_view", "refusal_of", "refusal_table", "refuse",
+    "result_case_table",
 ]

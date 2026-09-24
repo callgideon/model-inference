@@ -1,0 +1,26 @@
+{
+  "task": "F2C",
+  "lane": "F2C-L",
+  "slice": "a",
+  "activity": "review",
+  "at": "2026-09-24T22:13:51Z",
+  "head": "2d5e4743",
+  "base": "dff31efc",
+  "worktree": ".claude/worktrees/codex-f2c-lifecycle",
+  "branch": "codex/f2c-lifecycle",
+  "owned_paths": ["apps/infrx-api/infrx/contracts/", "apps/app/lib/contracts/", "apps/infrx-api/tests/contracts/", "apps/app/tests/contracts/", "research/plan/01-contracts.md", "research/plan/02-durable-protocols.md", "research/plan/evidence/f/F2C-lifecycle-2d5e474.md"],
+  "commands": [
+    {"cmd": "uv run --frozen pytest -q tests/contracts", "exit": 1, "summary": "1149 passed, 3 failed (HarnessBusy: shared PG port held by codex-e2c-verify; same 3 at base)"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py", "exit": 0, "summary": "48 passed"},
+    {"cmd": "uv run --frozen python -m tests.contracts.mutants <34 lc_* mutants>", "exit": 0, "summary": "34/34 killed"},
+    {"cmd": "uv run --frozen pytest -q tests/m tests/w tests/g -k 'not mutant'", "exit": 0, "summary": "1107 passed, 22 skipped"},
+    {"cmd": "make console-test", "exit": 0, "summary": "294 passed"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "node tests/contracts/run-mutants.mjs --entry v2", "exit": 0, "summary": "36/36 killed (5 new V2-LC-*)"}
+  ],
+  "estimate": {"optimistic_h": 5, "likely_h": 8, "pessimistic_h": 12, "confidence": "med", "basis": "slices b and d remain; b changes the v1 TerminalOutcome consumed by every JobStore suite", "at": "2026-09-24T22:13:51Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/f/F2C-lifecycle-2d5e474.md"]
+}

@@ -44,6 +44,10 @@
     "reason": "mime_not_accepted"
   },
   {
+    "code": "unsupported_media",
+    "reason": "media_refused"
+  },
+  {
     "code": "invalid_request",
     "reason": "invalid_manifest"
   },
