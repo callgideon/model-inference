@@ -988,22 +988,24 @@ def answered(rows: list[dict]) -> tuple:
     return ("answered", decide.PASS if accepted else decide.FAIL, f"{accepted} accepted", "BOX")
 
 
+def cap_verdict(rows: list[dict], counted: list[dict], cap_s: float) -> tuple:
+    """The duration cap at admission (P-20): every attempt over the cap got the typed
+    refusal, and none within it did; nothing sent over the cap judges nothing."""
+    over = [r for r in rows if r not in counted]
+    admitted = sorted({r["clip_id"] for r in over if not refused_over_cap(r)})
+    refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
+    verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
+    return ("duration_cap", verdict, {"over_cap_not_refused": admitted,
+                                      "within_cap_refused": refused, "cap_s": cap_s}, "BOX")
+
+
 def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float) -> list[tuple]:
     """Protocol §4 envelope criteria for one rate. Attempts on clips over the deployed cap
     are the cap's: each must get the typed over-cap refusal at admission, and they are no
     one's failures; a clip within the cap is never refused as over it."""
     counted = judged(rows, clips, cap_s)
-    over = [r for r in rows if r not in counted]
-    out = []
-    if not gateway:
-        out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "BOX"))
-    else:
-        admitted = sorted({r["clip_id"] for r in over if not refused_over_cap(r)})
-        refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
-        verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
-        out.append(("duration_cap", verdict, {"over_cap_not_refused": admitted,
-                                              "within_cap_refused": refused,
-                                              "cap_s": cap_s}, "BOX"))
+    out = [cap_verdict(rows, counted, cap_s) if gateway else
+           ("duration_cap", UNKNOWN, "an engine target has no admission", "BOX")]
     out += [failures(counted), answered(counted)]
     refusals = [r for r in counted if r.get("outcome") == "rejected"]
     out.append(("rejections", decide.FAIL if refusals else decide.PASS,
@@ -1045,11 +1047,16 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
 
 
 def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict,
-                  cap_s: float) -> list[tuple]:
+                  cap_s: float, gateway: bool = False) -> list[tuple]:
     """Protocol §4 soak criteria: failures, memory growth from /metrics, the reconciler's
-    drift at the end, and the latency of the last third against the first."""
+    drift at the end, and the latency of the last third against the first - over the clips
+    within the cap. The envelope judges the cap; on a gateway the soak reports its breach
+    (an over-cap clip admitted, or a within-cap clip refused as over it), never a pass."""
     counted = judged(rows, clips, cap_s)
     out = [failures(counted), answered(counted)]
+    cap = cap_verdict(rows, counted, cap_s)
+    if gateway and cap[1] == decide.FAIL:
+        out.append(cap)
     for name, key, limit in (("host_growth_mib", "rss_mib", CRITERIA["max_host_growth_mib"]),
                              ("gpu_growth_mib", "gpu_used_mib", CRITERIA["max_gpu_growth_mib"])):
         grew = decide.growth([sample.get(key) for sample in samples])
@@ -1161,8 +1168,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                        requests=max(1, round(rate * soak["seconds"])),
                        dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
         verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips,
-                                 cap_s) + [
-            client_exit(done["exit"])]
+                                 cap_s, gateway) + [client_exit(done["exit"])]
         status, owners = summarise(verdicts)
         report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
                                             "client_exit": done["exit"], "verdicts": verdicts,

@@ -1047,6 +1047,21 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     assert certify.summarise(blind) == (certify.PENDING, ("BOX",))
     assert _verdict(certify.soak_verdicts(rows[:17], flat, clips, CAP),
                     "latency_drift") == "unknown"
+    # the soak judges its failures within the cap and, on a gateway, reports a cap breach:
+    # an over-cap clip admitted (then failed) is the cap's defect, not a soak failure
+    admitted = [*rows, dict(_attempt("over", "failed", error="stream_error_event"), send_s=99)]
+    engine = certify.soak_verdicts(admitted, flat, clips, CAP)
+    assert [row[0] for row in engine] == [row[0] for row in certify.soak_verdicts(
+        rows, flat, clips, CAP)] and _verdict(engine, "failure_rate") == "pass"
+    gateway = certify.soak_verdicts(admitted, flat, clips, CAP, gateway=True)
+    assert _verdict(gateway, "failure_rate") == "pass" and [
+        row for row in gateway if row[0] == "duration_cap"] == [(
+        "duration_cap", "fail", {"over_cap_not_refused": ["over"], "within_cap_refused": [],
+                                 "cap_s": CAP}, "BOX")]
+    typed = [*rows, _attempt("over", "rejected", status=certify.OVER_CAP["http_status"],
+                             code=certify.OVER_CAP["code"])]
+    assert "duration_cap" not in [row[0] for row in certify.soak_verdicts(
+        typed, flat, clips, CAP, gateway=True)]            # the envelope judges; never a pass
 
 
 def test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx():
@@ -1098,6 +1113,8 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         seen.append((name, float(argv[argv.index("--rate") + 1]),
                      int(argv[argv.index("--requests") + 1])))
         rows = [dict(_attempt("c039-bbb1080p30-1080-square"), send_s=i) for i in range(20)]
+        if name.startswith("soak"):                     # a 112 s clip the gateway admitted
+            rows.append(dict(_attempt("c012-bbb1080p30-1024x768-4x3"), send_s=20))
         if name.startswith("overload"):
             rows = [_attempt("c039-bbb1080p30-1080-square")] + [
                 _attempt("c039-bbb1080p30-1080-square", "rejected", status=429,
@@ -1135,6 +1152,9 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
     assert seen[-1][2] == box["overload"]["burst"]
     assert report.stages[-1]["status"] == certify.PASS
+    soak = report.stages[-2]
+    assert (soak["stage"], soak["status"]) == ("e4b.b.soak", certify.FAIL)
+    assert ["duration_cap", "fail"] in [list(row[:2]) for row in soak["detail"]["verdicts"]]
 
 
 def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(
