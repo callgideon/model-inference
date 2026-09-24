@@ -18,10 +18,11 @@ claims. One pass:
 3. only after the tombstone commits, the **external delete**, outside every lock and
    idempotent. Objects are addressed by generation (`generation_key`), so a delete that is
    delayed past its lease can only remove the generation it tombstoned - never the next
-   one written later under the same logical key. Database content is scrubbed through the
-   store (`lifecycle.scrub`), which keeps the row's metadata (D3).
-4. **acknowledge_delete**. A lost acknowledgement leaves the row tombstoned: unreadable,
-   and a candidate again once the claim lapses, when the delete is simply repeated.
+   one written later under the same logical key. Database content has no external step.
+4. **acknowledge_delete** - for database content this is the scrub (F2C.b): the store
+   empties the body in that transaction and keeps the row's metadata (D3). A lost
+   acknowledgement leaves the row tombstoned: unreadable, and a candidate again once the
+   claim lapses, when the delete is simply repeated.
 
 Retain and report: a database or object store that does not answer ends the pass with
 what was not yet deleted kept. The claim TTL must exceed the object-store request timeout
@@ -134,27 +135,30 @@ class RetentionCollector:
         except (errors.NotClaimable, errors.StaleLease, errors.NotFound) as refused:
             report.retained[_reason(refused)] += 1
             return
+        erased = (str(tombstone.location), tombstone.object_key, tombstone.generation)
         in_database = tombstone.location == "database"
-        try:
-            if in_database:             # content-bearing columns: the store scrubs them (D3)
-                await self.lifecycle.scrub(tombstone)
-            else:
+        if not in_database:
+            try:
                 await self.objects.delete(generation_key(tombstone.object_key,
                                                          tombstone.generation))
-        except errors.DependencyUnavailable:
-            report.delete_failed += 1
-            report.aborted = "dependency_unavailable" if in_database \
-                else "object_store_unavailable"
-            return
-        report.deleted.append((str(tombstone.location), tombstone.object_key,
-                               tombstone.generation))
+            except errors.DependencyUnavailable:
+                report.delete_failed += 1
+                report.aborted = "object_store_unavailable"
+                return
+            report.deleted.append(erased)
         try:
+            # For database content this IS the scrub (F2C.b, D3): the store empties the body
+            # and records it in one transaction; the row's metadata stays.
             await self.lifecycle.acknowledge_delete(tombstone)
         except errors.StaleLease:
             report.retained["claim_lost"] += 1          # a newer claim finishes it
+            return
         except errors.DependencyUnavailable:
             report.ack_lost += 1
             report.aborted = "dependency_unavailable"
+            return
+        if in_database:
+            report.deleted.append(erased)
 
     async def run(self, interval_s: float, *, sleep=asyncio.sleep) -> None:
         """The schedule hook: one pass every `interval_s`, forever. A failed pass is

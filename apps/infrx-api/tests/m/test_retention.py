@@ -427,6 +427,8 @@ def test_every_content_kind_goes_and_the_financial_metadata_stays(make_draft_wor
     assert sorted(deleted(report)) == sorted(row.identity.object_key for name, row
                                              in rows.items() if name != "upload")
     assert world.objects.objects == {}
+    assert not any(key.startswith("job") for key in world.objects.deletes), \
+        "database content was sent to the object store"
     for name in ("request_text", "result"):
         assert run(world.port.body(rows[name].identity.object_key)) is None, name
     assert run(world.port.job(job)) == settled
@@ -455,8 +457,9 @@ def test_the_persisted_result_expiry_is_the_boundary_not_todays_configuration(ma
 
 
 def test_a_failed_scrub_keeps_the_expired_result_unreadable_and_is_retried(make_draft_world):
-    """A database that fails the scrub leaves the body in place, the row tombstoned and
-    the result unreadable; the pass says so, and a later one finishes it."""
+    """The scrub is the acknowledgement's transaction (F2C.b). A database that fails it
+    leaves the body in place, the row tombstoned and the result unreadable; the pass says
+    so, and a later one finishes it."""
     world = make_draft_world()
     job = new_id()
     run(world.port.admit(job, **METADATA))
@@ -467,8 +470,8 @@ def test_a_failed_scrub_keeps_the_expired_result_unreadable_and_is_retried(make_
 
     async def down(tombstone):
         raise errors.DependencyUnavailable("the database did not answer")
-    report = run(collector(world, port=Interpose(world.port, scrub=down)).sweep())
-    assert (report.delete_failed, report.aborted) == (1, "dependency_unavailable")
+    report = run(collector(world, port=Interpose(world.port, acknowledge_delete=down)).sweep())
+    assert (report.ack_lost, report.aborted, deleted(report)) == (1, "dependency_unavailable", [])
     assert run(world.port.row(result.content_id)).state == "tombstoned"
     assert run(world.read(result)) is None
     assert run(world.port.body(f"job_results/{job}")) == "the answer"

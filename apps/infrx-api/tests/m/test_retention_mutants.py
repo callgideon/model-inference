@@ -78,18 +78,23 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except (errors.NotClaimable, errors.StaleLease, errors.NotFound) as refused:",
        "        except errors.NotFound as refused:", ATTACH_RACE, CLAIM_EXPIRED),
     _m("m6_delete_failure_does_not_stop", "a store that refuses a delete ends the pass",
-       '            report.aborted = "dependency_unavailable" if in_database \\\n                else "object_store_unavailable"\n            return',
-       "            return", FAILED_DELETE, SCRUB_FAILED),
+       '                report.aborted = "object_store_unavailable"\n                return',
+       "                pass", FAILED_DELETE),
     _m("m6_delete_failure_unreported", "a failed delete is counted",
-       "            report.delete_failed += 1\n", "", FAILED_DELETE, SCRUB_FAILED),
+       "                report.delete_failed += 1\n", "", FAILED_DELETE),
     _m("m6_lost_ack_unreported", "a lost acknowledgement is counted",
-       "            report.ack_lost += 1\n", "", LOST_ACK),
+       "            report.ack_lost += 1\n", "", LOST_ACK, SCRUB_FAILED),
+    _m("m6_lost_ack_does_not_stop", "a store that loses an acknowledgement ends the pass",
+       '            report.ack_lost += 1\n            report.aborted = "dependency_unavailable"\n',
+       "            report.ack_lost += 1\n", SCRUB_FAILED),
     _m("m6_pending_age_unmeasured", "the age of an unfinished delete is measured",
        "            if item.tombstoned_at is not None:", "            if False:",
        LOST_ACK, RESTARTED),
     # --- what a delete is -------------------------------------------------------------------
-    _m("m6_database_content_as_object", "database content is scrubbed by the store",
-       "            if in_database:", "            if False:", KINDS, SCRUB_FAILED),
+    _m("m6_database_content_to_the_bucket", "database content never reaches the object store",
+       "        if not in_database:", "        if True:", KINDS),
+    _m("m6_objects_not_deleted", "object content is deleted from the object store",
+       "        if not in_database:", "        if False:", KINDS, RESTART),
     _m("m6_ack_skipped", "a finished delete is acknowledged",
        "            await self.lifecycle.acknowledge_delete(tombstone)", "            pass",
        RESTART, LOST_ACK),
@@ -104,9 +109,9 @@ RUNNER = Runner(name="m6", targets=("tests/m/test_retention.py",
                 env=("INFRX_M6_WORLDS",))
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The acceptance pins: a later generation survives, a foreign key is never deleted, a
-# refusal keeps the object, database content goes through the store.
+# refusal keeps the object, database content never reaches the bucket.
 SUBSET = ("m6_generation_ignored", "m6_any_key_deletable", "m6_refusal_escapes",
-          "m6_database_content_as_object")
+          "m6_database_content_to_the_bucket")
 SELECTED = MUTANTS if FULL_RUN else tuple(m for m in MUTANTS if m.name in SUBSET)
 
 

@@ -15,8 +15,10 @@ Two implementations of the coordinator's draft decisions, one world around each:
   registration generation + 1, and generation n > 1 lives at `generation_key(key, n)`.
 * **D3** - what survives expiry: the job row, its idempotency key, terminal outcome,
   ledger amount and digests. Content (object bytes, database bodies) is removed and the
-  row marked (`deleted`, `scrubbed_at`). A result's boundary is the job's persisted
-  `result_expires_at`; nothing is recomputed from configuration after settlement.
+  row marked (`deleted`, `scrubbed_at`); a database body is emptied by the acknowledgement
+  itself, in its transaction (F2C.b's scrub: "the acknowledgement records the scrub"). A
+  result's boundary is the job's persisted `result_expires_at`; nothing is recomputed from
+  configuration after settlement.
 
 `DraftLifecycle` is in memory (one asyncio lock stands for the row locks, as in F2C-L's
 draft). `PgLifecycleStandIn` is the same contract in real SQL on the task-local PostgreSQL
@@ -308,15 +310,10 @@ class DraftLifecycle:
                 return row                  # an older generation's delete, or a repeat
             if row.state != "tombstoned" or row.claim is None or row.claim.fence != tomb.fence:
                 raise refuse("claim_lost")
+            entry = self.d.bodies.get(tomb.object_key)
+            if row.identity.location == "database" and entry is not None:   # the scrub (F2C.b)
+                entry["body"], entry["scrubbed_at"] = None, self.clock.now()
             return self._save(row, state="deleted", deleted_at=self.clock.now())
-
-    async def scrub(self, tomb: Tomb) -> None:
-        """Database content: the body goes, the marker stays. Only for the tombstoned
-        generation, and idempotent."""
-        async with self.d.lock:
-            row, entry = self.d.rows[tomb.content_id], self.d.bodies.get(tomb.object_key)
-            if row.generation == tomb.generation and row.state == "tombstoned" and entry:
-                entry["body"], entry["scrubbed_at"] = None, entry["scrubbed_at"] or self.clock.now()
 
 
 # --- PostgreSQL --------------------------------------------------------------------------
@@ -589,18 +586,14 @@ class PgLifecycleStandIn:
                     return row
                 if row.state != "tombstoned" or row.claim is None or row.claim.fence != tomb.fence:
                     raise refuse("claim_lost")
+                if row.identity.location == "database":             # the scrub (F2C.b)
+                    await conn.execute("update m6.bodies set body = null, scrubbed_at = "
+                                       "m6.now() where object_key = %s", (tomb.object_key,))
                 await conn.execute("update m6.content set state = 'deleted', deleted_at = "
                                    "m6.now() where content_id = %s", (tomb.content_id,))
                 return await self._locked(conn, tomb.content_id)
         finally:
             await conn.close()
-
-    async def scrub(self, tomb: Tomb) -> None:
-        await self._one(
-            "update m6.bodies b set body = null, scrubbed_at = coalesce(scrubbed_at, m6.now()) "
-            "where object_key = %s and exists (select 1 from m6.content c where c.content_id = "
-            "%s and c.generation = %s and c.state = 'tombstoned') returning 1",
-            (tomb.object_key, tomb.content_id, tomb.generation))
 
 
 # --- the world a case runs in -------------------------------------------------------------
