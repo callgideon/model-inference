@@ -174,8 +174,8 @@ def test_ops_recover__the_worker_drains_before_the_engine_stops():
 
 def test_backend_deploy__runtime_containers_run_unprivileged_and_bounded():
     """Least privilege per process: own uid (gateway != worker), read-only root, no
-    capabilities, no privilege gain, and a memory/pid bound. Only the gateway may write
-    the media root; the worker reads it."""
+    capabilities, no privilege gain, and a memory/pid bound. The worker writes the media
+    root (PREP-WORKER: it prepares every job), beside the gateway."""
     uids = {}
     for name in CONTAINER_UNITS:
         argv = docker_run(name)
@@ -190,7 +190,7 @@ def test_backend_deploy__runtime_containers_run_unprivileged_and_bounded():
     assert uids["marlin2b-gateway.service"] != uids["infrx-worker.service"]
     media = "${PROCESSING_CACHE_DIR}"
     assert f"{media}:{media}" in flag(docker_run("marlin2b-gateway.service"), "-v")
-    assert f"{media}:{media}:ro" in flag(docker_run("infrx-worker.service"), "-v")
+    assert f"{media}:{media}" in flag(docker_run("infrx-worker.service"), "-v")
 
 
 def test_backend_deploy__the_runtime_listens_only_on_loopback():
@@ -234,7 +234,7 @@ def test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file()
     engine = unit("marlin2b-vllm.service")
     assert engine.get("EnvironmentFile") == [ENV_FILE]
     assert engine["ExecStart"] == ["/home/ubuntu/model-inference/models/marlin2b/serve.sh"]
-    create = "+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}"
+    create = "+/usr/bin/install -d -o 10001 -g 10000 -m 2770 ${PROCESSING_CACHE_DIR}"
     for name in ("marlin2b-vllm.service", "marlin2b-gateway.service"):
         assert create in unit(name)["ExecStartPre"], name
     assert "ENGINE_MAX_NUM_SEQS" in preflight.TUNABLE

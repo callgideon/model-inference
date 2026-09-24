@@ -15,11 +15,12 @@ ExecStartPre=-/usr/bin/docker rm -f infrx-gateway
 # The media root R (PROCESSING_CACHE_DIR, one value for the gateway, the worker and the
 # engine) is on the instance-store NVMe, which a stop/start wipes: recreate it with its
 # owner every start rather than let docker create it root-owned. `+`: this one line runs
-# privileged, the container does not.
-ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}
+# privileged, the container does not. Group-writable (2770): the worker (10002, same group)
+# prepares into it since PREP-WORKER.
+ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2770 ${PROCESSING_CACHE_DIR}
 # Least privilege: uid 10001 in group infrx, read-only root, no capabilities, bounded
 # memory/CPU/pids (est. budgets, infra/README.md §2), loopback only - Caddy is the only
-# public listener. The media root is the gateway's to write (M2/M3 preparation).
+# public listener. The media root is writable by the gateway and the worker (preparation).
 ExecStart=/usr/bin/docker run --rm --init --name infrx-gateway --network host \
   --user 10001:10000 --read-only --tmpfs /tmp:rw,size=1g,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \

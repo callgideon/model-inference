@@ -10,7 +10,8 @@ PartOf=marlin2b-vllm.service
 User=ubuntu
 EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-worker
-# Its own uid (10002); reads the media root the gateway writes, through the shared group.
+# Its own uid (10002). PREP-WORKER: it prepares every job, so it writes the media root
+# (PROCESSING_CACHE_DIR, mode 2770 for the shared group: the engine reads what it wrote).
 # `python -m infrx.worker`: the composition root around W3's WorkerService, which also runs
 # the store's recover() reaper (the probe refuses a pilot image without it). It refuses to
 # start (exit 2, the setting named) without its stores, and answers /readyz, /livez and
@@ -22,7 +23,7 @@ ExecStart=/usr/bin/docker run --rm --init --name infrx-worker --network host \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 4g --cpus 2 --pids-limit 256 \
   --env-file /etc/marlin2b-gateway.env \
-  -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR}:ro \
+  -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR} \
   ${INFRX_IMAGE} python -m infrx.worker
 # W3's drain: SIGTERM stops claiming, lets in-flight attempts finish within the deadline,
 # then fences and releases the rest - a released job is requeued by the store, never lost
