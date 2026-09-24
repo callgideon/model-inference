@@ -46,15 +46,29 @@ class Died(Exception):
 
 class World:
     """One deployment: the object store, the attach record and the ticket authority every
-    gateway process shares, and one clock. `durable=False` is M3's authority - a
+    gateway process shares, and one clock. The authority is F2C's reference adapter
+    (`reference`), D10's `PgLifecycle` on the task-local database (`postgres`: its clock is
+    the database's, moved by the case), or - `durable=False` - M3's authority, a
     `ProcessUploads` in each process, which is what RV-02 found composed."""
 
-    def __init__(self, *, durable: bool = True) -> None:
-        self.clock = FakeClock()
+    def __init__(self, *, durable: bool = True, authority: str = "reference") -> None:
         self.objects = store.InMemoryObjectStore()
         self.attachments = support.Durable()
         self.jobs: dict[str, str] = {}              # job id -> org: the relay's record (R55)
-        self.repository = FakeLifecycle(None, self.clock, SequentialIds()) if durable else None
+        self.conn = None
+        if durable and authority == "postgres":
+            from infrx.state import migrations, pgtesting
+
+            from ..d import pgharness, pgstore
+            harness = pgtesting.make_lifecycle_factory(
+                pgstore.fresh_database, pgharness.dsn, migrations.SEED_MARLIN.read_text(),
+                upload_window_s=TTL)()
+            self.clock, self.conn = harness.clock, harness.extra["conn"]
+            self.repository = types.SimpleNamespace(reopen=harness.extra["reopen"])
+        else:
+            self.clock = FakeClock()
+            self.repository = FakeLifecycle(None, self.clock, SequentialIds()) \
+                if durable else None
 
     def process(self, tmp_path=None, *, objects=None, uploads=None, cls=None):
         """A new gateway process: a new adapter over the shared state, nothing in memory."""
@@ -70,7 +84,23 @@ class World:
         return adapter
 
     def ticket(self, handle):
-        return self.repository.d.tickets[handle]
+        """The ticket as the authority holds it (for PostgreSQL, its row)."""
+        if self.conn is None:
+            return self.repository.d.tickets[handle]
+        row = self.conn.execute("select to_jsonb(u) from infrx.media_uploads u "
+                                "where handle = %s", (handle,)).fetchone()[0]
+        return types.SimpleNamespace(
+            state=UploadState(row["state"]),
+            received=row["received_at"] and types.SimpleNamespace(
+                bytes=row["received_bytes"], digest=row["received_digest"]),
+            finalized=row["finalized_at"] and types.SimpleNamespace(digest=row["digest"]))
+
+    def content_keys(self) -> list[str]:
+        """The object keys the authority's content rows name."""
+        if self.conn is None:
+            return sorted(key for _, key in self.repository.d.by_key)
+        return sorted(row[0] for row in self.conn.execute(
+            "select object_key from infrx.content_objects"))
 
     def keys(self, prefix):
         return sorted(key for key in self.objects.objects if key.startswith(prefix))
@@ -95,6 +125,22 @@ class DiesAfter:
             return answer
 
         return committed_then_died
+
+
+_pg = None
+try:
+    from ..d import pgharness as _pgharness
+    _pg = _pgharness.unavailable()
+except Exception as missing:                      # pragma: no cover - env without the rig
+    _pg = str(missing)
+AUTHORITIES = ["reference", pytest.param("postgres", marks=pytest.mark.skipif(
+    bool(_pg), reason=f"D10's PgLifecycle needs the task-local PostgreSQL: {_pg}"))]
+
+
+@pytest.fixture(params=AUTHORITIES)
+def world(request):
+    """The deployment, over each durable authority: F2C's reference and D10's PostgreSQL."""
+    return World(authority=request.param)
 
 
 def create(process, org_id=b.ORG_A, **constraints):
@@ -150,13 +196,14 @@ def test_upload_restart__the_process_local_authority_fails_the_sequence():
 def process_uploads(*, reopen_is_a_new_process: bool = False):
     """A lifecycle-conformance factory over `ProcessUploads`. `reopen` is the same instance
     (one process's memory standing in for a shared store), or - the negative control - a
-    new, empty one: what another gateway process holds."""
-    def factory(limits=None, **_):
+    new, empty one: what another gateway process holds. `upload_ttl_s` is the window the
+    acceptance transcript assumes (`acceptance.CONFIG`)."""
+    def factory(limits=None, *, upload_ttl_s: float = TTL, **_):
         clock, ids = FakeClock(), SequentialIds()
 
         def fresh():
             return uploads.ProcessUploads(now=clock.now, new_handle=ids.upload_handle,
-                                          window_s=TTL)
+                                          window_s=upload_ttl_s)
 
         port = fresh()
         return Harness(port=port, clock=clock, ids=ids, extra={
@@ -184,13 +231,26 @@ def test_the_f2c_restart_case_fails_on_a_process_local_repository():
     assert lifecycle_cases.upload_restart__every_step_survives_a_new_process in UPLOAD_CASES
 
 
+def test_the_f2c_acceptance_transcript_replays_on_the_process_local_repository():
+    """F2C.d acceptance: every committed UPLOAD-RESTART transcript step - each port call's
+    normalized answer or typed refusal, per process, with every clock move - is answered
+    identically by `ProcessUploads` (the readiness and retention cases need ports it does
+    not implement: D10's `PgLifecycle` replays those)."""
+    from infrx.contracts.conformance import acceptance
+    uploads_cases = [name for name in acceptance.committed()["cases"]
+                     if name.startswith("upload_restart__")]
+    assert len(uploads_cases) == len(UPLOAD_CASES)
+    problems = [problem for problem in acceptance.replay(process_uploads())
+                if problem.startswith("upload_restart__")]
+    assert problems == []
+
+
 # --- the sequence ---------------------------------------------------------------------------
-def test_upload_restart__create_put_complete_and_use_each_in_another_process(tmp_path):
+def test_upload_restart__create_put_complete_and_use_each_in_another_process(tmp_path, world):
     """Create in A, PUT in B, complete in C, resolve and admit in D, prepare in E. The ref
     is the one C measured (the verified digest and size, the probed type and duration, the
     content-addressed source key); D's admission and staging name exactly it; E, which
     touched nothing else, prepares the clip. No process keeps anything about the upload."""
-    world = World()
     a, b_, c, d, e = (world.process(tmp_path) for _ in range(5))
     handle = create(a, bytes=len(CLIP), digest=DIGEST, accepted_mime=["video/mp4"])
     put(b_, handle)
@@ -205,8 +265,7 @@ def test_upload_restart__create_put_complete_and_use_each_in_another_process(tmp
     assert prepared[0].handle == handle and prepared[0].duration_s == pytest.approx(10.0)
     assert world.ticket(handle).state is UploadState.finalized
     # every object the sequence wrote had its content row first (F2C, for M6's collector)
-    assert sorted(key for _, key in world.repository.d.by_key) == [
-        ref.storage_ref, destination(handle)]
+    assert world.content_keys() == [ref.storage_ref, destination(handle)]
     for process in (a, b_, c):
         assert (process.refs, process.idle_since, process._finalizing) == ({}, {}, {})
     assert world.keys("media/") == [prepared[0].storage_ref, ref.storage_ref]
@@ -214,7 +273,7 @@ def test_upload_restart__create_put_complete_and_use_each_in_another_process(tmp
 
 # --- a crash after each durable step ---------------------------------------------------
 @pytest.mark.parametrize("crash", ["receipt", "destination", "source", "completion"])
-def test_upload_restart__a_crash_after_each_durable_step_is_recovered_elsewhere(crash):
+def test_upload_restart__a_crash_after_each_durable_step_is_recovered_elsewhere(crash, world):
     """The process dies right after one durable step; another process takes the next call.
 
     * receipt - the PUT's receipt committed, the destination never written: completion is
@@ -224,7 +283,6 @@ def test_upload_restart__a_crash_after_each_durable_step_is_recovered_elsewhere(
       the same object (write-once, one source object);
     * completion - committed, the 200 lost: the retry answers the same finalized ticket.
     """
-    world = World()
     handle = create(world.process())
     repository = world.repository.reopen()
     dying = {"receipt": lambda: world.process(uploads=DiesAfter(repository, "acknowledge_put")),
@@ -261,12 +319,11 @@ def test_upload_restart__a_crash_after_each_durable_step_is_recovered_elsewhere(
 
 
 # --- duplicate, reordered and concurrent calls -----------------------------------------
-def test_upload_restart__duplicate_reordered_and_concurrent_calls():
+def test_upload_restart__duplicate_reordered_and_concurrent_calls(world):
     """Completion before any bytes is a 400 that leaves the upload open; the same bytes
     twice is one receipt and one object; other bytes after the receipt are a conflict that
     writes nothing; two processes completing at once give one ref and one source object; a
     completed upload takes no more bytes and a repeated completion answers the same ref."""
-    world = World()
     handle = create(world.process())
     with pytest.raises(errors.InvalidRequest):
         complete(world.process(), handle)
@@ -289,12 +346,12 @@ def test_upload_restart__duplicate_reordered_and_concurrent_calls():
 
 
 # --- the window --------------------------------------------------------------------------
-def test_upload_restart__the_window_is_the_tickets_and_an_admitted_job_outlives_it(tmp_path):
+def test_upload_restart__the_window_is_the_tickets_and_an_admitted_job_outlives_it(tmp_path,
+                                                                                   world):
     """From `expires_at` on - in any process - a finalized upload is `upload_expired` for
     new use and completion, and an open one takes neither bytes nor completion: a replay
     does not revive it, though the bytes are still stored. A job admitted before the window
     closed still attaches (the relay's replay) and prepares in another process."""
-    world = World()
     handle = create(world.process())
     put(world.process(), handle)
     ref = complete(world.process(), handle)
@@ -316,11 +373,10 @@ def test_upload_restart__the_window_is_the_tickets_and_an_admitted_job_outlives_
 
 
 # --- two tenants and forgeries ----------------------------------------------------------
-def test_upload_restart__another_tenant_is_not_found_in_every_process():
+def test_upload_restart__another_tenant_is_not_found_in_every_process(world):
     """Tenant B holding A's handle gets the unknown handle's `not_found` from every step in
     every process - put (nothing written), complete, resolve, admission, staging A's ref as
     sent or relabelled - and A's upload is untouched and usable."""
-    world = World()
     handle = create(world.process())
     for step in (lambda p: put(p, handle, org_id=b.ORG_B),
                  lambda p: complete(p, handle, org_id=b.ORG_B)):
@@ -341,12 +397,12 @@ def test_upload_restart__another_tenant_is_not_found_in_every_process():
     assert resolve(world.process(), handle) == ref
 
 
-def test_upload_restart__forged_digest_or_a_second_finalize_never_replaces_accepted_bytes():
+def test_upload_restart__forged_digest_or_a_second_finalize_never_replaces_accepted_bytes(
+        world):
     """Failure oracle: once accepted, a handle names its bytes. A destination rewritten
     behind the store makes a second completion a conflict; a request claiming other content
     under the handle is refused; an attach naming a source key the digest does not build, or
     whose object is gone, binds nothing - and the accepted ticket and object never change."""
-    world = World()
     handle = create(world.process())
     put(world.process(), handle)
     ref = complete(world.process(), handle)
@@ -414,8 +470,8 @@ def held(process) -> int:
     return total
 
 
-def growth(world) -> tuple[int, object]:
-    """Create, PUT and complete `TICKETS` uploads in ONE process: how much more that process
+def growth(world, tickets: int = TICKETS) -> tuple[int, object]:
+    """Create, PUT and complete `tickets` uploads in ONE process: how much more that process
     holds afterwards than after its first three."""
     process = world.process(cls=DeclaredFacts)
     for number in range(3):                              # every path warm first
@@ -423,25 +479,27 @@ def growth(world) -> tuple[int, object]:
         put(process, handle, b"warm-%d" % number)
         complete(process, handle)
     before = held(process)
-    for number in range(TICKETS):
+    for number in range(tickets):
         handle = create(process)
         put(process, handle, b"clip-%06d" % number)
         complete(process, handle)
     return held(process) - before, process
 
 
-def test_upload_restart__many_finalized_tickets_cost_the_process_no_memory():
+def test_upload_restart__many_finalized_tickets_cost_the_process_no_memory(world):
     """Acceptance: memory stays bounded under many finalized tickets. With the durable
     authority, 400 completions leave the process holding no more than before (every
     per-upload dictionary empty); the process-local authority - the negative control -
     holds a record per ticket, over 1 KiB each."""
-    durable, process = growth(World())
+    # 100 on PostgreSQL: the claim is per ticket, and each costs three real transactions
+    durable, process = growth(world, TICKETS if world.conn is None else 100)
     assert (process.refs, process.idle_since, process._finalizing, process.payloads,
             process.by_job) == ({}, {}, {}, {}, {})
     assert durable <= 0, f"the process holds {durable} more bytes"
     local, process = growth(World(durable=False))
     assert len(process.uploads) == TICKETS + 3
     assert local > TICKETS * 1024, f"the control holds only {local} more bytes"
-    print(f"\nheld by one process after {TICKETS} more finalized tickets: durable "
-          f"{durable:+d} B, process-local {local:+d} B")
+    print(f"\nheld by one process after more finalized tickets: durable "
+          f"({'reference' if world.conn is None else 'postgres'}) {durable:+d} B, "
+          f"process-local ({TICKETS}) {local:+d} B")
 

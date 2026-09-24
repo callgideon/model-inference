@@ -289,3 +289,27 @@ def test_stack__os_processes_window_and_tenants(minio, tmp_path):
             assert (late["status"], late["body"]["error"]["code"]) == (410, "upload_expired")
     assert stack.rows(pending)["state"] in ("created", "expired")
     assert f"uploads/{stack.rows(pending)['org_id']}/{pending}" in stack.keys()
+
+
+@needs_stack
+@pytest.mark.xfail(strict=True, reason=(
+    "D10.a (dee59ed8): 0019's infrx.lifecycle_code lacks F2C's `media_refused` (3a21e0bf), "
+    "so upload_abort refuses it as invalid_request and the ticket stays open - D10 aligns "
+    "0019/0020 with F2C's UPLOAD_ABORT_REASONS; this case then passes and must be un-marked"))
+def test_stack__os_processes_a_probe_refusal_is_final_on_postgres(minio, tmp_path):
+    """Bytes the probe refuses (not a container) abort the ticket durably with F2C's
+    `media_refused`: the completion is `unsupported_media`, the row says `aborted`, and a
+    completion from another process is the closed ticket's 409 - never a second chance."""
+    stack = Stack(minio, tmp_path)
+    junk = b"PK\x03\x04 not a video at all"
+    answer = stack.step("POST", "/v1/uploads", json={"accepted_mime": ["video/mp4"]})
+    handle = answer["body"]["upload_handle"]
+    assert stack.step("PUT", f"/v1/uploads/{handle}", data=junk)["status"] == 204
+    refused = stack.step("POST", f"/v1/uploads/{handle}/complete")
+    assert (refused["status"], refused["body"]["error"]["code"]) == (400, "unsupported_media"), \
+        refused
+    row = stack.rows(handle)
+    assert (row["state"], row["aborted_reason"]) == ("aborted", "media_refused")
+    again = stack.step("POST", f"/v1/uploads/{handle}/complete")
+    assert (again["status"], again["body"]["error"]["code"]) == (409, "state_conflict")
+    assert not any(key.startswith("media/") for key in stack.keys())
