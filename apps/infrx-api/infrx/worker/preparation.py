@@ -177,7 +177,11 @@ class PreparationRunner:
             if time.monotonic() >= end:
                 raise errors.NotFound(f"job {job_id} has no durable attach")
             await asyncio.sleep(ATTACH_POLL_S)
-        return await self.media.prepare(job_id, self.media.profile_version)
+        refs = await self.media.prepare(job_id, self.media.profile_version)
+        # Verifier F3: MediaPreparation keeps a per-job entry for the gateway's relay; nothing in
+        # this long-lived process reads it, so it must not grow by one video job forever.
+        self.media.prepared_by_job.pop(job_id, None)
+        return refs
 
     async def _renew(self, lease) -> None:
         """R52: renew until cancelled. A typed refusal ends it (the fence then refuses

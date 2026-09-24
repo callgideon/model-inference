@@ -222,6 +222,8 @@ def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
     assert work.prompt_tokens == COUNT and work.media_refs == (source,)
     assert prepared.storage_ref.endswith("/prepared") and prepared.digest == source.digest
     assert prepared.duration_s == 10.0 and prepared.mime == "video/mp4"
+    # verifier F3: the worker keeps no per-job entry after preparing (the map is the gateway relay's)
+    assert request.request_id not in prep.media.prepared_by_job, prep.media.prepared_by_job
     path = prep.media.cache.path_for(source.org_id, "v1", source.digest, "video/mp4")
     assert pathlib.Path(path).read_bytes() == CLIP
     asked, = prep.app.tokenized
