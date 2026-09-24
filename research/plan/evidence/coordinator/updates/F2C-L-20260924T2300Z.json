@@ -1,0 +1,29 @@
+{
+  "task": "F2C",
+  "lane": "F2C-L",
+  "slice": "d",
+  "slices_done": ["a", "b", "d"],
+  "activity": "review",
+  "at": "2026-09-24T23:00:20Z",
+  "head": "76d966cc",
+  "base": "dff31efc",
+  "worktree": ".claude/worktrees/codex-f2c-lifecycle",
+  "branch": "codex/f2c-lifecycle",
+  "owned_paths": ["apps/infrx-api/infrx/contracts/", "apps/app/lib/contracts/", "apps/infrx-api/tests/contracts/", "apps/app/tests/contracts/", "research/plan/01-contracts.md", "research/plan/02-durable-protocols.md"],
+  "commands": [
+    {"cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'", "exit": 0, "summary": "1162 passed, 6 deselected (PG port held by other lanes)"},
+    {"cmd": "uv run --frozen python -m tests.contracts.mutants <70 F2C mutants>", "exit": 0, "summary": "70/70 killed"},
+    {"cmd": "uv run --frozen pytest -q tests --ignore=tests/d --ignore=tests/contracts -k 'not mutant and not pg'", "exit": 0, "summary": "1666 passed, 15 skipped"},
+    {"cmd": "uv run --frozen pytest -q tests/d -k 'not mutant'", "exit": 0, "summary": "392 passed, 5 xfailed"},
+    {"cmd": "make console-test", "exit": 0, "summary": "297 passed"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "node tests/contracts/run-mutants.mjs --entry v2", "exit": 0, "summary": "41/41 killed"}
+  ],
+  "fixture_hash": "da29215d09b61a80030dc1b026aef0f3a389c4e712c9e36ad4acb303b9846380",
+  "verifier_findings_closed": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "med", "basis": "a, b, d delivered and green; only review fixes remain", "at": "2026-09-24T23:00:20Z"},
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/f/F2C-lifecycle-2d5e474.md", "research/plan/evidence/f/F2C-lifecycle-9bf7a95.md"]
+}

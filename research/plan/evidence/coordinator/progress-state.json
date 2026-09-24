@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 10,
-  "updated": "2026-09-24T23:00:48Z",
+  "revision": 11,
+  "updated": "2026-09-24T23:02:48Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -301,58 +301,59 @@
     {
       "id": "F2C-L",
       "task": "F2C",
-      "slice": "b/d (slice a accepted for consumption at 2d5e4743; read-only verifier on a)",
+      "slice": "d",
       "agent": "opus",
       "branch": "codex/f2c-lifecycle",
       "worktree": ".claude/worktrees/codex-f2c-lifecycle",
       "base": "dff31efc",
-      "head": "d566c83b",
+      "head": "76d966cc",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T22:31:34Z",
+      "updated": "2026-09-24T23:00:20Z",
       "blocker": null,
       "next_action": "slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table",
       "estimate": {
-        "optimistic_h": 5,
-        "likely_h": 8,
-        "pessimistic_h": 12,
+        "optimistic_h": 0.5,
+        "likely_h": 1,
+        "pessimistic_h": 3,
         "confidence": "medium",
-        "basis": "lane's own estimate for b+d at slice-a handback",
-        "at": "2026-09-24T22:31:34Z"
+        "basis": "a, b, d delivered and green; only review fixes remain",
+        "at": "2026-09-24T23:00:20Z"
       },
       "evidence": [
-        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md"
+        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md",
+        "research/plan/evidence/f/F2C-lifecycle-9bf7a95.md"
       ],
       "commands": [
         {
-          "cmd": "uv run --frozen pytest -q tests/contracts",
-          "exit": 1,
-          "summary": "1149 passed, 3 failed (HarnessBusy: shared PG port held by codex-e2c-verify; same 3 at base)"
+          "cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'",
+          "exit": 0,
+          "summary": "1162 passed, 6 deselected (PG port held by other lanes)"
         },
         {
-          "cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py",
+          "cmd": "uv run --frozen python -m tests.contracts.mutants <70 F2C mutants>",
           "exit": 0,
-          "summary": "48 passed"
+          "summary": "70/70 killed"
         },
         {
-          "cmd": "uv run --frozen python -m tests.contracts.mutants <34 lc_* mutants>",
+          "cmd": "uv run --frozen pytest -q tests --ignore=tests/d --ignore=tests/contracts -k 'not mutant and not pg'",
           "exit": 0,
-          "summary": "34/34 killed"
+          "summary": "1666 passed, 15 skipped"
         },
         {
-          "cmd": "uv run --frozen pytest -q tests/m tests/w tests/g -k 'not mutant'",
+          "cmd": "uv run --frozen pytest -q tests/d -k 'not mutant'",
           "exit": 0,
-          "summary": "1107 passed, 22 skipped"
+          "summary": "392 passed, 5 xfailed"
         },
         {
           "cmd": "make console-test",
           "exit": 0,
-          "summary": "294 passed"
+          "summary": "297 passed"
         },
         {
           "cmd": "make console-lint",
@@ -367,7 +368,7 @@
         {
           "cmd": "node tests/contracts/run-mutants.mjs --entry v2",
           "exit": 0,
-          "summary": "36/36 killed (5 new V2-LC-*)"
+          "summary": "41/41 killed"
         }
       ],
       "owned_paths": [
@@ -376,8 +377,7 @@
         "apps/infrx-api/tests/contracts/",
         "apps/app/tests/contracts/",
         "research/plan/01-contracts.md",
-        "research/plan/02-durable-protocols.md",
-        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md"
+        "research/plan/02-durable-protocols.md"
       ],
       "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06).",
       "wiring_requests": []
@@ -889,6 +889,12 @@
       "lane": "I8",
       "task": "I8",
       "head": "103d20a8"
+    },
+    {
+      "since": "2026-09-24T23:00:20Z",
+      "lane": "F2C-L",
+      "task": "F2C",
+      "head": "76d966cc"
     }
   ],
   "integration_queue": [],
@@ -1747,6 +1753,12 @@
       "at": "2026-09-24T23:00:48Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T23:00:20Z",
+      "by": "F2C-L",
+      "what": "running → review; head 76d966cc; estimate likely 8 → 1 h (a, b, d delivered and green; only review fixes remain)",
+      "source": "updates/F2C-L-20260924T2300Z.json"
     }
   ],
   "history": {
@@ -1817,10 +1829,14 @@
     "I8-20260924T2258Z.json": {
       "status": "applied",
       "at": "2026-09-24T22:58:00Z"
+    },
+    "F2C-L-20260924T2300Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T23:00:20Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T23:00:48Z",
+    "computed_at": "2026-09-24T23:02:48Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
