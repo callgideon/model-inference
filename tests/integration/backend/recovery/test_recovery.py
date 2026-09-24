@@ -18,7 +18,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc05 object store | M2's preparation; an outage in front of the object store; rc05b: M1-L2's S3ObjectStore on E2's MinIO, partitioned from the stack's network | - |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
-| rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
+| rc08 drain | W2's drain over real Valkey; rc08b: SIGTERM to the pilot box's worker PROCESS (I2B-R4's `python -m infrx.worker`) mid-attempt | - |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
 | rc10/rc10b/rc10c rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
@@ -786,25 +786,43 @@ def test_i3b_rc08_a_drain_releases_in_flight_work_to_the_store_and_keeps_the_que
     kit.run(body)
 
 
-def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3():
-    """The same drain driven by SIGTERM to the worker PROCESS, bounded by the unit's
-    `TimeoutStopSec`: W3's WorkerService and I2B's unit exist; the composition root the
-    unit starts (`python -m infrx.worker`, I2B request 4) does not. Fails the day
-    `infrx.worker` grows one, in any of the shapes a process can start from here: an
-    `infrx.worker.__main__` module (`python -m infrx.worker`), a `main` attribute of the
-    package, or a worker module with an `if __name__ == "__main__":` guard. A console
-    script is not a shape: `infrx-api` is never installed (`[tool.uv] package = false`), so
-    no entry point of it can exist in the environment."""
-    import re
+def test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_finishes_its_attempt_and_exits_0(
+        tmp_path):
+    """OPS-RECOVER (drain), the same drain driven by SIGTERM to the worker PROCESS the unit
+    runs (I2B-R4's `python -m infrx.worker`, in E3B's pilot box beside the mounted gateway),
+    as `docker stop` delivers it through tini: an async job is admitted over HTTP and, while
+    its attempt streams (the fake engine slowed), the worker is sent SIGTERM. It stops
+    claiming, lets the attempt finish inside the generation budget - the job succeeds with ONE
+    debit and no attempt left unreleased - and exits 0, well inside the unit's stop budget
+    (`docker stop -t 330`, `TimeoutStopSec=360`), its log recording what the drain did."""
+    import signal
 
-    import infrx.worker as worker
-    entry = importlib.util.find_spec("infrx.worker.__main__") or getattr(worker, "main", None) \
-        or [path.name for path in Path(worker.__file__).parent.glob("*.py")
-            if re.search(r"^if __name__ == .__main__.:", path.read_text(), re.M)]
-    if entry:
-        pytest.fail("infrx.worker has a process entry point: SIGTERM it mid-attempt now")
-    kit.pending("I2B-R4", why="no worker process entry point (python -m infrx.worker) to "
-                             "SIGTERM")
+    import pilotbox
+    kit.needs_stack()
+    with pilotbox.journey(tmp_path) as trip:
+        alpha = trip.world.alpha
+        trip.engine.control(text="Two people unload boxes from a van onto a trolley. " * 6,
+                            delta_gap_s=0.1)
+        accepted = trip.send(alpha, "async", [{"role": "user", "content": "Describe it."}],
+                             "rc08b")
+        assert accepted.status_code == 202, accepted.text
+        request_id = accepted.json()["request_id"]
+        _until(lambda: trip.db("select 1 from infrx.jobs where request_id = %s and "
+                               "state = 'running' and published", request_id))
+        began = time.monotonic()
+        code = trip.box.stop("worker", signal.SIGTERM, timeout=120)
+        took = time.monotonic() - began
+        log = (tmp_path / "worker-1.log").read_text()
+        assert code == 0 and took < 120, (code, took, log[-600:])
+        assert trip.db("select state, outcome_cause, settlement_state from infrx.jobs "
+                       "where request_id = %s", request_id) == \
+            [("succeeded", "completed", "settled")], log[-600:]
+        assert f"0 released [], ended [('{request_id}', 'completed')]" in log, log[-600:]
+        assert trip.db("select count(*) from infrx.credit_ledger where request_id = %s",
+                       request_id) == [(1,)], "not ONE debit for the job"
+        assert trip.db("select count(*) from infrx.attempts where job_id = %s and "
+                       "released_at is null", request_id) == [(0,)]
+        trip.conserved(alpha)
 
 
 def _outcome(call) -> str:
@@ -823,14 +841,11 @@ def _outcome(call) -> str:
 def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is_refused(
         monkeypatch):
     """DR-4: a pending count is only honest if the id is. `kit.pending` refuses an id outside
-    the vocabulary (and none at all); each pending drill pends on exactly the id pinned here,
-    so a swapped or misspelt owner fails instead of being counted. Layer 0. (rc03 runs since
-    the cutover mounted the ingress, and rc04b since D5: E3B phase 3.)"""
+    the vocabulary (and none at all). Layer 0. No drill pends now: rc03 runs since the cutover
+    mounted the ingress, rc04b since D5 (E3B phase 3), rc08b since I2B-R4's worker entry
+    point - its owner reference retired with it."""
     assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
     assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
-    pinned = {test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
-    for case, owner in pinned.items():
-        assert _outcome(case).startswith(f"PENDING[{owner}] "), (case.__name__, _outcome(case))
 
 
 def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepted_job(

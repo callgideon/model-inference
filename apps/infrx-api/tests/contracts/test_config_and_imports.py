@@ -478,6 +478,8 @@ DEPLOYMENT_EXPECTED = {
     "S3_MEDIA_PREFIX": "infrx/", "S3_ENDPOINT_URL": "",
     # E4B: the deployed commit and image, `infrx_build_info` (required in pilot at startup)
     "INFRX_RELEASE_SHA": "", "INFRX_IMAGE": "",
+    # I2B-R4 (W3 request 6): the worker's loopback readiness/metrics port
+    "WORKER_HEALTH_PORT": 8002,
 }
 
 # Everything except the text values (the secret, the accounting regime).

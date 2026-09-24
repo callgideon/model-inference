@@ -12,8 +12,11 @@ EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-worker
 # Its own uid (10002); reads the media root the gateway writes, through the shared group.
 # `python -m infrx.worker`: the composition root around W3's WorkerService, which also runs
-# the store's recover() reaper (the probe refuses a pilot image without it). --init: tini
-# forwards SIGTERM, which starts the drain, and reaps children.
+# the store's recover() reaper (the probe refuses a pilot image without it). It refuses to
+# start (exit 2, the setting named) without its stores, and answers /readyz, /livez and
+# /metrics on 127.0.0.1:WORKER_HEALTH_PORT (8002: lib.sh wait_ready) once the pool, the
+# bucket and the media root answered. --init: tini forwards SIGTERM, which starts the
+# drain, and reaps children.
 ExecStart=/usr/bin/docker run --rm --init --name infrx-worker --network host \
   --user 10002:10000 --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \
