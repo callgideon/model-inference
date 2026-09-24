@@ -55,7 +55,8 @@ Fix, two halves:
   described it) and `infrx.job_media` (`role='source'`, `position`), one transaction,
   write-once (a handle recorded with other content, or a job bound to other refs, is
   `conflict`); R55 by the composite foreign key `(job_id, org_id) → infrx.jobs` (a ref of
-  another org → `not_found`). `MediaStaging(attachments=)` writes it first, then its
+  another org → `not_found`). *(Review round: the round-1 write-once check accepted a
+  superset; see "Review fix round (8b91648)" for the rule as it now stands.)* `MediaStaging(attachments=)` writes it first, then its
   in-process copy; `attached(job_id)` reads this process's copy, else the durable one;
   `prepare` and the relay's `_resume` bound-gate read `attached`. `pilot.adapters_from_env`
   composes `PgAttachments` on the pool; `build_ingress_deps(attachments=)` hands it on.
@@ -113,14 +114,23 @@ on the pilot box or with a real object store.
 
 1. **A zero-ref attach is not durable.** 0003's `job_media` names refs, so a text job's attach
    has no row and another process answers `attached(job) is None` — the same as "never
-   attached". Today preparation runs in the attaching process (E3B's emulation; no
+   attached". The same gap lets another process durably attach media to a job this
+   process attached with none (the in-process check refuses it here; `PgAttachments.put`
+   cannot). The fake's `reopened()` is itself and answers `()`: a disclosed fake/real
+   divergence that no case pins. Today preparation runs in the attaching process (E3B's emulation; no
    preparation worker exists), so nothing reads it elsewhere. A preparer in another process
    would never open a text job; the fix is a zero-ref marker (a `0019` — e.g. an
    `attached_at` row per job), not taken here because nothing needs it yet.
 2. **`_resume`'s staged-payload witness is still this process's**, so G2's B2 retry window
    after a gateway restart is not lifted: making the payload witness durable too would
    recheck — and could cancel — a running *text* job after a restart (Limit 1). The gate now
-   reads the durable attach; behaviour is unchanged in every reachable case.
+   reads the durable attach. What changed: the attach is now a database write, so it is a
+   NEW source of the 503 that opens the B2 window (a failed `put` leaves the job admitted and
+   unbound, and nothing bound here either - "durable first", pinned by
+   `test_mpilot__a_failed_durable_attach_binds_nothing_here`); the window's outcome is
+   unchanged (the same-key retry in the same process completes it; after a restart the job
+   waits for its stored deadline, unbilled). A database failure in the gate's own read is
+   the retryable 503 (pinned since the review round).
 3. **Upload records are still in process** (`MediaUploads.uploads`, M3's limit): an upload is
    usable only through the gateway process that finalized it; 0010's rows are M's follow-up.
 4. **The shared object store is exercised only in memory here.** M1-L2's `S3ObjectStore`
@@ -128,17 +138,32 @@ on the pilot box or with a real object store.
    shares the source objects and could `prepare` as well as resolve. No MPILOT case ran
    against it (no S3 endpoint on this host; M1-L2's own S3 cases skip the same way): the
    `_pg` and `reopened` cases share one `InMemoryObjectStore`, standing in for it.
-5. **The collector** (`gc.MediaCollector`) still protects media from this process's
-   `by_job`/`prepared_by_job`; it is not composed anywhere yet (G2 request 6). When it is, it
-   should read live jobs' refs from `PgAttachments` and `jobs.prepared_refs`. `staged_media`
-   rows accumulate (nothing deletes them; `job_media` cascades with the job).
+5. **Nothing protects a live job's media across processes yet.** `gc.MediaCollector` protects
+   only this process's `by_job`/`prepared_by_job`, and it is not composed anywhere (G2
+   request 6). Composed in a restarted gateway as it stands, its step 3 would delete the
+   source objects of live jobs attached before the restart once the grace passes. Before it
+   is composed it must read live jobs' refs from `PgAttachments` and `jobs.prepared_refs`.
+   `staged_media` rows accumulate (nothing deletes them; `job_media` cascades with the job).
 6. **The disk lookup's hash is the source digest**, which is right because profile `v1`'s
    prepared artifact is the source bytes (`_prepared_bytes`); a transcoding profile needs the
    prepared digest beside the file (marked `ponytail:`). It costs one read + sha256 per
    process per entry, synchronously on the caller's loop: 85–95 ms for 64 MiB (page-cached,
    this host, 5 runs), then indexed.
-7. **On the worker's read-only mount** an expired file is refused but cannot be removed there;
-   the gateway's `sweep`/collector removes it.
+7. **Who removes expired cache files.** On the worker's read-only mount an expired file is
+   refused but cannot be removed. A gateway removes it only when it looks the entry up
+   (`get`) or its own `ProcessingCache.sweep` runs over it - and `sweep` walks only that
+   process's index, so files a previous gateway incarnation put are removed only when a
+   lookup finds them expired (or by `MediaCollector._stray_files`, not composed). So the
+   7-day obligation holds for every READ (an expired file is never served, by any process;
+   the life is the file's mtime, a future mtime is refused) but not yet for deletion across
+   a restart. On a writable mount, a process whose loaded entry expired would delete a file
+   another process just re-put for the same digest; the pilot mounts the worker read-only.
+8. **The gateway's own index is not re-verified.** An entry this process `put` is trusted
+   until it expires: bytes corrupted on disk afterwards keep hitting in the gateway's
+   `prepare` (it never re-puts), while the worker's lookup refuses them. A symlinked
+   DIRECTORY above the file is followed (only the file itself is opened `O_NOFOLLOW`).
+9. **Duplicate refs.** One attach naming the same ref twice is `invalid_request` in every
+   adapter (review round); the route cannot produce one (`max_parts = 1`).
 
 ## Integration requests
 
@@ -168,9 +193,14 @@ on the pilot box or with a real object store.
   `not_found`), its size spent from the request's `MAX_MEDIA_BYTES` budget (`413`). (b) The
   upload window bounds use as well as completion: from `expires_at` on, resolution and staging
   of the upload are `410 upload_expired`, in the fake and every adapter. (c) `attach` is
-  durable: it records the job's source refs where another process reads them (on PostgreSQL,
-  0003's `staged_media`/`job_media`), and `prepare(job_id)` reads that record; the
-  mediastore conformance hook `reopened()` is another process's view of the same store.
+  durable and write-once: it records the job's source refs where another process reads them
+  (on PostgreSQL, 0003's `staged_media`/`job_media`), except an attach of no media, which
+  0003 cannot record (another process answers "not attached" for it); `prepare(job_id)`
+  reads that record; the mediastore conformance hook `reopened()` is another process's view
+  of the same store. (d) Re-attaching a job's exact refs (handles and digests, in order) is a
+  no-op; any other binding - other refs, a superset, a subset, a reorder, none - is `409
+  conflict` and keeps the first; one attach naming a ref twice is `invalid_request`; on
+  PostgreSQL attaches of one job are serialized on its `infrx.jobs` row.
 * **Coordinator — pre-existing, not MPILOT's:** at `6cb8ebe`,
   `tests/contracts/test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record`
   fails (DID NOT RAISE UnsupportedParameter: 0018 now records the cause), so the shared
@@ -195,6 +225,39 @@ on the pilot box or with a real object store.
   script found there) was overwritten at 20:42Z by this lane; its previous content is lost.
   This lane's files moved to `scratchpad/mpilot/`.
 
+## Review fix round (8b91648 → 2d1dcbe)
+
+Review `research/plan/evidence/m/MPILOT-review-8b91648.json` (claude/backend-impl): fix_required,
+4 confirmed blocking, 1 downgraded, 6 nonblocking. One commit per item.
+
+| Finding | Commit | What changed | Cases | Mutants → kill (measured) |
+|---|---|---|---|---|
+| PAR-1 + H-B1 (blocking), PAR-2 (downgraded, folded) | `2972df1` | `PgAttachments.put` locks the job row of the refs' org (`for update`; none → `not_found`), reads the binding, commits a no-op only on an EXACT match (handles and digests, in order), otherwise `conflict`; inserts only when unbound. `MediaStaging.attach`, the fake and `tests/m/support.Durable` follow the same rule; one ref twice is `invalid_request` everywhere | PG: `test_mpilot_pg__an_attach_is_write_once_and_tenant_bound` (foreign → not_found; exact replay; other refs, superset, same handle other content, reorder, subset → conflict with the binding kept), `test_mpilot_pg__an_attach_waits_for_the_job_row` (another transaction holds the row `for no key update`: the attach waits); exported `media_parity__an_attach_is_write_once` (fake, MediaStaging, MediaPreparation, MediaUploads, and on PostgreSQL), `test_mpilot__the_exported_write_once_case_runs_on_the_store_alone` | PG: `rebind_to_other_refs_accepted`, `rebind_to_a_superset_accepted` (the reviewer's O2 analogue), `rebind_to_other_content_accepted` (`DID NOT RAISE Conflict`), `rebind_reordered_accepted` (`DID NOT RAISE Conflict` at the reorder), `existing_binding_ignored` (declared `UniqueViolation … "job_media_pkey"` on the exact replay), `attach_not_serialized` (`the attach did not wait for the job row`), `tenant_unchecked_at_the_lock` (`Conflict` where `not_found`), `recorded_content_unchecked`, `another_jobs_refs_returned` (the second job's attach is `Conflict`); memory: `in_process_rebind_accepted`, `in_process_duplicate_accepted` (the exported case's `AssertionError: an attach of … was accepted`); contracts: `fake_attach_rebinds`, `fake_attach_accepts_a_duplicate` (killed under the conformance-only runner) |
+| PAR-3 + H-B2 (blocking) | `8a31e6c` | cases only (the code was right; nothing could kill a regression) | `test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable` (after a restart, the record's `get` raises `psycopg.OperationalError`: 503 `dependency_unavailable`, the job still preparing, nothing attached), `…a_text_job_attached_here_is_bound_whatever_the_record_holds` (record composed, no row for the text job; the replay after the card rotated answers 200 from the running job), `…a_failed_durable_attach_binds_nothing_here[unreachable\|conflict]` | `replay_read_unguarded` (O6: `AssertionError` on the 500 `internal_error` envelope), `attached_with_no_media_reads_unbound` (O5: the text job's own preparation reads it unbound, `NotFound: no staged media for job`), `bound_here_before_it_is_durable` (O4: the job id is in `by_job` after the failed put) |
+| H-N1, H-N4, PAR-4 (nonblocking, folded) | `2d1dcbe` | `_load` opens `O_NOFOLLOW` and refuses an mtime more than 60 s in the reader's future | the not-the-hash case adds a ref sharing the file's first 16 hex, a symlink to the right bytes and a future mtime; `test_mpilot__with_no_cache_root_a_prepared_ref_is_not_found` | `disk_hash_compared_by_prefix` (the reviewer's D1), `disk_symlink_followed`, `future_mtime_believed`, `disk_lookup_without_a_root` (D3) |
+| PAR-5, H-N2 (nonblocking) | this commit | wording: Limits 1, 2, 5, 7 rewritten, Limits 8–9 added, ruling text (c) qualified and (d) added; `attachments.py` says `staged_media` keeps a handle's first description | — | — |
+| H-N3 (nonblocking) | — | E3B phase 3's (drop `M3-U1`, re-anchor `e3bm62` after the cutover's `metrics` router) | — | — |
+
+Left, stated: a corrupt file in the gateway's OWN index is not re-verified and a symlinked
+directory above a cache file is followed (Limit 8); deletion of a previous incarnation's
+expired files across a restart (Limit 7); a zero-ref attach (Limit 1); the collector's
+cross-process protection (Limit 5).
+
+Runs at `2d1dcbe` (d4, private `TMPDIR`; the review round's code head):
+
+| Command | Tail |
+|---|---|
+| `pytest -rs tests/m` (the `_pg` cases on the D harness, d4) | `418 passed, 15 skipped in 151.91s`, exit 0 - skips: 12 M1-L2 S3 cases and 2 S3 mutant tests (no `INFRX_M_S3_ENDPOINT`), and the PostgreSQL mutant parametrization, empty unless `INFRX_MUTANTS=all` |
+| `INFRX_MUTANTS=all pytest -rs tests/m/test_pilot_mutants.py` (24 memory + 11 PostgreSQL mutants) | `40 passed in 194.95s`, exit 0 |
+| tests/g quick (`uploads/test_uploads.py test_relay_sync.py test_relay_sse.py test_relay_recovery.py test_relay_matrix.py jobs/test_jobs.py test_composition.py`) | `176 passed, 2 warnings in 27.98s`, exit 0 |
+| tests/contracts quick (`test_conformance.py test_fixtures.py test_config_and_imports.py`) | `640 passed in 6.60s`, exit 0 |
+| the five contracts mutants MPILOT touches, conformance-only runner | `prepare_falls_back_to_any_job`, `prepare_serves_the_first_attach`, `fake_attach_rebinds`, `fake_attach_accepts_a_duplicate`, `upload_used_past_its_window`: all `killed` |
+
+d4 was held twice during the round by the `codex-worker` checkout's PostgreSQL mutant runs
+(its containers labelled `…/worktrees/codex-worker` and `…/scratchpad/mut2/…`); this lane's
+PostgreSQL runs waited for the name to be free and never touched those containers.
+
 ## Verification log
 
 - 2026-09-23: report written at `078eefe` (MPILOT lane); the cutover merged in at `8418832` (rows 13–15).
+- 2026-09-24: review fix round on top of `8b91648` (review `MPILOT-review-8b91648.json`): `2972df1`, `8a31e6c`, `2d1dcbe`; this section and the Limits/ruling wording.

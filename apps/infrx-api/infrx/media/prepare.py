@@ -104,6 +104,10 @@ class MediaProfile:
                 f"the video is longer than {self.max_duration_s:.0f}s", param="messages")
 
 
+# MPILOT (review PAR-4): how far in the future a cache file's mtime may be and still be
+# believed. Writer and reader share one host clock; this only absorbs a step adjustment.
+FUTURE_MTIME_SLACK_S = 60.0
+
 # What a probed container is called on disk. The engine opens the file by path, and a
 # decoder that sniffs is one more thing to be wrong about.
 EXTENSIONS = {probing.MP4_MIME: "mp4", probing.QUICKTIME_MIME: "mov", probing.WEBM_MIME: "webm"}
@@ -215,7 +219,9 @@ class ProcessingCache:
 
     def _load(self, key: tuple[str, str, str], mime: str) -> CacheEntry | None:
         """MPILOT: an entry another process `put` - the path the key builds, verified by
-        content hash, with the file's own life. None if absent or not those bytes.
+        content hash, with the file's own life. None if absent, not those bytes, a symlink
+        (the file itself - a directory above it is `path_for`'s), or dated in the future: a
+        touched, restored or skewed mtime would otherwise extend the 7-day retention.
 
         ponytail: the hash is the source digest because profile `v1`'s prepared artifact is
         the source bytes (`_prepared_bytes`); a transcoding profile needs the prepared
@@ -226,12 +232,12 @@ class ProcessingCache:
         org_id, digest, profile = key
         path = self.path_for(org_id, profile, digest, mime)
         try:
-            with open(path, "rb") as handle:
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as handle:
                 data = handle.read()
                 stored_at = os.fstat(handle.fileno()).st_mtime
         except OSError:
             return None
-        if digest_of(data) != digest:
+        if digest_of(data) != digest or stored_at > self.clock() + FUTURE_MTIME_SLACK_S:
             return None
         entry = CacheEntry(local_path=path, probed=None, bytes=len(data), stored_at=stored_at)
         self.entries[key] = entry

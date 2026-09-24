@@ -33,8 +33,9 @@ from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
-from infrx.contracts.records import MediaKind
+from infrx.contracts.records import JobState, MediaKind, Usage
 from infrx.gateway.app import create_app
+from infrx.gateway.routes.relay import CREDIT
 from infrx.media import fetch, prepare
 from infrx.media.attachments import PgAttachments
 from infrx.media.store import InMemoryObjectStore
@@ -299,17 +300,43 @@ def test_mpilot__a_second_process_resolves_the_attach_and_the_local_file(tmp_pat
 
 
 def test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served(tmp_path):
-    """The disk is found by the path the key builds and trusted only for the key's content
-    hash: other bytes at that path (a 64-bit prefix collision, a botched copy) are a miss,
-    never another tenant's or another clip's frames."""
+    """The disk is found by the path the key builds and trusted only for the key's WHOLE
+    content hash: a ref whose digest shares the file's first 16 hex (the path's name, a
+    64-bit prefix collision) is a miss, and so are other bytes at that path (a botched copy),
+    a symlink there, and a file dated in the future (a touch or a restore without -p would
+    otherwise extend the retention) - never another clip's frames."""
     gateway, worker = two_processes(tmp_path, support.Durable())
     job_id, _ = attach(gateway)
     ref = run(gateway.prepare(job_id, "v1"))[0]
     path = gateway.local_uri(ref).removeprefix("file://")
+    collided = ref.model_copy(update={"digest": ref.digest[:23] + "0" * 48})
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(collided)                                  # same path, other hash
+    outside = tmp_path.parent / f"{tmp_path.name}-elsewhere.mp4"
+    os.replace(path, outside)
+    os.symlink(outside, path)                                        # the right bytes, linked
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(ref)
+    os.remove(path)
+    os.replace(outside, path)
+    later = worker.cache.clock() + 10 * TTL
+    os.utime(path, (later, later))                                   # the right bytes, "future"
+    with pytest.raises(errors.NotFound):
+        worker.local_uri(ref)
     with open(path, "wb") as handle:
         handle.write(support.mp4(seconds=11.0))
     with pytest.raises(errors.NotFound):
         worker.local_uri(ref)
+
+
+def test_mpilot__with_no_cache_root_a_prepared_ref_is_not_found():
+    """Review H-N4: with no processing cache configured the disk lookup is off, so
+    `local_uri` answers `not_found` for a prepared ref (the engine's refusal), not the
+    cache's `dependency_unavailable` from building a path under no root."""
+    adapter = adapter_for()                                          # no cache root
+    ref = run(adapter.materialize(b.ORG_A, data_url(CLIP)))
+    with pytest.raises(errors.NotFound):
+        adapter.local_uri(ref)
 
 
 def test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process(tmp_path):
@@ -381,6 +408,120 @@ def test_mpilot__the_pilot_composition_records_the_attach_on_its_pool(monkeypatc
     assert given.state.runtime.media_store.attachments is None
 
 
+def test_mpilot__the_exported_write_once_case_runs_on_the_store_alone():
+    """Review PAR-1/PAR-2: the in-process guard (`MediaStaging.attach`) on its own - the
+    exported write-once case against `MediaUploads` with no durable record composed (every
+    test world, and any composition without a database)."""
+    from infrx.contracts.conformance import services
+
+    from .test_uploads import conformance_factory
+
+    def factory(limits=None, **_kw):
+        harness = conformance_factory(limits)
+        harness.port.attachments = None
+        return harness
+
+    asyncio.run(services.media_parity__an_attach_is_write_once(factory))
+
+
+# --- review PAR-3/H-B2: the durable attach on the relay's paths -------------------------
+class Unreachable(support.Durable):
+    """The attach record with its database gone: every read and write fails as psycopg's."""
+
+    async def get(self, job_id):
+        import psycopg
+        raise psycopg.OperationalError("connection to server at db.internal:5432 failed")
+
+    async def put(self, job_id, refs):
+        await self.get(job_id)
+
+
+def accepted_then_lost(world, key: str):
+    """A CREDIT job accepted (admitted, rechecked, attached) whose answer was lost."""
+    from ..g.test_relay_recovery import dies_before_the_wait
+    dies_before_the_wait(world)
+    first = rs.run(rs.call(world.app, rs.body(), key=key))
+    assert first.status == 500, first.body
+    return world.only_job()
+
+
+def test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable():
+    """078eefe's claim: after a restart (nothing in this process's memory) a same-key replay
+    of a job in flight asks the durable record whether the job is bound; with the database
+    gone that is the typed, retryable 503 - never a 500 - and nothing is cancelled, attached
+    or rechecked."""
+    world = rs.World(regime=CREDIT)
+    world.media.attachments = support.Durable()
+    job = accepted_then_lost(world, "k-db")
+    world.restart()
+    world.media.attachments = Unreachable()
+    again = rs.run(rs.call(world.app, rs.body(), key="k-db"))
+    error = again.json().get("error") or {}
+    assert (again.status, error.get("code")) == (503, "dependency_unavailable"), again.body
+    assert job.outcome is None and job.state is JobState.preparing
+    assert world.media.by_job == {}
+
+
+def test_mpilot__a_text_job_attached_here_is_bound_whatever_the_record_holds():
+    """Limit 1's other side, with the durable record composed: the record has no row for a
+    text job, but this process attached it (`by_job[job] == ()`), so it is bound. A same-key
+    replay while it runs is answered from the job - not rechecked against the rotated card,
+    never cancelled (G2 money-B2) - and its preparation found the attach too."""
+    world = rs.World(regime=CREDIT)
+    world.media.attachments = support.Durable()
+    job, box = accepted_then_lost(world, "k-text"), {}
+    assert world.media.by_job[job.id] == () and world.media.attachments.rows == {}
+
+    async def runs():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two ", "people")
+
+    rs.run(runs())
+    world.relay.active_rate_card_version = "rc_rotated_since"
+
+    async def settles():
+        assert job.state is JobState.running, job.state          # untouched by the replay
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(box["lease"], b.outcome(
+            job.id, world, tokens=Usage.of(1200, 5), result_ref=ref))
+
+    world.during.append(settles)
+    again = rs.run(rs.call(world.app, rs.body(), key="k-text"))
+    assert again.status == 200, again.body
+    assert again.json()["choices"][0]["message"]["content"] == "Two people"
+    assert job.outcome.state is JobState.succeeded
+
+
+@pytest.mark.parametrize("failure", ["unreachable", "conflict"])
+def test_mpilot__a_failed_durable_attach_binds_nothing_here(failure):
+    """"Durable first": an attach whose durable write fails leaves this process with no
+    binding either, so the same-key retry's `_resume` sees an unbound job and attaches -
+    instead of answering from an in-process copy the worker's process will never see."""
+    import psycopg
+    adapter = adapter_for()
+    refusal = {"unreachable": psycopg.OperationalError("connection to server failed"),
+               "conflict": errors.Conflict("job already attached to other media")}[failure]
+
+    class Once(support.Durable):
+        async def put(self, job_id, refs):
+            if refusal is not None:
+                raise refusal
+            await super().put(job_id, refs)
+
+    adapter.attachments = Once()
+    prepared = admitted(adapter, request_with(adapter, data_url(CLIP)))
+    refs = run(adapter.stage(b.ORG_A, prepared))
+    adapter.jobs[prepared.request_id] = b.ORG_A
+    with pytest.raises(type(refusal)):
+        run(adapter.attach(prepared.request_id, refs))
+    assert prepared.request_id not in adapter.by_job
+    assert run(adapter.attached(prepared.request_id)) is None
+    refusal = None                                                 # the record is back
+    run(adapter.attach(prepared.request_id, refs))
+    assert adapter.by_job[prepared.request_id] == refs
+    assert adapter.attachments.rows[prepared.request_id] == refs
+
+
 # --- gap 2 on PostgreSQL: the real attach record ------------------------------------------
 def postgres():
     """A fresh migrated, seeded database (tests/d's rig, `INFRX_D_TASK`), its JobStore
@@ -431,33 +572,74 @@ def test_mpilot_pg__each_job_reads_back_its_own_refs_in_order(tmp_path):
 
 
 def test_mpilot_pg__an_attach_is_write_once_and_tenant_bound(tmp_path):
-    """R55 in the database and immutability: a ref of another organization cannot be bound
-    to the job (the composite foreign key), and a job bound to its refs cannot be re-bound
-    to others - both refused with nothing written."""
+    """R55 and write-once on the real record (review PAR-1/H-B1). A ref of another
+    organization is `not_found` (the job row is locked by job AND org). A bound job answers
+    the exact same refs - handles and digests, in order - as a no-op; every other binding is
+    `conflict` with nothing written: other refs, a superset, a subset, a reorder, the same
+    handle with other content. A handle recorded with other content binds nothing either."""
     harness, durable = postgres()
     gateway, _ = two_processes(tmp_path, durable)
     gateway.harness = harness
     job_id, refs = attach(gateway, admit=admitted_on(harness))
+    (a,) = refs
     foreign = run(gateway.materialize(b.ORG_B, data_url(support.mp4(seconds=5.0))))
     with pytest.raises(errors.NotFound):
         run(durable.put(job_id, (foreign,)))
-    other = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=6.0))))
-    with pytest.raises(errors.Conflict):
-        run(durable.put(job_id, (other,)))
-    assert run(durable.get(job_id)) == refs
     run(durable.put(job_id, refs))                                   # the same is a no-op
-    assert run(durable.get(job_id)) == refs
+    other = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=6.0))))
+    moved = a.model_copy(update={"digest": fetch.digest_of(b"other content")})
+    for rebind, what in (((other,), "other refs"), ((a, other), "a superset"),
+                         ((moved,), "the same handle, other content")):
+        with pytest.raises(errors.Conflict):
+            run(durable.put(job_id, rebind))
+        assert run(durable.get(job_id)) == refs, what
+    pair = b.request(harness)
+    admitted_on(harness)(pair)
+    run(durable.put(pair.request_id, (a, other)))
+    for rebind, what in (((other, a), "a reorder"), ((a,), "a subset")):
+        with pytest.raises(errors.Conflict):
+            run(durable.put(pair.request_id, rebind))
+        assert run(durable.get(pair.request_id)) == (a, other), what
+    run(durable.put(pair.request_id, (a, other)))                   # still a no-op
     # a handle already recorded is bound only for the content it was recorded with
-    forged = refs[0].model_copy(update={"digest": fetch.digest_of(b"other content")})
     job = b.request(harness)
     admitted_on(harness)(job)
     with pytest.raises(errors.Conflict):
-        run(durable.put(job.request_id, (forged,)))
+        run(durable.put(job.request_id, (moved,)))
     assert run(durable.get(job.request_id)) is None
 
 
+def test_mpilot_pg__an_attach_waits_for_the_job_row(tmp_path):
+    """Attaches of one job are serialized on its row (`for update`): while another
+    transaction holds it, an attach waits instead of reading a binding that is about to
+    change - two concurrent attaches of different refs cannot both commit (review PAR-1).
+    The holder takes `for no key update`, which the binding's foreign-key check (`for key
+    share`) does not wait for, so only the attach's own row lock can make it wait."""
+    import psycopg
+    harness, durable = postgres()
+    gateway, _ = two_processes(tmp_path, durable)
+    gateway.harness = harness
+    job = b.request(harness)
+    admitted_on(harness)(job)
+    ref = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=5.0))))
+
+    async def contended():
+        with psycopg.connect(pgharness.dsn(harness.extra["database"])) as holder:
+            holder.execute("select 1 from infrx.jobs where request_id = %s "
+                           "for no key update", (job.request_id,))
+            putting = asyncio.create_task(durable.put(job.request_id, (ref,)))
+            await asyncio.sleep(0.5)
+            waited = not putting.done()
+            holder.rollback()
+        await putting
+        return waited
+
+    assert run(contended()), "the attach did not wait for the job row"
+    assert run(durable.get(job.request_id)) == (ref,)
+
+
 def test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql(tmp_path):
-    """Item 3 on PostgreSQL: the two exported cases MPILOT added, against `MediaUploads`
+    """Item 3 on PostgreSQL: the exported cases MPILOT added, against `MediaUploads`
     whose attach record is `PgAttachments` on the D harness's database. `admitted` commits
     the staged request as the job row the attach's foreign key names (D2's `infrx.admit`);
     the store's clock is the database's, so the window moves with it."""
@@ -485,7 +667,8 @@ def test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql(tmp_path):
                        extra={**base.extra, "admitted": admitted})
 
     ours = (services.media_sec__an_upload_is_usable_only_within_its_window,
-            services.media_parity__an_attach_outlives_the_process_that_made_it)
+            services.media_parity__an_attach_outlives_the_process_that_made_it,
+            services.media_parity__an_attach_is_write_once)
     assert set(ours) <= set(SUITES["mediastore"][0]())
     for case in ours:
         asyncio.run(case(factory))

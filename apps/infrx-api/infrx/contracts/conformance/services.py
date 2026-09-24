@@ -423,6 +423,43 @@ async def media_parity__an_attach_outlives_the_process_that_made_it(factory):
         raise AssertionError("another process invented media for an unknown job")
 
 
+async def media_parity__an_attach_is_write_once(factory):
+    """DUR-RECOVER / MPILOT (review PAR-1/PAR-2): a job runs on the media it was first bound
+    to, in every adapter. The same refs again are a no-op (the relay's same-key retry
+    re-attaches exactly them); any other binding - other refs, a superset, a subset, a
+    reorder, none - is `conflict` and leaves the first; one attach naming a ref twice is
+    `invalid_request`."""
+    harness = factory()
+    one = await b.materialized(harness, b.ORG_A)
+    two = await b.materialized(harness, b.ORG_A,
+                               handle="upl_conformancefixture0000000000000000002")
+    jobs = [b.request(harness, refs=(one, two)) for _ in range(3)]
+    for request in jobs:
+        staged = await harness.port.stage(b.ORG_A, request)
+        hook(harness, "admitted")(request.request_id, b.ORG_A)
+    a, c = staged
+    first, second, third = (request.request_id for request in jobs)
+
+    async def refused(job_id, refs, error, what):
+        try:
+            await harness.port.attach(job_id, refs)
+        except error:
+            pass
+        else:
+            raise AssertionError(f"an attach of {what} was accepted")
+
+    await harness.port.attach(first, (a,))
+    await harness.port.attach(first, (a,))                 # the same refs: a no-op
+    for refs, what in (((c,), "other refs"), ((a, c), "a superset"), ((), "no media")):
+        await refused(first, refs, errors.Conflict, f"{what} over a bound job")
+    await harness.port.attach(second, (a, c))
+    for refs, what in (((c, a), "a reorder"), ((a,), "a subset")):
+        await refused(second, refs, errors.Conflict, f"{what} over a bound job")
+    await harness.port.attach(first, (a,))                 # still bound to the first refs
+    await harness.port.attach(second, (a, c))
+    await refused(third, (a, a), errors.InvalidRequest, "one ref twice")
+
+
 def mediastore_cases():
     return [media_sec__an_upload_is_owned_verified_and_immutable,
             media_sec__another_org_cannot_resolve_or_finalize,
@@ -434,7 +471,8 @@ def mediastore_cases():
             media_sec__an_expired_upload_window_says_so,
             media_sec__a_partial_request_stages_nothing,
             media_sec__an_upload_is_usable_only_within_its_window,
-            media_parity__an_attach_outlives_the_process_that_made_it]
+            media_parity__an_attach_outlives_the_process_that_made_it,
+            media_parity__an_attach_is_write_once]
 
 
 # ==========================================================================

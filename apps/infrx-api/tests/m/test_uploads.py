@@ -588,5 +588,5 @@ def test_the_exported_conformance_suite_runs_every_upload_case():
     print("\nmediastore conformance against infrx.media.uploads.MediaUploads:")
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
-    assert len(outcomes) == len(cases()) == 11
+    assert len(outcomes) == len(cases()) == 12
     assert [name for name, out in outcomes.items() if out != "pass"] == []

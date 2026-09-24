@@ -46,7 +46,9 @@ OTHER_TASKS = {
     "media_parity__an_attach_outlives_the_process_that_made_it": "prepare",
 }
 OWNED_BY_M1 = ("media_sec__a_foreign_media_reference_is_not_staged",
-               "media_sec__a_partial_request_stages_nothing")
+               "media_sec__a_partial_request_stages_nothing",
+               # MPILOT: `attach` is M1's, and write-once is its rule.
+               "media_parity__an_attach_is_write_once")
 
 
 class Deferred:
@@ -638,7 +640,7 @@ def test_the_exported_conformance_suite_runs_the_cases_m1_owns():
         print(f"  skipped {case}: needs {missing}")
     assert ran + len(skipped) == len(cases())
     assert {case: missing.split(" ")[0] for case, missing in report.items()} == OTHER_TASKS
-    assert ran == len(OWNED_BY_M1) == 2
+    assert ran == len(OWNED_BY_M1) == 3
     # and the cases that ran are the ones M1 owns, not whichever happened not to skip
     assert set(OWNED_BY_M1) & set(report) == set()
 

@@ -708,6 +708,13 @@ MUTANTS: tuple[Mutant, ...] = (
           '            raise errors.NotFound(f"no staged media for job {job_id}")',
        "media_parity__staging_is_content_addressed_and_tenant_namespaced",
        "media_parity__an_attach_outlives_the_process_that_made_it"),
+    # MPILOT review PAR-1/PAR-2: the fake's attach is write-once, like every adapter's.
+    _m("fake_attach_rebinds", "a bound job is never re-bound (other, superset, subset, reorder)",
+       M, "        if self.bound.setdefault(job_id, owned) != owned:", "        if False:",
+       "media_parity__an_attach_is_write_once"),
+    _m("fake_attach_accepts_a_duplicate", "one attach naming a ref twice is invalid_request",
+       M, "        if len({ref.handle for ref in owned}) != len(owned):", "        if False:",
+       "media_parity__an_attach_is_write_once"),
     # MPILOT (proposed ruling): the upload window bounds use as well as completion.
     _m("upload_used_past_its_window", "an upload past its window is 410 at use (R22)",
        M, "                and self.clock.now() >= upload.expires_at:", "                and False:",

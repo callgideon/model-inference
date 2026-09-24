@@ -32,6 +32,8 @@ A = "media/attachments.py"
 E2E = "test_mpilot__an_upload_named_in_a_job_over_the_mounted_gateway"
 SECOND = "test_mpilot__a_second_process_resolves_the_attach_and_the_local_file"
 SECOND_PG = "test_mpilot_pg__a_second_process_resolves_the_attach_and_the_local_file"
+WRITE_ONCE = "test_mpilot__the_exported_write_once_case_runs_on_the_store_alone"
+WRITE_ONCE_PG = "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -75,7 +77,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # === item 2: a second process resolves the attach and the local file ===============
     _m("attach_not_persisted",
        "the attach is written to the durable record another process reads (gap 2)",
-       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       S, "            await self.attachments.put(job_id, owned)", "            pass",
        SECOND),
     _m("attach_not_read_back",
        "a process that did not attach reads the job's refs from the durable record",
@@ -92,8 +94,23 @@ MUTANTS: tuple[Mutant, ...] = (
        SECOND, "test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process"),
     _m("index_rebuilt_without_the_hash",
        "a file found on disk is served only if its bytes are the key's content hash",
-       R, "        if digest_of(data) != digest:\n            return None\n",
+       R, "        if digest_of(data) != digest or stored_at > self.clock() + "
+          "FUTURE_MTIME_SLACK_S:\n            return None\n",
        "        pass\n", "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
+    # review H-N1/H-N4/PAR-4 (nonblocking, folded in)
+    _m("disk_hash_compared_by_prefix", "H-N1: the whole content hash, not the path's 16 hex",
+       R, "        if digest_of(data) != digest or", "        if digest_of(data)[:23] != digest[:23] or",
+       "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
+    _m("disk_symlink_followed", "PAR-4: a symlink at the cache path is not served",
+       R, "os.O_RDONLY | os.O_NOFOLLOW", "os.O_RDONLY",
+       "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
+    _m("future_mtime_believed", "PAR-4: a file dated in the future does not extend its life",
+       R, " or stored_at > self.clock() + FUTURE_MTIME_SLACK_S:", ":",
+       "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
+    _m("disk_lookup_without_a_root", "H-N4: no cache root, no disk lookup: not_found",
+       R, "        if not self.enabled:\n            return None\n        org_id, digest, profile = key",
+       "        org_id, digest, profile = key",
+       "test_mpilot__with_no_cache_root_a_prepared_ref_is_not_found"),
     _m("stale_entry_served_after_expiry",
        "a file found on disk lives from when it was written, not from when it was found",
        R, "                stored_at = os.fstat(handle.fileno()).st_mtime",
@@ -108,6 +125,34 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            if entry is None or entry.probed is None \\\n",
        "            if entry is None \\\n",
        SECOND, dies_by=("AttributeError",)),
+    # --- review PAR-1/PAR-2: write-once in process (the store alone, no durable record) ---
+    _m("in_process_rebind_accepted",
+       "a job bound in this process is never re-bound: other refs, superset, subset, reorder",
+       S, "        if bound is not None and bound != owned:", "        if False:", WRITE_ONCE),
+    _m("in_process_duplicate_accepted", "one attach naming a ref twice is invalid_request",
+       S, "        if len({ref.handle for ref in owned}) != len(owned):", "        if False:",
+       WRITE_ONCE),
+    # --- review PAR-3/H-B2: the durable attach on the relay's paths (O4/O5/O6) -------------
+    _m("bound_here_before_it_is_durable",
+       "O4: a failed durable write leaves no in-process binding, so the retry attaches",
+       S, "        if self.attachments is not None:            # durable first (MPILOT gap 2)\n"
+          "            await self.attachments.put(job_id, owned)\n"
+          "        self.by_job[job_id] = owned\n",
+       "        self.by_job[job_id] = owned\n"
+       "        if self.attachments is not None:            # durable first (MPILOT gap 2)\n"
+       "            await self.attachments.put(job_id, owned)\n",
+       "test_mpilot__a_failed_durable_attach_binds_nothing_here"),
+    _m("attached_with_no_media_reads_unbound",
+       "O5: () bound in this process is bound, whatever the record (no row for a text job)",
+       S, "        if refs is None and self.attachments is not None:",
+       "        if not refs and self.attachments is not None:",
+       "test_mpilot__a_text_job_attached_here_is_bound_whatever_the_record_holds"),
+    _m("replay_read_unguarded",
+       "O6: the durable read in _resume is a dependency - a database failure is a 503",
+       "gateway/routes/relay.py",
+       "        if await _dependency(self.media.attached(job.request_id)) is not None:",
+       "        if await self.media.attached(job.request_id) is not None:",
+       "test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable"),
     _m("attach_record_not_composed",
        "create_app from settings gives M's store the durable attach record on D's pool",
        "gateway/pilot.py", "        job_org=relay.job_org, attachments=attachments)",
@@ -119,7 +164,7 @@ MUTANTS: tuple[Mutant, ...] = (
 PG_MUTANTS: tuple[Mutant, ...] = (
     _m("attach_not_persisted_pg",
        "the attach is written to D2's staged tables another process reads",
-       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       S, "            await self.attachments.put(job_id, owned)", "            pass",
        SECOND_PG, "test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql"),
     _m("another_jobs_refs_returned",
        "a job reads back its own refs, never another job's",
@@ -129,17 +174,31 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        A, "order by m.position\")", "order by m.position desc\")",
        "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order"),
     _m("rebind_to_other_refs_accepted", "a job bound to its refs is never re-bound to others",
-       A, "            if [row[1] for row in bound] != [ref.handle for ref in refs]:",
-       "            if False:", "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
+       A, "                if bound != given:", "                if False:", WRITE_ONCE_PG),
+    # review PAR-1: the three rebinds the round-1 check let through or never tried
+    _m("rebind_to_a_superset_accepted", "a bound job is not extended by a longer attach",
+       A, "                if bound != given:", "                if bound != given[:len(bound)]:",
+       WRITE_ONCE_PG),
+    _m("rebind_reordered_accepted", "a bound job's order is its order: a reorder is a conflict",
+       A, "                if bound != given:", "                if sorted(bound) != sorted(given):",
+       WRITE_ONCE_PG),
+    _m("rebind_to_other_content_accepted",
+       "the binding is compared by handle AND digest, not by handle alone",
+       A, "                if bound != given:",
+       "                if [h for h, _ in bound] != [h for h, _ in given]:", WRITE_ONCE_PG),
+    _m("existing_binding_ignored", "an attach inserts only when the job has no binding yet",
+       A, "            if bound:\n", "            if False:\n", WRITE_ONCE_PG,
+       dies_by=("UniqueViolation",)),      # the exact replay re-inserts its own row
+    _m("attach_not_serialized", "attaches of one job wait for its row (for update)",
+       A, " and org_id = %s for update\"", " and org_id = %s\"",
+       "test_mpilot_pg__an_attach_waits_for_the_job_row"),
+    _m("tenant_unchecked_at_the_lock", "R55: a ref of another org than the job is not_found",
+       A, "where request_id = %s and org_id = %s for update",
+       "where request_id = %s and %s::uuid is not null for update", WRITE_ONCE_PG),
     _m("recorded_content_unchecked",
        "a handle recorded with other content is a conflict, never bound",
-       A, "                if recorded != ref.digest:", "                if False:",
-       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
-    _m("foreign_job_not_translated",
-       "R55: a ref of another org than the job is the typed not_found, not a database error",
-       A, "        except pg.ForeignKeyViolation:", "        except pg.UniqueViolation:",
-       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound",
-       dies_by=("ForeignKeyViolation",)),
+       A, "                    if recorded != ref.digest:", "                    if False:",
+       WRITE_ONCE_PG),
 )
 
 
