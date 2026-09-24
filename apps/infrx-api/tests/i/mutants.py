@@ -1107,6 +1107,41 @@ MUTANTS += (
        POLICY, "        code = BLOCKED\n", "        code = 0\n", POLICY_CASE),
 )
 
+# --- I8 slice 6: the rollback drill --------------------------------------------------------
+KG, JOURNEY = "../../infra/rollout/known-good.py", "../../infra/rollout/verify-journey.sh"
+JUDGED = "test_ops_recover__a_known_good_target_is_judged_by_its_tree_and_its_record"
+BOXCHECK = "test_ops_recover__the_box_check_shows_what_each_backup_really_holds"
+SERVES = "test_ops_recover__the_journey_proves_a_real_video_job_its_result_and_settleable_usage"
+MUTANTS += (
+    _m("known_good_without_preparation", "a tree without the preparation loop is no target",
+       KG, 'check("preparation", prep and "PreparationRunner(" in main,', 'check("preparation", True,',
+       JUDGED),
+    _m("known_good_ignores_migrations", "a tree whose migrations are not applied is no target",
+       KG, 'check("migrations", newest <= applied,', 'check("migrations", True,', JUDGED),
+    _m("known_good_without_evidence", "the record must carry evidence that exists",
+       KG, 'entry.get("known_good") is True and not absent,', "entry is not None,", JUDGED),
+    _m("known_good_bundle_unchecked", "the release bundle must be in the release prefix",
+       KG, '{f"{sha}.bundle", f"{sha}.sha256"} <= have,', "True,", JUDGED),
+    _m("box_check_prints_backup_env", "only the release id is read from a backup",
+       STEP + "85-known-good-box.sh", "sed -n 's/^INFRX_RELEASE_SHA=//p' | tail -n1", "cat", BOXCHECK),
+    _m("box_check_trusts_a_tampered_bundle", "a bundle that fails its sha256 is not ready",
+       STEP + "85-known-good-box.sh", 'sha256sum -c --status "$TARGET.sha256"', "true", BOXCHECK),
+    _m("journey_accepts_a_closed_edge", "a public 503 after readiness fails the drill",
+       JOURNEY, 'if [ "$lag" -lt "$EDGE_LAG_MAX_S" ]; then', "if true; then", SERVES),
+    _m("journey_ignores_usage_certainty", "unsettleable usage fails the drill",
+       JOURNEY, '[ "$(field "$work/status" usage_certainty)" = authoritative ] && ok',
+       "true && ok", SERVES),
+    _m("journey_may_replay", "the drill's job is fresh work, never an idempotent replay",
+       JOURNEY, "printf 'Idempotency-Key: verify-journey-%s\\n'", "printf 'X-Note: %s\\n'", SERVES),
+    _m("journey_window_admits", "during the window a submission must be refused",
+       JOURNEY, "if [ \"$code\" = 503 ] && grep -qi '^retry-after:' \"$work/hd\"; then",
+       "if true; then", "test_ops_recover__during_the_window_nothing_new_is_admitted"),
+    _m("install_readiness_as_cold_start", "readiness is never reported as a cold start",
+       "deploy/install.sh", 'else kind="engine kept running: NOT a cold start"; fi',
+       'else kind="cold start: engine restarted, weights loaded"; fi',
+       "test_ops_recover__an_install_never_reports_readiness_as_a_cold_start"),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in

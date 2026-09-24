@@ -54,10 +54,11 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                                        "60-verify-local.sh", "71-pool-budget.sh",
                                        "72-observe-install.sh", "73-observe-status.sh",
                                        "74-alert-test.sh", "80-mirror-artifacts.sh",
-                                       "81-restore-artifacts.sh",
+                                       "81-restore-artifacts.sh", "85-known-good-box.sh",
                                        "90-revert.sh", "91-abort.sh",
                                        "93-restore-edge.sh", "95-maintenance.sh"]
-    for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh"]:
+    for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh",
+                 ROLLOUT / "verify-journey.sh"]:
         text = path.read_text()
         done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
         assert done.returncode == 0, (path.name, done.stderr)

@@ -93,14 +93,22 @@ fi
 # The engine takes minutes to load, so it is started (a no-op when it is up) and not
 # restarted - unless ENGINE=restart, which the runbook's cutover sets: a running engine
 # keeps its old image, flags and mounts until it restarts.
+engine_t0=$SECONDS
 if [ "${ENGINE:-start}" = restart ]; then systemctl restart marlin2b-vllm
 else systemctl start marlin2b-vllm; fi
 wait_http http://127.0.0.1:8000/health "${ENGINE_READY_S:-900}" \
   || die "the engine is not healthy; nothing else was restarted (backup $backup)" 4
+# I8: the two timings a drill records, never one number standing in for the other - a cold
+# start (weights loaded) only when the engine was restarted; otherwise it was already up.
+if [ "${ENGINE:-start}" = restart ]; then kind="cold start: engine restarted, weights loaded"
+else kind="engine kept running: NOT a cold start"; fi
+echo "timing engine_s=$((SECONDS - engine_t0)) ($kind)"
 
 # 6. the runtime, then readiness
+runtime_t0=$SECONDS
 systemctl restart $runtime_units
 wait_ready "$mode" || die "the runtime did not become ready; the edge was not changed. Roll back with: $here/rollback.sh $backup" 4
+echo "timing runtime_ready_s=$((SECONDS - runtime_t0)) (runtime restart to /readyz: readiness only, no request served)"
 
 # 7. the edge - pilot only (a dev host answering on the pilot's name is an unmetered pilot)
 if [ "$mode" = pilot ]; then edge_install "$here"; fi

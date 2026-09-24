@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "description": "Releases a rollback may return to, and the evidence that they served real work (I8 slice 6). infra/rollout/known-good.py checks a candidate against its own tree (preparation loop, migrations, config names) and this record; a candidate comes from here and its release bundle, never from a backup directory alone (F7: the only install backup on the box holds 27af05a, which cannot complete a job). Append entries; never rewrite one - a release that stops qualifying gets a new entry with known_good false and the reason.",
+  "releases": [
+    {
+      "sha": "27af05a8cb06ff446d62d13bfbd83f6e573d3461",
+      "known_good": false,
+      "reason": "no preparation loop (PREP-WORKER landed after it): accepts video jobs it can never prepare; its own commit says the pilot cannot serve until the loop lands",
+      "evidence": ["research/plan/20-platform-handoff-2026-09-24.md"]
+    },
+    {
+      "sha": "422631591845fbd66b590c73d5ff4150318d9d7a",
+      "known_good": true,
+      "served": "second pilot release, 2026-09-24: W12 smoke 15/15, text and video jobs settled with engine-exact counts; E4B run1/run2; E1B through the public edge",
+      "caveat": "intake close-on-refusal ReadErrors under an 8-burst (fixed in bda1586); LARGE_BODY_LIMIT=8 is not in its env",
+      "evidence": ["models/marlin2b/results/E4B-box-4226315/run2-20260924T172244Z",
+                   "models/marlin2b/results/E1B-box-4226315/run2-distinct-keys",
+                   "research/plan/20-platform-handoff-2026-09-24.md"]
+    },
+    {
+      "sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+      "known_good": true,
+      "served": "third pilot release, deployed 2026-09-24T20:06Z: W12 smoke 15/15; E1B acceptance 0 failed at 0.5/s, 1.0/s and an 8-burst",
+      "caveat": "certification run3 on it was still running at this record",
+      "evidence": ["models/marlin2b/results/E1B-box-bda1586/bench.jsonl",
+                   "research/plan/evidence/coordinator/2026-09-22-session-02.md"]
+    }
+  ]
+}
