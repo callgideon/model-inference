@@ -32,7 +32,8 @@ def test_an_unexpected_replay_invalidates_the_cell_and_never_counts_as_capacity(
         gw = FakeGateway(idempotent=True)
         first, _, _, _ = run_bench(argv(tmp, "c1", requests=4, concurrency=1,
                                         dataset_version="cell"), gw, env={"MARLIN_API_KEY": KEY})
-        assert first["validity"]["verdict"] == "VALID", first["validity"]
+        # mechanically clean: the only reason is that no profile was declared
+        assert first["validity"]["reasons"] == [bench.UNPROFILED], first["validity"]
         second, raw, _, _ = run_bench(argv(tmp, "c2", requests=8, concurrency=1,
                                            dataset_version="cell"), gw,
                                       env={"MARLIN_API_KEY": KEY})
@@ -62,7 +63,7 @@ def test_a_resume_labels_its_replays_and_they_do_not_invalidate_it():
         a = argv(tmp, "r2", requests=3, concurrency=1, dataset_version="ds") + ["--resume", first]
         resumed, raw, _, _ = run_bench(a, gw, env={"MARLIN_API_KEY": KEY})
         v = resumed["validity"]
-        assert v["verdict"] == "VALID" and v["intentional_resume"], v
+        assert v["reasons"] == [bench.UNPROFILED] and v["intentional_resume"], v
         assert v["replayed"] == 2 and v["unexpected_replayed"] == 0
         assert [(r["resend"], r["served"]) for r in raw] == [("resume", "replay")] * 2
         assert resumed["accepted_fresh"] == 0 and resumed["req_per_s"] == 0

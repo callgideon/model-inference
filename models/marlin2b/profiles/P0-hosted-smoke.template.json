@@ -1,0 +1,84 @@
+{
+  "schema": "infrx.run-profile/1",
+  "identity": {
+    "run_id": "e1c-p0-hosted-smoke-1",
+    "source_sha": "FILL: 40-hex sha of the checkout that runs bench.py",
+    "deployed_sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+    "image_digest": "FILL: sha256:<64 hex> of infrx-runtime:<release>",
+    "weights_sha256": "FILL: sha256:<64 hex> (W3 serving pin)",
+    "tokenizer_sha256": "FILL: sha256:<64 hex> (W3 serving pin)",
+    "processor_sha256": "FILL: sha256:<64 hex> (W3 serving pin)",
+    "template_sha256": "FILL: sha256:<64 hex> (W3 serving pin)",
+    "model_revision": "nemostation/marlin-2b@2026-09-01",
+    "preparation_profile": "v1",
+    "engine_options": {"max_num_seqs": 8, "max_video_seconds": 82},
+    "migration_version": "0018",
+    "config_version": "FILL: /etc/marlin2b-gateway.env digest or version"
+  },
+  "target": {
+    "path": "public-edge",
+    "allowlist": ["marlin2b.callbill.ai"],
+    "environment_owner": "coordinator (pilot box i-0e8449a4ffca29bab)",
+    "allowed_fault_targets": [],
+    "tenant_key_env": ["INFRX_API_KEY"],
+    "test_key_ids": ["FILL: 8-12 hex id prefix of the certify/E1B consumer key"],
+    "customer_traffic": false,
+    "maintenance_window": null
+  },
+  "bounds": {
+    "max_duration_s": 900,
+    "max_requests": 4,
+    "max_input_bytes": 20000000,
+    "max_input_tokens_per_request": 32768,
+    "max_output_tokens_per_request": 128,
+    "max_output_tokens": 512,
+    "max_concurrency": 1,
+    "max_drain_s": 600,
+    "spend": {
+      "currency": "USD",
+      "max_usd": 0.05,
+      "outstanding_holds_usd": null,
+      "rates": {"input_usd_per_mtok": 0.10, "output_usd_per_mtok": 0.30,
+                "source": "P-22 pv_marlin2b_usd_2026_09 (plan 20 section 14.1)",
+                "as_of": "2026-09-24"}
+    },
+    "stop_thresholds": {}
+  },
+  "workload": {
+    "manifest_sha256": "3a2c05f5928cb53b9441037c193cc40c61c0d348a05ae924edda8677ed153581",
+    "data_source": "E1 licensed corpus (CC-BY / public domain), two committed clips",
+    "item_ids": ["c015-nasasteve-240p-tiny", "c051-tos720p-360p-16x9"],
+    "dataset_version": "e1c-smoke-1",
+    "seed": 20260922,
+    "forms": ["upload", "upload", "video_b64", "video_b64"],
+    "max_tokens_mix": [128],
+    "max_clip_duration_s": 82,
+    "transport": "sse",
+    "tenants": 1,
+    "expected_invalid": ["c051-tos720p-360p-16x9"]
+  },
+  "measurement": {
+    "profile_class": "P0",
+    "client": {"location": "FILL: where bench.py runs", "resources": "one process",
+               "clock": "time.perf_counter, one process"},
+    "arrival": "closed-loop",
+    "rate_per_s": null,
+    "concurrency": 1,
+    "warmup_excluded": true,
+    "cache_regime": "unknown",
+    "max_driver_lag_s": 1.0,
+    "min_samples": 1,
+    "repeats": 1,
+    "thresholds": {},
+    "fault_schedule": [],
+    "telemetry": [],
+    "price": null
+  },
+  "cleanup": {
+    "policy": "drain",
+    "owned_prefix": "infrx-e1c-",
+    "restore": "nothing on the target changes; uploads expire with their TTL",
+    "max_cleanup_s": 600,
+    "evidence_destination": "models/marlin2b/results/E1C-smoke-<release7>/"
+  }
+}

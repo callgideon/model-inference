@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "infrx.run-profile/1",
+  "title": "Marlin/infrx benchmark run profile, version 1 (consumer-v1/05 section 1)",
+  "description": "Everything a resource-consuming bench.py run must declare before it may start. No secrets, media or raw prompts: protected config and data are referenced by ids and hashes; API keys by environment variable NAME only. runprofile.py interprets this subset of JSON Schema (type, const, enum, required, properties, additionalProperties, items, minItems, minimum, exclusiveMinimum, pattern, minLength) and adds the cross-field checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "identity", "target", "bounds", "workload", "measurement", "cleanup"],
+  "properties": {
+    "schema": {"const": "infrx.run-profile/1"},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "source_sha", "deployed_sha", "image_digest", "weights_sha256",
+                   "tokenizer_sha256", "processor_sha256", "template_sha256", "model_revision",
+                   "preparation_profile", "engine_options", "migration_version", "config_version"],
+      "properties": {
+        "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"},
+        "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "deployed_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "weights_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "tokenizer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "processor_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "template_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "model_revision": {"type": "string", "pattern": "^[A-Za-z0-9._/@:-]{1,128}$"},
+        "preparation_profile": {"type": "string", "minLength": 1},
+        "engine_options": {"type": "object"},
+        "migration_version": {"type": "string", "minLength": 1},
+        "config_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "allowlist", "environment_owner", "allowed_fault_targets",
+                   "tenant_key_env", "test_key_ids", "customer_traffic", "maintenance_window"],
+      "properties": {
+        "path": {"enum": ["public-edge", "direct-gateway", "direct-engine"],
+                 "description": "Which hop the requests enter: the public edge (Caddy), the gateway port behind it, or the engine. S3 F5: a cell through 127.0.0.1:8001 says nothing about delivery through the edge."},
+        "test_key_ids": {"type": "array", "minItems": 1,
+                         "items": {"type": "string", "pattern": "^[0-9a-f]{8,12}$"},
+                         "description": "Id prefixes (never key material) of the only API keys allowed to be active on the target during the run. S3 F8 / P-24: a paid run refuses when --key-inventory shows any other active key."},
+        "allowlist": {"type": "array", "minItems": 1,
+                      "items": {"type": "string", "pattern": "^[a-z0-9.-]{1,253}(:[0-9]{1,5})?$"}},
+        "environment_owner": {"type": "string", "minLength": 1},
+        "allowed_fault_targets": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "tenant_key_env": {"type": "array", "minItems": 1,
+                           "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$"}},
+        "customer_traffic": {"type": "boolean"},
+        "maintenance_window": {"type": ["string", "null"]}
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_duration_s", "max_requests", "max_input_bytes", "max_input_tokens_per_request",
+                   "max_output_tokens_per_request", "max_output_tokens", "max_concurrency",
+                   "max_drain_s", "spend", "stop_thresholds"],
+      "properties": {
+        "max_duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "max_requests": {"type": "integer", "minimum": 1},
+        "max_input_bytes": {"type": "integer", "minimum": 0},
+        "max_input_tokens_per_request": {"type": "integer", "minimum": 1},
+        "max_output_tokens_per_request": {"type": "integer", "minimum": 1},
+        "max_output_tokens": {"type": "integer", "minimum": 1},
+        "max_concurrency": {"type": "integer", "minimum": 1},
+        "max_drain_s": {"type": "number", "exclusiveMinimum": 0},
+        "spend": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["currency", "max_usd", "outstanding_holds_usd", "rates"],
+          "properties": {
+            "currency": {"const": "USD"},
+            "max_usd": {"type": ["number", "null"], "minimum": 0},
+            "outstanding_holds_usd": {"type": ["number", "null"], "minimum": 0},
+            "rates": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["input_usd_per_mtok", "output_usd_per_mtok", "source", "as_of"],
+              "properties": {
+                "input_usd_per_mtok": {"type": "number", "minimum": 0},
+                "output_usd_per_mtok": {"type": "number", "minimum": 0},
+                "source": {"type": "string", "minLength": 1},
+                "as_of": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+              }
+            }
+          }
+        },
+        "stop_thresholds": {"type": "object"}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_sha256", "data_source", "item_ids", "dataset_version", "seed", "forms",
+                   "max_tokens_mix", "max_clip_duration_s", "transport", "tenants",
+                   "expected_invalid"],
+      "properties": {
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "data_source": {"type": "string", "minLength": 1},
+        "item_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "dataset_version": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,96}$"},
+        "seed": {"type": "integer"},
+        "forms": {"type": "array", "minItems": 1,
+                  "items": {"enum": ["text", "video_url", "video_b64", "upload"]}},
+        "max_tokens_mix": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
+        "max_clip_duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "transport": {"enum": ["sse"]},
+        "tenants": {"type": "integer", "minimum": 1},
+        "expected_invalid": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "constraints": {"type": "object"}
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_class", "client", "arrival", "rate_per_s", "concurrency", "warmup_excluded",
+                   "cache_regime", "max_driver_lag_s", "min_samples", "repeats", "thresholds",
+                   "fault_schedule", "price"],
+      "properties": {
+        "profile_class": {"enum": ["P0", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"],
+                          "description": "consumer-v1/05 section 4. P4 must enter through the public edge and must observe refusals, or it measured no overload delivery."},
+        "client": {"type": "object", "additionalProperties": false,
+                   "required": ["location", "resources", "clock"],
+                   "properties": {"location": {"type": "string", "minLength": 1},
+                                  "resources": {"type": "string", "minLength": 1},
+                                  "clock": {"type": "string", "minLength": 1}}},
+        "arrival": {"enum": ["open-loop", "closed-loop"]},
+        "rate_per_s": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "concurrency": {"type": ["integer", "null"], "minimum": 1},
+        "warmup_excluded": {"type": "boolean"},
+        "cache_regime": {"enum": ["cold-host", "cold-artifact", "loaded-cold-preparation",
+                                  "warm-repeated", "warm-distinct", "unknown"]},
+        "max_driver_lag_s": {"type": "number", "exclusiveMinimum": 0},
+        "min_samples": {"type": "integer", "minimum": 1},
+        "repeats": {"type": "integer", "minimum": 1},
+        "thresholds": {"type": "object", "additionalProperties": false,
+                       "properties": {"ttft_s": {"type": ["number", "null"], "exclusiveMinimum": 0},
+                                      "e2e_s": {"type": ["number", "null"], "exclusiveMinimum": 0},
+                                      "max_error_rate": {"type": ["number", "null"], "minimum": 0}}},
+        "fault_schedule": {"type": "array",
+                           "items": {"type": "object", "additionalProperties": false,
+                                     "required": ["at_s", "target", "action"],
+                                     "properties": {"at_s": {"type": "number", "minimum": 0},
+                                                    "target": {"type": "string", "minLength": 1},
+                                                    "action": {"type": "string", "minLength": 1}}}},
+        "telemetry": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "price": {"type": ["object", "null"], "additionalProperties": false,
+                  "required": ["usd_per_hour", "instances", "source", "as_of"],
+                  "properties": {"usd_per_hour": {"type": "number", "exclusiveMinimum": 0},
+                                 "instances": {"type": "integer", "minimum": 1},
+                                 "source": {"type": "string", "minLength": 1},
+                                 "as_of": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}}}
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "owned_prefix", "restore", "max_cleanup_s", "evidence_destination"],
+      "properties": {
+        "policy": {"enum": ["drain", "cancel", "drain-then-cancel"]},
+        "owned_prefix": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"},
+        "restore": {"type": "string", "minLength": 1},
+        "max_cleanup_s": {"type": "number", "exclusiveMinimum": 0},
+        "evidence_destination": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

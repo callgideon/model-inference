@@ -87,6 +87,10 @@ PARSER_VERSION = "e1c.1"
 # client, not the target, shaped the offered load, and the cell is INVALID. The E1B box
 # cells measured 0.02-0.27 s (the 8-burst's base64 encoding); 1 s is the default bound.
 DEFAULT_MAX_DRIVER_LAG_S = 1.0
+# §1: a run with no profile has declared no bounds, target or identity; its mechanics may be
+# clean but its numbers are not a qualifying measurement (BENCH-VALIDITY "unbounded profile").
+UNPROFILED = "unprofiled: no --profile declares this run's bounds, target and identity"
+RESULT_SCHEMA = "infrx.run-result/1"
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
 # and nothing else. `upload://` (this client's previous spelling) is refused at ingress by
@@ -456,6 +460,15 @@ def parse_args(argv=None):
     ap.add_argument("--validate-raw", default=None,
                     help="re-derive the validity of an existing raw file (read-only; the raw "
                          "rows are never rewritten) and print it; runs nothing")
+    ap.add_argument("--profile", default=None,
+                    help="run profile JSON (profiles/run-profile.v1.schema.json): the run "
+                         "refuses to start unless it validates against these flags")
+    ap.add_argument("--key-inventory", default=None,
+                    help="sanitized JSON of the target's active key id prefixes (the "
+                         "coordinator's read-only op); a paid profiled run needs it (P-24)")
+    ap.add_argument("--validate-only", action="store_true",
+                    help="validate --profile against the other flags and print the verdict; "
+                         "no request, no provisioning")
     ap.add_argument("--intentional-resume", action="store_true",
                     help="with --validate-raw: the file is a --resume run, so its replays are "
                          "the resume's own and labelled, not unexpected")
@@ -565,7 +578,8 @@ def load_corpus(path, subset="fast"):
                       # to be declared with any throughput number, not decoration.
                       "codec": c["derived"].get("codec"), "fps": c["derived"].get("fps"),
                       "frames": c["derived"].get("frames"),
-                      "sha256": c["derived"]["sha256"], "prompt_id": c["prompt"],
+                      "sha256": c["derived"]["sha256"], "bytes": c["derived"].get("bytes"),
+                      "prompt_id": c["prompt"],
                       "prompt": prompts[c["prompt"]]["text"], "prompt_kind": prompts[c["prompt"]]["kind"]})
     if not clips:
         sys.exit(f"no built clips in {path} subset {subset}; run corpus/build.py build")
@@ -1213,6 +1227,15 @@ def resource_summary(samples):
 # ---------------------------------------------------------------- drivers
 
 
+def past_deadline(cfg, t0):
+    """The profile's bounds.max_duration_s, enforced: no new request after it."""
+    limit = cfg.get("max_duration_s")
+    if limit is not None and CLOCK() - t0 > limit:
+        cfg["stopped_by"] = "bounds.max_duration_s"
+        return True
+    return False
+
+
 async def run_open_loop(client, cfg, schedule, rows):
     t0 = CLOCK()
     tasks = []
@@ -1220,8 +1243,18 @@ async def run_open_loop(client, cfg, schedule, rows):
         delay = item["arrival_s"] - (CLOCK() - t0)
         if delay > 0:
             await SLEEP(delay)                  # arrivals never wait for completions
+        if past_deadline(cfg, t0):
+            break
         tasks.append(asyncio.create_task(run_one(client, cfg, item, t0, rows)))
-    await asyncio.gather(*tasks)
+    if tasks:
+        # bounds.max_drain_s: what is still open after it is cancelled (a client disconnect,
+        # billable per R21) and its rows are missing, so the cell reads INVALID.
+        _, pending = await asyncio.wait(tasks, timeout=cfg.get("max_drain_s"))
+        if pending:
+            cfg["stopped_by"] = "bounds.max_drain_s"
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
     return CLOCK() - t0
 
 
@@ -1232,7 +1265,7 @@ async def run_closed_loop(client, cfg, schedule, rows):
     t0 = CLOCK()
 
     async def worker():
-        while True:
+        while not past_deadline(cfg, t0):
             try:
                 item = queue.get_nowait()
             except asyncio.QueueEmpty:
@@ -1344,7 +1377,7 @@ def finals_of(rows):
 
 
 def validity(rows, *, scheduled, open_loop, max_lag_s, intentional_resume=False,
-             expect_model=None, interrupted=False):
+             expect_model=None, interrupted=False, extra_reasons=()):
     """BENCH-VALIDITY: may this cell's numbers be read as capacity at all?
 
     INVALID, with every reason, when: a replay the run did not intend (any replay unless the
@@ -1353,7 +1386,7 @@ def validity(rows, *, scheduled, open_loop, max_lag_s, intentional_resume=False,
     a fresh answer from a model other than the declared one (or none reported when one was
     declared); counters that do not add up. Zero replay is necessary, not sufficient."""
     finals = finals_of(rows)
-    reasons = []
+    reasons = list(extra_reasons)
     replays = [r for r in finals if served_as(r) == "replay"]
     # A pre-E1C row carries no `resend`; in a declared resume its replays are the resume's.
     unexpected = [r for r in replays
@@ -1427,6 +1460,139 @@ def stage_blocks(fresh):
     return out
 
 
+def profile_reasons(rows, cfg):
+    """What only the declared profile can make INVALID. S3 F5: a P4 (overload) cell that saw
+    no 429/503 exercised no overload delivery, whatever else it measured."""
+    profile = cfg.get("run_profile")
+    if not profile:
+        return (UNPROFILED,)
+    if profile["measurement"]["profile_class"] == "P4" and not any(
+            r.get("http_status") in (429, 503) for r in rows):
+        return ("P4 observed no 429/503: the overload path was not exercised",)
+    return ()
+
+
+def overload_by_path(rows, cfg):
+    """S3 F5: refusals and what became of them, keyed by the hop the requests entered. A
+    refusal delivered is a 429/503 status the client read; a transport loss is an attempt that
+    ended in a transport error with no status at all (the intake-drain ReadError)."""
+    path = ((cfg.get("run_profile") or {}).get("target") or {}).get("path") or "undeclared"
+    lost = [r for r in rows if r["outcome"] == "failed" and r["http_status"] is None
+            and r["error_class"] not in PLATFORM_ERROR_CLASSES and r["send_s"] is not None]
+    return {path: {"status_429": sum(1 for r in rows if r["http_status"] == 429),
+                   "status_503": sum(1 for r in rows if r["http_status"] == 503),
+                   "retry_after_present": sum(1 for r in rows if r["http_status"] in (429, 503)
+                                              and r["retry_after"] is not None),
+                   "transport_losses": len(lost),
+                   "transport_loss_classes": _counts(lost, "error_class")}}
+
+
+def peak_in_flight(rows):
+    """Most attempts open at once, from their send/end stamps (the actual concurrency)."""
+    edges = sorted([(r["send_s"], 1) for r in rows if r.get("send_s") is not None]
+                   + [(r["end_s"], -1) for r in rows if r.get("send_s") is not None
+                      and r.get("end_s") is not None])
+    peak = level = 0
+    for _, step in edges:
+        level += step
+        peak = max(peak, level)
+    return peak
+
+
+def video_hour_cost(price, wall_s, clip_seconds, slo_clip_seconds=None):
+    """§6: attributable infrastructure USD / (unique successful in-contract clip-seconds /
+    3600). No price evidence -> unavailable, never zero; a price not from cloud-pricing.md
+    -> estimated, labelled with its source and date."""
+    if not price:
+        return {"status": "unavailable", "usd_per_successful_video_hour": None,
+                "reason": "no price evidence declared (profile measurement.price)"}
+    infra = price["usd_per_hour"] * price["instances"] * wall_s / 3600
+    status = "sourced" if "cloud-pricing.md" in price["source"] else "estimated"
+    per = lambda secs: round(infra / (secs / 3600), 6) if secs else None
+    return {"status": status, "label": f"{status} ({price['source']}, {price['as_of']})",
+            "infrastructure_usd": round(infra, 6), "clip_seconds": clip_seconds,
+            "usd_per_successful_video_hour": per(clip_seconds),
+            "usd_per_slo_qualified_video_hour": per(slo_clip_seconds),
+            "formula": "infrastructure USD over the cell's wall time / (unique successful "
+                       "in-contract clip-seconds / 3600)",
+            "not_included": "idle and warm-up outside the cell, control plane"}
+
+
+def measurement_block(res, rows, finals, fresh, cfg, valid):
+    """The §6 result fields, one place, with every denominator named. Charges (CREDIT, USD)
+    are the ledger's and are not observed by this client; they are never converted into or
+    out of the infrastructure cost, which is labelled on its own."""
+    profile = cfg.get("run_profile") or {}
+    w, m = profile.get("workload") or {}, profile.get("measurement") or {}
+    cap = w.get("max_clip_duration_s", 82.0)
+    deliberate = [r for r in finals if r["clip_id"] in set(w.get("expected_invalid") or ())]
+    offers = [r for r in finals if r not in deliberate]
+    count = lambda rs, o: sum(1 for r in rs if r["outcome"] == o)
+    in_contract = {r["item_key"]: r for r in fresh
+                   if r["media_sent"] and r["duration_s"] is not None and r["duration_s"] <= cap}
+    clip_s = round(sum(r["duration_s"] for r in in_contract.values()), 3)
+    wall = res["wall_s"] or 0.0
+    sends = sorted(r["send_s"] for r in rows if r["attempt"] == 0 and r["send_s"] is not None)
+    classes = {"text": [r for r in fresh if not r["media_sent"]]}
+    for lo, hi in ((0, 30), (30, 60), (60, cap)):
+        classes[f"video_{lo}-{hi:g}s"] = [r for r in fresh if r["media_sent"] and
+                                          r["duration_s"] is not None and lo < r["duration_s"] <= hi]
+    t = (m.get("thresholds") or {}).get("ttft_s")
+    e = (m.get("thresholds") or {}).get("e2e_s")
+    meets = [r for r in fresh if (t is None or (r["ttft_s"] or float("inf")) <= t)
+             and (e is None or (r["request_latency_s"] or float("inf")) <= e)]
+    gated = t is not None or e is not None
+    slo_clip_s = sum(in_contract[k]["duration_s"] for k in {r["item_key"] for r in meets}
+                     if k in in_contract) if gated else None
+    failed_offers = count(offers, "failed")
+    return {
+        "schema": RESULT_SCHEMA, "profile_schema": profile.get("schema"),
+        "run_id": (profile.get("identity") or {}).get("run_id"),
+        "profile_sha256": cfg.get("profile_sha256"), "candidate": profile.get("identity"),
+        "corpus_sha256": cfg.get("corpus_sha256"),
+        "counts": {"offered": valid["scheduled"], "attempts": len(rows),
+                   "valid_offers": len(offers), "deliberate_invalid": len(deliberate),
+                   "deliberate_invalid_refused": count(deliberate, "rejected"),
+                   "fresh_accepted": len(fresh), "replayed": valid["replayed"],
+                   "rejected": count(offers, "rejected"), "failed": failed_offers,
+                   "timed_out": sum(1 for r in offers if r["outcome"] == "failed"
+                                    and "Timeout" in (r["error_class"] or "")),
+                   "cancelled": count(offers, "cancelled"), "completed": res["accepted"]},
+        "error_rate": {"value": round(failed_offers / len(offers), 6) if offers else None,
+                       "denominator": "valid offers (every scheduled item except the "
+                                      "declared deliberate-invalid ones), admitted or not"},
+        "accepted_service_success": {
+            "value": round(len(fresh) / (len(fresh) + failed_offers), 6)
+            if fresh or failed_offers else None,
+            "denominator": "fresh accepted + failed valid offers"},
+        "actual_rate_per_s": round((len(sends) - 1) / (sends[-1] - sends[0]), 4)
+        if len(sends) > 1 and sends[-1] > sends[0] else None,
+        "peak_in_flight": peak_in_flight(rows), "warmup_count": cfg.get("warmups", 0),
+        "target_path": ((profile.get("target") or {}).get("path") or "undeclared"),
+        "overload_by_target_path": overload_by_path(rows, cfg),
+        "driver_lag": {"max_s": valid["driver_lag_max_s"], "bound_s": valid["driver_lag_bound_s"]},
+        "latency_by_class": {name: {"ttft_s": percentile_block(rs, "ttft_s")[0],
+                                    "e2e_s": percentile_block(rs, "request_latency_s")[0]}
+                             for name, rs in classes.items()},
+        "successful_clip_seconds": clip_s,
+        "clip_seconds_per_hour": round(clip_s / wall * 3600, 3) if wall else None,
+        "slo_goodput": ({"thresholds": m.get("thresholds"), "qualified": len(meets),
+                         "per_valid_offer": round(len(meets) / len(offers), 6) if offers else None}
+                        if gated else {"status": "not gated: no threshold declared"}),
+        "charges": {"credit": None, "usd": None,
+                    "note": "ledger charges are not observed by the client; reconcile them "
+                            "from the usage resource (E3C/E4C), in their own units"},
+        "infrastructure_cost": video_hour_cost(m.get("price"), wall, clip_s, slo_clip_s),
+        "telemetry": list(m.get("telemetry") or []),
+        "reconciliation": valid["reconciliation"],
+        "stop_cleanup": {"stopped_by": cfg.get("stopped_by") or
+                         ("interrupted" if cfg.get("interrupted") else "schedule_end"),
+                         "declared_cleanup": profile.get("cleanup"),
+                         "cleanup_executed_by_client": False},
+        "verdict": valid["verdict"], "reasons": valid["reasons"],
+    }
+
+
 def summarize(rows, wall, cfg):
     finals = finals_of(rows)
     accepted = [r for r in finals if r["outcome"] == "accepted"]
@@ -1470,7 +1636,8 @@ def summarize(rows, wall, cfg):
                      max_lag_s=getattr(cfg["args"], "max_driver_lag", DEFAULT_MAX_DRIVER_LAG_S),
                      intentional_resume=bool(cfg.get("resumed_from")),
                      expect_model=getattr(cfg["args"], "expect_model", None),
-                     interrupted=bool(cfg.get("interrupted")))
+                     interrupted=bool(cfg.get("interrupted")),
+                     extra_reasons=profile_reasons(rows, cfg))
     res = {
         # our own label, slugged into LABEL_OK (it also names the raw file)
         "label": slug(cfg["args"].label), "target": cfg["args"].target, "model": cfg["model"],
@@ -1549,6 +1716,7 @@ def summarize(rows, wall, cfg):
                            f"(p50>=6, p95>=60, p99>=300)",
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    res["measurement"] = measurement_block(res, rows, finals, fresh, cfg, valid)
     for legacy, (field, q) in {"ttft_p50": ("ttft_s", 50), "ttft_p95": ("ttft_s", 95),
                                "latency_p50": ("latency_s", 50), "latency_p95": ("latency_s", 95),
                                "tpot_p50_ms": ("tpot_ms", 50), "tpot_p95_ms": ("tpot_ms", 95)}.items():
@@ -1610,7 +1778,11 @@ def make_config(a, clips=None, manifest=None):
         print("note: --target gateway does not send mm_processor_kwargs (server-side budget)",
               file=sys.stderr)
     mm_fixed = resolve_mm_kwargs(a, video=a.video) if not a.corpus else None   # probes once
+    profile = getattr(a, "run_profile", None)
+    bounds = (profile or {}).get("bounds") or {}
     return {"args": a, "key": tuple(dict.fromkeys([key, *keys])), "headers": headers,
+            "run_profile": profile, "profile_sha256": getattr(a, "profile_sha256", None),
+            "max_duration_s": bounds.get("max_duration_s"), "max_drain_s": bounds.get("max_drain_s"),
             "headers_for": headers_for, "tenants": len(keys),
             "base": a.base_url.rstrip("/"),
             "model": a.model, "max_tokens": a.max_tokens, "concurrency": a.concurrency,
@@ -1639,6 +1811,9 @@ async def execute(a, state):
     cfg = state["cfg"] = make_config(a, clips, manifest)
     cfg["raw_file"], cfg["state"] = state["raw_file"], state
     cfg["dataset_version"] = a.dataset_version or (manifest or {}).get("corpus_version") or "adhoc"
+    if a.corpus and os.path.isfile(a.corpus):
+        with open(a.corpus, "rb") as f:
+            cfg["corpus_sha256"] = sha256(f.read()).hexdigest()
     prompt = a.prompt
     if not a.corpus and prompt is None:
         prompt = smoke_namespace()["canonical_prompt"](a.weights, "caption")
@@ -1674,6 +1849,7 @@ async def execute(a, state):
             # request an idempotent replay of the warm-up instead of a request.
             warm = make(1, rate=None, dataset_version=cfg["dataset_version"] + ".warmup")
             await run_one(client, cfg, warm[0], CLOCK(), [])   # warm-up, not counted
+            cfg["warmups"] = 1
         state["t0"] = CLOCK()
         sampler_task = (asyncio.create_task(sample_resources(cfg, state["t0"], cfg["samples"]))
                         if a.sample_interval > 0 else None)
@@ -1823,6 +1999,49 @@ def print_legacy(legacy, stream):
               f"{c.get('req_per_s')} req/s — p50-grade, no tail", file=stream)
 
 
+def check_profile(a):
+    """--profile against these flags and the schedule they declare. No request is made: the
+    schedule is bench's own pure function, the corpus is read from its manifest only."""
+    import runprofile
+    if not a.profile:
+        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "warnings": [],
+                                  "derived": {}, "errors": ["--validate-only needs --profile"]},
+                                 False)
+    try:
+        with open(a.profile, encoding="utf-8") as f:
+            profile = json.load(f)
+    except (OSError, ValueError) as e:
+        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "warnings": [],
+                                  "derived": {}, "errors": [f"--profile unreadable: "
+                                                            f"{type(e).__name__}"]}, False)
+    clips = load_corpus(a.corpus, a.subset)[0] if a.corpus else []
+    schedule = build_schedule(a.requests, clips, [f.strip() for f in a.forms.split(",")
+                                                  if f.strip()],
+                              prompt=a.prompt, rate=a.rate, seed=a.seed, video=a.video,
+                              burst=a.burst, max_tokens_mix=a.max_tokens_mix,
+                              tenants=max(len(a.tenant_env), 1),
+                              dataset_version=a.dataset_version or "",
+                              profile_version=a.profile_version)
+    warmups = int(not a.rate and not a.corpus and not a.no_warmup)   # a warm-up is a request
+    keys = tuple(k for k in [api_key(), *(os.environ.get(n, "").strip() for n in a.tenant_env)]
+                 if k)
+    inventory = None
+    if a.key_inventory:
+        try:
+            with open(a.key_inventory, encoding="utf-8") as f:
+                inventory = json.load(f)
+        except (OSError, ValueError) as e:
+            inventory = {"unreadable": type(e).__name__}
+    verdict = runprofile.validate(profile, a, schedule + schedule[:warmups], keys=keys,
+                                  carries_key=carries_key, local=runprofile.is_local(a),
+                                  key_env=KEY_ENV, inventory=inventory)
+    if verdict["runnable"]:
+        a.run_profile, a.profile_sha256 = profile, verdict["derived"]["profile_sha256"]
+        a.max_driver_lag = profile["measurement"]["max_driver_lag_s"]
+        a.expect_model = profile["identity"]["model_revision"]
+    return verdict
+
+
 def main(argv=None):
     """Wrapper only: nothing may reach stderr around _run() either. A traceback would
     carry the exception message; only its type and its frames may be printed."""
@@ -1843,6 +2062,17 @@ def _run(argv=None):
     if a.validate_raw:
         return validate_raw(a.validate_raw, intentional_resume=a.intentional_resume,
                             max_lag_s=a.max_driver_lag, expect_model=a.expect_model)
+    if a.validate_only or a.profile:
+        refuse_key_in_args(a, (api_key(),))
+        verdict = check_profile(a)
+        if a.validate_only:
+            print(json.dumps(verdict, indent=2, sort_keys=True))
+            return 0 if verdict["runnable"] else 2
+        if not verdict["runnable"]:
+            print("refusing to start: the run profile does not validate against this run\n"
+                  + json.dumps({k: verdict[k] for k in ("errors", "blocks")}, indent=2),
+                  file=sys.stderr)
+            return 2
     refuse_key_in_args(a, tuple(dict.fromkeys([api_key(), *tenant_keys(a)])))
     raw = raw_path(a)                        # exit 2 before anything is opened or printed
     for path in (raw, a.out):
