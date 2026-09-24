@@ -206,17 +206,24 @@ class OperatorSession:
             raise errors.InvalidRequest("an operator write states a reason of 1..500 characters")
         prior = await self.ops.audit.by_idempotency_key(idempotency_key)
         if prior is not None:
-            if prior.after.get("operation") != operation or prior.after.get("request") != request:
-                raise errors.IdempotencyConflict("this idempotency key recorded a different "
-                                                 "operator write")
-            return prior.after["result"], True
+            return _recorded(prior, operation, request), True
         operation_id = stable_id(operation, idempotency_key)
         before, result = await write(operation_id)
-        await self.ops.audit.append(AuditEntry(
-            id=operation_id, at=self.ops.clock(), actor_principal=self.principal,
-            action=ACTION[operation], target_org_id=target_org_id, reason=reason, before=before,
-            after={"operation": operation, "request": request, "result": result},
-            idempotency_key=idempotency_key))
+        try:
+            await self.ops.audit.append(AuditEntry(
+                id=operation_id, at=self.ops.clock(), actor_principal=self.principal,
+                action=ACTION[operation], target_org_id=target_org_id, reason=reason,
+                before=before,
+                after={"operation": operation, "request": request, "result": result},
+                idempotency_key=idempotency_key))
+        except errors.Conflict:
+            # G8: a concurrent call under the same key (a callback retry racing its original)
+            # recorded first; the ports deduped the write on the operation id, and the
+            # recorded row is the answer - never the raw unique violation. Nothing retried.
+            prior = await self.ops.audit.by_idempotency_key(idempotency_key)
+            if prior is None:
+                raise
+            return _recorded(prior, operation, request), True
         return result, False
 
     async def _identity(self, user_id: str) -> VerifiedIdentity:
@@ -461,6 +468,14 @@ class OperatorSession:
         result, _ = await self._once("reconcile", idempotency_key, reason, org_id,
                                      {"org_id": org_id, "request_id": request_id}, write)
         return result
+
+
+def _recorded(prior: AuditEntry, operation: str, request: dict[str, Any]) -> Any:
+    """The result an idempotency key recorded, if it recorded THIS write (R34)."""
+    if prior.after.get("operation") != operation or prior.after.get("request") != request:
+        raise errors.IdempotencyConflict("this idempotency key recorded a different "
+                                         "operator write")
+    return prior.after["result"]
 
 
 def _iso(value: datetime | None) -> str | None:

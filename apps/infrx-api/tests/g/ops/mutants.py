@@ -376,6 +376,15 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        if why:\n            raise errors.InvalidRequest(f\"publish-card",
        "        if False:\n            raise errors.InvalidRequest(f\"publish-card",
        "test_credit_rate__publish_card_publishes_approved_prices_only"),
+    # --- G8 point 4: races and retries ---------------------------------------------
+    _m("same_key_race_surfaces_the_raw_conflict", "a same-key race answers the recorded row",
+       S, "        except errors.Conflict:\n            # G8:",
+       "        except errors.IdempotencyConflict:\n            # G8:",
+       "test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing_twice"),
+    _m("same_key_race_ignores_the_request", "the recorded row answers only its own request",
+       S, "            return _recorded(prior, operation, request), True\n        return result, False",
+       "            return prior.after[\"result\"], True\n        return result, False",
+       "test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing_twice"),
     # --- the CLI ---------------------------------------------------------------
     _m("cli_accepts_a_key_on_argv", "a key on argv is refused before any prompt",
        C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",

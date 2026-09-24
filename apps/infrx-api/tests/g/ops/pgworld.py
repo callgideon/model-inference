@@ -63,6 +63,9 @@ def world(label: str) -> World:
     owner = pgharness.connect(name)
     checks_admission.seed_admission(owner)
     checks_signup.gotrue_columns(owner)
+    # C1/C2 were granted by the seed; they are verified individuals (GoTrue's evidence).
+    owner.execute("update auth.users set email_confirmed_at = infrx.now() where id in (%s, %s)",
+                  (cc.CONSUMER_1, cc.CONSUMER_2))
     owner.execute("update public.api_keys set revoked_at = infrx.now() where audience = 'operator'")
     secret = service.new_secret()
     owner.execute("select infrx.bootstrap_operator_key(%s, 'bootstrap', %s, %s, 'ops@test', "
