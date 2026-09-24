@@ -6,9 +6,9 @@
 | Status | **implemented** (item 1, the count memo); items (b), (c), (d) investigated - (b) needs no code and has a serve.sh finding (no flag can do it on the pinned build), (c) and (d) found nothing worth changing. **Not integrated, not deployed**: nothing ran on the pilot box, AWS or hosted Supabase |
 | Owner/session | Opus 5.5 implementation lane (TOKCOST), 2026-09-24 |
 | Base SHA | `2d4a88b` (origin/main) |
-| Implementation SHA | **`40440d4`** (item 1 `4ffa351` + its I2B-R4 stub follow-up `40440d4`; this report is committed after it) |
+| Implementation SHA | **`40440d4`** (item 1 `4ffa351` + its I2B-R4 stub follow-up `40440d4`); **fix round `9fa0006`** (verifier `TOKCOST-verify-ad50b9d.json`: B1, N1; this report is updated after it) |
 | Branch / worktree | `codex/tokcost` in `.claude/worktrees/codex-tokcost` |
-| Oracles | R104, R105, `BACKEND-JOURNEY` (E3B's journeys: the count is the engine's) |
+| Oracles | R104, R105, R107 (numbered at the merge, text below), `BACKEND-JOURNEY` (E3B's journeys: the count is the engine's) |
 
 ## What the engine does (b): read at the pinned build, measured nothing
 
@@ -85,7 +85,9 @@ source was read at that commit (raw GitHub); line numbers are that commit's.
   `prepare` (the local file exists) and before the count; a hit is the count, a miss asks
   the engine (`_ask`, the unchanged `engine_prompt_tokens` call - E3B's `e3bm79` anchor is
   kept byte for byte) and memoizes the answer only after every check passed (an unchecked,
-  failed or timed-out answer raises before `put`). A text job is never memoized: 4-6 ms on
+  failed or timed-out answer raises before `put`; since the fix round the checks are
+  `checked_count`, which `engine_prompt_tokens` calls, and the case
+  `a_refused_video_count_is_never_memoized` pins it). A text job is never memoized: 4-6 ms on
   the pilot, and the worker holds no digest of a text prompt. The INFO line says which:
   `prepared <job>: <n> prompt tokens (engine /tokenize, <ms> ms)` or `… (memo of engine
   /tokenize, <ms> ms)` - a hit is never reported as an engine latency.
@@ -185,8 +187,11 @@ prefix `tests/w/test_prep_worker.py`:
 | 1 | `prep_memo_never_expires` | `a_stale_memo_is_asked_again` | `:397: assert (1337, 1337) == (1337, 1000)` |
 | 1 | `prep_memo_expiry_exclusive` | same | `:397: assert (1337, 1337) == (1337, 1000)` |
 | 1 | `prep_memo_ttl_not_the_retention` | same | `:386: AssertionError: assert inf == 604800.0` |
-| 1 | `prep_memo_unbounded` | `the_memo_is_bounded_least_recently_used_first` | `:409: assert (1, 2, 3, 3) == (1, None, 3, 2)` |
-| 1 | `prep_memo_evicts_the_recently_used` | same | `:409: assert (None, 2, 3, 2) == (1, None, 3, 2)` |
+| 1 | `prep_memo_unbounded` | `the_memo_is_bounded_least_recently_used_first` | `:409: assert (1, 2, 3, 3) == (1, None, 3, 2)` (`:429` since the fix round) |
+| 1 | `prep_memo_evicts_the_recently_used` | same | `:409: assert (None, 2, 3, 2) == (1, None, 3, 2)` (`:429` since the fix round) |
+| fix round B1 (`9fa0006`) | `prep_memo_holds_a_refused_count` | `a_refused_video_count_is_never_memoized` | `:416: AssertionError: (PreparationResult(job_id='00000004-…', cause='prepared', refusal=None, prompt_tokens=1000, detail=''), 1000)` - the stored-count assertion |
+| fix round N1 (`9fa0006`) | `prep_memo_bound_not_1024` | `the_memo_is_bounded_least_recently_used_first` | `:430: assert 1000000000 == 1024` |
+| fix round N1 (`9fa0006`) | `prep_runner_memo_unbounded` | same | `:430: AssertionError: assert 1000000000 == 1024` |
 
 `40440d4` (item 1's follow-up) changes no product line: I2B-R4's composition case
 (`test_worker_main__the_composition_is_the_pilots_stores_and_settings`) hand-builds a
@@ -231,6 +236,27 @@ the preparation runner, `PreparedWork`'s optional field and `CreditWork`; every 
 reads them is in `tests/w`, `tests/d/test_lease_units.py` constructs `PreparedWork` without
 the field) and the layer-3 gate (the journeys and `e3bm79` ran on their own, R5/R6).
 
+## Fix round (verifier `TOKCOST-verify-ad50b9d.json`: fix_required, B1; N1, N2, N4 folded in)
+
+| Finding | What changed (`9fa0006`) | Case | Mutant | Death (`$L/F1-deaths.log`, `e4f5a938`) |
+|---|---|---|---|---|
+| **B1** (blocking): R105's fail-closed rule for the memo was not pinned - the verifier's `memo_holds_an_unchecked_count` survived all 45 service-free cases | the answer checks move from `engine_prompt_tokens` into `checked_count` (called by it; no behaviour change, the checks' lines and every anchor on them unchanged), so the regression - memoize the raw `/tokenize` count, then check - is one edit | the verifier's case, verbatim: `test_prep_worker__a_refused_video_count_is_never_memoized` (`tokenize_fault=unexpanded` + `tokenize_count=1000` → refused `dependency_unavailable`; the fault cleared → the same body is asked and stored at 1337; two `/tokenize` calls) | `prep_memo_holds_a_refused_count`: `_prepare`'s engine call replaced by the raw `/tokenize` post, the put of its raw count, then `checked_count` on the same answer (one engine call, no call-count artefact) | `tests/w/test_prep_worker.py:416: AssertionError: (PreparationResult(job_id='00000004-0000-4000-8000-000000000004', cause='prepared', refusal=None, prompt_tokens=1000, detail=''), 1000)` - the **stored-count** assertion: the second job prepared at the refused answer's 1000 |
+| **N1**: the 1024 bound and the product runner's bound were unpinned (the old `CountMemo(ttl_s=60.0).entries == MEMO_ENTRIES` was a tautology) | the bounded case asserts `Prep(tmp_path).runner.memo.entries == MEMO_ENTRIES == 1024` | `the_memo_is_bounded_least_recently_used_first` | `prep_memo_bound_not_1024` (`MEMO_ENTRIES = 10**9`), `prep_runner_memo_unbounded` (the runner builds `CountMemo(…, entries=10**9)`) | `:430: assert 1000000000 == 1024` (both) |
+| **N2**: Limit 2's ⚠️ TO BE VERIFIED | evidence only: Limit 2 now carries the verifier's systemd 255 measurement and the 5 s residual | - | - | - |
+| **N4**: the ruling number | evidence only: R107, the coordinator's wording verbatim (the Ruling section) | - | - | - |
+| N3, N5 | none: N3 accepted the journey relaxation; N5 is W's (outside the lane) | - | - | - |
+
+Fix-round runs (lane env as above; MinIO `infrx-tokcost-minio` on 55724 again, removed after):
+
+| # | Command (from the API root) | At | Exit | Tail (log sha256 prefix) |
+|---|---|---|---|---|
+| F0 | `pytest -q tests/w/test_prep_worker.py tests/w/test_prep_worker_mutants.py -k "not _pg__ and not mutant_is_killed"` | `9fa0006` tree | 0 | `51 passed, 7 deselected in 12.55s` |
+| F1 | `python -m tests.w.prep_worker_mutants <the 18 memo mutants>` | `9fa0006` | 0 | **`18/18 killed`** (the 15 of item 1 and the 3 above) (`314e8b59`); death lines `$S/deaths.py` (`e4f5a938`) |
+| F2 | lane env `pytest -q -rfEs tests/w/test_prep_worker.py -k "not _pg__"` (the new case + the whole service-free file) | `9fa0006` | 0 | **`46 passed, 4 deselected in 4.93s`** (`6eb46632`) |
+| F3 | lane env `INFRX_MUTANTS=all pytest -q -rfEs tests/w/test_prep_worker_mutants.py` (my list, all: 68 service-free + 8 PostgreSQL + 5 structure) | `9fa0006` | 0 | **`81 passed in 615.79s`** (78 + the 3 new) (`241b3f53`) |
+| F4 | lane env `INFRX_MUTANTS=all pytest -q -rfEs tests/w/test_worker_main_mutants.py` (I2B-R4's list) | `9fa0006` | 0 | **`22 passed in 113.14s`** (`f2a7b132`) |
+| F5 | anchors (`$S/anchors.py`: every `tests/<track>` list in the three changed source files; E3B's list in them) | `9fa0006` | - | 108 checked, 0 moved; E3B 0 moved |
+
 ## Limits
 
 1. **In-process only.** Each worker process has its own memo, empty at start; a second worker
@@ -242,12 +268,21 @@ the field) and the layer-3 gate (the journeys and `e3bm79` ran on their own, R5/
 2. **The legacy regime's revision is `model_revision`.** A job with no pinned
    `serving_version_id` (legacy USD, which the pilot smoke ran) keys on the public
    `model_revision` string, which a new serving revision may keep. The memo then relies on
-   the worker's lifetime ⊆ the engine's (`PartOf=`). ⚠️ TO BE VERIFIED on the box: that
-   systemd's automatic restart of the engine (`Restart=always` after a crash) also restarts
-   the worker - a `systemctl restart` does (PartOf) - and the gap only matters if the
-   checkout under `/home/ubuntu/model-inference` was changed to another serve.sh pin while the
-   engine kept running and then crashed. The CREDIT regime's key carries the pin and has no
-   such gap.
+   the worker's lifetime ⊆ the engine's (`PartOf=`). **meas.** by the verifier
+   (`TOKCOST-verify-ad50b9d.json` N2; log `systemd-partof.log`, sha256 prefix `310f5c61`) on
+   systemd 255 (255.4-1ubuntu8.17, the Ubuntu 24.04 line the pilot runs) with stand-in user
+   units shaped like `infrx-worker.service` (`PartOf=`, `After=`, no `BindsTo`) and the
+   engine's (`Restart=always`, `RestartSec=5`; serve.sh `exec docker run --rm` in the
+   foreground, so a dead container ends the unit): `systemctl restart` of the engine, an
+   engine SIGKILL followed by its `Restart=always` auto-restart ("Scheduled restart job" then
+   "Stopping …worker"), and an external SIGTERM exit each restarted the worker (a new pid
+   every time); `systemctl stop` of the engine stopped it. So no engine process can start
+   under a worker that holds another engine process's answers. Residual: for the
+   `RestartSec` (5 s) between an engine crash and its scheduled restart the old worker still
+   answers repeated video bodies from its memo while the engine is down - the crashed
+   instance's own counts, the same revision a job prepared just before the crash carries, so
+   nothing new is exposed. `tests/i` keeps `PartOf=` pinned (`test_packaging.py:166`,
+   `i/mutants.py:447`). The CREDIT regime's key carries the pin as well.
 3. **First-seen video bodies are not faster.** R105 requires the engine's count of every new
    body; the engine decodes each video twice per job on the pinned build (finding 4), and no
    serve.sh flag changes that. The 16.8 s itself is unexplained (finding 5; request 1).
@@ -288,18 +323,27 @@ the field) and the layer-3 gate (the journeys and `e3bm79` ran on their own, R5/
    and weight digests into the worker's environment, compared against the engine's `/version`
    at startup).
 5. **E3B - merge the journey change** (`counted_by_the_memo`, video cells only); no E3B anchor
-   moved (`e3bm79`'s anchor in `preparation.py` is byte for byte the same).
+   moved (`e3bm79`'s anchor in `preparation.py` is byte for byte the same). The verifier
+   found the relaxation acceptable (N3: `test_journey.py:204`, stored = usage = the engine's
+   count, still runs for every cell).
+6. **W (outside this lane, verifier N5)** - the W3/W4 perf-script stubs match any argv
+   containing `verify` (`test_serving.py`, `test_w4.py`); not touched here.
 
-## Ruling candidate (proposed, not numbered; next free is R106)
+## Ruling (R107, numbered by the coordinator at the merge; R106 is taken)
 
-- **A preparation count may be the memo of the engine's answer to the same body.** A
-  preparation worker may store, instead of asking again, the serving engine's checked count
-  for a byte-identical `/tokenize` body (canonical JSON), over media with the same whole
-  digests and profile, for the same serving revision (the job's `model_revision` and its
-  pinned `serving_version_id` when it has one), held only in the process that asked, never
-  past `PROCESSING_CACHE_TTL_S`; a text body is always asked; a use of the memo is logged as
-  such. Anything else is asked, and R105's checks and fail-closed rule apply to every answer
-  before it is memoized.
+The coordinator's wording, verbatim (verifier N4):
+
+"R107 | A preparation count may be the memo of the engine's checked answer to the same body | A preparation worker may store, instead of asking the engine again, a count the serving engine gave for a `/tokenize` body equal to the one this attempt would send. Equal means the same canonical JSON (keys sorted, compact separators) of {model, messages, add_generation_prompt, mm_processor_kwargs} as `engine_prompt_tokens` builds it. The messages carry the organization's own `file://` path, so a memo never answers across organizations. The memo may answer only when every prepared media ref has the same whole digest and profile version and the job has the same serving revision: its `model_revision` and, in the CREDIT regime, its pinned `serving_version_id`. Only a body with media is memoized; a text body is always asked. Only an answer that passed every R105 check is memoized; a refused, failed or timed-out answer memoizes nothing. The memo lives only in the worker process that asked, and that process must end whenever the engine process that answered ends (the worker unit is PartOf= the engine unit, which also carries a Restart=always restart; a memo shared between processes or kept durably needs its own ruling). An entry expires PROCESSING_CACHE_TTL_S after the engine answered, and a use never extends it. The memo is bounded in entries (least recently used first). A memoized count reaches the store only through prepared(...) (R104), under the same bounds. Each use is logged `prepared <job>: <n> prompt tokens (memo of engine /tokenize, <ms> ms)`, never as the engine's latency."
+
+Where each clause is pinned: equal body, organization, digests/profile, revision -
+`a_memo_answers_only_its_own_body_media_and_revision[*]` and
+`the_memo_key_names_the_media_digests_and_the_credit_revision`; text always asked -
+`a_repeated_video_body_is_counted_by_the_engine_once[text]`; only a checked answer -
+`a_refused_video_count_is_never_memoized` (fix round B1); the TTL and "a use never extends
+it" - `a_stale_memo_is_asked_again` (the verifier's `memo_ttl_from_last_use` was killed
+there); the bound and LRU - `the_memo_is_bounded_least_recently_used_first`; the log line -
+`a_repeated_video_body_is_counted_by_the_engine_once[video]`; the process lifetime - `tests/i`'s
+`PartOf=` case and Limit 2's measurement.
 
 ## Verification log
 
@@ -312,3 +356,9 @@ the field) and the layer-3 gate (the journeys and `e3bm79` ran on their own, R5/
 - 2026-09-24: After the last run: `infrx-tokcost-minio` removed; no `infrx-d6-*`,
   `infrx-tokcost-*`, `infrx-e4b-*` or `infrx-q3-valkey-55472` container and no process of this
   worktree left running.
+- 2026-09-24: Fix round at `9fa0006` (B1 case + mutant, N1 pin + two mutants, N2 Limit 2
+  measured by the verifier, N4 R107 verbatim), runs F0-F5 above. Attribution noted by the
+  coordinator: this lane's R4-R6 on the e4b namespace overlapped another lane's use of e4b (its
+  fake engine was reset to 1,337 by R5's journey fixture); R4-R6 here passed as reported.
+  After the last fix-round run: `infrx-tokcost-minio` removed; no `infrx-d6-*`,
+  `infrx-tokcost-*`, `infrx-e4b-*` or `infrx-q3-valkey-55472` container left. Nothing pushed.
