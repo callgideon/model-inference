@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T19:30:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T19:08:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -88,11 +88,12 @@ Generated 2026-09-24T19:30:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review WORKER: lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z
 - review I2B-R4-worker: MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z
 - review PREP-WORKER: MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z
-- review TOKCOST: fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -> single verifier -> step 12 -> gate-3 since 2026-09-24T18:40:00Z
+- review TOKCOST: fix round 293ddcb (B1/N1 pinned); targeted verifier running -> step 12 (R107 numbered) since 2026-09-24T19:40:00Z
 - review CERTIFY-TREE: MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z
 - review LONGCLIP: SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip since 2026-09-24T19:10:00Z
 - review INTAKE-DRAIN: lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row since 2026-09-24T19:20:00Z
 - review FLEET: TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z
+- review CERTIFY-POLISH: handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -> step 13 since 2026-09-24T19:04:00Z
 
 ## Checkpoints
 

@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T19:30:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T19:08:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>28</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -118,11 +118,12 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>WORKER</code> — lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z</li>
 <li>review <code>I2B-R4-worker</code> — MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z</li>
 <li>review <code>PREP-WORKER</code> — MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z</li>
-<li>review <code>TOKCOST</code> — fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -&gt; single verifier -&gt; step 12 -&gt; gate-3 since 2026-09-24T18:40:00Z</li>
+<li>review <code>TOKCOST</code> — fix round 293ddcb (B1/N1 pinned); targeted verifier running -&gt; step 12 (R107 numbered) since 2026-09-24T19:40:00Z</li>
 <li>review <code>CERTIFY-TREE</code> — MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z</li>
 <li>review <code>LONGCLIP</code> — SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip since 2026-09-24T19:10:00Z</li>
 <li>review <code>INTAKE-DRAIN</code> — lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row since 2026-09-24T19:20:00Z</li>
 <li>review <code>FLEET</code> — TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z</li>
+<li>review <code>CERTIFY-POLISH</code> — handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -&gt; step 13 since 2026-09-24T19:04:00Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>

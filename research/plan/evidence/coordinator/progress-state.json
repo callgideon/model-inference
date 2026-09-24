@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T19:30:00Z",
+  "updated": "2026-09-24T19:08:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -102,8 +102,8 @@
       "since": "2026-09-24T08:44:25Z"
     },
     "TOKCOST": {
-      "phase": "fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -> single verifier -> step 12 -> gate-3",
-      "since": "2026-09-24T18:40:00Z"
+      "phase": "fix round 293ddcb (B1/N1 pinned); targeted verifier running -> step 12 (R107 numbered)",
+      "since": "2026-09-24T19:40:00Z"
     },
     "CERTIFY-TREE": {
       "phase": "MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11)",
@@ -120,6 +120,10 @@
     "FLEET": {
       "phase": "TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost",
       "since": "2026-09-24T19:25:00Z"
+    },
+    "CERTIFY-POLISH": {
+      "phase": "handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -> step 13",
+      "since": "2026-09-24T19:04:00Z"
     }
   },
   "gates": {
