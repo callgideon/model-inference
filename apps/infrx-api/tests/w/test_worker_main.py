@@ -97,17 +97,27 @@ async def http_get(port: int, path: str) -> tuple[int, str]:
 
 
 async def answer(port: int, path: str, want: int, within_s: float = 20.0) -> tuple[int, str]:
-    """Poll until `path` answers `want` (or the bound); the last answer, for the assert."""
-    deadline, last = time.monotonic() + within_s, (0, "no answer")
-    while time.monotonic() < deadline:
+    """Poll until `path` answers `want` (or the bound; at least once); the last answer, for
+    the assert. A refused connection is an answer of 0."""
+    deadline = time.monotonic() + within_s
+    while True:
         try:
             last = await http_get(port, path)
         except OSError as refused:
             last = (0, type(refused).__name__)
-        if last[0] == want:
-            break
+        if last[0] == want or time.monotonic() >= deadline:
+            return last
         await asyncio.sleep(0.1)
-    return last
+
+
+def pilotbox_module(monkeypatch):
+    """E3B's pilot box (tests/integration/backend/pilotbox.py), as its own suite loads it."""
+    backend = REPO / "tests" / "integration" / "backend"
+    monkeypatch.syspath_prepend(str(backend))
+    spec = importlib.util.spec_from_file_location("infrx_i2b_pilotbox", backend / "pilotbox.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def fake_vllm_module():
@@ -286,6 +296,29 @@ def test_worker_main__the_process_refuses_to_start_naming_the_setting(tmp_path):
         assert process.wait(timeout=60) == worker_main.REFUSED, log.read_text()
         text = log.read_text()
         assert f"refusing to start" in text and named in text and "Traceback" not in text, text
+
+
+def test_worker_main__the_pilot_box_runs_the_real_entry_point_on_request(tmp_path, monkeypatch):
+    """E3B's pilot box: with `real_worker` its separate worker process is `python -m
+    infrx.worker` from the API directory, on the fake engine as `UPSTREAM`, with a
+    readiness port of its own and the index in the pilot's namespace (where the real worker
+    reads it); without, the emulated composition as before."""
+    pilotbox = pilotbox_module(monkeypatch)
+    real = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1,
+                             "e3b3-ns", real_worker=True)
+    argv, cwd = real.command("worker")
+    assert (argv[1:], cwd) == (["-m", "infrx.worker"], pilotbox.harness.API_ROOT)
+    assert real.command("gateway")[0][1:] == [str(REPO / "tests" / "integration" / "backend"
+                                                  / "pilotbox.py"), "gateway"]
+    assert (real.env["UPSTREAM"], real.env["WORKER_HEALTH_PORT"]) == \
+        ("http://127.0.0.1:1", str(real.worker_port))
+    assert real.namespace == real.env[pilotbox.INDEX_ENV] == "infrx:sched:{pilot}"
+    assert {name: real.env[name] for name in pilotbox.BUILD} == pilotbox.BUILD
+    emulated = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1,
+                                 "e3b3-ns")
+    assert emulated.command("worker")[0][1:] == [str(REPO / "tests" / "integration" /
+                                                     "backend" / "pilotbox.py"), "worker"]
+    assert emulated.namespace == emulated.env[pilotbox.INDEX_ENV] == "e3b3-ns"
 
 
 # --- on PostgreSQL: the D harness, a Valkey and a MinIO of the lane's own ------------
@@ -556,3 +589,19 @@ def test_worker_main_pg__an_unreachable_database_refuses_before_readiness(tmp_pa
     text = log.read_text()
     assert code == worker_main.REFUSED and "DATABASE_URL did not answer" in text, (code, text)
     assert answered == [] and "do-not-print" not in text, (answered, text)
+
+
+def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(box, monkeypatch):
+    """E3B's pilot box on this lane's services: `start("worker")` with `real_worker` returns
+    once `python -m infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
+    pilotbox = pilotbox_module(monkeypatch)
+    box.start_engine()
+    pilot = pilotbox.PilotBox(dict(box.settings), f"http://127.0.0.1:{box.engine_port}",
+                              box.log.parent, 1, "unused", real_worker=True)
+    try:
+        pilot.start("worker", timeout=60)
+        ready = asyncio.run(answer(pilot.worker_port, "/readyz", 200, within_s=0))  # once
+    finally:
+        code = pilot.stop("worker")
+    assert ready[0] == 200 and '"engine": "up"' in ready[1], (ready, pilot.tail("worker"))
+    assert code == 0, pilot.tail("worker")

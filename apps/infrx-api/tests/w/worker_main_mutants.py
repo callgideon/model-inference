@@ -38,6 +38,9 @@ PROCESS = "test_worker_main__the_process_refuses_to_start_naming_the_setting"
 ROUND_TRIP = "test_worker_main_pg__a_job_the_gateway_admitted_runs_in_the_worker_process"
 DRAIN = "test_worker_main_pg__sigterm_drains_the_in_flight_job_and_exits_0"
 UNREACHABLE = "test_worker_main_pg__an_unreachable_database_refuses_before_readiness"
+PILOT_BOX = "test_worker_main__the_pilot_box_runs_the_real_entry_point_on_request"
+PILOT_BOX_PG = "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
+PB = "../../../tests/integration/backend/pilotbox.py"      # E3B's pilot box, from `infrx/`
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -81,6 +84,14 @@ MUTANTS = (
              "        return REFUSED\n",
        '        print(f"infrx.worker: refusing to start: {refused}", file=sys.stderr)\n'
        "        return 0\n", PROCESS),
+    # item 3: E3B's pilot box can run the real entry point
+    _m("pilotbox_real_worker_emulated", "real_worker runs python -m infrx.worker",
+       PB, '        if role == "worker" and self.real_worker:\n'
+           '            return [sys.executable, "-m", "infrx.worker"], harness.API_ROOT\n', "",
+       PILOT_BOX),
+    _m("pilotbox_real_worker_private_namespace", "the real worker and the gateway share the "
+       "pilot's index namespace", PB, "        if real_worker:\n"
+                                      "            namespace = PILOT_NAMESPACE\n", "", PILOT_BOX),
 )
 
 PG_MUTANTS = (
@@ -95,6 +106,9 @@ PG_MUTANTS = (
        MAIN, "        await pool.open(wait=True, "
              "timeout=settings.deployment.database_pool_connect_timeout_s)\n",
        "        pass\n", UNREACHABLE),
+    _m("pilotbox_real_worker_not_awaited", "start returns once the real worker is ready",
+       PB, "        elif self.real_worker:\n            self._wait_ready(role, "
+           'f"http://127.0.0.1:{self.worker_port}/readyz", timeout)\n', "", PILOT_BOX_PG),
 )
 
 
@@ -102,14 +116,22 @@ def case_names() -> set[str]:
     return set(re.findall(r"^def (test_\w+)\(", (API_DIR / SUITE_FILE).read_text(), re.M))
 
 
-#: W3's copy (the package, the tests, fake_vllm.py beside them), one level down.
-RUNNER = Runner(name="worker-main", targets=(SUITE_FILE,), layout=w3_mutants._layout)
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """W3's copy (the package, the tests, fake_vllm.py beside them) plus E3B's integration
+    tree, whose pilot box the item-3 cases load."""
+    api = w3_mutants._layout(root)
+    shutil.copytree(API_DIR.parents[1] / "tests" / "integration", root / "tests" / "integration",
+                    dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    return api
+
+
+RUNNER = Runner(name="worker-main", targets=(SUITE_FILE,), layout=_layout)
 
 
 def _pg_layout(root: pathlib.Path) -> pathlib.Path:
-    """W3's copy plus the migrations `infrx.state.migrations` reads (the D harness builds
-    its template database from them)."""
-    api = w3_mutants._layout(root)
+    """The copy above plus the migrations `infrx.state.migrations` reads (the D harness
+    builds its template database from them)."""
+    api = _layout(root)
     migrations = pathlib.Path("apps", "app", "supabase", "migrations")
     shutil.copytree(API_DIR.parents[1] / migrations, root / migrations)
     return api
