@@ -365,19 +365,20 @@ def test_deploy_failclosed__pilot_runs_only_the_pinned_runtime_image(tmp_path, m
 def test_deploy_failclosed__a_pilot_image_must_be_unprivileged_and_carry_the_worker(
         tmp_path, monkeypatch):
     """Inside the image, a pilot refuses a root interpreter and a runtime without W3's
-    worker entry point - the unit would start something that cannot run. It is absent
-    today: that refusal is the named pending item."""
+    worker entry point - the unit would start something that cannot run. Since I2B-R4 the
+    entry point is in the runtime, so only a runtime that lacks it is refused."""
     env = tmp_path / "pilot.env"
     env.write_text("INFRX_MODE=pilot\n")
     problems = preflight.probe(env, "pilot")["problems"]
-    for entry in preflight.WORKER_ENTRIES:
-        assert f"PENDING(W3): {entry}" in " ".join(problems), entry
+    assert not [p for p in problems if "PENDING(W3)" in p], problems
     assert not [p for p in problems if "as root" in p]
     monkeypatch.setattr(preflight.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(preflight, "_importable", lambda module: True)
+    monkeypatch.setattr(preflight, "_importable",
+                        lambda module: module not in preflight.WORKER_ENTRIES)
     problems = preflight.probe(env, "pilot")["problems"]
     assert [p for p in problems if "as root" in p]
-    assert not [p for p in problems if "PENDING(W3)" in p]
+    for entry in preflight.WORKER_ENTRIES:
+        assert f"PENDING(W3): {entry}" in " ".join(problems), entry
 
 
 def test_deploy_failclosed__pilot_needs_w3s_recorded_engine_pin(tmp_path):

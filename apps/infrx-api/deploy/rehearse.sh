@@ -16,8 +16,15 @@
 #   `aws` answers from a local parameter file. The scripts themselves are unmodified.
 # * no GPU: the engine unit runs tests/integration/fake_vllm.py (E2's fake) in the runtime
 #   image on 127.0.0.1:8000 instead of serve.sh. Nothing here measures the engine.
-# * pilot is refused by the real preflight today (G2 composition, W3 entry points), so the
-#   deploy rehearsed end to end is dev mode; pilot's refusal is rehearsed as a drill.
+# * since the cutover every mode builds its stores from settings, so the box has its own
+#   PostgreSQL (the pinned supabase/postgres, migrated by migrate.py; DATABASE_URL through
+#   the SSM stub's pg_journal_url), MinIO (S3_MEDIA_BUCKET + S3_ENDPOINT_URL through
+#   INFRX_SET; the docker wrapper hands every container the MinIO literals, the stand-in for
+#   the instance role) and, from step 4, the Valkey unit. All in the box's namespace.
+# * the deploy rehearsed end to end is dev mode (a pilot needs an HTTPS identity source, a
+#   seeded catalog and 60 GiB of disk); pilot's install refusal and the in-image pilot probe
+#   (which now passes: ingress composed, worker entry point present) are drills, and the
+#   worker unit (`python -m infrx.worker`) is started on the dev env file in step 4b.
 # Every container, network and volume it makes is named $NS-* and labelled
 # ai.infrx.rehearsal=$NS; teardown removes exactly those and checks nothing is left.
 # NS is REHEARSAL_NS (default infrx-i2b), so two rehearsals never touch each other.
@@ -33,6 +40,7 @@ NS=${REHEARSAL_NS:-infrx-i2b}
 LABEL=ai.infrx.rehearsal=$NS
 export REHEARSAL_NS=$NS REHEARSAL_LABEL=$LABEL
 PG_IMAGE=supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd
+MINIO_IMAGE=quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # tests/integration/compose.yaml
 KEY=infrx-i2b-rehearsal-legacy-key-0123456789     # a local literal, dev mode only
 mkdir -p "$INFRX_ROOT/etc" "$BIN"
 step() { printf '\n=== %s\n' "$*"; }
@@ -82,6 +90,8 @@ args, out = sys.argv[1:], []
 sub = args[0] if args else ""
 if sub == "run":
     out, i = ["run", "--label", os.environ["REHEARSAL_LABEL"]], 1
+    for pair in os.environ.get("REHEARSAL_AWS_ENV", "").split():   # the instance role's stand-in
+        out += ["-e", pair]
     while i < len(args):
         a = args[i]
         if a in ("--network",) and args[i + 1] == "host":
@@ -261,7 +271,14 @@ SH
 chmod +x "$BIN"/*
 export PATH="$BIN:$PATH"
 params() { printf '%s' "$1" > "$work/params.json"; }
-params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
+# The box's own services (step 0): DATABASE_URL is an SSM parameter, the bucket a tunable, and
+# the MinIO credentials reach every container through the docker wrapper (local literals).
+BOX_DSN=postgresql://postgres:infrx-i2b-local@127.0.0.1:5432/postgres
+S3_SET="S3_MEDIA_BUCKET=infrx-rehearsal S3_ENDPOINT_URL=http://127.0.0.1:9000"
+export REHEARSAL_AWS_ENV="AWS_ACCESS_KEY_ID=infrxi2bminio AWS_SECRET_ACCESS_KEY=infrx-i2b-local-secret AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true"
+BASE_PARAMS="{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"},
+ \"/model-inference/pg_journal_url\": {\"value\": \"$BOX_DSN\"}}"
+params "$BASE_PARAMS"
 
 # in-namespace HTTP: status, then body
 http() {  # http METHOD URL [header-json] [body]
@@ -297,11 +314,36 @@ export REHEARSAL_ENGINE="docker run --rm --name marlin2b-8000 --network host \
   -v $repo/tests/integration/fake_vllm.py:/x/tests/integration/fake_vllm.py:ro \
   -e INFRX_E2_REPO_ROOT=/x $REHEARSAL_IMAGE python /x/tests/integration/fake_vllm.py --port 8000"
 echo "release $RELEASE"; echo "runtime image $REHEARSAL_IMAGE"
+# The box's PostgreSQL and MinIO, in its namespace (127.0.0.1:5432, :9000).
+/usr/bin/docker run -d --name "$NS-db" --label "$LABEL" --network "container:$NS-box" \
+  -e POSTGRES_PASSWORD=infrx-i2b-local "$PG_IMAGE" >/dev/null
+/usr/bin/docker run -d --name "$NS-s3" --label "$LABEL" --network "container:$NS-box" \
+  -e MINIO_ROOT_USER=infrxi2bminio -e MINIO_ROOT_PASSWORD=infrx-i2b-local-secret \
+  "$MINIO_IMAGE" server /data --address 127.0.0.1:9000 >/dev/null
+for _ in $(seq 60); do
+  /usr/bin/docker exec "$NS-db" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 2
+done
+sleep 3
+/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local "$NS-db" psql -q -h 127.0.0.1 -U postgres -c \
+  "create schema if not exists supabase_migrations; create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);"
+boxdb() {  # migrate.py against the box's database
+  MIGRATE_DATABASE_URL=$BOX_DSN /usr/bin/docker run --rm --label "$LABEL" --network "container:$NS-box" \
+    -v "$repo/apps/app/supabase/migrations:/migrations:ro" -e MIGRATE_DATABASE_URL \
+    -e PYTHONDONTWRITEBYTECODE=1 "$REHEARSAL_IMAGE" python /app/deploy/migrate.py "$@" --dir /migrations
+}
+boxdb apply --expect "$(boxdb plan | sed -n 's/^plan digest: //p')" | tail -n 1
+for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
+/usr/bin/docker run --rm --label "$LABEL" --network "container:$NS-box" \
+  $(printf -- '-e %s ' $REHEARSAL_AWS_ENV) "$REHEARSAL_IMAGE" python -c '
+import botocore.session
+from botocore.config import Config
+botocore.session.get_session().create_client("s3", endpoint_url="http://127.0.0.1:9000",
+    config=Config(s3={"addressing_style": "path"})).create_bucket(Bucket="infrx-rehearsal")'
 docker run --rm --network none "$REHEARSAL_IMAGE" python -c 'import os, sys; print("image python", sys.version.split()[0], "uid", os.geteuid())'
 
 step "1. fresh dev deploy through install.sh (real preflight probe in the real image)"
 set +e
-INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) READY_S=60 ENGINE_READY_S=60 \
+INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) READY_S=60 ENGINE_READY_S=60 INFRX_SET="$S3_SET" \
   "$here/install.sh" 2>&1 | tail -n 8
 code=${PIPESTATUS[0]}; set -e
 check "install.sh dev exits 0 (got $code)" '[ "$code" = 0 ]'
@@ -315,15 +357,18 @@ echo "gateway container: $g"
 check "the gateway runs the pinned image as 10001, read-only, no capabilities" \
   "[[ '$g' == *'user=10001:10000 ro=true capdrop=[ALL] secopt=[no-new-privileges]'*'image=$REHEARSAL_IMAGE'* ]]"
 
-step "2. calls on the deployed path (loopback, legacy key: dev mode)"
+step "2. calls on the deployed path (loopback; since the cutover only a per-organization key is an identity)"
 r=$(status_of GET http://127.0.0.1:8001/v1/models); check "GET /v1/models 200 (got $r)" '[ "$r" = 200 ]'
 body='{"model":"nemostation/marlin-2b","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'
 r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions '{"Content-Type":"application/json"}' "$body")
 check "chat without a key is 401 (got $r)" '[ "$r" = 401 ]'
 r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer wrong-key-0123456789abcdef\"}" "$body")
 check "chat with a wrong key is 401 (got $r)" '[ "$r" = 401 ]'
-r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
-check "chat with the key reaches the engine: 200 (got $r)" '[ "$r" = 200 ]'
+# R51/R86: the metered ingress serves chat, and the shared legacy key names no organization to
+# meter - refused in every mode (a 200 here would be the legacy route, unmetered).
+r=$(http POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
+check "chat with the shared legacy key is 401 invalid_api_key from the ingress ($(echo "$r" | head -n1))" \
+  "[[ '${r%%$'\n'*}' = 401 && '$r' == *'\"code\":\"invalid_api_key\"'* ]]"
 
 step "3. fail-closed drills against the running deploy"
 before_env=$(sha "$env_file"); before_start=$(started infrx-gateway)
@@ -340,22 +385,23 @@ params '{"/model-inference/marlin2b_api_key": {"error": "AccessDeniedException"}
 drill "a denied SSM read" 2 INFRX_MODE=dev
 params '{"/model-inference/marlin2b_api_key": {"error": "ThrottlingException"}}'
 drill "a throttled SSM read" 2 INFRX_MODE=dev
-params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
+params "$BASE_PARAMS"
 drill "a mistyped tunable" 2 INFRX_MODE=dev INFRX_SET=MAX_ACTIVE_JOB=4
 drill "a tunable the runtime cannot read" 2 INFRX_MODE=dev INFRX_SET=MAX_ACTIVE_JOBS=abc
 drill "an engine sequence count of 0" 2 INFRX_MODE=dev INFRX_SET=ENGINE_MAX_NUM_SEQS=0
 params "{\"/model-inference/supabase_url\": {\"value\": \"https://example.supabase.co\"},
  \"/model-inference/supabase_service_role_key\": {\"value\": \"local-literal-service-role-0123456789\"},
  \"/model-inference/pg_journal_url\": {\"value\": \"postgresql://infrx@127.0.0.1:5432/infrx\"}}"
-drill "the repository's pilot today (refused before the probe: engine pin, W3 record, disk)" 2 INFRX_MODE=pilot
+drill "a pilot without S3_MEDIA_BUCKET or its disk budget (refused before the probe)" 2 INFRX_MODE=pilot
 # ... and the probe itself, in the real image, on a pilot-shaped file (the runbook's gate G3)
 v=$(printf 'INFRX_MODE=pilot\nSUPABASE_URL=https://gate.supabase.co\nSUPABASE_SERVICE_ROLE_KEY=gate-placeholder-0123456789\nDATABASE_URL=postgresql://gate@127.0.0.1/gate\nPROCESSING_CACHE_DIR=/opt/dlami/nvme/processing\nVALKEY_URL=valkey://127.0.0.1:6379/0\n' \
   | /usr/bin/docker run --rm -i --network none --label "$LABEL" "$REHEARSAL_IMAGE" python /app/deploy/preflight.py probe --mode pilot --env-file /dev/stdin || true)
 echo "pilot probe in the image: $v"
-check "the in-image pilot probe refuses: ROUTERS not composed (G2), worker entry absent (W3)" \
-  "[[ '$v' == *'\"ok\": false'*ROUTERS*'PENDING(W3): infrx.worker.__main__'* ]]"
+# G2's ingress is composed and I2B-R4's `infrx.worker.__main__` is in the image: G3 passes.
+check "the in-image pilot probe accepts a pilot-shaped file (ingress composed, worker entry present)" \
+  "[[ '$v' == *'\"ok\": true'* && '$v' != *PENDING* ]]"
 drill "no mode" 2 INFRX_MODE=
-params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
+params "$BASE_PARAMS"
 
 step "4. the pilot-only index unit (pinned Valkey, loopback, read-only, no persistence)"
 systemctl start infrx-valkey
@@ -364,6 +410,22 @@ check "valkey answers PONG on 127.0.0.1 (got $v)" '[ "$v" = PONG ]'
 vi=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}}' "$NS-infrx-valkey")
 echo "valkey container: $vi"
 check "valkey runs as 999, read-only, no capabilities" "[ '$vi' = 'user=999:1000 ro=true capdrop=[ALL]' ]"
+
+step "4b. the worker unit on this env file: python -m infrx.worker, loopback readiness, drain on stop"
+systemctl start infrx-worker
+set +e; READY_S=60 bash -c ". '$here/lib.sh'; wait_http \"\$WORKER_READY\" 60"; code=$?; set -e
+check "the worker's /readyz on 127.0.0.1:8002 answers 200 (engine up, pool running) ($code)" '[ "$code" = 0 ]'
+out=$(http GET http://127.0.0.1:8002/metrics)
+check "the worker's /metrics carries infrx_build_info for this release and image" \
+  "[[ '$out' == *'infrx_build_info{process=\"worker\",revision=\"$RELEASE\",image=\"$REHEARSAL_IMAGE\"} 1'* ]]"
+w=$(/usr/bin/docker inspect --format 'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}} image={{.Image}}' "$NS-infrx-worker")
+echo "worker container: $w"
+check "the worker runs the pinned image as 10002, read-only, no capabilities" \
+  "[ '$w' = 'user=10002:10000 ro=true capdrop=[ALL] image=$REHEARSAL_IMAGE' ]"
+systemctl stop infrx-worker
+for _ in $(seq 30); do grep -q 'drained:' "$work/infrx-worker.service.log" 2>/dev/null && break; sleep 1; done
+check "stopping the unit drains the worker (SIGTERM through --init: $(grep -o 'drained: [0-9]* finished, [0-9]* released' "$work/infrx-worker.service.log" || echo none))" \
+  "grep -q 'drained: [0-9]* finished, 0 released' '$work/infrx-worker.service.log'"
 
 step "5. the edge: real Caddyfile, pinned Caddy, in the box (plain HTTP address, no ACME)"
 (export INFRX_SITE=http://:8080; . "$here/lib.sh"; edge_install "$here")
@@ -377,8 +439,8 @@ for p in /metrics /readyz /internal/x; do
   r=$(http GET "http://127.0.0.1:8080$p"); echo "$p -> $(echo "$r" | tr '\n' ' ')"
   check "$p is 404 not_found at the edge" "[[ '${r%%$'\n'*}' = 404 && '$r' == *'\"code\":\"not_found\"'* ]]"
 done
-r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
-check "an authenticated call through the edge is 200 (got $r)" '[ "$r" = 200 ]'
+r=$(status_of GET http://127.0.0.1:8080/v1/models)
+check "an API call through the edge reaches the gateway: GET /v1/models 200 (got $r)" '[ "$r" = 200 ]'
 # A raw socket: the edge answers 413 and closes while the client is still sending, which
 # an HTTP library reports as a reset rather than as the answer it received.
 r=$(/usr/bin/docker exec "$NS-box" python -c '
@@ -403,8 +465,9 @@ print(data.split(b"\r\n", 1)[0].decode(), "sent", sent // 2**20, "MiB",
       "request_too_large" if b"request_too_large" in data else "no-envelope")')
 echo "97 MiB body -> $r"
 check "a body over MAX_REQUEST_BYTES is 413 request_too_large at the edge" "[[ '$r' == 'HTTP/1.1 413'*request_too_large ]]"
-r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
-check "a normal body still passes the edge after it ($r)" '[ "$r" = 200 ]'
+r=$(http POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
+check "a normal body still passes the edge after it: the ingress answers it ($(echo "$r" | head -n1))" \
+  "[[ '${r%%$'\n'*}' = 401 && '$r' == *'\"code\":\"invalid_api_key\"'* ]]"
 
 systemctl stop marlin2b-gateway
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
@@ -428,7 +491,7 @@ check "resumed: public health up again ($r)" "[[ '$r' == '200 {\"ok\":true}'* ]]
 step "7. R2 in runbook order: pause, a second deploy (MAX_ACTIVE_JOBS=4), ENGINE=restart rollback.sh to the first, resume"
 "$here/drain.sh" pause
 set +e
-INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) INFRX_SET=MAX_ACTIVE_JOBS=4 READY_S=60 \
+INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) INFRX_SET="$S3_SET MAX_ACTIVE_JOBS=4" READY_S=60 \
   "$here/install.sh" > "$work/second.log" 2>&1; code=$?; set -e
 check "second deploy exits 0 (got $code)" '[ "$code" = 0 ]'
 check "the second env carries MAX_ACTIVE_JOBS=4" "grep -qx MAX_ACTIVE_JOBS=4 '$env_file'"
