@@ -596,6 +596,19 @@ def test_a_runtime_restarted_mid_delete_finishes_it_and_keeps_live_work(make_wor
     report = run(collector(world, holder="replacement").sweep())
     assert deleted(report) == [key(1)] and report.max_pending_delete_s == CLAIM_TTL_S
     assert run(world.read(live_row)) == b"content" and run(world.read(fresh)) == b"content"
+    # F2C.d's reconcile rule: the crash does not leave identical media `content_retiring`
+    # for ever - the same bytes staged again are the next generation, readable.
+    again = run(world.write("source", key(1), b"content"))
+    assert (again.content_id, again.generation) == (doomed.content_id, 2)
+    assert run(world.read(again)) == b"content"
+
+
+def test_the_committed_retention_transcripts_hold_for_the_port_the_collector_drives():
+    """F2C.d: the RETENTION-DURABLE acceptance transcripts, replayed on the reference
+    adapter this suite's `f2c` world wraps (D10's adapter replays the same file)."""
+    from infrx.contracts.conformance.acceptance import replay
+    from infrx.contracts.fakes.factories import lifecycle_factory
+    assert [p for p in replay(lifecycle_factory) if p.startswith("retention_durable__")] == []
 
 
 def test_the_schedule_survives_a_failed_pass(make_world, caplog):
