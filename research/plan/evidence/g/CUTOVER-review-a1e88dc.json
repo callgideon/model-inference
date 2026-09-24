@@ -1,0 +1,689 @@
+{
+  "verdict": "fix_required",
+  "lenses_returned": 2,
+  "head": "a1e88dc",
+  "reviews": [
+    {
+      "lens": "composition",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every count and tail above is copied from command output I ran in this session, or from the lane's cut4 logs, which I read and label as harvested. I checked the code identity of the harvested runs with git diff, as the brief asked. Nothing ran on AWS, the box or any secret. Containers were only in my own namespace. I verified the claim that the test_cancel_cause failure is pre-existing by running it at a0711ac. The lane's make api-test was still running when I harvested, and I do not quote it.",
+      "cleanup": "I removed my three containers: infrx-review-cutover-composition-postgres (55741), -valkey (55742) and -minio (55744). The decoy was never started, and no Q container was started on 55743. I deleted the scratch tree /tmp/claude-1000/review-cutover-composition-3833937, which held the private TMPDIR, the lock, the logs, the mutant copies and the base archive. The uvicorn on 55745 and the DB-holder process have ended. I did not touch the lane's worktree or its detached reruns. The lane's stream B make api-test is still running, and I left it alone.",
+      "mutants": [
+        {
+          "name": "D:composition_root_mounts_the_legacy_route",
+          "edit": "app.py ROUTERS gains legacy chat before ingress",
+          "result": "KILLED",
+          "killed_by": "test_startup::…serves_chat_through_the_metered_ingress_only (ROUTERS equality)"
+        },
+        {
+          "name": "D:composition_root_drops_uploads",
+          "edit": "ROUTERS without uploads",
+          "result": "KILLED",
+          "killed_by": "…serves_chat_through_the_metered_ingress_only"
+        },
+        {
+          "name": "D:composition_root_jobs_before_ingress",
+          "edit": "ROUTERS (health, models, jobs, ingress, uploads, metrics)",
+          "result": "KILLED",
+          "killed_by": "…serves_chat_through_the_metered_ingress_only"
+        },
+        {
+          "name": "D:composition_root_drops_metrics",
+          "edit": "ROUTERS without metrics",
+          "result": "KILLED",
+          "killed_by": "test_ops_recover__the_gateway_exposes_the_build… (404 body)"
+        },
+        {
+          "name": "D:composition_root_route_table_unchecked",
+          "edit": "drop ingress.assert_route_table(app)",
+          "result": "KILLED",
+          "killed_by": "…the_route_table_is_asserted_after_every_router_mounted (DID NOT RAISE)"
+        },
+        {
+          "name": "D:build_info_not_required_in_pilot",
+          "edit": "if rt.mode == 'pilot' -> if False",
+          "result": "KILLED",
+          "killed_by": "BUILD_CASE (DID NOT RAISE)"
+        },
+        {
+          "name": "D:build_info_revision_from_git",
+          "edit": "revision from git rev-parse",
+          "result": "KILLED",
+          "killed_by": "BUILD_CASE"
+        },
+        {
+          "name": "D:release_sha_shape_unchecked",
+          "edit": "if False and not RELEASE_SHA_RE…",
+          "result": "KILLED",
+          "killed_by": "BUILD_CASE (DID NOT RAISE)"
+        },
+        {
+          "name": "D:objects_unset_in_memory",
+          "edit": "unset bucket -> InMemoryObjectStore",
+          "result": "KILLED",
+          "killed_by": "test_composition::…never_stages_into_process_memory (message lacks S3_MEDIA_BUCKET)"
+        },
+        {
+          "name": "D:objects_from_settings_in_memory",
+          "edit": "set bucket -> InMemoryObjectStore",
+          "result": "KILLED",
+          "killed_by": "…never_stages_into_process_memory"
+        },
+        {
+          "name": "D:stores_on_an_unnamed_database",
+          "edit": "empty DATABASE_URL check -> if False",
+          "result": "KILLED",
+          "killed_by": "…builds_the_stores_it_is_not_given_on_one_pool"
+        },
+        {
+          "name": "D:stores_on_two_pools",
+          "edit": "catalog on a second pool",
+          "result": "KILLED",
+          "killed_by": "…on_one_pool ('do not share one pool')"
+        },
+        {
+          "name": "D:startup_probe_on_the_closed_pool",
+          "edit": "if pool.closed -> if False",
+          "result": "KILLED",
+          "killed_by": "…startup_probe_connects_on_its_own… (PoolClosed, declared dies_by)"
+        },
+        {
+          "name": "D:pilot_built_without_jobs",
+          "edit": "skip the jobs None check",
+          "result": "KILLED",
+          "killed_by": "…a_pilot_is_not_built_without_its_durable_adapters[jobs]"
+        },
+        {
+          "name": "D:unset_mode_starts_legacy",
+          "edit": "unset mode returns 'legacy'",
+          "result": "KILLED",
+          "killed_by": "test_startup::…an_unset_mode_refuses_to_start"
+        },
+        {
+          "name": "D:operations_without_a_database",
+          "edit": "cli: if not dsn -> if False",
+          "result": "KILLED",
+          "killed_by": "test_cli::…builds_the_postgres_adapters_from_the_environment"
+        },
+        {
+          "name": "D:release_engine_options_placeholder_restored",
+          "edit": "ENGINE_OPTIONS_DIGEST back to 44…",
+          "result": "KILLED",
+          "killed_by": "test_publication::…pins_the_measured_image_and_engine_options"
+        },
+        {
+          "name": "D:unit_runs_the_retired_shim",
+          "edit": "unit runs uvicorn gateway:app",
+          "result": "KILLED",
+          "killed_by": "test_packaging::…runs_the_factory_from_what_the_image_copies"
+        },
+        {
+          "name": "D:edge_buffers_events",
+          "edit": "flush_interval -1 -> 1s",
+          "result": "KILLED",
+          "killed_by": "test_packaging::…edge_proxies_jobs_and_uploads…"
+        },
+        {
+          "name": "D:edge_hides_uploads",
+          "edit": "@private gains /v1/uploads*",
+          "result": "KILLED",
+          "killed_by": "…edge_proxies_jobs_and_uploads…"
+        },
+        {
+          "name": "D:install_passes_no_release",
+          "edit": "drop --release \"$sha\" from install.sh",
+          "result": "KILLED",
+          "killed_by": "test_install::…a_pilot_env_carries_the_release…"
+        },
+        {
+          "name": "D:credit_without_card_installs",
+          "edit": "credit-needs-card check -> if False",
+          "result": "KILLED",
+          "killed_by": "test_prereqs::…refuses_a_regime_or_card_it_cannot_serve"
+        },
+        {
+          "name": "O1:site_level_encode_buffers_sse",
+          "edit": "Caddyfile site-level `encode gzip zstd`",
+          "result": "SURVIVED (23 passed) -> COMP-B2",
+          "killed_by": ""
+        },
+        {
+          "name": "O2:site_level_strips_server_timing",
+          "edit": "Caddyfile site-level `header -Server-Timing`",
+          "result": "SURVIVED (23 passed) -> COMP-B2",
+          "killed_by": ""
+        },
+        {
+          "name": "O3:build_info_exposed_twice",
+          "edit": "second infrx_build_info series with revision=sha[:7]",
+          "result": "SURVIVED (48 passed) -> COMP-N2",
+          "killed_by": ""
+        },
+        {
+          "name": "O4:runtime_release_sha_short_accepted",
+          "edit": "RELEASE_SHA_RE [0-9a-f]{7,40}",
+          "result": "SURVIVED (292 passed) -> COMP-B1",
+          "killed_by": ""
+        },
+        {
+          "name": "O5:preflight_release_sha_short_accepted",
+          "edit": "preflight git_sha [0-9a-f]{7,40}",
+          "result": "SURVIVED (81 passed) -> COMP-B1",
+          "killed_by": ""
+        },
+        {
+          "name": "O6:runtime_image_any_sha256",
+          "edit": "IMAGE_ID_RE sha256:\\S+",
+          "result": "SURVIVED (47 passed) -> COMP-B1",
+          "killed_by": ""
+        },
+        {
+          "name": "O7:head_bucket_probe_skipped",
+          "edit": "drop objects.probe()",
+          "result": "KILLED",
+          "killed_by": "…never_stages_into_process_memory"
+        },
+        {
+          "name": "O8:bucket_name_in_refusal",
+          "edit": "refusal detail includes the bucket name",
+          "result": "KILLED",
+          "killed_by": "…never_stages_into_process_memory (value not echoed)"
+        },
+        {
+          "name": "O9:unit_two_workers",
+          "edit": "--workers 1 -> 2",
+          "result": "SURVIVED (tests/i 153 passed) -> COMP-N1",
+          "killed_by": ""
+        },
+        {
+          "name": "O10:unit_drain_shortened",
+          "edit": "--timeout-graceful-shutdown 110 -> 30",
+          "result": "SURVIVED (tests/i 153 passed) -> COMP-N1",
+          "killed_by": ""
+        },
+        {
+          "name": "O11:unit_cache_dir_unmounted",
+          "edit": "drop -v ${PROCESSING_CACHE_DIR} mount",
+          "result": "KILLED",
+          "killed_by": "test_packaging::…runtime_containers_run_unprivileged_and_bounded"
+        },
+        {
+          "name": "O12:ops_dsn_whitespace_accepted",
+          "edit": "build_operations without .strip()",
+          "result": "KILLED",
+          "killed_by": "test_cli::…builds_the_postgres_adapters_from_the_environment"
+        },
+        {
+          "name": "O13:metrics_before_ingress",
+          "edit": "ROUTERS metrics before ingress",
+          "result": "KILLED",
+          "killed_by": "…serves_chat_through_the_metered_ingress_only"
+        },
+        {
+          "name": "O14:dev_build_info_partial",
+          "edit": "dev with a missing value still sets the gauge",
+          "result": "KILLED",
+          "killed_by": "BUILD_CASE (dev: no gauge)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git archive a1e88dc | tar -x (scratch) && make api-env",
+          "exit": 0,
+          "tail": "uvicorn==0.53.0, valkey==6.1.1, zstandard==0.25.0 installed (frozen)"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d9 (private: infrx-review-cutover-composition-postgres 55741, decoy 55781, valkey 55742) pytest tests/d/test_composition_pg.py test_jobstore_conformance.py test_streamstore_conformance.py test_credit_jobstore_conformance.py test_catalog_pg.py test_operations_pg.py test_pgharness.py",
+          "exit": 0,
+          "tail": "158 passed, 5 xfailed, 2 warnings in 240.12s"
+        },
+        {
+          "cmd": "same set minus test_pgharness with INFRX_D1_IMAGE=supabase",
+          "exit": 0,
+          "tail": "151 passed, 5 xfailed, 2 warnings in 717.30s"
+        },
+        {
+          "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55744 (private MinIO) pytest tests/m/test_s3.py",
+          "exit": 0,
+          "tail": "28 passed in 14.87s (no skips: the S3 arms ran)"
+        },
+        {
+          "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55744 INFRX_MUTANTS=all pytest tests/m/test_s3_mutants.py",
+          "exit": 0,
+          "tail": "28 passed in 117.45s (the lane's run skipped 14 for lack of an endpoint)"
+        },
+        {
+          "cmd": "pytest tests/i",
+          "exit": 0,
+          "tail": "153 passed in 226.25s"
+        },
+        {
+          "cmd": "pytest tests/g",
+          "exit": 0,
+          "tail": "574 passed, 2 warnings in 238.39s"
+        },
+        {
+          "cmd": "probe: create_app(from_env(pilot env)) with NOTHING injected, on real PostgreSQL + MinIO + Valkey",
+          "exit": 0,
+          "tail": "ROUTERS health,models,ingress,uploads,jobs,observe.route; adapters PgCatalogDirectory/PgStreamStore/PgJobStore/S3ObjectStore(bucket, infrx/), one AsyncConnectionPool (closed until lifespan), ValkeyScheduler; /metrics 200 with one infrx_build_info{process,revision(40hex),image(sha256)} 1.0; public peer 404; loopback+XFF 404; /readyz 200 ok; unauthenticated chat/jobs/uploads 401 envelope; /docs, /openapi.json, trailing slash 404"
+        },
+        {
+          "cmd": "probe refusals (timed)",
+          "exit": 0,
+          "tail": "pg closed port 0.2s / pg blackhole 20.1s / wrong password 0.2s -> 'unreachable at startup: journal, price_source'; credit card not active -> price_source; card unset -> requires ACTIVE_RATE_CARD_VERSION; bucket 404/403 -> 'S3_MEDIA_BUCKET did not answer HeadBucket (404|403)' with no bucket name or endpoint; s3 closed 5.6s / blackhole 21.7s refused; bucket unset refused in pilot/dev/test; DATABASE_URL unset refused in dev and pilot; release/image missing refused naming the key; short sha / tag image refused with no value echoed; mode unset/bogus refused; valkey closed port STARTED (COMP-N5)"
+        },
+        {
+          "cmd": "env -i <pilot env> python -m uvicorn --factory infrx.gateway.app:create_app --port 55745 --workers 1 --timeout-graceful-shutdown 110; curl; SIGTERM",
+          "exit": 0,
+          "tail": "exactly 1 infrx_build_info{ line; readyz 200 ok; metrics+XFF 404; chat 401; docs 404; 'Application shutdown complete.'"
+        },
+        {
+          "cmd": "hand-applied mutants (22 declared, 14 own) via per-mutant copy + pytest -x",
+          "exit": 0,
+          "tail": "22/22 declared KILLED; own 8 KILLED, 6 SURVIVED (O1,O2,O3,O4,O5,O6 -> B1/B2/N2) + O9,O10 SURVIVED (N1)"
+        },
+        {
+          "cmd": "harvest lane streamA/streamB (code at 92269a6/a1e88dc; git diff f7d9b03..a1e88dc -- apps tests Makefile = tests/i/mutants.py only; 60dd799..a1e88dc no code)",
+          "exit": 0,
+          "tail": "G all 329 passed (22:19); G6B 72 passed; G3 jobs 85 passed; G4U 42 passed; I all 204 passed (12:30); M S3 14 passed 14 skipped; G by-name 11/11; G6B by-name 4/4; I by-name 5/5; tests/g 574; tests/i 153; tests/d d3 151 passed 5 xfailed; make api-test still running at harvest"
+        },
+        {
+          "cmd": "lane layer 0 (INFRX_E2_NAMESPACE=e3b2)",
+          "exit": 1,
+          "tail": "17 failed, 149 passed, 86 skipped: 12 'the pilot ingress is mounted: write … body now' (9 journeys, dataset resume, dr11, rc03) + rc00 + test_stage held-cutover (E3B phase 3, by design); dr17 'requires S3_MEDIA_BUCKET' (E3B phase 3 body, as proposed); rc05b (M1-L2 merge lifts PENDING); test_harness '0018_terminal_settlement.sql' (D5). None is a cutover defect"
+        },
+        {
+          "cmd": "lane tests/contracts quick; tests/contracts/test_cancel_cause.py at base a0711ac",
+          "exit": 1,
+          "tail": "23 failed at a1e88dc; at a0711ac the same test_dur_settle__before_0018… fails (1 failed, 1 passed): D5/F, not the cutover's"
+        }
+      ]
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every count and tail above comes from my own runs in /tmp/claude-1000/review-cutover-honesty-3842183 (now removed) or from the lane's cut4 logs, which I read after STREAM_A_DONE and STREAM_B_DONE appeared. Diffs show that code at a1e88dc is byte-identical to 92269a6 and 60dd799. What the evidence claims and what I verified: the final-code make api-test gives `23 failed, 3497 passed`, and the failure list is identical to both the f7d9b03 run and M1-L2's eae07a9 run. The I list gives 204 passed at final code, i.e. 203 plus the re-anchored preflight_refusal_ignored. The G list gives 329, G6B 72, G3 85 and G4U 42. I checked 27 per-item kill texts by hand, all killed: 16 G and 11 I. The R76 decision text appears in the evidence (item 6, Limits 8, Integration requests) and twice in the coordinator log. The R95 proposal matches the code (H-N5 lists its gaps). Things I did not reproduce: the sha256 of G2's inline diff text; the image checks at 351d084 (docker build); the one-off PostgreSQL copy-and-edit check quoted under Limits 3; the phase-3 lane's '23 identical' claim (I found no api-test evidence on origin/codex/e3b-phase3-bodies to compare). I found no fabricated number in the evidence. One of my own results needed correcting: the first full-suite runs of H6 and H16 reported 'killed', but only because -x stopped on the pre-existing test_cancel_cause red. I reran them with that red excluded and both survived. H10 was my own misdeclared mutant (it targeted a route that does not exist) and is not counted.",
+      "cleanup": "I removed the containers infrx-review-cutover-honesty-minio (55748) and infrx-review-cutover-honesty-valkey (55746). The harness created and removed infrx-review-cutover-honesty-postgres (55745) at exit; afterwards `docker ps -a` shows none of the three. I also deleted /tmp/claude-1000/review-cutover-honesty-3842183 (scratch tree, merge clone, private TMPDIR and locks) and my pointer file in the scratchpad. The lane's worktree and cut4 logs were never modified, and none of my processes are still running. I never touched 55432, the infrx-cutover-*/d3/q3/d5/e3b2/d2/gideon containers, AWS or any secrets.",
+      "mutants": [
+        {
+          "name": "H1_unset_mode_is_dev",
+          "edit": "config.validate_runtime: MODE_UNSET `raise RuntimeMisconfigured(mode, (\"INFRX_MODE\",))` -> `return \"dev\"`",
+          "result": "killed",
+          "killed_by": "test_startup::test_f_base__an_unset_mode_refuses_to_start (1 failed)"
+        },
+        {
+          "name": "H2_probe_skipped",
+          "edit": "pilot.object_store: `objects.probe()` -> `pass` (no HeadBucket)",
+          "result": "killed",
+          "killed_by": "test_composition never_stages_into_process_memory (1 failed, 3 passed, 19 deselected)"
+        },
+        {
+          "name": "H3_refusal_leaks_s3_error_text",
+          "edit": "pilot.object_store: refusal detail `reason(failure)` -> raw `failure` text",
+          "result": "killed",
+          "killed_by": "never_stages_into_process_memory (bucket name must not appear)"
+        },
+        {
+          "name": "H4_pilot_needs_only_the_release",
+          "edit": "pilot.build_info: required tuple drops infrx_image",
+          "result": "killed",
+          "killed_by": "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
+        },
+        {
+          "name": "H5_release_short_sha_accepted",
+          "edit": "config RELEASE_SHA_RE `[0-9a-f]{40}` -> `[0-9a-f]{7,40}`",
+          "result": "SURVIVED (tests/g+i+contracts: 1755 passed)",
+          "killed_by": ""
+        },
+        {
+          "name": "H6_malformed_build_refused_only_in_pilot",
+          "edit": "validate_deployment: INFRX_IMAGE shape check guarded by `mode == \"pilot\"`",
+          "result": "SURVIVED (1755 passed)",
+          "killed_by": ""
+        },
+        {
+          "name": "H16_malformed_release_refused_only_in_pilot",
+          "edit": "validate_deployment: INFRX_RELEASE_SHA shape check guarded by `mode == \"pilot\"`",
+          "result": "SURVIVED (1755 passed)",
+          "killed_by": ""
+        },
+        {
+          "name": "H15_preflight_short_sha_accepted",
+          "edit": "preflight SHAPES git_sha -> `[0-9a-f]{7,40}`",
+          "result": "SURVIVED (tests/i 153 passed)",
+          "killed_by": ""
+        },
+        {
+          "name": "H7_unit_without_factory",
+          "edit": "marlin2b-gateway.service: drop `--factory`",
+          "result": "killed",
+          "killed_by": "tests/i/test_packaging.py (factory case)"
+        },
+        {
+          "name": "H8_image_without_traces_extra",
+          "edit": "Dockerfile uv sync drops `--extra traces`",
+          "result": "SURVIVED (tests/i + tests/m/test_s3.py); the in-image pilot probe backstops it at install",
+          "killed_by": ""
+        },
+        {
+          "name": "H9_edge_strips_prefer",
+          "edit": "Caddyfile catch-all: add `header_up -Prefer`",
+          "result": "killed",
+          "killed_by": "test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered"
+        },
+        {
+          "name": "H10_edge_hides_upload_parts_only",
+          "edit": "@private += /v1/uploads/*/parts",
+          "result": "equivalent (misdeclared by me: no such route); replaced by H10b/H10c",
+          "killed_by": ""
+        },
+        {
+          "name": "H10b_edge_hides_upload_complete_midglob",
+          "edit": "@private += /v1/uploads/*/complete",
+          "result": "killed",
+          "killed_by": "edge proxies jobs and uploads case"
+        },
+        {
+          "name": "H10c_edge_hides_uploads_prefix",
+          "edit": "@private += /v1/uploads/*",
+          "result": "killed",
+          "killed_by": "edge proxies jobs and uploads case"
+        },
+        {
+          "name": "H10d_edge_handle_block_for_events",
+          "edit": "new `handle /v1/jobs/*/events { reverse_proxy 127.0.0.1:8001 }` (no flush_interval) before the catch-all",
+          "result": "SURVIVED (22 passed); disclosed as the lane's Limits 4",
+          "killed_by": ""
+        },
+        {
+          "name": "H11_objects_in_memory_when_bucket_unset_dev",
+          "edit": "adapters_from_env: InMemoryObjectStore when bucket unset outside pilot",
+          "result": "killed",
+          "killed_by": "test_composition never_stages_into_process_memory"
+        },
+        {
+          "name": "H12_stores_built_after_objects_refusal_order",
+          "edit": "adapters_from_env: object store no longer built at all",
+          "result": "killed",
+          "killed_by": "test_composition (1 failed, 17 passed)"
+        },
+        {
+          "name": "H13_cli_whitespace_dsn",
+          "edit": "cli.build_operations: no strip, refuse only on None",
+          "result": "killed",
+          "killed_by": "tests/g/ops/test_cli.py (1 failed, 4 passed)"
+        },
+        {
+          "name": "H14_build_info_image_label_dropped",
+          "edit": "pilot.build_info: gauge set without the image label",
+          "result": "killed",
+          "killed_by": "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-cutover diff --stat 92269a6 a1e88dc; git diff --stat 60dd799 a1e88dc",
+          "exit": 0,
+          "tail": "only research/plan/evidence/g/CUTOVER-60dd799.md differs: code at a1e88dc == 92269a6 == 60dd799, so the lane's cut4 logs apply"
+        },
+        {
+          "cmd": "harvest cut4/streamA.out (lane, final code)",
+          "exit": 0,
+          "tail": "G by-name 11/11 killed; G6B by-name 4/4 killed; G list 329 passed (22:19); G6B 72 passed; G3 jobs 85 passed; G4U 42 passed; M S3 14 passed, 14 skipped; STREAM_A_DONE"
+        },
+        {
+          "cmd": "harvest cut4/streamB.out (lane, final code)",
+          "exit": 2,
+          "tail": "layer0 (e3b2 ns) 17 failed, 149 passed, 86 skipped; tests/g 574 passed; tests/i 153 passed; contracts 23 failed, 1045 passed (pre-existing cancel_cause + 22 broken_runner); tests/d d3 151 passed, 5 xfailed; I by-name 5/5 killed (incl. preflight_refusal_ignored); I list 204 passed (= 203 + fixed anchor); make api-test 23 failed, 3497 passed, 14 skipped, 5 xfailed (35:34); STREAM_B_DONE"
+        },
+        {
+          "cmd": "sort/diff FAILED lists: cut4/api-test.log vs api-test-final.log (f7d9b03) vs api-test-eae07a9.log (M1-L2)",
+          "exit": 0,
+          "tail": "23 == 23 == 23, identical names: test_cancel_cause::before_0018 + 19 contracts subset mutants + 3 runner self-tests (SAME_23). No phase-3-lane api-test evidence file found on origin/codex/e3b-phase3-bodies to diff against"
+        },
+        {
+          "cmd": "git archive a1e88dc | tar -x; make api-env (UV_OFFLINE=1)",
+          "exit": 0,
+          "tail": "env built"
+        },
+        {
+          "cmd": "python -m tests.g.mutants <16 item-1 names> (scratch a1e88dc)",
+          "exit": 0,
+          "tail": "16/16 killed; texts match evidence (deselected count 21 now vs 20 at 88e1cfd, as the evidence's 'at the item's commit or later' allows)"
+        },
+        {
+          "cmd": "python tests/i/mutants.py <11 item-2/3/4 names>",
+          "exit": 0,
+          "tail": "11/11 killed (unit/image/context retire 4, edge 5, preflight regime/card 2); compose_* mutants gone (0 occurrences)"
+        },
+        {
+          "cmd": "git grep gateway.py|from gateway|gateway:app|retired test names a1e88dc (whole repo)",
+          "exit": 0,
+          "tail": "no executable consumer imports gateway.py; left: HANDOFF.md (historical), apps/README.md §7 heading (spec), infrx docstrings saying 'retired', tests/i mutant/negative fixtures, testids label"
+        },
+        {
+          "cmd": "merge sim: clone --shared; checkout 1c50f0c; merge 8554b47 1fa825b a1e88dc ba26ca4",
+          "exit": 0,
+          "tail": "no conflicts (ba26ca4 already merged the cutover at f7d9b03; 1fa825b contains 9fd3457 via m-pilot); config regex block, Dockerfile, pilot.py single copies; Makefile api-mutants includes d5, s3, pilot lists"
+        },
+        {
+          "cmd": "merge: INFRX_E2_NAMESPACE unset pytest tests/integration (layer 0)",
+          "exit": 1,
+          "tail": "2 failed, 152 passed, 103 skipped; FAILED test_stage::...owner_reference_never_on_a_merged_task (M3-U1 fixed), test_run anchor guard (e3bm62: 0); only PENDING[I2B-R4]"
+        },
+        {
+          "cmd": "per-step test_stage + test_run at 1fa825b / 23846c6 / b95a97c / fef96a9",
+          "exit": 1,
+          "tail": "the same 2 failures at every step, including 1fa825b alone"
+        },
+        {
+          "cmd": "merge: pytest tests/g; tests/i; tests/contracts",
+          "exit": 0,
+          "tail": "574 passed; 153 passed; 1069 passed"
+        },
+        {
+          "cmd": "INFRX_D_TASK=dh (private PG 55745, container infrx-review-cutover-honesty-postgres) + MinIO 55748 + Valkey 55746: scratch test_review_settings_only.py + tests/d/test_composition_pg.py",
+          "exit": 0,
+          "tail": "5 passed: pilot create_app with nothing injected but HTTP clients, legacy_usd and credit; /readyz 200, build_info on /metrics, /docs 404, chat 401; refusals for bucket unset/missing/no release"
+        },
+        {
+          "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55748 INFRX_M_S3_LOCAL_CREDS=1 pytest tests/m/test_s3.py",
+          "exit": 0,
+          "tail": "28 passed in 14.08s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest tests/m/test_s3_mutants.py (private MinIO)",
+          "exit": 0,
+          "tail": "28 passed in 97.87s (the lane's 14 skipped now run and kill)"
+        },
+        {
+          "cmd": "own mutant runner (19 edits, see mutants)",
+          "exit": 0,
+          "tail": "13 killed, 5 survived (H5, H6, H16, H15, H8; H10d disclosed), 1 equivalent (H10, replaced)"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "COMP-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/g/test_startup.py",
+      "line": "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as; tests/i/test_install.py test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys",
+      "claim_broken": "The evidence (item 7), 08 §5.1 and the brief all claim INFRX_RELEASE_SHA is a full 40-hex commit id (E4B's served-build check needs the whole sha) and INFRX_IMAGE is sha256:<64 hex>. No test can fail on a weaker shape. The only malformed values tested are 'c0ffee' (6 characters, with no sha256: prefix for the image), '' and upper case. Any rule that still rejects a 6-character value passes the tests.",
+      "evidence": "Own mutants, applied by hand. O4 changes config.RELEASE_SHA_RE to [0-9a-f]{7,40}: SURVIVED tests/g/test_startup.py + tests/g/test_composition.py + tests/contracts/test_config_and_imports.py (292 passed). O5 changes the preflight SHAPES git_sha to [0-9a-f]{7,40}: SURVIVED test_install/test_prereqs/test_packaging (81 passed). O6 changes config.IMAGE_ID_RE to sha256:\\S+: SURVIVED test_startup + test_composition (47 passed). The shipped code is correct. On my settings-path probe a 7-character sha is refused as 'INFRX_RELEASE_SHA must be a 40-hex commit id', and 'infrx-runtime@sha256:…' is refused, so the defect is the test gap only.",
+      "minimal_fix": "In the BUILD_CASE loop, add a 7-hex and a 39-hex release (e.g. RELEASE[:7], RELEASE[:-1]) and an image 'sha256:' + 'b'*63 (or 'sha256:c0ffee'), each expecting the '... must be' refusal. In test_install's release loop, add support.RELEASE[:7]. Declare O4/O5/O6 as G/I mutants.",
+      "lens": "composition",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed on a scratch git archive of a1e88dc; the cutover worktree was not touched and the scratch copy was deleted afterwards. No PostgreSQL was needed. The shipped code is correct: config.py:366-367 has RELEASE_SHA_RE=[0-9a-f]{40} and IMAGE_ID_RE=sha256:[0-9a-f]{64}, and preflight.py:250 has git_sha=[0-9a-f]{40}. The tests only use '' , 'c0ffee' and upper case as malformed values (test_startup.py:178-185, test_install.py:542). The declared mutants are all-or-nothing: g/mutants.py:908-913 replaces the check with `if False`, and i/mutants.py:227-228 uses \\S+. So a weakened shape is never killed. I applied the mutants by hand, one at a time, with sed.\n- O4 changes RELEASE_SHA_RE to [0-9a-f]{7,40}. `pytest -q tests/g/test_startup.py tests/g/test_composition.py tests/contracts/test_config_and_imports.py` ended with `292 passed, 2 warnings in 22.60s`.\n- O6 changes IMAGE_ID_RE to sha256:\\S+. The same command ended with `292 passed, 2 warnings in 19.69s`.\n- O5 changes preflight git_sha to [0-9a-f]{7,40}. `pytest -q tests/i/test_install.py tests/i/test_prereqs.py tests/i/test_packaging.py` ended with `81 passed in 19.85s`.\nGrepping every test that mentions these values (contracts/test_config_and_imports.py, d/test_composition_pg.py, g/*, i/*) finds only valid 40-hex and 64-hex fixtures, apart from the malformed values above. None could kill a {7,40} or \\S+ weakening. The evidence file CUTOVER-60dd799.md:140 states the value is 'shaped as 40 hex digits'. So a stated invariant has no test that can kill a weaker rule. The code is correct, so this is a test gap only; it is blocking under this workflow's rule for an invariant with no killable test. The minimal fix stands: add RELEASE[:7], RELEASE[:-1] and 'sha256:'+'b'*63 cases, and declare O4/O5/O6 as G/I mutants.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed on a git archive of a1e88dc. The live worktree is at 1bed457, so I used the archive. The shipped code is strict: config.py:366-367 has RELEASE_SHA_RE = [0-9a-f]{40} and IMAGE_ID_RE = sha256:[0-9a-f]{64}, and deploy/preflight.py SHAPES has git_sha [0-9a-f]{40} and image_id sha256:[0-9a-f]{64}. The tests only try weaker bad values. In test_startup.py the loop sets each field to \"c0ffee\" (6 hex characters, and the image has no sha256: prefix). test_install.py:542 tries (\"\", \"c0ffee\", RELEASE.upper()). tests/contracts/test_config_and_imports.py:183 uses only well-formed values. None of these can fail on a weaker shape.\n\nExperiment: I applied O4, O5 and O6 together with sed to the archive: RELEASE_SHA_RE -> [0-9a-f]{7,40}, IMAGE_ID_RE -> sha256:\\S+, preflight git_sha -> [0-9a-f]{7,40}, image_id -> sha256:\\S+.\n\nCommand: `PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests/g/test_startup.py tests/g/test_composition.py tests/contracts/test_config_and_imports.py tests/i/test_install.py tests/i/test_prereqs.py tests/i/test_packaging.py`\n\nTail, run twice: \"373 passed, 2 warnings in 40.85s\" and \"373 passed, 2 warnings in 46.15s\". An earlier run with -x showed one failure in test_install (a_required_parameter_that_is_missing_is_a_failure). The same test passed alone and in both full reruns, so that failure was a flake, not a kill.\n\nBroader run: tests/i + tests/contracts + the two G files gave \"23 failed, 1245 passed\". Every failure is environmental. They are the PG-backed tests (test_cancel_cause before_0018, v2/test_v1_projection_pg; no database was provided) and the contracts test_mutants harness, which reports broken_runner because that PG test fails on the pristine baseline. None of them concerns the release or image shape.\n\nSo the full-40-hex and sha256:<64 hex> requirement that E4B's served-build check depends on has no killable test. The fix is the one the reviewer proposed: add RELEASE[:7], RELEASE[:-1] and a 'sha256:'+'b'*63 image to the test_startup loop and to the test_install release loop, and declare O4, O5 and O6 as G and I mutants. The shipped behaviour is correct, so this is a test-coverage defect only. It is blocking because the rubric lists \"an invariant with no killable test\" as blocking.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "COMP-B2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/i/test_packaging.py",
+      "line": "test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered (PASSTHROUGH, directive scan)",
+      "claim_broken": "Item 3 and the Caddyfile comment claim there is 'No header directive anywhere' and that a stream is never buffered, and the brief's pass-through list includes Server-Timing. The edge test scans for header_up/header_down/encode/buffer directives only inside the catch-all handle block. Its name check leaves out Server-Timing. A site-level directive, which applies to every proxied response, is never caught.",
+      "evidence": "O1 inserts a site-level `encode gzip zstd` (compresses and buffers text/event-stream for chat SSE and /v1/jobs/{h}/events): SURVIVED the edge case and all of test_packaging.py (23 passed). O2 inserts a site-level `header -Server-Timing` (strips a contract response header): SURVIVED (23 passed). The declared edge mutants all edit inside the block (edge_strips_a_contract_response_header, edge_strips_last_event_id, edge_buffers_events) and are killed.",
+      "minimal_fix": "Add 'Server-Timing' to PASSTHROUGH. Run the directive scan (header, header_up, header_down, encode, request_buffers/response_buffers) over the whole site with comments stripped. Allow `header Content-Type` only inside the @private/@health/handle_errors respond blocks. Declare O1/O2 as I mutants.",
+      "lens": "composition",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at a1e88dc. The worktree HEAD is 1bed457, and a1e88dc differs from it only in an evidence .md. I checked a1e88dc's tree through a git archive scratch copy and made no PostgreSQL, Docker or AWS changes. The shipped Caddyfile is correct: it has no site-level encode or header directive. The gap is in the test.\n\n(1) PASSTHROUGH (test_packaging.py:469) lists Location, Retry-After, Preference-Applied, Idempotency-Replayed, Inference-Id, Last-Event-ID, Prefer and Idempotency-Key. It leaves out Server-Timing, which is a contract out-header in 08-contracts-v1-encoding.md:75 (\"out `Inference-Id`, `Preference-Applied: respond-async`, `Retry-After`, `Idempotency-Replayed: true`, `Server-Timing`\"). The gateway sets it (wire.HEADER_SERVER_TIMING, observe/metrics.py:7). The Caddyfile comment also leaves it out.\n\n(2) The loop over directives (header_up/header_down/encode/*_buffers) runs only on `block`, which is the catch-all `handle {}` returned by _edge_block. Only the name loop scans the whole site. So a site-level `encode` or `header -X`, where X is a name not in PASSTHROUGH, is never caught.\n\nExperiment: I inserted each line before `# Bounded bodies at the edge` in scratch deploy/Caddyfile and ran `PYTHONPATH=$S .venv/bin/python -m pytest -q -p no:cacheprovider tests/i/test_packaging.py`:\n- baseline: `22 passed in 6.82s`\n- O1 `encode gzip zstd`: `22 passed in 6.14s`\n- O2 `header -Server-Timing`: `22 passed in 6.70s`\n- control `header -Retry-After`: `FAILED ...test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered / 1 failed, 21 passed`. The name scan works for listed names, so the hole is the Server-Timing omission plus the block-only directive scan.\n\nAcross the whole I suite (`pytest -q tests/i`), O1 gave `153 passed in 200.03s` and O2 gave `153 passed in 193.50s`. rehearse.sh has no SSE, Content-Encoding or Server-Timing check either.\n\nThe reviewer counted 23 tests; I got 22. That difference does not matter.\n\nSeverity is blocking under the lane taxonomy: a contract invariant with no killable test, and an edge hole. Server-Timing pass-through is undefended, and the comment's \"no header directive anywhere / never buffered\" claim can be broken by a site-level edit that nothing catches.\n\nThe reviewer's minimal fix is right: add Server-Timing to PASSTHROUGH, run the directive scan over the comment-stripped whole site (allowing `header Content-Type` only inside the respond/handle_errors blocks), and declare O1/O2 as I mutants.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed at a1e88dc. I took a scratch copy with `git archive a1e88dc`, ran it with the codex-cutover venv and used no Postgres. The worktree HEAD is 1bed457; a1e88dc is on codex/cutover-mount.\n\n**Why the mutants survive.** The test `test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered` has two checks:\n- Its directive loop (header_up, header_down, encode, request_buffers, response_buffers, buffer_*) scans only `block`. That is the catch-all `\\thandle {` block returned by `_edge_block`.\n- Its whole-site check is a name scan over PASSTHROUGH = (Location, Retry-After, Preference-Applied, Idempotency-Replayed, Inference-Id, Last-Event-ID, Prefer, Idempotency-Key). That list has no Server-Timing, although 08 line 75 lists `Server-Timing` as an outbound contract header.\n\nSo a site-level `encode` is never scanned, and a site-level `header -Server-Timing` names nothing that PASSTHROUGH holds.\n\n**Experiment.** I inserted one line before `# Bounded bodies at the edge` in `deploy/Caddyfile` and ran `python -m pytest -q -p no:cacheprovider tests/i/test_packaging.py`:\n\n| Inserted line | Result |\n|---|---|\n| none (baseline) | `22 passed in 7.45s` |\n| `encode gzip zstd` | `22 passed in 6.72s` (survived) |\n| `header -Server-Timing` | `22 passed in 6.65s` (survived) |\n| `header -Location` (control) | `FAILED ...edge_proxies_jobs_and_uploads_untouched_and_unbuffered` / `1 failed, 21 passed in 7.03s` |\n\nThe control shows only the name scan reaches site level. The reviewer reported 23 passed; at a1e88dc the baseline is 22.\n\n**No other net.** `tests/i/test_scripts.py` and the recovery tests only check that the file is mounted, copied and validated; nothing runs Caddy against SSE or checks Server-Timing. CUTOVER-60dd799.md limit 4 also says the edge is pinned by parsing only.\n\n**One correction to the claim.** G3 request (e) (session-02 line 621) does not list Server-Timing. The requirement comes from 08 §3 (line 75) and from the test's own docstring: \"rewrites no header: the contract headers pass through both ways\", \"no buffering or encoding\".\n\n**Severity: blocking.** The Caddyfile comment (\"No header directive anywhere\", a stream \"is never buffered\") and the test docstring state a whole-site invariant. That invariant has no killable test at site scope, and it is an edge hole: site-level `encode` would compress chat SSE and `/v1/jobs/{h}/events`, and site-level `header -Server-Timing` would strip a contract header. Both pass the full I suite. The shipped Caddyfile is currently correct, so this is a gap in the test, not a live defect. The reviewer's minimal fix stands: add Server-Timing to PASSTHROUGH, run the directive scan over the whole site with comments stripped (allowing `header Content-Type` only in the respond blocks), and declare O1 and O2 as I mutants.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/tests/g/test_startup.py",
+      "line": "165-189 (test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as); code infrx/config.py validate_deployment",
+      "claim_broken": "08 §5.1 row INFRX_RELEASE_SHA / INFRX_IMAGE and the evidence (item 7) both say a malformed value \"refuses in every mode (validate_deployment)\". No test checks any mode but pilot, so this claim cannot be killed by any test.",
+      "evidence": "My mutants H6 (`if deployment.infrx_image and mode == \"pilot\" and not IMAGE_ID_RE...`) and H16 (the same guard on infrx_release_sha) both SURVIVED `pytest tests/g tests/i tests/contracts --ignore=tests/contracts/test_mutants.py --deselect <pre-existing test_cancel_cause>`: 1755 passed. The malformed-value loop in the test builds `support.settings()` (pilot) only. The lane's own `release_sha_shape_unchecked`/`build_image_shape_unchecked` delete the check outright, so a pilot case kills them. The every-mode half is never exercised. An earlier run of H6/H16 that I did not use looked killed, but only because -x stopped on the pre-existing test_cancel_cause red; I reran both with that red excluded.",
+      "minimal_fix": "In the loop, also assert `pilot_app(support.settings(\"dev\", deployment=support.BUILD.replace(**{name: \"c0ffee\"})))` raises `RuntimeMisconfigured` matching `{NAME} must be`. Alternatively, reword the 08 row and the evidence to say \"in pilot\".",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I could not refute the finding. The code at a1e88dc behaves as documented, but no test checks the \"every mode\" half of the claim.\n\nDocs: 08 §5.1, line 135 at a1e88dc, says \"a malformed one refuses in every mode (`validate_deployment`)\". research/plan/evidence/g/CUTOVER-60dd799.md:143 says the same.\n\nCode: config.py:439-442 runs the shape checks with no mode guard. validate_runtime (l.245) calls validate_deployment before it dispatches on mode. I called the unmutated head directly with 'c0ffee' for each field in modes dev, test, pilot and '' (unset). All 8 cases raise, for example \"INFRX_MODE='dev': INFRX_RELEASE_SHA must be a 40-hex commit id\". So the behavior is correct.\n\nTests: `git grep` at a1e88dc finds malformed-value cases only in these places:\n- test_startup.py:178-185, which only builds `support.settings()`, i.e. pilot.\n- tests/i/test_install.py:543-545, which checks preflight problems for mode=\"pilot\", not validate_deployment.\n- contracts/test_config_and_imports.py:183, which uses well-formed values only.\n\nNothing sets a malformed INFRX_RELEASE_SHA or INFRX_IMAGE in dev, test or unset mode. The lane's mutants `release_sha_shape_unchecked` and `build_image_shape_unchecked` rewrite the guard to `if False`, so the pilot case kills them. They do not cover the mode dimension.\n\nExperiment: I extracted a1e88dc with `git archive` into scratch. I then applied both reviewer mutants at once with sed: `if deployment.infrx_release_sha and mode == \"pilot\" and not RELEASE_SHA_RE...` and `if deployment.infrx_image and mode == \"pilot\" and not IMAGE_ID_RE...` (grep count 2). I ran:\n`python -m pytest -q -p no:cacheprovider tests/g tests/contracts --ignore=tests/contracts/test_mutants.py`\nTail: \"FAILED tests/contracts/test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record / 1 failed, 1602 passed, 2 warnings in 189.15s\". The one failure is the unrelated test_cancel_cause red the reviewer had already excluded. So both mode-gated mutants survive. I did not run tests/i or the full default suite: two full-suite runs aborted with FileNotFoundError because the scratch directory disappeared mid-run. The grep shows tests/i has no validate_deployment case outside pilot.\n\nSeverity: blocking under this review's rubric (an invariant with no killable test). The documented every-mode refusal could regress to pilot-only and every test would still pass. The runtime is correct today, so the practical risk is low. The fix is small: in the test loop, also assert that `pilot_app(support.settings(\"dev\", deployment=support.BUILD.replace(**{name: \"c0ffee\"})))` raises `RuntimeMisconfigured` matching `{NAME} must be`. Adding a mode-gated mutant to tests/g/mutants.py would lock it in. The other option is to reword 08 and the evidence to say \"in pilot\".\n\nScratch copies were removed. I did not use Postgres, AWS or any other lane's containers.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I could not refute it; the finding holds at a1e88dc. The worktree HEAD is 1bed457, so I read and archived commit a1e88dc explicitly.\n\nCode: in `infrx/config.py`, `validate_deployment` at lines 439-442 checks `RELEASE_SHA_RE` and `IMAGE_ID_RE` without looking at `mode`, so the code itself does refuse a malformed value in every mode. The claim is about the tests. Row 135 of 08 §5.1 says \"a malformed one refuses in every mode (`validate_deployment`)\". In `tests/g/test_startup.py`, lines 178-185 give the malformed \"c0ffee\" value only to `support.settings()`, which is a pilot config. The one dev case (line 186) uses empty values, not malformed ones. I searched the tests with `git grep` and found no other malformed INFRX_RELEASE_SHA or INFRX_IMAGE value in any mode. The only non-pilot `validate_deployment` calls are `tests/m/test_s3.py:143`, which covers S3 only, and the `contracts/test_config_and_imports.py` calls with MODE_UNSET, which cover other fields.\n\nExperiment: I extracted `git archive a1e88dc apps/infrx-api` to scratch and applied the reviewer's H6 and H16 together, `mode == \"pilot\" and` added to both guards.\n(1) `python -c` with `validate_deployment(DEPLOYMENT_DEFAULTS.replace(infrx_release_sha='c0ffee', infrx_image='x'), m)` accepted the value in every non-pilot mode. Output: `dev c0ffee / test c0ffee / legacy c0ffee / <unset> c0ffee`.\n(2) `pytest -q tests/g/test_startup.py tests/contracts/test_config_and_imports.py tests/m/test_s3.py` gave `283 passed, 12 skipped, 2 warnings in 11.03s`, so the mutant survived.\n(3) `pytest -q tests/g tests/i tests/contracts --ignore=<the three test_mutants.py> --continue-on-collection-errors` gave `60 failed, 1537 passed ... 4 errors`. Every failure came from the scratch setup, in `test_parity_console`, `*_pg`, `jobs`/`ops` mutants and publication, and `i` rollout/scripts/prereqs, which need files outside `apps/infrx-api` or PostgreSQL, plus the known `test_cancel_cause` failure. None was in `test_startup` or `test_config_and_imports`. The mutant survived here too, which matches the reviewer's 1755-passed run.\n\nThe lane's own `release_sha_shape_unchecked` and `build_image_shape_unchecked` mutants delete the check outright, so the pilot case kills them. Nothing kills a mutant that limits the check to pilot. Scratch was removed; I used no PostgreSQL and no AWS.\n\nSeverity: blocking under this review's rubric. The behaviour is correct today, but the spec and the evidence state an every-mode invariant that no test can catch breaking. The fix is small: add the reviewer's dev-mode malformed-value assertion to the loop, or reword the 08 row and the evidence item 7 to say \"in pilot\".",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "downgraded_to_nonblocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "COMP-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/marlin2b-gateway.service",
+      "line": "ExecStart … --workers 1 … --timeout-graceful-shutdown 110",
+      "claim_broken": "The cutover mounted the upload routes, and their records and resume witness live in process memory (G4U limit 1, evidence Limits 2). A single uvicorn worker is now a correctness invariant: create on worker A followed by PUT on worker B would 404. The 110 s drain is part of the 110/120/150 stop budget. No test pins either value. This was already true before the cutover, but the cutover rewrote this line.",
+      "evidence": "O9 (--workers 1 -> 2) SURVIVED all of tests/i (153 passed). O10 (--timeout-graceful-shutdown 110 -> 30) SURVIVED all of tests/i (153 passed). O11 (dropping the PROCESSING_CACHE_DIR mount) was killed.",
+      "minimal_fix": "In test_packaging's factory case, also assert that the command contains '--workers', '1' and '--timeout-graceful-shutdown', '110', and that 110 < docker stop -t (120) < TimeoutStopSec (150). Declare O9/O10.",
+      "lens": "composition"
+    },
+    {
+      "id": "COMP-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_startup.py",
+      "line": "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as",
+      "claim_broken": "The gauge should be exposed once, with labels exactly revision and image. The case asserts only that the expected line is `in` the body.",
+      "evidence": "O3 adds a second infrx_build_info series with revision=sha[:7]: SURVIVED test_startup + test_composition (48 passed). The real uvicorn factory on real dependencies does expose exactly 1 infrx_build_info{ line.",
+      "minimal_fix": "Assert that exactly one line starting with 'infrx_build_info{' is in the /metrics body, and that it is the expected line.",
+      "lens": "composition"
+    },
+    {
+      "id": "COMP-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/README.md",
+      "line": "## Environment paragraph (added by 43fe900)",
+      "claim_broken": "The docs should match the merged state. The README says S3_MEDIA_BUCKET 'has no adapter yet (M1 limit 2): until it does, the gateway refuses to start'. At a1e88dc, M1-L2's S3ObjectStore is merged (f11f1f6) and create_app builds it. The same staleness is in the tests/d/test_composition_pg.py docstring ('no S3 adapter, M1 limit 2'), the apps/README.md §7 heading ('Gateway changes (`apps/infrx-api/gateway.py`)'), the pyproject.toml comment 'gateway.py and infrx/ are used from the source tree', and the config.py comment \"gateway.py's directory\".",
+      "evidence": "git grep at a1e88dc. No code, script or test imports the retired gateway module. The only hits are these comments/docs and tests/i mutant anchors that name the retired shim on purpose.",
+      "minimal_fix": "Change the README sentence to: 'set, it is M1-L2's S3ObjectStore and must answer HeadBucket'. Fix the other four texts in the same way.",
+      "lens": "composition"
+    },
+    {
+      "id": "COMP-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rehearse.sh",
+      "line": "steps 1-3 (lines ~304-356)",
+      "claim_broken": "The one real-run rehearsal of the deploy files should still pass after the retirement. It now cannot. Step 1's dev deploy needs a bucket that answers HeadBucket plus DATABASE_URL. Step 2 expects a legacy-key chat to return 200, and the ingress has no legacy-key path. Step 3 expects a ROUTERS refusal that no longer happens.",
+      "evidence": "This is disclosed in the lane evidence under Integration requests (I2B). rehearse.sh is not run by any make target, so the merge breaks no make check, but the deploy has no end-to-end rehearsal until it is fixed.",
+      "minimal_fix": "The coordinator records the I2B follow-up as a merge condition for any box deploy. Rewrite steps 1-3 for a dev env with the E2 s3 service and PostgreSQL, a consumer key through the ingress, and no ROUTERS expectation.",
+      "lens": "composition"
+    },
+    {
+      "id": "COMP-N5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "build_ingress_deps (REQUIRED_CHECKS = price_source, journal)",
+      "claim_broken": "A pilot should not start with a dependency its routes need unreachable. With VALKEY_URL pointing at a closed port, the pilot starts and reports ready, because the scheduling index is not a startup probe. This is G2/Q's existing design and was not introduced by the cutover. The cutover now builds this composition in production, so it is recorded here.",
+      "evidence": "Settings-path probe (nothing injected, real PostgreSQL + MinIO): [valkey closed port] STARTED mode=pilot. [valkey unset] REFUSED 'requires VALKEY_URL'.",
+      "minimal_fix": "None required of the cutover. G2/Q decide whether an index probe joins REQUIRED_CHECKS.",
+      "lens": "composition"
+    },
+    {
+      "id": "H-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/config.py",
+      "line": "RELEASE_SHA_RE; deploy/preflight.py SHAPES git_sha",
+      "claim_broken": "The evidence says INFRX_RELEASE_SHA is \"shaped as 40 hex digits\", and config says \"A full git commit id\". Neither shape is pinned against a 7-39 hex abbreviated sha.",
+      "evidence": "H5 (`[0-9a-f]{7,40}` in config) SURVIVED the full g/i/contracts run: 1755 passed. H15 (the same loosening in preflight's git_sha) SURVIVED tests/i: 153 passed. Both tests use only 'c0ffee' (6 chars), '' and upper-case as malformed values. install.sh always passes a full `git rev-parse HEAD`, so there is no live exposure.",
+      "minimal_fix": "Add a 7-char abbreviated sha (e.g. RELEASE[:7]) to the malformed values in test_startup's loop and in test_install's release loop.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N2",
+      "severity": "nonblocking",
+      "file": "tests/integration/mutants.py (origin/codex/e3b-phase3-bodies) + tests/integration/backend/test_stage.py",
+      "line": "e3bm62 (mutants.py ~976); stack.OWNERS['M3-U1']",
+      "claim_broken": "Merge readiness: layer 0 on the five-way merge is not green. Owner: E3B phase-3 lane, not this branch's code.",
+      "evidence": "Merge sim 1c50f0c + 8554b47 + 1fa825b + a1e88dc + ba26ca4 merged with no conflicts; ba26ca4 and 1fa825b already contain the cutover up to f7d9b03/9fd3457. Layer 0 from the repo root, INFRX_E2_NAMESPACE unset: `2 failed, 152 passed, 103 skipped`. The only PENDING skip is [I2B-R4]. The 2 failures: (1) test_run anchor guard `stale anchors {'e3bm62': 0}`: E3B3 anchored `ROUTERS = (health, models, ingress, uploads, jobs)`, and this lane's item 7 (9fd3457) made it `(..., jobs, metrics)`. (2) test_stage `M3-U1 is fixed: M's real staging resolves an infrx-upload: reference - delete stack.OWNERS['M3-U1']` (M-pilot's gap-1 fix). Both reproduce identically on 1fa825b alone, and at every merge step (23846c6, b95a97c, fef96a9). The lane's own 17 layer-0 reds (12 G2-R1 cells, dr17, rc00, rc03, rc05b, the harness 0018) are all resolved on the merge.",
+      "minimal_fix": "E3B3: re-anchor e3bm62 on `ROUTERS = (health, models, ingress, uploads, jobs, metrics)` (mutate to drop uploads); delete stack.OWNERS['M3-U1'] and run the video_upload cells. Both are required before the merge unit lands.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/README.md",
+      "line": "37; also tests/d/test_composition_pg.py:7",
+      "claim_broken": "The retirement docs are honest, but these two lines are stale: they still say S3_MEDIA_BUCKET \"has no adapter yet (M1 limit 2): until it does, the gateway refuses to start\" and \"Only the object store (no S3 adapter, M1 limit 2)\". Since the f11f1f6 merge, M1-L2's S3ObjectStore is built from settings, gated on HeadBucket.",
+      "evidence": "`git grep 'no adapter yet|no S3 adapter' a1e88dc`. My settings-only composition (create_app pilot with nothing injected but the two HTTP clients: S3ObjectStore on a private MinIO, the three Pg stores on one pool on a private PostgreSQL, ValkeyScheduler on a private Valkey) passed in both regimes, with /readyz 200 and infrx_build_info on /metrics. The refusals for bucket unset, missing bucket and no release named the setting: 3 passed.",
+      "minimal_fix": "README: \"create_app builds M1-L2's S3ObjectStore on it and refuses unless it answers HeadBucket\". Fix the docstring the same way.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rehearse.sh",
+      "line": "302-356",
+      "claim_broken": "A consumer broken by the cutover, disclosed and routed to I2B: the rehearsal's step 1 (dev deploy now needs a bucket that answers HeadBucket), step 2 (a legacy-key chat expecting 200) and step 3's `*ROUTERS*` pilot-probe match no longer hold.",
+      "evidence": "Evidence \"Integration requests - I (I2B)\" lists these three. rehearse.sh is unchanged at a1e88dc. No unit test runs it (tests/i/test_migrate.py and test_packaging.py only reference it). It does not import gateway.py.",
+      "minimal_fix": "I2B: give the rehearsal a local S3 bucket (S3_MEDIA_BUCKET/S3_ENDPOINT_URL), replace step 2 with a key-backed ingress call, and change step 3's expectation to PENDING(W3) only. Do this before the rehearsal gates the rollout.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N5",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/CUTOVER-60dd799.md",
+      "line": "Integration requests - ruling R95",
+      "claim_broken": "Ruling numbering: CUTOVER, M1L2-eae07a9 and MPILOT-078eefe each propose \"next free R95\". The cutover's R95 text matches the code: object store first, one pool, refusals naming S3_MEDIA_BUCKET/DATABASE_URL, INFRX_MODE unset refused. It does not mention the pilot refusal without INFRX_RELEASE_SHA/INFRX_IMAGE, or the VALKEY_URL-or-injected-index requirement.",
+      "evidence": "`git grep R95` across origin/codex/m1l2-object-store, origin/codex/e3b-phase3-bodies and origin/claude/backend-impl; 08 still says \"Next free ruling R95\"; code: pilot.adapters_from_env/object_store/build_info, build_ingress_deps index default.",
+      "minimal_fix": "Coordinator assigns distinct numbers (merge the M1-L2 object-store ruling into R95 as the lane suggests) and adds the build_info and VALKEY_URL clauses when the ruling is recorded.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_packaging.py",
+      "line": "493-523 (edge test); deploy/Dockerfile uv sync line",
+      "claim_broken": "Two deploy pins are only partly killable, both disclosed or backstopped elsewhere. (a) A new public `handle` block without `flush_interval -1` passes the edge test (the lane's Limits 4). (b) Dropping `--extra traces` (botocore) from the Dockerfile passes tests/i and tests/m; only the in-image pilot probe at install catches it.",
+      "evidence": "Mutant H10d (`handle /v1/jobs/*/events { reverse_proxy 127.0.0.1:8001 }` before the catch-all) SURVIVED: 22 passed. H8 (Dockerfile without --extra traces) SURVIVED tests/i + tests/m/test_s3.py. For contrast, H9 (header_up -Prefer) was killed, and so were H10b/H10c (hiding /v1/uploads/*/complete or /v1/uploads/*).",
+      "minimal_fix": "(a) Have the resolver refuse any `handle <path>` it does not model (fail the test on an unknown handle). (b) Assert the Dockerfile's uv sync line carries `--extra traces` in test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies.",
+      "lens": "honesty"
+    }
+  ]
+}
