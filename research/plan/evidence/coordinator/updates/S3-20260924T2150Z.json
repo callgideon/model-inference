@@ -1,0 +1,64 @@
+{
+ "task": "S3",
+ "slice": "reconcile baseline (identity, RV-01..12, E4B/E1B evidence, inputs, per-lane map, proposed edits)",
+ "activity": "review",
+ "head": "8d17204f",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-s3-reconcile",
+ "branch": "codex/s3-reconcile",
+ "owned_paths": [
+  "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md",
+  "research/plan/evidence/coordinator/updates/S3-*.json"
+ ],
+ "commands": [
+  {
+   "cmd": "git diff --stat bda15866e5700f3856d7142580da842fba9bbd23 dff31efc -- apps infra models tests Makefile",
+   "exit": 0,
+   "summary": "only E1B results + models/marlin2b/smoke.py differ: dff31efc code = deployed bda1586"
+  },
+  {
+   "cmd": "cd apps/infrx-api && uv sync --frozen --all-extras --offline",
+   "exit": 0,
+   "summary": "pinned venv from local uv cache, no network"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python research/plan/evidence/v1-review-20260924/reproduce.py",
+   "exit": 0,
+   "summary": "output byte-identical to committed observations.json: RV-07 400 at create, RV-02 not_found after reconstruction, RV-03 source deleted with 0 durable queries"
+  },
+  {
+   "cmd": "cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider tests/i/test_release_bundle.py tests/g/test_startup.py::test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as",
+   "exit": 0,
+   "summary": "3 passed on Linux (git default branch)"
+  },
+  {
+   "cmd": "GIT_CONFIG_GLOBAL=<init.defaultBranch=main> .venv/bin/python -m pytest -q tests/i/test_release_bundle.py",
+   "exit": 1,
+   "summary": "1 failed 1 passed: fetch into checked-out main refused (RV-12 mechanism reproduced on Linux)"
+  },
+  {
+   "cmd": "python over E1B-box-bda1586/raw/*.jsonl",
+   "exit": 0,
+   "summary": "each cell 114x200, 6x400 unsupported_media, replayed 0, zero 429 (drain path not exercised)"
+  },
+  {
+   "cmd": "python3 research/plan/scripts/validate_plan.py",
+   "exit": 0,
+   "summary": "PASS 133 tasks; 876 links / 177 docs"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 0.5,
+  "likely_h": 1.0,
+  "pessimistic_h": 2.0,
+  "confidence": "med",
+  "basis": "residual = read run3 report.json after the soak/overload finish and append an addendum confirming S3 \u00a72.2 (regime-only ledger problems) and \u00a72.3 (which 0.5-rung rows failed), soak/overload verdicts",
+  "at": "2026-09-24T21:50:00Z"
+ },
+ "blockers": [
+  "run3 report.json not yet fetched (coordinator; soak ends ~00:46-01:20Z box clock, overload after)"
+ ],
+ "wiring_requests": [],
+ "evidence": [
+  "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+ ]
+}
