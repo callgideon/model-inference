@@ -1,0 +1,223 @@
+{
+  "cases": [
+    {
+      "before": {
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "price_version": "pv_marlin2b_usd_2026_09"
+      },
+      "credit": {
+        "accounting_regime": "credit",
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "model_revision": "nemostation/marlin-2b@2026-09-01",
+        "rate_card_version": "rc_marlin2b_2026_09_provisional",
+        "requested_model": "nemostation/marlin-2b",
+        "schema_version": 2,
+        "serving_version_id": "d0000003-0000-4000-8000-000000000003"
+      },
+      "found_in": [
+        "infrx/config.py MODEL_ID default (an omitted model resolves as this)",
+        "supabase/migrations/0002_seed_models.sql id/served_model/snippets",
+        "openrouter/provider-models.json id",
+        "infrx/state/seed_marlin_provisional.sql catalog_listings.public_model_id",
+        "infra/runbooks/rollout.md W7c"
+      ],
+      "legacy_usd": {
+        "accounting_regime": "legacy_usd",
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "model_revision": "nemostation/marlin-2b@2026-09-01",
+        "price_version": "pv_marlin2b_usd_2026_09_r1",
+        "requested_model": "nemostation/marlin-2b",
+        "schema_version": 2,
+        "serving_version_id": "d0000003-0000-4000-8000-000000000003"
+      },
+      "requested": "nemostation/marlin-2b"
+    },
+    {
+      "before": {
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "price_version": "pv_marlin2b_usd_2026_09_r1"
+      },
+      "credit": {
+        "accounting_regime": "credit",
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "model_revision": "nemostation/marlin-2b@2026-09-01",
+        "rate_card_version": "rc_marlin2b_2026_09_provisional",
+        "requested_model": "nemostation/marlin-2b@2026-09-01",
+        "schema_version": 2,
+        "serving_version_id": "d0000003-0000-4000-8000-000000000003"
+      },
+      "found_in": [
+        "contracts fixtures v1/v2 (R62 pin, REQUESTED_MODEL)",
+        "research/plan/evidence/e/E4B-endpoint.md examples",
+        "operations.service.marlin_release / certify target",
+        "models/marlin2b/results E1B-box-*/bench.jsonl and E4B-box-4226315 (bench --model)",
+        "infra/runbooks/rollout.md W7e"
+      ],
+      "legacy_usd": {
+        "accounting_regime": "legacy_usd",
+        "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+        "model_revision": "nemostation/marlin-2b@2026-09-01",
+        "price_version": "pv_marlin2b_usd_2026_09_r1",
+        "requested_model": "nemostation/marlin-2b@2026-09-01",
+        "schema_version": 2,
+        "serving_version_id": "d0000003-0000-4000-8000-000000000003"
+      },
+      "requested": "nemostation/marlin-2b@2026-09-01"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "contracts/v2/fixtures.py DEV_REQUESTED_MODEL (private dev endpoint)"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "nemostation/marlin-2b-dev@2026-09-01"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "R101 private naming <provider slug>/<endpoint name>-<env> (state/catalog.py _PRIVATE)"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "nemostation/marlin-2b-dev"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "models/marlin2b/bench.py and smoke.py --model default (vLLM --served-model-name)",
+        "models/marlin2b/results/bench.jsonl (target direct only)"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "marlin2b"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "serving model_repo (Hugging Face id)",
+        "research/matrix/pairs.json"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "NemoStation/Marlin-2B"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "console view-model tests and traces/query.ts comment (R62 unprefixed form)"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "marlin-2b@2026-09-01"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "tests/w/test_prep_worker.py (an unpublished label)"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "nemostation/marlin-2b@tokcost"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "0002_seed_models.sql coming_soon row"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "0002_seed_models.sql coming_soon row"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "Qwen/Qwen3.8-27B"
+    },
+    {
+      "before": {
+        "refused": "not_found"
+      },
+      "credit": {
+        "refused": "not_found"
+      },
+      "found_in": [
+        "0002_seed_models.sql coming_soon row"
+      ],
+      "legacy_usd": {
+        "refused": "not_found"
+      },
+      "requested": "moonshotai/Kimi-K3"
+    }
+  ],
+  "hosted_usd_rows": [
+    {
+      "input_rate_per_million": "0.10000000",
+      "model_revision": "nemostation/marlin-2b",
+      "output_rate_per_million": "0.30000000",
+      "price_version": "pv_marlin2b_usd_2026_09",
+      "source": "rollout W7c",
+      "token_rules_version": "tr-1"
+    },
+    {
+      "input_rate_per_million": "0.10000000",
+      "model_revision": "nemostation/marlin-2b@2026-09-01",
+      "output_rate_per_million": "0.30000000",
+      "price_version": "pv_marlin2b_usd_2026_09_r1",
+      "source": "rollout W7e",
+      "token_rules_version": "tr-1"
+    }
+  ]
+}

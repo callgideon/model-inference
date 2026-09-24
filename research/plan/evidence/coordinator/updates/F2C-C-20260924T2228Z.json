@@ -1,0 +1,35 @@
+{
+  "task": "F2C",
+  "slice": "c",
+  "activity": "review",
+  "head": "35d1e32a",
+  "worktree": ".claude/worktrees/codex-f2c-catalog",
+  "branch": "codex/f2c-catalog",
+  "owned_paths": [
+    "apps/infrx-api/infrx/contracts/v2/published_model.py",
+    "apps/infrx-api/infrx/contracts/v2/published_fixtures.py",
+    "apps/infrx-api/infrx/contracts/v2/published/",
+    "apps/infrx-api/tests/contracts/v2/test_published_model.py",
+    "apps/app/lib/contracts/v2/published-model.ts",
+    "apps/app/tests/contracts/v2/published-model.test.ts",
+    "research/plan/evidence/f/F2C-catalog-d414607.md",
+    "research/plan/evidence/coordinator/updates/F2C-C-20260924T2228Z.json"
+  ],
+  "commands": [
+    {"cmd": "cd apps/infrx-api && uv run --frozen python -m infrx.contracts.v2.published_fixtures", "exit": 0, "summary": "would change nothing after --write (deterministic; only cases.json changed this round)"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/v2/test_published_model.py", "exit": 0, "summary": "98 passed (89 + 9); 36 failed against the unfixed module"},
+    {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts --deselect tests/contracts/v2/test_v1_projection_pg.py", "exit": 0, "summary": "1173 passed, 3 deselected (port 55432 held by infrx-d1-postgres)"},
+    {"cmd": "cd apps/app && node --test tests/contracts/v2/published-model.test.ts", "exit": 0, "summary": "54/54"},
+    {"cmd": "make console-test", "exit": 0, "summary": "343/343"},
+    {"cmd": "make console-typecheck", "exit": 0, "summary": "clean"},
+    {"cmd": "make console-lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "python3 <scratchpad>/f2c-fix/mutants.py", "exit": 0, "summary": "15/15 killed (12 reviewer survivors + 3 declaration guards)"},
+    {"cmd": "python3 <scratchpad>/f2c-c/mutate.py <worktree>", "exit": 0, "summary": "18/18 killed (lane's original set)"}
+  ],
+  "estimate": {"optimistic_h": 0.25, "likely_h": 1, "pessimistic_h": 3, "confidence": "med", "basis": "0-F1, 0-F2, 2-F2C-C-R1, 2-F2C-C-R2 closed with regressions; left: wiring requests, R109/P-22 application", "at": "2026-09-24T22:28Z"},
+  "blockers": [],
+  "wiring_requests": [
+    "unchanged from F2C-C-20260924T2215Z.json (evidence section 9); R109 wording change in the evidence Fix round section"
+  ],
+  "evidence": ["research/plan/evidence/f/F2C-catalog-d414607.md"]
+}
