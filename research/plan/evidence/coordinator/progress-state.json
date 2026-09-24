@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T16:49:00Z",
+  "updated": "2026-09-24T17:26:15Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "END-TO-END PROVEN on the pilot 16:47Z (smoke failures 0; text + video jobs settled with engine-exact counts; video /tokenize 16.8 s per 5 s clip = the open performance item) → E1B L2-L7 → certify --box → release decision",
+      "phase": "pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification rerun in progress (out 20260924T172244Z; served-build needs git in the image, parity needs the cap-aware certify - CERTIFY-TREE lane); TOKCOST lane on the 16.8 s video tokenize; then drills, E1B L2-L7, release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
