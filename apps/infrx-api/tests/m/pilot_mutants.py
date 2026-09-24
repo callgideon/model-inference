@@ -117,6 +117,27 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("in_process_duplicate_accepted", "one attach naming a ref twice is invalid_request",
        S, "        if len({ref.handle for ref in owned}) != len(owned):", "        if False:",
        WRITE_ONCE),
+    # --- review PAR-3/H-B2: the durable attach on the relay's paths (O4/O5/O6) -------------
+    _m("bound_here_before_it_is_durable",
+       "O4: a failed durable write leaves no in-process binding, so the retry attaches",
+       S, "        if self.attachments is not None:            # durable first (MPILOT gap 2)\n"
+          "            await self.attachments.put(job_id, owned)\n"
+          "        self.by_job[job_id] = owned\n",
+       "        self.by_job[job_id] = owned\n"
+       "        if self.attachments is not None:            # durable first (MPILOT gap 2)\n"
+       "            await self.attachments.put(job_id, owned)\n",
+       "test_mpilot__a_failed_durable_attach_binds_nothing_here"),
+    _m("attached_with_no_media_reads_unbound",
+       "O5: () bound in this process is bound, whatever the record (no row for a text job)",
+       S, "        if refs is None and self.attachments is not None:",
+       "        if not refs and self.attachments is not None:",
+       "test_mpilot__a_text_job_attached_here_is_bound_whatever_the_record_holds"),
+    _m("replay_read_unguarded",
+       "O6: the durable read in _resume is a dependency - a database failure is a 503",
+       "gateway/routes/relay.py",
+       "        if await _dependency(self.media.attached(job.request_id)) is not None:",
+       "        if await self.media.attached(job.request_id) is not None:",
+       "test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable"),
     _m("attach_record_not_composed",
        "create_app from settings gives M's store the durable attach record on D's pool",
        "gateway/pilot.py", "        job_org=relay.job_org, attachments=attachments)",

@@ -144,7 +144,8 @@ class Durable:
         self.rows: dict = {}
 
     async def put(self, job_id, refs):
-        if self.rows.setdefault(job_id, tuple(refs)) != tuple(refs):
+        # As 0003 records it: an attach of no media leaves no row (Limit 1 of MPILOT).
+        if refs and self.rows.setdefault(job_id, tuple(refs)) != tuple(refs):
             raise errors.Conflict(f"job {job_id} is already attached to other media")
 
     async def get(self, job_id):

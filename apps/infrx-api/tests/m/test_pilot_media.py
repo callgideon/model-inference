@@ -33,8 +33,9 @@ from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
-from infrx.contracts.records import MediaKind
+from infrx.contracts.records import JobState, MediaKind, Usage
 from infrx.gateway.app import create_app
+from infrx.gateway.routes.relay import CREDIT
 from infrx.media import fetch, prepare
 from infrx.media.attachments import PgAttachments
 from infrx.media.store import InMemoryObjectStore
@@ -395,6 +396,104 @@ def test_mpilot__the_exported_write_once_case_runs_on_the_store_alone():
         return harness
 
     asyncio.run(services.media_parity__an_attach_is_write_once(factory))
+
+
+# --- review PAR-3/H-B2: the durable attach on the relay's paths -------------------------
+class Unreachable(support.Durable):
+    """The attach record with its database gone: every read and write fails as psycopg's."""
+
+    async def get(self, job_id):
+        import psycopg
+        raise psycopg.OperationalError("connection to server at db.internal:5432 failed")
+
+    async def put(self, job_id, refs):
+        await self.get(job_id)
+
+
+def accepted_then_lost(world, key: str):
+    """A CREDIT job accepted (admitted, rechecked, attached) whose answer was lost."""
+    from ..g.test_relay_recovery import dies_before_the_wait
+    dies_before_the_wait(world)
+    first = rs.run(rs.call(world.app, rs.body(), key=key))
+    assert first.status == 500, first.body
+    return world.only_job()
+
+
+def test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable():
+    """078eefe's claim: after a restart (nothing in this process's memory) a same-key replay
+    of a job in flight asks the durable record whether the job is bound; with the database
+    gone that is the typed, retryable 503 - never a 500 - and nothing is cancelled, attached
+    or rechecked."""
+    world = rs.World(regime=CREDIT)
+    world.media.attachments = support.Durable()
+    job = accepted_then_lost(world, "k-db")
+    world.restart()
+    world.media.attachments = Unreachable()
+    again = rs.run(rs.call(world.app, rs.body(), key="k-db"))
+    error = again.json().get("error") or {}
+    assert (again.status, error.get("code")) == (503, "dependency_unavailable"), again.body
+    assert job.outcome is None and job.state is JobState.preparing
+    assert world.media.by_job == {}
+
+
+def test_mpilot__a_text_job_attached_here_is_bound_whatever_the_record_holds():
+    """Limit 1's other side, with the durable record composed: the record has no row for a
+    text job, but this process attached it (`by_job[job] == ()`), so it is bound. A same-key
+    replay while it runs is answered from the job - not rechecked against the rotated card,
+    never cancelled (G2 money-B2) - and its preparation found the attach too."""
+    world = rs.World(regime=CREDIT)
+    world.media.attachments = support.Durable()
+    job, box = accepted_then_lost(world, "k-text"), {}
+    assert world.media.by_job[job.id] == () and world.media.attachments.rows == {}
+
+    async def runs():
+        box["lease"] = await world.lease()
+        await world.commit(box["lease"], "Two ", "people")
+
+    rs.run(runs())
+    world.relay.active_rate_card_version = "rc_rotated_since"
+
+    async def settles():
+        assert job.state is JobState.running, job.state          # untouched by the replay
+        ref = await world.put_result(job.id, "Two people")
+        await world.jobs.complete_credit(box["lease"], b.outcome(
+            job.id, world, tokens=Usage.of(1200, 5), result_ref=ref))
+
+    world.during.append(settles)
+    again = rs.run(rs.call(world.app, rs.body(), key="k-text"))
+    assert again.status == 200, again.body
+    assert again.json()["choices"][0]["message"]["content"] == "Two people"
+    assert job.outcome.state is JobState.succeeded
+
+
+@pytest.mark.parametrize("failure", ["unreachable", "conflict"])
+def test_mpilot__a_failed_durable_attach_binds_nothing_here(failure):
+    """"Durable first": an attach whose durable write fails leaves this process with no
+    binding either, so the same-key retry's `_resume` sees an unbound job and attaches -
+    instead of answering from an in-process copy the worker's process will never see."""
+    import psycopg
+    adapter = adapter_for()
+    refusal = {"unreachable": psycopg.OperationalError("connection to server failed"),
+               "conflict": errors.Conflict("job already attached to other media")}[failure]
+
+    class Once(support.Durable):
+        async def put(self, job_id, refs):
+            if refusal is not None:
+                raise refusal
+            await super().put(job_id, refs)
+
+    adapter.attachments = Once()
+    prepared = admitted(adapter, request_with(adapter, data_url(CLIP)))
+    refs = run(adapter.stage(b.ORG_A, prepared))
+    adapter.jobs[prepared.request_id] = b.ORG_A
+    with pytest.raises(type(refusal)):
+        run(adapter.attach(prepared.request_id, refs))
+    assert prepared.request_id not in adapter.by_job
+    assert run(adapter.attached(prepared.request_id)) is None
+    refusal = None                                                 # the record is back
+    run(adapter.attach(prepared.request_id, refs))
+    assert adapter.by_job[prepared.request_id] == refs
+    assert adapter.attachments.rows[prepared.request_id] == refs
 
 
 # --- gap 2 on PostgreSQL: the real attach record ------------------------------------------
