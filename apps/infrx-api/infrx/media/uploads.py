@@ -46,14 +46,15 @@ from datetime import UTC, datetime, timedelta
 from ..contracts import errors
 from ..contracts.ids import UPLOAD_HANDLE_RE, new_upload_handle
 from ..contracts.records import MediaKind, MediaRef, UploadState
-from ..contracts.v2.lifecycle import (DESTINATION_SCHEME, ContentIdentity, ContentKind,
-                                      ContentLocation, ContentOrigin, FinalizedSource,
-                                      LifecycleRefusal as R, UploadConstraints, UploadReceipt,
-                                      UploadTicket, refusal_of, refuse)
+from ..contracts.v2.lifecycle import (DESTINATION_SCHEME, UPLOAD_ABORT_REASONS,
+                                      ContentIdentity, ContentKind, ContentLocation,
+                                      ContentOrigin, FinalizedSource, LifecycleRefusal as R,
+                                      UploadConstraints, UploadReceipt, UploadTicket,
+                                      refusal_of, refuse)
 from ..contracts.wire import UploadCreated
 from .fetch import digest_of
 from .prepare import MediaPreparation
-from .store import valid_org
+from .store import DIGEST_RE, valid_org
 
 UPLOAD_REF_SCHEME = DESTINATION_SCHEME       # R61(1): `infrx-upload:upl_<id>`, nothing else
 UPLOAD_KEY_PREFIX = "uploads/"               # where uploaded bytes wait for completion
@@ -107,6 +108,8 @@ class ProcessUploads:
                               digest: str) -> UploadTicket:
         ticket = self._owned(org_id, upload_handle)
         self._open(ticket)
+        if not isinstance(digest, str) or not DIGEST_RE.fullmatch(digest):
+            raise errors.InvalidRequest("a receipt's digest is sha256:<64 hex>")
         if bytes > ticket.constraints.max_bytes:
             raise refuse(R.too_large, f"{bytes} bytes over the upload's "
                                       f"{ticket.constraints.max_bytes}")
@@ -151,11 +154,14 @@ class ProcessUploads:
             finalized_at=self.now()))
 
     async def abort(self, org_id: str, upload_handle: str, refusal: R) -> UploadTicket:
+        if refusal not in UPLOAD_ABORT_REASONS:
+            raise errors.InvalidRequest("a ticket records only a public upload refusal")
         ticket = self._owned(org_id, upload_handle)
         if ticket.state is UploadState.aborted:
             return ticket
-        if ticket.state is not UploadState.created:
-            raise refuse(R.upload_not_open, f"upload {upload_handle} is {ticket.state}")
+        if ticket.state is not UploadState.created or self.now() >= ticket.expires_at:
+            raise refuse(R.upload_not_open, f"upload {upload_handle} is {ticket.state} or "
+                                            "past its window")
         return self._save(ticket, state=UploadState.aborted, refusal=R(refusal))
 
     async def resolve(self, org_id: str, upload_handle: str) -> UploadTicket:
@@ -332,7 +338,7 @@ class MediaUploads(MediaPreparation):
                 # is configured. A probe that timed out (platform-side) leaves it open.
                 mime, duration_s = await self.facts(data, declared_mime)
             except errors.InvalidRequest as refused:
-                raise await self._abort(org_id, handle, R.mime_not_accepted, refused)
+                raise await self._abort(org_id, handle, R.media_refused, refused)
             if mime not in c.accepted_mime:
                 raise await self._abort(org_id, handle, R.mime_not_accepted,
                                         errors.UnsupportedMedia(f"{mime} is not accepted"))

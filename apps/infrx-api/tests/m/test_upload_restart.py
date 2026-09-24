@@ -170,8 +170,8 @@ UPLOAD_CASES = [case for case in lifecycle_cases.cases()
 
 @pytest.mark.parametrize("case", UPLOAD_CASES, ids=[case.__name__ for case in UPLOAD_CASES])
 def test_the_f2c_upload_cases_pass_on_the_process_local_repository(case):
-    """`ProcessUploads` is the port, refusal for refusal: F2C's five UPLOAD-RESTART cases
-    pass on it within one process (so the unit suites above test the port's semantics)."""
+    """`ProcessUploads` is the port, refusal for refusal: every F2C UPLOAD-RESTART case
+    passes on it within one process (so the unit suites above test the port's semantics)."""
     asyncio.run(case(process_uploads()))
 
 
@@ -181,7 +181,7 @@ def test_the_f2c_restart_case_fails_on_a_process_local_repository():
     with pytest.raises(errors.NotFound):
         asyncio.run(lifecycle_cases.upload_restart__every_step_survives_a_new_process(
             process_uploads(reopen_is_a_new_process=True)))
-    assert len(UPLOAD_CASES) == 5
+    assert lifecycle_cases.upload_restart__every_step_survives_a_new_process in UPLOAD_CASES
 
 
 # --- the sequence ---------------------------------------------------------------------------
