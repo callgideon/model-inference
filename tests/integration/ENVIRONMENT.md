@@ -92,7 +92,7 @@ Ports, container names and database names come from **one registry**,
 
 | Namespace | Source | Ports | Containers / DB / objects | Used by |
 |---|---|---|---|---|
-| `e2c` | tasklocal `e2c` | 55448 PostgreSQL, 55474 Valkey (55475 S3 reserved, unused) | `infrx-e2c-postgres` (`infrx_e2c`), `infrx-e2c-valkey`; object prefix `test/e2c/` | consumer-local API stages: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER` |
+| `e2c` | tasklocal `e2c` | 55448 PostgreSQL, 55474 Valkey (55475 S3 reserved, unused) at efad43e0 | `infrx-e2c-postgres` (`infrx_e2c`), `infrx-e2c-valkey`; object prefix `test/e2c/` | consumer-local API stages: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER` |
 | `e2` | harness `e2` | 55500, 55523, 55532, 55579, 55580, 55590 | `infrx-e2-*`, `infrx_e2`, `test/e2/`, `infrx_e2:` | `run.py` layers, certify.py local |
 | `e2c-selftest` | E2C lane block | 55510–55519 | none (`infrx-e2c-selftest-*` reserved) | `test_preflight.py` binds 55510 |
 

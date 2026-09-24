@@ -48,8 +48,11 @@ def test_the_environment_manifest_is_self_consistent():
         assert set(profile["namespaces"]) <= set(ENV["namespaces"]), name
     ports = [p for spec in ENV["namespaces"].values() for p in pf.namespace(spec)[0]]
     assert len(ports) == len(set(ports))
+    from infrx.contracts.tasklocal import local_services     # the one registry, not a copy
+    own = local_services("e2c")
     assert pf.namespace(ENV["namespaces"]["e2c"]) == \
-        ([55448, 55474], ["infrx-e2c-postgres", "infrx-e2c-valkey"])   # tasklocal's e2c
+        ([own["postgres"].host_port, own["valkey"].host_port],
+         ["infrx-e2c-postgres", "infrx-e2c-valkey"])
     assert all("@sha256:" in image["ref"] for image in ENV["images"].values())
 
 
