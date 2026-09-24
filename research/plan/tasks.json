@@ -3848,7 +3848,7 @@
       "product": "shared",
       "milestone": "BACKEND-M3",
       "status": "implemented",
-      "disposition": "backend-first-addition. Software half merged --no-ff on claude/backend-impl at 66eed31 (2026-09-24) after review (fix_required at 37a4652 -> one fix round -> verifier pass at 7b5dbd7 (evidence/e/E4B-verify-7b5dbd7.json); final 4d9360c): the certify runner (tests/integration/backend/certify.py), the protocol (amendment 3), the endpoint document and the release decision (PENDING). The box half - certify.py --box after the I2B rollout, with E1B L2-L7 - and the release decision remain; BACKEND-READY is not claimed",
+      "disposition": "backend-first-addition. Software half merged --no-ff on claude/backend-impl at 66eed31 (2026-09-24) after review (fix_required at 37a4652 -> one fix round -> verifier pass at 7b5dbd7 (evidence/e/E4B-verify-7b5dbd7.json); final 4d9360c): the certify runner (tests/integration/backend/certify.py), the protocol (amendment 3), the endpoint document and the release decision (PENDING). The box half - certify.py --box after the I2B rollout, with E1B L2-L7 - and the release decision remain; BACKEND-READY is not claimed; 2026-09-24: I2B-R4 (python -m infrx.worker) merged; the pilot CANNOT SERVE until the preparation loop lands (no product process prepares a job - found at the I2B-R4 handback; PREP-WORKER/I2B-R5 lane in flight): BACKEND-READY still not claimed",
       "execution_class": "core",
       "start_dependencies": [
         "E3B",
