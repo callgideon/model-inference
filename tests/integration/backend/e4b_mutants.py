@@ -219,6 +219,18 @@ MUTANTS: tuple[Mutant, ...] = (
     # --- the protocol ------------------------------------------------------------------
     _m("criterion_drifts_from_protocol", "the runner applies the predeclared numbers",
        '"ttft_p95_short_s": 6.0,', '"ttft_p95_short_s": 8.0,', PROTOCOL),
+    _m("criterion_dropped_from_the_runner", "a §5 row the runner does not apply is superseded",
+       '    "soak_latency_drift": 1.5,\n}\n', "}\n", PROTOCOL),
+    _m("superseded_criterion_revived", "a superseded §5 row is not applied",
+       '    "soak_latency_drift": 1.5,\n}\n',
+       '    "soak_latency_drift": 1.5,\n    "applied_cap_s": 72,\n}\n', PROTOCOL),
+    _m("superseded_row_unmarked", "the superseded §5 row says so in place",
+       "`MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |",
+       "`MAX_VIDEO_SECONDS=72` |", PROTOCOL, file="models/marlin2b/results/E4B-protocol.md"),
+    _m("superseded_envelope_row_unmarked", "the superseded §4 envelope rule says so in place",
+       "is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one "
+       "bound, and a clip over it gets the typed refusal* |",
+       "is refused |", PROTOCOL, file="models/marlin2b/results/E4B-protocol.md"),
     _m("matrix_drifts_from_protocol", "the local cell shapes are the predeclared ones",
        '"dataset": {"items": 12, "interrupt_after": 4, "rate": 4.0}},',
        '"dataset": {"items": 12, "interrupt_after": 6, "rate": 4.0}},', PROTOCOL),

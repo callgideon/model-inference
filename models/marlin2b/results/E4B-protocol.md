@@ -55,7 +55,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 
 | Cell | Driver | Passes when |
 |---|---|---|
-| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused |
+| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one bound, and a clip over it gets the typed refusal* |
 | `e4b.b.soak` | `bench.py` open loop at `soak.rate` for `soak.seconds`, the target's `/metrics` scraped every `soak.sample_s` | failure rate below `max_failure_rate`; growth (second half's maximum over the first half's, `decide.growth`) of `infrx_process_resident_bytes` ≤ `max_host_growth_mib` and of used GPU memory ≤ `max_gpu_growth_mib`; `infrx_reconciliation_drift` and `infrx_unsettleable_jobs` 0 at the end; latency p50 of the last third ≤ `soak_latency_drift` × the first third's |
 | `e4b.b.overload` | `bench.py --burst <burst>`: `burst` requests from one key at one instant | at least one accepted; at least one refused; **every** refusal is a 429 carrying a numeric `Retry-After` and one of `overload_codes`; no 5xx and no platform-caused failure |
 | `e4b.b.recovery` | I3B's `rc*`/`bk*` drills: local = the backend suite's `recovery/` cases on the E2 stack; box = I3B's runbook drills, executed by the coordinator from the E4B box protocol | every drill passes, or pends on a typed owner |
@@ -74,7 +74,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 | `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion) |
 | `max_gpu_growth_mib` | 256 | `decide.MAX_GPU_GROWTH_MIB` |
 | `soak_latency_drift` | 1.5 | E4B engineering criterion, provisional (P-18) |
-| `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72` |
+| `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |
 | `engine_ceiling_s` | 82 | `decide.ceiling_s(<encoder budget of the pinned flags>)`: 16,384 tokens today (W4 P-20 record) |
 | `overload_codes` | capacity_exhausted, journal_capacity_exhausted, rate_limited | `errors.RETRY_AFTER_CODES` minus `dependency_unavailable` (a dependency, not overload) |
 

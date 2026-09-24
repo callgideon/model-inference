@@ -721,12 +721,22 @@ def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
 
 def test_e4b_the_protocol_file_states_the_numbers_the_runner_applies():
     """E4B-protocol.md §5 is the predeclared source; `CRITERIA` and `MATRIX` must say the
-    same, row by row, so neither can move without the other."""
+    same, row by row, so neither can move without the other - in both directions: a §5
+    row the runner does not apply is one an amendment superseded, and says so in place."""
     text = certify.PROTOCOL.read_text()
     table = dict(re.findall(r"^\| `(\w+)` \| ([^|]+?) \|", text, re.M))
     for name, value in certify.CRITERIA.items():
         assert name in table, name
         assert float(table[name]) == float(value), (name, table[name], value)
+    section = text[text.index("## 5."):text.index("| Scale |")]
+    rows = {row[0]: row for row in re.findall(r"^\| `(\w+)` \| ([^|]+?) \| ([^|]+?) \|$",
+                                               section, re.M)}
+    superseded = {"applied_cap_s"}              # amendment 5(c): the deployed cap replaced it
+    assert set(rows) == set(certify.CRITERIA) | {"engine_ceiling_s", "overload_codes"} | superseded
+    assert not superseded & set(certify.CRITERIA)
+    assert all("Superseded by 5(c)" in rows[name][2] for name in superseded)
+    envelope = next(line for line in text.splitlines() if line.startswith("| `e4b.b.envelope`"))
+    assert "Superseded by 5(c)" in envelope
     assert table["engine_ceiling_s"] == str(certify.engine_ceiling_s(certify.serving_record()))
     shapes = {row[0]: row[1:] for row in re.findall(
         r"^\| `(tiny|box)`[^|]*\| ([^|]+) \| ([^|]+) \| (\d+)[^|]* \| ([^|]+) \|", text, re.M)}
