@@ -11,5 +11,8 @@ Type=oneshot
 EnvironmentFile=-/etc/infrx-alert.env
 RuntimeDirectory=infrx-observe
 RuntimeDirectoryMode=0700
-ExecStart=/bin/bash /home/ubuntu/model-inference/infra/observe/observe.sh
+# The monitor runs from its own pinned copy (72-observe-install.sh), not the runtime's
+# checkout: a rollback to a release without it must not blind the monitoring.
+Environment=REPO=/opt/infrx/observe
+ExecStart=/bin/bash /opt/infrx/observe/infra/observe/observe.sh
 TimeoutStartSec=120

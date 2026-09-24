@@ -154,6 +154,13 @@ def test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_nam
     assert not (root / "etc" / "infrx-observe.env").exists()            # no D10 monitor DSN yet
     assert sorted(p.name for p in (root / "etc" / "systemd" / "system").iterdir()) == [
         "infrx-canary.service", "infrx-canary.timer", "infrx-observe.service", "infrx-observe.timer"]
+    # the monitor runs from its own pinned copy, so a runtime rollback cannot blind it
+    pinned = root / "opt" / "infrx" / "observe"
+    assert (pinned / "infra" / "observe" / "observe.sh").is_file()
+    assert (pinned / "infra" / "alerts" / "operations.json").is_file()
+    assert (pinned / "RELEASE").read_text().strip() == "c" * 40
+    unit = (root / "etc" / "systemd" / "system" / "infrx-observe.service").read_text()
+    assert "Environment=REPO=/opt/infrx/observe" in unit and "/home/ubuntu" not in unit
     ssm = [c["argv"] for c in calls(stub) if c["tool"] == "aws"]
     assert [a[a.index("--name") + 1] for a in ssm] == ["/model-inference/e4b_api_key",
                                                         "/model-inference/alert_webhook"]

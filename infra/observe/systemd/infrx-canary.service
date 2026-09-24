@@ -9,5 +9,8 @@ Type=oneshot
 # INFRX_CANARY_KEY (the canary tenant's scoped key) and CANARY_VIDEO (an in-cap clip on
 # this host), root 0600. Required: without it the unit fails to start, visibly.
 EnvironmentFile=/etc/infrx-canary.env
-ExecStart=/bin/bash /home/ubuntu/model-inference/infra/observe/canary.sh
+# The monitor runs from its own pinned copy (72-observe-install.sh), not the runtime's
+# checkout: a rollback to a release without it must not blind the monitoring.
+Environment=REPO=/opt/infrx/observe
+ExecStart=/bin/bash /opt/infrx/observe/infra/observe/canary.sh
 TimeoutStartSec=300

@@ -34,6 +34,19 @@ write_env() {  # write_env FILE NAME=SSM-PARAM|NAME:=LITERAL ... - 0600 root, by
   echo "wrote $file: $(cut -d= -f1 "$file" | tr '\n' ' ')"
 }
 install -d -o 10001 -g 10000 -m 0770 "$R/var/lib/infrx/metrics"
+# The monitor's own copy of its scripts and rules, replaced by one rename: the units run
+# from it, so a rollback of the runtime checkout to a release without infra/observe (or with
+# older rules) leaves the monitoring as installed. Re-run this step to upgrade it.
+pinned=$R/opt/infrx/observe
+install -d -m 0755 "$(dirname "$pinned")"
+next=$(mktemp -d "$pinned.next.XXXXXX")
+mkdir -p "$next/infra"
+cp -r "$repo/infra/observe" "$repo/infra/alerts" "$next/infra/"
+echo "$RELEASE" > "$next/RELEASE"
+chmod -R go-w "$next"; chmod 0755 "$next"
+rm -rf "$pinned.previous"; [ -d "$pinned" ] && mv "$pinned" "$pinned.previous"
+mv "$next" "$pinned"
+echo "monitor pinned at $pinned from $RELEASE"
 for unit in infrx-observe.service infrx-observe.timer infrx-canary.service infrx-canary.timer; do
   install -m 0644 "$repo/infra/observe/systemd/$unit" "$R/etc/systemd/system/$unit"
 done
