@@ -273,3 +273,52 @@ def test_v1_models_publishes_only_what_the_deployed_profile_admits():
 
 - 2026-09-24: written by lane F2C-C at code head `d414607d` (base `dff31efc`); every count above
   is from this worktree; no hosted database, box, edge or AWS access.
+
+## Fix round (2026-09-24, one round; code head `35d1e32a`, base `dff31efc`, previous head `042ea49d`)
+
+Changed paths (all lane-owned, created by this lane): `apps/infrx-api/infrx/contracts/v2/published_model.py`,
+`…/v2/published_fixtures.py`, `…/v2/published/cases.json` (regenerated; the two record fixtures
+and the profile are byte-identical), `apps/infrx-api/tests/contracts/v2/test_published_model.py`,
+`apps/app/tests/contracts/v2/published-model.test.ts`, this section,
+`research/plan/evidence/coordinator/updates/F2C-C-20260924T2228Z.json`. No existing file edited
+(`git diff --stat dff31efc..HEAD` lists only the lane's new files).
+
+| Finding | Fix | Regression (fails before / under the mutant, passes after) |
+|---|---|---|
+| 0-F1, 2-F2C-C-R1: the visibility half of `project()`'s publish guard was untested | test only: `(Visibility.private, DeploymentState.active)` added to `test_a_private_or_deactivated_deployment_is_never_published` (`records.py:415-424` constructs it) | mutant `project-no-visibility` (visibility clause → `False`): SURVIVED 89 passed at `042ea49d` → KILLED |
+| 0-F2: modality, stream-output and serving-revision guards in `project()` untested | new `test_a_projection_the_serving_revision_does_not_back_is_refused` (4 cases: video on a text-only revision, text output undeclared (`CapabilityRecord.output_modalities` has no min length), stream on `stream_output=False`, deployment pinning another serving revision). `test_a_capability_the_serving_revision_does_not_declare_is_refused` now passes a profile that accepts the claim, so only the declaration or the deployment ceiling can refuse | `project-in-modality`, `project-out-modality`, `project-stream-out`, `project-serving-mismatch`: SURVIVED → KILLED |
+| 0-F2: `violations()` modality/mode subsets and "video, profile has none" untested (both languages) | `cases.json` violation cases carry `profile_patches` (applied to the profile doc by both suites; `[]` for the old cases): "SSE streaming on a deployment without it" (profile modes async/sync → `capability.execution_modes`), "video input on a text-only deployment" (profile text-only, no video → `capability.input_modalities`, `capability.video`). `output_modalities` is `Literal["text"]` with min length 1 on both sides, so its subset rule cannot fire through a parsed record; the input half kills the SUBSETS mutant | `viol-subsets-no-modalities`, `viol-subsets-no-modes`, `viol-video-none`, `ts-subsets-no-modalities`, `ts-subsets-no-modes`, `ts-video-none`: SURVIVED → KILLED |
+| 2-F2C-C-R2: `project()` could emit an overclaiming record | `project(..., capability, profile: ServingProfile, ...)`: the `retention` argument is gone (published retention = `profile.retention`, which `violations` requires exactly anyway); after building the record, `violations(record, profile)` non-empty → `InvalidRequest("the projection advertises what the serving profile refuses: …")` (`published_model.py:450-454`). `published_fixtures.published()` passes the deployed profile | before: `project(capability=<82 s profile with max_seconds 120>)` at `042ea49d` returned a record with `max_seconds` 120 (`violations` = `capability.video.max_seconds: advertised 120, enforced 82`). New `test_project_refuses_what_the_serving_profile_refuses` (stale 120 s cap; tools declared by the revision but refused by the validator), `match=` the violated path, plus an understated 60 s cap still publishes. Mutant `project-no-profile-check` → KILLED |
+
+Failed-then-passed: the updated Python suite against the unfixed module (`042ea49d` code) gave
+**36 failed, 60 passed** (`project()` has no `profile` argument; `cases.json` has no
+`profile_patches`); after the fix **98 passed**.
+
+| Command (worktree root unless noted) | Exit | Result |
+|---|---|---|
+| `cd apps/infrx-api && uv run --frozen python -m infrx.contracts.v2.published_fixtures --write`, then again without `--write` | 0 | wrote `cases.json` only; rerun "would change nothing" (deterministic) |
+| `cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/v2/test_published_model.py` | 0 | **98 passed** (89 + 9: 1 visibility, 4 declaration, 2 profile check, 2 violation cases) |
+| `cd apps/infrx-api && uv run --frozen pytest -q tests/contracts --deselect tests/contracts/v2/test_v1_projection_pg.py` | 0 | **1173 passed**, 3 deselected (port 55432 held by `infrx-d1-postgres`; not this lane's) |
+| `cd apps/app && node --test tests/contracts/v2/published-model.test.ts` | 0 | **54/54** (52 + 2 violation cases) |
+| `make console-test` | 0 | **343/343**, 0 skipped |
+| `make console-typecheck` | 0 | clean |
+| `make console-lint` | 0 | 0 errors, the 2 pre-existing warnings |
+| `python3 <scratchpad>/f2c-fix/mutants.py` (apply-then-revert) | 0 | **15/15 killed**: the 12 reviewer mutants above plus `project-structured`, `project-live-video`, `project-deploy-ceiling` (declaration tests now isolate each guard) |
+| `python3 <scratchpad>/f2c-c/mutate.py <worktree>` (the lane's original set) | 0 | **18/18 killed** (unchanged) |
+
+Proposed R109 (§5) wording change for the coordinator: replace "produced only by `project` from
+trusted rows" with "produced only by `project` from trusted rows and the enforced
+`serving_profile`, which refuses any record `violations` flags", and replace "A published
+projection must pass `violations(projection, serving_profile(<runtime>))`:" with "`project`
+refuses, and G7's CI check re-asserts, any `violations(projection, serving_profile(<runtime>))`:".
+Consumer matrix (§6): G7 now calls `project(..., capability=profile.capability (or an
+understatement), profile=serving_profile(<runtime>))`; there is no `retention` argument.
+Wiring requests §9 unchanged (re-verify item 1's 602-count after this round: the v2 suite grew
+by 9).
+
+Remaining effort (this slice): optimistic 0.25 h, likely 1 h, pessimistic 3 h; confidence
+medium. Basis: all four findings closed with regressions; left are the coordinator's wiring
+requests and R109/P-22 application.
+
+- 2026-09-24: fix round by the F2C-C fixer at code head `35d1e32a`; counts from this worktree;
+  no hosted database, box, edge or AWS access.
