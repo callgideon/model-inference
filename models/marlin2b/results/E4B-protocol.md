@@ -151,3 +151,54 @@ run closed, and the coordinator's decision recorded in
   shorter than 7 characters identifies nothing (V5). Stated, not coded (V3): the runner reads
   only `E4B_WINDOW_OK=1` from the window record; the record's time and the edge's maintenance
   site are the operator's checks in the box protocol's step 5, not the runner's.
+- 2026-09-24 (CERTIFY-TREE), **amendment 5**, after the first box run (in
+  `infrx-runtime:<release>`, which has no git; out `20260924T165408Z`) failed
+  `e4b.b.served-build` with the report's tree `None`. None of the §5 numbers moved.
+  (a) Where git cannot exist - no git binary, or a checkout with no `.git` - the tree under
+  test is `--release-sha`: both `git_head` samples read
+  `{"sha": <release>, "dirty": null, "source": "--release-sha (no git)"}` (or `(no .git)`),
+  and the served-build cell names that source. The state stays unknown, so `release-identity`
+  still FAILs (§6.3, R97): only a run with git proves one clean SHA. Git that runs is never
+  overridden - a SHA other than `--release-sha` stays a FAIL of both entries.
+  (b) The served build is read from both processes: `--box` also needs `--worker-metrics-url`
+  (box: `http://127.0.0.1:8002/metrics`, the worker's `infrx_build_info{process="worker"}`
+  since I2B-R4). `e4b.b.served-build` FAILs unless the gateway's and the worker's revisions
+  are each the report's tree, each read from a page whose `process` label is that process's.
+  (c) The deployed duration cap, from the same box run: its sop-parity cell failed with
+  "refused by the candidate". W4's E0 baseline and the release engine both refuse the parity
+  set's 112 s and 120 s clips (16,384-token encoder budget), and the pilot's admission
+  refuses every clip over `MAX_VIDEO_SECONDS=82` (P-20 decision B).
+  - The runner reads the cap once, from the environment the box step passes (`--env-file`),
+    with the gateway's own parser; unset, the tree's default (120). It records the cap in the
+    report's `target.max_video_seconds` and the config pin's `deployed_max_video_seconds`.
+    The cap replaces §5's interim `applied_cap_s` (72) everywhere; §5's other numbers do not
+    move.
+  - The typed over-cap refusal is the M layer's (`MediaProfile.check`): HTTP 400,
+    `unsupported_media`, param `messages`. On bench.py's rows it is the status and the code,
+    because bench's allowlist does not keep the param.
+  - `e4b.a.sop-parity` pairs only the parity clips within the cap. It sends each clip over
+    the cap to the gateway, as bench.py would, and that clip must get the typed refusal. A
+    within-cap refusal or an over-cap acceptance FAILs. An engine target has no admission,
+    so its over-cap clips pend on `BOX`.
+  - The envelope's `duration_cap` counts a clip over the cap as passing only when it gets the
+    typed refusal, and it FAILs a within-cap clip refused as over the cap. A clip at the cap
+    is within it. Failures, soak and overload are judged over the clips within the cap.
+  - `e4b.a.dataset-resume` schedules only clips within the cap, from a copy of the licensed
+    manifest in the workdir that the first run and the resume both read. An item refused as
+    over the cap anyway FAILs the drill: the gateway's cap is then not the runner's.
+  (d) R106, a cancelled job's replay is terminal for that key. This comes from the box rerun
+  (out `20260924T172244Z`): its dataset-resume drill FAILed "items not terminal after the
+  resume" for exactly the two items the SIGINT interrupted.
+  - Why: a torn stream is a client that left, so each job is a committed cancel (R21). The
+    resume's replay of the same key answered that committed result, `state_conflict` (R91),
+    and bench.py re-sent it as a failure every time.
+  - bench.py now records a replay whose stream answers `state_conflict` as
+    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code.
+  - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
+    exactly once. A passing drill states the property it proved: no second accepted item,
+    nothing re-sent after it was terminal, and each item the interruption cancelled
+    terminal after exactly one replay.
+  - On the ledger a cancel carries no usage. A cancelled job's hold that is still held
+    (`held_unknown`, R21) is accounted in the reserved total, not failed.
+  - The envelope's over-cap refusals appear in every rung (the rerun: 8 × `unsupported_media`
+    at r = 0.5). They are the cap's by design and never lower the supported rate.
