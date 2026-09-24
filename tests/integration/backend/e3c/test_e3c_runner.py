@@ -120,3 +120,23 @@ def test_s12_blocked_must_name_known_lanes(lanes):
     import world
     with pytest.raises(AssertionError, match="known lanes"):
         world.blocked(*lanes, why="x")
+
+
+def test_s12_no_stack_blocks_every_scenario():
+    """VERIFY-REPRO: a service that cannot be provisioned is BLOCKED for every scenario and
+    the gate exits 3 - measured live too (the pinned MinIO digest answering 401)."""
+    result = runner.blocked_all(runner.classify("<testsuites/>"), "services: pull failed")
+    assert {e["status"] for e in result["scenarios"].values()} == {"BLOCKED"}
+    assert runner.gate(result) == "BLOCKED" and runner.EXIT[runner.gate(result)] == 3
+
+
+def test_nc_verify_repro__s12_a_required_case_that_did_not_run_keeps_the_gate_open():
+    """Negative control for VERIFY-REPRO: remove one required case from an otherwise green
+    report (a skip, or simply absent) - the gate must not pass."""
+    green = [(f"test_{sid}_x", "pass", "") for sid in runner.SCENARIOS]
+    for broken in ([c for c in green if c[0] != "test_s05_x"],
+                   [c if c[0] != "test_s05_x" else ("test_s05_x", "skip", "no stack")
+                    for c in green]):
+        result = runner.classify(junit(*broken))
+        assert result["scenarios"]["s05"]["status"] == "NOT RUN"
+        assert runner.gate(result) != "PASS"

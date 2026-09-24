@@ -123,6 +123,18 @@ def test_s10_the_browser_roles_reach_nothing_outside_the_console_surface(workdir
             f"the browser roles reach: {extra}; PostgREST let through {let_through}"
 
 
+def test_nc_roles_browser__s10_detects_a_browser_write_grant_on_the_ledger(workdir):
+    """Negative control: `authenticated` granted INSERT on the legacy ledger on this clone (a
+    one-line defect); s10's browser-surface oracle must report it."""
+    with world.composed(workdir, start=()) as trip:
+        assert stack.current_database() == trip.world.database
+        stack.defect("grant insert on public.credit_ledger to authenticated")
+        with pytest.raises(AssertionError, match="the browser roles reach"):
+            extra = browser_surface(trip)
+            assert not extra["functions"] and not extra["writes"], \
+                f"the browser roles reach: {extra}"
+
+
 def test_s10_operator_and_consumer_credentials_stay_in_their_lane(workdir):
     """A consumer key cannot operate (CLI refuses it); an operator key runs no inference; a
     revoked operator key operates nothing."""

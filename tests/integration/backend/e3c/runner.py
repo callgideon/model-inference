@@ -104,6 +104,9 @@ CONTROLS = {
                              "revert": True},
     "nc-result-expiry": {"oracle": "RESULT-EXPIRY", "scenario": "s07",
                          "mechanism": "bypass expiry-recompute (gateway)"},
+    "nc-roles-browser": {"oracle": "CREDIT-CUTOVER", "scenario": "s10",
+                         "mechanism": "DB defect: INSERT on public.credit_ledger granted to "
+                                      "authenticated"},
     "nc-credit-cutover": {"oracle": "CREDIT-CUTOVER", "scenario": "s09",
                           "mechanism": "DB defect: signup grant uniqueness dropped (E3B db09)"},
     "nc-verify-repro": {"oracle": "VERIFY-REPRO", "scenario": "s12",
@@ -170,6 +173,13 @@ def classify(junit_xml: str, only: set[str] | None = None) -> dict:
         else:
             entry["status"] = detected
     return {"scenarios": scenarios, "controls": controls}
+
+
+def blocked_all(result: dict, why: str) -> dict:
+    """No usable stack: every scenario is BLOCKED (never PASS, never silently NOT RUN)."""
+    for entry in result["scenarios"].values():
+        entry["status"], entry["reasons"] = BLOCKED, [f"BLOCKED[E2C] stack: {why}"]
+    return result
 
 
 def gate(result: dict) -> str:
@@ -315,8 +325,7 @@ def main(argv: list[str] | None = None) -> int:
                                                               else scenario),
                         reasons=[f"{control['scenario']} on {tree} (fix reverted): {scenario}"])
             else:
-                for entry in result["scenarios"].values():
-                    entry["status"], entry["reasons"] = BLOCKED, [f"BLOCKED[E2C] stack: {why}"]
+                blocked_all(result, why)
     except run.Interrupted as stop:
         why = f"interrupted by signal {stop.signum}: unfinished scenarios are NOT RUN"
     finally:
