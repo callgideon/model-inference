@@ -14,11 +14,15 @@ where the product wires D10's PostgreSQL adapter.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import pathlib
 import time
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
+from infrx.config import Settings
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.lifecycle import FakeLifecycle
@@ -28,13 +32,17 @@ from infrx.contracts.records import (HoldState, IndexEvent, JobState, OutboxKind
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.v2.lifecycle import AdmissionExpectation
 from infrx.contracts.v2.records import AccountingRegime
+from infrx.media.prepare import MediaProfile
+from infrx.media.video import Media
 from infrx.observe import alerts
 from infrx.observe.metrics import Registry
 from infrx.worker import WorkerLoop, WorkerService
-from infrx.worker.preparation import PreparationResult, PreparationRunner
+from infrx.worker.preparation import (ENCODER_CACHE_TOKENS, PreparationResult, PreparationRunner,
+                                      most_video_tokens)
 from infrx.worker.service import PgReconciliation
 from tests.w.test_loop import ScriptEngine, World, candidate, delta, queued, usage_event
-from tests.w.test_prep_worker import COUNT, Prep, outcome, within
+from tests.m.support import mp4
+from tests.w.test_prep_worker import COUNT, Prep, counted as tokenized, outcome, tokenizer, within
 
 
 def run(coro):
@@ -517,3 +525,184 @@ def test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds():
                      "values (gen_random_uuid(), 1, 0)")
     drifted = run(read())
     assert clean == (0, 0) and drifted == (1, 0), (clean, drifted)
+
+
+# --------------------------------------------------------------------------- 3. refusals
+class FailPreparation:
+    """R104's pending third candidate, a fenced `fail_preparation(lease, cause)`, drafted over
+    F's fake store for W5 (F2C freezes it on the port, D10 implements it on PostgreSQL):
+    fenced on the preparation lease exactly like `prepared`; the job ends `failed` with
+    `cause` (`invalid_media` or `preparation_failed`), no usage, settled by R21 - released
+    free - with its capacity and hold released in the same transaction. `calls` records it."""
+
+    def __init__(self, jobs, store) -> None:
+        self.jobs, self.store, self.calls = jobs, store, []
+
+    def __getattr__(self, name):
+        return getattr(self.jobs, name)
+
+    async def fail_preparation(self, lease, cause: TerminalCause):
+        self.calls.append((lease.job_id, cause))
+        if cause not in (TerminalCause.invalid_media, TerminalCause.preparation_failed):
+            raise errors.InvalidRequest(f"{cause} does not end a preparation")
+        async with self.store._lock:
+            job_ = self.store._fence_preparation(lease)
+            return self.store._terminalize(job_, cause, None, None, JobState.failed)
+
+
+def failing(prep: Prep) -> FailPreparation:
+    prep.runner.jobs = FailPreparation(prep.runner.jobs, prep.store)
+    return prep.runner.jobs
+
+
+CAP = DEFAULTS.replace(max_video_seconds=82.0)          # the deployed cap (P-20 decision B)
+
+
+@pytest.mark.parametrize("refusal", ["over_the_cap", "over_the_context"])
+def test_w5_refuse__a_permanent_refusal_ends_the_job_once(tmp_path, refusal):
+    """A refusal the same input can never outgrow - a clip over the deployed 82 s cap (an
+    acceptance from before the cap moved), a prompt past the job's `max_input_tokens` - ends
+    the job at the FIRST attempt through the fenced `fail_preparation`: `failed` with an
+    actionable cause (`invalid_media` / `preparation_failed`), released free, its hold
+    released once. No lease is left to lapse, the reaper redispatches nothing, and no second
+    attempt ever reaches the engine."""
+    prep = Prep(tmp_path)
+    ends = failing(prep)
+
+    async def case():
+        if refusal == "over_the_cap":
+            request = await prep.admit(video=True, clip=mp4(seconds=100.0))   # admitted at 120
+            prep.media.profile = MediaProfile.pinned(CAP)
+        else:
+            request = await prep.admit()
+            prep.app.control({"tokenize_count": 40_000})      # past max_input_tokens 30,720
+        result = await prep.runner.run(request.request_id)
+        await lapse(prep)
+        return request, result
+
+    request, result = run(case())
+    cause, code = {"over_the_cap": (TerminalCause.invalid_media, "unsupported_media"),
+                   "over_the_context": (TerminalCause.preparation_failed,
+                                        "context_length_exceeded")}[refusal]
+    assert (result.refusal, result.ended) == (code, cause.value), result
+    assert ends.calls == [(request.request_id, cause)]
+    settled = job(prep, request).outcome
+    assert settled is not None and (settled.state, settled.cause, settled.settlement_state) == (
+        JobState.failed, cause, SettlementState.released_free), settled
+    assert released_once(prep, request) and job(prep, request).preparation_attempts == 1
+    assert len(dispatches(prep.store, request, OutboxKind.prepare_dispatch)) == 1
+    assert "file://" not in result.detail and prep.root not in result.detail
+    assert len(prep.app.tokenized) == (0 if refusal == "over_the_cap" else 1)
+
+
+def test_w5_refuse__a_temporary_failure_is_retried_within_its_bound_never_ended_early(tmp_path):
+    """The tokenizer down is temporary: nothing is ended by the worker, the lapsed lease is
+    requeued within MAX_PREPUBLICATION_RETRIES and the store ends the job
+    `preparation_failed` once the bound is spent - the hold released once, never cycled
+    past the bound."""
+    prep = Prep(tmp_path)
+    ends = failing(prep)
+    prep.app.control({"tokenize_fault": "down"})
+
+    async def case():
+        request = await prep.admit()
+        refusals = []
+        while job(prep, request).outcome is None and len(refusals) < 10:
+            refusals.append((await prep.runner.run(request.request_id)).refusal)
+            await lapse(prep)
+        return request, refusals
+
+    request, refusals = run(case())
+    assert refusals == ["dependency_unavailable"] * (1 + DEFAULTS.max_prepublication_retries)
+    assert ends.calls == [] and job(prep, request).outcome.cause is TerminalCause.preparation_failed
+    assert released_once(prep, request)
+
+
+def test_w5_refuse__a_clip_past_the_encoder_budget_is_refused_before_it_is_queued(tmp_path):
+    """P-23: `/tokenize` does not apply the engine's encoder-cache check, so with a raised cap
+    (112 s here) a clip whose video item needs more than the served budget (16,384 embedding
+    tokens) would be counted, queued and then refused by the chat route. Preparation refuses
+    it permanently instead - `invalid_media`, ended once, never queued."""
+    limits = DEFAULTS.replace(max_video_seconds=112.0)
+    prep = Prep(tmp_path, limits=limits)
+    failing(prep)
+    prep.app.control({"tokenize_count": 22_000})
+
+    async def case():
+        request = await prep.admit(video=True, clip=mp4(seconds=112.0, width=1920, height=1080))
+        return request, await prep.runner.run(request.request_id)
+
+    request, result = run(case())
+    assert (result.refusal, result.ended) == ("unsupported_media", "invalid_media"), result
+    assert dispatches(prep.store, request, OutboxKind.inference_dispatch) == []
+    assert released_once(prep, request)
+
+
+def decide():
+    """W4's measured processor arithmetic (`models/marlin2b/measure/decide.py`)."""
+    path = pathlib.Path(__file__).resolve().parents[4] / "models/marlin2b/measure/decide.py"
+    spec = importlib.util.spec_from_file_location("w5_decide", path)
+    loaded = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
+def test_w5_refuse__the_video_bound_is_the_processors_worst_case_at_every_duration():
+    """Not duration alone: the check's ceiling is the most video tokens the pinned processor
+    gives ANY geometry at the budget (up to two frames fewer sampled, each allowed more
+    pixels - W4's `decide.worst_tokens`, which reproduces the engine's measured refusals),
+    at every duration up to the cap; and the deployed 82 s cap is exactly the longest
+    duration whose worst case fits the served encoder budget."""
+    measured, media = decide(), Media(SimpleNamespace(settings=Settings()))
+    for seconds in [*range(1, 121), 12.5, 81.5, 82.25]:
+        budget = media.budget_kwargs(seconds)
+        assert most_video_tokens(budget["size"]["longest_edge"], budget["min_frames"]) == \
+            measured.worst_tokens(seconds), seconds
+    assert measured.ceiling_s(ENCODER_CACHE_TOKENS) == CAP.max_video_seconds == 82
+
+
+def test_w5_refuse__the_maximum_geometry_at_the_cap_is_prepared(tmp_path):
+    """The maximum supported input: an 82 s clip at 1080p whose engine count is the
+    processor's worst case for its budget (16,154 video tokens - above the
+    `longest_edge // 2048` = 16,072 a fully sampled clip gives, below the 16,384 encoder
+    budget) is counted and queued, not refused as an engine off its profile."""
+    worst = most_video_tokens(Media(SimpleNamespace(settings=Settings())).budget_kwargs(82.0)
+                              ["size"]["longest_edge"], 4)
+    prep = Prep(tmp_path, limits=CAP, transport=tokenizer(tokenized(worst + 40, worst)))
+    failing(prep)
+
+    async def case():
+        request = await prep.admit(video=True, clip=mp4(seconds=82.0, width=1920, height=1080))
+        return request, await prep.runner.run(request.request_id)
+
+    request, result = run(case())
+    assert worst == 16_154 and (result.cause, result.prompt_tokens) == ("prepared", worst + 40), \
+        result
+    assert job(prep, request).state is JobState.queued
+
+
+def test_w5_refuse__a_permanent_refusal_racing_a_cancel_settles_once(tmp_path):
+    """The client's cancel lands while the over-cap clip is being probed: the job is already
+    `cancelled` when the refusal wants to end it, so `fail_preparation` is refused
+    (`already_terminal`) - the attempt answers, nothing settles twice, the client's cause
+    stands and the hold was released once."""
+    prep = Prep(tmp_path)
+    ends = failing(prep)
+
+    async def case():
+        request = await prep.admit(video=True, clip=mp4(seconds=100.0))
+        prep.media.profile = MediaProfile.pinned(CAP)
+        real = prep.media.prepare
+
+        async def cancelled_meanwhile(job_id, profile):
+            await prep.store.cancel(request.org_id, job(prep, request).admission.job_handle)
+            return await real(job_id, profile)
+        prep.media.prepare = cancelled_meanwhile
+        return request, await outcome(prep.runner.run(request.request_id))
+
+    request, result = run(case())
+    assert isinstance(result, PreparationResult), result
+    assert (result.refusal, result.ended) == ("unsupported_media", "already_terminal"), result
+    assert len(ends.calls) == 1 and job(prep, request).outcome.cause is \
+        TerminalCause.client_cancelled
+    assert released_once(prep, request)

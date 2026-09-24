@@ -469,16 +469,17 @@ TEXT_ANSWERS = {
     "bool-with-its-token": {"count": True, "tokens": [1]},
     "float-with-its-tokens": {"count": 3.0, "tokens": [1, 1, 1]},
 }
-# a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches, at most 13 x 196
+# a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches; 13 x 196 = 2548 when
+# every frame is sampled, 2756 at the processor's worst case (W5: 25 sampled, 13 groups of 212)
 VIDEO_ANSWERS = {"unexpanded": counted(40, 1), "below-one-per-patch": counted(40, 12),
-                 "past-the-budget": counted(3000, 2549), "no-tokens": {"count": 3000}}
+                 "past-the-budget": counted(3000, 2757), "no-tokens": {"count": 3000}}
 
 
 @pytest.mark.parametrize("name", sorted(TEXT_ANSWERS) + sorted(VIDEO_ANSWERS))
 def test_prep_worker__the_engines_answer_is_checked_and_never_guessed(name):
     """`/tokenize`'s answer is the count only when it is one: an integer and exactly that many
-    tokens, and for a video between one `video_token_id` per two-frame patch and the pinned
-    budget (196 per patch). Every other answer - the engine down, not JSON, no count, a bool,
+    tokens, and for a video between one `video_token_id` per two-frame patch and the most the
+    pinned processor gives any geometry at the budget (W5: `most_video_tokens`). Every other answer - the engine down, not JSON, no count, a bool,
     a negative, text, a disagreement, no tokens, one unexpanded placeholder, fewer than the
     patches, more than the budget - is `dependency_unavailable`, never a number."""
     box, root = ClockBox(), "/srv/infrx-cache"
@@ -493,9 +494,11 @@ def test_prep_worker__the_engines_answer_is_checked_and_never_guessed(name):
     assert got is errors.DependencyUnavailable, (name, got)
 
 
-@pytest.mark.parametrize("pads", [13, 1300, 2548], ids=["one-per-patch", "between", "budget"])
+@pytest.mark.parametrize("pads", [13, 1300, 2548, 2756],
+                         ids=["one-per-patch", "between", "fully-sampled", "budget"])
 def test_prep_worker__a_video_count_inside_the_pinned_budget_is_the_count(pads):
-    """The two bounds are inclusive: 13 patches of a 12.5 s clip, and 13 x 196."""
+    """The two bounds are inclusive: 13 patches of a 12.5 s clip, and the processor's worst
+    case at its budget (2756; 13 x 196 = 2548 when every frame is sampled, W5)."""
     box, root = ClockBox(), "/srv/infrx-cache"
     engine = VllmEngine(httpx.AsyncClient(transport=tokenizer(counted(3000, pads)),
                                           base_url="http://engine"),

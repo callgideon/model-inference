@@ -8,11 +8,15 @@ through the shared runner (`tests/contracts/mutants.py`) on PREP-WORKER's copy o
 
 `w5_readiness_barrier_media_only` is RV-05's executable negative control: the worker as it was
 before W5 (the manifest waited for only when the request carries media) fails the text-only
-canary.
+canary. Equivalent edit left out on purpose: `most_video_tokens` sampling one frame fewer
+instead of two (the budget's frame count is even, so one fewer always dominates two fewer;
+the parity case pins the whole function to W4's `decide.worst_tokens` at every duration).
 """
 from __future__ import annotations
 
+import pathlib
 import re
+import shutil
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Result, Runner, _m
@@ -40,6 +44,13 @@ V = "worker/service.py"
 # S3 F4: the reconciliation gauges
 GAUGES = "test_w5_reconcile__each_reaper_tick_publishes_the_reconciliation_gauges"
 PG_VIEWS = "test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds"
+# 3. refusals
+PERMANENT = "test_w5_refuse__a_permanent_refusal_ends_the_job_once"
+TEMPORARY = "test_w5_refuse__a_temporary_failure_is_retried_within_its_bound_never_ended_early"
+ENCODER = "test_w5_refuse__a_clip_past_the_encoder_budget_is_refused_before_it_is_queued"
+PARITY = "test_w5_refuse__the_video_bound_is_the_processors_worst_case_at_every_duration"
+GEOMETRY = "test_w5_refuse__the_maximum_geometry_at_the_cap_is_prepared"
+RACE = "test_w5_refuse__a_permanent_refusal_racing_a_cancel_settles_once"
 
 MUTANTS = (
     # --- 1. the readiness barrier (RV-05, ADMISSION-READY) -------------------------------
@@ -116,6 +127,42 @@ MUTANTS = (
        "and the reaper lives on", V,
        "        except Exception as failure:              # the database is down: the last "
        "pass stands", "        except ZeroDivisionError as failure:", GAUGES),
+    # --- 3. permanent versus temporary refusals ------------------------------------------
+    _m("w5_permanent_refusal_left_to_lapse", "a permanent refusal ends the job at once - "
+       "unsupported media never cycles preparation leases (the negative control: the "
+       "pre-W5 worker)", P, "                                     ended=await self._end(lease, "
+       "refused))", "                                     ended=None)", PERMANENT, ENCODER),
+    _m("w5_temporary_refusal_ended_early", "a temporary failure is retried within its bound, "
+       "never ended by the worker", P,
+       "PERMANENT = {errors.UnsupportedMedia: TerminalCause.invalid_media,",
+       "PERMANENT = {errors.DependencyUnavailable: TerminalCause.preparation_failed,\n"
+       "             errors.UnsupportedMedia: TerminalCause.invalid_media,", TEMPORARY),
+    _m("w5_over_context_left_to_lapse", "a prompt past max_input_tokens is permanent", P,
+       "             errors.RequestTooLarge: TerminalCause.invalid_media,\n"
+       "             errors.ContextLengthExceeded: TerminalCause.preparation_failed}",
+       "             errors.RequestTooLarge: TerminalCause.invalid_media}", PERMANENT),
+    _m("w5_invalid_media_ends_as_a_platform_cause", "over-cap media ends with the actionable "
+       "invalid_media cause", P,
+       "PERMANENT = {errors.UnsupportedMedia: TerminalCause.invalid_media,",
+       "PERMANENT = {errors.UnsupportedMedia: TerminalCause.preparation_failed,",
+       PERMANENT, ENCODER),
+    _m("w5_encoder_budget_unchecked", "a video item past the served encoder budget is refused "
+       "before it is queued (P-23)", P, "        if video > ENCODER_CACHE_TOKENS:",
+       "        if False:", ENCODER),
+    _m("w5_encoder_budget_raised", "the encoder budget is the served engine's 16,384, whose "
+       "ceiling is the 82 s cap", P, "ENCODER_CACHE_TOKENS = 16_384",
+       "ENCODER_CACHE_TOKENS = 32_768", PARITY, ENCODER),
+    _m("w5_video_bound_fully_sampled_only", "the video bound is the processor's worst case, "
+       "not the fully sampled count (max geometry at the cap)", P,
+       '        most = most_video_tokens(longest, budget["min_frames"])',
+       "        most = longest // PIXELS_PER_TOKEN", GEOMETRY),
+    _m("w5_worst_case_without_group_padding", "the worst case pads the sampled frames to "
+       "two-frame groups as the processor does", P,
+       "(min(round(sampled / 2) * 2, sampled) * 1024)", "(sampled * 1024)", PARITY),
+    _m("w5_permanent_end_refusal_escapes", "a permanent refusal racing a cancel is answered "
+       "(already_terminal), never a dead runner or a second settlement", P,
+       "        except errors.DomainError as lost:\n            return lost.code",
+       "        except errors.StaleLease as lost:\n            return lost.code", RACE),
 )
 
 PG_MUTANTS = (
@@ -130,7 +177,18 @@ def case_names() -> set[str]:
     return set(re.findall(r"^def (test_\w+)\(", (API_DIR / SUITE_FILE).read_text(), re.M))
 
 
-RUNNER = Runner(name="w5", targets=(SUITE_FILE,), layout=prep_worker_mutants._layout)
+DECIDE = pathlib.Path("models/marlin2b/measure/decide.py")      # W4's processor arithmetic
+
+
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """PREP-WORKER's copy plus W4's `decide.py`, the parity case's oracle."""
+    api = prep_worker_mutants._layout(root)
+    (root / DECIDE).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(API_DIR.parents[1] / DECIDE, root / DECIDE)
+    return api
+
+
+RUNNER = Runner(name="w5", targets=(SUITE_FILE,), layout=_layout)
 PG_RUNNER = Runner(name="w5-pg", targets=(SUITE_FILE,), layout=prep_worker_mutants._pg_layout,
                    env=("INFRX_D_TASK",))
 
