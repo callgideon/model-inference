@@ -105,3 +105,11 @@ The user asked for a 1200 s cap and then kept 82 s (2026-09-24). What a longer c
 - **P-25 — operations and retention ownership:** I8/D10/M6 record approved serving-content TTLs/cleanup bound, alert destination/authorization, backup/PITR policy and known-good rollback bundle. Existing policy is the starting point, not authority to extend retention. Blocks truthful public retention/operated-release acceptance where unresolved; local lifecycle tests can continue.
 
 See [load protocol](consumer-v1/05-client-and-load-testing.md) for machine-checkable run inputs and [operations brief](consumer-v1/03-operations-and-verification.md) for proof. None of these entries changes the one-time individual 10,000 CREDIT grant policy.
+
+## S3 reconciliation (2026-09-24, `evidence/coordinator/2026-09-24-S3-reconciliation.md` §4)
+
+- **P-02 re-opened for the pilot:** the 2026-09-22 resolution ($0.00) predates the pilot's USD 5.00 test grant and its legacy_usd usage (W12, E1B, E4B). G8/D10 inventory the USD wallet, jobs and holds read-only before any CREDIT activation; no conversion.
+- **P-05 also blocks a second hosted test tenant:** the second dev account's email is unconfirmed, so E1B `--tenant-keys` and E4C's two-tenant/fairness cells cannot run on the pilot. The coordinator confirms a second verified individual as a logged op, or the cells are NOT RUN.
+- **P-06:** add served-bytes digests of `processor_config.json` and `preprocessor_config.json` to the pinned serving record before E4C freezes the candidate.
+- **P-24:** target, window and stop rules exist (S3 §4.2); a versioned profile with numeric request/byte/spend caps does not. The two pre-cutover consumer keys recorded active on 2026-09-24 need a read-only inventory before the next `E4B_WINDOW_OK=1` run.
+- **P-25:** the only hosted backup on record is the coordinator-host dump `hosted-20260924T050746Z`; the hosted backup/PITR policy is ⚠️ TO BE VERIFIED. The box's newest install backup holds 27af05a, which is not a known-good rollback target.

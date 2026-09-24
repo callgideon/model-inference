@@ -153,3 +153,4 @@ run whose preconditions passed; anything else is `unverified target, not a measu
 - 2026-09-23 (E4B review fix round): release identity, served build, labels and the failure
   rate follow protocol amendment 3; B1 is routed to the cutover lane, B2 to the box (review
   N3/N4); the `infrx_build_info` input added. No box value filled.
+- 2026-09-24 (S3 reconciliation): §5 B1 closed (run2 `e4b.b.config-pin` PASS: the published release pins `sha256:3c4bb…` and the digest-pinned image), B2 closed (the box engine runs the pinned 8; config-pin PASS on 4226315 and bda1586), build_info closed (run3 `e4b.b.served-build` ok on bda1586, gateway and worker). Decision remains ⚠️ PENDING. run3 on bda1586: dataset-resume FAIL = regime mismatch (legacy_usd vs the CREDIT ledger oracle), envelope FAIL supported 0.5/s; soak/overload pending. E4C supersedes this decision per program 22; see `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md`.

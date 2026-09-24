@@ -594,6 +594,8 @@ scheduling, E verification, I infrastructure, F contracts, coordinator).
 | D-35 | Stale documents: `E4B-release-decision.md` §5 still lists B1 (placeholder digest), B2 (`--max-num-seqs 32`) and `build_info` as open — closed by the cutover (`351d084`, `9fd3457`, `S02:749`) and the rollout (run2 config-pin PASS); `progress-state.json` gates still say BACKEND-LOCAL "not started" although E3B's layer-3 gate exits 0 (no formal BACKEND-LOCAL declaration is recorded); session-02 timestamps between 00:57Z and 01:45Z on 09-24 run up to 30 min behind commit times (`HANDOFF-20260924T0215Z.md`) | coordinator | open | as cited |
 | D-36 | The public repository contains the I1 live inventory and the fail-open write-up (user chose to push) | user | accepted risk | `W2H` §6 |
 
+- 2026-09-24 (S3): D-1/D-2/D-3/D-4/D-6/D-7/D-9/D-12(worker build) addressed by the 2026-09-24 merges (see S3 §2.1); D-35 release-decision rows closed by evidence (S3 §6.4); new: the reconciliation gauges have no runtime producer (S3 finding 4); the install backup of bda1586 holds 27af05a (S3 finding 7).
+
 ## 8. Rulings register
 
 The contract history lives in `research/plan/08-contracts-v1-encoding.md` §10 (full text, plus a

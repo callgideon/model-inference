@@ -3865,7 +3865,12 @@
       ],
       "acceptance": "An actual GPU baseline and bounded serving envelope exist before M4/W4 performance claims. Report successful videos per second or video-seconds processed per second together with clip/frame/output profile, token metrics, p50/p95 and supported tails, cost per successful unit and full service costs; CREDIT is not USD.",
       "failure_oracle": "Repeated single-clip/warm-cache-only results, undersampled p99, hidden rejections, queue growth, rising memory or changed preprocessing invalidate claims. Missing SOP labels prevents accuracy certification; processor/output parity still has to be measured.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance.",
+      "evidence": [
+        "models/marlin2b/results/E1B-box-4226315/",
+        "models/marlin2b/results/E1B-box-bda1586/",
+        "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      ]
     },
     {
       "id": "M4",
@@ -3987,7 +3992,11 @@
       ],
       "acceptance": "BACKEND-READY means a provisioned external client can use the real metered Marlin endpoint reliably within a measured envelope and operators can detect/recover failures. It requires allocated GPU/staging proof; software-only tests cannot close this gate. Public cutover is a separately recorded authorized action. App work consumes this certified backend next.",
       "failure_oracle": "Any missing real-service/model evidence, unresolved security/accounting defect, untested restore, uncontrolled resource growth or unsupported quality claim leaves the appropriate gate pending with a named owner; do not declare a vaguely super-robust endpoint.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/e/E4B-dev-4226315.json",
+        "models/marlin2b/results/E4B-box-4226315/"
+      ]
     },
     {
       "id": "S3",
@@ -3995,7 +4004,7 @@
       "track": "S",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4015,7 +4024,10 @@
       ],
       "acceptance": "Committed actual-state matrix prevents repeating fixed work and preserves implementation versus release distinction.",
       "failure_oracle": "A newer commit or implemented runner without a final decision cannot be recorded as accepted.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md"
+      ]
     },
     {
       "id": "F2C",
