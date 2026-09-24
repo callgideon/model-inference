@@ -16,16 +16,20 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 
 import pytest
 
 from infrx.contracts import errors
-from infrx.contracts.records import (HoldState, JobState, MediaRef, OutboxKind,
-                                     SettlementState, TerminalCause)
+from infrx.contracts.limits import DEFAULTS
+from infrx.contracts.records import (HoldState, IndexEvent, JobState, MediaRef, OutboxKind,
+                                     SettlementState, TerminalCause, Usage, UsageCertainty)
+from infrx.worker import WorkerLoop
 from infrx.worker import __main__ as worker_main
-from infrx.worker.preparation import PreparationResult
-from tests.w.test_prep_worker import COUNT, Prep, within
+from infrx.worker.preparation import PreparationResult, PreparationRunner
+from tests.w.test_loop import ScriptEngine, World, candidate, delta, queued, usage_event
+from tests.w.test_prep_worker import COUNT, Prep, outcome, within
 
 
 def run(coro):
@@ -194,3 +198,228 @@ def test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once
         JobState.failed, TerminalCause.preparation_failed, SettlementState.released_free)
     assert [o.job_id for o in first] == [request.request_id] and second == ()
     assert released_once(prep, request) and prep.app.tokenized == []
+
+
+# --------------------------------------------------------------------------- 2. crash boundaries
+def dispatches(store, request, kind: OutboxKind) -> list:
+    """The durable dispatch rows of one job (the relay's input; the index is only a hint)."""
+    return [event for event in store.outbox
+            if event.aggregate_id == request.request_id and event.kind is kind]
+
+
+def redelivered(store, row) -> IndexEvent:
+    """What the relay/reconciler hands the index for a durable dispatch row - here under a
+    fresh event id, as a reconciler repair (a replay of the same id is deduplicated)."""
+    job_ = store.jobs[row.aggregate_id]
+    return IndexEvent(event_id=str(uuid.uuid4()), job_id=job_.id, org_id=job_.request.org_id,
+                      key_id=job_.request.key_id, kind=row.kind,
+                      execution_mode=job_.request.execution_mode, available_at=row.available_at,
+                      attempt=0)
+
+
+def counted(prompt: int, completion: int) -> Usage:
+    return Usage(prompt_tokens=prompt, completion_tokens=completion,
+                 total_tokens=prompt + completion, certainty=UsageCertainty.authoritative)
+
+
+async def lapse(prep: Prep) -> tuple:
+    """The dead preparation worker's lease lapses; the next worker's reaper runs."""
+    prep.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+    return await prep.store.recover()
+
+
+def test_w5_crash__accepted_but_never_ready_is_bounded_and_released_once(tmp_path):
+    """Crash after admit (RV-05): the gateway died between the admission commit and its
+    manifest, on a store that lets the claim through. Every attempt is refused before the
+    engine is asked; each lapsed lease is requeued within MAX_PREPUBLICATION_RETRIES, and the
+    job then ends `preparation_failed` with its hold released once - no orphan, no count."""
+    prep = Prep(tmp_path, attach_wait_s=0.05)
+
+    async def case():
+        request = await prep.admit(ready=False)
+        refusals = []
+        while job(prep, request).outcome is None and len(refusals) < 10:
+            refusals.append((await prep.runner.run(request.request_id)).refusal)
+            await lapse(prep)
+        return request, refusals
+
+    request, refusals = run(case())
+    bound = 1 + DEFAULTS.max_prepublication_retries
+    assert refusals == ["not_claimable"] * bound, refusals
+    assert job(prep, request).outcome.cause is TerminalCause.preparation_failed
+    assert released_once(prep, request) and prep.app.tokenized == []
+
+
+def test_w5_crash__a_lost_queue_wakeup_loses_no_job_and_a_redelivery_runs_it_once():
+    """Ready before the queue wakeup: the job is `queued` with its durable inference dispatch
+    row, but the index never received it (Valkey flushed). The pool finds nothing - Valkey is
+    a wakeup, not the authority - and the row is still there; its redelivery, twice (a
+    repair racing a replay), runs the job exactly once: one generation in the journal, one
+    settlement, one debit at the admitted price."""
+    async def case():
+        world = World()
+        request, admission = await queued(world)
+        engine = ScriptEngine(events=(delta("Two people "), delta("unload boxes."),
+                                      usage_event(counted(1200, 2))))
+        loop = WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
+                          worker_id="worker-a", limits=world.limits)
+        idle = await loop.run()
+        rows = dispatches(world.jobs, request, OutboxKind.inference_dispatch)
+        for row in rows * 2:
+            await world.scheduler.enqueue(redelivered(world.jobs, row))
+        results = await loop.run()
+        return world, request, admission, engine, idle, rows, results
+
+    world, request, admission, engine, idle, rows, results = run(case())
+    assert idle == [] and len(rows) == 1, (idle, rows)
+    assert sorted(str(r.cause or r.refusal) for r in results) == [
+        "already_terminal", "completed"], results
+    settled = world.outcome(request.request_id)
+    assert settled.debit == admission.price_snapshot.debit(1200, 2) and engine.started == 1
+    assert {chunk.generation for chunk in world.journal(request.request_id)} == {1}
+    assert world.jobs.outbox_kinds(request.request_id).count(OutboxKind.usage_projection) == 1
+
+
+@pytest.mark.parametrize("crash", ["before_the_object", "before_prepared_commits",
+                                   "after_prepared_commits"])
+def test_w5_crash__a_preparation_that_dies_mid_way_is_prepared_once(tmp_path, crash):
+    """Preparing before the object/row commit: the worker process dies (an untyped failure
+    propagates: crash-only) before M writes the prepared object, after the object but before
+    `prepared` commits, or after it commits with the answer lost. The next worker process
+    (its own count memo, R107) prepares the job once from the durable state: one prepared
+    object at its content address, one stored count, one inference dispatch; a job whose
+    `prepared` did commit is never prepared again (the redelivered candidate is a lost
+    claim)."""
+    prep = Prep(tmp_path)
+
+    async def case():
+        request = await prep.admit(video=True)
+        real = prep.media.prepare
+        if crash == "before_the_object":
+            async def dies(job_id, profile):
+                raise RuntimeError("the worker process died")
+            prep.media.prepare = dies
+        elif crash == "before_prepared_commits":
+            prep.harness.failures.raise_("prepared", RuntimeError("the worker process died"))
+        else:
+            prep.harness.failures.crash_after_commit("prepared")
+        died = await outcome(prep.runner.run(request.request_id))
+        prep.media.prepare = real
+        if crash == "after_prepared_commits":
+            await prep.store.recover()             # queued already: nothing to requeue
+        else:
+            await lapse(prep)
+        successor = PreparationRunner(jobs=prep.jobs, media=prep.media, engine=prep.engine,
+                                      worker_id="prep-next", limits=prep.runner.limits)
+        again = await successor.run(request.request_id)
+        return request, died, again
+
+    request, died, again = run(case())
+    assert isinstance(died, type) and issubclass(died, Exception), died       # it died
+    prepared = [key for key in prep.media.objects.objects if key.endswith("/prepared")]
+    assert len(prepared) == 1, prep.media.objects.objects.keys()
+    assert job(prep, request).state is JobState.queued
+    assert job(prep, request).prompt_tokens == COUNT
+    assert len(dispatches(prep.store, request, OutboxKind.inference_dispatch)) == 1
+    retries = dispatches(prep.store, request, OutboxKind.prepare_dispatch)
+    if crash == "after_prepared_commits":
+        assert again.refusal == "not_claimable" and len(retries) == 1, (again, retries)
+        assert len(prep.app.tokenized) == 1
+    else:
+        assert (again.cause, again.prompt_tokens) == ("prepared", COUNT), again
+        assert len(retries) == 2, retries                  # the reaper's fresh dispatch (R93)
+        assert len(prep.app.tokenized) == (1 if crash == "before_the_object" else 2)
+
+
+class Dying(ScriptEngine):
+    """An engine that streams its events, then goes silent while the worker still holds them
+    in its unflushed batch - where a process death lands between engine and journal."""
+
+    yielded: int = 0
+
+    async def _events(self):
+        self.started += 1
+        for event in self.events:
+            self.yielded += 1
+            yield event
+        await asyncio.Event().wait()
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["unpublished", "published"])
+def test_w5_crash__engine_output_before_the_journal_commit_is_never_relayed_or_billed(published):
+    """Engine submitted before the journal cursor commit: the worker process dies while the
+    engine is generating. Unpublished (no chunk committed), the next generation runs it once:
+    the journal and the relay hold only generation 2, and the one debit is generation 2's
+    usage at the admitted price - no exactly-once engine promise, but once-only output and
+    accounting. Published (the first append committed), it is never regenerated: the engine
+    is not asked again, nothing is debited (`lost_after_publication`)."""
+    async def case():
+        world = World()
+        request, admission = await queued(world)
+        dying = Dying(events=(delta("lost "),))
+        first = asyncio.create_task(world.runner(dying).run(request.request_id))
+        while not dying.yielded:                         # the runner holds an unjournalled delta
+            await asyncio.sleep(0)
+        if published:
+            lease = world.jobs.jobs[request.request_id].lease
+            await world.stream.append(lease, (delta("published "),))
+        first.cancel()                                  # the process dies mid-generation
+        await asyncio.gather(first, return_exceptions=True)
+        world.clock.advance(world.limits.lease_ttl_s + 1)
+        for event in await world.jobs.recover():
+            if isinstance(event, IndexEvent):
+                await world.scheduler.enqueue(event)
+        engine = ScriptEngine(events=(delta("Two people unload boxes."),
+                                      usage_event(counted(1200, 5))))
+        results = await WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
+                                   worker_id="worker-b", limits=world.limits).run()
+        return world, request, admission, engine, results
+
+    world, request, admission, engine, results = run(case())
+    settled = world.outcome(request.request_id)
+    if published:
+        assert (settled.cause, settled.debit, engine.started, results) == (
+            TerminalCause.lost_after_publication, 0, 0, []), (settled, results)
+    else:
+        assert [(r.generation, r.cause) for r in results] == [(2, TerminalCause.completed)]
+        assert settled.debit == admission.price_snapshot.debit(1200, 5)
+        assert {c.generation for c in world.journal(request.request_id)} == {2}
+        assert {c.generation for c in world.relayed} == {2}
+        assert world.visible(request.request_id) == "Two people unload boxes."
+    assert world.jobs.outbox_kinds(request.request_id).count(OutboxKind.usage_projection) == 1
+
+
+def test_w5_crash__a_cancel_during_preparation_or_before_the_claim_runs_nothing_more(tmp_path):
+    """Cancellation races: a job cancelled while the engine counts its prompt is not queued
+    (`prepared` is refused typed, the attempt answered, never a dead runner) and its hold is
+    released once; a job cancelled after it was queued is never run (the claim is refused,
+    the engine never asked) and settles once."""
+    prep = Prep(tmp_path)
+    prep.app.control({"tokenize_delay_s": 0.3})
+
+    async def preparing():
+        request = await prep.admit()
+        attempt = asyncio.create_task(prep.runner.run(request.request_id))
+        while not prep.app.tokenized:
+            await asyncio.sleep(0.01)
+        await prep.store.cancel(request.org_id, job(prep, request).admission.job_handle)
+        return request, await outcome(within(attempt, 5.0))
+
+    async def queued_then_cancelled():
+        world = World()
+        request, admission = await queued(world)
+        await world.jobs.cancel(request.org_id, admission.job_handle)
+        await world.scheduler.enqueue(candidate(world, request))
+        engine = ScriptEngine(events=(delta("never"),))
+        results = await WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
+                                   worker_id="worker-a", limits=world.limits).run()
+        return world, request, engine, results
+
+    request, result = run(preparing())
+    assert isinstance(result, PreparationResult) and result.refusal == "already_terminal", \
+        result
+    assert job(prep, request).state is JobState.cancelled and released_once(prep, request)
+    assert dispatches(prep.store, request, OutboxKind.inference_dispatch) == []
+    world, other, engine, results = run(queued_then_cancelled())
+    assert [r.refusal for r in results] == ["already_terminal"] and engine.started == 0
+    assert world.jobs.outbox_kinds(other.request_id).count(OutboxKind.usage_projection) == 1
