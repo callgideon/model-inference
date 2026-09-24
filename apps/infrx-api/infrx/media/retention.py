@@ -134,15 +134,17 @@ class RetentionCollector:
         except (errors.NotClaimable, errors.StaleLease, errors.NotFound) as refused:
             report.retained[_reason(refused)] += 1
             return
+        in_database = tombstone.location == "database"
         try:
-            if tombstone.location == "database":
+            if in_database:             # content-bearing columns: the store scrubs them (D3)
                 await self.lifecycle.scrub(tombstone)
             else:
                 await self.objects.delete(generation_key(tombstone.object_key,
                                                          tombstone.generation))
         except errors.DependencyUnavailable:
             report.delete_failed += 1
-            report.aborted = "object_store_unavailable"
+            report.aborted = "dependency_unavailable" if in_database \
+                else "object_store_unavailable"
             return
         report.deleted.append((str(tombstone.location), tombstone.object_key,
                                tombstone.generation))

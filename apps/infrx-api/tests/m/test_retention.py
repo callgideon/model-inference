@@ -21,7 +21,7 @@ from infrx.contracts import errors
 from infrx.media import gc, retention, uploads
 
 from .test_lifecycle_standin import (CLAIM_TTL_S, GRACE_S, RETENTION_S, key,  # noqa: F401
-                                     make_world, new_id, pg_world, run)
+                                     make_draft_world, make_world, new_id, pg_world, run)
 
 ORACLE = os.environ.get("INFRX_M6_ORACLE", "")
 
@@ -357,3 +357,144 @@ def test_pg_an_attach_racing_the_delete_serializes_on_the_content_row(locking):
         assert not violated and report.retained == {"reference_live": 1}
     else:
         assert violated
+
+
+# --- point 2: every content kind, database content, the persisted result boundary ----------
+RESULT_TTL_S = RETENTION_S * 2           # the configured result lifetime at settlement
+
+
+def upload_key(world) -> str:
+    return f"uploads/{world.org}/upl_{'u' * 22}"
+
+
+def content_of(world, job: str) -> dict:
+    """One succeeded job's content in every form the collector must reach."""
+    return {
+        "source": run(world.write("source", key(1))),
+        "prepared": run(world.write("prepared", key(1, "prepared"), b"frames", job=job)),
+        "payload": run(world.write("payload", f"payloads/{world.org}/{job}.json",
+                                   b'{"messages": "the request"}', job=job)),
+        "request_text": run(world.write("payload", f"jobs/{job}", b"the request text",
+                                        job=job, location="database")),
+        "result": run(world.write("result", f"job_results/{job}", b"the answer", job=job,
+                                  location="database")),
+    }
+
+
+METADATA = {"idempotency_key": "idem-1", "debit_credit": "400",
+            "payload_digest": "sha256:" + "a" * 64, "result_digest": "sha256:" + "b" * 64}
+
+
+def test_every_content_kind_goes_and_the_financial_metadata_stays(make_draft_world):
+    """Uploaded, staged and prepared media, the payload envelope, the request text and the
+    result body in the database: all kept until the job's persisted boundary, all removed
+    at it. The job row - state, settlement, expiry, idempotency key, debit, digests - is
+    exactly what it was (D3): content is scrubbed and marked, never the record."""
+    world = make_draft_world()
+    job = new_id()
+    run(world.port.admit(job, **METADATA))
+    rows = content_of(world, job)
+    run(world.port.attach(job, rows["source"].content_id))
+    rows["upload"] = run(world.write("upload_destination", upload_key(world), b"bytes",
+                                     hold_s=GRACE_S * 2))
+    run(world.port.finish(job, "succeeded", result_ttl_s=RESULT_TTL_S))
+    settled = run(world.port.job(job))
+    world.clock.advance(RESULT_TTL_S - 1)
+    report = run(collector(world).sweep())
+    assert deleted(report) == [upload_key(world)]           # its window closed long ago
+    assert all(run(world.read(row)) for name, row in rows.items() if name != "upload")
+    world.clock.advance(1)
+    report = run(collector(world).sweep())
+    assert sorted(deleted(report)) == sorted(row.identity.object_key for name, row
+                                             in rows.items() if name != "upload")
+    assert world.objects.objects == {}
+    for name in ("request_text", "result"):
+        assert run(world.port.body(rows[name].identity.object_key)) is None, name
+    assert run(world.port.job(job)) == settled
+
+
+def test_the_persisted_result_expiry_is_the_boundary_not_todays_configuration(make_draft_world):
+    """RV-11's cleanup half: the result expires at the `result_expires_at` persisted at
+    settlement. A redeploy with a longer retention extends nothing, and the result is
+    unreadable from that instant - before any collector has run."""
+    world = make_draft_world()
+    job = new_id()
+    run(world.port.admit(job, **METADATA))
+    rows = content_of(world, job)
+    run(world.port.finish(job, "succeeded", result_ttl_s=RESULT_TTL_S))
+    expires = run(world.port.job(job))["result_expires_at"]
+    world = world.restart(retention_s=RESULT_TTL_S * 10, grace_s=GRACE_S * 10)
+    world.clock.advance(RESULT_TTL_S - 1)
+    assert run(world.read(rows["result"])) == "the answer"
+    world.clock.advance(1)
+    assert world.clock.now() == expires
+    assert run(world.read(rows["result"])) is None                 # before any deletion
+    assert run(world.port.body(rows["result"].identity.object_key)) == "the answer"
+    report = run(collector(world).sweep())
+    assert f"job_results/{job}" in deleted(report) and key(1, "prepared") in deleted(report)
+    assert run(world.port.body(rows["result"].identity.object_key)) is None
+
+
+def test_a_failed_scrub_keeps_the_expired_result_unreadable_and_is_retried(make_draft_world):
+    """A database that fails the scrub leaves the body in place, the row tombstoned and
+    the result unreadable; the pass says so, and a later one finishes it."""
+    world = make_draft_world()
+    job = new_id()
+    run(world.port.admit(job, **METADATA))
+    result = run(world.write("result", f"job_results/{job}", b"the answer", job=job,
+                             location="database"))
+    run(world.port.finish(job, "succeeded", result_ttl_s=RESULT_TTL_S))
+    world.clock.advance(RESULT_TTL_S)
+
+    async def down(tombstone):
+        raise errors.DependencyUnavailable("the database did not answer")
+    report = run(collector(world, port=Interpose(world.port, scrub=down)).sweep())
+    assert (report.delete_failed, report.aborted) == (1, "dependency_unavailable")
+    assert run(world.port.row(result.content_id)).state == "tombstoned"
+    assert run(world.read(result)) is None
+    assert run(world.port.body(f"job_results/{job}")) == "the answer"
+    world.clock.advance(CLAIM_TTL_S)
+    assert deleted(run(collector(world).sweep())) == [f"job_results/{job}"]
+    assert run(world.port.body(f"job_results/{job}")) is None
+    assert run(world.port.row(result.content_id)).state == "deleted"
+
+
+def test_late_worker_output_for_an_ended_job_never_becomes_readable(make_draft_world):
+    """A worker that lost its lease writes after the job ended and its content was
+    collected: the prepared artifact is a new row that nothing live references, collected
+    after its own grace; the result, past its persisted expiry, is never readable - the
+    late write cannot resurrect it."""
+    world = make_draft_world()
+    job = new_id()
+    run(world.port.admit(job, **METADATA))
+    result = run(world.write("result", f"job_results/{job}", b"the answer", job=job,
+                             location="database"))
+    run(world.port.finish(job, "succeeded", result_ttl_s=RESULT_TTL_S))
+    world.clock.advance(RESULT_TTL_S)
+    run(collector(world).sweep())
+    late_result = run(world.write("result", f"job_results/{job}", b"a late answer", job=job,
+                                  location="database"))
+    late_frames = run(world.write("prepared", key(1, "prepared"), b"late frames", job=job))
+    assert late_result.generation == result.generation + 1
+    assert run(world.read(late_result)) is None and run(world.read(result)) is None
+    assert run(world.read(late_frames)) == b"late frames"         # unreferenced, not secret
+    world.clock.advance(GRACE_S)
+    report = run(collector(world).sweep())
+    assert sorted(deleted(report)) == sorted([f"job_results/{job}", key(1, "prepared")])
+    assert world.objects.objects == {}
+
+
+def test_an_interrupted_upload_is_kept_for_its_window_then_collected(make_draft_world):
+    """A PUT that stopped half way leaves a partial object at the destination; the open
+    ticket's persisted window protects it, and it goes at the window's end - no process
+    needs to remember it. (There is no multipart path: `S3ObjectStore` sends one PutObject,
+    so no invisible parts exist to abort; see the M6 evidence.)"""
+    world = make_draft_world()
+    partial = run(world.write("upload_destination", upload_key(world), b"half a cl",
+                              hold_s=GRACE_S * 2))
+    world.clock.advance(GRACE_S)
+    world = world.restart()
+    assert deleted(run(collector(world).sweep())) == []
+    assert run(world.read(partial)) == b"half a cl"
+    world.clock.advance(GRACE_S)
+    assert deleted(run(collector(world).sweep())) == [upload_key(world)]
