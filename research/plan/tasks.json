@@ -4330,7 +4330,7 @@
       "track": "E",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4362,7 +4362,11 @@
       ],
       "acceptance": "Interrupted datasets reconcile one logical item; load validity is machine-readable and no paid run starts unbounded.",
       "failure_oracle": "Unexpected replay, omitted attempts, driver lag or missing budget/target invalidates/refuses a run.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/e/E1C-2531dc4.md"
+      ],
+      "closure_note": "2026-09-24: merged on claude/consumer-v1 at cc687216 after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); implemented = reviewed code + focused tests; integration against M5's durable store and the certify runner wiring remain (E3C/E4C)."
     },
     {
       "id": "I8",

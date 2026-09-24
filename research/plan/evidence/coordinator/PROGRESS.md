@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-24 23:04Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 13, updated 2026-09-24 23:04Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-24 23:05Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 15, updated 2026-09-24 23:05Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -50,7 +50,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
-| Backend corrections | 1 / 14 | D10, E1C, E2C, E3C, F2C, G7, G8, I8, M5, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
+| Backend corrections | 2 / 14 | D10, E1C, E2C, E3C, F2C, G7, G8, I8, M5, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
 | App completion | 0 / 12 | none | APP-LOCAL 0/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
@@ -81,13 +81,13 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | Finding | Status | Corrective tasks | As of | Source |
 |---|---|---|---|---|
 | RV-01 | open | F2C (review), G7 (running), A3 (unassigned) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-02 | open | D10 (running), M5 (running), E1C (review), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-02 | open | D10 (running), M5 (running), E1C (integration), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-03 | open | D10 (running), M6 (running), I8 (review), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-05 | open | F2C (review), D10 (running), W5 (running), G7 (running), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-06 | open | C0 (unassigned), C3A (unassigned), A2 (unassigned), A3 (unassigned), U1R (unassigned), U2 (unassigned), U3 (unassigned), U4 (unassigned), E3A (unassigned) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-07 | open | E1C (review), M5 (running), G7 (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-08 | open | E1C (review), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-07 | open | E1C (integration), M5 (running), G7 (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-08 | open | E1C (integration), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-09 | open | D10 (running), I8 (review), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-10 | open | I8 (review), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-11 | open | F2C (review), D10 (running), G7 (running), U4 (unassigned), E3C (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
@@ -108,7 +108,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 2.3 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 2.3 h remaining at generation) |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 2.3 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 2.2 h remaining at generation) |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -130,7 +130,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | E2C | E2C all | running | codex/e2c-verify | dff31efc → — | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-24 21:40Z | Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | F2C-L | F2C d | review | codex/f2c-lifecycle | dff31efc → 76d966cc | none | 2026-09-24 23:00Z | slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-24 23:00Z; basis: a, b, d delivered and green; only review fixes remain |
 | F2C-C | F2C c | complete | codex/f2c-catalog | dff31efc → b8de6171 | none | 2026-09-24 22:36Z | merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:36Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171) |
-| E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | review | codex/e1c-client | dff31efc → f928103a | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 23:00Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 2–7 h remaining (likely 4 h), confidence medium, estimated 2026-09-24 23:00Z; basis: UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; one more review round |
+| E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | integration | codex/e1c-client | dff31efc → 6cb6c929 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 23:05Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 0–2 h remaining (likely 0.5 h), confidence high, estimated 2026-09-24 23:05Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree |
 | I8 | I8 1-7 (code/config half) | review | codex/i8-operate | dff31efc → 103d20a8 | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-24 22:58Z | P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-24 22:58Z; basis: code half done and tested; left: coordinator ops O1-O14 (two ~1 h maintenance windows), I8 follow-ups after WR-I8-1..5 land (~1-2 h), inputs P-25/D10 outside the lane |
 | D10 | D10 all (SQL writer) | running | codex/d10-durable | dff31efc → — | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-24 21:58Z | Wire 0010 media_uploads and jobs.result_expires_at (S3 F9); role-bound login or SET LOCAL (F6); P-02 USD inventory with G8. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | M5 | M5 all | running | codex/m5-uploads | dff31efc → — | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-24 21:58Z | Durable upload lifecycle across gateway replacement; wire media_uploads (S3 F9). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
@@ -143,8 +143,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: I8, F2C-L, E1C.
-- Integration queue: empty.
+- Review queue: I8, F2C-L.
+- Integration queue: E1C.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
 - runner dir tests/integration/backend: E2C. One owner per runner directory; E2C → E3C → E4C.
@@ -170,8 +170,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E2C (running) and G7 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/
 - warning: overlapping writers: E2C (running) and G8 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/ops/
 - warning: overlapping writers: E2C (running) and M6 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
-- warning: overlapping writers: E1C (review) and E3C (running) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
-- warning: overlapping writers: E1C (review) and E4C (queued) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
+- warning: overlapping writers: E1C (integration) and E3C (running) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
+- warning: overlapping writers: E1C (integration) and E4C (queued) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
 - warning: overlapping writers: G7 (running) and G8 (running) both own apps/infrx-api/tests/g/ / apps/infrx-api/tests/g/ops/
 
 ## Pending inputs
@@ -192,7 +192,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## Rejected updates
 
 - `S3-20260924T2150Z.json`: stale: at 2026-09-24T21:50:00Z is not newer than lane S3 state 2026-09-24T21:58:00Z
-- `E1C-20260924T230439Z.json`: impossible transition: E1C cannot be complete before start dependencies F2C
 
 ## All manifest tasks
 
@@ -326,7 +325,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `W5` | Enforce execution readiness and bounded worker recovery | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
 | `G8` | Prove headless consumer CREDIT operations and safe activation | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
-| `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | planned | review | active: started before F2C (see lane deviation) |
+| `E1C` | Repair upload client and deliver valid resumable dataset/load measurement | Backend corrections | implemented | integration | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `I8` | Operate continuously with bounded DB pools, durable artifacts and real rollback | Backend corrections | planned | review | active: started before F2C (see lane deviation) |
 | `E3C` | Integrate corrective backend with real services and process faults | Backend corrections | planned | running | active: started before E2C, F2C (see lane deviation) |
 | `E4C` | Certify repaired CREDIT backend on final Marlin deployment | Backend corrections | planned | queued | blocked: waiting on start dependencies: E3C |
@@ -334,6 +333,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-24 23:05Z UTC, E1C: review → integration; head 6cb6c929; estimate likely 4 → 0.5 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree)
 - 2026-09-24 23:04Z UTC, tracker: rejected update: impossible transition: E1C cannot be complete before start dependencies F2C
 - 2026-09-24 23:00Z UTC, E1C: review → review; head f928103a
 - 2026-09-24 23:00Z UTC, F2C-L: running → review; head 76d966cc; estimate likely 8 → 1 h (a, b, d delivered and green; only review fixes remain)

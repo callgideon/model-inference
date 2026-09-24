@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 13,
-  "updated": "2026-09-24T23:04:39Z",
+  "revision": 15,
+  "updated": "2026-09-24T23:05:05Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -482,24 +482,24 @@
       "branch": "codex/e1c-client",
       "worktree": ".claude/worktrees/codex-e1c-client",
       "base": "dff31efc",
-      "head": "f928103a",
+      "head": "6cb6c929",
       "isolation": {
         "ports": "postgres 55449 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e1c-",
         "db": null
       },
-      "activity": "review",
+      "activity": "integration",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T23:00:00Z",
+      "updated": "2026-09-24T23:05:05Z",
       "blocker": "UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence)",
-      "next_action": "RV-07/08; profile schema + validate-only; resume recipe; re-check F2C fixtures when they land.",
+      "next_action": "merged into claude/consumer-v1 at cc687216 (manifest: implemented); lane complete once F2C's manifest status flips; UPLOAD-RESTART over M5's store + certify runner wiring are E3C/E4C integration items; hosted smoke (--unprofiled smoke) after run3",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 4,
-        "pessimistic_h": 7,
-        "confidence": "medium",
-        "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; one more review round",
-        "at": "2026-09-24T23:00Z"
+        "optimistic_h": 0,
+        "likely_h": 0.5,
+        "pessimistic_h": 2,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree",
+        "at": "2026-09-24T23:05:05Z"
       },
       "evidence": [
         "research/plan/evidence/e/E1C-2531dc4.md"
@@ -893,15 +893,16 @@
       "lane": "F2C-L",
       "task": "F2C",
       "head": "76d966cc"
-    },
-    {
-      "since": "2026-09-24T22:15:00Z",
-      "lane": "E1C",
-      "task": "E1C",
-      "head": "f928103a"
     }
   ],
-  "integration_queue": [],
+  "integration_queue": [
+    {
+      "since": "2026-09-24T23:05:05Z",
+      "lane": "E1C",
+      "task": "E1C",
+      "head": "6cb6c929"
+    }
+  ],
   "resource_locks": [
     {
       "id": "gpu-box",
@@ -1775,6 +1776,12 @@
       "by": "tracker",
       "what": "rejected update: impossible transition: E1C cannot be complete before start dependencies F2C",
       "source": "updates/E1C-20260924T230439Z.json"
+    },
+    {
+      "at": "2026-09-24T23:05:05Z",
+      "by": "E1C",
+      "what": "review → integration; head 6cb6c929; estimate likely 4 → 0.5 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree)",
+      "source": "updates/E1C-20260924T230505Z.json"
     }
   ],
   "history": {
@@ -1854,14 +1861,13 @@
       "status": "applied",
       "at": "2026-09-24T23:00:00Z"
     },
-    "E1C-20260924T230439Z.json": {
-      "status": "rejected",
-      "at": "2026-09-24T23:04:39Z",
-      "reason": "impossible transition: E1C cannot be complete before start dependencies F2C"
+    "E1C-20260924T230505Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T23:05:05Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T23:04:39Z",
+    "computed_at": "2026-09-24T23:05:05Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
