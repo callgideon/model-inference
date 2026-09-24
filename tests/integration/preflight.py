@@ -65,7 +65,11 @@ def check_image(name: str, spec: dict, docker_ok: bool) -> dict:
 
 
 def port_free(port: int) -> bool:
+    """Bindable as a server binds it: SO_REUSEADDR, so a closed connection lingering in
+    TIME_WAIT is not "busy" (it made one run BLOCKED spuriously); a listener or a live
+    connection's source port still is."""
     with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
         except OSError:
@@ -106,6 +110,29 @@ def holder(port: int) -> str:
     done = subprocess.run(["docker", "ps", "--filter", f"publish={port}", "--format",
                            "{{.Names}}"], capture_output=True, text=True, timeout=30)
     return done.stdout.strip()
+
+
+def ephemeral_overlap(ports: list[int], proc: Path = Path("/proc/sys/net/ipv4")) -> dict:
+    """Namespace ports the kernel may hand out as a connection's source port. A collision
+    only ever turns a run into a spurious BLOCKED/FAIL (the bind fails), never a false
+    PASS, so this is reported as a risk and does not change the verdict."""
+    row = {"check": "ephemeral-overlap"}
+    try:
+        low, high = map(int, (proc / "ip_local_port_range").read_text().split())
+        reserved_text = (proc / "ip_local_reserved_ports").read_text().strip()
+    except (OSError, ValueError):
+        return {**row, "status": "ok", "detail": "no Linux port-range sysctl on this host"}
+    reserved = set()
+    for part in filter(None, reserved_text.split(",")):
+        first, _, last = part.partition("-")
+        reserved.update(range(int(first), int(last or first) + 1))
+    exposed = sorted(p for p in set(ports) if low <= p <= high and p not in reserved)
+    if not exposed:
+        return {**row, "status": "ok"}
+    return {**row, "status": "risk", "ports": exposed, "ephemeral_range": [low, high],
+            "detail": "a namespace port can be taken as an outgoing source port and the "
+                      "container bind then fails; reserve them host-wide, e.g. sysctl -w "
+                      "net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999"}
 
 
 def containers() -> list[str] | None:
@@ -157,19 +184,23 @@ def preflight(profile: str, certify_profile: Path | None = None,
     docker_ok = any(c["check"] == "tool:docker" and c["status"] == "ok" for c in checks)
     checks += [check_image(name, env["images"][name], docker_ok) for name in wanted["images"]]
     names = containers() if docker_ok else None
-    checks += [check_namespace(name, env["namespaces"][name], names)
-               for name in wanted["namespaces"]]
+    spaces = [check_namespace(name, env["namespaces"][name], names)
+              for name in wanted["namespaces"]]
+    checks += spaces
+    if spaces:
+        checks.append(ephemeral_overlap([p for row in spaces for p in row["ports"]]))
     if certify_profile is not None:
         checks.append(validate_certify_profile(certify_profile, env["certify_profile_required"]))
     if any(c["status"] == "invalid" for c in checks):
         verdict = INVALID
-    elif all(c["status"] == "ok" for c in checks):
+    elif all(c["status"] in ("ok", "risk") for c in checks):
         verdict = PASS
     else:
         verdict = BLOCKED
     return {"schema": "infrx.e2c.preflight/1", "profile": profile, "verdict": verdict,
             "exit": EXIT[verdict], "checks": checks,
-            "not_ok": [c["check"] for c in checks if c["status"] != "ok"]}
+            "not_ok": [c["check"] for c in checks if c["status"] not in ("ok", "risk")],
+            "risks": [c["check"] for c in checks if c["status"] == "risk"]}
 
 
 def main(argv: list[str] | None = None) -> int:

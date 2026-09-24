@@ -23,6 +23,7 @@ Measured on the development host on 2026-09-24 (not the pilot box). `match` in
 | systemd | `systemd-analyze` present | 255 | `tests/i` verifies the shipped units |
 | git | ≥ 2.28 | 2.43.0 (`init.defaultBranch` unset → `master`) | tests pin their own branch names; see below |
 | Docker | server reachable | 29.6.2, Compose v5.3.1, overlayfs, cgroup v2 | D/Q task-local containers, E2 compose stack |
+| `net.ipv4.ip_local_reserved_ports` | covers every namespace port (reported as a **risk**, not pinned) | empty; ephemeral range 32768–60999 | task-local ports 554xx–569xx sit inside the ephemeral range (see below) |
 
 Service images, every one pinned by digest (the tag is a comment). Whether a host has them
 is state, not a pin: preflight reports an absent one with its `docker pull` line, and a clean
@@ -96,7 +97,19 @@ Ports, container names and database names come from **one registry**,
 | `e2` | harness `e2` | 55500, 55523, 55532, 55579, 55580, 55590 | `infrx-e2-*`, `infrx_e2`, `test/e2/`, `infrx_e2:` | `run.py` layers, certify.py local |
 | `e2c-selftest` | E2C lane block | 55510–55519 | none (`infrx-e2c-selftest-*` reserved) | `test_preflight.py` binds 55510 |
 
-Setup refuses (BLOCKED) when a namespace port is bound or a container with its name exists.
+Setup refuses (BLOCKED) when a namespace port is bound (a listener or a live connection;
+a closed connection lingering in `TIME_WAIT` is not busy, the check binds with `SO_REUSEADDR`
+as a server does) or a container with its name exists.
+
+**Ephemeral-port overlap (measured).** Every task-local port (tasklocal's 554xx, the E blocks
+555xx–569xx) is inside this host's ephemeral range, so any outgoing connection may take one
+as its source port. On 2026-09-24 a `make api-test` run lost its D container that way
+(`failed to bind host port 127.0.0.1:55432/tcp: address already in use`, 54 D cases failed),
+and an E2C test found its own 55510 held as the source port of a connection to 55448.
+Preflight reports the exposed ports as `ephemeral-overlap: risk`; it never changes the verdict,
+because a collision can only produce a spurious BLOCKED/FAIL, not a pass. The host fix is
+`sysctl -w net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999` (persisted under
+`/etc/sysctl.d/`), a coordinator/host-owner action.
 Teardown belongs to the runner that created the resource: `pgharness`/`vkstore` remove their
 containers at interpreter exit (only ones carrying this checkout's label), `run.py` removes the
 `infrx-e2-*` stack in its `finally`. After a crash, list what is left with

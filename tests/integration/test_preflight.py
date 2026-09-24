@@ -95,13 +95,46 @@ def test_a_missing_tool_or_image_blocks_and_a_complete_host_passes():
 
 def test_a_busy_namespace_port_is_blocked():
     """A port another run holds is BLOCKED before anything binds it (not a later FAIL)."""
+    block = ENV["namespaces"]["e2c-selftest"]["ports"]
+    port = next((p for p in block if pf.port_free(p)), None)   # a source port may sit on one
+    assert port is not None, f"every port of {block} is taken"
     with socket.socket() as held:
-        held.bind(("127.0.0.1", 55510))
+        held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        held.bind(("127.0.0.1", port))
         held.listen()
         result = pf.preflight("self-test")
     assert result["verdict"] == "BLOCKED"
     assert [c.get("busy_ports") for c in result["checks"]
-            if c["check"] == "namespace:e2c-selftest"] == [[55510]]
+            if c["check"] == "namespace:e2c-selftest"] == [[port]]
+
+
+def test_a_port_lingering_in_time_wait_is_not_busy():
+    """Measured: a run killed with its containers left 55448/55474 in TIME_WAIT and the next
+    preflight called them busy (BLOCKED), though a server binds them fine."""
+    block = ENV["namespaces"]["e2c-selftest"]["ports"]
+    port = next(p for p in reversed(block) if pf.port_free(p))
+    with socket.socket() as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", port))
+        server.listen()
+        with socket.create_connection(("127.0.0.1", port)):
+            accepted, _ = server.accept()
+            accepted.close()                        # the server side closes first: TIME_WAIT
+    assert pf.port_free(port)
+
+
+def test_an_ephemeral_port_overlap_is_a_risk_not_a_block(tmp_path):
+    """Measured on this host (E2C evidence): a D container failed to bind 55432 because an
+    outgoing connection held it as its source port. The check names every exposed port,
+    honours ip_local_reserved_ports, and never flips the verdict (it cannot cause a pass)."""
+    (tmp_path / "ip_local_port_range").write_text("32768\t60999\n")
+    (tmp_path / "ip_local_reserved_ports").write_text("55400-55449,55474\n")
+    row = pf.ephemeral_overlap([1234, 55448, 55474, 55500, 56932], tmp_path)
+    assert (row["status"], row["ports"]) == ("risk", [55500, 56932])
+    (tmp_path / "ip_local_reserved_ports").write_text("55400-57000\n")
+    assert pf.ephemeral_overlap([55448, 56932], tmp_path)["status"] == "ok"
+    result = pf.preflight("self-test")
+    assert "not_ok" in result and "ephemeral-overlap" not in result["not_ok"]
 
 
 @pytest.mark.parametrize("profile,problem", [
