@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T09:59:55Z",
+  "updated": "2026-09-24T10:06:20Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "main 2d4a88b carries the preparation loop; SECOND INSTALL (RELEASE 4226315) in progress → smoke (operator key: user decision) → E1B L2-L7 → certify --box",
+      "phase": "SECOND RELEASE 4226315 DEPLOYED 10:04Z (both worker loops live; main 2d4a88b); box half waits on the operator-key bootstrap (user decision) → W12 smoke + end-to-end job proof → E1B L2-L7 → certify --box → release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
