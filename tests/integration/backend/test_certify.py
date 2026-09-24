@@ -524,6 +524,14 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     assert ledger(usage=[*usage, Usage("job-i3", "0.50000000")],
                   after=Balance(Decimal("9997.5"), Decimal("1"))) == [
         "Σ charged 2.00000000 != ledger fall 2.5"]                # a cancel carries no usage
+    # the allowance is the cancelled replays' holds only: a quarantined item (refused 400 at
+    # the rechecks, with its Inference-Id) whose hold leaked is not the interruption's
+    quarantined = _row("q1", "rejected", status=400, job="job-q1")
+    assert certify.reconcile_problems(
+        [*first_run, *second_run, quarantined], usage,
+        (*released, Hold("job-i3", state="held"), Hold("job-q1", state="held")), before,
+        Balance(Decimal("9998"), Decimal("2"))) == [
+        "reserved 0 -> 2 (1.00000000 held for the interruption's cancels)"]
     monkeypatch.setattr(certify, "interrupted_run", lambda argv, raw, **_: (
         raw.write_text("".join(json.dumps(r) + "\n" for r in first_run)),
         {"exit": 130, "signalled": True})[1])
