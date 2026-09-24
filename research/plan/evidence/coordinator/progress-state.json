@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T18:58:00Z",
+  "updated": "2026-09-24T19:30:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification RERUN at 4226315 in its 4 h soak (out 20260924T172244Z; envelope: 0.5/s supported, 429s at 1.0/s+, over-cap 400s by design); run1 evidence filed; dataset-resume = cancelled-replay classification (CERTIFY-TREE item 5; ruling R106 at merge); served-build/parity protocol fixes in the CERTIFY-TREE lane; TOKCOST lane on the 16.8 s video tokenize; then step-6 drills, E1B L2-L7, release decision",
+      "phase": "box certification RUN2 done at 4226315 (envelope 0.5/s; e2e p95 91 s/clip-min vs 45 provisional; soak 65 min clean but cut by the runner's 3600 s bound; overload: typed 429s lost mid-upload -> INTAKE-DRAIN lane; parity/served-build/resume = protocol, fixed in the merged CERTIFY-TREE); step-6 drills RUNNING on the box; then TOKCOST split, E1B L2-L7, polish+TOKCOST+INTAKE-DRAIN merges -> gate-3 -> main -> third install -> certification run3 -> release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
@@ -110,8 +110,16 @@
       "since": "2026-09-24T18:58:00Z"
     },
     "LONGCLIP": {
-      "phase": "lane running (user decision 82 s -> 1200 s): serving-version candidate for the encoder budget, apply --set value set, long-clip corpus, box measurement protocol, P-23 (sub-2 fps sampling over 120 s)",
-      "since": "2026-09-24T18:55:00Z"
+      "phase": "SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip",
+      "since": "2026-09-24T19:10:00Z"
+    },
+    "INTAKE-DRAIN": {
+      "phase": "lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row",
+      "since": "2026-09-24T19:20:00Z"
+    },
+    "FLEET": {
+      "phase": "TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost",
+      "since": "2026-09-24T19:25:00Z"
     }
   },
   "gates": {
@@ -304,6 +312,10 @@
     {
       "at": "2026-09-24T18:58:00Z",
       "what": "CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -> 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round"
+    },
+    {
+      "at": "2026-09-24T19:30:00Z",
+      "what": "Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -> INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -> notes; step-6 drills started"
     }
   ],
   "cadence_windows": [

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T18:58:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T19:30:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-24T18:58:00Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification RERUN at 4226315 in its 4 h soak (out 20260924T172244Z; envelope: 0.5/s supported, 429s at 1.0/s+, over-cap 400s by design); run1 evidence filed; dataset-resume = cancelled-replay classification (CERTIFY-TREE item 5; ruling R106 at merge); served-build/parity protocol fixes in the CERTIFY-TREE lane; TOKCOST lane on the 16.8 s video tokenize; then step-6 drills, E1B L2-L7, release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — box certification RUN2 done at 4226315 (envelope 0.5/s; e2e p95 91 s/clip-min vs 45 provisional; soak 65 min clean but cut by the runner's 3600 s bound; overload: typed 429s lost mid-upload -> INTAKE-DRAIN lane; parity/served-build/resume = protocol, fixed in the merged CERTIFY-TREE); step-6 drills RUNNING on the box; then TOKCOST split, E1B L2-L7, polish+TOKCOST+INTAKE-DRAIN merges -> gate-3 -> main -> third install -> certification run3 -> release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
@@ -90,7 +90,9 @@ Generated 2026-09-24T18:58:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review PREP-WORKER: MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z
 - review TOKCOST: fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -> single verifier -> step 12 -> gate-3 since 2026-09-24T18:40:00Z
 - review CERTIFY-TREE: MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z
-- review LONGCLIP: lane running (user decision 82 s -> 1200 s): serving-version candidate for the encoder budget, apply --set value set, long-clip corpus, box measurement protocol, P-23 (sub-2 fps sampling over 120 s) since 2026-09-24T18:55:00Z
+- review LONGCLIP: SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip since 2026-09-24T19:10:00Z
+- review INTAKE-DRAIN: lane running (G): bounded drain before a mid-body refusal so the typed 429 reaches uploading clients; real-socket test; LARGE_BODY_LIMIT sizing row since 2026-09-24T19:20:00Z
+- review FLEET: TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z
 
 ## Checkpoints
 
@@ -124,6 +126,7 @@ Generated 2026-09-24T18:58:00Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-24T09:59:55Z: focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b
 - 2026-09-24T18:03:00Z: Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -> CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z
 - 2026-09-24T18:58:00Z: CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -> 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round
+- 2026-09-24T19:30:00Z: Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -> INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -> notes; step-6 drills started
 
 ## Authorizations
 
