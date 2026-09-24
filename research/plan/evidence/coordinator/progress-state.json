@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T08:44:25Z",
+  "updated": "2026-09-24T09:59:55Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "pilot release 27af05a deployed (cannot complete jobs); the preparation loop merged 28f3153 → focused gate → main → SECOND INSTALL → smoke (operator key: user decision) → E1B L2-L7 → certify --box",
+      "phase": "main 2d4a88b carries the preparation loop; SECOND INSTALL (RELEASE 4226315) in progress → smoke (operator key: user decision) → E1B L2-L7 → certify --box",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
@@ -280,6 +280,10 @@
     {
       "at": "2026-09-24T05:33:05Z",
       "what": "checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67"
+    },
+    {
+      "at": "2026-09-24T09:59:55Z",
+      "what": "focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b"
     }
   ],
   "cadence_windows": [

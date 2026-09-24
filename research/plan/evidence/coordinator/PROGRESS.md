@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T08:44:25Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T09:59:55Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-24T08:44:25Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — pilot release 27af05a deployed (cannot complete jobs); the preparation loop merged 28f3153 → focused gate → main → SECOND INSTALL → smoke (operator key: user decision) → E1B L2-L7 → certify --box since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — main 2d4a88b carries the preparation loop; SECOND INSTALL (RELEASE 4226315) in progress → smoke (operator key: user decision) → E1B L2-L7 → certify --box since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
@@ -118,6 +118,7 @@ Generated 2026-09-24T08:44:25Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-23T10:43:20Z: Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc
 - 2026-09-23T14:10:54Z: SESSION LIMIT (Opus 429 until 14:00 UTC): all lanes/workflows died; coordinator saved everything (E3B2 WIP c587ddc; all lane branches pushed; partial review JSONs saved); main stays at 01a7dfc; handoff HANDOFF-20260923T1330Z.md
 - 2026-09-24T05:33:05Z: checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67
+- 2026-09-24T09:59:55Z: focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b
 
 ## Authorizations
 

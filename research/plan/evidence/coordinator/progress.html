@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T08:44:25Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T09:59:55Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>28</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -96,7 +96,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>E1B</code> — codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
-<li><code>E4B</code> — codex-e4b / codex/e4b-certify — pilot release 27af05a deployed (cannot complete jobs); the preparation loop merged 28f3153 → focused gate → main → SECOND INSTALL → smoke (operator key: user decision) → E1B L2-L7 → certify --box since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
+<li><code>E4B</code> — codex-e4b / codex/e4b-certify — main 2d4a88b carries the preparation loop; SECOND INSTALL (RELEASE 4226315) in progress → smoke (operator key: user decision) → E1B L2-L7 → certify --box since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
 <li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
@@ -146,6 +146,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-23T10:43:20Z</span> — Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc</li>
 <li><span class="meta">2026-09-23T14:10:54Z</span> — SESSION LIMIT (Opus 429 until 14:00 UTC): all lanes/workflows died; coordinator saved everything (E3B2 WIP c587ddc; all lane branches pushed; partial review JSONs saved); main stays at 01a7dfc; handoff HANDOFF-20260923T1330Z.md</li>
 <li><span class="meta">2026-09-24T05:33:05Z</span> — checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67</li>
+<li><span class="meta">2026-09-24T09:59:55Z</span> — focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
