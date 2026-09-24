@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T00:11:02Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T00:20:08Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>27</b><span>done</span></div>
 <div class="tile prog"><b>3</b><span>in progress</span></div>
@@ -116,11 +116,12 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>M1-L2</code> — verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json) since 2026-09-23T22:09:07Z</li>
 <li>review <code>E4B</code> — verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json) since 2026-09-23T22:24:46Z</li>
 <li>review <code>W4-phaseB</code> — MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z</li>
-<li>review <code>E3B-phase3</code> — fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) → fix round since 2026-09-23T22:44:29Z</li>
+<li>review <code>E3B-phase3</code> — fix round HANDED BACK b9529d1 (J2 fixed: worker always its own process after the M merge; M3-U1 retired, video_upload cells run; J1 footprint; H-B1; 14 mutants killed; gate at a7a2388 exit 3 PENDING only I2B-R4) → single verifier wf_959f82dd-e03 on namespace e2 since 2026-09-24T00:20:08Z</li>
 <li>review <code>merge-plan</code> — MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z</li>
 <li>review <code>M-pilot-media</code> — fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) → fix round since 2026-09-24T00:11:02Z</li>
-<li>review <code>CUTOVER</code> — review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters) since 2026-09-23T23:21:08Z</li>
+<li>review <code>CUTOVER</code> — HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w) since 2026-09-24T00:20:08Z</li>
 <li>review <code>ROLLOUT-PREP</code> — DONE f0a1a82: hosted 0001/0002 only → release applies 0003–0018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey → worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing → worker lane since 2026-09-23T23:43:44Z</li>
+<li>review <code>WORKER</code> — lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>

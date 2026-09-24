@@ -1,47 +1,47 @@
 {
-  "updated": "2026-09-24T00:11:02Z",
+  "updated": "2026-09-24T00:20:08Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "E1B": {
       "lane": "codex-e1b",
-      "phase": "engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2\u2013L7 after the rollout (phase 2)",
+      "phase": "engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2)",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "verifier PASS at 4bfdbf0 \u2192 CLEARED for merge unit step 1 (with phase 3); evidence fill + V-N2/3/4 test pins pending the battery (~00:30Z)",
+      "phase": "verifier PASS at 4bfdbf0 → CLEARED for merge unit step 1 (with phase 3); evidence fill + V-N2/3/4 test pins pending the battery (~00:30Z)",
       "since": "2026-09-23T12:56:22Z",
-      "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
+      "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half FINAL 4d9360c (verifier pass + V1\u2013V6 folded; 138 mutants) \u2192 merge at step 6; box half after the rollout",
+      "phase": "software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },
     "CUTOVER": {
       "lane": "codex-cutover / codex/cutover-mount",
-      "phase": "HANDED BACK a1e88dc (items 1\u20138; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running \u2192 merge at step 3",
+      "phase": "HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3",
       "since": "2026-09-23T19:29:02Z",
       "note": "d3 ports, Q 55492; merges together with E3B phase 3"
     },
     "E3B-phase3": {
       "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
-      "phase": "fix round with M pilot-media merged (1fa825b); agent killed 22:45Z \u2192 resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 \u2192 handback \u2192 single verifier",
+      "phase": "fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e3b2 / 56732"
     },
     "M1-L2": {
       "lane": "codex-objstore / codex/m1l2-object-store",
-      "phase": "FINAL ba26ca4 (verifier pass + V1\u2013V4 folded; 46 mutants; cutover f7d9b03 re-merged) \u2192 merge at step 4 of the unit",
+      "phase": "FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit",
       "since": "2026-09-23T19:57:28Z",
       "note": "compose S3 in namespace e2 if free; else stub"
     },
     "M-pilot-media": {
       "lane": "codex-mpilot / codex/m-pilot-media",
-      "phase": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) \u2192 ONE fix round running \u2192 single verifier \u2192 merge at step 5 (phase 3 re-merges the fixed head)",
+      "phase": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head)",
       "since": "2026-09-23T20:11:55Z",
       "note": "d4 ports, Q 55494; merges on top of the cutover head"
     },
@@ -82,15 +82,15 @@
       "since": "2026-09-23T18:25:08Z"
     },
     "F-fakes-followup": {
-      "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
+      "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
       "since": "2026-09-23T16:27:29Z"
     },
     "checkpoint-2-interim": {
-      "phase": "whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console \u00d74, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log)",
+      "phase": "whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log)",
       "since": "2026-09-23T18:41:52Z"
     },
     "D5": {
-      "phase": "verifier pass at 4bfdbf0 (wf_0a7ebbf4-7ec; JSON evidence/d/D5-verify-4bfdbf0.json); V-N1 concurrent reconcile reuse untyped \u2192 follow-up",
+      "phase": "verifier pass at 4bfdbf0 (wf_0a7ebbf4-7ec; JSON evidence/d/D5-verify-4bfdbf0.json); V-N1 concurrent reconcile reuse untyped → follow-up",
       "since": "2026-09-24T00:04:02Z"
     },
     "M1-L2": {
@@ -102,28 +102,32 @@
       "since": "2026-09-23T22:24:46Z"
     },
     "W4-phaseB": {
-      "phase": "MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted \u2192 B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md",
+      "phase": "MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md",
       "since": "2026-09-23T22:02:17Z"
     },
     "E3B-phase3": {
-      "phase": "fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) \u2192 fix round",
-      "since": "2026-09-23T22:44:29Z"
+      "phase": "fix round HANDED BACK b9529d1 (J2 fixed: worker always its own process after the M merge; M3-U1 retired, video_upload cells run; J1 footprint; H-B1; 14 mutants killed; gate at a7a2388 exit 3 PENDING only I2B-R4) → single verifier wf_959f82dd-e03 on namespace e2",
+      "since": "2026-09-24T00:20:08Z"
     },
     "merge-plan": {
-      "phase": "MERGED 58e6fdb: scripts 1\u20139 + replay; gating unit D5\u2192phase 3\u2192cutover\u2192M1-L2 on all four verdicts; then M pilot \u2192 E4B \u2192 checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) \u2192 ff main",
+      "phase": "MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main",
       "since": "2026-09-23T22:22:23Z"
     },
     "M-pilot-media": {
-      "phase": "fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) \u2192 fix round",
+      "phase": "fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) → fix round",
       "since": "2026-09-24T00:11:02Z"
     },
     "CUTOVER": {
-      "phase": "review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters)",
-      "since": "2026-09-23T23:21:08Z"
+      "phase": "HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w)",
+      "since": "2026-09-24T00:20:08Z"
     },
     "ROLLOUT-PREP": {
-      "phase": "DONE f0a1a82: hosted 0001/0002 only \u2192 release applies 0003\u20130018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey \u2192 worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing \u2192 worker lane",
+      "phase": "DONE f0a1a82: hosted 0001/0002 only → release applies 0003–0018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey → worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing → worker lane",
       "since": "2026-09-23T23:43:44Z"
+    },
+    "WORKER": {
+      "phase": "lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback",
+      "since": "2026-09-24T00:20:08Z"
     }
   },
   "gates": {
@@ -149,19 +153,19 @@
     },
     {
       "id": "P-06",
-      "what": "Marlin artifact/capabilities \u2014 RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests \u26a0\ufe0f need HF_TOKEN + pinned image",
+      "what": "Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image",
       "blocks": "publishing externally until the three fail-stops (D2/D3/D12) close",
       "owner": "M2/W/G2 (fixes); W3 (digests)"
     },
     {
       "id": "P-07",
-      "what": "SOP rubric, ground truth, dataset rights \u2014 RECORDED (10 missing inputs; no accuracy baseline exists)",
+      "what": "SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists)",
       "blocks": "SOP accuracy claims only",
       "owner": "user/product"
     },
     {
       "id": "P-18",
-      "what": "Workload + criteria \u2014 PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent",
+      "what": "Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent",
       "blocks": "E4B certification; provisional criteria allowed",
       "owner": "workload owner"
     },
@@ -174,24 +178,24 @@
     {
       "id": "P-19 (new)",
       "what": "Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md",
-      "blocks": "publishing any cost-per-video-hour figure (S2M \u00a75.2, E1B protocol)",
+      "blocks": "publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol)",
       "owner": "pricing owner / user"
     },
     {
       "id": "P-04-sweep",
       "what": "W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside",
-      "blocks": "ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 \u26a0\ufe0f / cutover keeps 32 explicitly); W4's first input",
+      "blocks": "ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 ⚠️ / cutover keeps 32 explicitly); W4's first input",
       "owner": "W4 (tuning) / W3 (record)"
     },
     {
       "id": "P-20",
-      "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) \u2014 until then the pilot admits what the engine cannot serve",
+      "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) — until then the pilot admits what the engine cannot serve",
       "blocks": "E4B certification; G2's validation ceiling",
       "owner": "W4 decides; G2 applies"
     },
     {
       "id": "P-21",
-      "what": "Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) \u2014 a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes",
+      "what": "Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) — a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes",
       "blocks": "nothing (lanes retry); reduces HarnessBusy/bind noise",
       "owner": "user (root approval); coordinator applies"
     }
@@ -247,7 +251,7 @@
     },
     {
       "at": "2026-09-22T18:05:08Z",
-      "what": "F2P additive phase merged (9faaa57); rulings R64\u2013R78; D1R dispatched"
+      "what": "F2P additive phase merged (9faaa57); rulings R64–R78; D1R dispatched"
     },
     {
       "at": "2026-09-22T18:06:47Z",
@@ -271,7 +275,7 @@
     },
     {
       "at": "2026-09-22T19:16:15Z",
-      "what": "M3 merged (e2188f3): owned uploads, collector, consented reuse; M\u2192W seam tests wired to the resolver"
+      "what": "M3 merged (e2188f3): owned uploads, collector, consented reuse; M→W seam tests wired to the resolver"
     },
     {
       "at": "2026-09-22T19:36:54Z",
@@ -279,11 +283,11 @@
     },
     {
       "at": "2026-09-22T20:55:35Z",
-      "what": "D1R merged: migrations 0006\u20130009 (CREDIT, registry, read surface, operator seams); D2 dispatched"
+      "what": "D1R merged: migrations 0006–0009 (CREDIT, registry, read surface, operator seams); D2 dispatched"
     },
     {
       "at": "2026-09-22T21:18:49Z",
-      "what": "E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001\u20130009"
+      "what": "E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009"
     },
     {
       "at": "2026-09-22T22:14:13Z",
@@ -295,7 +299,7 @@
     },
     {
       "at": "2026-09-23T10:43:20Z",
-      "what": "Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 \u2192 main fast-forwarded f9ba5d2 \u2192 01a7dfc"
+      "what": "Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc"
     },
     {
       "at": "2026-09-23T14:10:54Z",
@@ -308,12 +312,12 @@
       "start": "2026-09-21T06:32:00Z",
       "end": "2026-09-21T22:14:11Z",
       "tasks": 11,
-      "lanes": "4\u20136 concurrent"
+      "lanes": "4–6 concurrent"
     }
   ],
   "authorizations": [
     "merge to main at reviewed green checkpoints (user, 2026-09-22)",
-    "FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations \u2014 logged with cost and rollback before each irreversible step",
+    "FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step",
     "2026-09-23: finish in-flight lanes only; no new task dispatch (user instruction, session limits)"
   ],
   "not_authorized": [
@@ -323,7 +327,7 @@
     "S2M": {
       "merged": "S2M @ 3aa3535 merged --no-ff",
       "at": "2026-09-22T16:30:52Z",
-      "note": "profile v1 frozen; digests measured on box; registry oid \u26a0\ufe0f HF_TOKEN (W3)"
+      "note": "profile v1 frozen; digests measured on box; registry oid ⚠️ HF_TOKEN (W3)"
     },
     "G1R": {
       "merged": "G1R @ 3552ce3 merged --no-ff (b609cc9) + follow-up 67e0320 (requests 3/4/5, C2)",
@@ -333,17 +337,17 @@
     "M4": {
       "merged": "M4 @ f689753 merged --no-ff (4185f4d)",
       "at": "2026-09-23T03:03:16Z",
-      "note": "review pass at 2e323be (wf_564484b4-b63); 13 nonblocking folded in (2176681); M list 242 on the lane, tests/m 343 on the merged tree; measured on the dev host only \u2014 pilot-box harness run (E1B/P-04) remains the gate"
+      "note": "review pass at 2e323be (wf_564484b4-b63); 13 nonblocking folded in (2176681); M list 242 on the lane, tests/m 343 on the merged tree; measured on the dev host only — pilot-box harness run (E1B/P-04) remains the gate"
     },
     "I3B": {
       "merged": "I3B @ 9250eec merged --no-ff (8e01fe0)",
       "at": "2026-09-23T03:06:53Z",
-      "note": "review fix_required at 48d3bb2 \u2192 fix round 5ec6f40 confirmed pass \u2192 residuals folded (10bfd90); mutants_i3b 78 = 77 + control; merged-tree layer-2 run detached; hosted backup rehearsal (restore.md A0\u2013A9) still a coordinator operation; five PENDING drills wait on G2/D3/M3/W3/I2B"
+      "note": "review fix_required at 48d3bb2 → fix round 5ec6f40 confirmed pass → residuals folded (10bfd90); mutants_i3b 78 = 77 + control; merged-tree layer-2 run detached; hosted backup rehearsal (restore.md A0–A9) still a coordinator operation; five PENDING drills wait on G2/D3/M3/W3/I2B"
     },
     "Q3": {
       "merged": "Q3 @ 6fa13bf merged --no-ff (25de7ab) + Makefile follow-up 88a48d7",
       "at": "2026-09-23T03:57:39Z",
-      "note": "review + confirmation pass; 14 residuals folded; tests/q 169 on the merged tree; Q lists detached (.claude-logs/q3-merged-88a48d7.log) \u2014 read the tail next session"
+      "note": "review + confirmation pass; 14 residuals folded; tests/q 169 on the merged tree; Q lists detached (.claude-logs/q3-merged-88a48d7.log) — read the tail next session"
     },
     "D2": {
       "merged": "D2 @ 2e386f0 merged --no-ff (24b4589) + follow-up (harness 0010-0014, api-mutants += tests/d/test_code_mutants.py)",
@@ -358,12 +362,12 @@
     "D3": {
       "merged": "D3 @ 92687f8 merged --no-ff (f237237) + follow-up d57e04e (harness 0016, TASK_PORTS d3)",
       "at": "2026-09-23T04:38:47Z",
-      "note": "review fix_required \u2192 fix round confirmed pass \u2192 five residuals folded (87 mutants); merged-tree tests/d both images running; CREDIT jobs not claimable until WorkV2 (MY-3); complete() past the fence is D5's"
+      "note": "review fix_required → fix round confirmed pass → five residuals folded (87 mutants); merged-tree tests/d both images running; CREDIT jobs not claimable until WorkV2 (MY-3); complete() past the fence is D5's"
     },
     "W3": {
       "merged": "W3 @ c81ef36 merged --no-ff (65e2c99); follow-up: tests/i real-script case passes the pilot gate; api-mutants += tests/w/test_w3_mutants.py",
       "at": "2026-09-23T04:45:36Z",
-      "note": "review + confirmation pass; box inventory/capability measured (image equals the pin, KV 2,644,426 tokens); concurrency sweep HELD (P-04-sweep); registry oids \u26a0\ufe0f HF_TOKEN; software half only \u2014 box rollout not done"
+      "note": "review + confirmation pass; box inventory/capability measured (image equals the pin, KV 2,644,426 tokens); concurrency sweep HELD (P-04-sweep); registry oids ⚠️ HF_TOKEN; software half only — box rollout not done"
     },
     "I2B": {
       "merged": "I2B @ e82d77f merged --no-ff (08d3240) in the same step as W3 (FC-1)",
@@ -373,7 +377,7 @@
     "F2P": {
       "merged": "F2P additive 9faaa57 + wire-in 6a49af5 merged --no-ff (1baf0b8); IR-C1 applied by the coordinator",
       "at": "2026-09-23T05:19:56Z",
-      "note": "wire-in reviewed (e307084), confirmed (ced6751), round 2 folded; 395 Python mutants / 415 items; console lists 199/40/64/104; IR-DTO (console DTO swap) stays open for C0/C1/U1R; Q Valkey runners to pass env=('INFRX_Q2_VALKEY_PORT',) \u2014 follow-up"
+      "note": "wire-in reviewed (e307084), confirmed (ced6751), round 2 folded; 395 Python mutants / 415 items; console lists 199/40/64/104; IR-DTO (console DTO swap) stays open for C0/C1/U1R; Q Valkey runners to pass env=('INFRX_Q2_VALKEY_PORT',) — follow-up"
     },
     "F-cancel-cause": {
       "merged": "F cancel-cause @ 0fe8fdd merged --no-ff (6803d2f) + PENDING line 0024da2",
@@ -383,7 +387,7 @@
     "I-schema": {
       "merged": "I schema fix @ 4c7de56 merged --no-ff",
       "at": "2026-09-23T08:22:54Z",
-      "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to \u00a75; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
+      "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to §5; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
     },
     "W-new": {
       "merged": "W-new @ 483d763 merged --no-ff (a15fa4b)",
@@ -393,22 +397,22 @@
     "G4U": {
       "merged": "G4U @ d1827d5 merged --no-ff (7d21fa7) + Makefile list",
       "at": "2026-09-23T10:59:19Z",
-      "note": "review fix_required f3c8055 \u2192 round 2 962b2b1 \u2192 confirmation PASS \u2192 fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
+      "note": "review fix_required f3c8055 → round 2 962b2b1 → confirmation PASS → fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
     },
     "D4": {
       "merged": "D4 @ 90efcb0 merged --no-ff (93ba108) + harness 0017 + Makefile list (e2a52b2)",
       "at": "2026-09-23T12:56:22Z",
-      "note": "review fix_required a4598b0 \u2192 round 2 7d3ef59 (journal pass) \u2192 round 3 90efcb0 verified pass; 53 migration + 17 code mutants; sweeps 788/802 both images; pgstate rows at the E3B2 merge; D4 requests 2 (G2), 3 (W3), 4 (I3B), 9 (W), 10 (F) recorded"
+      "note": "review fix_required a4598b0 → round 2 7d3ef59 (journal pass) → round 3 90efcb0 verified pass; 53 migration + 17 code mutants; sweeps 788/802 both images; pgstate rows at the E3B2 merge; D4 requests 2 (G2), 3 (W3), 4 (I3B), 9 (W), 10 (F) recorded"
     },
     "W4": {
       "merged": "W4 phase A @ b1eee7c merged --no-ff + Makefile list (f36c17c)",
       "at": "2026-09-23T14:44:06Z",
-      "note": "review fix_required db12a5a \u2192 rounds 2\u20134 \u2192 verifier pass (evidence/w/W4-verify-b1eee7c.json); 107 mutants; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window); merged-tree tests/w + W4 list + bench running"
+      "note": "review fix_required db12a5a → rounds 2–4 → verifier pass (evidence/w/W4-verify-b1eee7c.json); 107 mutants; phase B = coordinator box re-measurement (E0/E1 candidates, maintenance window); merged-tree tests/w + W4 list + bench running"
     },
     "G2": {
       "merged": "2391d4d",
       "when": "2026-09-23T15:38:21Z",
-      "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters | confirmation pass at 76ba3bb; cutover HELD"
+      "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters | confirmation pass at 76ba3bb; cutover HELD"
     },
     "G3": {
       "merged": "b560b51",
@@ -433,7 +437,7 @@
     "BOX-phase1": {
       "merged": "0117d48",
       "when": "2026-09-23T22:02:17Z",
-      "note": "W4 phase B decision B at 82 s (P-20 decided); E1B L0/L1/L8; window 19:47\u201321:54Z closed"
+      "note": "W4 phase B decision B at 82 s (P-20 decided); E1B L0/L1/L8; window 19:47–21:54Z closed"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
