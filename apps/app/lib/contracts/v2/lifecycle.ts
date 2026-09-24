@@ -51,6 +51,7 @@ export const LIFECYCLE_REFUSALS = [
   "size_mismatch",
   "digest_mismatch",
   "mime_not_accepted",
+  "media_refused",
   "invalid_manifest",
   "expectation_mismatch",
   "not_ready",
@@ -75,6 +76,7 @@ export const LIFECYCLE_REFUSAL_CODES: Readonly<Record<LifecycleRefusal, string>>
   size_mismatch: "invalid_request",
   digest_mismatch: "unsupported_media",
   mime_not_accepted: "unsupported_media",
+  media_refused: "unsupported_media",
   invalid_manifest: "invalid_request",
   expectation_mismatch: "invalid_request",
   not_ready: "not_claimable",
@@ -84,6 +86,15 @@ export const LIFECYCLE_REFUSAL_CODES: Readonly<Record<LifecycleRefusal, string>>
   claim_held: "not_claimable",
   claim_lost: "stale_lease",
 });
+
+/** The only reasons a ticket records as aborted: public, about the caller's own bytes. */
+export const UPLOAD_ABORT_REASONS = [
+  "too_large",
+  "size_mismatch",
+  "digest_mismatch",
+  "mime_not_accepted",
+  "media_refused",
+] as const;
 
 export const DESTINATION_SCHEME = "infrx-upload:";
 const V2 = 2;
@@ -121,7 +132,7 @@ export type UploadTicket = {
   expires_at: string;
   received?: UploadReceipt;
   finalized?: FinalizedSource;
-  refusal?: LifecycleRefusal;
+  refusal?: (typeof UPLOAD_ABORT_REASONS)[number];
 };
 export type ReadinessView = {
   schema_version: 2;
@@ -214,7 +225,7 @@ export function decodeUploadTicket(value: unknown): UploadTicket {
   const expires = instant(obj, "expires_at");
   if (!before(created, expires)) fail("expires_at must follow created_at");
   if ((state === "aborted") !== ("refusal" in obj)) fail("aborted exactly when a refusal is recorded");
-  if ("refusal" in obj) member(obj, "refusal", LIFECYCLE_REFUSALS);
+  if ("refusal" in obj) member(obj, "refusal", UPLOAD_ABORT_REASONS);
   let received: Obj | undefined;
   if ("received" in obj) {
     received = exact(obj.received, "received", ["bytes", "digest", "received_at"]);

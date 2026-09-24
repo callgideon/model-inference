@@ -2188,6 +2188,17 @@
       "cases": [
         "every read outcome is the committed cross-language table"
       ]
+    },
+    {
+      "id": "V2-LC-11",
+      "entry": "v2",
+      "note": "F2C slice-a finding F8: an aborted ticket decodes with an internal refusal",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (\"refusal\" in obj) member(obj, \"refusal\", UPLOAD_ABORT_REASONS);",
+      "replace": "  if (\"refusal\" in obj) member(obj, \"refusal\", LIFECYCLE_REFUSALS);",
+      "cases": [
+        "a missing required or an unexpected field throws, deterministically"
+      ]
     }
   ]
 }
