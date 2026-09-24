@@ -8,6 +8,7 @@ for "a stale candidate never acquires a second lease".
 """
 from __future__ import annotations
 
+import os
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,7 +22,7 @@ from infrx.scheduling import MemoryScheduler, ValkeyScheduler
 from infrx.scheduling.reconcile import Reconciler
 
 from . import vkharness
-from .outboxfake import FakeDispatchOutbox
+from .outboxfake import FakeDispatchOutbox, OutboxLost
 
 ORG_A, KEY_A, ORG_B, KEY_B = b.ORG_A, b.KEY_A, b.ORG_B, b.KEY_B
 ADAPTERS = ("memory", "valkey")
@@ -50,13 +51,32 @@ def make_index(adapter: str, now, **kw):
     return ValkeyScheduler(vkharness.client(), now, namespace=vkharness.namespace(), **kw)
 
 
+#: D3 request 5 / D5 item 9e: `INFRX_Q3_STORE=postgres` runs every case on the REAL store -
+#: the PostgreSQL `PgJobStore` and D2's dispatch outbox functions on the D harness's own
+#: task-local database (`tests/d/pgstore`), with the store-side reads the cases make of the
+#: fake (`pgtesting.PgDispatchOutbox`, `pgtesting.JobsView`).
+STORE = os.environ.get("INFRX_Q3_STORE", "fake")
+
+
 def world(adapter: str, **index_kw) -> World:
     # Async jobs: their 600 s queue budget outlives the redeliveries a case waits for
     # (interactive jobs expire after 10 s queued); room for more than 8 in preparation.
-    h = jobstore_factory(limits=DEFAULTS.replace(max_preparing_jobs=256))
+    limits = DEFAULTS.replace(max_preparing_jobs=256)
+    if STORE == "postgres":
+        from infrx.state import pgtesting
+        from ..d import pgstore
+        # The real store runs each step slower than the fake, so the concurrent drills keep
+        # more jobs active at once: room for them (a rig setting, not store semantics).
+        h = pgstore.factory(limits=limits.replace(max_active_jobs=256, max_active_jobs_per_org=256,
+                                                  max_active_jobs_per_key=256))
+        store, rows = h.extra["store"], h.extra["conn"]
+        store.jobs = pgtesting.JobsView(rows)         # `w.jobs.jobs[id]`, read from the rows
+        outbox = pgtesting.PgDispatchOutbox(store, rows, lost=OutboxLost)
+    else:
+        h = jobstore_factory(limits=limits)
+        outbox = FakeDispatchOutbox(h.port)
     for org in (ORG_A, ORG_B):
         h.extra["grant"](org, "1000")
-    outbox = FakeDispatchOutbox(h.port)
     index = make_index(adapter, h.clock.now, **index_kw)
     return World(h, outbox, index, Reconciler(outbox, index, h.clock.now))
 
