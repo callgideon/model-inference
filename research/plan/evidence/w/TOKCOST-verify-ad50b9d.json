@@ -1,0 +1,154 @@
+{
+ "head": "ad50b9d",
+ "base": "2d4a88b",
+ "verdict": "fix_required",
+ "blocking": [
+  {
+   "id": "B1",
+   "title": "R105 fail-closed of the memo is not pinned: a memo that keeps an answer the checks refused survives the lane's whole suite",
+   "evidence": "Code is correct today: preparation.py:241-243 puts only after `_ask` returns, and `engine_prompt_tokens` raises DependencyUnavailable on every failed check (:160, :165, :167, :172) before `return count` (:175). But no case pins it. Verifier mutant `memo_holds_an_unchecked_count` (memoizes the engine's raw count even when a check refuses it, no extra engine call) SURVIVED all 45 service-free cases of tests/w/test_prep_worker.py (`45 passed, 4 deselected`; the 4 `_pg__` cases never send a refused count and then the same body again). The one refused-video case (`a_tokenizer_that_cannot_count_prepares_nothing[unexpanded-True]`) never re-sends the same body. With the proposed case below added, the same mutant dies at `test_prep_worker.py:992: AssertionError: (PreparationResult(..., cause='prepared', prompt_tokens=1000, ...), 1000)`: a second job was PREPARED AT 1000, a count the engine gave in an answer R105's video-token check refused (1 placeholder), without asking the engine. That is an R105 breach the suite does not catch. A single-edit variant that asks the engine again on refusal is killed today only by collateral (`:502 ... 2 == 1`, a call count), not by the property. Logs: mut/run6-q2.log (ad13de7f).",
+   "fix": "Add the case (it passes on ad50b9d: `46 passed`) and a mutant naming it in `prep_worker_mutants.py`:\ndef test_prep_worker__a_refused_video_count_is_never_memoized(tmp_path):\n    prep = Prep(tmp_path)\n    prep.app.control({\"tokenize_fault\": \"unexpanded\", \"tokenize_count\": 1000})\n    async def case():\n        _, refused, _ = await prep.prepare(video=True)\n        prep.app.control({\"tokenize_fault\": \"none\", \"tokenize_count\": None})\n        _, again, stored = await prep.prepare(video=True)\n        return refused, again, stored\n    refused, again, stored = run(case())\n    assert refused.refusal == \"dependency_unavailable\", refused\n    assert (again.cause, stored) == (\"prepared\", COUNT), (again, stored)\n    assert len(prep.app.tokenized) == 2, prep.app.tokenized\nMutant shape (one anchor): replace the `_ask` line at preparation.py:241 with a try/except DependencyUnavailable that puts the raw `/tokenize` count before re-raising. Or move the checks out of `engine_prompt_tokens` into `_ask` after the put. Either way the new case must be the one that kills it, and the kill must not rest on a call count."
+  }
+ ],
+ "nonblocking": [
+  {
+   "id": "N1",
+   "title": "The 1024 bound's value and the product runner's bound are not pinned",
+   "evidence": "The bound is enforced on insert (preparation.py:143, popitem(last=False)) and TTL is checked on read (:134, `>=`, stale entry deleted, engine asked again). The lane's 5 mutants kill the logic, and verifier mutants `memo_ttl_from_last_use` (a hit renews the life) and `memo_bound_off_by_one` (`>=`) are killed (stale_memo case; `:407 assert None == 1`). But `memo_bound_not_1024` (MEMO_ENTRIES = 10**9) and `runner_memo_unbounded` (the runner builds CountMemo(..., entries=10**9)) both SURVIVED the whole service-free suite (`45 passed`). The test's `CountMemo(ttl_s=60.0).entries == MEMO_ENTRIES` is a tautology. Logs: mut/run4.log (d353fb17).",
+   "fix": "In the bounded case (or the stale one, which already checks `runner.memo.ttl_s`) assert `Prep(tmp_path).runner.memo.entries == MEMO_ENTRIES == 1024`, and add a mutant for it."
+  },
+  {
+   "id": "N2",
+   "title": "Legacy regime: the worker lifetime covers an engine auto-restart (verified). Close Limit 2's TO BE VERIFIED",
+   "evidence": "infrx-worker.service has `PartOf=marlin2b-vllm.service` and `After=... marlin2b-vllm.service` and no `BindsTo`. The engine unit has `Restart=always`, `RestartSec=5`, no `RestartMode=`. serve.sh:90 is `exec docker run --rm` in the foreground, so a dead container ends the unit. Run on systemd 255 (255.4-1ubuntu8.17, the Ubuntu 24.04.4 line the pilot runs) with stand-in user units shaped like the worker's: `systemctl restart engine` restarted the worker (pid 838056->838077). An engine SIGKILL followed by Restart=always auto-restart restarted the worker (838077->838517; journal: 'Scheduled restart job, restart counter is at 1' then 'Stopping tokverify-worker.service'). An external SIGTERM exit did the same (->839281). `systemctl stop engine` left the worker inactive. So no engine process can start (a serving revision change) under a worker that holds another engine process's answers. Residual: for the ~RestartSec (5 s) between an engine crash and its scheduled restart, the old worker still answers repeated video bodies from its memo while the engine is down. Those counts are the crashed instance's own, the same revision a job prepared just before the crash would carry, so nothing new is exposed. Log: systemd-partof.log (310f5c61). Units removed and daemon reloaded.",
+   "fix": "Evidence update only: replace Limit 2's ⚠️ TO BE VERIFIED with this measurement, or a box re-run of it, and keep `tests/i` pinning PartOf (test_packaging.py:166, i/mutants.py:447)."
+  },
+  {
+   "id": "N3",
+   "title": "E3B journey relaxation is acceptable; no wrong count can pass",
+   "evidence": "test_journey.py:204 (`stored == usage == ENGINE_PROMPT_TOKENS`) is unchanged and still runs for every cell (prepared_by_the_worker, called before the relaxed assertion at :278-280). The relaxation accepts, only for non-text cells, the worker's own line for THIS job id and count 1337 `(memo of engine /tokenize, `. The first video cell of a fresh box must still move the engine's counter, because the memo is empty. What it gives up: the journey no longer proves the engine was consulted per video job. That was never discriminating anyway, since the fake answers a constant 1337 for every body. Key correctness is carried by the unit cases and mutants. Run: 13 passed, 3 skipped. The box worker log had 11 `(engine /tokenize` lines and 5 `(memo of engine /tokenize` lines, as the lane reported. e3bm79 is killed at test_journey.py:204 (text-sync).",
+   "fix": "None required."
+  },
+  {
+   "id": "N4",
+   "title": "Ruling number: next free is R107, not R106",
+   "evidence": "R106 (a cancelled job's replay is terminal for that key) is numbered on claude/backend-impl (08 §10 row R106; commit 318904e). The evidence's 'next free is R106' is stale against origin/main 2d4a88b.",
+   "fix": "Number the memo ruling R107, using the wording in ruling_text."
+  },
+  {
+   "id": "N5",
+   "title": "Outside the lane: W3/W4 perf-script stubs match any argv containing 'verify' (9 false failures in a checkout or TMPDIR whose path contains it)",
+   "evidence": "tests/w whole at /tmp/claude-1000/tokcost-verify (TMPDIR .../tokcost-verify-tmp) gave 9 failed: test_serving.py perf_pilot concurrency_sweep x3, test_w4.py sweep_labels_the_engine_state, test_w4_mutants x5 (pristine broken_runner). The `bench` stub `case \"$*\" in *verify*)` (test_serving.py:204,229,249,268; test_w4.py:644) matches the checkout or TMPDIR path in the argv. The same 9 plus 2 other selected cases, re-run from a clone and TMPDIR without 'verify' in their paths at ad50b9d: `11 passed`. None of these files is touched by TOKCOST.",
+   "fix": "W: match the subcommand, not any substring of the argv (for example `case \"$1\" in verify)`)."
+  }
+ ],
+ "answers": {
+  "Q1_key": "memo_key (preparation.py:114) hashes [prepared.model_revision, work.serving_version_id (None in legacy), sorted whole digest@profile of every prepared ref, the exact tokenize_body]. tokenize_body is the same function engine_prompt_tokens asks with (:152), and :237 builds the key from it. Only sampling parameters reach the chat body (engine.py:84-87), and mm_uuids/cache_salt are not in /tokenize, so the body holds every prompt-shaping input. Organization: prepared_request sets tenant_salt = request.org_id (engine.py:275), messages_for reads it (:563) and builds the video URL with it (:616), _inside_tenant_root requires segments[:3] == [org_id, profile, digest16] (:348), and M's path_for is <root>/<org>/<profile>/<digest16>/source.<ext> (media/prepare.py:162). Building the key calls M's local_uri, so a missing cache file is NotFound before any lookup. upstream_body's refusals also run before the lookup. Collision attempts, each blocked: another org (OWN_BODY[organization]; verifier mutant memo_key_without_the_org killed at test_prep_worker.py:349); another prompt (OWN_BODY[prompt]); another clip with the same length (OWN_BODY[clip]); same digest16/path with a different whole digest (KEY case: digest sha256:0…, same ask, distinct key; lane mutant ..._without_the_media_digests killed); another legacy revision (OWN_BODY[revision]); another CREDIT pin (KEY; serving_pin and CreditWork mutants killed). The pin is a validated UuidStr, so it is always a str (contracts/records.py:298), both from PG (jobstore.py load_work_credit) and from the fake. No collision found.",
+  "Q2_fail_closed": "Code yes (preparation.py:241-243 after checks at :160-:175); test NO -> B1.",
+  "Q3_staleness_bounds": "TTL is checked on read, and a stale entry is deleted and asked again (:134). The bound is enforced on insert (:143). Logic mutants are killed; the value and the product runner's bound are unpinned -> N1.",
+  "Q4_legacy": "Not blocking: a Restart=always auto-restart restarts the PartOf worker (measured, N2).",
+  "Q5_text": "Text never memoized (:237 `if refs else None`). Lane mutant prep_memo_holds_text killed: `test_prep_worker.py:317: AssertionError: [{'add_generation_prompt': True, 'messages': [{'content': 'Describe this clip.'...` (one /tokenize for two text jobs). It also fails the service drain case (:706) over the whole suite.",
+  "Q6_journey": "N3: not weakened on the count; e3bm79 killed at test_journey.py:204.",
+  "Q7_stub": "Real: pristine composition case passes; verifier mutant `serving_version_id=None` in __main__.py:99 dies at `test_worker_main.py:200: AssertionError: assert ('req', 7, None) == ('req', 7, 'sv')`. jobstore.py:147 adds `serving_version_id: str | None = None` to PreparedWork; CreditWork.load_work (model_construct) fills it from the validated WorkV2 pins; the legacy PgJobStore.load_work leaves it None (memo_key uses getattr default).",
+  "Q9_ruling": "Close, but not binding as worded. It leaves open what makes two bodies equal, the process-lifetime condition in legacy, TTL measured from the engine's answer, the bound, the log line, and cross-tenant exclusion. Wording in ruling_text.",
+  "Q10_anchors": "D3's list (all 8 mutants anchored in state/jobstore.py): INFRX_MUTANTS=all tests/d/test_code_mutants_d3.py -> `9 passed in 17.32s` (8 mutants killed plus the list case); nothing moved. The lane's own list (78) and I2B-R4's (22) are also green (they anchor preparation.py and __main__.py)."
+ },
+ "runs": [
+  {
+   "what": "make api-env in the clone",
+   "env": "uv sync --frozen --all-extras",
+   "result_counts": "ok (.venv built)",
+   "log": "-"
+  },
+  {
+   "what": "pytest -q -rfEs tests/w (whole)",
+   "env": "INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-tokverify-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1 (MinIO infrx-tokverify-minio, quay.io/minio/minio@sha256:14cea493..., E2 literals); AWS_* unset; clone venv built by `make api-env` (uv sync --frozen --all-extras) - no fallback interpreter used; TMPDIR=/tmp/claude-1000/tokcost-verify-tmp",
+   "result_counts": "9 failed, 255 passed, 2 skipped in 624.86s (all 9 = N5 path artifact, none in TOKCOST files)",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-tests-w.log (f967e7f9)"
+  },
+  {
+   "what": "the 9 failures re-run: tests/w/test_serving.py tests/w/test_w4.py tests/w/test_w4_mutants.py -k 'concurrency_sweep or sweep_labels_the_engine_state or test_mutant_is_killed' from a second scratch clone at ad50b9d with TMPDIR without 'verify'",
+   "env": "service-free",
+   "result_counts": "11 passed, 20 deselected in 291.57s (=> tests/w equivalent to 264 passed, 2 skipped)",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-perf-rerun-nonverify-path.log (92ffe825)"
+  },
+  {
+   "what": "INFRX_MUTANTS=all pytest tests/w/test_prep_worker_mutants.py (lane list, all)",
+   "env": "INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-tokverify-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1 (MinIO infrx-tokverify-minio, quay.io/minio/minio@sha256:14cea493..., E2 literals); AWS_* unset; clone venv built by `make api-env` (uv sync --frozen --all-extras) - no fallback interpreter used",
+   "result_counts": "78 passed in 618.42s",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-prep-mutants.log (32828794)"
+  },
+  {
+   "what": "python -m tests.w.prep_worker_mutants <the 15 TOKCOST mutants>",
+   "env": "service-free",
+   "result_counts": "15/15 killed",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-memo-15.log (bb33f594)"
+  },
+  {
+   "what": "INFRX_MUTANTS=all pytest tests/w/test_worker_main_mutants.py (I2B-R4 list)",
+   "env": "INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-tokverify-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1 (MinIO infrx-tokverify-minio, quay.io/minio/minio@sha256:14cea493..., E2 literals); AWS_* unset; clone venv built by `make api-env` (uv sync --frozen --all-extras) - no fallback interpreter used",
+   "result_counts": "22 passed in 113.12s",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-main-mutants.log (0ddef595)"
+  },
+  {
+   "what": "INFRX_MUTANTS=all pytest tests/d/test_code_mutants_d3.py (anchor spot-check, jobstore.py)",
+   "env": "INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-tokverify-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1 (MinIO infrx-tokverify-minio, quay.io/minio/minio@sha256:14cea493..., E2 literals); AWS_* unset; clone venv built by `make api-env` (uv sync --frozen --all-extras) - no fallback interpreter used",
+   "result_counts": "9 passed in 17.32s",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/R-d3-mutants.log (cf163cbb)"
+  },
+  {
+   "what": "INFRX_E2_NAMESPACE=e4b tests/integration/run.py --layer 2 --keep",
+   "env": "e4b namespace (56800-56899)",
+   "result_counts": "exit 0 (all stages passed)",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/E-layer2.log (3d9399a9)"
+  },
+  {
+   "what": "e4b pytest tests/integration/backend/test_journey.py",
+   "env": "e4b",
+   "result_counts": "13 passed, 3 skipped in 17.31s (3 = layer-3 PostgREST); box worker log 11 engine + 5 memo lines",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/E-journey.log (e4eea3b3)"
+  },
+  {
+   "what": "e4b tests/integration/mutants.py --layer 2 --only e3bm79",
+   "env": "e4b",
+   "result_counts": "killed: test_backend_journey[text-sync], test_journey.py:204: AssertionError",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/E-e3bm79.log (3cec36e4)"
+  },
+  {
+   "what": "verifier mutants over all 45 service-free test_prep_worker.py cases (runner's _copy/_pytest)",
+   "env": "service-free",
+   "result_counts": "baseline 45 passed; memo_holds_an_unchecked_count SURVIVED; memo_holds_a_refused_count_single_edit killed (collateral :502); memo_ttl_from_last_use killed; memo_bound_off_by_one killed; memo_key_without_the_org killed (:349); memo_holds_text killed (:317); memo_bound_not_1024 SURVIVED; runner_memo_unbounded SURVIVED",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/mut/run4.log (d353fb17), mut/run6-q2.log (ad13de7f), mut/run2.log (473ec50a); script mut/verify_mutants.py"
+  },
+  {
+   "what": "same, with the proposed B1 case appended",
+   "env": "service-free",
+   "result_counts": "baseline 46 passed; memo_holds_an_unchecked_count killed (:992, stored 1000); single-edit variant killed (:502 and :992)",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/mut/run6-q2.log (ad13de7f)"
+  },
+  {
+   "what": "I2B-R4 stub: composition case pristine and with CreditWork dropping the pin",
+   "env": "service-free",
+   "result_counts": "pristine 1 passed; mutant 1 failed at test_worker_main.py:200",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/mut/run5-stub.log (65eaf6a8)"
+  },
+  {
+   "what": "systemd PartOf/Restart=always propagation (stand-in user units)",
+   "env": "local systemd 255.4-1ubuntu8.17, user manager, units under /run/user/1000/systemd/user, removed after",
+   "result_counts": "worker restarted on engine restart, on crash auto-restart (x2), and stopped on engine stop",
+   "log": "/tmp/claude-1000/tokcost-verify-logs/systemd-partof.log (310f5c61)"
+  }
+ ],
+ "ruling_text": "R107 | A preparation count may be the memo of the engine's checked answer to the same body (TOKCOST proposal) | A preparation worker may store, instead of asking the engine again, a count the serving engine gave for a `/tokenize` body equal to the one this attempt would send. Equal means the same canonical JSON (keys sorted, compact separators) of `{model, messages, add_generation_prompt, mm_processor_kwargs}` as `engine_prompt_tokens` builds it. The messages carry the organization's own `file://` path, so a memo never answers across organizations. The memo may answer only when every prepared media ref has the same whole digest and profile version and the job has the same serving revision: its `model_revision` and, in the CREDIT regime, its pinned `serving_version_id`. Only a body with media is memoized; a text body is always asked. Only an answer that passed every R105 check is memoized; a refused, failed or timed-out answer memoizes nothing. The memo lives only in the worker process that asked, and that process must end whenever the engine process that answered ends (the worker unit is `PartOf=` the engine unit, which also carries a `Restart=always` restart; a memo shared between processes or kept durably needs its own ruling). An entry expires `PROCESSING_CACHE_TTL_S` after the engine answered, and a use never extends it. The memo is bounded in entries (least recently used first). A memoized count reaches the store only through `prepared(...)` (R104), under the same bounds. Each use is logged `prepared <job>: <n> prompt tokens (memo of engine /tokenize, <ms> ms)`, never as the engine's latency.",
+ "containers_removed": {
+  "removed": true,
+  "names": [
+   "infrx-tokverify-minio (docker rm -f) and its anonymous volume 44a533ca… (docker volume rm)",
+   "infrx-d6-postgres, infrx-tokverify-valkey (created and removed by the D harness; none left)",
+   "infrx-e4b-clickhouse, infrx-e4b-postgres, infrx-e4b-s3, infrx-e4b-valkey (harness.down())",
+   "systemd user units tokverify-engine/-worker (stopped, files removed, daemon-reload)",
+   "second scratch clone /tmp/claude-1000/tokcost-chk and the tmp dirs removed"
+  ]
+ },
+ "contact": "No pilot box, AWS or hosted Supabase contact. Nothing pushed, rebased, reset, amended or stashed. No lane worktree touched."
+}
