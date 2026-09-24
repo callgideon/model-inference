@@ -47,6 +47,8 @@ class FakeMediaStore:
         # never name, replace or shadow another org's object.
         self.objects: dict[tuple[str, str], MediaRef] = {}
         self.by_job: dict[str, tuple[MediaRef, ...]] = {}
+        # MPILOT: what each job was first bound to (`prepare` replaces `by_job`'s entry).
+        self.bound: dict[str, tuple[MediaRef, ...]] = {}
         # r1 R55: where `attach` reads a job's organization. A real adapter joins the job
         # row; the fake is given the same lookup, and refuses a job it does not know rather
         # than trusting a caller to name the tenant.
@@ -114,9 +116,16 @@ class FakeMediaStore:
             if indexed is None or indexed.digest != ref.digest:
                 raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
             owned.append(indexed)
+        owned = tuple(owned)
+        if len({ref.handle for ref in owned}) != len(owned):
+            raise errors.InvalidRequest("an attach names each media ref once")
+        # MPILOT (review PAR-1/PAR-2): write-once. The same refs again are a no-op; any other
+        # binding - other refs, a superset, a subset, a reorder, none - is a conflict.
+        if self.bound.setdefault(job_id, owned) != owned:
+            raise errors.Conflict(f"job {job_id} is already attached to other media")
         # Validated in full first: a refused attach must leave `prepare` with nothing,
         # rather than a half-written set the next phase would transcode.
-        self.by_job[job_id] = tuple(owned)
+        self.by_job[job_id] = owned
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durable, immutable staging before acceptance, of refs **this store produced**.

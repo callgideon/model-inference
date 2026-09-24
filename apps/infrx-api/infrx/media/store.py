@@ -324,9 +324,17 @@ class MediaStaging:
             if indexed is None or indexed.digest != ref.digest:
                 raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
             owned.append(indexed)
+        owned = tuple(owned)
+        if len({ref.handle for ref in owned}) != len(owned):
+            raise errors.InvalidRequest("an attach names each media ref once")
+        # Write-once (MPILOT review PAR-1): the same refs again are a no-op - the relay's
+        # same-key retry re-attaches them - and any other binding is a conflict.
+        bound = self.by_job.get(job_id)
+        if bound is not None and bound != owned:
+            raise errors.Conflict(f"job {job_id} is already attached to other media")
         if self.attachments is not None:            # durable first (MPILOT gap 2)
-            await self.attachments.put(job_id, tuple(owned))
-        self.by_job[job_id] = tuple(owned)
+            await self.attachments.put(job_id, owned)
+        self.by_job[job_id] = owned
 
     async def attached(self, job_id: str) -> tuple[MediaRef, ...] | None:
         """The refs bound to the job, from this process or the durable record; None if

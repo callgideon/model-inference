@@ -9,6 +9,7 @@ and a lying `Content-Length` is a header that disagrees with the stream beside i
 from __future__ import annotations
 
 import httpx
+from infrx.contracts import errors
 
 # Addresses, not names, so a case says what it means. 93.184.216.34 is example.com's
 # documentation address; the rest are the ranges MEDIA-SEC names.
@@ -143,7 +144,8 @@ class Durable:
         self.rows: dict = {}
 
     async def put(self, job_id, refs):
-        self.rows[job_id] = tuple(refs)
+        if self.rows.setdefault(job_id, tuple(refs)) != tuple(refs):
+            raise errors.Conflict(f"job {job_id} is already attached to other media")
 
     async def get(self, job_id):
         return self.rows.get(job_id)

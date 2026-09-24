@@ -32,6 +32,8 @@ A = "media/attachments.py"
 E2E = "test_mpilot__an_upload_named_in_a_job_over_the_mounted_gateway"
 SECOND = "test_mpilot__a_second_process_resolves_the_attach_and_the_local_file"
 SECOND_PG = "test_mpilot_pg__a_second_process_resolves_the_attach_and_the_local_file"
+WRITE_ONCE = "test_mpilot__the_exported_write_once_case_runs_on_the_store_alone"
+WRITE_ONCE_PG = "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -75,7 +77,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # === item 2: a second process resolves the attach and the local file ===============
     _m("attach_not_persisted",
        "the attach is written to the durable record another process reads (gap 2)",
-       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       S, "            await self.attachments.put(job_id, owned)", "            pass",
        SECOND),
     _m("attach_not_read_back",
        "a process that did not attach reads the job's refs from the durable record",
@@ -108,6 +110,13 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            if entry is None or entry.probed is None \\\n",
        "            if entry is None \\\n",
        SECOND, dies_by=("AttributeError",)),
+    # --- review PAR-1/PAR-2: write-once in process (the store alone, no durable record) ---
+    _m("in_process_rebind_accepted",
+       "a job bound in this process is never re-bound: other refs, superset, subset, reorder",
+       S, "        if bound is not None and bound != owned:", "        if False:", WRITE_ONCE),
+    _m("in_process_duplicate_accepted", "one attach naming a ref twice is invalid_request",
+       S, "        if len({ref.handle for ref in owned}) != len(owned):", "        if False:",
+       WRITE_ONCE),
     _m("attach_record_not_composed",
        "create_app from settings gives M's store the durable attach record on D's pool",
        "gateway/pilot.py", "        job_org=relay.job_org, attachments=attachments)",
@@ -119,7 +128,7 @@ MUTANTS: tuple[Mutant, ...] = (
 PG_MUTANTS: tuple[Mutant, ...] = (
     _m("attach_not_persisted_pg",
        "the attach is written to D2's staged tables another process reads",
-       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       S, "            await self.attachments.put(job_id, owned)", "            pass",
        SECOND_PG, "test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql"),
     _m("another_jobs_refs_returned",
        "a job reads back its own refs, never another job's",
@@ -129,17 +138,31 @@ PG_MUTANTS: tuple[Mutant, ...] = (
        A, "order by m.position\")", "order by m.position desc\")",
        "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order"),
     _m("rebind_to_other_refs_accepted", "a job bound to its refs is never re-bound to others",
-       A, "            if [row[1] for row in bound] != [ref.handle for ref in refs]:",
-       "            if False:", "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
+       A, "                if bound != given:", "                if False:", WRITE_ONCE_PG),
+    # review PAR-1: the three rebinds the round-1 check let through or never tried
+    _m("rebind_to_a_superset_accepted", "a bound job is not extended by a longer attach",
+       A, "                if bound != given:", "                if bound != given[:len(bound)]:",
+       WRITE_ONCE_PG),
+    _m("rebind_reordered_accepted", "a bound job's order is its order: a reorder is a conflict",
+       A, "                if bound != given:", "                if sorted(bound) != sorted(given):",
+       WRITE_ONCE_PG),
+    _m("rebind_to_other_content_accepted",
+       "the binding is compared by handle AND digest, not by handle alone",
+       A, "                if bound != given:",
+       "                if [h for h, _ in bound] != [h for h, _ in given]:", WRITE_ONCE_PG),
+    _m("existing_binding_ignored", "an attach inserts only when the job has no binding yet",
+       A, "            if bound:\n", "            if False:\n", WRITE_ONCE_PG,
+       dies_by=("UniqueViolation",)),      # the exact replay re-inserts its own row
+    _m("attach_not_serialized", "attaches of one job wait for its row (for update)",
+       A, " and org_id = %s for update\"", " and org_id = %s\"",
+       "test_mpilot_pg__an_attach_waits_for_the_job_row"),
+    _m("tenant_unchecked_at_the_lock", "R55: a ref of another org than the job is not_found",
+       A, "where request_id = %s and org_id = %s for update",
+       "where request_id = %s and %s::uuid is not null for update", WRITE_ONCE_PG),
     _m("recorded_content_unchecked",
        "a handle recorded with other content is a conflict, never bound",
-       A, "                if recorded != ref.digest:", "                if False:",
-       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
-    _m("foreign_job_not_translated",
-       "R55: a ref of another org than the job is the typed not_found, not a database error",
-       A, "        except pg.ForeignKeyViolation:", "        except pg.UniqueViolation:",
-       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound",
-       dies_by=("ForeignKeyViolation",)),
+       A, "                    if recorded != ref.digest:", "                    if False:",
+       WRITE_ONCE_PG),
 )
 
 

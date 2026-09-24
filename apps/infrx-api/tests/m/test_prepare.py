@@ -823,6 +823,7 @@ M1_CASES = ("media_sec__a_foreign_media_reference_is_not_staged",
 PARITY = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
 # MPILOT: the durable attach, read back by a reopened adapter.
 ATTACH = "media_parity__an_attach_outlives_the_process_that_made_it"
+WRITE_ONCE = "media_parity__an_attach_is_write_once"
 
 
 def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, capsys):
@@ -844,11 +845,11 @@ def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, 
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
     assert {name for name, out in outcomes.items() if out == "pass"} == \
-        {*M1_CASES, PARITY, ATTACH}
+        {*M1_CASES, PARITY, ATTACH, WRITE_ONCE}
     assert {name: out.split("needs ")[1].split(" ")[0]
             for name, out in outcomes.items() if out.startswith("skip")} == M3_CASES
     assert not [name for name, out in outcomes.items() if out.startswith("blocked")], outcomes
-    assert len(outcomes) == len(cases()) == 11
+    assert len(outcomes) == len(cases()) == 12
 
 
 def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path):

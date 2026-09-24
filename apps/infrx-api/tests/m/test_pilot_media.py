@@ -381,6 +381,22 @@ def test_mpilot__the_pilot_composition_records_the_attach_on_its_pool(monkeypatc
     assert given.state.runtime.media_store.attachments is None
 
 
+def test_mpilot__the_exported_write_once_case_runs_on_the_store_alone():
+    """Review PAR-1/PAR-2: the in-process guard (`MediaStaging.attach`) on its own - the
+    exported write-once case against `MediaUploads` with no durable record composed (every
+    test world, and any composition without a database)."""
+    from infrx.contracts.conformance import services
+
+    from .test_uploads import conformance_factory
+
+    def factory(limits=None, **_kw):
+        harness = conformance_factory(limits)
+        harness.port.attachments = None
+        return harness
+
+    asyncio.run(services.media_parity__an_attach_is_write_once(factory))
+
+
 # --- gap 2 on PostgreSQL: the real attach record ------------------------------------------
 def postgres():
     """A fresh migrated, seeded database (tests/d's rig, `INFRX_D_TASK`), its JobStore
@@ -431,33 +447,72 @@ def test_mpilot_pg__each_job_reads_back_its_own_refs_in_order(tmp_path):
 
 
 def test_mpilot_pg__an_attach_is_write_once_and_tenant_bound(tmp_path):
-    """R55 in the database and immutability: a ref of another organization cannot be bound
-    to the job (the composite foreign key), and a job bound to its refs cannot be re-bound
-    to others - both refused with nothing written."""
+    """R55 and write-once on the real record (review PAR-1/H-B1). A ref of another
+    organization is `not_found` (the job row is locked by job AND org). A bound job answers
+    the exact same refs - handles and digests, in order - as a no-op; every other binding is
+    `conflict` with nothing written: other refs, a superset, a subset, a reorder, the same
+    handle with other content. A handle recorded with other content binds nothing either."""
     harness, durable = postgres()
     gateway, _ = two_processes(tmp_path, durable)
     gateway.harness = harness
     job_id, refs = attach(gateway, admit=admitted_on(harness))
+    (a,) = refs
     foreign = run(gateway.materialize(b.ORG_B, data_url(support.mp4(seconds=5.0))))
     with pytest.raises(errors.NotFound):
         run(durable.put(job_id, (foreign,)))
-    other = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=6.0))))
-    with pytest.raises(errors.Conflict):
-        run(durable.put(job_id, (other,)))
-    assert run(durable.get(job_id)) == refs
     run(durable.put(job_id, refs))                                   # the same is a no-op
-    assert run(durable.get(job_id)) == refs
+    other = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=6.0))))
+    moved = a.model_copy(update={"digest": fetch.digest_of(b"other content")})
+    for rebind, what in (((other,), "other refs"), ((a, other), "a superset"),
+                         ((moved,), "the same handle, other content")):
+        with pytest.raises(errors.Conflict):
+            run(durable.put(job_id, rebind))
+        assert run(durable.get(job_id)) == refs, what
+    pair = b.request(harness)
+    admitted_on(harness)(pair)
+    run(durable.put(pair.request_id, (a, other)))
+    for rebind, what in (((other, a), "a reorder"), ((a,), "a subset")):
+        with pytest.raises(errors.Conflict):
+            run(durable.put(pair.request_id, rebind))
+        assert run(durable.get(pair.request_id)) == (a, other), what
+    run(durable.put(pair.request_id, (a, other)))                   # still a no-op
     # a handle already recorded is bound only for the content it was recorded with
-    forged = refs[0].model_copy(update={"digest": fetch.digest_of(b"other content")})
     job = b.request(harness)
     admitted_on(harness)(job)
     with pytest.raises(errors.Conflict):
-        run(durable.put(job.request_id, (forged,)))
+        run(durable.put(job.request_id, (moved,)))
     assert run(durable.get(job.request_id)) is None
 
 
+def test_mpilot_pg__an_attach_waits_for_the_job_row(tmp_path):
+    """Attaches of one job are serialized on its row (`for update`): while another
+    transaction holds it, an attach waits instead of reading a binding that is about to
+    change - two concurrent attaches of different refs cannot both commit (review PAR-1)."""
+    import psycopg
+    harness, durable = postgres()
+    gateway, _ = two_processes(tmp_path, durable)
+    gateway.harness = harness
+    job = b.request(harness)
+    admitted_on(harness)(job)
+    ref = run(gateway.materialize(b.ORG_A, data_url(support.mp4(seconds=5.0))))
+
+    async def contended():
+        with psycopg.connect(pgharness.dsn(harness.extra["database"])) as holder:
+            holder.execute("select 1 from infrx.jobs where request_id = %s for update",
+                           (job.request_id,))
+            putting = asyncio.create_task(durable.put(job.request_id, (ref,)))
+            await asyncio.sleep(0.5)
+            waited = not putting.done()
+            holder.rollback()
+        await putting
+        return waited
+
+    assert run(contended()), "the attach did not wait for the job row"
+    assert run(durable.get(job.request_id)) == (ref,)
+
+
 def test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql(tmp_path):
-    """Item 3 on PostgreSQL: the two exported cases MPILOT added, against `MediaUploads`
+    """Item 3 on PostgreSQL: the exported cases MPILOT added, against `MediaUploads`
     whose attach record is `PgAttachments` on the D harness's database. `admitted` commits
     the staged request as the job row the attach's foreign key names (D2's `infrx.admit`);
     the store's clock is the database's, so the window moves with it."""
@@ -485,7 +540,8 @@ def test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql(tmp_path):
                        extra={**base.extra, "admitted": admitted})
 
     ours = (services.media_sec__an_upload_is_usable_only_within_its_window,
-            services.media_parity__an_attach_outlives_the_process_that_made_it)
+            services.media_parity__an_attach_outlives_the_process_that_made_it,
+            services.media_parity__an_attach_is_write_once)
     assert set(ours) <= set(SUITES["mediastore"][0]())
     for case in ours:
         asyncio.run(case(factory))
