@@ -58,6 +58,7 @@ class FakeGateway:
         self.upload_url, self.put_status = upload_url, put_status
         self.bad_destination_ref, self.complete_override = bad_destination_ref, complete_override
         self.home, self.foreign = None, []
+        self.upload_calls = []    # (method, path) of every upload-route request
         self.truncate_stream, self.finish_reason = truncate_stream, finish_reason
         self.retry_after = retry_after
         # chat_override(request) -> a Response, or raises a transport exception: one knob
@@ -169,6 +170,7 @@ class FakeGateway:
     # -------------------------------------------------- uploads (routes/uploads.py)
 
     def _upload(self, request, path):
+        self.upload_calls.append((request.method, path))
         auth = request.headers.get("authorization", "")
         if not auth.startswith("Bearer ") or len(auth) <= len("Bearer "):
             return self._error(401, "invalid_api_key", "no key")

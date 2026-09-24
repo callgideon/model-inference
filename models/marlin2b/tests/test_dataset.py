@@ -99,8 +99,15 @@ def test_interrupt_then_resume_leaves_exactly_one_logical_result_per_item():
         assert replays and all(r["sends"] >= 2 for r in replays)
         assert second["skipped_terminal"] == first["done"]
         assert all(r["output"] and r["output_chars"] == len(r["output"]) for r in results)
-        # an upload is staged once per item; a resumed item re-uses its handle (no 409)
-        assert len(gw.uploads) == 4 and not any(e for e in gw.foreign)
+        # a resumed item re-sends the handle it was sent with (no 409): one reference per key.
+        # (A staging the SIGINT cut short may leave an orphan upload to expire; that is not a
+        # second item, so the count of uploads is not the invariant - the key -> ref map is.)
+        refs = {}
+        for s in gw.seen:
+            if isinstance(s["content"], list):
+                refs.setdefault(s["idempotency_key"], set()).add(s["content"][0]["video_url"]["url"])
+        assert len(refs) == 4 and all(len(r) == 1 for r in refs.values()), refs
+        assert not gw.foreign
 
 
 def test_the_producer_never_reads_further_ahead_than_the_bounded_queue():
