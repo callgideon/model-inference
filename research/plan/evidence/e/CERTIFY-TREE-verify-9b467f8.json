@@ -1,0 +1,179 @@
+{
+  "head": "9b467f8854f0d3e6d50e04d7ea7bae63ff4deb32",
+  "base": "2d4a88b (origin/main); round checked = 7bb7b41..9b467f8 (e4a7106, 7ac77c7, 0df3fa7, 9b467f8)",
+  "verdict": "pass",
+  "python": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/infrx-impl/apps/infrx-api/.venv/bin/python (the worktree's pinned venv; `infrx` is not installed in it, so every import resolved to the clone: infrx -> /tmp/claude-1000/certify-verify/apps/infrx-api/infrx, bench -> the clone's models/marlin2b/bench.py; no PYTHONPATH needed)",
+  "blocking": [],
+  "nonblocking": [
+    {
+      "id": "N1",
+      "title": "The reserved-total allowance is bounded in code, but nothing pins WHICH rows feed it: a mutant widening it to every non-accepted row's job survives the whole E4B list",
+      "evidence": "certify.py:545-548 takes `cancelled` only from rows whose outcome is bench.CANCELLED_REPLAY and counts only those jobs' holds still `held`, by amount - bounded, not blanket. Verifier probe test_q5_allowance_is_exactly_the_cancelled_holds: a leaked hold on an unrelated job with reserved 0->2 FAILs ('reserved 0 -> 2 (1.00000000 held for the interruption's cancels)'); an accepted job's held hold FAILs 'holds still held'; a usage record on the cancelled job FAILs 'Σ charged 2.00000000 != ledger fall 2.5'. But verifier mutant v_cancelled_from_any_non_accepted (`if row.get(\"outcome\") == bench.CANCELLED_REPLAY} - {None}` -> `if row.get(\"outcome\") != \"accepted\"} - {None}`) SURVIVED the lane's CANCELLED, LEDGER and DATASET cases through the shared R83 runner ('3 passed'). Under it, a quarantined item's job (admitted, then refused at the rechecks, 400 with its Inference-Id) whose hold leaked is hidden. The verifier case test_kill_v_cancelled_from_any_non_accepted kills it (probes/test_verifier_probes.py:216: assert [] == [\"reserved 0 ...n's cancels)\"]). The blanket version (drop the request_id filter) IS killed by the lane's LEDGER case (test_certify.py:478). Fails closed today, like E4B-verify-7b5dbd7 V5.",
+      "fix": "Add the case: a rejected (400) row carrying inference_id job-q1 whose hold is still held, reserved up by its amount, must FAIL 'reserved ...'; add mutant v_cancelled_from_any_non_accepted to e4b_mutants.py under CANCELLED."
+    },
+    {
+      "id": "N2",
+      "title": "Parity's exact OVER_CAP comparison is not pinned on the param: accepting a param-less unsupported_media (the relay's post-admission preparation failure) survives",
+      "evidence": "certify.py:432 compares the whole answer with OVER_CAP (400, unsupported_media, param messages): correct. But verifier mutant v_parity_param_ignored (compare only status and code) SURVIVED PARITY_CAP and ADMISSION ('2 passed'). A param-less 400 unsupported_media is what relay.py:498-499 (`_refusal`, cause invalid_media) answers for a job that was ADMITTED and then failed preparation - i.e. an over-cap clip admission let through. The verifier case test_kill_v_parity_param_ignored kills it (probes/test_verifier_probes.py:252: assert 'PASS' == 'FAIL'). The lane's own branch mutants die: over_cap_acceptance_accepted and over_cap_refusal_untyped at test_certify.py:330, engine_target_over_cap_passes at :340.",
+      "fix": "Add {\"http_status\": 400, \"code\": \"unsupported_media\", \"param\": None} to the answers loop in test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_rest (expect FAIL) and the mutant to the list."
+    },
+    {
+      "id": "N3",
+      "title": "The dataset drill's 'refused as over the cap' check is pinned only for the resume's rows; a mutant that ignores the first run survives",
+      "evidence": "certify.py:666 scans rows_first + rows_second: correct. The lane's DATASET_CAP case puts the capped item (i6) only in the second run, so verifier mutant v_capped_second_run_only (`rows_first + rows_second` -> `rows_second`) SURVIVED ('3 passed'). A first-run over-cap 400 is terminal and never re-sent, so the first run is exactly where such a refusal would sit. test_kill_v_capped_second_run_only kills it (probes/test_verifier_probes.py:232: assert 'PENDING' == 'FAIL').",
+      "fix": "Add a first-run typed-400 row to test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap (expect FAIL naming it) and the mutant."
+    },
+    {
+      "id": "N4",
+      "title": "Soak judges no duration cap: an over-cap clip the gateway ADMITS during the soak is excluded from its failures and flagged nowhere in the cell; its within-cap filter is unpinned",
+      "evidence": "soak_verdicts (certify.py:1051) filters to within-cap rows and has no duration_cap row (the envelope rungs carry it, certify.py:995-1004). Verifier mutant v_soak_judges_over_cap (`counted = rows`) SURVIVED SOAK and CELLS ('2 passed'): no soak case has an over-cap row. Low risk: the envelope's three rungs judge the cap, and soak runs only at a supported rate.",
+      "fix": "Optional: append the rung's duration_cap row to soak_verdicts on a gateway target, or add an over-cap failed row to the soak case."
+    },
+    {
+      "id": "N5",
+      "title": "R106 cause attribution: a first-run PLATFORM failure whose job was cancelled is counted 'cancelled by the interruption' and the drill passes (before 7ac77c7 it failed)",
+      "evidence": "Verifier probe test_q6_a_first_run_platform_cancel_is_labelled_the_interruptions: first run i2 failed stream_error_event/status_unknown (not in flight at the SIGINT), i4 torn (ReadError); both replay state_conflict -> resume_problems == [] and sop_property says '2 item(s) cancelled by the interruption'. relay.py:625-636 cancels a job with cause client_cancelled whenever the relay cannot continue (store gone, journal gap) and emits the error, so a platform-side stream failure replays exactly like a SIGINT tear. R106's text sanctions counting every cancelled replay as terminal ('cancelled by the interruption'), so this follows the ruling; the drill's label overclaims the cause.",
+      "fix": "Coordinator decision. Suggested: count as 'cancelled by the interruption' only items whose first-run row was a client-side tear (a transport error_class, not stream_error_event), and FAIL or list separately the others."
+    },
+    {
+      "id": "N6",
+      "title": "R106's text disagrees with the gateway and the contract in two places (ruling wording, not lane code)",
+      "evidence": "(a) R106 says a job cancelled 'by ... the deadline' replays state_conflict with infrx.state=cancelled; relay.py:493-495 answers expired/deadline causes as deadline_exceeded, which bench keeps a non-terminal failure (SOP §3.6: 504 -> retry), so such a key is re-sent forever by a resume. (b) R106 says the interrupted item was 'billed for what it generated (R21)'; the conformance case dur_settle__cancel_records_its_cause_and_settles_by_r21 (conformance/jobs.py:2455-2496) has debit 0 and no usage for every cancel, published or not. The drill follows the conformance case: a usage record on a cancelled job FAILs Σ charged (lane test_certify.py:524-526; verifier probe). Also, a stream journal_expired replay stays non-terminal in bench while SOP §3.6 says re-derive and re-run - pre-existing, not R106's.",
+      "fix": "Coordinator: align R106's wording with relay._refusal and the DUR-SETTLE conformance case."
+    },
+    {
+      "id": "N7",
+      "title": "bench's cancelled-replay rule is slightly wider than 5(d) states and ignores infrx.state",
+      "evidence": "bench.py:892-894 keys on (outcome failed, code state_conflict, replayed True), not on a stream event: verifier probe test_q4_a_non_stream_5xx_state_conflict_replay_is_also_classified shows an HTTP 500 carrying the header and the code becomes cancelled_by_interruption. Unreachable from this gateway: state_conflict is always 409 (errors.py:35 -> 'rejected', terminal by TERMINAL_REJECT_STATUS; probe test_q4_a_sync_409...), and the relay streams state_conflict only for JobState.cancelled (relay.py:496-497) or as a pass-through DomainError (relay.py:633-634). R106 names infrx.state=cancelled, which bench's allowlist does not read.",
+      "fix": "Optional: also require error_class == 'stream_error_event'; or reword 5(d) to 'a replay answered state_conflict'."
+    },
+    {
+      "id": "N8",
+      "title": "A --box run whose environment lacks MAX_VIDEO_SECONDS is not refused: it reads 120 and the run fails loudly, but mostly without naming the cap",
+      "evidence": "Verifier probe test_q1_env_not_passed_every_load_cell_fails (runner 120, gateway 82): envelope duration_cap FAIL {'within_cap_refused': ['over'], 'cap_s': 120.0} and rejections FAIL -> envelope_summary (FAIL, (), None) -> soak FAIL 'no supported envelope rate'; overload FAIL (a 400 is not 429); parity FAILs as in the first box run ('refused by the candidate', since the 112 s and 120 s clips count as within 120); the dataset drill names the mismatch only if a 112 s clip is scheduled. Nothing passes silently overall (exit 1), and target.max_video_seconds / config-pin deployed_max_video_seconds record 120.",
+      "fix": "Optional: on --box, FAIL the config pin when MAX_VIDEO_SECONDS is absent from the environment (the rollout runbook always deploys it)."
+    },
+    {
+      "id": "N9",
+      "title": "bench's summary denominators have no bucket for cancelled_by_interruption",
+      "evidence": "bench.py summarize: latency_samples + rejected_excluded + failed_excluded + cancelled_excluded no longer sums to scheduled when a cancelled replay occurs (the top-level count is reported: CANCELLED_REPLAY: len(cancelled_replays)). No consumer checks the sum today (grep).",
+      "fix": "Optional: add a cancelled_replay_excluded denominator."
+    },
+    {
+      "id": "N10",
+      "title": "Protocol §4/§5 still state the interim rule; the one-directional protocol test cannot see it",
+      "evidence": "E4B-protocol.md:58 (§4 envelope row: 'longer than engine_ceiling_s ... at most applied_cap_s') and :77 (`applied_cap_s` | 72) remain; amendment 5(c) supersedes them by append (repo convention). test_e4b_the_protocol_file_states_the_numbers_the_runner_applies checks CRITERIA ⊆ §5 only, so a stale row passes.",
+      "fix": "Optional: mark the §5 row superseded in place (e.g. 'superseded by 5(c)'), or make the test two-directional with an explicit superseded list."
+    },
+    {
+      "id": "N11",
+      "title": "Item 3's death-line table was derived at e4a7106; several lines moved at the head",
+      "evidence": "Re-derived at 9b467f8: cap_exclusive_at_the_boundary and within_cap_refusal_accepted :935 (evidence :876), over_ceiling_judged_as_failures :921 (:865), overload_counts_capped_clips :1042 (:983), first/resume_on_the_full_corpus :643 (:587), capped_items_accepted :648 (:592). Every one still an assertion death in the named case. The evidence says 're-derived at e4a7106', so it is accurate but stale.",
+      "fix": "Optional: refresh the table at the head."
+    }
+  ],
+  "answers": {
+    "q1_cap_semantics": "Same parser, same default. certify.py:359-363 deployed_cap_s() = infrx.config.pilot_from_env().max_video_seconds (config.py:142, os.environ, '' = unset); the gateway builds MediaPreparation with limits=settings.pilot = pilot_from_env(e) (config.py:109 `pilot=pilot_from_env(e)`, gateway/pilot.py:280-283 MediaUploads(..., limits=pilot)) and MediaProfile.pinned(limits) (prepare.py:86-88). Default 120.0 (contracts/limits.py:62). Verifier probe test_q1_runner_cap_is_the_gateways: unset/''/'82'/'82.0' -> runner == gateway profile == 120/120/82/82; 'abc' raises ValueError in both. Boundary: gateway prepare.py:101 `if probed.duration_s > self.max_duration_s` (82.0 admitted, 82.001 refused, probe test_q1_boundary_both_sides); runner certify.py:969 judged `<= cap_s`, :404 parity over `> cap_s`, :632 corpus `<= cap_s`. Boundary mutants: runner cap_exclusive_at_the_boundary killed test_certify.py:935, parity_cap_exclusive and dataset_corpus_cap_exclusive in the 191; gateway: M list duration_cap_excludes_its_own_bound killed (INFRX_MUTANTS=all tests/m/test_mutants.py, 2 passed) and verifier v_gateway_boundary_exclusive killed in CAP_SOURCE (prepare.py:103 UnsupportedMedia death, a DOMAIN_DEATH). Env not passed: see N8 - every load cell FAILs and parity FAILs; only the dataset message names the mismatch. Inside the container: the runner is `docker run ... --env-file /etc/marlin2b-gateway.env ... python tests/integration/backend/certify.py` (E4B-9aa7ffe.md:187-193 and :446-453), so os.environ of the certify process is the container env docker built from that host file - the same file the gateway container gets (deploy/marlin2b-gateway.service:13 EnvironmentFile and :28 --env-file). Local run at 9b467f8 with MAX_VIDEO_SECONDS=82: target.max_video_seconds 82.0 and config-pin deployed_max_video_seconds 82.0.",
+    "q2_bias": "Rule (certify.py:1030-1043): the supported rate is the highest rung, climbing from the lowest, whose failure_rate (< 0.01 of within-cap attempts), answered (>= 1 accepted), rejections (zero within-cap refusals of ANY status, :1008) and client_exit (0) all PASS; the climb stops at the first failing rung. Over-cap rows are dropped by judged() before failures/answered/rejections (:995), soak (:1051) and overload (:1081); bench exits 0 whenever anything was accepted, so 400s do not touch client_exit. Verifier probe test_q2_rerun_ladder_supports_half_per_second: r0.5 = 112 accepted + 8 typed over-cap 400 -> rejections pass, duration_cap pass, failure_rate '0/112'; r1.0 with 3 x 429 capacity_exhausted -> rejections FAIL; envelope (PASS, 0.5). The same 8 over-cap refusals at r1.0 with no 429 -> supported 1.0 (they never lower it). Lane mutant over_cap_refusals_bias_the_rate killed test_certify.py:921; overload_counts_capped_clips killed :1042; verifier v_rejections_ignore_429 killed :945 (assert 'pass' == 'fail'). So r=1.0 with 3 x 429 is NOT supported; the box rerun's supported rate is 0.5/s.",
+    "q3_parity": "certify.py:404 splits the parity set at the cap; :423-424 asks the gateway (admission_answer, bench's own messages/data_url, Bearer key, :372-394) for each over-cap clip; :432 FAILs any answer != OVER_CAP; :435 PENDs (owners BOX) an engine target's over-cap clips; within-cap clips are paired (:428-430) and a candidate refusal FAILs through decide.parity_verdict. Lane mutants re-derived at 9b467f8: over_cap_acceptance_accepted :330 AssertionError {'code': None, 'http_status': 200, 'param': None}; over_cap_refusal_untyped :330 {'code': 'invalid_request', 'http_status': 400, 'param': None}; engine_target_over_cap_passes :340 ('PASS', None, []) == ('PENDING', ['BOX'], []); parity_pairs_over_cap_clips and over_cap_read_from_the_outcome in the 191. Gap N2: the param alone is not pinned. A transport error to the gateway (URLError/timeout, both OSError) FAILs the cell via :425-427.",
+    "q4_r106_bench": "Header: bench.py:933 `resp.headers.get(\"idempotency-replayed\") == \"true\"` - exact value, stored as a bool, never verbatim (probe: 'True' -> False, row value always a bool). Classification bench.py:892-894 needs outcome failed + allowlisted code state_conflict + replayed True. Fresh state_conflict (no header) stays failed/non-terminal (probe; lane e1bm27 killed test_bench.py:586). A replay's other codes - journal_expired, result_expired, deadline_exceeded, status_unknown, stream_interrupted - stay failed/non-terminal (probe; lane e1bm28 killed test_bench.py:582). SOP §3.6: deadline_exceeded -> retry, so non-terminal is right; journal_expired/result_expired -> re-derive and re-run: bench treats an HTTP 410 as terminal but a STREAM journal_expired as a re-sendable failure (pre-existing, N6). R106 vs relay on the deadline cause: N6. e1bm07 re-anchor is honest: death at test_bench.py:538 'AssertionError: accepted items are done' (skipped_terminal_on_resume becomes 6, not 3). e1bm25-29 deaths: :576, :573, :586, :582, :577, all AssertionError.",
+    "q5_ledger_allowance": "certify.py:545-551: cancelled = inference ids of CANCELLED_REPLAY rows only; kept = sum of those jobs' hold.amount whose state is 'held'; reserved must equal before + kept exactly. Bounded by job and amount, not a blanket (probe: a leaked unrelated hold, reserved 0 -> 2, FAILs). A held hold on an ACCEPTED job still FAILs 'holds still held' independently (certify.py:534-537). A usage record on the cancelled job FAILs Σ charged, because Σ charged counts only accepted jobs' records against the ledger's full fall (lane test_certify.py:524-526; probe 'Σ charged 2.00000000 != ledger fall 2.5'). Lane mutants: cancel_holds_unaccounted :519, released_cancel_holds_counted :520; verifier blanket mutant v_blanket_hold_allowance killed :478. The row filter itself is not pinned (N1).",
+    "q6_resume_invariants": "accepted twice: lane accepted_twice_unchecked killed test_certify.py:421 `assert [\"terminal it...sume: ['i1']\"] == [\"terminal it...once: ['i1']\"]`. Cancelled item not replayed exactly once: second_replay_accepted killed :510 `assert [] == [\"cancelled i...play: ['i3']\"]`; verifier v_replays_counted_over_both_runs killed :504. Nothing re-sent after terminal: resent_unchecked killed :421 `assert [\"items accep...once: ['i1']\"] == [\"terminal it...once: ['i1']\"]`. Same file: certify.py:647 builds corpus-within-cap.json once; :653 (first run) and :659 (resume) both pass corpus=corpus; first_run_on_the_full_corpus and resume_on_the_full_corpus killed :643. Local run at 9b467f8: the file held 60 clips, the longest 72.0 s. Gaps: N3 (first-run capped rows), N5 (cause attribution).",
+    "q7_runs": "See runs.",
+    "q8_amendments": "5(c)/5(d) match the code: cap read once (certify.py:1285) with the gateway's parser, default 120, recorded in target and pin; OVER_CAP 400/unsupported_media/messages = MediaProfile.check (prepare.py:101-103) and errors.py:23; bench rows judged on status+code (certify.py:366-369); parity pairs within-cap only, asks the gateway, PENDs on BOX for an engine target (owners=('BOX',) when PENDING); envelope/soak/overload judged within the cap; the drill reads one within-cap copy for both runs; R106 classification, 'exactly one replay', the SOP property string, the reserved allowance. Claims checked by a run here: the local run's values (reproduced at 9b467f8, report sha256 36d936aa6bf69d8f...: cap 82.0, parity 2 clips pass + 7 'unasked' PENDING BOX, dataset 60 clips / 72 s, envelope 0/11, release-identity PASS), the tails (191 / 46 / 68 / 41-38-3 / 612 all reproduced). Not backed by a run, and the evidence says so: the gateway's own over-cap answer end to end, and the ledger half on the box ('inferred from the contract, not yet seen on the box'). Wording nits: N7 (5(d) 'stream'), N10 (§4/§5 rows), N11 (stale death lines)."
+  },
+  "runs": [
+    {
+      "what": "E4B mutant list, whole (make api-mutants' E4B line): INFRX_MUTANTS=all python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py",
+      "env": "clone /tmp/claude-1000/certify-verify at 9b467f8, worktree venv python, no stack",
+      "result_counts": "191 passed in 409.30s (0:06:49), exit 0",
+      "log": "/tmp/claude-1000/certify-verify-logs/e4b-mutants-all.log"
+    },
+    {
+      "what": "tests/integration/backend/test_certify.py + test_endpoint_doc.py",
+      "env": "clone at 9b467f8, no stack",
+      "result_counts": "46 passed in 2.31s",
+      "log": "inline"
+    },
+    {
+      "what": "models/marlin2b/tests (make bench-test's command)",
+      "env": "clone at 9b467f8",
+      "result_counts": "68 passed in 5.99s",
+      "log": "inline"
+    },
+    {
+      "what": "E1B list: python models/marlin2b/tests/mutants.py --report",
+      "env": "clone at 9b467f8",
+      "result_counts": "mutants 41, killed 38, controls_survived 3, not_killed 0, problems None",
+      "log": "/tmp/claude-1000/certify-verify-logs/e1b-mutants.log, /tmp/claude-1000/certify-verify-logs/e1b-mutants.json"
+    },
+    {
+      "what": "E1B death lines re-derived with --tb=line (e1bm07, e1bm25-29)",
+      "env": "throwaway copies of models/marlin2b",
+      "result_counts": "6/6 AssertionError: e1bm07 test_bench.py:538 'accepted items are done'; e1bm25 :576; e1bm26 :573; e1bm27 :586; e1bm28 :582; e1bm29 :577",
+      "log": "/tmp/claude-1000/certify-verify-logs/e1b_deaths.py"
+    },
+    {
+      "what": "W/G suites that load bench.py: (apps/infrx-api) pytest tests/w/test_serving.py tests/w/test_w4.py tests/w/test_service.py tests/g",
+      "env": "clone at 9b467f8, stub docker/systemctl/curl only, no Valkey/stack",
+      "result_counts": "612 passed, 2 warnings in 284.77s",
+      "log": "/tmp/claude-1000/certify-verify-logs/wg-bench-suites.log"
+    },
+    {
+      "what": "Lane E4B mutants' death lines re-derived at the head (17: resent_unchecked, accepted_twice_unchecked, second_replay_accepted, cancel_holds_unaccounted, released_cancel_holds_counted, over_cap_refusals_bias_the_rate, over_cap_acceptance_accepted, over_cap_refusal_untyped, engine_target_over_cap_passes, cap_exclusive_at_the_boundary, cap_read_from_the_tree, first_run_on_the_full_corpus, resume_on_the_full_corpus, capped_items_accepted, within_cap_refusal_accepted, over_ceiling_judged_as_failures, overload_counts_capped_clips)",
+      "env": "the lane's _layout copies, --tb=line",
+      "result_counts": "17/17 assertion deaths in the named case (lines quoted in answers)",
+      "log": "/tmp/claude-1000/certify-verify-logs/lane_death.py"
+    },
+    {
+      "what": "Verifier's own E4B mutants through the lane's shared R83 runner (9)",
+      "env": "e4b_mutants.run on throwaway copies",
+      "result_counts": "killed 4: v_blanket_hold_allowance (test_certify.py:478), v_replays_counted_over_both_runs (:504), v_rejections_ignore_429 (:945), v_gateway_boundary_exclusive (prepare.py:103 UnsupportedMedia, CAP_SOURCE). survived 5: v_cancelled_from_any_non_accepted (N1), v_parity_param_ignored (N2), v_capped_second_run_only (N3), v_soak_judges_over_cap (N4), v_resume_problems_skip_cancelled_check_when_first (equivalent in practice: a cancelled replay can only come from the resume)",
+      "log": "/tmp/claude-1000/certify-verify-logs/verifier-mutants.log, /tmp/claude-1000/certify-verify-logs/verifier_mutants.py"
+    },
+    {
+      "what": "Verifier probe cases (Q1-Q6 behaviour on the real code, plus a killing case for each of N1-N3)",
+      "env": "clone at 9b467f8",
+      "result_counts": "23 passed in 0.48s",
+      "log": "/tmp/claude-1000/certify-verify-logs/probes/test_verifier_probes.py"
+    },
+    {
+      "what": "Kill check: the three probe killing cases against their surviving mutants",
+      "env": "the lane's _layout copies with the mutant applied, VERIFY_ROOT=copy",
+      "result_counts": "3/3 killed by assertion: probes:216, :252, :232",
+      "log": "/tmp/claude-1000/certify-verify-logs/kill_check.py"
+    },
+    {
+      "what": "M list boundary mutants: INFRX_MUTANTS=all pytest tests/m/test_mutants.py -k 'duration_cap_excludes_its_own_bound or duration_cap_is_a_literal'",
+      "env": "clone apps/infrx-api",
+      "result_counts": "2 passed (both killed)",
+      "log": "inline"
+    },
+    {
+      "what": "Local certify run at the head: MAX_VIDEO_SECONDS=82 certify.py --no-stack (target local, scale tiny, runner's fake vLLM on the e2 namespace port 55580; no stack, no containers)",
+      "env": "INFRX_E2_NAMESPACE=e2, CORPUS_CACHE=<main checkout>/.claude/corpus-cache, TMPDIR in the logs dir",
+      "result_counts": "exit 1 (e4b.b.preconditions FAIL on this host's App dev servers, the known exemption); release-identity PASS at 9b467f8 clean; target.max_video_seconds 82.0; config-pin PENDING BOX with deployed_max_video_seconds 82.0; sop-parity PENDING BOX (verdict pass, '2 clips', 7 over-cap 'unasked'); dataset-resume PENDING BOX (60 within-cap clips, longest 72.0 s; first run exit 130 signalled, 4 accepted; client_problems None); envelope PENDING BOX (failure_rate 0/11); soak PENDING BOX (0/19); overload PENDING BOX; report sha256 36d936aa6bf69d8f...",
+      "log": "/tmp/claude-1000/certify-verify-logs/local-run/report.json, /tmp/claude-1000/certify-verify-logs/local-run/stdout.log"
+    }
+  ],
+  "not_run": [
+    {
+      "what": "anything against the pilot box, AWS or hosted Supabase (the gateway's end-to-end over-cap answer; the ledger half on the box)",
+      "reason": "forbidden by the verifier's rules; the evidence itself marks both as not reproduced / inferred"
+    },
+    {
+      "what": "the e4b namespace",
+      "reason": "ports 56800-56899 reserved by another verifier; the local run used e2 instead and no stack"
+    }
+  ],
+  "box_command_requirements": [
+    "Run certify.py inside the container with `docker run ... --env-file /etc/marlin2b-gateway.env ...` (already in E4B-9aa7ffe.md steps at :190 and :449). deployed_cap_s() reads MAX_VIDEO_SECONDS from the certify process's own environment, so this flag is how the deployed 82 reaches it.",
+    "Do not pass `-e MAX_VIDEO_SECONDS=...` on that docker run. An -e value overrides the env-file, so it would split the runner's cap from the gateway's.",
+    "The running gateway must have been started from the same /etc/marlin2b-gateway.env content (MAX_VIDEO_SECONDS=82; rollout runbook §1). If the file was edited after the gateway started, restart the gateway before the window. Otherwise the caps differ and the parity/envelope/overload/dataset cells FAIL.",
+    "Flags: --no-stack --box --target http://127.0.0.1:8001/v1 --engine-url http://127.0.0.1:8000 --metrics-url http://127.0.0.1:8001/metrics --worker-metrics-url http://127.0.0.1:8002/metrics --release-sha <full release SHA> --inventory <inventory.sh output> --parity-baseline <W4 E0 parity.jsonl> --report <path>.",
+    "Environment: E4B_WINDOW_OK=1 (window.env), INFRX_API_KEY (key.env), DATABASE_URL (from the gateway env file, for the ledger half), CORPUS_CACHE=/corpus, INFRX_CERTIFY_GATEWAY_IMAGE. The workdir must be writable: the default is a mkdtemp inside the container; corpus-within-cap.json is written there, and /repo is read-only.",
+    "After the run, check that report target.max_video_seconds == 82.0 and e4b.b.config-pin measured.deployed_max_video_seconds == 82.0. The runner does not refuse a missing cap; it reads 120 (N8)."
+  ],
+  "containers_removed": [],
+  "containers_note": "none created: every run was stack-free (no D task, no Valkey, no compose); port 55580 (the local run's fake vLLM) was released (no listener after the run); the clone's worktree is clean (verifier files live in /tmp/claude-1000/certify-verify-logs)."
+}
