@@ -23,8 +23,8 @@ from .contracts.v2.money_units import ACCOUNTING_REGIMES, CREDIT_REGIME, LEGACY_
 from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
 from .contracts.limits import JUDGE_MODES, MODE_UNSET, MODES, PilotSettings, env_name
 
-# gateway.py's directory, i.e. apps/infrx-api: MODELS_DOC used to be resolved
-# against it, and that is this package's parent, not the package itself.
+# apps/infrx-api (the retired gateway.py shim's directory): MODELS_DOC used to be
+# resolved against it, and that is this package's parent, not the package itself.
 _API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULT_MODELS_DOC = os.path.join(_API_DIR, "openrouter", "provider-models.json")

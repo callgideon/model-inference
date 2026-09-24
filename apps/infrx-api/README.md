@@ -34,8 +34,9 @@ client ─▶ Caddy :443 ─▶ create_app :8001 ─▶ vLLM :8000
 `install.sh` writes `/etc/marlin2b-gateway.env` from SSM; the unit adds
 `USAGE_LOG`. `INFRX_MODE` is required (an unset mode refuses to start, R44), and
 `create_app` builds the pilot's stores from `DATABASE_URL` and its object store from
-`S3_MEDIA_BUCKET`, which has no adapter yet (M1 limit 2): until it does, the gateway
-refuses to start rather than stage media in process memory. Tests inject the adapters.
+`S3_MEDIA_BUCKET`: M1-L2's `S3ObjectStore`, which must answer HeadBucket. Unset, or not
+answering, the gateway refuses to start rather than stage media in process memory. Tests
+inject the adapters.
 
 | var | SSM parameter | meaning |
 |---|---|---|

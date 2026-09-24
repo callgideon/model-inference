@@ -4,8 +4,9 @@ builds from `DATABASE_URL` (`pilot.adapters_from_env`: D5's `PgCatalogDirectory`
 `PgStreamStore`, `PgJobStore`, one pool) answer the pilot's startup probes before the pool
 is open (a connection of their own, from `Probe`'s own thread and loop), then through the
 pool once `lifespan` opens it. The database is the operator's Marlin catalog seed (the v2
-fixtures, `test_catalog_pg`'s template). Only the object store (no S3 adapter, M1 limit 2)
-and the scheduling index are injected.
+fixtures, `test_catalog_pg`'s template). Only the object store (M1-L2's `S3ObjectStore`
+needs an S3-compatible endpoint, which this harness does not run) and the scheduling index
+are injected.
 
     INFRX_D_TASK=d3 uv run --frozen pytest -q tests/d/test_composition_pg.py
 """

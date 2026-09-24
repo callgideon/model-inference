@@ -166,23 +166,33 @@ def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as():
     """E4B's served-build check: /metrics (loopback only) carries
     `infrx_build_info{revision, image} 1` from the settings the installer wrote
     (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`), set at startup and never read from git at runtime.
-    A pilot without either refuses to start, naming it; a malformed one is refused as a
-    deployment value; dev without them starts with no gauge."""
+    A pilot without either refuses to start, naming it; anything but the full shape (a whole
+    40-hex commit, `sha256:<64 hex>`) is refused as a deployment value in every mode; dev
+    without them starts with no gauge."""
     import dataclasses
+    import itertools
+
+    from infrx.contracts.limits import MODES
 
     body = local(pilot_app()).get("/metrics").text
     build = (f'infrx_build_info{{process="gateway",revision="{support.RELEASE}",'
-             f'image="{support.IMAGE}"}} 1')
-    assert build in body, body
+             f'image="{support.IMAGE}"}} 1.0')
+    exposed = [line for line in body.splitlines() if line.startswith("infrx_build_info{")]
+    assert exposed == [build], body                          # one series, exactly these labels
     assert TestClient(pilot_app()).get("/metrics").status_code == 404     # never public
-    for name in ("infrx_release_sha", "infrx_image"):
+    malformed = {"infrx_release_sha": ("c0ffee", support.RELEASE[:7], support.RELEASE[:-1],
+                                       support.RELEASE.upper()),
+                 "infrx_image": ("c0ffee", "sha256:c0ffee", "sha256:" + "b" * 63,
+                                 support.IMAGE.removeprefix("sha256:"))}
+    for name, values in malformed.items():
         config = support.settings()
         config.deployment = dataclasses.replace(config.deployment, **{name: ""})
         with pytest.raises(RuntimeMisconfigured, match=f"requires {name.upper()}"):
             pilot_app(config)
-        config.deployment = dataclasses.replace(support.BUILD, **{name: "c0ffee"})
-        with pytest.raises(RuntimeMisconfigured, match=f"{name.upper()} must be"):
-            pilot_app(config)
+        for value, mode in itertools.product(values, MODES):     # validate_deployment
+            config = support.settings(mode, deployment=support.BUILD.replace(**{name: value}))
+            with pytest.raises(RuntimeMisconfigured, match=f"{name.upper()} must be"):
+                pilot_app(config)
     dev = support.settings("dev", deployment=support.BUILD.replace(infrx_release_sha="",
                                                                    infrx_image=""))
     assert "infrx_build_info{" not in local(pilot_app(dev)).get("/metrics").text
