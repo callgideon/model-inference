@@ -218,10 +218,11 @@ class PilotBox:
         inherited = {name: value for name, value in os.environ.items()
                      if name not in stack.AWS_UNSET}
         self.worker_port = free_port()
-        # Both processes import the `infrx` this one does - the checkout's, or a mutation
-        # run's copy that E's runner puts on PYTHONPATH - never a package beside their cwd.
-        package = str(Path(importlib.util.find_spec("infrx").origin).resolve().parents[1])
-        path = os.pathsep.join(filter(None, (package, inherited.get("PYTHONPATH"))))
+        # Both processes resolve `infrx` as the gateway always did (`api_on_path` only when
+        # nothing else provides it): E's mutation runner's copy on PYTHONPATH first, the
+        # checkout's package after it - never this process's module, which fake_vllm.py
+        # may have imported from the real checkout, and never a package beside their cwd.
+        path = os.pathsep.join(filter(None, (inherited.get("PYTHONPATH"), str(harness.API_ROOT))))
         self.env = {**inherited, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
                     CALLS_ENV: str(workdir / "calls.log"), "UPSTREAM": engine_url,
                     "WORKER_HEALTH_PORT": str(self.worker_port), "PYTHONPATH": path,

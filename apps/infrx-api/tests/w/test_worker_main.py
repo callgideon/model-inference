@@ -299,11 +299,12 @@ def test_worker_main__the_process_refuses_to_start_naming_the_setting(tmp_path):
 
 
 def test_worker_main__the_pilot_box_runs_the_real_entry_point(tmp_path, monkeypatch):
-    """E3B's pilot box: its worker process is `python -m infrx.worker` importing the
-    `infrx` this process imports, on the fake engine as `UPSTREAM`, with a readiness port of
-    its own that `start` waits on, and the index in the pilot's namespace (where the real
-    worker reads it); the gateway is still the box's own composition."""
+    """E3B's pilot box: its worker process is `python -m infrx.worker` (a mutation copy on
+    PYTHONPATH first), on the fake engine as `UPSTREAM`, with a readiness port of its own
+    that `start` waits on, and the index in the pilot's namespace (where the real worker
+    reads it); the gateway is still the box's own composition."""
     pilotbox = pilotbox_module(monkeypatch)
+    monkeypatch.setenv("PYTHONPATH", "/a-mutation-copy")
     box = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1)
     assert box.command("worker") == ([sys.executable, "-m", "infrx.worker"],
                                       f"http://127.0.0.1:{box.worker_port}/readyz")
@@ -311,8 +312,9 @@ def test_worker_main__the_pilot_box_runs_the_real_entry_point(tmp_path, monkeypa
         str(REPO / "tests" / "integration" / "backend" / "pilotbox.py"), "gateway"]
     assert (box.env["UPSTREAM"], box.env["WORKER_HEALTH_PORT"]) == \
         ("http://127.0.0.1:1", str(box.worker_port))
-    # the `infrx` this process imports (a mutation run's copy included), first on the path
-    assert box.env["PYTHONPATH"].split(os.pathsep)[0] == str(API)
+    # E's mutation runner's copy (on PYTHONPATH) first, the checkout's package after it
+    assert box.env["PYTHONPATH"] == os.pathsep.join(("/a-mutation-copy",
+                                                     str(pilotbox.harness.API_ROOT)))
     assert box.namespace == box.env[pilotbox.INDEX_ENV] == "infrx:sched:{pilot}"
 
 

@@ -87,6 +87,10 @@ MUTANTS = (
     # item 3: E3B's pilot box runs the real entry point
     _m("pilotbox_worker_emulated", "the pilot box's worker process is python -m infrx.worker",
        PB, '        if role == "worker":\n', "        if False:\n", PILOT_BOX),
+    _m("pilotbox_worker_imports_the_checkout", "a mutation copy on PYTHONPATH is what the "
+       "box's processes import", PB,
+       '(inherited.get("PYTHONPATH"), str(harness.API_ROOT))',
+       '(str(harness.API_ROOT), inherited.get("PYTHONPATH"))', PILOT_BOX),
     _m("pilotbox_worker_private_namespace", "the worker and the gateway share the pilot's "
        "index namespace", PB, "port: int, namespace: str = PILOT_NAMESPACE) -> None:",
        'port: int, namespace: str = "infrx_e2:{e3b3}") -> None:', PILOT_BOX),
