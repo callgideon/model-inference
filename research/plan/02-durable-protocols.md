@@ -60,6 +60,27 @@ Executable in [`contracts/v2/lifecycle.py`](../../apps/infrx-api/infrx/contracts
 
 **Ports (signatures in the module):** `UploadRepository` (`create`, `acknowledge_put`, `complete`, `abort`, `resolve`, `expire`), `ReadinessStore` (`admit_ready`, `readiness`, `claim_preparation`), `ContentLifecycle` (`register`, `references`, `candidates`, `claim`, `tombstone`, `acknowledge_delete`). Refusals are the closed `LifecycleRefusal` set, each raised as an existing error code (`REFUSAL_ERRORS`; `lifecycle_refusals.json` is the cross-language table); the reason rides on `DomainError.refusal` and is never serialized. `not_ready` and the claim refusals are internal codes with no HTTP status.
 
+## F2C terminal/read consistency (2026-09-24, slice b)
+
+Closes RV-11's contract half. `records.TerminalOutcome.result_expires_at` is the instant the settling transaction persisted for a success's result (store clock, the store's TTL at that moment; 0018 already writes `jobs.result_expires_at`). The store decides it exactly as it decides `settlement_state`: a worker proposal's value is ignored. It is absent on every other outcome, on a proposal, and on a record written before F2C.b - and absent is never "recompute it". `v2.lifecycle.read_outcome(outcome, db_now)` is the one classification status, result, sync/stream replay and the console apply; `fixtures/v2/result_read_cases.json` is its cross-language table.
+
+| Read | When | Result route | Status `result_available` / `result_expires_at` |
+|---|---|---|---|
+| `pending` | not terminal | 409 `result_pending` | false / absent |
+| `available` | success with result and authoritative usage, `now < result_expires_at` | 200 with response | true / persisted instant |
+| `no_result` | failed, cancelled or expired job; a success the store rewrote | 200, no response | false / absent |
+| `held_unknown` | unknown usage, reservation held for reconciliation | 200, no response | false / absent |
+| `expired` | success at or past its persisted expiry (scrubbed or not) | 410 `result_expired` | false / absent |
+| `unavailable` | success with no persisted expiry (pre-F2C.b record) | 410 `result_expired` | false / absent |
+
+A sync or stream replay of an `expired`/`unavailable` success answers `result_expired`; nothing regenerates. Metadata (state, cause, usage, settlement) is readable in every row.
+
+**Scrub (D3 mechanics).** Result bodies are `ContentLifecycle` content (`kind = result`, `location = database`), protected until the job's persisted `result_expires_at` (a job keeping no result: until settlement), then claimed, tombstoned and scrubbed; the acknowledgement records the scrub. Other kinds stay until settlement plus their configured serving retention (P-25). Survives: job row, idempotency tombstone, terminal outcome, usage, settlement and ledger rows, the content's digest and size. A scrubbed body reads `result_expired`, never empty text. D10 replaces 0014's `job_results_immutable` trigger (new migration) with a guard permitting exactly body -> empty and `scrubbed_at` null -> now, only when `now >= jobs.result_expires_at` or the job keeps no result.
+
+**Compatibility.** Public wire bodies are unchanged: `JobStatus.result_expires_at` keeps its shape and presence rule (only while available) and now carries the persisted instant instead of a recomputed one, so previous clients decode every body as before. A new reader of an old record gets `None` and answers `unavailable`. Records are `extra="forbid"`, so a previous-runtime reader would refuse a serialized outcome carrying the new field: every reader must whitelist fields as `PgJobStore._outcome` does (`_OUTCOME_FIELDS`), and the field must not be added to the terminal journal payload (0017 pins its widest bytes) or to an outbox payload while the previous runtime is a rollback target.
+
+**Optional -> required rollout (explicit).** (1) This revision: optional on the record; required of every committed success by conformance (`result_expiry__`), ignored on proposals. (2) D10: return it from `job_admission`'s outcome document and `_OUTCOME_FIELDS`; add `check (state <> 'succeeded' or result_ref is null or result_expires_at is not null)` `NOT VALID`, count violations, `VALIDATE` only at zero - never backfill by recomputation; a violating row stays and reads `unavailable`. (3) G7: delete `Jobs.result_expiry`; every read path uses `read_outcome(outcome, db_now)`. (4) Once the previous runtime is no longer a rollback target, readers may decode whole documents.
+
 ## Verification log
 
 - 2026-09-20: Review fixes codified for durable acceptance, first-output fencing, terminal settlement, trace loss and external submission ambiguity. No live fault tests performed in this documentation change.
@@ -67,3 +88,4 @@ Executable in [`contracts/v2/lifecycle.py`](../../apps/infrx-api/infrx/contracts
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
 
 - 2026-09-24: F2C.a lifecycle amendment appended (decisions D1-D5 validated against `dff31efc`; ports, refusals and time authority). Fake-backed conformance only; no PostgreSQL adapter exists yet (D10).
+- 2026-09-24: F2C.b terminal/read consistency appended (persisted result expiry, the six read outcomes, scrub mechanics, compatibility, optional->required rollout). Fake-backed conformance only.

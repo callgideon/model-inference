@@ -52,7 +52,10 @@ MODELS: dict[str, type[BaseModel]] = {
     "terminal_cancelled.json": records.TerminalOutcome,
     "terminal_expired.json": records.TerminalOutcome,
     "terminal_platform_error.json": records.TerminalOutcome,
-    "terminal_success.json": records.TerminalOutcome,
+    "terminal_success.json": records.TerminalOutcome,       # written before F2C.b: no expiry
+    # F2C.b: the same success as the store commits it now, with its persisted expiry
+    # (settled_at + the 24 h result TTL, as `job_status.json` already shows).
+    "terminal_success_expiring.json": records.TerminalOutcome,
     "terminal_unknown_usage.json": records.TerminalOutcome,
     "trace_envelope.json": records.TraceEnvelope,
     "trace_envelope_lossy.json": records.TraceEnvelope,

@@ -4,7 +4,7 @@
     run_lifecycle_conformance(my_factory)            # raises AssertionError on failure
 
 One oracle per test id of `04-verification.md`: `upload_restart__`, `admission_ready__`,
-`retention_durable__`. `factory() -> Harness` returns a FRESH store whose `port`
+`retention_durable__`, `result_expiry__` (F2C.b). `factory() -> Harness` returns a FRESH store whose `port`
 implements `UploadRepository`, `ReadinessStore` and `ContentLifecycle`, plus hooks:
 
 * `reopen()` - the same durable state as another process sees it (a new adapter, a new
@@ -13,7 +13,9 @@ implements `UploadRepository`, `ReadinessStore` and `ContentLifecycle`, plus hoo
   the PREVIOUS runtime's admission, which writes no marker;
 * `credit_balance(wallet_id)` - `{"ledger", "reserved", "available"}`;
 * `set_capability(serving_version_id, input_modalities)` - the catalog row a later alias
-  move would change.
+  move would change;
+* `retune(**limits)` - the store's CURRENT configuration (`result_ttl_s`), as an operator
+  changing it would.
 
 The store is seeded with the v2 fixture directories (consumer credential, wallet, the
 Marlin revision and card). Every instant a case waits for is read off a returned record
@@ -25,15 +27,17 @@ means integrated.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from .. import errors
-from ..records import ExecutionMode, IdempotencyRef, LeaseKind, MediaKind, MediaRef, UploadState
+from ..records import (ExecutionMode, IdempotencyRef, LeaseKind, MediaKind, MediaRef,
+                       TerminalOutcome, UploadState)
 from ..v2 import fixtures as v2fix
 from ..v2.lifecycle import (REFUSAL_ERRORS, AdmissionExpectation, ContentIdentity, ContentKind, ContentLocation,
                             ContentOrigin, LifecycleRefusal as R, LifecycleState, ReadinessState,
-                            Tombstone, UploadConstraints, readiness_view, refusal_of)
+                            ReadOutcome, Tombstone, UploadConstraints, read_outcome,
+                            readiness_view, refusal_of)
 from ..v2.records import AccountingRegime
 from . import builders as b
 from .harness import hook
@@ -545,6 +549,101 @@ async def retention_durable__candidates_page_without_loss_or_repeat(factory):
         raise AssertionError("a forged cursor accepted")
 
 
+# --- RESULT-EXPIRY (F2C.b) --------------------------------------------------------------------
+async def _succeeded(harness, key: str, *, proposal_expiry=None, before_complete=None):
+    """Admit ready, prepare, claim and complete one CREDIT job; the committed outcome."""
+    port, jobs = harness.port, hook(harness, "jobs")
+    request = _request(harness)
+    admission, _ready = await port.admit_ready(request, _idem(request, key), CARD)
+    await jobs.prepared(await port.claim_preparation(request.request_id, "prep-a"))
+    lease = await jobs.claim(request.request_id, "worker-a")
+    proposal = b.outcome(request.request_id, harness)
+    if proposal_expiry is not None:
+        proposal = TerminalOutcome.model_validate(
+            {**proposal.model_dump(), "result_expires_at": proposal_expiry})
+    if before_complete is not None:
+        await before_complete(request)
+    outcome, _settlement = await jobs.complete_credit(lease, proposal)
+    return request, admission, outcome
+
+
+async def result_expiry__a_committed_success_carries_its_persisted_expiry(factory):
+    """RV-11: the settling transaction persists the result's expiry and every committed
+    read (owned read, idempotent lookup) carries that same instant; the store clock at it
+    reads `expired`. Every other outcome carries none."""
+    harness = factory()
+    jobs = hook(harness, "jobs")
+    request, admission, outcome = await _succeeded(harness, "expiring")
+    assert outcome.result_expires_at is not None and outcome.result_expires_at > outcome.settled_at
+    assert (await jobs.get_owned_credit(ORG, admission.job_handle))[1] == outcome
+    assert (await jobs.lookup(ORG, _idem(request, "expiring")))[1] == outcome
+    assert read_outcome(outcome, harness.clock.now()) is ReadOutcome.available
+    _at(harness, outcome.result_expires_at)
+    assert read_outcome((await jobs.get_owned_credit(ORG, admission.job_handle))[1],
+                        harness.clock.now()) is ReadOutcome.expired
+    cancelled = _request(harness)
+    other, _ = await harness.port.admit_ready(cancelled, _idem(cancelled, "cancelled"), CARD)
+    ended = await jobs.cancel(ORG, other.job_handle)
+    assert ended.result_expires_at is None and \
+        read_outcome(ended, harness.clock.now()) is ReadOutcome.no_result
+
+
+async def result_expiry__the_proposal_never_selects_the_expiry(factory):
+    """No caller-selected expiry: a worker's proposal naming one is not honoured."""
+    harness = factory()
+    far = harness.clock.now().replace(year=2099)
+    _request_, _admission, outcome = await _succeeded(harness, "far", proposal_expiry=far)
+    assert outcome.result_expires_at is not None and outcome.result_expires_at < far
+
+
+async def result_expiry__a_configuration_change_never_moves_a_promised_expiry(factory):
+    """The promise is the persisted instant: changing the configured TTL later moves no
+    committed result (it applies to settlements after it). Re-deriving the expiry from
+    current configuration - what `Jobs.result_expiry` does today - fails here."""
+    harness = factory()
+    jobs = hook(harness, "jobs")
+    _r, admission, first = await _succeeded(harness, "before")
+    hook(harness, "retune")(result_ttl_s=60.0)
+    again = (await jobs.get_owned_credit(ORG, admission.job_handle))[1]
+    assert again.result_expires_at == first.result_expires_at, "a retune moved a promise"
+    _r2, _a2, second = await _succeeded(harness, "after")
+    assert (second.result_expires_at - second.settled_at).total_seconds() == 60.0
+
+
+async def result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgotten(factory):
+    """D3: the result body is content (`result`, in the database). It is protected until
+    the PERSISTED expiry - however the TTL is reconfigured meanwhile - then scrubbed
+    through claim/tombstone/acknowledgement; the job, its idempotency mapping, outcome,
+    usage and settlement stay, and the read is `expired`, never regenerated."""
+    harness = factory()
+    port, jobs = harness.port, hook(harness, "jobs")
+    hook(harness, "retune")(result_ttl_s=3600.0)
+    registered = {}
+
+    async def put_result(request):          # the result is stored BEFORE settlement (02 §7)
+        registered["row"] = await port.register(ContentIdentity(
+            org_id=ORG, kind=ContentKind.result, location=ContentLocation.database,
+            object_key=f"job_results/{request.request_id}", digest=_digest(b"text"),
+            bytes=4, job_id=request.request_id, origin=ContentOrigin.written))
+    request, admission, outcome = await _succeeded(harness, "scrubbed",
+                                                   before_complete=put_result)
+    row = registered["row"]
+    before = _available(harness)
+    hook(harness, "retune")(result_ttl_s=1.0)
+    _at(harness, max(row.eligible_at, outcome.result_expires_at - timedelta(seconds=1)))
+    assert harness.clock.now() < outcome.result_expires_at, "fixture: grace < result TTL"
+    await _refused(port.claim(row.content_id, row.generation, "s"), R.reference_live)
+    _at(harness, outcome.result_expires_at)
+    assert row.content_id in {r.content_id for r in await _all_candidates(port)}
+    tombstone = await port.tombstone(await port.claim(row.content_id, row.generation, "s"))
+    assert (await port.acknowledge_delete(tombstone)).state is LifecycleState.deleted
+    _admission, kept = await jobs.get_owned_credit(ORG, admission.job_handle)
+    assert kept == outcome, "scrubbing content changed the terminal outcome"
+    assert read_outcome(kept, harness.clock.now()) is ReadOutcome.expired
+    assert (await jobs.lookup(ORG, _idem(request, "scrubbed")))[1] == outcome
+    assert _available(harness) == before, "scrubbing moved money"
+
+
 def cases() -> list[Callable]:
     return [
         upload_restart__every_step_survives_a_new_process,
@@ -566,6 +665,10 @@ def cases() -> list[Callable]:
         retention_durable__an_upload_protects_its_destination_and_source,
         retention_durable__a_payload_is_protected_by_its_job_once_admitted,
         retention_durable__candidates_page_without_loss_or_repeat,
+        result_expiry__a_committed_success_carries_its_persisted_expiry,
+        result_expiry__the_proposal_never_selects_the_expiry,
+        result_expiry__a_configuration_change_never_moves_a_promised_expiry,
+        result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgotten,
     ]
 
 
