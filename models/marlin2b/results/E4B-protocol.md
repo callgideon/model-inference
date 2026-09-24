@@ -151,3 +151,12 @@ run closed, and the coordinator's decision recorded in
   shorter than 7 characters identifies nothing (V5). Stated, not coded (V3): the runner reads
   only `E4B_WINDOW_OK=1` from the window record; the record's time and the edge's maintenance
   site are the operator's checks in the box protocol's step 5, not the runner's.
+- 2026-09-24 (CERTIFY-TREE), **amendment 5**, after the first box run (in
+  `infrx-runtime:<release>`, which has no git; out `20260924T165408Z`) failed
+  `e4b.b.served-build` with the report's tree `None`. None of the §5 numbers moved.
+  (a) Where git cannot exist - no git binary, or a checkout with no `.git` - the tree under
+  test is `--release-sha`: both `git_head` samples read
+  `{"sha": <release>, "dirty": null, "source": "--release-sha (no git)"}` (or `(no .git)`),
+  and the served-build cell names that source. The state stays unknown, so `release-identity`
+  still FAILs (§6.3, R97): only a run with git proves one clean SHA. Git that runs is never
+  overridden - a SHA other than `--release-sha` stays a FAIL of both entries.

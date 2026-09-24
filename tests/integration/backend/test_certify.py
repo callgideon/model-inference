@@ -879,6 +879,51 @@ def test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity(tmp_path
         f"the tree is {'c' * 40}, not the release {'c' * 7}"]
 
 
+def test_e4b_a_checkout_without_git_is_the_named_release_and_the_report_says_so(tmp_path,
+                                                                               monkeypatch):
+    """CERTIFY-TREE: the first box run (the runtime image, no git) failed served-build with
+    the report's tree None. Where git cannot exist - no git binary, or a checkout with no
+    .git - the tree under test is `--release-sha`, named as such (`source`) in both samples
+    and in the cell, and of unknown state, so `release-identity` still fails (R97). Git that
+    runs is never overridden: its silence stays unknown, its other SHA stays a FAIL."""
+    release, image = "e" * 40, "sha256:" + "1" * 64
+    checkout, empty, bin_ = tmp_path / "checkout", tmp_path / "empty", tmp_path / "bin"
+    for folder in (checkout, empty, bin_):
+        folder.mkdir()
+    (bin_ / "git").write_text("#!/bin/sh\nexit 1\n")        # a git that runs and cannot answer
+    (bin_ / "git").chmod(0o755)
+    monkeypatch.setattr(certify.harness, "REPO_ROOT", checkout)
+    monkeypatch.setattr(certify, "scrape", lambda url: {"revision": release})
+    monkeypatch.setenv("INFRX_CERTIFY_GATEWAY_IMAGE", image)
+    monkeypatch.setenv("INFRX_CERTIFY_RELEASE_IMAGE", image)
+    named = {"sha": release, "dirty": None, "source": "--release-sha (no git)"}
+    monkeypatch.setenv("PATH", str(empty))
+    assert certify.release_head(release) == named and certify.release_head(None) is None
+    report = certify.Report(TARGET, release_sha=release)
+    served = certify.served_build_check(report, "http://gw/metrics")
+    assert (served["status"], served["detail"]) == (certify.PASS, (
+        f"the gateway serves the report's tree {release} (--release-sha (no git)), "
+        "from the release image"))
+    doc = json.loads(report.as_json())
+    assert doc["git_head"] == doc["git_head_end"] == named
+    assert (doc["stages"][-1]["stage"], doc["stages"][-1]["status"],
+            doc["stages"][-1]["detail"]) == ("release-identity", certify.FAIL, [
+                "the tree at the start is of unknown state", "the tree at the end is of unknown state"])
+    monkeypatch.setenv("PATH", str(bin_))
+    assert certify.release_head(release) == {**named, "source": "--release-sha (no .git)"}
+    (checkout / ".git").write_text("gitdir: /nowhere\n")
+    assert certify.release_head(release) is None
+    report = certify.Report(TARGET, release_sha=release)
+    assert report.head == {"sha": None, "dirty": None}
+    monkeypatch.setattr(certify.run, "git_head", lambda: dict(CLEAN))
+    report = certify.Report(TARGET, release_sha=release)
+    assert certify.served_build_check(report, "http://gw/metrics")["detail"] == [
+        f"the gateway serves {release}, the report's tree is {'c' * 40}"]
+    doc = json.loads(report.as_json())
+    assert doc["git_head"] == doc["git_head_end"] == CLEAN
+    assert doc["stages"][-1]["detail"] == [f"the tree is {'c' * 40}, not the release {release}"]
+
+
 def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch):
     """Review F3: on the box the report's hashes are the release the endpoint serves - the
     gateway's own `infrx_build_info` revision is the report's tree, and it runs the image

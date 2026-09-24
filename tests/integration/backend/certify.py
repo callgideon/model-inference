@@ -41,6 +41,7 @@ import json
 import os
 import signal
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -125,6 +126,7 @@ class Report(run.Report):
         super().__init__()
         self.target, self.hashes, self.head_end = target, {}, None
         self.release_sha = release_sha
+        self.head = release_head(release_sha) or self.head
 
     def check(self, check_id: str, status: str, detail, *, owners=(), measured=None,
               label: str | None = None) -> dict:
@@ -146,7 +148,7 @@ class Report(run.Report):
         # Review F1: a certification counts for one clean, known tree - judged once, from the
         # same end sample the report records, so the exit code carries it.
         if self.head_end is None:
-            self.head_end = run.git_head()
+            self.head_end = release_head(self.release_sha) or run.git_head()
             problems = identity_problems(self.head, self.head_end, self.release_sha)
             self.check("release-identity", FAIL if problems else PASS,
                        problems or f"one clean tree: {self.head['sha']}")
@@ -158,6 +160,18 @@ class Report(run.Report):
                                             "the box half and the coordinator's recorded "
                                             "decision (E4B-release-decision.md)",
                            **doc}, indent=2, default=str, ensure_ascii=False)
+
+
+def release_head(release_sha: str | None) -> dict | None:
+    """The tree under test where git cannot exist - no git binary (the runtime image) or a
+    checkout with no .git: the release the operator names, and the report says so (`source`).
+    Its state stays unknown, so `release-identity` still fails it (R97: one clean SHA); git
+    that runs is never overridden - its answer, or its silence, stands (None here)."""
+    missing = ("no git" if shutil.which("git") is None
+               else "no .git" if not (harness.REPO_ROOT / ".git").exists() else None)
+    if release_sha and missing:
+        return {"sha": release_sha, "dirty": None, "source": f"--release-sha ({missing})"}
+    return None
 
 
 def identity_problems(start: dict, end: dict, release_sha: str | None = None) -> list[str]:
@@ -775,11 +789,13 @@ def served_build_problems(scraped: dict | None, head_sha: str | None,
 
 
 def served_build_check(report: Report, metrics_url: str) -> dict:
-    problems = served_build_problems(scrape(metrics_url), report.head.get("sha"),
+    tree = report.head.get("sha")
+    problems = served_build_problems(scrape(metrics_url), tree,
                                      os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE"),
                                      os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"))
     return report.check("e4b.b.served-build", FAIL if problems else PASS,
-                        problems or "the gateway serves the report's tree, from the release image")
+                        problems or f"the gateway serves the report's tree {tree} "
+                                    f"({report.head.get('source', 'git')}), from the release image")
 
 
 def preconditions_check(report: Report, target: dict, box: bool) -> dict:

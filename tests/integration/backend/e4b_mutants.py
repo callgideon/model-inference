@@ -118,6 +118,7 @@ RECORD = "test_e4b_the_declared_settings_are_the_serving_record_read_never_typed
 RULES = "test_e4b_each_stated_client_rule_holds_one_assertion_each"
 EXIT = "test_e4b_the_suite_halves_carry_pytests_own_exit_code"
 BOX_ARGS = "test_e4b_a_box_run_names_its_release_and_reads_its_metrics"
+TREE = "test_e4b_a_checkout_without_git_is_the_named_release_and_the_report_says_so"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -461,6 +462,32 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("app_path_substring_matches", "only an apps/app or apps/lab path component is a package",
        'APP_OR_LAB = re.compile(r"(?:^|/)apps/(?:app|lab)(?:/|$)")',
        'APP_OR_LAB = re.compile(r"apps/(?:app|lab)")', APPS),
+    # --- CERTIFY-TREE: a checkout without git is the named release ---------------------
+    _m("no_git_tree_unnamed", "a checkout git cannot read is certified as --release-sha",
+       "    if release_sha and missing:\n", "    if False:\n", TREE),
+    _m("git_overridden_by_release_sha", "git that runs is never overridden by --release-sha",
+       "    if release_sha and missing:\n", "    if release_sha:\n", TREE),
+    _m("no_git_binary_ignored", "no git binary is what names the tree (no git)",
+       '    missing = ("no git" if shutil.which("git") is None\n',
+       '    missing = ("no git" if False\n', TREE),
+    _m("no_dot_git_ignored", "a checkout with no .git is not git's to read",
+       '               else "no .git" if not (harness.REPO_ROOT / ".git").exists() else None)\n',
+       "               else None)\n", TREE),
+    _m("named_tree_recorded_clean", "a tree named by --release-sha is of unknown state",
+       '        return {"sha": release_sha, "dirty": None, "source": f"--release-sha ({missing})"}\n',
+       '        return {"sha": release_sha, "dirty": False, "source": f"--release-sha ({missing})"}\n',
+       TREE),
+    _m("named_tree_source_dropped", "the report says the SHA is --release-sha's, not git's",
+       '        return {"sha": release_sha, "dirty": None, "source": f"--release-sha ({missing})"}\n',
+       '        return {"sha": release_sha, "dirty": None}\n', TREE),
+    _m("start_sample_ignores_release", "the start sample is the named release too",
+       "        self.head = release_head(release_sha) or self.head\n", "", TREE),
+    _m("end_sample_ignores_release", "the end sample is the named release too",
+       "            self.head_end = release_head(self.release_sha) or run.git_head()\n",
+       "            self.head_end = run.git_head()\n", TREE),
+    _m("served_detail_hides_the_source", "the served-build cell names where its tree came from",
+       "f\"({report.head.get('source', 'git')}), from the release image\")",
+       "f\"(git), from the release image\")", TREE),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',
