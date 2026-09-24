@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T18:16:00Z",
+  "updated": "2026-09-24T18:30:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -106,8 +106,8 @@
       "since": "2026-09-24T18:16:00Z"
     },
     "CERTIFY-TREE": {
-      "phase": "lane running: served-build without git (--release-sha) + worker gauge (7bb7b41), cap-aware parity/dataset/envelope (item 2/4), cancelled-replay terminal (item 5, R106) -> handback -> verifier -> merge",
-      "since": "2026-09-24T17:10:00Z"
+      "phase": "handed back 9b467f8 (served-build without git, deployed cap in every cell, parity within-cap + typed over-cap, R106 cancelled-replay terminal); single Opus verifier running -> merge -> focused gate -> third install -> certification run3",
+      "since": "2026-09-24T18:30:00Z"
     }
   },
   "gates": {

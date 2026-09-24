@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T18:16:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T18:30:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -89,7 +89,7 @@ Generated 2026-09-24T18:16:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review I2B-R4-worker: MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z
 - review PREP-WORKER: MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z
 - review TOKCOST: handed back ad50b9d (count memo; R105 kept; request 1 = box /tokenize cold-vs-warm protocol); single Opus verifier running -> merge -> R107 -> focused gate -> third install since 2026-09-24T18:16:00Z
-- review CERTIFY-TREE: lane running: served-build without git (--release-sha) + worker gauge (7bb7b41), cap-aware parity/dataset/envelope (item 2/4), cancelled-replay terminal (item 5, R106) -> handback -> verifier -> merge since 2026-09-24T17:10:00Z
+- review CERTIFY-TREE: handed back 9b467f8 (served-build without git, deployed cap in every cell, parity within-cap + typed over-cap, R106 cancelled-replay terminal); single Opus verifier running -> merge -> focused gate -> third install -> certification run3 since 2026-09-24T18:30:00Z
 
 ## Checkpoints
 
