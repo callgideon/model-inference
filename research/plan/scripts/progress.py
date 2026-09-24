@@ -418,7 +418,13 @@ def malformed(u):
     return estimate_problem(u["estimate"]) if "estimate" in u else None
 
 
+CONFIDENCE_ALIASES = {"med": "medium", "mid": "medium"}  # lanes wrote 'med'; the enum is low/medium/high
+
+
 def judge(model, state, u, at):
+    est = u.get("estimate")
+    if isinstance(est, dict) and est.get("confidence") in CONFIDENCE_ALIASES:
+        est["confidence"] = CONFIDENCE_ALIASES[est["confidence"]]
     """(lane or None, rejection reason or None) for one update."""
     task, act, lanes = u.get("task"), u.get("activity"), state["lanes"]
     if not isinstance(task, str) or task not in set(model.tasks) | {x["id"] for x in lanes if not x.get("task")}:

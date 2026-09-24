@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "f764e396",
+  "integration_head": "2cae9a4c",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,13 +19,13 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 3,
-  "updated": "2026-09-24T22:24:27Z",
+  "revision": 7,
+  "updated": "2026-09-24T22:31:34Z",
   "agent_slots": {
-    "total": 14,
-    "active": 12,
+    "total": 16,
+    "active": 14,
     "reserved": 2,
-    "note": "Coordinator update 1: 12 lanes active, 2 slots reserved for review (16-CPU host)"
+    "note": "Dispatch 3 (21:59Z): 14 lanes active (12 writers + M6 phase 1 + E3C phase 1); 2 slots reserved for the verify-lane workflows (3 lenses + fix + recheck per handback)"
   },
   "eta_params": {
     "review_rework_fraction": 0.3,
@@ -200,24 +200,24 @@
       "branch": "codex/tracker",
       "worktree": ".claude/worktrees/codex-tracker",
       "base": "dff31efc",
-      "head": "32bbe9a8",
+      "head": "803f6cb1",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T22:24:00Z",
+      "updated": "2026-09-24T22:31:32Z",
       "blocker": null,
-      "next_action": "Coordinator re-verification of the fix round; merge; run apply-updates at each lane handback.",
+      "next_action": "merged into claude/consumer-v1 at 2cae9a4c; the coordinator runs apply-updates at each handback",
       "estimate": {
         "optimistic_h": 0,
-        "likely_h": 0.5,
-        "pessimistic_h": 2,
-        "confidence": "medium",
-        "basis": "fix round done; remaining is re-verification follow-up only",
-        "at": "2026-09-24T22:24:00Z"
+        "likely_h": 0,
+        "pessimistic_h": 0.5,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 803f6cb1)",
+        "at": "2026-09-24T22:31:32Z"
       },
       "evidence": [
         "research/plan/evidence/coordinator/TRACKER-7fa0e76.md"
@@ -301,12 +301,12 @@
     {
       "id": "F2C-L",
       "task": "F2C",
-      "slice": "a/b/d",
+      "slice": "b/d (slice a accepted for consumption at 2d5e4743; read-only verifier on a)",
       "agent": "opus",
       "branch": "codex/f2c-lifecycle",
       "worktree": ".claude/worktrees/codex-f2c-lifecycle",
       "base": "dff31efc",
-      "head": null,
+      "head": "d566c83b",
       "isolation": {
         "ports": null,
         "prefix": null,
@@ -314,28 +314,73 @@
       },
       "activity": "running",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
+      "updated": "2026-09-24T22:31:34Z",
       "blocker": null,
-      "next_action": "Hand back after slice a so D10/M5/W5 can start; then slices b, d.",
+      "next_action": "slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 5,
+        "likely_h": 8,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "lane's own estimate for b+d at slice-a handback",
+        "at": "2026-09-24T22:31:34Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md"
+      ],
+      "commands": [
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts",
+          "exit": 1,
+          "summary": "1149 passed, 3 failed (HarnessBusy: shared PG port held by codex-e2c-verify; same 3 at base)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py",
+          "exit": 0,
+          "summary": "48 passed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants <34 lc_* mutants>",
+          "exit": 0,
+          "summary": "34/34 killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/m tests/w tests/g -k 'not mutant'",
+          "exit": 0,
+          "summary": "1107 passed, 22 skipped"
+        },
+        {
+          "cmd": "make console-test",
+          "exit": 0,
+          "summary": "294 passed"
+        },
+        {
+          "cmd": "make console-lint",
+          "exit": 0,
+          "summary": "0 errors, 2 pre-existing warnings"
+        },
+        {
+          "cmd": "make console-typecheck",
+          "exit": 0,
+          "summary": "clean"
+        },
+        {
+          "cmd": "node tests/contracts/run-mutants.mjs --entry v2",
+          "exit": 0,
+          "summary": "36/36 killed (5 new V2-LC-*)"
+        }
+      ],
       "owned_paths": [
-        "apps/infrx-api/infrx/contracts/ (lifecycle/terminal files)",
-        "apps/app/lib/contracts/ (lifecycle/terminal files)",
+        "apps/infrx-api/infrx/contracts/",
+        "apps/app/lib/contracts/",
         "apps/infrx-api/tests/contracts/",
         "apps/app/tests/contracts/",
         "research/plan/01-contracts.md",
-        "research/plan/02-durable-protocols.md"
+        "research/plan/02-durable-protocols.md",
+        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md"
       ],
-      "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06)."
+      "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06).",
+      "wiring_requests": []
     },
     {
       "id": "F2C-C",
@@ -345,69 +390,165 @@
       "branch": "codex/f2c-catalog",
       "worktree": ".claude/worktrees/codex-f2c-catalog",
       "base": "dff31efc",
-      "head": null,
+      "head": "d414607d",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
+      "updated": "2026-09-24T22:15:00Z",
       "blocker": null,
       "next_action": "Slice c + fixtures; exports via wiring request; P-22 amendment text.",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 0.5,
+        "likely_h": 1.5,
+        "pessimistic_h": 4,
+        "confidence": "medium",
+        "basis": "contract, fixtures and both suites done; left: review fixes and applying wiring requests",
+        "at": "2026-09-24T22:15Z"
       },
-      "evidence": [],
-      "commands": [],
-      "owned_paths": [
-        "apps/infrx-api/infrx/contracts/ (new files only: published-model projection, pricing identity, alias resolution)",
-        "apps/app/lib/contracts/ (new files only)"
+      "evidence": [
+        "research/plan/evidence/f/F2C-catalog-d414607.md"
       ],
-      "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06)."
+      "commands": [
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/v2/test_published_model.py",
+          "exit": 0,
+          "summary": "89 passed (new)"
+        },
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts --deselect tests/contracts/v2/test_v1_projection_pg.py",
+          "exit": 0,
+          "summary": "1164 passed (1075 existing + 89 new), 3 deselected"
+        },
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts",
+          "exit": 1,
+          "summary": "1164 passed, 3 failed: test_v1_projection_pg HarnessBusy (port 55432 held by codex-e2c-verify; nothing altered); environment, not product"
+        },
+        {
+          "cmd": "cd apps/app && node --test tests/contracts/v2/published-model.test.ts",
+          "exit": 0,
+          "summary": "52/52 (new)"
+        },
+        {
+          "cmd": "make console-test",
+          "exit": 0,
+          "summary": "341/341 (289 existing + 52 new)"
+        },
+        {
+          "cmd": "make console-typecheck",
+          "exit": 0,
+          "summary": "clean"
+        },
+        {
+          "cmd": "make console-lint",
+          "exit": 0,
+          "summary": "0 errors, 2 pre-existing warnings"
+        },
+        {
+          "cmd": "python3 scratchpad/f2c-c/mutate.py <worktree>",
+          "exit": 0,
+          "summary": "18/18 ad-hoc mutants killed (12 py, 6 ts)"
+        },
+        {
+          "cmd": "G7 seam regression (evidence appendix A) against dff31efc GET /v1/models",
+          "exit": 1,
+          "summary": "2 failed as intended: 25 validation errors; tools + 120 s vs 82 s violations; zdr refused"
+        }
+      ],
+      "owned_paths": [
+        "apps/infrx-api/infrx/contracts/v2/published_model.py",
+        "apps/infrx-api/infrx/contracts/v2/published_fixtures.py",
+        "apps/infrx-api/infrx/contracts/v2/published/",
+        "apps/infrx-api/tests/contracts/v2/test_published_model.py",
+        "apps/app/lib/contracts/v2/published-model.ts",
+        "apps/app/tests/contracts/v2/published-model.test.ts",
+        "research/plan/evidence/f/F2C-catalog-d414607.md",
+        "research/plan/evidence/coordinator/updates/F2C-C-20260924T2215Z.json"
+      ],
+      "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06).",
+      "wiring_requests": [
+        "apps/infrx-api/infrx/contracts/v2/__init__.py: _SUBMODULES += published_fixtures, published_model (evidence §9.1)",
+        "apps/app/lib/contracts/v2/types.ts: export * from \"./published-model.ts\" after the money-units re-export (evidence §9.2)",
+        "15-pending-inputs.md P-22 amendment (evidence §4); 08 §10 R109 (evidence §5)",
+        "G7: adopt the seam regression (appendix A) in tests/g; D10: run alias_compatibility.json against real PostgreSQL",
+        "coordinator box check: hosted listing names rc_marlin2b_2026_09_provisional; price_versions holds the two HOSTED_USD_ROWS"
+      ]
     },
     {
       "id": "E1C",
       "task": "E1C",
-      "slice": "first slices (profile schema, validate-only, resume recipe)",
+      "slice": "E1C.1-E1C.4 + coordinator update 1 (S3 F5, F8/P-24)",
       "agent": "opus",
       "branch": "codex/e1c-client",
       "worktree": ".claude/worktrees/codex-e1c-client",
       "base": "dff31efc",
-      "head": null,
+      "head": "2531dc49",
       "isolation": {
         "ports": "postgres 55449 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e1c-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
-      "blocker": null,
+      "updated": "2026-09-24T22:15:00Z",
+      "blocker": "UPLOAD-RESTART needs M5 durable uploads (codex/m5-uploads empty at 22:05Z); hosted smoke is the coordinator's (command in the evidence)",
       "next_action": "RV-07/08; profile schema + validate-only; resume recipe; re-check F2C fixtures when they land.",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 2,
+        "likely_h": 4,
+        "pessimistic_h": 8,
+        "confidence": "medium",
+        "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds",
+        "at": "2026-09-24T22:15Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/E1C-2531dc4.md"
+      ],
+      "commands": [
+        {
+          "cmd": "make bench-test (base dff31efc)",
+          "exit": 0,
+          "summary": "68 passed"
+        },
+        {
+          "cmd": "make bench-test (2531dc49)",
+          "exit": 0,
+          "summary": "96 passed (+28: conformance 4, dataset 6, validity 8, profile 10)"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py",
+          "exit": 0,
+          "summary": "38 passed"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py (detached)",
+          "exit": 0,
+          "summary": "80 mutants: 77 killed, 3 controls survived, 0 problems (37 new E1C)"
+        },
+        {
+          "cmd": "bench.py --validate-raw <committed E1B raw>",
+          "exit": 0,
+          "summary": "bda1586 L2/L3 VALID; 4226315 L2-r0.5/L2-r1.0/L3/L5 INVALID (unexpected replay); counts equal stored summaries"
+        }
+      ],
       "owned_paths": [
         "models/marlin2b/bench.py",
         "models/marlin2b/tests/",
-        "models/marlin2b/ (new dataset client/profile files)",
-        "models/marlin2b/results/ (new only)"
+        "models/marlin2b/dataset.py",
+        "models/marlin2b/runprofile.py",
+        "models/marlin2b/profiles/",
+        "research/plan/evidence/e/E1C-2531dc4.md"
       ],
-      "deviation": "Session-03 recorded deviation: first slices do not consume F2C ports; re-check F2C fixtures when they land."
+      "deviation": "Session-03 recorded deviation: first slices do not consume F2C ports; re-check F2C fixtures when they land.",
+      "wiring_requests": [
+        "certify.py bench_argv: pass --profile/--key-inventory per cell; rung_verdicts FAIL on validity != VALID",
+        "after that: make --profile mandatory for non-local gateway targets in bench._run (E1C one-line flip)",
+        "coordinator: append E1B-protocol.md section 5 items 9-11 (replay INVALID, per-cell dataset version, P4 through the edge with observed 429/503)"
+      ]
     },
     {
       "id": "I8",
@@ -603,62 +744,64 @@
     {
       "id": "M6",
       "task": "M6",
-      "slice": null,
-      "agent": null,
-      "branch": null,
-      "worktree": null,
-      "base": null,
+      "slice": "phase 1: gc.py + new lifecycle modules + gc/retention tests; caches/process maps (point 3) after M5 merges",
+      "agent": "opus",
+      "branch": "codex/m6-retention",
+      "worktree": ".claude/worktrees/codex-m6-retention",
+      "base": "f764e396",
       "head": null,
       "isolation": {
-        "ports": "postgres 55444, s3 55471 (contracts/tasklocal.py, bfb3a8af)",
+        "ports": "55444 postgres, 55471 s3",
         "prefix": "infrx-m6-",
-        "db": null
+        "db": "infrx_m6"
       },
-      "activity": "queued",
-      "started": null,
-      "updated": "2026-09-24T21:40:00Z",
+      "activity": "running",
+      "started": "2026-09-24T21:59:30Z",
+      "updated": "2026-09-24T21:59:30Z",
       "blocker": "after M5 (same media paths, serialized)",
-      "next_action": null,
+      "next_action": "durable candidates/claims/tombstones against the F2C-L port and D10.b adapter (fake until they land)",
       "estimate": {
         "optimistic_h": null,
         "likely_h": null,
         "pessimistic_h": null,
         "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "basis": "dispatched; lane has not yet inspected the slice",
+        "at": "2026-09-24T21:59:30Z"
       },
       "evidence": [],
-      "commands": []
+      "commands": [],
+      "deviation": "phase 1 limited to gc.py + new modules (disjoint from M5); phase 2 (caches/process maps) after M5 merges; user asked for max parallel lanes (dispatch 3)"
     },
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": null,
-      "agent": null,
-      "branch": null,
-      "worktree": null,
-      "base": null,
+      "slice": "phase 1: red harness (tests/integration/backend/e3c/): scenario runner, fault injection, verdicts, the matrix run on the base tree; phase 2 = green on the merged SHA",
+      "agent": "opus",
+      "branch": "codex/e3c-integration",
+      "worktree": ".claude/worktrees/codex-e3c-integration",
+      "base": "f764e396",
       "head": null,
       "isolation": {
-        "ports": "compose block 56900-56999, postgres 56932 (contracts/tasklocal.py, bfb3a8af)",
+        "ports": "compose block 56900-56999 (postgres 56932)",
         "prefix": "infrx-e3c-",
-        "db": null
+        "db": "infrx_e3c"
       },
-      "activity": "queued",
-      "started": null,
-      "updated": "2026-09-24T21:40:00Z",
+      "activity": "running",
+      "started": "2026-09-24T21:59:40Z",
+      "updated": "2026-09-24T21:59:40Z",
       "blocker": "after E2C + F2C; integrates all runtime lanes",
-      "next_action": null,
+      "next_action": "scenario matrix red/blocked on f764e396",
       "estimate": {
         "optimistic_h": null,
         "likely_h": null,
         "pessimistic_h": null,
         "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "basis": "dispatched; lane has not yet inspected the slice",
+        "at": "2026-09-24T21:59:40Z"
       },
       "evidence": [],
-      "commands": []
+      "commands": [],
+      "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)"
     },
     {
       "id": "E4C",
@@ -693,10 +836,16 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-24T22:04:00Z",
-      "lane": "TRACKER",
-      "task": "TRACKER",
-      "head": "32bbe9a8"
+      "since": "2026-09-24T22:15:00Z",
+      "lane": "E1C",
+      "task": "E1C",
+      "head": "2531dc49"
+    },
+    {
+      "since": "2026-09-24T22:15:00Z",
+      "lane": "F2C-C",
+      "task": "F2C",
+      "head": "d414607d"
     }
   ],
   "integration_queue": [],
@@ -1425,6 +1574,98 @@
       "by": "TRACKER",
       "what": "review → review; head 32bbe9a8; estimate likely 1.5 → 0.5 h (fix round done; remaining is re-verification follow-up only)",
       "source": "updates/TRACKER-20260924T2224Z.json"
+    },
+    {
+      "at": "2026-09-24T22:30:37Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'med' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/S3-20260924T2150Z.json"
+    },
+    {
+      "at": "2026-09-24T21:59:30Z",
+      "by": "M6",
+      "what": "queued → running",
+      "source": "updates/M6-20260924T2159Z.json"
+    },
+    {
+      "at": "2026-09-24T21:59:40Z",
+      "by": "E3C",
+      "what": "queued → running",
+      "source": "updates/E3C-20260924T2159Z.json"
+    },
+    {
+      "at": "2026-09-24T22:30:37Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'med' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/F2C-L-20260924T2213Z.json"
+    },
+    {
+      "at": "2026-09-24T22:30:37Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'med' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/E1C-20260924T2215Z.json"
+    },
+    {
+      "at": "2026-09-24T22:30:37Z",
+      "by": "tracker",
+      "what": "rejected update: malformed: estimate confidence 'med' not in ['unknown', 'low', 'medium', 'high']",
+      "source": "updates/F2C-C-20260924T2215Z.json"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-24T21:50:00Z is not newer than lane S3 state 2026-09-24T21:58:00Z",
+      "source": "updates/S3-20260924T2150Z.json"
+    },
+    {
+      "at": "2026-09-24T22:13:51Z",
+      "by": "F2C-L",
+      "what": "running → review; head 2d5e4743; estimate likely unknown → 8 h (slices b and d remain; b changes the v1 TerminalOutcome consumed by every JobStore suite)",
+      "source": "updates/F2C-L-20260924T2213Z.json"
+    },
+    {
+      "at": "2026-09-24T22:15:00Z",
+      "by": "E1C",
+      "what": "running → review; head 2531dc49; estimate likely unknown → 4 h (UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds)",
+      "source": "updates/E1C-20260924T2215Z.json"
+    },
+    {
+      "at": "2026-09-24T22:15:00Z",
+      "by": "F2C-C",
+      "what": "running → review; head d414607d; estimate likely unknown → 1.5 h (contract, fixtures and both suites done; left: review fixes and applying wiring requests)",
+      "source": "updates/F2C-C-20260924T2215Z.json"
+    },
+    {
+      "at": "2026-09-24T22:31:32Z",
+      "by": "TRACKER",
+      "what": "complete → complete; head 803f6cb1",
+      "source": "updates/TRACKER-20260924T2231Z.json"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "F2C-L",
+      "what": "review → running; head d566c83b",
+      "source": "updates/F2C-L-20260924T223134Z.json"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, E1C, E2C, E3C, F2C, G7, G8, I8, M5, M6, W5 → unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5 (because: no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, I8, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T22:31:34Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5)"
     }
   ],
   "history": {
@@ -1450,10 +1691,43 @@
     "TRACKER-20260924T2224Z.json": {
       "status": "applied",
       "at": "2026-09-24T22:24:00Z"
+    },
+    "M6-20260924T2159Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T21:59:30Z"
+    },
+    "E3C-20260924T2159Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T21:59:40Z"
+    },
+    "S3-20260924T2150Z.json": {
+      "status": "rejected",
+      "at": "2026-09-24T21:50:00Z",
+      "reason": "stale: at 2026-09-24T21:50:00Z is not newer than lane S3 state 2026-09-24T21:58:00Z"
+    },
+    "F2C-L-20260924T2213Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:13:51Z"
+    },
+    "E1C-20260924T2215Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:15:00Z"
+    },
+    "F2C-C-20260924T2215Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:15:00Z"
+    },
+    "TRACKER-20260924T2231Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:31:32Z"
+    },
+    "F2C-L-20260924T223134Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:31:34Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T22:24:27Z",
+    "computed_at": "2026-09-24T22:31:34Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -1463,8 +1737,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, E1C, E2C, E3C, F2C, G7, G8, I8, M5, M6, W5",
-        "constraint": "no remaining-effort estimate for D10, E1C, E2C, E3C, F2C, G7, G8, I8, M5, M6, W5",
+        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5",
+        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1477,7 +1751,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E1C, E2C, E3C, E4C, F2C, G7, G8, I8, M5, M6, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, I8, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1490,7 +1764,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E1C, E2C, E3A, E3C, E4C, F2C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1503,7 +1777,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E1C, E2C, E3A, E3C, E4, E4C, F2C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,

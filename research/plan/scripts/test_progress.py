@@ -461,3 +461,14 @@ class Writes(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfidenceAlias(unittest.TestCase):
+    def test_med_is_normalised_to_medium(self):
+        import progress
+        u = {"task": "D10", "activity": "running", "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 3, "confidence": "med", "basis": "x"}}
+        progress.judge.__globals__["CONFIDENCE_ALIASES"]  # exists
+        est = u["estimate"]
+        est["confidence"] = progress.CONFIDENCE_ALIASES.get(est["confidence"], est["confidence"])
+        self.assertEqual(est["confidence"], "medium")
+
