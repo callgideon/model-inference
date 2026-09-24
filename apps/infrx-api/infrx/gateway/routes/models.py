@@ -18,8 +18,8 @@ from:
   jobs router installed its hook on the relay);
 * availability from the ingress's readiness probes, never a flag in a file.
 
-An entry is published only if it passes `violations` against the enforced profile AND
-against the approved release profile (`APPROVED`: the deployed Marlin profile, 82 s -
+An entry is published only if `project` accepts it against the enforced profile AND it
+passes `violations` against the approved release profile (`APPROVED`: the deployed Marlin profile, 82 s -
 P-20/P-23). Anything else - unpriced, retired, private, an unapproved card, a runtime past
 the approved profile - publishes nothing. `provider_document` renders the same entry as the
 OpenRouter v2.4 provider document (OpenRouter is deferred: nothing serves it yet).
@@ -164,11 +164,11 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
         published = pm.project(
             serving=serving, deployment=deployment, listing_version=LISTING_VERSION,
             regime=regime, credit_card=card, credit_provisional=PROVISIONAL, usd_price=usd,
-            capability=profile.capability, retention=profile.retention, owned_by=OWNED_BY,
+            capability=profile.capability, profile=profile, owned_by=OWNED_BY,
             available=available, as_of=now)
     except (errors.NotFound, errors.InvalidRequest):
-        return []                                     # project's refusal: not publishable
-    overclaims = pm.violations(published, profile) + pm.violations(published, APPROVED)
+        return []            # project's refusal: unpublishable, or past the enforced profile
+    overclaims = pm.violations(published, APPROVED)
     if overclaims:
         log.error("%s is not published: %s", serving.model_revision, "; ".join(overclaims))
         return []
