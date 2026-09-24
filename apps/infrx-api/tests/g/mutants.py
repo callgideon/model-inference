@@ -1568,6 +1568,24 @@ MUTANTS: tuple[Mutant, ...] = (
        V, '    if match.group("mime").lower() not in allowed_mime:',
        '    if match.group("mime").lower() not in allowed_mime - {"video/webm"}:',
        "test_catalog_truth__every_advertised_claim_is_what_admission_enforces"),
+    # === G7 item 2: P-22 / F11 - one canonical id, its aliases, one rate identity ==========
+    _m("ingress_card_check_removed", "an unapproved card is refused before any hold (F11)",
+       V, "        self.check_card(resolved.rate_card)\n", "",
+       "test_alias_pricing__an_unapproved_card_is_refused_before_any_hold"),
+    _m("card_check_in_every_regime", "the approved-card check is the CREDIT regime's only",
+       V, "        if (self.rt.settings.deployment.accounting_regime == CREDIT_REGIME\n"
+          "                and card.rate_card_version",
+       "        if (True\n                and card.rate_card_version",
+       "test_alias_pricing__legacy_discovery_prices_every_alias_by_the_canonical_revision"),
+    _m("ingress_rewrites_the_spelling", "admission gets the caller's spelling verbatim (P-22)",
+       V, "            model_revision=model,",
+       "            model_revision=resolved.serving.model_revision,",
+       "test_alias_pricing__every_known_spelling_resolves_and_prices_as_the_table",
+       "test_alias_pricing__legacy_discovery_prices_every_alias_by_the_canonical_revision"),
+    _m("replay_rechecked_against_todays_card", "a job on an earlier card keeps answering",
+       R, "        if found is None:\n            # A fresh admission",
+       "        if found is None or admission.replayed:\n            # A fresh admission",
+       "test_alias_pricing__a_job_on_the_earlier_card_keeps_answering"),
 )
 
 
