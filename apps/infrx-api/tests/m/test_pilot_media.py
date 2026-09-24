@@ -97,14 +97,15 @@ def test_mpilot__another_orgs_upload_is_not_found_at_admission():
 def test_mpilot__an_unfinalized_upload_is_refused_at_admission():
     """An upload whose bytes arrived but which was never completed names nothing: there is
     no verified object (`not_found`). A handle indexed while its upload is still open (a
-    squat, seeded as M3's R82 case does) is `invalid_request` - never the squatter's ref."""
+    squat, seeded as M3's R82 case does) is the same `not_found` - the ticket answers
+    (M5), never the squatter's ref."""
     adapter = adapter_for()
     handle = created(adapter)
     arrive(adapter, handle, CLIP)
     with pytest.raises(errors.NotFound):
         admitted(adapter, chat_naming(adapter, handle))
     adapter.refs[(b.ORG_A, handle)] = b.media(b.ORG_A, handle=handle, kind=MediaKind.upload)
-    with pytest.raises(errors.InvalidRequest):
+    with pytest.raises(errors.NotFound):
         admitted(adapter, chat_naming(adapter, handle))
 
 

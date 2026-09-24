@@ -298,18 +298,24 @@ def test_two_stores_never_see_each_others_objects(pair):
 
 
 def test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refused_unread(objects):
-    """The size bound (M3): `describe` reports the stored size exactly, so an upload of
-    exactly `max_bytes` finalizes and one byte more is `request_too_large` without a
-    download."""
+    """The size bound: an upload of exactly `max_bytes` finalizes; a PUT one byte over its
+    ticket's cap stores nothing (M5: the receipt is refused before the write); and bytes
+    over `MAX_MEDIA_BYTES` - every ticket's ceiling - found at a destination are
+    `request_too_large` from `describe`'s exact size, without a download."""
     counting = Counting(objects)
-    adapter = adapter_for(objects=counting)
+    adapter = adapter_for(objects=counting, limits=DEFAULTS.replace(max_media_bytes=len(CLIP)))
     assert uploaded(adapter, max_bytes=len(CLIP)).bytes == len(CLIP)
     over = created(adapter, max_bytes=len(CLIP) - 1)
-    # the client's bytes at the destination, past put_upload's own cap
-    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, over), CLIP, "video/mp4"))
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.put_upload(b.ORG_A, over, CLIP, "video/mp4"))
+    assert run(objects.describe(adapter.upload_key(b.ORG_A, over))) is None
+    beyond = created(adapter)
+    # bytes at the destination behind the store's back, one past the ceiling
+    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, beyond), CLIP + b"\0",
+                                     "video/mp4"))
     gets = counting.gets
     with pytest.raises(errors.RequestTooLarge):
-        run(adapter.finalize_upload(b.ORG_A, over))
+        run(adapter.finalize_upload(b.ORG_A, beyond))
     assert counting.gets == gets, "an oversize object was downloaded to be refused"
 
 
