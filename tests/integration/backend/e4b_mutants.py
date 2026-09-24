@@ -597,6 +597,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "                                corpus=corpus), env)",
        "                                ), env)",
        DATASET_CAP),
+    _m("v_capped_second_run_only", "a first-run refusal as over the cap fails the drill too",
+       'for row in rows_first + rows_second if refused_over_cap(row)})',
+       'for row in rows_second if refused_over_cap(row)})', DATASET_CAP),
     _m("capped_items_accepted", "an item refused as over the cap fails the drill",
        "    if capped:\n", "    if False:\n", DATASET_CAP),
     # --- CERTIFY-TREE item 5: R106, a cancelled job's replay is terminal ---------------

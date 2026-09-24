@@ -630,11 +630,11 @@ def test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap(tmp_
     assert kept["clips"] == [c for c in manifest["clips"] if c["derived"]["duration_s"] <= 72]
     assert max(clip["derived"]["duration_s"] for clip in kept["clips"]) == 72.0
     assert kept["cache_root_default"] == str(certify.corpus_cache())
-    corpora, second = [], list(SECOND)
+    corpora, first, second = [], list(FIRST), list(SECOND)
 
     def interrupted(argv, raw, *, after, env, timeout_s):
         corpora.append(argv[argv.index("--corpus") + 1])
-        raw.write_text("".join(json.dumps(r) + "\n" for r in FIRST))
+        raw.write_text("".join(json.dumps(r) + "\n" for r in first))
         return {"exit": 130, "signalled": True}
 
     def fake_client(argv, env=None):
@@ -659,6 +659,13 @@ def test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap(tmp_
     assert (report.stages[-1]["status"], report.stages[-1]["detail"]) == (certify.FAIL, [
         "items within the runner's cap (82 s) refused as over MAX_VIDEO_SECONDS - the "
         "gateway's cap is another: ['i6']"])
+    # a first-run refusal is terminal and never re-sent: the first run is where it sits
+    second[:] = SECOND
+    first[1] = dict(_row("i2", "rejected", status=400), error_code=certify.OVER_CAP["code"])
+    certify.dataset_check(report, local, tmp_path, CAP)
+    assert (report.stages[-1]["status"], report.stages[-1]["detail"]) == (certify.FAIL, [
+        "items within the runner's cap (82 s) refused as over MAX_VIDEO_SECONDS - the "
+        "gateway's cap is another: ['i2']"])
 
 
 def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
