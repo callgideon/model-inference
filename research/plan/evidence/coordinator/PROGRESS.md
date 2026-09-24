@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T17:26:15Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T18:03:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-24T17:26:15Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification rerun in progress (out 20260924T172244Z; served-build needs git in the image, parity needs the cap-aware certify - CERTIFY-TREE lane); TOKCOST lane on the 16.8 s video tokenize; then drills, E1B L2-L7, release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification RERUN at 4226315 in its 4 h soak (out 20260924T172244Z; envelope: 0.5/s supported, 429s at 1.0/s+, over-cap 400s by design); run1 evidence filed; dataset-resume = cancelled-replay classification (CERTIFY-TREE item 5; ruling R106 at merge); served-build/parity protocol fixes in the CERTIFY-TREE lane; TOKCOST lane on the 16.8 s video tokenize; then step-6 drills, E1B L2-L7, release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
@@ -119,6 +119,7 @@ Generated 2026-09-24T17:26:15Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-23T14:10:54Z: SESSION LIMIT (Opus 429 until 14:00 UTC): all lanes/workflows died; coordinator saved everything (E3B2 WIP c587ddc; all lane branches pushed; partial review JSONs saved); main stays at 01a7dfc; handoff HANDOFF-20260923T1330Z.md
 - 2026-09-24T05:33:05Z: checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67
 - 2026-09-24T09:59:55Z: focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b
+- 2026-09-24T18:03:00Z: Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -> CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z
 
 ## Authorizations
 

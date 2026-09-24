@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T17:26:15Z",
+  "updated": "2026-09-24T18:03:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification rerun in progress (out 20260924T172244Z; served-build needs git in the image, parity needs the cap-aware certify - CERTIFY-TREE lane); TOKCOST lane on the 16.8 s video tokenize; then drills, E1B L2-L7, release decision",
+      "phase": "pilot end-to-end proven (smoke 15/15; text+video settled with engine-exact counts); box certification RERUN at 4226315 in its 4 h soak (out 20260924T172244Z; envelope: 0.5/s supported, 429s at 1.0/s+, over-cap 400s by design); run1 evidence filed; dataset-resume = cancelled-replay classification (CERTIFY-TREE item 5; ruling R106 at merge); served-build/parity protocol fixes in the CERTIFY-TREE lane; TOKCOST lane on the 16.8 s video tokenize; then step-6 drills, E1B L2-L7, release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
@@ -284,6 +284,10 @@
     {
       "at": "2026-09-24T09:59:55Z",
       "what": "focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b"
+    },
+    {
+      "at": "2026-09-24T18:03:00Z",
+      "what": "Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -> CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z"
     }
   ],
   "cadence_windows": [
