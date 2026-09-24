@@ -20,6 +20,12 @@ What a pass removes:
 What it never removes: anything a live job references. Liveness is asked of the job store
 for every attached job **before** anything is deleted, and a lookup that fails aborts the
 pass - a collector that cannot tell whether a job is live keeps its media.
+
+**M6: do not schedule this collector's object deletion** (RV-03). Its liveness view is
+this process's maps: a restarted process knows no job and deletes a live job's source
+after the grace (`tests/m/test_retention.py` keeps that failure executable). Durable
+deletion is `retention.RetentionCollector`; this module keeps the local processing-cache
+hygiene until M6 phase 2 reduces it to that.
 """
 from __future__ import annotations
 

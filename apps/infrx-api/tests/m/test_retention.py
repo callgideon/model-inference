@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""M6: the collector deletes only what the durable lifecycle store says may go (RV-03).
+
+    INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py
+    INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py
+
+The second line runs every case against the pre-M6 collector (`gc.MediaCollector`, liveness
+from process maps): they fail, which is the regression record. Each case runs on both
+stand-ins of the port (`test_lifecycle_standin`: in memory, and real SQL on the task-local
+PostgreSQL); time is the store's clock, moved by hand.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import time
+from types import SimpleNamespace
+
+import pytest
+from infrx.contracts import errors
+from infrx.media import gc, retention, uploads
+
+from .test_lifecycle_standin import (CLAIM_TTL_S, GRACE_S, RETENTION_S, key,  # noqa: F401
+                                     make_world, new_id, pg_world, run)
+
+ORACLE = os.environ.get("INFRX_M6_ORACLE", "")
+
+
+class LocalOnly:
+    """The pre-M6 collector as a restarted process runs it: `gc.MediaCollector` over a fresh
+    `MediaUploads`, whose maps are empty, so `is_live` is asked about no job (RV-03)."""
+
+    def __init__(self, world) -> None:
+        adapter = uploads.MediaUploads(world.objects, now=world.clock.now)
+        self.inner = gc.MediaCollector(adapter, is_live=world.port.job_live, grace_s=GRACE_S)
+
+    async def sweep(self):
+        swept = await self.inner.sweep()
+        return SimpleNamespace(deleted=[("object_store", k, 1) for k in swept.deleted])
+
+
+def collector(world, *, port=None, objects=None, **options):
+    if ORACLE == "local_only":
+        return LocalOnly(world)
+    options.setdefault("holder", "collector-1")
+    return retention.RetentionCollector(port or world.port, objects or world.objects, **options)
+
+
+def deleted(report) -> list[str]:
+    return [object_key for _, object_key, _ in report.deleted]
+
+
+class Interpose:
+    """The port with a hook run before the named calls: the other side of a race."""
+
+    def __init__(self, port, **before) -> None:
+        self.port, self.before = port, before
+
+    def __getattr__(self, name):
+        target, hook = getattr(self.port, name), self.before.get(name)
+        if hook is None:
+            return target
+
+        async def call(*args, **kwargs):
+            await hook(*args, **kwargs)
+            return await target(*args, **kwargs)
+        return call
+
+
+class FailingDeletes:
+    """The object store, refusing its next `failures` deletes as S3ObjectStore does."""
+
+    def __init__(self, inner, failures: int) -> None:
+        self.inner, self.failures = inner, failures
+
+    async def delete(self, object_key: str) -> None:
+        if self.failures:
+            self.failures -= 1
+            raise errors.DependencyUnavailable("the media object store did not answer")
+        await self.inner.delete(object_key)
+
+
+class Delayed:
+    """The first delete is sent and then held in flight until released."""
+
+    def __init__(self, inner) -> None:
+        self.inner, self.held = inner, True
+        self.sent, self.release = asyncio.Event(), asyncio.Event()
+
+    async def delete(self, object_key: str) -> None:
+        if self.held:
+            self.held = False
+            self.sent.set()
+            await self.release.wait()
+        await self.inner.delete(object_key)
+
+
+async def until(predicate, timeout_s: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while not predicate():
+        assert time.monotonic() < deadline, "the schedule never reached its point"
+        await asyncio.sleep(0.01)
+
+
+def live_source(world, n: int = 1):
+    job = new_id()
+    run(world.port.admit(job))
+    row = run(world.write("source", key(n)))
+    run(world.port.attach(job, row.content_id))
+    return job, row
+
+
+# --- point 1: durable candidates, protected references, fenced claims ------------------
+def test_a_restarted_collector_keeps_a_live_jobs_source(make_world):
+    """RV-03: a restarted process knows nothing, and the durable reference still protects
+    a live job's source for as long as the job lives - then until its persisted
+    `retain_until`, exactly: kept one second before it, collected at it."""
+    world = make_world()
+    job, row = live_source(world)
+    world.clock.advance(GRACE_S * 3)
+    world = world.restart()
+    sweeper = collector(world)
+    for _ in range(2):
+        run(sweeper.sweep())
+        world.clock.advance(GRACE_S)
+    assert run(world.read(row)) == b"content"
+    run(world.port.finish(job, "failed"))
+    world.clock.advance(RETENTION_S - 1)
+    run(sweeper.sweep())
+    assert run(world.read(row)) == b"content"
+    world.clock.advance(1)
+    run(sweeper.sweep())
+    assert run(world.objects.get(key(1))) is None
+    assert run(world.port.row(row.content_id)).state == "deleted"
+
+
+def test_the_local_only_view_deletes_a_live_jobs_source_after_a_restart(make_world):
+    """The failure oracle, kept executable (and on PostgreSQL): the pre-M6 collector, with
+    liveness from process maps, deletes the source of a job the database says is live."""
+    world = make_world()
+    job, row = live_source(world)
+    world = world.restart()
+    old = LocalOnly(world)
+    run(old.sweep())
+    world.clock.advance(GRACE_S)
+    run(old.sweep())
+    assert run(world.port.job_live(job))
+    assert run(world.objects.get(key(1))) is None
+
+
+def test_candidates_come_from_the_store_in_bounded_pages(make_world):
+    """Nothing is listed from the bucket: the store's candidates, `page_size` at a time,
+    until the store says there are no more."""
+    world = make_world()
+    for n in range(5):
+        run(world.write("source", key(n)))
+    world.clock.advance(GRACE_S)
+    limits = []
+
+    async def asked(*, after, limit):
+        limits.append(limit)
+    report = run(collector(world, port=Interpose(world.port, candidates=asked),
+                           page_size=2).sweep())
+    assert sorted(deleted(report)) == sorted(key(n) for n in range(5))
+    assert (report.pages, report.max_batch, limits) == (3, 2, [2, 2, 2])
+    assert world.objects.objects == {}
+
+
+def test_an_attach_before_the_claim_or_the_tombstone_keeps_the_object(make_world):
+    """Eligibility is established atomically with attachment: an attach landing after the
+    candidate was listed - before its claim, or between claim and tombstone - is seen by
+    the store's recheck, and the object stays."""
+    world = make_world()
+    rows = [run(world.write("source", key(n))) for n in (1, 2)]
+    world.clock.advance(GRACE_S)
+    jobs = [new_id(), new_id()]
+    for job in jobs:
+        run(world.port.admit(job))
+
+    async def before_claim(content_id, generation, holder):
+        if content_id == rows[0].content_id:
+            await world.port.attach(jobs[0], content_id)
+
+    async def before_tombstone(claim):
+        if claim.content_id == rows[1].content_id:
+            await world.port.attach(jobs[1], claim.content_id)
+    port = Interpose(world.port, claim=before_claim, tombstone=before_tombstone)
+    report = run(collector(world, port=port).sweep())
+    assert deleted(report) == [] and report.retained == {"reference_live": 2}
+    assert [run(world.read(row)) for row in rows] == [b"content", b"content"]
+
+
+def test_an_attach_after_the_tombstone_is_refused_and_the_key_comes_back_new(make_world):
+    """Once the tombstone commits, new use is refused (`content_retiring`) rather than
+    bound to bytes about to vanish; after the acknowledgement the same key is a NEW
+    generation, never the deleted one revived."""
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    job = new_id()
+    run(world.port.admit(job))
+    refusals = []
+
+    class AttachDuringDelete:
+        async def delete(self, object_key):
+            try:
+                await world.port.attach(job, row.content_id)
+            except errors.DependencyUnavailable as refused:
+                refusals.append(refused.refusal)
+            await world.objects.delete(object_key)
+    report = run(collector(world, objects=AttachDuringDelete()).sweep())
+    assert deleted(report) == [key(1)] and refusals == ["content_retiring"]
+    assert run(world.port.row(row.content_id)).state != "live"
+    again = run(world.write("source", key(1), b"restaged"))
+    assert again.generation == 2 and run(world.read(again)) == b"restaged"
+
+
+def test_a_collector_whose_claim_expired_deletes_nothing(make_world):
+    """A claim is a lease: a collector that stalls past it cannot tombstone, so it never
+    reaches the delete; the next collector's fresh claim does."""
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+
+    async def stall(claim):
+        world.clock.advance(CLAIM_TTL_S)                  # equality: the lease has lapsed
+    report = run(collector(world, port=Interpose(world.port, tombstone=stall)).sweep())
+    assert deleted(report) == [] and report.retained == {"claim_lost": 1}
+    assert run(world.read(row)) == b"content"
+    assert run(world.port.row(row.content_id)).state == "live"
+    assert deleted(run(collector(world, holder="collector-2").sweep())) == [key(1)]
+
+
+@pytest.mark.parametrize("broken", ["candidates", "claim", "tombstone"])
+def test_an_unavailable_database_deletes_nothing_and_says_so(make_world, broken):
+    """Retain and report: a store that cannot answer ends the pass with nothing deleted."""
+    world = make_world()
+    rows = [run(world.write("source", key(n))) for n in (1, 2)]
+    world.clock.advance(GRACE_S)
+
+    async def down(*args, **kwargs):
+        raise errors.DependencyUnavailable("the lifecycle database did not answer")
+    report = run(collector(world, port=Interpose(world.port, **{broken: down})).sweep())
+    assert report.aborted == "dependency_unavailable" and deleted(report) == []
+    assert [run(world.read(row)) for row in rows] == [b"content", b"content"]
+
+
+def test_a_lost_delete_acknowledgement_is_finished_by_a_later_pass(make_world):
+    """The object is gone and the acknowledgement never reached the store: the row stays
+    tombstoned (unreadable), becomes a candidate once the claim lapses, and the delete is
+    repeated - harmlessly - before it is acknowledged. The wait is reported."""
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+
+    async def lost(tomb):
+        raise errors.DependencyUnavailable("the acknowledgement was lost")
+    report = run(collector(world, port=Interpose(world.port, acknowledge_delete=lost)).sweep())
+    assert deleted(report) == [key(1)] and report.ack_lost == 1
+    assert run(world.port.row(row.content_id)).state == "tombstoned"
+    assert run(world.read(row)) is None
+    assert deleted(run(collector(world).sweep())) == []        # the claim still holds
+    world.clock.advance(CLAIM_TTL_S * 2)
+    report = run(collector(world).sweep())
+    assert deleted(report) == [key(1)] and report.max_pending_delete_s == CLAIM_TTL_S * 2
+    assert run(world.port.row(row.content_id)).state == "deleted"
+    assert world.objects.deletes[key(1)] == 2
+
+
+def test_a_failed_object_delete_stays_tombstoned_unreadable_and_is_retried(make_world):
+    """An object store that refuses the delete ends the pass (it would refuse the rest
+    too): the tombstoned object is unreadable although its bytes are still there, the
+    untouched one is still live, and a later pass finishes both."""
+    world = make_world()
+    first, second = (run(world.write("source", key(n))) for n in (1, 2))
+    world.clock.advance(GRACE_S)
+    report = run(collector(world, objects=FailingDeletes(world.objects, 1),
+                           concurrency=1).sweep())
+    assert (report.delete_failed, report.aborted) == (1, "object_store_unavailable")
+    assert deleted(report) == []
+    assert run(world.port.row(first.content_id)).state == "tombstoned"
+    assert run(world.read(first)) is None and key(1) in world.objects.objects
+    assert run(world.read(second)) == b"content"
+    world.clock.advance(CLAIM_TTL_S)
+    assert sorted(deleted(run(collector(world).sweep()))) == [key(1), key(2)]
+    assert world.objects.objects == {}
+
+
+def test_a_delayed_delete_cannot_remove_the_next_generation_at_the_same_key(make_world):
+    """A delete held in flight past its collector's lease; another collector finishes that
+    generation, the same key is written again - and the delayed delete then lands. It
+    names generation 1's object only, so generation 2's bytes survive it; generation 2 is
+    later collected at its own name."""
+    world = make_world()
+    run(world.write("source", key(1), b"first"))
+    world.clock.advance(GRACE_S)
+
+    async def schedule():
+        slow = Delayed(world.objects)
+        first = asyncio.ensure_future(collector(world, objects=slow, holder="slow").sweep())
+        await asyncio.wait_for(slow.sent.wait(), 10)
+        world.clock.advance(CLAIM_TTL_S)
+        await collector(world, holder="fast").sweep()
+        reborn = await world.write("source", key(1), b"second")
+        slow.release.set()
+        await first
+        return reborn
+    reborn = run(schedule())
+    assert reborn.generation == 2 and run(world.read(reborn)) == b"second"
+    world.clock.advance(GRACE_S)
+    assert deleted(run(collector(world).sweep())) == [key(1)]
+    assert world.objects.objects == {}
+
+
+def test_the_grace_boundary_is_exact_on_the_store_clock(make_world):
+    world = make_world()
+    run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S - 0.001)
+    assert deleted(run(collector(world).sweep())) == []
+    world.clock.advance(0.001)
+    assert deleted(run(collector(world).sweep())) == [key(1)]
+
+
+@pytest.mark.parametrize("locking", [True, False], ids=["row_lock", "no_reference_lock"])
+def test_pg_an_attach_racing_the_delete_serializes_on_the_content_row(locking):
+    """Real PostgreSQL, two sessions: an attach holds its transaction open with the
+    reference written but not committed while a collector runs. With the row lock the
+    collector waits for it and then sees the reference; without it (the deliberately
+    broken stand-in) the live job's source is deleted - the race this lock exists for."""
+    world = pg_world(locking=locking)
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    job = new_id()
+    run(world.port.admit(job))
+
+    def waiting() -> bool:
+        return world.clock.conn.execute(
+            "select count(*) from pg_stat_activity where wait_event_type = 'Lock' "
+            "and datname = current_database()").fetchone()[0] > 0
+
+    async def race():
+        inserted, commit = asyncio.Event(), asyncio.Event()
+
+        async def hold():
+            inserted.set()
+            await commit.wait()
+        attaching = asyncio.ensure_future(world.port.attach(job, row.content_id, hold=hold))
+        await asyncio.wait_for(inserted.wait(), 10)
+        sweeping = asyncio.ensure_future(collector(world).sweep())
+        await until(lambda: sweeping.done() or waiting())
+        commit.set()
+        await attaching
+        return await sweeping
+    report = run(race())
+    violated = run(world.port.job_live(job)) and run(world.read(row)) is None
+    if locking:
+        assert not violated and report.retained == {"reference_live": 1}
+    else:
+        assert violated
