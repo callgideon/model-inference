@@ -47,6 +47,7 @@ from ...contracts.v2.published_fixtures import deployed_profile
 from ...contracts.v2.records import CredentialAudience
 from ...media.prepare import MediaProfile
 from . import intake, validate
+from .catalog import CALLABLE
 from .ingress import OK, component_state
 from .relay import CREDIT, _dependency
 
@@ -173,6 +174,32 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
         log.error("%s is not published: %s", serving.model_revision, "; ".join(overclaims))
         return []
     return [published]
+
+
+def price_check(catalog, settings):
+    """The `price_source` readiness probe, for `pilot.build_ingress_deps` to adopt (wiring
+    request): the served model resolves for a consumer, callable, with a CREDIT card (the
+    ingress's resolution needs one in both regimes, R69) - and priced in the regime
+    admission charges: the approved card in CREDIT, the USD identity of the canonical
+    revision in legacy (P-22). `pilot.price_check` asks for a card in both regimes, so a
+    legacy pilot with no USD row read ready."""
+    async def check() -> bool:
+        deployment = await catalog.resolve(settings.model_id,
+                                           audience=CredentialAudience.consumer,
+                                           endpoint_id=None)
+        if deployment is None or (deployment.visibility, deployment.state) \
+                != CALLABLE[CredentialAudience.consumer]:
+            return False
+        card = await catalog.active_rate_card(deployment.deployment_revision_id)
+        if card is None:
+            return False
+        if settings.deployment.accounting_regime == CREDIT:
+            return card.rate_card_version == settings.pilot.active_rate_card_version
+        serving = await catalog.serving_revision(deployment.serving_version_id)
+        reader = getattr(catalog, "usd_price", None)
+        return serving is not None and reader is not None \
+            and await reader(serving.model_revision) is not None
+    return check
 
 
 def provider_document(entry: dict, concurrency: int) -> dict:

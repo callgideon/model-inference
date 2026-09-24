@@ -395,3 +395,28 @@ def test_catalog_truth__the_provider_document_is_rendered_from_the_projection():
                                                  active_rate_card_version=CARD, **DEPLOYED))[0])
     document = models.provider_document(credit, 8)
     assert not [p for p, v in pairs(document) if p and p[-1] == "cost_usd"]
+
+
+# --- the price_source readiness probe (wiring request: pilot.py adopts models.price_check)
+def probe(catalog, config) -> bool:
+    import asyncio
+    return asyncio.run(models.price_check(catalog, config)())
+
+
+def test_catalog_truth__readiness_asks_the_price_admission_actually_reads():
+    """F2C.c finding: `pilot.price_check` asks for a CREDIT card in both regimes, while a
+    legacy admission prices from the USD row of the canonical revision (P-22). The probe
+    here asks each regime for its own price: the approved card in CREDIT, the USD identity
+    in legacy - so a legacy pilot with no USD row is not ready, whatever the card says."""
+    credit = support.settings(deployment=CREDIT, active_rate_card_version=CARD, **DEPLOYED)
+    assert probe(priced(), credit) is True
+    other = support.settings(deployment=CREDIT, active_rate_card_version="rc_other", **DEPLOYED)
+    assert probe(priced(), other) is False
+    legacy = support.settings(**DEPLOYED)
+    assert probe(priced(), legacy) is True
+    assert probe(priced(snapshot=None), legacy) is False          # no USD row
+    assert probe(support.catalog(), legacy) is False              # no USD reader (pre-D10)
+    retired = priced()
+    retired.deployments[IDS.prod_deployment] = retired.deployments[
+        IDS.prod_deployment].model_copy(update={"state": DeploymentState.retired})
+    assert probe(retired, legacy) is False

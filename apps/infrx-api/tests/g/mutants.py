@@ -1625,6 +1625,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if registry is not None:",
        "test_ops_alert__without_the_declarations_the_intake_records_nothing",
        dies_by=("KeyError",)),
+    _m("legacy_probe_reads_the_card", "legacy readiness asks for the USD price admission reads",
+       M, "        return serving is not None and reader is not None \\\n"
+          "            and await reader(serving.model_revision) is not None",
+       "        return True",
+       "test_catalog_truth__readiness_asks_the_price_admission_actually_reads"),
 )
 
 
