@@ -1,0 +1,30 @@
+{
+  "task": "G8",
+  "slice": "points 1-4 (trusted account ops; idempotent bounded transition; approved-card gate + dry-run; races/retries) + acceptance",
+  "activity": "review",
+  "head": "6a075c56",
+  "worktree": ".claude/worktrees/codex-g8-credit-ops",
+  "branch": "codex/g8-credit-ops",
+  "owned_paths": [
+    "apps/infrx-api/infrx/operations/",
+    "apps/infrx-api/tests/g/ops/",
+    "apps/infrx-api/client_example.py",
+    "research/plan/evidence/g/G8-6a075c5.md"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py", "exit": 0, "summary": "114 passed (tests/g/ops 80), 0 skipped"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py", "exit": 0, "summary": "95 passed: 89/89 mutants killed + 4 self-tests + 2 list checks"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/ops", "exit": 0, "summary": "527 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts", "exit": 0, "summary": "1078 passed (idle; one run under concurrent mutant load showed 3 load failures)"},
+    {"cmd": "make api-test / make check", "exit": null, "summary": "not run: 55432 is E2C's; PG suites ran on g8 (55447)"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium",
+               "basis": "code + local real-PG/composed-app proofs done; remaining = merged-SHA rerun with D10 0019/0020 (ready marker in pgworld.settle), wiring request 1, review fixes, box dry-run support, post-P-01 activation window",
+               "at": "2026-09-24T23:14Z"},
+  "blockers": ["P-01 approved launch rates (live activation only)", "coordinator box dry-run window (read-only)"],
+  "wiring_requests": [
+    "D10 SQL: infrx.require_feature reads the flag FOR SHARE (volatile) so a freeze waits for in-flight admissions; patch + two-connection proving test in the evidence",
+    "D10 integration: add infrx.readiness_cutover_check() to transition inventory once 0019 merges; pgworld.settle may need claim_preparation_ready"
+  ],
+  "evidence": ["research/plan/evidence/g/G8-6a075c5.md"]
+}

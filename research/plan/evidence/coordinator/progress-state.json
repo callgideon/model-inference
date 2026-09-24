@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 15,
-  "updated": "2026-09-24T23:05:05Z",
+  "revision": 16,
+  "updated": "2026-09-24T23:17:54Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -760,33 +760,71 @@
     {
       "id": "G8",
       "task": "G8",
-      "slice": "all",
+      "slice": "points 1-4 (trusted account ops; idempotent bounded transition; approved-card gate + dry-run; races/retries) + acceptance",
       "agent": "opus",
       "branch": "codex/g8-credit-ops",
       "worktree": ".claude/worktrees/codex-g8-credit-ops",
       "base": "dff31efc",
-      "head": null,
+      "head": "6a075c56",
       "isolation": {
         "ports": "postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g8-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-24T21:58:00Z",
-      "blocker": null,
+      "updated": "2026-09-24T23:14:00Z",
+      "blocker": "P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only)",
       "next_action": "Headless CREDIT operations; read-only key inventory in the dry-run (F8); P-02 inventory; one public card id (F11).",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 2,
+        "likely_h": 4,
+        "pessimistic_h": 8,
+        "confidence": "medium",
+        "basis": "code + local real-PG/composed-app proofs done; remaining = merged-SHA rerun with D10 0019/0020 (ready marker in pgworld.settle), wiring request 1, review fixes, box dry-run support, post-P-01 activation window",
+        "at": "2026-09-24T23:14Z"
       },
-      "evidence": [],
-      "commands": [],
-      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order."
+      "evidence": [
+        "research/plan/evidence/g/G8-6a075c5.md"
+      ],
+      "commands": [
+        {
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py",
+          "exit": 0,
+          "summary": "114 passed (tests/g/ops 80), 0 skipped"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "summary": "95 passed: 89/89 mutants killed + 4 self-tests + 2 list checks"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/ops",
+          "exit": 0,
+          "summary": "527 passed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts",
+          "exit": 0,
+          "summary": "1078 passed (idle; one run under concurrent mutant load showed 3 load failures)"
+        },
+        {
+          "cmd": "make api-test / make check",
+          "exit": null,
+          "summary": "not run: 55432 is E2C's; PG suites ran on g8 (55447)"
+        }
+      ],
+      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
+      "owned_paths": [
+        "apps/infrx-api/infrx/operations/",
+        "apps/infrx-api/tests/g/ops/",
+        "apps/infrx-api/client_example.py",
+        "research/plan/evidence/g/G8-6a075c5.md"
+      ],
+      "wiring_requests": [
+        "D10 SQL: infrx.require_feature reads the flag FOR SHARE (volatile) so a freeze waits for in-flight admissions; patch + two-connection proving test in the evidence",
+        "D10 integration: add infrx.readiness_cutover_check() to transition inventory once 0019 merges; pgworld.settle may need claim_preparation_ready"
+      ]
     },
     {
       "id": "M6",
@@ -893,6 +931,12 @@
       "lane": "F2C-L",
       "task": "F2C",
       "head": "76d966cc"
+    },
+    {
+      "since": "2026-09-24T23:14:00Z",
+      "lane": "G8",
+      "task": "G8",
+      "head": "6a075c56"
     }
   ],
   "integration_queue": [
@@ -1782,6 +1826,32 @@
       "by": "E1C",
       "what": "review → integration; head 6cb6c929; estimate likely 4 → 0.5 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree)",
       "source": "updates/E1C-20260924T230505Z.json"
+    },
+    {
+      "at": "2026-09-24T23:14:00Z",
+      "by": "G8",
+      "what": "running → review; head 6a075c56; estimate likely unknown → 4 h (code + local real-PG/composed-app proofs done; remaining = merged-SHA rerun with D10 0019/0020 (ready marker in pgworld.settle), wiring request 1, review fixes, box dry-run support, post-P-01 activation window)",
+      "source": "updates/G8-20260924T2314Z.json"
+    },
+    {
+      "at": "2026-09-24T23:17:54Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5 → unknown: no remaining-effort estimate for D10, E2C, E3C, G7, M5, M6, W5 (because: no remaining-effort estimate for D10, E2C, E3C, G7, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T23:17:54Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T23:17:54Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T23:17:54Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, I2A, I3, M5, M6, U1R, U2, U3, U4, W5)"
     }
   ],
   "history": {
@@ -1864,10 +1934,14 @@
     "E1C-20260924T230505Z.json": {
       "status": "applied",
       "at": "2026-09-24T23:05:05Z"
+    },
+    "G8-20260924T2314Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T23:14:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T23:05:05Z",
+    "computed_at": "2026-09-24T23:17:54Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -1877,8 +1951,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5",
-        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5",
+        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, M5, M6, W5",
+        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1891,7 +1965,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, M5, M6, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1904,7 +1978,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1917,7 +1991,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, I2A, I3, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
