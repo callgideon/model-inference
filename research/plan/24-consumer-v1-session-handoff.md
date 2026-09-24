@@ -2,7 +2,7 @@
 
 ## Session Metadata
 
-Prepared 2026-09-24 in `model-inference-v1-review`, branch `codex/consumer-v1-implementation-plan`, from main `6db71ee3`. This is a planning handoff; use the latest main containing this file as the implementation base. Fetch again before dispatch because another system may publish newer runtime evidence. Historical coordinator tracker v46 is preserved; this package does not fabricate runtime completion or a new operational tracker version.
+Prepared 2026-09-24 in `model-inference-v1-review`, branch `codex/consumer-v1-implementation-plan`, from main `6db71ee3`. This is a planning handoff; use the latest main containing this file as the implementation base. Fetch again before dispatch because another system may publish newer runtime evidence. Historical coordinator tracker v46 is preserved; this package does not fabricate runtime completion or a new operational tracker version. The implementation session must extend the existing HTML tracker using consumer-v1/06-progress-tracker.md, as now explicitly requested by the user.
 
 ## Current State Summary
 
@@ -24,7 +24,7 @@ The task manifest has 14 new planned corrective packages and refined existing Ap
 ## Immediate Next Steps
 
 1. Inspect branch/worktree state, fetch/pull main without overwriting local work, read root conventions and the files below. Create a coordinator integration branch from the committed current main. Keep unrelated experiment work separate.
-2. Run the plan validator and its negative tests. Start S3: reconcile actual deployed identity, newest operational tail/release decision, all RV findings and inputs. E2C can inventory the supported Linux environment concurrently.
+2. Run the plan validator and its negative tests. Assign tracker support to extend the existing progress renderer/HTML with task ownership, gate evidence and dependency-aware ETA; preserve its history. Start S3: reconcile actual deployed identity, newest operational tail/release decision, all RV findings and inputs. E2C can inventory the supported Linux environment concurrently.
 3. Complete F2C contracts/fixtures and E2C reproducible checks. Freeze lifecycle/readiness/expiry/alias decisions and path ownership before parallel implementations consume them.
 4. Dispatch D10, M5, W5, G7, G8, E1C and I8 in isolated worktrees from a committed integration SHA. M6 follows M5. Only the coordinator merges common composition/config/CI/layout/lockfiles. Integrate in manifest dependency order.
 5. E3C runs real-service backend integration, process crashes, tenant denial, retention/readiness/expiry and exact reconciliation. E4C then extends existing E4B/E1B tooling for final approved-rate CREDIT, actual Marlin load/burst/soak/fault/restore/rollback proof. Follow the failure→regression→fix→retest loop in the load brief.
@@ -45,6 +45,7 @@ One shared durable inference runtime serves headless clients and the later App. 
 | [Operations/verification brief](consumer-v1/03-operations-and-verification.md) | S3, E2C, I8, E3C, E4C |
 | [App brief](consumer-v1/04-app.md) | C0/C3A/A2/A3/U1R/U2/U3/U4/I2A/I3/E3A/E4 |
 | [Load/client protocol](consumer-v1/05-client-and-load-testing.md) | E1C, resumable datasets, valid measurement and bounded automated fix loop |
+| [Tracker/parallel coordination brief](consumer-v1/06-progress-tracker.md) | Extend existing HTML tracker; assignments, gate evidence, resource-aware ETA and safe concurrent dispatch |
 | [Review 21](21-v1-consumer-readiness-review-2026-09-24.md) | Evidence and RV-01…RV-12; do not rely on summary alone |
 | [As-built handoff 20](20-platform-handoff-2026-09-24.md) | §14 reported live state and original wave evidence |
 | [Operational tail](../../HANDOFF-20260924T2115Z.md) | Historical latest at baseline; read the current RESUME-NOW target too |
@@ -54,7 +55,7 @@ One shared durable inference runtime serves headless clients and the later App. 
 
 ## Files Modified
 
-This planning session adds program 22, roadmap 23, this handoff and five detailed module briefs. It amends the task manifest, validator/negative tests, generated ledger, verification/coverage/input registers and current-entry links. No runtime behavior, live deployment, paid inference or resource provisioning is changed. Historical operational evidence and original dirty experiment checkout remain preserved.
+This planning session adds program 22, roadmap 23, this handoff and five detailed module briefs, followed by explicit tracker/parallel-coordination instructions. It amends the task manifest, validator/negative tests, generated ledger, verification/coverage/input registers and current-entry links. No runtime behavior, live deployment, paid inference or resource provisioning is changed. Historical operational evidence and original dirty experiment checkout remain preserved.
 
 ## Decisions Made
 
@@ -88,13 +89,60 @@ The planning validation record is [here](evidence/v1-plan-20260924/verification.
 ## Copyable implementation prompt
 
 ```text
-Work in the model-inference repository. Complete consumer v1 using the latest main containing research/plan/24-consumer-v1-session-handoff.md. Start by inspecting local worktrees/status and fetching/pulling main safely; preserve unrelated changes and newer implementation evidence. Read root conventions, handoff 24, program 22, audit 21, handoff 20 §14, the current RESUME-NOW operational tail, tasks.json, 17-task-ledger.md and 15-pending-inputs.md. The five consumer-v1 briefs contain detailed module acceptance and test protocols.
+You are the implementation coordinator for model-inference. Analyze the committed plans and then start implementing; do not stop at a plan or summary. Use the maximum safe parallel agents supported by your environment, each in an isolated worktree, and maintain an HTML progress/ETA tracker throughout the work.
 
-Do S3 evidence reconciliation first; do not repeat repairs already proven closed on newer main. Complete F2C lifecycle/expiry/capability contracts and E2C reproducible Linux verification, then implement the corrective backend closure through E3C/E4C. Use isolated worktrees for disjoint lanes D10, M5, W5, G7, G8, E1C and I8; M6 follows M5. One owner writes additive migrations; coordinator owns common wiring/CI/config/lockfiles and integration. Preserve existing implemented statuses and immutable migrations. Do not treat runner implementation as accepted release evidence.
+1. Synchronize and establish the actual baseline
 
-Follow the executable verification protocol in consumer-v1/05-client-and-load-testing.md: validate target/workload/candidate/budget/stop conditions, run the real-service journey, reproduce failures, add regression tests, fix the owning module, rerun affected cells, and finish with combined verification on the final SHA. Unexpected benchmark replay, missing services, incomplete soak or skipped required cases cannot count as PASS. Reuse valid prior evidence with explicit scope; preserve failures and raw sanitized measurements. Use existing authorized resources, but do not purchase new GPU/Modal capacity or run unbounded tests. Missing external input blocks only its dependent gate; continue independent authorized work and record the exact next step.
+Inspect git status, worktrees and branches; fetch and pull the latest main without overwriting unrelated work. The planning baseline commit is ba8ffc40, followed by the tracker/handoff amendment; use current main containing this handoff and consumer-v1/06-progress-tracker.md, not an old pinned checkout. Create a coordinator integration branch from a committed main SHA.
 
-Backend-first is mandatory: after accepted E4C BACKEND-READY, complete C0/C3A/A2/A3/U1R/U2/U3/U4 and E3A/I2A/I3/E4. Prove verified signup, one-time 10,000 CREDIT per individual with no refill, key issue, actual finite-video inference and result, exact usage/balance, tenant isolation and revocation. apps/app is consumer distribution; apps/lab follows App. Current finite-video cap is 82 seconds with other declared resource limits. Do not claim native video streaming, robot action support, ZDR, unapproved prices or SOP accuracy.
+Read root conventions and HANDOFF.md, then:
+- research/plan/24-consumer-v1-session-handoff.md
+- research/plan/22-consumer-v1-implementation.md
+- research/plan/21-v1-consumer-readiness-review-2026-09-24.md
+- research/plan/20-platform-handoff-2026-09-24.md, especially section 14
+- the current RESUME-NOW target and latest operational tail/release evidence
+- research/plan/tasks.json, 17-task-ledger.md, 15-pending-inputs.md, 03-execution-protocol.md and 04-verification.md
+- all six briefs in research/plan/consumer-v1/.
 
-Produce reviewed commits and updated task/evidence handoffs with exact commands, outcomes, candidate identity, remaining inputs and an honest gate verdict. Use research/plan/23-inference-hosting-roadmap.md only to preserve interfaces for our later GPU scale-up/down, load management, custom vLLM/SGLang hosting and Modal comparison discussion; do not expand this implementation into an unapproved general compute platform.
+Run the plan validator and its tests. Start S3: compare the plan, actual code, migrations, deployed configuration and newest test/certification reports. Classify RV-01 through RV-12 as open, fixed with evidence or superseded with reason. Preserve earlier implemented/integrated task history. Do not repeat proven fixes or infer release acceptance from an implemented runner. Update the plan only where evidence justifies a correction, retaining the user's scope and acceptance criteria.
+
+2. Build the tracker immediately alongside reconciliation
+
+Extend the existing research/plan/scripts/progress.py, evidence/coordinator/progress-state.json, PROGRESS.md and progress.html. Follow consumer-v1/06-progress-tracker.md. Preserve the previous tracker history; its old E4B closure and old cadence forecast are not current authority.
+
+Use tasks.json as the sole task/dependency graph and a coordinator-owned overlay for activity/assignments/estimates. Render a self-contained HTML file that opens locally, with searchable tasks, status filters, backend/App/deferred scope summaries, agent/worktree ownership, review/integration queues, dependency/critical-path view, blockers, acceptance checklists, evidence links, test/soak progress and ETA ranges. Keep implementation, integration, deployment and accepted release states separate. Show last update and stale-data warnings. A green implementation task cannot make a pending release gate green.
+
+Base ETA on inspected remaining effort, confidence and dependency/resource constraints, including the SQL writer, review/rework, integration queue and serialized GPU/soak windows. Do not divide task count by agent count or invent finish dates. Unknown input availability means unknown/conditional ETA. Reforecast as evidence changes. Update on task transitions/merges/failures and around every 5–10 minutes during active work. One coordinator writes shared state atomically; agents submit separate updates. Test coverage, gate semantics, ETA constraints and safe escaping, then open the HTML and verify filters/details/reload. Report the tracker path early; do not let dashboard polish delay ready implementation.
+
+3. Maximize safe parallel implementation
+
+Inventory agent slots, CPU/RAM, test-service capacity and GPU access. Keep available slots occupied with useful dependency-ready work or independent review. Every writer gets codex/<task>-<slug>, a worktree from a committed integration SHA, explicit file ownership, isolated test resources, acceptance criteria and handback format. Never have several agents edit the same shared file or run destructive tests against the same resource.
+
+Begin with S3 reconciliation, E2C environment inventory and tracker support. Complete F2C's reviewed lifecycle/readiness/expiry/capability contracts before their consumers. Then dispatch D10, M5, W5, G7, G8, E1C and I8 in parallel to the extent available slots and committed prerequisites allow. M6 follows M5. Reuse agents for the next ready slice; give an independent reviewer finished work while other writers continue. Reserve coordinator capacity for integration and unblockers. If slots are limited, prioritize the critical path and queue remaining lanes rather than bypassing dependencies.
+
+One D owner writes additive migrations. Already-applied migrations are immutable; allocate the next free number from latest main. Coordinator owns common contracts/composition/config/CI/lockfiles/navigation and merges sequentially. E2C/E3C/E4C runner edits and shared GPU deployments/fault tests require serialized ownership. Agents hand back commits, changed paths, focused test results, failed-then-passed regressions, evidence, wiring requests, remaining issues and updated effort estimates. Review each handback and verify the combined tree before claiming integration.
+
+4. Complete and certify the backend first
+
+Implement the corrective closure through E3C and E4C using the detailed briefs. Cover durable uploads across restart, safe cleanup, readiness including text-only requests, persisted result expiry, truthful discovery/limits/retention, canonical pricing, exact CREDIT operations, continuous monitoring, pool/role safety, artifact restoration and real serving rollback.
+
+Follow consumer-v1/05-client-and-load-testing.md: freeze candidate/workload/config/card identities and validate target, resource, duration, volume, spend and stop bounds. Exercise actual service adapters, two tenants, sync/SSE/async, interruption/resume, accounting reconciliation, open-loop sustained load, bursts, overload, fairness, soak and recovery. Use the actual pinned Marlin target for model/performance proof. Record all attempts, fresh generation versus replay, rejected/failed requests, latency distributions, resource behavior, output parity and attributable cost.
+
+For each failure: reproduce the smallest failing case, add a meaningful regression, fix the owning module, rerun focused and impacted integration checks, redeploy the pinned candidate when required, repeat the failed cell, then perform final combined verification after the last runtime change. Preserve failed evidence. Missing services, skipped required cases, incomplete soak, unexpected benchmark replay and driver-limited traffic are not passing release evidence. Reuse valid previous measurements only with an explicit unaffected-path/profile justification.
+
+Reuse existing authorized resources and operations; do not repeatedly ask for permission already granted. Do not purchase new GPU/Modal capacity, submit unapproved paid calls or run unbounded fault/load tests. Missing external inputs block their dependent gate only: continue independent authorized backend work and record the precise missing input and next command. Never invent rates, budgets, SLOs or approval.
+
+5. Finish the consumer App after accepted BACKEND-READY
+
+Only after E4C is accepted, execute C0/C3A/A2/A3/U1R/U2/U3/U4, then E3A/I2A/I3/E4. Prove the hosted journey: fresh verified individual -> one-time 10,000 CREDIT -> API key -> actual finite-video inference -> owned result/request details -> exact usage/balance -> key revocation. Include repeated callbacks, low funds, failures/expiry and cross-tenant denial. Production data must come from real services, not fixture fallbacks.
+
+apps/app is consumer distribution. apps/lab is the later provider product. There is no monthly promotional refill. Preserve historical USD separately. The current finite-video cap is 82 seconds with additional declared byte/frame/geometry constraints. Do not claim native live-video input, robot action support, ZDR, unapproved prices or proven SOP accuracy.
+
+research/plan/23-inference-hosting-roadmap.md preserves later GPU scaling/scale-down, load management, custom vLLM/SGLang hosting and Modal comparisons. Keep relevant interfaces ready; do not expand this launch wave into that separate hosting program or Lab implementation.
+
+6. Maintain reviewable delivery and handoffs
+
+Commit coherent changes, integrate in dependency order and push reviewed, validated milestones to main under the repository's release workflow. Preserve newer remote work; never force-push main or merge unrelated experiment branches. Main may trigger App deployment, so apply the documented deployment/gate controls. Keep manifest, generated ledger, tracker, input register and evidence consistent at each checkpoint.
+
+Continue through the authorized implementation and verification; do not end after dispatching agents. At a real external blocker, leave exact state, passing/failing/not-run checks, candidate identity, active worktrees/processes, resource cleanup, blocker owner and a copyable resume step. At completion, provide the tracker, accepted gate evidence, actual measured operating envelope, remaining deferred scope and release decision. Report only what was verified.
 ```

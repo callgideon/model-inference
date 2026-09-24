@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+**Current dispatch (2026-09-24):** read [program 22](research/plan/22-consumer-v1-implementation.md), [handoff 24](research/plan/24-consumer-v1-session-handoff.md) and [tracker/parallel instructions](research/plan/consumer-v1/06-progress-tracker.md). E3C/E4C are the current corrective backend gates, then App. Preserve original implementation; older wave/dispatch statements below are historical. Use maximum safe parallel agents/worktrees and extend the existing HTML tracker with evidence-backed progress and ETA.
+
 Repository conventions for all implementation sessions; the filename is historical.
 
 ## What this repo is

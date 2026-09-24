@@ -16,7 +16,8 @@ Current launch profile: one pinned Marlin model, finite clips up to the deployed
 2. This program and [manifest v4](tasks.json); [generated ledger](17-task-ledger.md) gives all task IDs.
 3. [Audit 21](21-v1-consumer-readiness-review-2026-09-24.md), [as-built handoff 20](20-platform-handoff-2026-09-24.md) and the newest committed operational tail.
 4. Detailed briefs: [contracts/data](consumer-v1/01-contracts-and-data.md), [media/worker/gateway](consumer-v1/02-runtime.md), [operations/integration/release](consumer-v1/03-operations-and-verification.md), [consumer App](consumer-v1/04-app.md), [client/load/fault protocol](consumer-v1/05-client-and-load-testing.md).
-5. Existing [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), [App requirements](../platforms/03-app-spec.md), [credit policy](../platforms/02-credits.md) and [pending inputs](15-pending-inputs.md).
+5. [HTML progress/ETA tracker and parallel coordination](consumer-v1/06-progress-tracker.md): extend the existing tracker early; retain one task graph and evidence-backed gate decisions.
+6. Existing [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), [App requirements](../platforms/03-app-spec.md), [credit policy](../platforms/02-credits.md) and [pending inputs](15-pending-inputs.md).
 
 The manifest remains the only task/dependency graph. These briefs refine existing App tasks and add corrective tasks with their own status; they do not demote previously implemented tasks. E3C/E4C become the current BACKEND-LOCAL/BACKEND-READY gate roots. E3B/E4B stay as their implemented predecessors; a new final certificate may supersede an unfinished old release decision without requiring a pointless re-certification of an obsolete binary.
 
