@@ -534,17 +534,23 @@ class ContentLifecycle(Protocol):
     unexpired; it is the source a finalized, unexpired ticket names.
 
     `retain_until` per kind (F2C.b), set once at terminalization: a `result` lasts exactly
-    until the outcome's persisted `result_expires_at` (a job with none keeps no result);
-    every other kind until settlement + the configured serving retention for it (P-25).
+    until the outcome's persisted `result_expires_at`; a SETTLED job with none (every
+    non-success, and a success settled before 0018 persisted it, which reads
+    `unavailable`) keeps no result, so its body is scrubbable from settlement. Every other
+    kind lasts until settlement + the configured serving retention for it (P-25).
 
     Deleting `database` content is a SCRUB (D3): the tombstoned row's body is emptied in
     one transaction and the acknowledgement records it; the job row, idempotency tombstone,
     terminal outcome, usage, settlement and ledger rows and the content's digest and size
     stay. A scrubbed result reads `result_expired` (never empty text, never regenerated),
     and because a result is eligible only from its persisted expiry, `read_outcome` already
-    answers `expired` for it. D10 replaces 0014's `job_results_immutable` trigger with a
-    guard allowing exactly that scrub (body -> empty, `scrubbed_at` null -> now, only when
-    `now >= jobs.result_expires_at` or the job keeps no result) and nothing else.
+    answers `expired` for it. D10's guard on `infrx.job_results`, replacing 0014's
+    `job_results_immutable` trigger and `job_results_bytes_exact` check (02 §F2C "Scrub
+    guard" is the column-by-column text): an UPDATE may change only `body` -> '' and
+    `scrubbed_at` null -> `infrx.now()`, only when the job has `settled_at is not null and
+    (result_expires_at is null or infrx.now() >= result_expires_at)`; `bytes` keeps the
+    original size (`check (scrubbed_at is not null or bytes = octet_length(body))`);
+    DELETE and TRUNCATE stay forbidden.
     """
 
     async def register(self, identity: ContentIdentity) -> ContentObject:
@@ -642,6 +648,21 @@ def result_case_table() -> list[dict]:
     rows += [(name.removesuffix(".json"), v1_model(name), new.settled_at)
              for name in ("terminal_cancelled.json", "terminal_platform_error.json",
                           "terminal_expired.json", "terminal_unknown_usage.json")]
+
+    def variant(outcome: TerminalOutcome, **changes) -> TerminalOutcome:
+        return TerminalOutcome.model_validate({**outcome.model_dump(), **changes})
+    # Each `no_result` condition alone (valid records a store could hold): a ref on a job
+    # that did not succeed is never served, a success needs its ref, and a result is only
+    # served with authoritative usage - even when an expiry was persisted.
+    ref, zero = new.result_ref, v1_model("terminal_platform_error.json").debit
+    rows += [("cancelled with a result_ref", variant(v1_model("terminal_cancelled.json"),
+                                                     result_ref=ref), new.settled_at),
+             ("failed with a result_ref", variant(v1_model("terminal_platform_error.json"),
+                                                  result_ref=ref), new.settled_at),
+             ("success without a result_ref", variant(old, result_ref=None), old.settled_at),
+             ("success released free without usage, with an expiry",
+              variant(new, usage=None, settlement_state=SettlementState.released_free,
+                      debit=zero), new.settled_at)]
     return [{"name": name, "now": now.isoformat().replace("+00:00", "Z"),
              "expected": read_outcome(outcome, now).value,
              **({"outcome": outcome.model_dump(mode="json", exclude_none=True)}

@@ -138,7 +138,7 @@ Every existing implementation that consumes a contract F2C-L changed, with the o
 | Changed contract | Consumer (file:line) | Owner | Required change |
 |---|---|---|---|
 | `TerminalOutcome.result_expires_at` | `infrx/state/jobstore.py:39` `_OUTCOME_FIELDS`, `:105` `_outcome` | D10 | add the field; keep the whitelist (records are `extra="forbid"`) |
-| | `migrations/0018_terminal_settlement.sql:281` `job_admission` outcome document | D10 | new migration re-creates it with `result_expires_at` (0018:436 already persists it) |
+| | `migrations/0018_terminal_settlement.sql:281` `job_admission` outcome document | D10 | new migration re-creates it with `result_expires_at` (0018:436 already persists it); the `jobs` expiry check only at zero violators, never `NOT VALID` over one (02 rollout step 2) |
 | | `migrations/0017_stream_journal.sql:186` terminal journal payload | D10 | none - must NOT gain the field (widest bytes pinned) |
 | | `infrx/gateway/routes/jobs.py:145` `result_expiry`, `:158` `status_of`, `:286` `job_result` | G7 | delete the recomputation; `read_outcome(outcome, db_now)` |
 | | `infrx/gateway/routes/relay.py:338` `_outcome`, `:385` `answer` | G7 | a sync/stream replay of `expired`/`unavailable` answers `result_expired` |
@@ -162,7 +162,8 @@ Every existing implementation that consumes a contract F2C-L changed, with the o
 | | `infrx/media/uploads.py:91` `idle_since`, `:104` `_touch` | M5/M6 | replaced by `register` and durable references |
 | | `infrx/media/store.py:201` `_write_once`, `:221` `materialize`, `:269` `stage` | M5 | `register` before each object write |
 | | `migrations/0010_media_uploads.sql:95` `media_objects`, `:124` `delete_media_object_if_idle` | D10 | superseded additively (generation, tombstone, references) |
-| | `migrations/0014_job_results.sql:30` `job_results_immutable`; `infrx/state/jobstore.py:352` `read_result` | D10 | scrub-only guard; a scrubbed body reads `result_expired` |
+| | `migrations/0014_job_results.sql:24` `job_results_bytes_exact`, `:30` `job_results_immutable`, `:68` `read_result`; `infrx/state/jobstore.py:352` `read_result` | D10 | the scrub guard of 02 §F2C ("Scrub guard", column by column; the one allowed drop-and-recreate); `read_result` refuses a scrubbed row as `result_expired` |
 | Acceptance transcripts (`conformance/acceptance.py`) | E3C/E1C integration runs | E | `replay(real_factory) == []` on the merged SHA |
 
 - 2026-09-24: F2C consumer matrix appended (slice d).
+- 2026-09-24: F2C fix round: the 0014 and 0018 rows point at the column-by-column scrub guard and the zero-violator expiry check in 02; acceptance transcripts are now `f2c-lifecycle-acceptance.2`.

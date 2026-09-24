@@ -2525,6 +2525,56 @@ MUTANTS: tuple[Mutant, ...] = (
        LC, "    LifecycleRefusal.not_ready: errors.NotClaimable,",
        "    LifecycleRefusal.not_ready: errors.NotFound,",
        "test_every_refusal_is_an_existing_code_and_internal_ones_never_render"),
+    # --- F2C fix round: the survivors of the slice-b/d verification --------------------
+    # 0-M1: fences restart per generation, so only the generation tells a lapsed gen-1
+    # claim from a live gen-2 claim with the same fence (the ABA a delayed sweeper hits).
+    _m("lc_tombstone_ignores_the_generation", "a stale claim of an older generation cannot tombstone the new one",
+       LCF, "            if row.generation != claim.generation or row.claim is None \\",
+       "            if row.claim is None \\",
+       "retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_acked"),
+    # 2-ACI-1: each conjunct of the tombstone's claim check, alone.
+    _m("lc_tombstone_ignores_a_newer_fence", "a holder whose claim was replaced cannot tombstone",
+       LCF, "                    or row.claim.fence != claim.fence or now >= row.claim.expires_at:",
+       "                    or now >= row.claim.expires_at:",
+       "retention_durable__claims_are_leased_and_fenced"),
+    _m("lc_tombstone_ignores_the_claim_expiry", "a lapsed claim cannot tombstone",
+       LCF, "                    or row.claim.fence != claim.fence or now >= row.claim.expires_at:",
+       "                    or row.claim.fence != claim.fence:",
+       "retention_durable__claims_are_leased_and_fenced"),
+    # 0-M2: the cutover state - a new admit_ready job of the org beside an old marker-less one.
+    _m("lc_claim_gate_keyed_on_the_org", "the marker gate is per job, never per organization",
+       LCF, "        if job_id not in self.d.readiness:",
+       "        if not any(r.org_id == self.jobs.jobs[job_id].request.org_id\n"
+       "                   for r in self.d.readiness.values()):",
+       "admission_ready__a_job_with_no_marker_is_never_claimable"),
+    _m("lc_claim_gate_any_marker", "the marker gate is per job, never 'any marker exists'",
+       LCF, "        if job_id not in self.d.readiness:", "        if not self.d.readiness:",
+       "admission_ready__a_job_with_no_marker_is_never_claimable"),
+    # 0-M3: RV-11 on the LEGACY committed read.
+    _m("lcb_legacy_read_recomputes_from_configuration", "a retune never moves a legacy job's promised expiry",
+       S, "        return self._snapshot(job), job.outcome",
+       "        return self._snapshot(job), (job.outcome if job.outcome is None\n"
+       "                                     or job.outcome.result_expires_at is None\n"
+       "                                     else job.outcome.model_copy(update={\"result_expires_at\":\n"
+       "                                         job.outcome.settled_at + timedelta(\n"
+       "                                             seconds=self.limits.result_ttl_s)}))",
+       "result_expiry__a_configuration_change_never_moves_a_promised_expiry"),
+    # 2-ACI-2: each no_result condition of read_outcome, alone.
+    _m("lcb_failure_with_a_ref_read_as_a_result", "a failed or cancelled job never serves its result_ref",
+       LC, "    if outcome.state is not JobState.succeeded or not outcome.result_ref \\\n"
+           "            or outcome.usage is None:",
+       "    if not outcome.result_ref \\\n            or outcome.usage is None:",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
+    _m("lcb_success_without_a_ref_read_as_a_result", "a success with no result_ref has no result",
+       LC, "    if outcome.state is not JobState.succeeded or not outcome.result_ref \\\n"
+           "            or outcome.usage is None:",
+       "    if outcome.state is not JobState.succeeded \\\n            or outcome.usage is None:",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
+    _m("lcb_unbilled_success_read_as_a_result", "a success without authoritative usage has no result",
+       LC, "    if outcome.state is not JobState.succeeded or not outcome.result_ref \\\n"
+           "            or outcome.usage is None:",
+       "    if outcome.state is not JobState.succeeded or not outcome.result_ref:",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
 )
 
 

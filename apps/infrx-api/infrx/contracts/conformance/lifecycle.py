@@ -341,9 +341,14 @@ async def admission_ready__a_text_job_is_ready_with_an_empty_manifest(factory):
 async def admission_ready__a_job_with_no_marker_is_never_claimable(factory):
     """The other half of RV-05: a job the previous runtime admitted - `admit` or
     `admit_credit`, which never write a marker - reads NOT READY, never an empty
-    manifest, and preparation cannot claim it."""
+    manifest, and preparation cannot claim it. Run in the cutover state the no-backfill
+    drain relies on: the same organization already has a new `admit_ready` job with a
+    marker, so a gate keyed on the organization (or on "any marker") is caught."""
     harness = factory()
     for expectation in EXPECTATIONS:
+        new = _request(harness)
+        await harness.port.admit_ready(new, _idem(new, _key("new", expectation)), expectation)
+        assert await harness.port.readiness(new.request_id) is not None
         request = _request(harness)
         await _previous_admit(harness, expectation)(
             request, _idem(request, _key("previous", expectation)))
@@ -509,13 +514,17 @@ async def retention_durable__admission_wins_over_a_claim_that_has_not_tombstoned
 
 async def retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_acked(factory):
     """attach/delete, delete first: once tombstoned, admission and re-registration wait
-    (`content_retiring`); after the acknowledgement the key is a NEW generation, and a
-    delayed acknowledgement of the old tombstone cannot retire it."""
+    (`content_retiring`); after the acknowledgement the key is a NEW generation, and
+    neither a delayed acknowledgement of the old tombstone nor a delayed sweeper still
+    holding an old generation's lapsed claim can retire it - even when the new
+    generation's live claim carries the same fence number (fences are per generation)."""
     harness = factory()
     port = harness.port
     before = _balances(harness)
     clip = await _staged(harness, b"retired")
     row = await _eligible(harness, clip)
+    stale = await port.claim(row.content_id, row.generation, "s-slow")   # ... then stalls
+    _at(harness, stale.expires_at)
     tombstone = await port.tombstone(await port.claim(row.content_id, row.generation, "s-a"))
     assert tombstone.generation == row.generation
     request = _request(harness, (clip,))
@@ -531,6 +540,11 @@ async def retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_ack
     assert (reborn.content_id, reborn.generation, reborn.state) == (
         row.content_id, row.generation + 1, LifecycleState.live)
     assert await port.acknowledge_delete(tombstone) == reborn, "a delayed ack retired it"
+    _at(harness, reborn.eligible_at)
+    await port.claim(reborn.content_id, reborn.generation, "s-c")          # gen 2's live claim
+    await _refused(port.tombstone(stale), R.claim_lost)
+    assert (await port.register(_written(clip))).state is LifecycleState.live, \
+        "an old generation's claim tombstoned the recreated key"
     request = _request(harness, (clip,))
     _admission, readiness = await port.admit_ready(request, _idem(request, "reborn"), CARD)
     assert readiness.sources[0].generation == reborn.generation
@@ -554,8 +568,9 @@ async def retention_durable__claims_are_leased_and_fenced(factory):
     await _refused(port.tombstone(first), R.claim_lost)
     second = await port.claim(row.content_id, row.generation, "s-b")
     assert second.fence > first.fence
+    await _refused(port.tombstone(first), R.claim_lost)     # superseded, under a LIVE claim
     tombstone = await port.tombstone(second)
-    stale = Tombstone.model_validate({**tombstone.model_dump(), "fence": first.fence})
+    stale =Tombstone.model_validate({**tombstone.model_dump(), "fence": first.fence})
     await _refused(port.acknowledge_delete(stale), R.claim_lost)
     assert (await port.acknowledge_delete(tombstone)).state is LifecycleState.deleted
 
@@ -687,11 +702,13 @@ async def retention_durable__candidates_page_without_loss_or_repeat(factory):
 
 
 # --- RESULT-EXPIRY (F2C.b) --------------------------------------------------------------------
-async def _succeeded(harness, key: str, *, proposal_expiry=None, before_complete=None):
-    """Admit ready, prepare, claim and complete one CREDIT job; the committed outcome."""
+async def _succeeded(harness, key: str, *, expectation=CARD, proposal_expiry=None,
+                     before_complete=None):
+    """Admit ready, prepare, claim and complete one job of `expectation`'s regime; the
+    committed outcome."""
     port, jobs = harness.port, hook(harness, "jobs")
     request = _request(harness)
-    admission, _ready = await port.admit_ready(request, _idem(request, key), CARD)
+    admission, _ready = await port.admit_ready(request, _idem(request, key), expectation)
     await jobs.prepared(await port.claim_preparation(request.request_id, "prep-a"))
     lease = await jobs.claim(request.request_id, "worker-a")
     proposal = b.outcome(request.request_id, harness)
@@ -700,51 +717,75 @@ async def _succeeded(harness, key: str, *, proposal_expiry=None, before_complete
             {**proposal.model_dump(), "result_expires_at": proposal_expiry})
     if before_complete is not None:
         await before_complete(request)
-    outcome, _settlement = await jobs.complete_credit(lease, proposal)
+    if expectation.accounting_regime is AccountingRegime.credit:
+        outcome, _settlement = await jobs.complete_credit(lease, proposal)
+    else:
+        outcome = await jobs.complete(lease, proposal)
     return request, admission, outcome
+
+
+async def _owned_outcome(harness, expectation, admission):
+    """The owner's committed read in the job's regime (`get_owned_credit` / `get_owned`,
+    the reads status and result serve from)."""
+    jobs = hook(harness, "jobs")
+    read = (jobs.get_owned_credit if expectation.accounting_regime is AccountingRegime.credit
+            else jobs.get_owned)
+    return (await read(ORG, admission.job_handle))[1]
 
 
 async def result_expiry__a_committed_success_carries_its_persisted_expiry(factory):
     """RV-11: the settling transaction persists the result's expiry and every committed
     read (owned read, idempotent lookup) carries that same instant; the store clock at it
-    reads `expired`. Every other outcome carries none."""
+    reads `expired`. Every other outcome carries none. In BOTH regimes (0018 persists it
+    for legacy USD jobs too, and the legacy status route reads it)."""
     harness = factory()
     jobs = hook(harness, "jobs")
-    request, admission, outcome = await _succeeded(harness, "expiring")
-    assert outcome.result_expires_at is not None and outcome.result_expires_at > outcome.settled_at
-    assert (await jobs.get_owned_credit(ORG, admission.job_handle))[1] == outcome
-    assert (await jobs.lookup(ORG, _idem(request, "expiring")))[1] == outcome
-    assert read_outcome(outcome, harness.clock.now()) is ReadOutcome.available
-    _at(harness, outcome.result_expires_at)
-    assert read_outcome((await jobs.get_owned_credit(ORG, admission.job_handle))[1],
-                        harness.clock.now()) is ReadOutcome.expired
-    cancelled = _request(harness)
-    other, _ = await harness.port.admit_ready(cancelled, _idem(cancelled, "cancelled"), CARD)
-    ended = await jobs.cancel(ORG, other.job_handle)
-    assert ended.result_expires_at is None and \
-        read_outcome(ended, harness.clock.now()) is ReadOutcome.no_result
+    for expectation in EXPECTATIONS:
+        key = _key("expiring", expectation)
+        request, admission, outcome = await _succeeded(harness, key, expectation=expectation)
+        assert outcome.result_expires_at is not None and \
+            outcome.result_expires_at > outcome.settled_at, expectation
+        assert await _owned_outcome(harness, expectation, admission) == outcome
+        assert (await jobs.lookup(ORG, _idem(request, key)))[1] == outcome
+        assert read_outcome(outcome, harness.clock.now()) is ReadOutcome.available
+        _at(harness, outcome.result_expires_at)
+        assert read_outcome(await _owned_outcome(harness, expectation, admission),
+                            harness.clock.now()) is ReadOutcome.expired
+        cancelled = _request(harness)
+        other, _ = await harness.port.admit_ready(
+            cancelled, _idem(cancelled, _key("cancelled", expectation)), expectation)
+        ended = await jobs.cancel(ORG, other.job_handle)
+        assert ended.result_expires_at is None and \
+            read_outcome(ended, harness.clock.now()) is ReadOutcome.no_result
 
 
 async def result_expiry__the_proposal_never_selects_the_expiry(factory):
     """No caller-selected expiry: a worker's proposal naming one is not honoured."""
     harness = factory()
     far = harness.clock.now().replace(year=2099)
-    _request_, _admission, outcome = await _succeeded(harness, "far", proposal_expiry=far)
-    assert outcome.result_expires_at is not None and outcome.result_expires_at < far
+    for expectation in EXPECTATIONS:
+        _request_, _admission, outcome = await _succeeded(
+            harness, _key("far", expectation), expectation=expectation, proposal_expiry=far)
+        assert outcome.result_expires_at is not None and outcome.result_expires_at < far
 
 
 async def result_expiry__a_configuration_change_never_moves_a_promised_expiry(factory):
     """The promise is the persisted instant: changing the configured TTL later moves no
-    committed result (it applies to settlements after it). Re-deriving the expiry from
-    current configuration - what `Jobs.result_expiry` does today - fails here."""
+    committed result (it applies to settlements after it), read through each regime's own
+    owned read. Re-deriving the expiry from current configuration - what
+    `Jobs.result_expiry` does today - fails here."""
     harness = factory()
-    jobs = hook(harness, "jobs")
-    _r, admission, first = await _succeeded(harness, "before")
+    promised = [(expectation, *await _succeeded(harness, _key("before", expectation),
+                                                expectation=expectation))
+                for expectation in EXPECTATIONS]
     hook(harness, "retune")(result_ttl_s=60.0)
-    again = (await jobs.get_owned_credit(ORG, admission.job_handle))[1]
-    assert again.result_expires_at == first.result_expires_at, "a retune moved a promise"
-    _r2, _a2, second = await _succeeded(harness, "after")
-    assert (second.result_expires_at - second.settled_at).total_seconds() == 60.0
+    for expectation, _r, admission, first in promised:
+        again = await _owned_outcome(harness, expectation, admission)
+        assert again.result_expires_at == first.result_expires_at, (
+            f"a retune moved a promise ({expectation.accounting_regime.value})")
+        _r2, _a2, second = await _succeeded(harness, _key("after", expectation),
+                                            expectation=expectation)
+        assert (second.result_expires_at - second.settled_at).total_seconds() == 60.0
 
 
 async def result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgotten(factory):

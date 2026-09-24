@@ -38,7 +38,7 @@ from ..v2.lifecycle import refusal_of
 from . import lifecycle
 from .harness import Harness
 
-VERSION = "f2c-lifecycle-acceptance.1"
+VERSION = "f2c-lifecycle-acceptance.2"
 PATH = pathlib.Path(__file__).resolve().parent.parent / "fixtures" / "acceptance" / "lifecycle.json"
 # The windows the transcript's instants assume (keywords every lifecycle factory accepts).
 CONFIG = {"upload_ttl_s": 3600.0, "grace_s": 60.0, "claim_ttl_s": 30.0, "retention_s": 600.0}

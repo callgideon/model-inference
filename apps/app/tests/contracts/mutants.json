@@ -2199,6 +2199,39 @@
       "cases": [
         "a missing required or an unexpected field throws, deterministically"
       ]
+    },
+    {
+      "id": "V2-LC-12",
+      "entry": "v2",
+      "note": "F2C fix round (2-ACI-2): a failed or cancelled job carrying a result_ref reads as a result (410 instead of 200)",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (outcome.state !== \"succeeded\" || !outcome.result_ref || !outcome.usage) return \"no_result\";",
+      "replace": "  if (!outcome.result_ref || !outcome.usage) return \"no_result\";",
+      "cases": [
+        "every read outcome is the committed cross-language table"
+      ]
+    },
+    {
+      "id": "V2-LC-13",
+      "entry": "v2",
+      "note": "F2C fix round (2-ACI-2): a success with no result_ref reads as a result",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (outcome.state !== \"succeeded\" || !outcome.result_ref || !outcome.usage) return \"no_result\";",
+      "replace": "  if (outcome.state !== \"succeeded\" || !outcome.usage) return \"no_result\";",
+      "cases": [
+        "every read outcome is the committed cross-language table"
+      ]
+    },
+    {
+      "id": "V2-LC-14",
+      "entry": "v2",
+      "note": "F2C fix round (2-ACI-2): a success without authoritative usage is served as available",
+      "file": "lib/contracts/v2/lifecycle.ts",
+      "find": "  if (outcome.state !== \"succeeded\" || !outcome.result_ref || !outcome.usage) return \"no_result\";",
+      "replace": "  if (outcome.state !== \"succeeded\" || !outcome.result_ref) return \"no_result\";",
+      "cases": [
+        "every read outcome is the committed cross-language table"
+      ]
     }
   ]
 }
