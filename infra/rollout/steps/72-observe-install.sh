@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# I8 slice 3 on the box: install the monitoring units from the checked-out release, write
+# I8 slice 3 on the box: install the monitoring units (infra/observe/systemd/: not in the
+# runtime's deploy dir, whose only timer-free reaper path W3 pins) from the checked-out release, write
 # their three env files from SSM (values read on the box into 0600 files, never printed, never
 # an argument), start the timers and run one cycle. Idempotent. Needs RELEASE (the checkout
 # must be it) and CANARY_VIDEO (an in-cap clip on the box, e.g. the 8 s sop-synth clip).
@@ -34,7 +35,7 @@ write_env() {  # write_env FILE NAME=SSM-PARAM|NAME:=LITERAL ... - 0600 root, by
 }
 install -d -o 10001 -g 10000 -m 0770 "$R/var/lib/infrx/metrics"
 for unit in infrx-observe.service infrx-observe.timer infrx-canary.service infrx-canary.timer; do
-  install -m 0644 "$repo/apps/infrx-api/deploy/$unit" "$R/etc/systemd/system/$unit"
+  install -m 0644 "$repo/infra/observe/systemd/$unit" "$R/etc/systemd/system/$unit"
 done
 write_env "$R/etc/infrx-canary.env" "INFRX_CANARY_KEY=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}" \
   "CANARY_VIDEO:=$CANARY_VIDEO"

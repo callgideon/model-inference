@@ -40,7 +40,7 @@ ALERTS = support.REPO / "infra" / "alerts"
 RULES = runpy.run_path(str(OBSERVE / "rules.py"))["merge"](ALERTS)
 DURABLE = runpy.run_path(str(OBSERVE / "durable.py"))
 DELIVER = runpy.run_path(str(OBSERVE / "deliver.py"))
-DEPLOY = API / "deploy"
+UNITS = OBSERVE / "systemd"
 
 
 # --- producers --------------------------------------------------------------------------
@@ -379,13 +379,13 @@ def test_ops_continuous__the_monitoring_units_are_valid_and_scheduled():
     names = ["infrx-observe.service", "infrx-observe.timer", "infrx-canary.service",
              "infrx-canary.timer"]
     done = subprocess.run(["systemd-analyze", "verify", "--man=no",
-                           *[str(DEPLOY / n) for n in names]], capture_output=True, text=True)
+                           *[str(UNITS / n) for n in names]], capture_output=True, text=True)
     assert (done.stdout + done.stderr).strip() == ""
-    observe = (DEPLOY / "infrx-observe.timer").read_text()
-    canary = (DEPLOY / "infrx-canary.timer").read_text()
+    observe = (UNITS / "infrx-observe.timer").read_text()
+    canary = (UNITS / "infrx-canary.timer").read_text()
     assert "OnUnitActiveSec=60s" in observe and "OnUnitActiveSec=10min" in canary
-    assert "EnvironmentFile=/etc/infrx-canary.env" in (DEPLOY / "infrx-canary.service").read_text()
-    service = (DEPLOY / "infrx-observe.service").read_text()
+    assert "EnvironmentFile=/etc/infrx-canary.env" in (UNITS / "infrx-canary.service").read_text()
+    service = (UNITS / "infrx-observe.service").read_text()
     assert "EnvironmentFile=-/etc/infrx-alert.env" in service and "Type=oneshot" in service
 
 

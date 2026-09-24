@@ -1062,7 +1062,7 @@ MUTANTS += (
        OBS + "deliver.py", 'text = (f"[TEST {word}] infrx', 'text = (f"[{word}] infrx',
        "test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runbook"),
     _m("observe_timer_hourly", "the monitoring cycle runs every minute",
-       "deploy/infrx-observe.timer", "OnUnitActiveSec=60s", "OnUnitActiveSec=1h",
+       OBS + "systemd/infrx-observe.timer", "OnUnitActiveSec=60s", "OnUnitActiveSec=1h",
        "test_ops_continuous__the_monitoring_units_are_valid_and_scheduled"),
     _m("observe_hands_the_whole_env_file", "only the DSN crosses into the exporter",
        OBS + "observe.sh", "  || grep -E '^DATABASE_URL=' \"$env_file\" > \"$dsn_env\"",
