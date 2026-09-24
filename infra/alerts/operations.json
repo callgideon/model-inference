@@ -1,0 +1,292 @@
+{
+  "version": 1,
+  "description": "I8 operations rules, evaluated together with alerts.json (infra/observe/rules.py merges them; the evaluator is python -m infrx.observe.alerts). The metrics come from I8's deployed exporters - infra/observe/durable.py (PostgreSQL truth), host-probe.sh (host truth), canary.sh (the public synthetic check) - or are pending the runtime wiring named in pending_producers. Same rule shape and threshold conventions as alerts.json.",
+  "overrides": {
+    "GpuUnavailable": {
+      "match": {
+        "process": "host"
+      },
+      "reason": "the gateway container has no nvidia-smi, so its infrx_gpu_up is always 0 and would page every cycle; the host probe's reading is the GPU's (WR-I8-4: the gateway stops collecting GPU gauges)"
+    }
+  },
+  "pending_producers": {
+    "infrx_db_pool_requests_waiting": "WR-I8-2 (psycopg_pool get_stats on /metrics)",
+    "infrx_db_pool_timeouts_total": "WR-I8-2",
+    "infrx_db_pool_connection_errors_total": "WR-I8-2",
+    "infrx_large_body_in_use": "WR-I8-3 (the gateway's LargeBodies occupancy on /metrics)",
+    "infrx_large_body_limit": "WR-I8-3"
+  },
+  "rules": [
+    {
+      "name": "DurableExporterDown",
+      "severity": "page",
+      "summary": "The durable-truth exporter could not read PostgreSQL: queue, hold and drift alerts are blind.",
+      "metric": "infrx_durable_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#exporter-down"
+    },
+    {
+      "name": "ReadyBacklogOld",
+      "severity": "page",
+      "summary": "A dispatch the store made available has waited longer than an async job's queue budget, by durable truth (not the rebuildable index).",
+      "metric": "infrx_durable_ready_backlog_seconds",
+      "agg": "max",
+      "op": ">",
+      "threshold": 600,
+      "threshold_status": "derived: QUEUE_WAIT_ASYNC_S = 600 (contracts limits); ⚠️ TO BE VERIFIED (P-18): against the measured envelope",
+      "runbook": "infra/runbooks/observe.md#durable-backlog"
+    },
+    {
+      "name": "PreparingStuck",
+      "severity": "ticket",
+      "summary": "The oldest job still preparing was admitted more than 10 minutes ago.",
+      "metric": "infrx_durable_oldest_seconds",
+      "match": {
+        "state": "preparing"
+      },
+      "op": ">",
+      "threshold": 600,
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): twice the 300 s preparation phase budget",
+      "runbook": "infra/runbooks/observe.md#stuck-jobs"
+    },
+    {
+      "name": "QueuedStuck",
+      "severity": "page",
+      "summary": "The oldest queued job has waited longer than an async job's queue budget.",
+      "metric": "infrx_durable_oldest_seconds",
+      "match": {
+        "state": "queued"
+      },
+      "op": ">",
+      "threshold": 600,
+      "threshold_status": "derived: QUEUE_WAIT_ASYNC_S = 600; ⚠️ TO BE VERIFIED (P-18): against the measured envelope",
+      "runbook": "infra/runbooks/observe.md#stuck-jobs"
+    },
+    {
+      "name": "RunningStuck",
+      "severity": "page",
+      "summary": "A job has been running longer than one generation plus a lease: the engine or the worker is stuck.",
+      "metric": "infrx_durable_oldest_seconds",
+      "match": {
+        "state": "running"
+      },
+      "op": ">",
+      "threshold": 420,
+      "threshold_status": "derived: GENERATION_TIMEOUT_S 300 + LEASE_TTL_S 120; ⚠️ TO BE VERIFIED (P-18): against the measured envelope",
+      "runbook": "infra/runbooks/observe.md#stuck-jobs"
+    },
+    {
+      "name": "OverdueJobs",
+      "severity": "page",
+      "summary": "Non-terminal jobs are past their deadline by more than a minute: the reaper is not terminalizing them, and their holds stay reserved.",
+      "metric": "infrx_durable_overdue_jobs",
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: a job past its deadline must be terminal",
+      "runbook": "infra/runbooks/observe.md#stuck-jobs"
+    },
+    {
+      "name": "PlatformFailuresRecent",
+      "severity": "page",
+      "summary": "More than 3 jobs settled with a platform-caused failure in the last 15 minutes (durable truth).",
+      "metric": "infrx_durable_platform_failures_recent",
+      "op": ">",
+      "threshold": 3,
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): engineering guess for a single-GPU pilot",
+      "runbook": "infra/runbooks/observe.md#stuck-jobs"
+    },
+    {
+      "name": "StuckHolds",
+      "severity": "page",
+      "summary": "A hold is still reserved for a job that is terminal or long past its deadline.",
+      "metric": "infrx_durable_stuck_holds",
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: a terminal job holds nothing",
+      "runbook": "infra/runbooks/observe.md#stuck-holds"
+    },
+    {
+      "name": "UnknownUsageOverdue",
+      "severity": "ticket",
+      "summary": "An unknown-usage hold is past its reconcile_after and was not released.",
+      "metric": "infrx_durable_unknown_overdue",
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: reconcile_after is the release deadline",
+      "runbook": "infra/runbooks/reconcile.md#unknown-usage"
+    },
+    {
+      "name": "OutboxGcLag",
+      "severity": "ticket",
+      "summary": "Acknowledged outbox rows are kept more than a day past their 7-day retention: the GC is not running.",
+      "metric": "infrx_durable_gc_lag_seconds",
+      "match": {
+        "kind": "outbox"
+      },
+      "op": ">",
+      "threshold": 86400,
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): a day of slack over jobstore.OUTBOX_RETENTION_S",
+      "runbook": "infra/runbooks/observe.md#gc-lag"
+    },
+    {
+      "name": "StreamChunkGcLag",
+      "severity": "ticket",
+      "summary": "Journal chunks are kept more than an hour past their expiry.",
+      "metric": "infrx_durable_gc_lag_seconds",
+      "match": {
+        "kind": "stream_chunks"
+      },
+      "op": ">",
+      "threshold": 3600,
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): an hour of slack over JOURNAL_CHUNK_TTL_S",
+      "runbook": "infra/runbooks/observe.md#gc-lag"
+    },
+    {
+      "name": "ResultContentPastExpiry",
+      "severity": "ticket",
+      "summary": "Result bodies are kept more than an hour past their persisted expiry (RV-03/RV-11: fires until D10/M6 content cleanup ships).",
+      "metric": "infrx_durable_gc_lag_seconds",
+      "match": {
+        "kind": "results"
+      },
+      "op": ">",
+      "threshold": 3600,
+      "threshold_status": "⚠️ TO BE VERIFIED (P-18): an hour of slack over RESULT_TTL_S",
+      "runbook": "infra/runbooks/observe.md#gc-lag"
+    },
+    {
+      "name": "EngineDown",
+      "severity": "page",
+      "summary": "The engine's loopback /health does not answer (host view).",
+      "metric": "infrx_engine_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/restart.md#engine"
+    },
+    {
+      "name": "UnitInactive",
+      "severity": "page",
+      "summary": "A runtime unit is not active.",
+      "metric": "infrx_unit_active",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#units"
+    },
+    {
+      "name": "EdgeInMaintenance",
+      "severity": "ticket",
+      "summary": "The edge serves the maintenance site: admission is refused (a drain, a rollout or a rollback in progress).",
+      "metric": "infrx_edge_maintenance",
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#edge"
+    },
+    {
+      "name": "PublicEdgeDown",
+      "severity": "page",
+      "summary": "The public /health does not answer 200 from the box (DNS, TLS, the edge, or a 503 after local readiness).",
+      "metric": "infrx_edge_public_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#edge"
+    },
+    {
+      "name": "ProcessingCacheLarge",
+      "severity": "ticket",
+      "summary": "The processing cache is above its 60 GiB budget on the instance-store NVMe.",
+      "metric": "infrx_processing_cache_bytes",
+      "op": ">",
+      "threshold": 64424509440,
+      "threshold_status": "derived: the 60 GiB media budget of infra/README.md §2 (est.); ⚠️ TO BE VERIFIED (P-18): against measured cache growth",
+      "runbook": "infra/runbooks/disk.md#disk-filling"
+    },
+    {
+      "name": "CanaryFailed",
+      "severity": "page",
+      "summary": "The synthetic text or in-cap video request through the public edge did not succeed.",
+      "metric": "infrx_canary_up",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#canary"
+    },
+    {
+      "name": "CanaryStale",
+      "severity": "ticket",
+      "summary": "The synthetic inference check has not run for 30 minutes.",
+      "metric": "infrx_canary_last_run_timestamp_seconds",
+      "age": true,
+      "agg": "max",
+      "op": ">",
+      "threshold": 1800,
+      "threshold_status": "derived: three missed 10-minute timer runs",
+      "runbook": "infra/runbooks/observe.md#canary"
+    },
+    {
+      "name": "CanaryNotConfigured",
+      "severity": "ticket",
+      "summary": "The synthetic inference check has no canary key: nothing proves the public path serves.",
+      "metric": "infrx_canary_configured",
+      "op": "<",
+      "threshold": 1,
+      "threshold_status": "exact: the gauge is 1 or 0",
+      "runbook": "infra/runbooks/observe.md#canary"
+    },
+    {
+      "name": "DbPoolWaiting",
+      "severity": "ticket",
+      "summary": "Requests are waiting for a database connection in a runtime pool.",
+      "metric": "infrx_db_pool_requests_waiting",
+      "agg": "max",
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: the budget (pool_budget.py) sizes the pools for no wait",
+      "runbook": "infra/runbooks/observe.md#database-pool"
+    },
+    {
+      "name": "DbPoolTimeouts",
+      "severity": "page",
+      "summary": "A runtime pool gave up waiting for a connection since the last evaluation.",
+      "metric": "infrx_db_pool_timeouts_total",
+      "agg": "sum",
+      "increase": true,
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: each is a failed operation",
+      "runbook": "infra/runbooks/observe.md#database-pool"
+    },
+    {
+      "name": "DbPoolConnectionErrors",
+      "severity": "ticket",
+      "summary": "A runtime pool failed to open a connection since the last evaluation (EMAXCONNSESSION, auth, network).",
+      "metric": "infrx_db_pool_connection_errors_total",
+      "agg": "sum",
+      "increase": true,
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "exact: a refused connection is a budget or credential event",
+      "runbook": "infra/runbooks/observe.md#database-pool"
+    },
+    {
+      "name": "GatewayBodySlotsFull",
+      "severity": "ticket",
+      "summary": "Every large-body intake slot of the gateway is in use: further large bodies are refused (buffering bound reached).",
+      "metric": "infrx_large_body_in_use",
+      "agg": "max",
+      "divide_by": {
+        "metric": "infrx_large_body_limit",
+        "agg": "max"
+      },
+      "op": ">=",
+      "threshold": 1.0,
+      "threshold_status": "exact: at the configured LARGE_BODY_LIMIT",
+      "runbook": "infra/runbooks/observe.md#edge"
+    }
+  ]
+}

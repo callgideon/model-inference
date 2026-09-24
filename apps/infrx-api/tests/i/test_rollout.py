@@ -52,6 +52,7 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                                        "30-pause.sh", "40-checkout.sh", "45-s3-check.sh",
                                        "50-install.sh",
                                        "60-verify-local.sh", "71-pool-budget.sh",
+                                       "72-observe-install.sh", "73-observe-status.sh",
                                        "90-revert.sh", "91-abort.sh",
                                        "93-restore-edge.sh", "95-maintenance.sh"]
     for path in [*STEPS, ROLLOUT / "ssm.sh", ROLLOUT / "verify-external.sh"]:

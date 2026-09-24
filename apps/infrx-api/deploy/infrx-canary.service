@@ -1,0 +1,13 @@
+[Unit]
+Description=infrx synthetic inference: one text and one in-cap video request via the public edge (I8)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# INFRX_CANARY_KEY (the canary tenant's scoped key) and CANARY_VIDEO (an in-cap clip on
+# this host), root 0600. Required: without it the unit fails to start, visibly.
+EnvironmentFile=/etc/infrx-canary.env
+ExecStart=/bin/bash /home/ubuntu/model-inference/infra/observe/canary.sh
+TimeoutStartSec=300
