@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T01:29:18Z",
+  "updated": "2026-09-24T02:13:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,9 +17,15 @@
     },
     "I2B-R4-worker": {
       "lane": "codex-worker / codex/i2b-r4-worker",
-      "phase": "running on e3b2 + d4 (items 1–3 in; merged phase 3 b9529d1); handback → verifier → step 8b (conflict resolutions scripted)",
-      "since": "2026-09-23T23:43:44Z",
-      "note": "d4 ports, Q 55494, MinIO 55781"
+      "phase": "HANDED BACK e540963 (impl fb8babb; layer-3 backend 144/0/0, no PENDING) → single verifier wf_c8d406f4-b7b → step 8b",
+      "since": "2026-09-24T02:13:25Z",
+      "note": "python -m infrx.worker composition root; rehearsal PASSED; the pilot box on the real entry point"
+    },
+    "PREP-WORKER": {
+      "lane": "codex-prepw / codex/prep-worker",
+      "phase": "DISPATCHED (Opus) from 01103c9: the product preparation loop (prepare_dispatch → claim_preparation → MediaPreparation → exact prompt_tokens via the engine's /tokenize → prepared); acceptance = E3B journeys on the real worker with the box's emulation deleted",
+      "since": "2026-09-24T02:13:25Z",
+      "note": "BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b"
     }
   },
   "reviews": {
@@ -98,6 +104,10 @@
     "WORKER": {
       "phase": "lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback",
       "since": "2026-09-24T00:20:08Z"
+    },
+    "I2B-R4-worker": {
+      "phase": "handed back e540963 → verifier wf_c8d406f4-b7b",
+      "since": "2026-09-24T02:13:25Z"
     }
   },
   "gates": {
