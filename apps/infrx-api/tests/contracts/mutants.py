@@ -696,7 +696,22 @@ MUTANTS: tuple[Mutant, ...] = (
           "            sources = next(iter(self.by_job.values()), None)\n"
           "        if sources is None:\n"
           '            raise errors.NotFound(f"no staged media for job {job_id}")',
-       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced",
+       "media_parity__an_attach_outlives_the_process_that_made_it"),
+    # MPILOT: another process (the worker, a restarted gateway) prepares each job's own refs.
+    _m("prepare_serves_the_first_attach", "every job prepares its own attach, never the first",
+       M, "        sources = self.by_job.get(job_id)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "        sources = next(iter(self.by_job.values()), None)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced",
+       "media_parity__an_attach_outlives_the_process_that_made_it"),
+    # MPILOT (proposed ruling): the upload window bounds use as well as completion.
+    _m("upload_used_past_its_window", "an upload past its window is 410 at use (R22)",
+       M, "                and self.clock.now() >= upload.expires_at:", "                and False:",
+       "media_sec__an_upload_is_usable_only_within_its_window"),
     _m("load_work_reports_current_budgets", "load_work carries the R4 budgets (q16)",
        S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
        "                        price_snapshot=job.admission.price_snapshot,\n"
@@ -2159,10 +2174,6 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
        "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
        "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
-    # Item 3: the PostgreSQL adapter until D5's 0018 (D5 retires this with the refusal).
-    _m("pg_cancel_records_an_unsupported_cause", "before 0018 no cause but client_cancelled reaches 0016",
-       "state/jobstore.py", "        if cause != TerminalCause.client_cancelled:", "        if False:",
-       "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"),
 )
 
 

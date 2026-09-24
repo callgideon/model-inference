@@ -2,13 +2,9 @@
 
 Two app shapes, both built without importing the legacy `gateway` shim (r1 R48):
 
-* `cutover_app()` - the app the cutover produces: the ingress router mounted on a
-  bare FastAPI with a real `Runtime`, i.e. `create_app` minus the legacy routers.
-  Registering the ingress on top of the legacy chat route would leave that route in
-  charge of `/v1/chat/completions` (Starlette matches in registration order), which
-  would test the wrong handler.
-* `legacy_app()` - `create_app()` itself, for the cases about what the composition
-  root does today.
+* `cutover_app()` - the ingress router mounted on a bare FastAPI with a real
+  `Runtime`, with the `IngressDeps` a case chooses (`create_app` itself composes the
+  pilot's own, `test_startup.pilot_app`).
 """
 from __future__ import annotations
 
@@ -17,18 +13,16 @@ import dataclasses
 import pathlib
 import shutil
 import tempfile
-from unittest import mock
 
 import httpx
 from fastapi import FastAPI
 
-from infrx.config import Settings, validate_runtime
+from infrx.config import DEPLOYMENT_DEFAULTS, Settings, validate_runtime
 from infrx.contracts.conformance.v2_fakes import fake_v2_harness
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.limits import DEFAULTS
-from infrx.gateway import app as composition
-from infrx.gateway.app import Runtime, create_app
-from infrx.gateway.routes import health, ingress, models
+from infrx.gateway.app import Runtime
+from infrx.gateway.routes import ingress
 
 CHAT_PATH = ingress.CHAT_PATH
 HEALTH_PATH = ingress.HEALTH_PATH
@@ -81,6 +75,9 @@ def upstream():
 
 
 PILOT_FIELDS = {f.name for f in dataclasses.fields(DEFAULTS)}
+# What install.sh/preflight write for E4B's served-build check (`pilot.build_info`).
+RELEASE, IMAGE = "c0ffee" + "0" * 34, "sha256:" + "b" * 64
+BUILD = DEPLOYMENT_DEFAULTS.replace(infrx_release_sha=RELEASE, infrx_image=IMAGE)
 
 
 def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase.co",
@@ -89,28 +86,17 @@ def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase
     owns the name, so a case can set `max_request_bytes` and `key_cache_max` alike."""
     pilot = {"infrx_mode": mode, "database_url": "postgresql:///infrx_g1",
              **{k: v for k, v in overrides.items() if k in PILOT_FIELDS}}
+    overrides.setdefault("deployment", BUILD)
     return Settings(usage_log=USAGE_LOG, legacy_key=legacy_key, supabase_url=supabase_url,
                     supabase_key=supabase_key, pilot=DEFAULTS.replace(**pilot),
                     **{k: v for k, v in overrides.items() if k not in PILOT_FIELDS})
-
-
-# The router list G2's cutover produces: the metered ingress in place of legacy `chat`.
-CUTOVER = (health, models, ingress)
-
-
-def as_cutover():
-    """`app.ROUTERS` as the cutover leaves it, for the length of a `with`. `pilot` refuses
-    to validate while the legacy chat route is composed (G1R / E3B dr17), and these apps
-    are the cutover's, so they are validated as the cutover will be."""
-    return mock.patch.object(composition, "ROUTERS", CUTOVER)
 
 
 def runtime(config=None, *, sb=None, clock=None, seen=None):
     rt = Runtime(config if config is not None else settings(), client=upstream(),
                  sb=sb if sb is not None else supabase(seen=seen),
                  clock=clock if clock is not None else (lambda: 1_790_000_000.0))
-    with as_cutover():
-        rt.mode = validate_runtime(rt.settings)
+    rt.mode = validate_runtime(rt.settings)
     return rt
 
 
@@ -155,11 +141,6 @@ def cutover_app(config=None, *, sb=None, clock=None, seen=None, ingress_deps=Non
     rt.app = app
     mounted = ingress.register(app, rt, ingress_deps if ingress_deps is not None else deps())
     return app, mounted
-
-
-def legacy_app(config=None):
-    return create_app(config if config is not None else Settings(usage_log=USAGE_LOG),
-                      client=upstream(), sb=supabase(), clock=lambda: 1_790_000_000.0)
 
 
 def recorder():

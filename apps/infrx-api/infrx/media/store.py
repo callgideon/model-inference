@@ -161,7 +161,7 @@ class MediaStaging:
 
     def __init__(self, objects: ObjectStore, *, limits: PilotSettings = DEFAULTS,
                  fetcher: MediaFetcher | None = None, job_org=None,
-                 profile_version: str = "v1") -> None:
+                 profile_version: str = "v1", attachments=None) -> None:
         self.objects = objects
         self.limits = limits
         self.fetcher = fetcher or MediaFetcher(limits)
@@ -173,7 +173,11 @@ class MediaStaging:
         # (org, handle) -> immutable ref. Keyed by tenant, so one org's handle can never
         # name, replace or shadow another org's object.
         self.refs: dict[tuple[str, str], MediaRef] = {}
+        # MPILOT gap 2: `by_job` is this process's copy of the attach; `attachments`
+        # (`attachments.PgAttachments`, D2's staged tables) is the durable one another
+        # process reads - the worker, a restarted gateway. None: in process only.
         self.by_job: dict[str, tuple[MediaRef, ...]] = {}
+        self.attachments = attachments
         # M2: what `prepare` produced, kept beside the attached sources rather than
         # replacing them. R46 allows bounded preparation retries, and a store that
         # overwrote the sources with the prepared refs would have the second attempt
@@ -320,7 +324,20 @@ class MediaStaging:
             if indexed is None or indexed.digest != ref.digest:
                 raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
             owned.append(indexed)
+        if self.attachments is not None:            # durable first (MPILOT gap 2)
+            await self.attachments.put(job_id, tuple(owned))
         self.by_job[job_id] = tuple(owned)
+
+    async def attached(self, job_id: str) -> tuple[MediaRef, ...] | None:
+        """The refs bound to the job, from this process or the durable record; None if
+        none were. ponytail: the durable record has no row for an attach of no media (0003's
+        `job_media` names refs), so another process answers None for a text job - which only
+        a preparer outside the attaching process would ask; 0019 (a zero-ref marker) if one
+        ever runs there."""
+        refs = self.by_job.get(job_id)
+        if refs is None and self.attachments is not None:
+            refs = await self.attachments.get(job_id)
+        return refs
 
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
         # Keyed by tenant: another org's handle simply is not in this org's namespace.

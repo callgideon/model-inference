@@ -120,6 +120,9 @@ class FakeVllmApp:
         self.drained = False
         self.cancelled: set[str] = set()
         self.seen: list[dict] = []
+        # E3B phase 3 (dr11): streams the CLIENT abandoned mid-body - what vLLM sees when a
+        # worker cancels a generation (it closes the connection). Never reset.
+        self.disconnected = 0
 
     # ---------------------------------------------------------- scripting
 
@@ -217,7 +220,7 @@ class FakeVllmApp:
                 self.cancelled.add(job_id)
             return await self._json(send, 200, {"cancelled": sorted(self.cancelled)})
         if path == "/v1/chat/completions" and method == "POST":
-            return await self._chat(scope, body, send)
+            return await self._chat(scope, body, send, receive)
         await self._json(send, 404, {"error": {"message": "no route", "type": "not_found_error",
                                                "code": "not_found"}})
 
@@ -258,7 +261,8 @@ class FakeVllmApp:
     def state(self) -> dict:
         return {"fault": self.default_fault.value, "drained": self.drained,
                 "cancelled": sorted(self.cancelled), "requests": len(self.seen),
-                "text": self.text, "prompt_tokens": self.prompt_tokens}
+                "text": self.text, "prompt_tokens": self.prompt_tokens,
+                "delta_gap_s": self.delta_gap_s, "disconnected": self.disconnected}
 
     def control(self, payload: dict) -> dict:
         """Set the process-wide default. Used when the client under test cannot be made to
@@ -274,6 +278,8 @@ class FakeVllmApp:
             self.text = str(payload["text"])
         if "prompt_tokens" in payload:
             self.prompt_tokens = int(payload["prompt_tokens"])
+        if "delta_gap_s" in payload:          # E3B phase 3: a generation slow enough to leave
+            self.delta_gap_s = max(0.0, float(payload["delta_gap_s"]))
         if payload.get("reset"):
             self.cancelled.clear()
             self.seen.clear()
@@ -292,7 +298,7 @@ class FakeVllmApp:
         except ValueError:
             raise UnknownFault(str(named)) from None
 
-    async def _chat(self, scope, body: bytes, send) -> None:
+    async def _chat(self, scope, body: bytes, send, receive=None) -> None:
         request = self._body_json(body)
         try:
             fault = self._fault_for(scope, request)
@@ -308,9 +314,28 @@ class FakeVllmApp:
         await send({"type": "http.response.start", "status": 200,
                     "headers": [(b"content-type", b"text/event-stream"),
                                 (b"cache-control", b"no-cache")]})
-        produced = 0
         gap = CANCEL_GAP_S if fault is EngineFault.cancellation_race else self.delta_gap_s
+        import asyncio
+        gone = asyncio.Event()
+
+        async def watch() -> None:
+            # The body is read, so the next message is the client leaving.
+            while receive is not None and (await receive())["type"] != "http.disconnect":
+                pass
+            if receive is not None:
+                gone.set()
+        watcher = asyncio.create_task(watch())
+        try:
+            await self._stream(fault, job_id, send, gap, gone)
+        finally:
+            watcher.cancel()
+
+    async def _stream(self, fault, job_id, send, gap, gone) -> None:
+        produced = 0
         for kind, payload in self.script(fault, job_id):
+            if gone.is_set():
+                self.disconnected += 1
+                return
             # A cancel that arrives WHILE the stream is running: the precomputed script cannot
             # see it, so the loop checks between sends and answers with usage for the deltas
             # actually emitted. W2/E3 depend on this shape, and the old code ignored a
@@ -342,6 +367,9 @@ class FakeVllmApp:
                 # a few milliseconds of yielding, not a timeout being waited out.
                 import asyncio
                 await asyncio.sleep(gap)
+        if gone.is_set():
+            self.disconnected += 1
+            return
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 
     def _non_stream(self, fault: EngineFault) -> dict:

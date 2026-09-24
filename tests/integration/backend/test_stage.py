@@ -106,6 +106,27 @@ def test_a_drill_pends_only_on_the_stubs_it_drives():
     assert stack.stubbed(("terminalize", "cancel"), {}) == {}
 
 
+def test_a_drill_driving_a_stub_pends_on_its_owner_before_building_a_store(monkeypatch):
+    """1a, the other half, at layer 1 (E3B phase 3: D5 merged, so no drill on the stack drives
+    a stub any more and e3bm15 moved here): `rig` asks the probe which of ITS functions are
+    stubs, and a drill driving one pends on the task that stub names - before any store is
+    built - while a D6 stub it never calls holds nothing back."""
+    import pytest
+    import test_drills
+    monkeypatch.setitem(stack.PENDING, "X9", "synthetic")
+    monkeypatch.setattr(stack, "has_stack", lambda: True)
+    monkeypatch.setattr(stack, "stub_owners",
+                        lambda: {"terminalize": "X9", "accept_feedback": "D6"})
+
+    def built(limits=None):
+        raise AssertionError("a drill driving a stub built its store")
+    monkeypatch.setattr(stack, "pg_jobstore", built)
+    with pytest.raises(pytest.skip.Exception, match=r"^PENDING\[X9\] \['terminalize'\]"):
+        test_drills.rig("postgres", "admit", "terminalize")
+    with pytest.raises(AssertionError, match="built its store"):
+        test_drills.rig("postgres", "admit", "claim")
+
+
 def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeypatch):
     """1c: every pending id is a task of tasks.json - or one of I3B's owner references
     (`recoverykit.OWNERS`: work no task schedules, named by its document and owner) - and one
@@ -118,12 +139,18 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeyp
     import recoverykit
     vocabulary = {**stack.PENDING, **recoverykit.PENDING}
     kit_owners = getattr(recoverykit, "OWNERS", {})        # the I3B follow-up adds OWNERS
-    # R3-1: an owner both name (G2-R1) is one reference - the same text on both sides.
+    # R3-1: an owner both name is one reference - the same text on both sides.
     assert all(stack.OWNERS[o] == kit_owners[o] for o in set(stack.OWNERS) & set(kit_owners))
     owners = set(stack.OWNERS) | set(kit_owners)
     # ... which are no task, and which the stage's PENDING[..] parser reads whole.
     assert owners.isdisjoint(tasks) and all(run.PENDING_MARK.fullmatch(f"PENDING[{o}]")
                                             for o in owners)
+    # Review H-N2: ... and each is still named by a case (a `pending("<id>"` call in a case
+    # module of this tree), or it is dead vocabulary that lets a retired reference linger.
+    here = Path(__file__).resolve()
+    cases = "".join(path.read_text() for path in here.parent.rglob("test_*.py") if path != here)
+    unnamed = sorted(o for o in owners if f'pending("{o}"' not in cases)
+    assert unnamed == [], f"owner references no case names: {unnamed}"
     assert set(vocabulary) - owners <= set(tasks), set(vocabulary) - owners - set(tasks)
     merged = {task for task in vocabulary if tasks.get(task) in ("implemented", "integrated")}
     assert merged <= set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))
@@ -166,40 +193,47 @@ def test_a_pending_id_naming_a_merged_task_fails_the_stage():
     assert run.backend_summary(run.classify(XML % ""), 0)[1]["stale_pending"] is None
 
 
-def test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task(monkeypatch):
-    """R3-1: a merged task whose cutover is held (G2, G3) is no pending owner; the cutover
-    request is (`G2-R1`). Every E3B case that waits on the cutover - 9 journeys, the dataset
-    resume, dr11 - is run here and its skip read back: each names G2-R1 and none names a
-    merged task (`stack.pending` refuses a RESIDUAL id outright). `stale_pending` states the
-    rule for any skip: RESIDUAL excuses a merged id only in I3B's recovery cases."""
-    import functools
-
+def test_e3b_cases_pend_only_on_an_owner_reference_never_on_a_merged_task(monkeypatch):
+    """R3-1, after the cutover and M's pilot-media merge (E3B phase 3): no E3B case waits on a
+    held cutover (`G2-R1`) or on M (`M3-U1`, `M3-U2`) any more, and a merged task is never a
+    pending owner. The journey matrix is run here without a stack: all NINE cells RUN (they
+    reach the journey stack, which a sentinel stands in for) and none pends. `stale_pending`
+    states the rule for any skip: RESIDUAL excuses a merged id only in I3B's recovery
+    cases."""
     import pytest
-    import test_drills
     import test_journey
-    runs = [functools.partial(test_journey.test_backend_journey, kind, mode)
-            for kind in test_journey.BY_INPUT for mode in test_journey.BY_MODE]
-    runs += [test_journey.test_backend_journey__dataset_client_resume,
-             test_drills.test_e3b_dr11_client_disconnect_mid_stream_is_pending]
-    pended, refused = {}, []
-    for number, case in enumerate(runs):
-        try:
-            with pytest.raises(pytest.skip.Exception) as skipped:
-                case()
-        except AssertionError as refusal:           # stack.pending refused a merged id
-            refused.append(str(refusal))
-            continue
-        for task in run.PENDING_MARK.search(skipped.value.msg).group(1).split(","):
-            pended.setdefault(task, []).append(f"b.test_journey::cutover{number}")
-    assert refused == [], f"E3B cases keyed on a merged task: {refused}"
-    assert len(pended.get("G2-R1", ())) == len(runs) == 11, pended
-    assert run.stale_pending({"pending": pended}) == [], pended
+
+    class Ran(Exception):
+        pass
+
+    class Unreachable:                      # a journey stack that proves the cell ran
+        def __getattr__(self, name):
+            raise Ran(name)
+    pended, refused, ran = {}, [], []
+    for kind in test_journey.INPUTS:
+        for mode in test_journey.MODES:
+            try:
+                with pytest.raises(pytest.skip.Exception) as skipped:
+                    test_journey.test_backend_journey(Unreachable(), kind, mode)
+            except AssertionError as refusal:           # stack.pending refused an id
+                refused.append(str(refusal))
+                continue
+            except Ran:
+                ran.append((kind, mode))
+                continue
+            for task in run.PENDING_MARK.search(skipped.value.msg).group(1).split(","):
+                pended.setdefault(task, []).append(f"b.test_journey::{kind}-{mode}")
+    assert refused == [], f"E3B cases keyed on an unknown or merged id: {refused}"
+    assert pended == {}, pended
+    assert sorted(ran) == sorted((kind, mode) for kind in test_journey.INPUTS
+                                 for mode in test_journey.MODES), ran
+    assert not {"G2-R1", "M3-U1", "M3-U2"} & set(stack.OWNERS), stack.OWNERS
     # The rule itself, on an id merged on every tree (G1R), made RESIDUAL for the check.
     monkeypatch.setitem(stack.RESIDUAL, "G1R", "a merged task I3B still names")
     e3b = "b.test_journey::test_backend_journey[sync-text]"
     i3b = "tests.integration.backend.recovery.test_recovery::test_i3b_rc03"
     assert run.stale_pending({"pending": {"G1R": [e3b, i3b]}}) == ["G1R"]
-    assert run.stale_pending({"pending": {"G1R": [i3b], "G2-R1": [e3b]}}) == []
+    assert run.stale_pending({"pending": {"G1R": [i3b], "I2B-R4": [e3b]}}) == []
     # Verification GATE-N2/RUN-N4: "recovery" must be the MODULE PATH's component - an E3B case
     # merely named like one is still stale.
     assert run.stale_pending({"pending": {"G1R": ["b.test_drills::test_e3b_recovery_like"]}}) \

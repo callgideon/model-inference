@@ -18,7 +18,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from infrx.config import RuntimeMisconfigured
+from infrx.config import DEPLOYMENT_DEFAULTS, RuntimeMisconfigured
 from infrx.contracts.fakes.factories import credit_jobstore_factory
 from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import ExecutionMode, IndexEvent, JobState, OutboxKind
@@ -86,10 +86,11 @@ def served(rt, deps):
     return app
 
 
-@pytest.mark.parametrize("missing", ["catalog", "stream", "objects"])
+@pytest.mark.parametrize("missing", ["catalog", "stream", "objects", "jobs"])
 def test_f_base__a_pilot_is_not_built_without_its_durable_adapters(missing):
-    """D5's catalog, D4's journal and an object store that outlives the process have no
-    real adapter yet: the composition refuses, naming the collaborator (never a value)."""
+    """`build_ingress_deps` builds nothing of its own (`adapters_from_env` does, for
+    `create_app`): without a catalog, a journal, an object store that outlives the process
+    or a job store it refuses, naming the collaborator (never a value)."""
     with pytest.raises(RuntimeMisconfigured) as refused:
         composed(**{missing: None})
     assert missing in str(refused.value)
@@ -374,3 +375,112 @@ def test_f_base__shutdown_drains_the_relays_durable_cancels():
     rs.run(body())
     states = [job.state for job in jobs.jobs.values()]
     assert states == [JobState.cancelled, JobState.cancelled], states
+
+
+# === the cutover: `create_app` composes from settings (G2 R2-1) ===========================
+class Connection:
+    """A psycopg connection as far as the stores and the configure hook drive it."""
+
+    def __init__(self) -> None:
+        self.executed = []
+
+    async def execute(self, sql, *args):
+        self.executed.append(sql)
+
+    async def close(self):
+        pass
+
+
+def cutover_app(config, **adapters):
+    from infrx.gateway.app import create_app
+    return create_app(config, client=support.upstream(), sb=support.supabase(), **adapters)
+
+
+@pytest.mark.parametrize("mode", ["pilot", "dev", "test"])
+@pytest.mark.parametrize("bucket", ["", "infrx-media-bucket"])
+def test_f_base__create_app_never_stages_into_process_memory(mode, bucket, monkeypatch):
+    """With no object store injected, `create_app` refuses to start in every mode unless the
+    `S3_MEDIA_BUCKET` bucket answers, naming the setting and never its value: unset, nothing
+    is configured; set, a bucket that does not answer HeadBucket (M1-L2; nothing listens at
+    this endpoint, and the credentials are local literals). It never falls back to the
+    in-memory store."""
+    for name, value in (("AWS_ACCESS_KEY_ID", "local-test-key"),
+                        ("AWS_SECRET_ACCESS_KEY", "local-test-secret"),
+                        ("AWS_EC2_METADATA_DISABLED", "true")):
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+    config = support.settings(mode, s3_media_bucket=bucket, deployment=DEPLOYMENT_DEFAULTS.replace(
+        s3_endpoint_url="http://127.0.0.1:9"))
+    for injected in ({}, {"catalog": support.catalog()}):
+        with pytest.raises(RuntimeMisconfigured) as refused:
+            cutover_app(config, **injected)
+        assert "S3_MEDIA_BUCKET" in str(refused.value)
+        assert "infrx-media-bucket" not in str(refused.value)
+
+
+def test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool(monkeypatch):
+    """Each adapter not injected comes from settings: D5's catalog, D4's journal and the job
+    store on ONE pool that `lifespan` opens (not yet open: nothing connects to build them),
+    while an injected one is used as given. The database here is unreachable, so `dev` starts
+    and says so."""
+    import psycopg
+
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.jobstore import PgJobStore
+    from infrx.state.journal import PgStreamStore
+
+    async def unreachable(*args, **kw):
+        raise psycopg.OperationalError("postgresql://infrx:secret@db/infrx is unreachable")
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", unreachable)
+    objects, index = InMemoryObjectStore(), MemoryScheduler(lambda: None)
+    app = cutover_app(support.settings("dev"), objects=objects, index=index)
+    rt = app.state.runtime
+    relay, pool = rt.relay, rt.lifetime.pool
+    assert isinstance(relay.catalog, PgCatalogDirectory) and relay.catalog is rt.ingress.catalog
+    assert isinstance(relay.stream, PgStreamStore) and isinstance(relay.jobs, PgJobStore)
+    assert pool is not None and pool.closed
+    connects = {relay.catalog._db._connect, relay.jobs._connect, relay.stream._db._connect}
+    assert len(connects) == 1, "the three stores do not share one pool"
+    assert rt.media_store.objects is objects and rt.lifetime.reconciler.index is index
+    assert ingress.component_state(rt.ingress.checks) == {"price_source": "unavailable",
+                                                          "journal": "unavailable"}
+    # a store built from settings needs a database named: an empty DSN is libpq's defaults
+    with pytest.raises(RuntimeMisconfigured, match="requires DATABASE_URL"):
+        cutover_app(support.settings("dev", database_url=""), objects=objects, index=index)
+    # and a given store is used as given, with no pool of ours
+    rt, _ = composed()
+    given = cutover_app(support.settings("dev"), catalog=rt.relay.catalog,
+                        stream=rt.relay.stream, objects=objects, jobs=rt.relay.jobs,
+                        index=index).state.runtime
+    assert given.relay.jobs is rt.relay.jobs and given.lifetime.pool is None
+
+
+def test_f_base__the_startup_probe_connects_on_its_own_until_the_lifespan_opens_the_pool(
+        monkeypatch):
+    """`Probe`'s first answer is asked inside `create_app`, on a thread and loop of its own,
+    before `lifespan` opens the pool (a pool belongs to the loop that opens it). Until then the
+    stores' connect opens a connection of its own, configured as a pooled one is (the
+    service role, the statement timeout); once the pool is open, it lends a pooled one."""
+    import psycopg
+
+    direct, pooled = Connection(), Connection()
+
+    async def connect(dsn, **kw):
+        assert kw == {"autocommit": True}
+        return direct
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
+    config = support.settings()
+    pool, store_connect = pilot.connection_pool(config)
+    assert pool.closed and rs.run(store_connect()) is direct
+    assert direct.executed == ["set role service_role", "set statement_timeout = "
+                               f"{config.deployment.database_pool_statement_timeout_ms}"]
+
+    async def lend():
+        return pooled
+
+    pool._closed, pool.getconn = False, lend       # as `pool.open()` leaves it
+    lent = rs.run(store_connect())
+    assert lent is not pooled and rs.run(lent.execute("select 1")) is None
+    assert pooled.executed == ["select 1"] and direct.executed[2:] == []

@@ -199,12 +199,8 @@ MUTANTS += (
            "                debit = candidate\n", "                debit = candidate + candidate\n",
            DRILLS, "rc01"),
     # D3: the PENDING probes are structural - an adapter or entry point of any name flips them
-    Mutant("i3bm39", "D3: rc05b fails once any class implements the ObjectStore port",
-           "apps/infrx-api/infrx/media/store.py", "class InMemoryObjectStore:\n",
-           "class MinioObjectStore:\n    async def head(self, key): ...\n"
-           "    async def get(self, key): ...\n"
-           "    async def put_if_absent(self, key, data, content_type): ...\n\n\n"
-           "class InMemoryObjectStore:\n", DRILLS, "rc05b"),
+    # i3bm39 (rc05b's adapter probe) is retired: M1-L2's S3ObjectStore merged, so rc05b runs
+    # (E3B phase 3; e3bm68 kills its body).
     # Anchored on the future import, not on loop.py's last line: W3's merge (65e2c99) changed
     # that line and made this mutant stale; a module-level guard anywhere is the shape.
     Mutant("i3bm57", "D3: rc08b fails once any worker module runs as a script",
@@ -215,12 +211,9 @@ MUTANTS += (
     Mutant("i3bm99", "DR-4: kit.pending refuses an id outside the vocabulary", KIT,
            "    unknown = [task for task in ids if task not in PENDING]\n",
            "    unknown = []\n", DRILLS, "rc00"),
-    Mutant("i3bm100", "DR-4: rc05b pends on its owner (M1-L2), not on another known id", DRILLS,
-           'kit.pending("M1-L2", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
-    Mutant("i3bm101", "DR-4: rc03 fails the day the ingress is mounted", DRILLS,
-           "    if stack.ingress_is_mounted():\n", "    if False:\n", DRILLS, "rc00"),
-    Mutant("i3bm105", "DRL-2: rc03 pends on the held cutover (G2-R1), not on G2, which merged",
-           DRILLS, 'kit.pending("G2-R1", why=', 'kit.pending("G2", why=', DRILLS, "rc00"),
+    # i3bm100 (rc05b's M1-L2 key) is retired with that pending (E3B phase 3).
+    # i3bm101 and i3bm105 (rc03's pending probe and its G2-R1 key) are retired: E3B phase 3
+    # gave rc03 its body once the cutover mounted the ingress (e3bm67 kills that body).
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
@@ -386,9 +379,14 @@ MUTANTS += (
                       "restore failures", RESTORE,
            "    if not d_harness().ON_SUPABASE:\n        pytest.skip(PLAIN_IMAGE)\n", "",
            RESTORE, "bk00"),
+    # E3B phase 3 (the layer-3 gate: i3bm107 SURVIVED): `kill_postgres` has two paths, D's
+    # container (INFRX_I3B_PG=d) and E2's compose service, and a run takes exactly one. The
+    # mutant edits the path of the mode it runs in, so neither mode leaves it dead code.
     Mutant("i3bm107", "DRL-3: rc04a really kills PostgreSQL under the store (the drill's loss "
                       "is injected, not assumed)", RESTORE,
-           '        d._docker("kill", container)\n', '        d._docker("inspect", container)\n',
+           *(('        d._docker("kill", container)\n', '        d._docker("inspect", container)\n')
+             if os.environ.get("INFRX_I3B_PG") == "d" else
+             ('        faults.kill_container("postgres")\n', '        pass\n')),
            DRILLS, "rc04a", layer=2),
     Mutant("i3bm111", "DRL-R3-2: rc04a's last word is the reconcile runbook's own drift "
                       "detector (pgrestore.drift), and any row it reports fails the drill",

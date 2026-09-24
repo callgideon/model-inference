@@ -21,12 +21,15 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # way - the subset only changes how long `make api-test` takes.
 SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception_text_leaks",
           "unsupported_parameters_ignored", "pilot_starts_unreachable", "key_cache_unbounded",
-          "input_ceiling_ignores_the_output", "unset_mode_refuses",
+          "input_ceiling_ignores_the_output", "unset_mode_starts_legacy",
           # One per blocking finding of review round 1, so the default suite would
           # have caught each of them.
           "recursion_error_escapes", "envelope_render_unprotected", "messages_unbounded",
           "param_echoed_unfiltered", "admission_ignores_db_deadline", "cap_counts_one_chunk",
-          "http_exceptions_unwrapped", "trace_default_is_full")
+          "http_exceptions_unwrapped", "trace_default_is_full",
+          # the cutover: the full mount and never process memory from settings
+          "composition_root_drops_jobs", "objects_from_settings_in_memory",
+          "build_info_not_required_in_pilot")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

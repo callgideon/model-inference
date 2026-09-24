@@ -40,6 +40,10 @@ OTHER_TASKS = {
     "media_sec__a_refused_upload_stays_refused": "create_upload",
     "media_sec__an_expired_upload_window_says_so": "create_upload",
     "media_parity__staging_is_content_addressed_and_tenant_namespaced": "prepare",
+    # MPILOT: the window at use is M3's upload; the durable attach is read back by M2's
+    # `prepare` in the reopened store.
+    "media_sec__an_upload_is_usable_only_within_its_window": "create_upload",
+    "media_parity__an_attach_outlives_the_process_that_made_it": "prepare",
 }
 OWNED_BY_M1 = ("media_sec__a_foreign_media_reference_is_not_staged",
                "media_sec__a_partial_request_stages_nothing")
@@ -109,9 +113,17 @@ def materialized(adapter):
 
 def factory(limits=None, **_kw) -> Harness:
     adapter = staging(limits=limits or DEFAULTS)
+    adapter.attachments = support.Durable()
+
+    def reopened():
+        """MPILOT: the same object store and attach record, nothing in memory."""
+        other = staging(limits=limits or DEFAULTS, objects=adapter.objects)
+        other.attachments = adapter.attachments
+        return Deferred(other)
+
     return Harness(port=Deferred(adapter), clock=FakeClock(), ids=SequentialIds(),
                    extra={"admitted": adapter.jobs.__setitem__,
-                          "materialized": materialized(adapter)})
+                          "materialized": materialized(adapter), "reopened": reopened})
 
 
 def made(adapter, org_id=b.ORG_A, **kw) -> MediaRef:

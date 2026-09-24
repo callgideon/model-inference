@@ -15,10 +15,12 @@ What `create_app` calls at the cutover, once per process:
 * the gateway `Registry` (I3B request 1) and the two readiness probes `REQUIRED_CHECKS`
   names, as sync callables over cached answers the lifetime task refreshes.
 
-Three collaborators have no real adapter yet, so they are parameters and a pilot is not
-built without them: the psycopg `CatalogDirectory` over 0007 (D5), D4's `PgStreamStore`,
-and an object store that outlives the process (M: no S3 adapter; staging into process
-memory would make acceptance depend on gateway-local bytes, 02 step 1).
+`adapters_from_env` is what `create_app` composes when a caller injects nothing: D5's
+`PgCatalogDirectory`, D4's `PgStreamStore` and D2's `PgJobStore` (both regimes: the relay
+dispatches on `ACCOUNTING_REGIME`, R86) on the one pool, and M1-L2's `S3ObjectStore` on the
+bucket `S3_MEDIA_BUCKET` names - probed with HeadBucket before anything else is built. No
+bucket, or one that does not answer, refuses startup rather than staging into process
+memory, which would make acceptance depend on gateway-local bytes (02 step 1).
 """
 from __future__ import annotations
 
@@ -31,15 +33,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import RuntimeMisconfigured
+from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
+from ..contracts.limits import env_name
 from ..contracts.v2.records import CredentialAudience
 from ..media import fetch
+from ..media.attachments import PgAttachments
 from ..media.prepare import ProcessingCache
 from ..media.uploads import MediaUploads
 from ..observe.metrics import Registry
 from ..scheduling.reconcile import Reconciler
+from ..state.catalog import PgCatalogDirectory
 from ..state.jobstore import PgJobStore
+from ..state.journal import PgStreamStore
 from .routes import intake
 from .routes.ingress import IngressDeps
 from .routes.relay import CREDIT, Relay
@@ -144,18 +150,69 @@ class _Pooled:
 
 def connection_pool(settings):
     """A psycopg pool from `DATABASE_URL` and `DATABASE_POOL_*`, opened by `lifespan` (a pool
-    belongs to the loop that opens it). Its connect is `PgJobStore`'s `Connect`."""
+    belongs to the loop that opens it). Its connect is the stores' `Connect`."""
     from psycopg_pool import AsyncConnectionPool
     deployment = settings.deployment
+    configure = configure_connection(deployment.database_pool_statement_timeout_ms)
     pool = AsyncConnectionPool(
         settings.pilot.database_url, open=False, kwargs={"autocommit": True},
         min_size=deployment.database_pool_min_size, max_size=deployment.database_pool_max_size,
-        timeout=deployment.database_pool_connect_timeout_s,
-        configure=configure_connection(deployment.database_pool_statement_timeout_ms))
+        timeout=deployment.database_pool_connect_timeout_s, configure=configure)
 
     async def connect():
+        if pool.closed:
+            # Before `lifespan` opens the pool: `Probe`'s first answer, asked inside
+            # `create_app` on a thread and loop of its own. One connection of its own,
+            # configured as a pooled one is, closed by the caller.
+            import psycopg
+            conn = await psycopg.AsyncConnection.connect(settings.pilot.database_url,
+                                                         autocommit=True)
+            await configure(conn)
+            return conn
         return _Pooled(pool, await pool.getconn())
     return pool, connect
+
+
+def object_store(settings):
+    """The object store that outlives the process, from `S3_MEDIA_BUCKET` - in every mode,
+    never process memory (M1-L2). The bucket must answer HeadBucket with the environment's
+    credentials before anything is served; a refusal names the setting and the S3 error
+    code, never the bucket or the endpoint."""
+    mode = runtime_mode(settings)
+    if not settings.pilot.s3_media_bucket.strip():
+        raise RuntimeMisconfigured(mode, ("S3_MEDIA_BUCKET",))
+    from ..media.s3 import S3ObjectStore, reason      # stdlib only; botocore on connect
+    deployment = settings.deployment
+    try:
+        objects = S3ObjectStore.connect(settings.pilot.s3_media_bucket,
+                                        deployment.s3_media_prefix, deployment.s3_endpoint_url)
+        objects.probe()
+    except Exception as failure:          # noqa: BLE001 - every failure refuses startup
+        raise RuntimeMisconfigured(mode, detail="S3_MEDIA_BUCKET did not answer HeadBucket "
+                                                f"({reason(failure)})") from None
+    return objects
+
+
+def adapters_from_env(settings, **injected):
+    """G2 R2-1: `build_ingress_deps`'s adapters from settings, for each one not injected -
+    the object store first, so a refusal builds nothing; then the three stores on one pool
+    (`lifespan` opens it)."""
+    adapters = {name: value for name, value in injected.items() if value is not None}
+    if "objects" not in adapters:
+        adapters["objects"] = object_store(settings)
+    if not {"catalog", "stream", "jobs"} <= adapters.keys():
+        if not settings.pilot.database_url.strip():
+            # Required in pilot by `validate_runtime`; in dev/test too once a store is built
+            # from it - an empty DSN is libpq's defaults, some other database.
+            raise RuntimeMisconfigured(runtime_mode(settings), ("DATABASE_URL",))
+        pool, connect = connection_pool(settings)
+        adapters = {"catalog": PgCatalogDirectory(connect),
+                    "stream": PgStreamStore(connect, limits=settings.pilot),
+                    # MPILOT gap 2: M's attach, durable where the worker reads it
+                    "attachments": PgAttachments(connect),
+                    "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
+                    **adapters}
+    return adapters
 
 
 def valkey_index(pilot):
@@ -178,15 +235,34 @@ class Lifetime:
     tasks: list = field(default_factory=list)
 
 
+def build_info(rt) -> None:
+    """E4B's served-build check: `infrx_build_info{revision, image} 1` on /metrics, from the
+    settings the installer wrote (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`). A pilot refuses to
+    start without them; dev/test set the gauge only when both are given."""
+    deployment = rt.settings.deployment
+    missing = [env_name(name) for name in ("infrx_release_sha", "infrx_image")
+               if not getattr(deployment, name)]
+    if missing:
+        if rt.mode == "pilot":
+            raise RuntimeMisconfigured(rt.mode, missing)
+        return
+    if getattr(rt, "metrics", None) is None:
+        rt.metrics = Registry("gateway")
+    rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,
+                   image=deployment.infrx_image)
+
+
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
-                       consent_for=None) -> IngressDeps:
+                       pool=None, consent_for=None, attachments=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
-    `jobs`/`index` default to the real PostgreSQL store and Valkey index."""
+    The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
+    `lifespan` to open and close. `index` defaults to the Valkey index."""
     for name, value, owner in (("catalog", catalog, "a CatalogDirectory (D5)"),
                                ("stream", stream, "a StreamStore (D4)"),
                                ("objects", objects, "an object store that outlives the "
-                                                    "process (M)")):
+                                                    "process (M)"),
+                               ("jobs", jobs, "a JobStore (D2)")):
         if value is None:
             raise RuntimeMisconfigured(rt.mode, detail=f"the pilot needs {owner}: {name}")
     settings = rt.settings
@@ -196,10 +272,6 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
     fetch.silence_transport_logs()
     if getattr(rt, "metrics", None) is None:
         rt.metrics = Registry("gateway")
-    pool = None
-    if jobs is None:
-        pool, connect = connection_pool(settings)
-        jobs = PgJobStore(connect, limits=pilot)
     reconciler = Reconciler(store=jobs, index=index if index is not None else valkey_index(pilot),
                             now=_utc_now, worker_id=f"gateway-{uuid.uuid4().hex[:8]}")
     relay = Relay(jobs=jobs, stream=stream, media=None, regime=deployment.accounting_regime,
@@ -209,7 +281,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         objects, cache=ProcessingCache(pilot.processing_cache_dir,
                                        ttl_s=pilot.processing_cache_ttl_s),
         limits=pilot, fetcher=fetch.MediaFetcher(pilot, allowed_mime=settings.allowed_video_mime),
-        job_org=relay.job_org)
+        job_org=relay.job_org, attachments=attachments)
     rt.large_bodies = intake.LargeBodies(limit=deployment.large_body_limit,
                                          threshold=deployment.large_body_threshold_bytes)
     checks = {"price_source": Probe(price_check(catalog, settings.model_id,

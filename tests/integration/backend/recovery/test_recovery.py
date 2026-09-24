@@ -13,9 +13,9 @@ What is real in each drill, and what stands in for a component that is missing:
 |---|---|---|
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
-| rc03 gateway restart | - | PENDING G2-R1 (G2's cutover that mounts the relay, held); the store half is E3B dr01 |
-| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim | rc04b: settlement, PENDING on terminalize's stub owner (D5); the database's own boundary is `test_restore.py` bk03 |
-| rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
+| rc03 gateway restart | the mounted gateway PROCESS (E3B's `pilotbox`), SIGKILLed mid-answer and restarted, beside a worker process that survives it | text (E3B's journeys run video on the same two processes); the store half is E3B dr01 |
+| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim; rc04b: settlement across the kill (D5's terminalize, E3B phase 3) | the database's own boundary is `test_restore.py` bk03 |
+| rc05 object store | M2's preparation; an outage in front of the object store; rc05b: M1-L2's S3ObjectStore on E2's MinIO, partitioned from the stack's network | - |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
 | rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
@@ -235,16 +235,91 @@ def test_i3b_rc02_an_engine_process_killed_mid_stream_costs_nothing_and_a_new_on
             server.stop()
 
 
-def test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route():
-    """OPS-RECOVER (gateway restart): a restart between durable acceptance and the answer
-    must replay the same accepted identity, and a restart mid-stream must leave the job to
-    the worker. The store half is E3B's dr01 (crash after commit, idempotent retry); the
-    route half waits on the cutover that mounts G2's (merged) relay - G2 integration request
-    1, held by the coordinator - and fails the day the ingress is mounted."""
-    if stack.ingress_is_mounted():
-        pytest.fail("the pilot ingress is mounted: write the gateway restart drill body now")
-    kit.pending("G2-R1", why="no metered route is mounted to restart under load (G2's cutover "
-                             "is held)")
+def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its_identity(
+        tmp_path):
+    """OPS-RECOVER (gateway restart), on the mounted gateway process (E3B phase 3: the cutover
+    mounted G2's relay; `pilotbox` runs it, with the worker in a process of its own). The
+    gateway is SIGKILLed while an SSE answer streams (after the identity frame and a chunk)
+    and while a sync client waits on a running job, and restarted at once. The SAME key is
+    retried WHILE the job is still in flight (review J9: R91's in-flight replay across the
+    restart - the new process never staged it) and replays the SAME accepted identity - the
+    sync retry waits for and answers the committed result, the SSE retry streams the journal
+    from the start to `[DONE]` - with `Idempotency-Replayed: true`; the worker that survived
+    the kill (the same pid) finishes each job, one job per key, one debit each, no attempt
+    left unreleased."""
+    import signal
+
+    import pilotbox
+    kit.needs_stack()
+    with pilotbox.journey(tmp_path) as trip:
+        alpha = trip.world.alpha
+        before = trip.wallet(alpha)
+        worker = trip.box.processes["worker"].pid
+        text = "Two people unload boxes from a van onto a trolley. " * 12
+        trip.engine.control(text=text, delta_gap_s=0.1)
+        messages = [{"role": "user", "content": "Describe the van."}]
+        for mode in ("sse", "sync"):
+            key = f"rc03-{mode}"
+            sock = _raw_chat(trip.box.port, alpha.secret, messages, key, stream=mode == "sse")
+            request_id, = _until(lambda: trip.db(
+                "select request_id::text from infrx.jobs where idempotency_key = %s and "
+                "published", key))[0]
+            if mode == "sse":
+                assert b"infrx.progress" in sock.recv(65536), "no identity frame before the kill"
+            trip.box.stop("gateway", signal.SIGKILL)            # the gateway dies mid-answer
+            sock.close()
+            trip.box.start("gateway")                           # the restart
+            assert trip.db("select settled_at from infrx.jobs where request_id = %s",
+                           request_id) == [(None,)], "the job ended before the retry"
+            again = trip.send(alpha, mode, messages, key)       # while it is in flight
+            assert (again.status_code, again.headers["inference-id"],
+                    again.headers.get("idempotency-replayed")) == (200, request_id, "true"), \
+                again.text
+            if mode == "sse":
+                sent = pilotbox.frames(again.text)
+                assert pilotbox.frame_data(sent[-1]) == "[DONE]", sent[-3:]
+                content = "".join(choice["delta"].get("content", "") for frame in sent[1:-1]
+                                  for choice in (pilotbox.frame_data(frame) or {})
+                                  .get("choices", []))
+            else:
+                content = again.json()["choices"][0]["message"]["content"]
+            assert content == text.strip() or content == text, content[-80:]
+            assert _until(lambda: trip.db("select state, outcome_cause from infrx.jobs where "
+                                          "request_id = %s and settled_at is not null",
+                                          request_id)) == [("succeeded", "completed")]
+            assert trip.db("select count(*) from infrx.jobs where idempotency_key = %s",
+                           key) == [(1,)]
+            assert trip.db("select count(*) from infrx.credit_ledger where request_id = %s",
+                           request_id) == [(1,)], "not ONE debit for the job"
+            assert trip.db("select count(*) from infrx.attempts where job_id = %s and "
+                           "released_at is null", request_id) == [(0,)]
+        assert trip.box.processes["worker"].pid == worker, "the worker did not survive"
+        trip.conserved(alpha)
+        assert trip.wallet(alpha)[0] < before[0]
+
+
+def _raw_chat(port: int, secret: str, messages, key: str, *, stream: bool):
+    """A chat request on a raw socket (the client the kill leaves behind)."""
+    import json
+    import socket
+    body = {"model": stack.CREDIT_ALIAS, "messages": messages}
+    payload = json.dumps({**body, "stream": True} if stream else body).encode()
+    sock = socket.create_connection(("127.0.0.1", port), timeout=30)
+    sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                 + f"Authorization: Bearer {secret}\r\nIdempotency-Key: {key}\r\n".encode()
+                 + b"Content-Type: application/json\r\n"
+                 + f"Content-Length: {len(payload)}\r\n\r\n".encode() + payload)
+    return sock
+
+
+def _until(predicate, timeout: float = 60.0):
+    end = time.monotonic() + timeout
+    while True:
+        found = predicate()
+        if found or time.monotonic() > end:
+            assert found, f"not within {timeout}s"
+            return found
+        time.sleep(0.05)
 
 
 def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobstore(
@@ -260,7 +335,7 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
     exactly the three holds and debits nothing, and it agrees with the ledger and the holds
     themselves (`infrx.wallet_reconciliation`: zero drift, and the runbook's detector finds
     none - and names ORG_A once a hold is released behind the summary's back). Settling
-    across the loss is rc04b's (terminalize is still D5's stub)."""
+    across the loss is rc04b's."""
     import pgstate
 
     import test_restore as bk
@@ -341,17 +416,74 @@ def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobst
         kit.run(lambda: body(database, factory))
 
 
-def test_i3b_rc04b_settlement_across_a_database_loss_is_pending_on_terminalize():
-    """The other half of rc04: a job SETTLED across the PostgreSQL kill needs
-    `infrx.terminalize`, still an `infrx.unimplemented` stub. It pends on the task the stub
-    names (E3B's per-drill probe, measured on the stack; D5 today) and fails the day
-    terminalize is implemented."""
-    kit.needs_stack()
-    stubs = stack.stubbed(("terminalize",))
-    if not stubs:
-        pytest.fail("terminalize is implemented: settle a job across rc04a's PostgreSQL kill now")
-    kit.pending(*sorted(set(stubs.values())),
-                why=f"{sorted(stubs)} is still an infrx.unimplemented stub")
+def test_i3b_rc04b_settlement_across_a_database_loss(monkeypatch):
+    """The other half of rc04 (E3B phase 3: D5's `terminalize` merged): two jobs claimed on
+    PgJobStore, then PostgreSQL SIGKILLed and restarted. Job 1's settlement COMMITTED before
+    the kill and its answer was lost; job 2 was still running. After the restart, with the
+    store object built before the kill: job 1's identical retry replays the committed
+    outcome, job 2 settles, each once at its ADMITTED price (one usage projection each), both
+    holds are released, and the wallet's summary agrees with the ledger and the holds (zero
+    drift; the runbook's detector silent)."""
+    import pgstate
+
+    import test_restore as bk
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.fakes.support import CrashAfterCommit
+    from infrx.contracts.records import ExecutionMode, OutboxKind, SettlementState
+    from infrx.state import migrations as d_migrations
+    from infrx.state import pgtesting
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    tokens = b.usage(1200, 200)         # inside the 256-token envelope
+
+    async def body(database: str, factory) -> None:
+        h = factory()
+        h.extra["grant"](b.ORG_A, kit.GRANT)
+        store = h.port
+        admitted, leases = [], []
+        for n in (1, 2):
+            request = b.request(h, mode=ExecutionMode.async_, max_output_tokens=256)
+            admission = await store.admit(request, b.idem(request, f"rc04b-{n}"))
+            lease = await store.claim_preparation(admission.request_id, "prep-a")
+            await store.prepared(lease, ())
+            admitted.append(admission)
+            leases.append(await store.claim(admission.request_id, "worker-a"))
+        proposals = [b.outcome(a.request_id, h, tokens=tokens) for a in admitted]
+        h.failures.crash_after_commit("complete")
+        with pytest.raises(CrashAfterCommit):
+            await store.complete(leases[0], proposals[0])
+        committed = (await store.get_owned(b.ORG_A, admitted[0].job_handle))[1]
+        bk.kill_postgres(database)
+        rig = factory()                 # the hooks' and the clock's own connection, anew
+        replayed = await store.complete(leases[0], proposals[0])
+        settled = await store.complete(leases[1], proposals[1])
+        assert replayed == committed, (replayed, committed)
+        debits = Decimal(0)
+        for admission, outcome in zip(admitted, (replayed, settled)):
+            debit = admission.price_snapshot.debit(1200, 200)
+            assert (outcome.settlement_state, outcome.debit, outcome.usage) == (
+                SettlementState.settled, debit, tokens), outcome
+            assert (await store.get_owned(b.ORG_A, admission.job_handle))[1] == outcome
+            assert rig.extra["outbox_kinds"](admission.request_id).count(
+                OutboxKind.usage_projection) == 1, admission.request_id
+            debits += debit
+        balance = rig.extra["balance"](b.ORG_A)
+        assert (balance["ledger"], balance["reserved"]) == (Decimal(kit.GRANT) - debits, 0), \
+            balance
+        with bk.connect(database) as conn:
+            drifts = conn.execute("select ledger_drift, reserved_drift, active_holds from "
+                                  "infrx.wallet_reconciliation where org_id = %s",
+                                  (b.ORG_A,)).fetchone()
+        assert drifts == (0, 0, 0), drifts
+        assert bk.drift(database) == [], "the reconcile runbook's detector reports drift"
+
+    with bk.scratch("infrx_i3b_settle") as (database,):
+        with bk.connect(database) as conn:
+            pgstate.apply_migrations(conn)
+            pgstate.install_test_clock(conn)
+            pgtesting.seed(conn)
+            conn.execute(d_migrations.SEED_MARLIN.read_text())
+        factory = pgtesting.make_jobstore_factory(lambda: database, bk.conninfo)
+        kit.run(lambda: body(database, factory))
 
 
 # ------------------------------------------------------------------ media: object store, disk
@@ -415,28 +547,34 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
     and the job completes once the store is back. Job 2's outage outlasts the budget: the
     reaper fails it `preparation_failed`, free, hold released. The probe shows the store
     down while it is."""
-    world = kit.World()
     objects = Outage()
+    outage_drill(tmp_path, objects, down=lambda: setattr(objects, "down", True),
+                 up=lambda: setattr(objects, "down", False))
+
+
+def outage_drill(tmp_path, objects, *, down, up) -> None:
+    """rc05's drill on any object store with an outage switch (`down`/`up`)."""
+    world = kit.World()
     with_media(world, objects, str(tmp_path / "cache"))
     clip = kit.m_support().mp4(seconds=10.0)
 
     async def body():
         short, long = await video_job(world, 0, clip), await video_job(world, 1, clip)
         before = world.scrape()
-        objects.down = True                          # a short outage
+        down()                                       # a short outage
         assert not await probe(world, "object_store", lambda: objects.head("probe"))
         assert not await world.prepare(short.request_id, "prep-a")
         assert "ComponentDown" in kit.fired(world, before)
         world.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
         await world.reap()
-        objects.down = False
+        up()
         assert await probe(world, "object_store", lambda: objects.head("probe"))
         assert await world.prepare(short.request_id, "prep-b")
         await world.dispatch(short.request_id)
         await world.finish(world.loop())
-        objects.down = True                          # an outage longer than the budget
+        down()                                       # an outage longer than the budget
         assert not await prepare_until_settled(world, long.request_id)
-        objects.down = False
+        up()
         summary = await world.reconcile()
         assert summary["terminal"] == {"succeeded/completed": 1,
                                        "failed/preparation_failed": 1}, summary
@@ -444,41 +582,39 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
     kit.run(body)
 
 
-def _object_store_adapters() -> list[str]:
-    """D3: structural, not a name heuristic - every class defined anywhere under
-    `infrx.media`, subpackages included (`infrx/media/s3/adapter.py` counts), that has the
-    port's core operations, other than the Protocol and the in-memory double. A class
-    re-exported by a second module is counted once, under the module that defines it.
-    ponytail: a module that fails to import (a missing optional dependency) is not seen,
-    nor an adapter defined outside `infrx.media`."""
-    import inspect
-    import pkgutil
+def test_i3b_rc05b_an_object_store_outage_on_minio_through_the_s3_adapter(tmp_path,
+                                                                            monkeypatch):
+    """rc05's drill against E2's MinIO through M1-L2's `S3ObjectStore` (E3B phase 3: the
+    adapter merged, so this runs), the outage a real network partition: MinIO leaves the
+    stack's network (`harness.disconnect_container`) and rejoins it. The store's own answer
+    during the partition is `dependency_unavailable`, so the probe reads it down, the short
+    outage is retried and completes, the long one is released `preparation_failed`, free.
+    MinIO's local literals are botocore's only credentials; the objects live under a prefix
+    of this run's own in E2's bucket, removed afterwards."""
+    import uuid
 
-    import infrx.media
-    core = ("head", "get", "put_if_absent")
-    found = set()
-    for info in pkgutil.walk_packages(infrx.media.__path__, "infrx.media.",
-                                      onerror=lambda name: None):
-        try:
-            module = importlib.import_module(info.name)
-        except ImportError:
-            continue
-        for _, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__.startswith("infrx.media") \
-                    and cls not in (store.ObjectStore, store.InMemoryObjectStore) \
-                    and all(callable(getattr(cls, op, None)) for op in core):
-                found.add(f"{cls.__module__}.{cls.__qualname__}")
-    return sorted(found)
-
-
-def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter():
-    """The same drill against E2's MinIO needs an S3-backed `ObjectStore`; `media.store`
-    has only the in-memory one. Fails the day any class in `infrx.media` implements the
-    port (whatever its name) other than the in-memory double."""
-    names = _object_store_adapters()
-    if names:
-        pytest.fail(f"an S3 object store exists ({names}): pause MinIO under it now")
-    kit.pending("M1-L2", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
+    from infrx.media.s3 import S3ObjectStore
+    kit.needs_stack()
+    for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in stack.s3_env().items():
+        monkeypatch.setenv(name, value)
+    client = harness.s3_client()
+    with contextlib.suppress(Exception):                     # already there
+        client.create_bucket(Bucket=harness.S3_BUCKET)
+    prefix = f"{harness.OBJECT_PREFIX}rc05b-{uuid.uuid4().hex}/"
+    objects = S3ObjectStore.connect(harness.S3_BUCKET, prefix, harness.s3_endpoint())
+    partition = []
+    try:
+        outage_drill(tmp_path, objects,
+                     down=lambda: partition.append(harness.disconnect_container("s3")),
+                     up=lambda: partition.pop().revert())
+    finally:
+        while partition:
+            partition.pop().revert()
+        listed = client.list_objects_v2(Bucket=harness.S3_BUCKET, Prefix=prefix)
+        for item in listed.get("Contents", []):
+            client.delete_object(Bucket=harness.S3_BUCKET, Key=item["Key"])
 
 
 @contextlib.contextmanager
@@ -688,20 +824,13 @@ def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is
         monkeypatch):
     """DR-4: a pending count is only honest if the id is. `kit.pending` refuses an id outside
     the vocabulary (and none at all); each pending drill pends on exactly the id pinned here,
-    so a swapped or misspelt owner fails instead of being counted; and rc03's probe fails the
-    day the ingress is mounted. Layer 0 (rc04 needs E2's stack: its ids come from
-    `stack.stubbed`)."""
+    so a swapped or misspelt owner fails instead of being counted. Layer 0. (rc03 runs since
+    the cutover mounted the ingress, and rc04b since D5: E3B phase 3.)"""
     assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
     assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
-    pinned = {test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route: "G2-R1",
-              test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter:
-                  "M1-L2",
-              test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
+    pinned = {test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
     for case, owner in pinned.items():
         assert _outcome(case).startswith(f"PENDING[{owner}] "), (case.__name__, _outcome(case))
-    monkeypatch.setattr(stack, "ingress_is_mounted", lambda: True)
-    assert _outcome(test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route) \
-        .startswith("failed: the pilot ingress is mounted")
 
 
 def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepted_job(

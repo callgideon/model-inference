@@ -10,9 +10,11 @@ Secrets never travel through argv or output: the operator secret comes from
 issued secret is written once into `--secret-file` (created 0600, never overwritten).
 stdout carries the JSON result without the secret.
 
-The composition root is `build_operations()`. It refuses until D1R/D5/A1 provide the
-PostgreSQL adapters (the fakes live in tests only), so this tool cannot run against a
-store that would silently accept writes nobody persists.
+The composition root is `build_operations()`: the D5/A1 PostgreSQL adapters over the
+deployment's `DATABASE_URL` (`config.from_env`, the one environment reader), one fresh
+`service_role` connection per operation. Without it the tool refuses (the fakes live in
+tests only), so it cannot run against a store that would silently accept writes nobody
+persists.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ import getpass
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..contracts import errors
 from . import service
@@ -30,9 +32,24 @@ from . import service
 OPERATOR_KEY_ENV = "INFRX_OPERATOR_KEY"
 
 
-def build_operations() -> service.Operations:
-    raise SystemExit("no state adapter is wired: the D1R/D5/A1 PostgreSQL adapters are "
-                     "pending, and this tool does not run against an in-memory store")
+def build_operations(settings=None) -> service.Operations:
+    """D5 request 4 / E4B request 4: the operator ports on PostgreSQL, from `settings`
+    (default: the process environment, as the gateway reads it)."""
+    from ..config import from_env
+    dsn = (from_env() if settings is None else settings).pilot.database_url.strip()
+    if not dsn:
+        raise SystemExit("DATABASE_URL is not set: this tool runs only against the "
+                         "PostgreSQL store, never an in-memory one")
+    from ..state import operations as pg
+    from ..state.catalog import PgCatalogDirectory
+    from ..state.jobstore import PgJobStore, connector
+    connect = connector(dsn)
+    return service.Operations(
+        identities=pg.PgSignup(pg._Db(connect)), tenants=pg.PgTenantStore(connect),
+        ledger=pg.PgLedger(connect), audit=pg.PgAuditLog(connect),
+        registry=pg.PgRegistry(connect), wallets=pg.PgWalletDirectory(connect),
+        catalog=PgCatalogDirectory(connect), jobs=PgJobStore(connect),
+        accounts=pg.PgAccountView(connect), clock=lambda: datetime.now(timezone.utc))
 
 
 def refuse_secret_argv(argv: list[str]) -> None:

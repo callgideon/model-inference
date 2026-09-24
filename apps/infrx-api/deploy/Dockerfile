@@ -25,14 +25,14 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON_DOWNLOADS=never UV_COMPILE_BYTECO
     UV_LINK_MODE=copy PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-# `state` (psycopg) and `scheduling` (valkey) are what the pilot processes import; traces
-# and judge stay out until their services are deployed. uv itself does not ship.
+# `state` (psycopg) and `scheduling` (valkey) are what the pilot processes import, and
+# `traces` for its pinned botocore: M1-L2's S3 media store (clickhouse-connect comes along
+# unimported until T deploys). judge stays out. uv itself does not ship.
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
-    uv sync --frozen --no-dev --extra state --extra scheduling
-COPY gateway.py ./
+    uv sync --frozen --no-dev --extra state --extra scheduling --extra traces
 COPY openrouter ./openrouter
 COPY infrx ./infrx
 COPY deploy/preflight.py deploy/migrate.py ./deploy/
-RUN python -m compileall -q infrx gateway.py deploy
+RUN python -m compileall -q infrx deploy
 
 USER infrx-gateway:infrx

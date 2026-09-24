@@ -11,7 +11,7 @@ layout and the public endpoint: [`models/marlin2b/README.md`](../../models/marli
 Requirements and data model: [`apps/README.md`](../README.md) §6–§7.
 
 ```
-client ─▶ Caddy :443 ─▶ gateway.py :8001 ─▶ vLLM :8000
+client ─▶ Caddy :443 ─▶ create_app :8001 ─▶ vLLM :8000
                           │  auth: api_keys (cache 60 s)
                           ├─▶ Supabase  usage_events (background queue)
                           └─▶ usage.jsonl (always) · usage_failed.jsonl (on failure)
@@ -19,23 +19,23 @@ client ─▶ Caddy :443 ─▶ gateway.py :8001 ─▶ vLLM :8000
 
 | file | what |
 |---|---|
-| `infrx/gateway/` | the application factory and routes (F1 moved them out of `gateway.py`) |
+| `infrx/gateway/` | the application factory (`uvicorn --factory infrx.gateway.app:create_app`) and routes |
 | `infrx/auth/`, `infrx/media/`, `infrx/usage.py`, `infrx/config.py` | auth cache, safe media fetch and video budget, usage shipping, settings |
-| `gateway.py` | compatibility entry point: `gateway:app` and the legacy globals the deploy unit imports |
 | `infrx/contracts/` | executable contracts v1: records, ports, fixtures, fakes and conformance suites ([README](infrx/contracts/README.md)) |
 | `deploy/install.sh` | idempotent installer, run as root on the box |
 | `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
 | `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
 | `openrouter/provider-models.json` | served at `/v1/models` (see `openrouter/PLAN.md`) |
-| `tests/test_gateway_auth.py` | auth cache and cost maths, no network |
-| `tests/test_media.py` | SSRF address checks, size cap, redirects, data: URL to vLLM |
+| `tests/<track>/` | one suite per track (`make api-test`) |
 | `client_example.py` | reference client |
 
 ## Environment
 
 `install.sh` writes `/etc/marlin2b-gateway.env` from SSM; the unit adds
-`USAGE_LOG`. Everything is optional — with none of it set the gateway imports
-and serves unauthenticated, which is how the tests run it.
+`USAGE_LOG`. `INFRX_MODE` is required (an unset mode refuses to start, R44), and
+`create_app` builds the pilot's stores from `DATABASE_URL` and its object store from
+`S3_MEDIA_BUCKET`, which has no adapter yet (M1 limit 2): until it does, the gateway
+refuses to start rather than stage media in process memory. Tests inject the adapters.
 
 | var | SSM parameter | meaning |
 |---|---|---|
@@ -73,7 +73,7 @@ fetched **once, in the gateway**, and handed to vLLM inline as a base64
 `data:` URL, so the engine never fetches from the internet — one download
 instead of two, and no second SSRF surface behind ours.
 
-Policy (`prepare_video` / `fetch_video` in `infrx/media/video.py`; `gateway.py` re-exports them):
+Policy (`prepare_video` / `fetch_video` in `infrx/media/video.py`):
 
 - **scheme**: `http`/`https` only; anything else is rejected before a socket
   is opened;
@@ -208,13 +208,6 @@ coordinator: nobody else edits `pyproject.toml` or `uv.lock`. Test files live in
 `tests/<track>/`, discovered with `--import-mode=importlib` so same-named files in
 different track directories do not collide.
 
-`test_gateway_auth.py` covers key hashing, cache hit/expiry, revoked and
-unknown keys, the 503 path when Supabase is down, cost maths, and the spill to
-`usage_failed.jsonl`. `test_media.py` covers the address validator (metadata,
-loopback, private, link-local, CGNAT, v4-mapped v6 all rejected; public
-accepted), the streaming size cap and the `Content-Length` pre-check, redirect
-re-validation and the hop budget, the content-type allowlist, and that the body
-forwarded to vLLM carries a `data:` URL rather than the caller's.
 `httpx.MockTransport` stands in for Supabase, the media origin and vLLM, so the
 tests need no network and no env vars. `tests/contracts/` covers the shared
 contracts: fixture round-trips, the money rules, the configuration names, and

@@ -142,7 +142,10 @@ def mediastore_factory(limits: PilotSettings | None = None, **_: object) -> Harn
                    # r1 R55: the job row `attach` reads the organization from. A real
                    # adapter joins `jobs`; this is the same lookup, injected.
                    extra={"put_object": store.put_object, "admitted": store.admitted,
-                          "materialized": store.materialized})
+                          "materialized": store.materialized,
+                          # MPILOT: the fake's state IS its durable state, so another
+                          # process sees this very store.
+                          "reopened": lambda: store})
 
 
 def scheduler_factory(limits: PilotSettings | None = None, **_: object) -> Harness:

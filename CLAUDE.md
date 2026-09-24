@@ -68,8 +68,8 @@ Track tests never import the legacy `gateway` shim; they build apps with
 `set -euo pipefail` plus small Python clients. Marlin tools:
 `./models/marlin2b/serve.sh` (vLLM in docker), `models/marlin2b/smoke.py`
 (one request), `bench.py` (load test), `reference.py` (transformers path),
-`tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the compatibility entry point of the public
-OpenAI-compatible gateway (the code lives in `apps/infrx-api/infrx/`) (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
+`tokens.py` (video token budget); the public OpenAI-compatible gateway is the factory
+`uvicorn --factory infrx.gateway.app:create_app` in `apps/infrx-api/infrx/` (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
 `g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
 env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `models/marlin2b/README.md`.
 
@@ -122,3 +122,4 @@ and ships no MTP weights.
 - 2026-09-20: Updated implementation entry point, worktree rules and existing-test guidance; application behavior unchanged.
 - 2026-09-21: Commands updated after F1/F2 integration (pinned environment, make targets, recursive console discovery, contracts location); application behavior unchanged.
 - 2026-09-21: Wave 2 merged on `claude/infrx-impl`; entry point for the next session is `research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md`; `make check` now runs eight Python mutant lists (D's needs Docker and skips visibly) and four console lists; application behavior unchanged on `main`.
+- 2026-09-23: Cutover: the gateway entry point is `uvicorn --factory infrx.gateway.app:create_app`; `apps/infrx-api/gateway.py` and its legacy tests are retired (evidence `research/plan/evidence/g/CUTOVER-*.md`).

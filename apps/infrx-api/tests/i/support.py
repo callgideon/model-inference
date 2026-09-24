@@ -130,6 +130,7 @@ os.execv({python!r}, [{python!r}, {preflight!r}, *rest])
 
 # A runtime image id, i.e. what `install.sh` passes as `--image` after its build.
 IMAGE = "sha256:" + "a" * 64
+RELEASE = "c0ffee" + "0" * 34        # the commit install.sh deploys (INFRX_RELEASE_SHA)
 
 # A digest-pinned engine image, i.e. what W3 owes the pilot. `models/marlin2b/serve.sh`
 # defaults to the floating `:nightly` tag today, which is the recorded pending gap.
@@ -243,7 +244,8 @@ def config(tmp_path, mode="dev", previous="PREVIOUS=1\n", **overrides):
                     runtime_python=sys.executable,
                     units=("marlin2b-vllm", "marlin2b-gateway"),
                     # a pilot runs the pinned runtime image (the docker stub stands in)
-                    image=IMAGE if mode == "pilot" else "")
+                    image=IMAGE if mode == "pilot" else "",
+                    release=RELEASE if mode == "pilot" else "")
     settings.update(overrides)
     # Only generate the default script when the case did not bring its own: both land
     # at `tmp_path/serve.sh`, so generating it unconditionally would overwrite the

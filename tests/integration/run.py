@@ -420,6 +420,17 @@ KNOWN_API_SKIPS: tuple[str, ...] = ()
 SUITE_ADDOPTS = "-rfEs"
 
 
+def make_env() -> dict[str, str]:
+    """The canonical make targets' environment (E3B phase 3 review H-B1). `-rfEs` always;
+    while this run's stack is up, also M1-L2's S3 cases pointed at its MinIO with MinIO's
+    local literals (`INFRX_M_S3_ENDPOINT`, `INFRX_M_S3_LOCAL_CREDS`), or `make api-test`
+    reports them as skips nobody attributed and the stage fails."""
+    env = {"PYTEST_ADDOPTS": SUITE_ADDOPTS}
+    if harness.load_state():
+        env.update(INFRX_M_S3_ENDPOINT=harness.s3_endpoint(), INFRX_M_S3_LOCAL_CREDS="1")
+    return env
+
+
 def suites(report: Report, *, own_only: bool) -> None:
     """Cross-module discovery, measured. The canonical targets are the root Makefile's
     (08 §7); this suite has none yet, so it is invoked directly and `make integration` is
@@ -432,7 +443,7 @@ def suites(report: Report, *, own_only: bool) -> None:
             # E3B phase 2: the D suite alone has grown past 30 min on a shared host. `-rs`
             # makes pytest name every skip, so an unexpected one fails the stage (below).
             runs.append(shell(["make", target], cwd=harness.REPO_ROOT, timeout=3600.0,
-                              env={"PYTEST_ADDOPTS": SUITE_ADDOPTS}))
+                              env=make_env()))
     failed = [run["argv"] for run in runs if run["exit"] != 0]
     # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
     # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose

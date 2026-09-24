@@ -24,6 +24,10 @@ The rules, each of which has a test and a mutant in `tests/m`:
 
 State is in process (`self.uploads`); D2 owns the durable rows (integration request 1 in
 the M3 evidence names the columns).
+
+MPILOT gap 1: a chat or job naming `infrx-upload:upl_…` reaches `materialize` like a URL
+does; it is *resolved* there, never fetched - by the same `resolve_owned` rule `stage`
+applies to an upload ref, plus the upload's window.
 """
 from __future__ import annotations
 
@@ -228,6 +232,17 @@ class MediaUploads(MediaPreparation):
         return error
 
     # --- use ------------------------------------------------------------------
+    async def materialize(self, org_id: str, source: str) -> MediaRef:
+        """MPILOT gap 1: the third source form (R61(1)), which `validate.py` lets through.
+        An `infrx-upload:upl_…` source is the caller's finalized upload, resolved by
+        `resolve_owned` - the rule `stage` applies to an upload ref, so admission and
+        staging can never disagree about one. Its ref is already content-addressed at the
+        `source` key a fetched URL of the same bytes gets (finalize copied it there), and the
+        request's byte budget (`_materialize_all`) bounds it like any source."""
+        if not source.startswith(UPLOAD_REF_SCHEME):
+            return await super().materialize(org_id, source)
+        return await self.resolve_owned(valid_org(org_id), source[len(UPLOAD_REF_SCHEME):])
+
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
         media = await super().resolve_owned(org_id, ref)     # another org's: not_found
         # Scoped by (org, handle): another org's upload state is never answered (review).
@@ -235,6 +250,11 @@ class MediaUploads(MediaPreparation):
         if upload is not None and upload.org_id == org_id \
                 and upload.state is not UploadState.finalized:
             raise errors.InvalidRequest(f"upload {ref} is {upload.state}, not finalized")
+        if upload is not None and upload.org_id == org_id and self.now() >= upload.expires_at:
+            # MPILOT / R22: the window bounds an upload's use as well as its completion -
+            # 0010 lets the record go once it passes, so past it the answer is 410, not a
+            # coin toss on whether the collector has run yet.
+            raise errors.UploadExpired("the upload window has expired")
         if media.kind is MediaKind.upload \
                 and await self.objects.head(media.storage_ref) != media.digest:
             # Collected, or replaced behind the store: a job must not run on either.

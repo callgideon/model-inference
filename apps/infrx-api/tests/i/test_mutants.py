@@ -25,7 +25,7 @@ SUBSET = ("denied_read_tolerated", "unknown_error_is_not_found", "validation_ski
           "value_printed_on_refusal", "value_passed_as_an_argument",
           "staged_file_is_world_readable", "stale_staged_file_kept",
           "python_pin_dropped", "transport_check_dropped", "engine_digest_unchecked",
-          "transport_logs_not_silenced", "manifest_modes_drift", "unset_mode_refuses",
+          "transport_logs_not_silenced", "manifest_modes_drift", "unset_mode_starts_legacy",
           # I2B: one per file it added, and every one that decides a refusal or the edge
           "probe_on_host_despite_image", "unknown_setting_accepted", "worker_killed_before_drain",
           "gateway_public_bind", "engine_second_setting_source", "valkey_public_bind",
@@ -33,7 +33,11 @@ SUBSET = ("denied_read_tolerated", "unknown_error_is_not_found", "validation_ski
           "units_before_preflight", "edge_opened_unready", "maintenance_not_sticky",
           "drain_leaves_edge_open", "rollback_to_unmetered_allowed",
           "reviewed_digest_not_enforced", "failure_not_rolled_back", "ssm_drops_arguments",
-          "revert_runtime_before_tree")
+          "revert_runtime_before_tree",
+          # the cutover: the factory, the edge's routes and headers, the composition refusal
+          "unit_runs_the_retired_shim", "edge_strips_a_contract_response_header",
+          "edge_buffers_events", "edge_hides_jobs", "credit_without_card_installs",
+          "release_not_required_in_pilot")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

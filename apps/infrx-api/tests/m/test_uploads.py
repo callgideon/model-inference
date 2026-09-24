@@ -546,6 +546,14 @@ def conformance_factory(limits=None, **_kw):
     ids = SequentialIds()
     adapter = adapter_for(limits=limits or DEFAULTS, cls=DeclaredFacts)
     adapter.new_handle = ids.upload_handle
+    adapter.attachments = support.Durable()
+
+    def reopened():
+        """MPILOT: the same object store and attach record, nothing in memory."""
+        other = adapter_for(limits=limits or DEFAULTS, objects=adapter.objects,
+                            cls=DeclaredFacts)
+        other.attachments = adapter.attachments
+        return other
 
     def put_object(handle, data, mime="video/mp4"):
         arrive(adapter, handle, data, mime)
@@ -558,12 +566,13 @@ def conformance_factory(limits=None, **_kw):
 
     return Harness(port=adapter, clock=adapter.clock, ids=ids,
                    extra={"put_object": put_object, "admitted": adapter.jobs.__setitem__,
-                          "materialized": materialized})
+                          "materialized": materialized, "reopened": reopened})
 
 
 def test_the_exported_conformance_suite_runs_every_upload_case():
     """F-CONTRACT / r1 R32: the six upload cases M2 skipped naming `create_upload` now
-    run and pass; the two M1 cases and the parity case pass - every case passes."""
+    run and pass; the two M1 cases and the parity case pass - every case passes, MPILOT's
+    two (the window at use, the durable attach) included."""
     from infrx.contracts.conformance import SUITES, MissingHook
 
     cases, _runner = SUITES["mediastore"]
@@ -579,5 +588,5 @@ def test_the_exported_conformance_suite_runs_every_upload_case():
     print("\nmediastore conformance against infrx.media.uploads.MediaUploads:")
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
-    assert len(outcomes) == len(cases()) == 9
+    assert len(outcomes) == len(cases()) == 11
     assert [name for name, out in outcomes.items() if out != "pass"] == []

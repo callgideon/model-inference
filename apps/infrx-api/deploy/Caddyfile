@@ -61,6 +61,12 @@
 		}
 	}
 
+	# The metered API: chat, the jobs routes (G3) and the upload routes (G4U) since the
+	# cutover mounted them. `flush_interval -1`: a stream (chat SSE, `/v1/jobs/{h}/events`)
+	# is never buffered. No header directive anywhere: Location, Retry-After,
+	# Preference-Applied, Idempotency-Replayed and Inference-Id reach the client as the
+	# gateway sets them, and Last-Event-ID, Prefer and Idempotency-Key reach the gateway as
+	# the client sent them.
 	handle {
 		reverse_proxy 127.0.0.1:8001 {
 			flush_interval -1

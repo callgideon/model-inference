@@ -11,7 +11,7 @@ Status: spec, 2026-09-20. Two applications:
 | app | what | runs on |
 |---|---|---|
 | `apps/app` | customer console: sign in, browse models, copy a working request, manage API keys, see usage and balance, read docs | Vercel (Next.js), Supabase (Postgres + Auth) |
-| `apps/infrx-api` | the OpenAI-compatible inference gateway in front of vLLM (`gateway.py`), its deployment files, and the OpenRouter provider document | AWS EC2 GPU instances (systemd + Caddy) |
+| `apps/infrx-api` | the OpenAI-compatible inference gateway in front of vLLM (`infrx.gateway.app:create_app`), its deployment files, and the OpenRouter provider document | AWS EC2 GPU instances (systemd + Caddy) |
 
 Reference for the console's shape: Wafer's app (models catalog with per-model
 input/output/cache prices and a Copy & Run snippet, Usage with request/latency
@@ -92,7 +92,7 @@ browser ──HTTPS──▶ Vercel (apps/app, Next.js)
                     Auth (magic link, Google) · Postgres · RLS
                     ▲
                     │ service-role key, from EC2 only
-developer ──HTTPS──▶ Caddy ─▶ gateway.py (apps/infrx-api) ─▶ vLLM (Marlin) on the GPU box
+developer ──HTTPS──▶ Caddy ─▶ create_app (apps/infrx-api) ─▶ vLLM (Marlin) on the GPU box
                                  auth cache 60 s · usage_events writes (batched, async)
 ```
 

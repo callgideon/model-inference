@@ -62,6 +62,10 @@ def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
                   dies_by=tuple(dies_by))
 
 
+REGIME = "test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve"
+RELEASE_CASE = "test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys"
+
+
 MUTANTS: tuple[Mutant, ...] = (
     # --- the fail-open defect itself (row O-FAILOPEN) -----------------------------
     _m("denied_read_tolerated", "a denied or unexplained read is never an absent value",
@@ -143,12 +147,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("composition_gate_removed", "pilot is refused while the pilot routers are absent",
        P, '    if mode == "pilot" and ingress not in composition.ROUTERS:',
        "    if False:",
-       "test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed"),
+       "test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_is_composed"),
     _m("probe_verdict_ignored", "a runtime refusal stops the install",
        P, '        if not verdict["ok"]:\n            report(verdict["problems"])\n'
           "            return REFUSED",
        '        if not verdict["ok"]:\n            report(verdict["problems"])',
-       "test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed",
        "test_deploy_failclosed__the_probe_that_says_nothing_is_a_refusal"),
     _m("unparsable_verdict_passes", "a probe that answers nothing is not a pass",
        P, '        return {"ok": False, "python": None, "mode": cfg.mode, "warnings": [],',
@@ -215,6 +218,26 @@ MUTANTS: tuple[Mutant, ...] = (
        'return (f"{key.env}: {value} contains a newline, NUL, quote or backslash; "',
        "test_deploy_failclosed__a_value_cannot_write_a_second_variable"),
     # --- prerequisites (brief item 4) --------------------------------------------------
+    # E4B's served-build check (CUTOVER item 7): the release install.sh deploys
+    _m("release_not_required_in_pilot", "a pilot env carries the deployed commit",
+       P, '    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",\n'
+          '        required_in=("pilot",)),',
+       '    Key("INFRX_RELEASE_SHA", "deployed commit (install.sh RELEASE)", "git_sha",\n'
+       '        required_in=()),', RELEASE_CASE),
+    _m("release_shape_unchecked", "the deployed commit is a 40-hex id",
+       P, '    "git_sha": _matches(r"[0-9a-f]{40}"),', '    "git_sha": _matches(r"\\S+"),',
+       RELEASE_CASE),
+    _m("release_not_supplied", "the installer supplies the commit it deploys",
+       P, '"INFRX_RELEASE_SHA": cfg.release,', '"INFRX_RELEASE_SHA": "",', RELEASE_CASE),
+    _m("install_passes_no_release", "install.sh hands preflight its HEAD",
+       "deploy/install.sh", ' --release "$sha"', "", RELEASE_CASE),
+    # the cutover (CUTOVER item 4): the regime and the card, the runtime's own check
+    _m("credit_without_card_installs", "a CREDIT pilot needs an approved card",
+       "infrx/config.py", "    if deployment.accounting_regime == CREDIT_REGIME \\\n",
+       "    if False \\\n", REGIME),
+    _m("unknown_regime_installs", "an ACCOUNTING_REGIME the runtime does not know is refused",
+       "infrx/config.py", "    if deployment.accounting_regime not in ACCOUNTING_REGIMES:",
+       "    if False:", REGIME),
     _m("python_pin_lowered", "the pin is 3.12.4 exactly, not whatever is installed",
        P, "REQUIRED_PYTHON = (3, 12, 4)", "REQUIRED_PYTHON = (3, 12, 0)",
        "test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough"),
@@ -271,13 +294,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "infrx/contracts/limits.py", 'MODES = ("dev", "test", "pilot")',
        'MODES = ("dev", "test", "pilot", "prod")',
        "test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys"),
-    _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour (F2.2 item 14)",
-       "infrx/config.py", '        return "legacy"',
-       '        raise RuntimeMisconfigured(mode, detail="INFRX_MODE must be set")',
-       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer",
-       # the defect IS the raise: `validate_runtime(Settings())` refusing instead of
-       # answering "legacy" (the shared rule makes that kill mode explicit)
-       dies_by=("RuntimeMisconfigured",)),
+    _m("unset_mode_starts_legacy", "an unset INFRX_MODE refuses to start (F2.2 item 14)",
+       "infrx/config.py", '        raise RuntimeMisconfigured(mode, ("INFRX_MODE",))',
+       '        return "legacy"',
+       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer"),
 )
 
 
@@ -286,8 +306,23 @@ MUTANTS: tuple[Mutant, ...] = (
 U = "deploy/"
 CADDY, MAINT = "deploy/Caddyfile", "deploy/Caddyfile.maintenance"
 PACK = "test_backend_deploy__"
+FACTORY = "the_gateway_runs_the_factory_from_what_the_image_copies"
+EDGE = "the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered"
 MUTANTS += (
     # the runtime image and its probe
+    # the cutover (CUTOVER item 2): the factory, and nothing of the retired shim
+    _m("unit_runs_the_retired_shim", "the gateway unit runs the create_app factory",
+       U + "marlin2b-gateway.service",
+       "${INFRX_IMAGE} uvicorn --factory infrx.gateway.app:create_app --host",
+       "${INFRX_IMAGE} uvicorn gateway:app --host", PACK + FACTORY),
+    _m("image_copies_the_retired_shim", "the image copies only what exists in its context",
+       U + "Dockerfile", "COPY infrx ./infrx\n", "COPY gateway.py ./\nCOPY infrx ./infrx\n",
+       PACK + FACTORY),
+    _m("image_compiles_the_retired_shim", "the image compiles only what it copied",
+       U + "Dockerfile", "RUN python -m compileall -q infrx deploy",
+       "RUN python -m compileall -q infrx gateway.py deploy", PACK + FACTORY),
+    _m("context_drops_the_package", "the build context lets in what the image copies",
+       U + "Dockerfile.dockerignore", "!infrx/\n", "", PACK + FACTORY),
     _m("image_not_required_in_pilot", "a pilot runs only the pinned runtime image",
        P, 'Key("INFRX_IMAGE", "runtime image pin (built image id)", "image_id",\n'
           '        required_in=("pilot",)),',
@@ -466,6 +501,21 @@ MUTANTS += (
        CADDY, "reverse_proxy 127.0.0.1:8001 {\n\t\t\tflush_interval -1",
        "reverse_proxy 127.0.0.1:8000 {\n\t\t\tflush_interval -1",
        PACK + "the_edge_hides_operator_paths_and_sanitizes_health"),
+    # the cutover's routes at the edge (CUTOVER item 3; G3 request (e), G4U)
+    _m("edge_strips_a_contract_response_header", "Location etc. reach the client untouched",
+       CADDY, "\t\t\tflush_interval -1\n", "\t\t\tflush_interval -1\n\t\t\theader_down -Location\n",
+       PACK + EDGE),
+    _m("edge_strips_last_event_id", "Last-Event-ID reaches the gateway untouched",
+       CADDY, "\t\t\tflush_interval -1\n",
+       "\t\t\tflush_interval -1\n\t\t\theader_up -Last-Event-ID\n", PACK + EDGE),
+    _m("edge_buffers_events", "a stream (jobs events, chat SSE) is never buffered",
+       CADDY, "\t\t\tflush_interval -1\n", "\t\t\tflush_interval 1s\n", PACK + EDGE),
+    _m("edge_hides_jobs", "the edge proxies the jobs routes",
+       CADDY, "@private path /metrics /metrics/* /readyz",
+       "@private path /v1/jobs/* /metrics /metrics/* /readyz", PACK + EDGE),
+    _m("edge_hides_uploads", "the edge proxies the upload routes",
+       CADDY, "@private path /metrics /metrics/* /readyz",
+       "@private path /v1/uploads /v1/uploads/* /metrics /metrics/* /readyz", PACK + EDGE),
     _m("health_body_passed_through", "public health is up/down only",
        CADDY, 'respond `{"ok":true}` 200', "copy_response 200",
        PACK + "the_edge_hides_operator_paths_and_sanitizes_health"),
@@ -811,7 +861,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     api = root / COPY_ROOT
     api.mkdir(parents=True)
     ignore = shutil.ignore_patterns("__pycache__", ".venv")
-    for name in ("infrx", "tests", "deploy"):
+    for name in ("infrx", "tests", "deploy", "openrouter"):   # openrouter: the image copies it
         shutil.copytree(API_DIR / name, api / name, ignore=ignore)
     engine = root / "models" / "marlin2b"
     engine.mkdir(parents=True)
@@ -820,7 +870,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copy2(REPO / "models" / "marlin2b" / "serving-version.json", engine / "serving-version.json")
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
-    shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
+    for name in ("pyproject.toml", "uv.lock"):
+        shutil.copy2(API_DIR / name, api / name)
     return api
 
 

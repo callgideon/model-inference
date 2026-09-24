@@ -204,6 +204,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         # D3 (fenced leases, cancellation, reaper)
         "0016_fenced_leases.sql",
         "0017_stream_journal.sql",
+        # D5 (terminal settlement, cancel cause, grants, reconcile, the R91 lookup)
+        "0018_terminal_settlement.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
@@ -253,9 +255,10 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     generated = {check.case for check in checks if check.case.startswith("E3B-RLS-")}
     assert generated == {f"E3B-RLS-{name}-{role}" for name in (
         *pgstate.RELATIONS, *pgstate.FUNCTIONS, *pgstate.INVOKER_FUNCTIONS,
-        "0017-watermark-columns") for role in pgstate.API_ROLES} | {
+        "0017-watermark-columns", "0018-settlement-columns") for role in pgstate.API_ROLES} | {
         f"E3B-RLS-W-{name}-{role}" for name in pgstate.RELATIONS for role in pgstate.API_ROLES
-    } | {"E3B-RLS-0017-watermark-check", "E3B-RLS-0017-terminal-trigger"}
+    } | {"E3B-RLS-0017-watermark-check", "E3B-RLS-0017-terminal-trigger",
+         "E3B-RLS-0018-settled-usage-check", "E3B-RLS-0018-settlement-guard"}
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)

@@ -38,6 +38,7 @@ R = "gateway/routes/relay.py"           # G2: the acceptor, the sync wait and th
 P = "gateway/pilot.py"                  # G2: the pilot composition
 OR = "observe/route.py"                 # I3B's loopback rule, which G2's /readyz reuses
 ST = "contracts/fakes/state.py"         # the contract store the G2 drills run against
+BUILD_CASE = "test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -866,21 +867,110 @@ MUTANTS: tuple[Mutant, ...] = (
        V, '    if match.group("mime").lower() not in allowed_mime:', "    if True:",
        "test_api_auth__the_headless_quickstart_is_served_over_both_media_forms",
        "test_dur_cap__the_headless_client_retries_denied_capacity_with_its_own_key"),
-    # These two edit files G does not own, in the temporary copy only: they are the
-    # cutover itself, and they say exactly which cases pin today's behaviour.
-    _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",
-       "gateway/app.py", "ROUTERS = (health, models, chat)",
-       "from .routes import ingress as _ingress\nROUTERS = (health, models, chat, _ingress)",
-       "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers"),
-    # R44/item 14: while `INFRX_MODE` is unset the legacy entry keeps F1 behaviour, so the
-    # honest kill is the refusal this mutant introduces. G2/I0 retire this mutant at cutover.
-    _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour",
-       "config.py", '        return "legacy"',
-       '        raise RuntimeMisconfigured(mode, detail="INFRX_MODE must be set")',
-       "test_f_base__an_unset_mode_is_still_legacy_behaviour",
-       "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers",
-       "test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route",
+    # The cutover itself (G2 item 5), in files G does not own, in the temporary copy only:
+    # the retired `unset_mode_refuses` / `composition_root_mounts_the_ingress` inverted.
+    _m("composition_root_mounts_the_legacy_route", "chat is served by the ingress only",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "from .routes import chat as _chat\n"
+       "ROUTERS = (health, models, _chat, ingress, uploads, jobs, metrics)",
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    # === the cutover lane (CUTOVER item 1): the full mount and the adapters from settings ==
+    _m("composition_root_drops_uploads", "the composition root mounts G4U's upload routes",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, jobs, metrics)",
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    _m("composition_root_drops_jobs", "the composition root mounts G3's jobs routes",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, metrics)",
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    _m("composition_root_jobs_before_ingress", "jobs and uploads mount after the ingress",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, jobs, ingress, uploads, metrics)",
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    # E4B's served-build check (CUTOVER item 7): /metrics mounted, the build gauge from settings
+    _m("composition_root_drops_metrics", "the composition root mounts I3B's /metrics",
+       "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
+       "ROUTERS = (health, models, ingress, uploads, jobs)", BUILD_CASE,
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    _m("build_info_not_set_at_startup", "create_app sets the build gauge at startup",
+       "gateway/app.py", "    pilot.build_info(rt)\n", "", BUILD_CASE),
+    _m("build_info_gauge_omitted", "the build gauge is set from the settings",
+       P, '    rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,\n'
+          "                   image=deployment.infrx_image)\n", "", BUILD_CASE),
+    _m("build_info_revision_from_git", "the revision is the installed setting, never git's",
+       P, "    rt.metrics.set(\"infrx_build_info\", 1, revision=deployment.infrx_release_sha,",
+       "    rt.metrics.set(\"infrx_build_info\", 1, revision=__import__(\"subprocess\").run(\n"
+       "        [\"git\", \"rev-parse\", \"HEAD\"], capture_output=True, text=True).stdout.strip(),",
+       BUILD_CASE),
+    _m("build_info_not_required_in_pilot", "a pilot does not start without its build",
+       P, '        if rt.mode == "pilot":\n            raise RuntimeMisconfigured(rt.mode, missing)',
+       '        if False:\n            raise RuntimeMisconfigured(rt.mode, missing)', BUILD_CASE),
+    _m("release_sha_shape_unchecked", "INFRX_RELEASE_SHA is a 40-hex commit id",
+       "config.py", "    if deployment.infrx_release_sha and not RELEASE_SHA_RE.fullmatch(",
+       "    if False and not RELEASE_SHA_RE.fullmatch(", BUILD_CASE),
+    _m("build_image_shape_unchecked", "INFRX_IMAGE is sha256:<64 hex>",
+       "config.py", "    if deployment.infrx_image and not IMAGE_ID_RE.fullmatch(",
+       "    if False and not IMAGE_ID_RE.fullmatch(", BUILD_CASE),
+    _m("composition_root_route_table_unchecked", "create_app asserts the route table it built",
+       "gateway/app.py", "    ingress.assert_route_table(app)\n", "",
+       "test_f_base__the_route_table_is_asserted_after_every_router_mounted"),
+    _m("composition_root_adapters_not_from_settings", "create_app builds what it is not given",
+       "gateway/app.py",
+       "    rt.ingress = pilot.build_ingress_deps(rt, **pilot.adapters_from_env(rt.settings, **adapters))",
+       "    rt.ingress = pilot.build_ingress_deps(rt, **adapters)",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
+       # the defect IS the refusal: nothing is built, so the composition refuses to start
        dies_by=("RuntimeMisconfigured",)),
+    _m("objects_from_settings_in_memory", "no object store from settings is process memory",
+       P, "    try:\n        objects = S3ObjectStore.connect(",
+       "    from ..media.store import InMemoryObjectStore\n    return InMemoryObjectStore()\n"
+       "    try:\n        objects = S3ObjectStore.connect(",
+       "test_f_base__create_app_never_stages_into_process_memory"),
+    _m("objects_unset_in_memory", "an unset S3_MEDIA_BUCKET refuses, naming it",
+       P, '        raise RuntimeMisconfigured(mode, ("S3_MEDIA_BUCKET",))',
+       "        from ..media.store import InMemoryObjectStore\n        return InMemoryObjectStore()",
+       "test_f_base__create_app_never_stages_into_process_memory"),
+    _m("injected_objects_replaced", "an injected object store is used as given",
+       P, '    if "objects" not in adapters:', "    if True:",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
+       dies_by=("RuntimeMisconfigured",)),        # the given store refused: the defect
+    _m("given_stores_replaced", "injected stores are used as given, with no pool of ours",
+       P, "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool,\n"
+          "                    **adapters}",
+       "                    \"jobs\": PgJobStore(connect, limits=settings.pilot), \"pool\": pool}",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool",
+       dies_by=("RuntimeMisconfigured",)),        # the given store dropped, then refused
+    _m("stores_on_an_unnamed_database", "a store is built only on a named DATABASE_URL",
+       P, "        if not settings.pilot.database_url.strip():", "        if False:",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool"),
+    _m("stores_on_two_pools", "the three stores share one pool",
+       P, "        adapters = {\"catalog\": PgCatalogDirectory(connect),",
+       "        adapters = {\"catalog\": PgCatalogDirectory(connection_pool(settings)[1]),",
+       "test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool"),
+    _m("startup_probe_on_the_closed_pool", "before lifespan the stores connect on their own",
+       P, "        if pool.closed:", "        if False:",
+       "test_f_base__the_startup_probe_connects_on_its_own_until_the_lifespan_opens_the_pool",
+       dies_by=("PoolClosed",)),                  # the closed pool asked: the defect
+    _m("startup_connection_unconfigured", "a connection of its own is configured as pooled",
+       P, "            await configure(conn)\n", "",
+       "test_f_base__the_startup_probe_connects_on_its_own_until_the_lifespan_opens_the_pool"),
+    _m("open_pool_bypassed", "once open, the pool lends the connection",
+       P, "        return _Pooled(pool, await pool.getconn())",
+       "        import psycopg\n"
+       "        return await psycopg.AsyncConnection.connect(settings.pilot.database_url)",
+       "test_f_base__the_startup_probe_connects_on_its_own_until_the_lifespan_opens_the_pool"),
+    _m("pilot_built_without_jobs", "no pilot without a JobStore (D2)",
+       P, "        if value is None:", '        if value is None and name != "jobs":',
+       "test_f_base__a_pilot_is_not_built_without_its_durable_adapters"),
+    _m("composition_root_publishes_docs", "the pilot app publishes no docs or schema",
+       "gateway/app.py",
+       "    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=pilot.lifespan)",
+       "    app = FastAPI(lifespan=pilot.lifespan)",
+       "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    _m("unset_mode_starts_legacy", "an unset INFRX_MODE refuses to start (R44, item 14)",
+       "config.py", '        raise RuntimeMisconfigured(mode, ("INFRX_MODE",))',
+       '        return "legacy"',
+       "test_f_base__an_unset_mode_refuses_to_start"),
     # === G2 item 1: durable acceptance (DUR-ADMIT G half, API-MODES) =====================
     _m("admits_the_validation_record", "admission takes prepare_request's record (S2M D1)",
        R, "            else self.jobs.admit(prepared, idem)",
@@ -977,7 +1067,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_dur_admit__a_catalog_outage_after_a_credit_admission_is_retryable"),
     _m("inflight_replay_rechecked_after_attach", "a replay never rechecks or cancels a job "
        "that may be running (review r2 money-B2)",
-       R, "        if job.request_id in self.media.by_job:", "        if False:",
+       R, "        if await _dependency(self.media.attached(job.request_id)) is not None:", "        if False:",
        "test_dur_admit__a_replay_never_rechecks_or_cancels_a_job_that_may_be_running"),
     _m("replay_of_another_process_refused", "a job staged by another process is answered "
        "as it stands",
@@ -1297,12 +1387,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "                               return_when=asyncio.FIRST_COMPLETED)",
        "test_f_base__shutdown_drains_the_relays_durable_cancels"),
     _m("pool_configure_dropped", "the built pool carries the configure hook (review C1)",
-       P, "        configure=configure_connection(deployment.database_pool_statement_timeout_ms))",
-       "        configure=None)",
+       P, "        timeout=deployment.database_pool_connect_timeout_s, configure=configure)",
+       "        timeout=deployment.database_pool_connect_timeout_s, configure=None)",
        "test_f_base__the_pool_sets_the_service_role_on_every_connection"),
     _m("pool_statement_timeout_zero", "the hook carries the deployment's statement timeout",
-       P, "        configure=configure_connection(deployment.database_pool_statement_timeout_ms))",
-       "        configure=configure_connection(0))",
+       P, "    configure = configure_connection(deployment.database_pool_statement_timeout_ms)",
+       "    configure = configure_connection(0)",
        "test_f_base__the_pool_sets_the_service_role_on_every_connection"),
     _m("price_probe_ignores_active_card", "CREDIT price_source needs the active card (H-B4)",
        P, "        return card is not None and (regime != CREDIT",

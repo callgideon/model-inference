@@ -899,8 +899,12 @@ async def _send(client, cfg, item, row, now):
     """Issue the request and fill `row`. Returning early is fine: attempt() finalises."""
     ref = await media_ref_for(item, cfg, client, row)
     payload = {"model": cfg["model"], "messages": messages_for(item, ref),
-               "max_tokens": item["max_tokens"],
-               "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
+               "max_tokens": item["max_tokens"], "temperature": 0, "stream": True}
+    # vLLM streams usage only when asked. The infrx gateway always sends its usage frame, and
+    # its parameter set is closed (01): `stream_options` there is 400 unsupported_parameter
+    # (measured against the mounted gateway, E3B phase 3).
+    if cfg["args"].target == "direct":
+        payload["stream_options"] = {"include_usage": True}
     # A corpus clip knows its duration; the single-video path does not, and 'auto' there
     # means an ffprobe subprocess, so make_config() resolved it once instead of per attempt.
     mm = (resolve_mm_kwargs(cfg["args"], duration=item["duration_s"])

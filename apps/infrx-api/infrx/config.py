@@ -1,8 +1,8 @@
 """Gateway configuration: one mutable dataclass, and the only os.environ read.
 
 Field names mirror the original gateway module's globals (UPSTREAM -> upstream,
-MAX_VIDEO_MB -> max_video_mb, ...) so the legacy shim in gateway.py forwards
-assignments straight here, and so a config change is one place, not two.
+MAX_VIDEO_MB -> max_video_mb, ...), which the legacy `gateway.py` shim forwarded here
+until the cutover retired it, so a config change is one place, not two.
 
 `Settings`/`from_env` are the F1 gateway's own configuration and keep their exact
 defaults. The pilot settings of contracts v1 (08 §5) are a separate object:
@@ -12,9 +12,9 @@ environment. Nothing in the F1 path reads them, so adding them changes no
 existing behaviour.
 """
 import dataclasses
-import logging
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
@@ -224,10 +224,8 @@ def runtime_mode(settings) -> str:
 def validate_runtime(settings):
     """r1 R44: the one hook `create_app` calls. Returns the mode it validated.
 
-    * unset (`INFRX_MODE` absent) - **legacy F1 behaviour, exactly as before**, logged
-      once as `legacy`. F1 preserved behaviour by rule, so the legacy `gateway:app`
-      entry point must keep working untouched; G1 replaces this branch with a refusal at
-      cutover, in the same change in which I2's installer writes `INFRX_MODE=pilot`.
+    * unset (`INFRX_MODE` absent) - refuses to start (R44, F2.2 carryover 14): the G2
+      cutover retired the legacy F1 entry point, and I2's installer always writes a mode.
     * `dev` / `test` - explicit, and no further requirement.
     * `pilot` - requires authentication **and** metering configuration, and refuses the
       shared `GATEWAY_API_KEY` (R51), or a typed `RuntimeMisconfigured` naming the setting
@@ -264,9 +262,7 @@ def validate_runtime(settings):
         raise RuntimeMisconfigured(
             mode, detail="ACTIVE_RATE_CARD_VERSION must not carry surrounding whitespace")
     if mode == MODE_UNSET:
-        logging.getLogger("infrx").info(
-            "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
-        return "legacy"
+        raise RuntimeMisconfigured(mode, ("INFRX_MODE",))
     if mode not in MODES:
         raise RuntimeMisconfigured(mode, detail="must be one of " + ", ".join(MODES))
     if mode == "pilot":
@@ -344,6 +340,18 @@ class DeploymentSettings:
     # One `LargeBodies` per process: at most two bodies over the threshold at a time.
     large_body_limit: int = 2
     large_body_threshold_bytes: int = 1_048_576   # 1 MiB
+    # M1-L2: where in `S3_MEDIA_BUCKET` (contract data, 08 §5) the media store keeps its
+    # objects, and - for an S3-compatible store (MinIO in tests) - where that store is;
+    # unset is AWS S3. Credentials and region are never settings: botocore's own chain
+    # reads them (the instance role on the box).
+    s3_media_prefix: str = "infrx/"
+    s3_endpoint_url: str = ""
+    # E4B's served-build check: the commit install.sh deployed (`RELEASE`, "the checkout is
+    # exactly a commit") and the runtime image id it built, written by preflight `apply`.
+    # Exposed as `infrx_build_info{revision, image} 1`; a pilot refuses to start without
+    # them (`pilot.build_info`). Never read from git or docker at runtime.
+    infrx_release_sha: str = ""
+    infrx_image: str = ""
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)
@@ -353,6 +361,14 @@ DEPLOYMENT_DEFAULTS = DeploymentSettings()
 
 # Set, it must be at least this long. Not a password: a signing key.
 MIN_CONSOLE_CURSOR_SECRET_CHARS = 16
+
+# A full git commit id, and an image id as `docker image inspect` prints it.
+RELEASE_SHA_RE = re.compile(r"[0-9a-f]{40}")
+IMAGE_ID_RE = re.compile(r"sha256:[0-9a-f]{64}")
+# One or more path segments, each ending in `/`: never the bucket root, never `//`.
+S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")
+# A scheme and an authority only: no path, no query, no `user:password@`.
+S3_ENDPOINT_RE = re.compile(r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?/?")
 
 # 08 §5: what the *console* runtime requires that this gateway does not. C2 reads the
 # secret and signs its cursors with it; the deployment checklist (G2/I2) must write it.
@@ -414,6 +430,16 @@ def validate_deployment(deployment, mode=MODE_UNSET):
             mode,
             detail=f"CONSOLE_CURSOR_SECRET must be at least "
                    f"{MIN_CONSOLE_CURSOR_SECRET_CHARS} characters")
+    if not S3_PREFIX_RE.fullmatch(deployment.s3_media_prefix):
+        raise RuntimeMisconfigured(
+            mode, detail="S3_MEDIA_PREFIX must be path segments, each ending in /")
+    if deployment.s3_endpoint_url and not S3_ENDPOINT_RE.fullmatch(deployment.s3_endpoint_url):
+        raise RuntimeMisconfigured(
+            mode, detail="S3_ENDPOINT_URL must be http(s)://host[:port], no path or credentials")
+    if deployment.infrx_release_sha and not RELEASE_SHA_RE.fullmatch(deployment.infrx_release_sha):
+        raise RuntimeMisconfigured(mode, detail="INFRX_RELEASE_SHA must be a 40-hex commit id")
+    if deployment.infrx_image and not IMAGE_ID_RE.fullmatch(deployment.infrx_image):
+        raise RuntimeMisconfigured(mode, detail="INFRX_IMAGE must be sha256:<64 hex>")
     return deployment
 
 

@@ -449,14 +449,18 @@ def footprint() -> tuple:
 
 
 def assert_credit_conserved(person) -> None:
-    """Per CREDIT wallet: ledger = the one signup grant - settled debits (none settle
-    before D5); reserved = its holds still held; available never negative."""
+    """Per CREDIT wallet: ledger = the one signup grant - settled debits; reserved = its holds
+    still held; available never negative. A CREDIT job's v1 `debit` is 0 (R64): its charge is
+    the usage row's `charged_credits` (0018 `settle_credit`), read here, not the ledger the
+    total is summed from."""
     with stack.connect() as conn:
         held, = conn.execute("select coalesce(sum(amount), 0) from infrx.credit_wallet_holds "
                              "where wallet_id = %s and state = 'held'",
                              (person.wallet_id,)).fetchone()
-        debited, = conn.execute("select coalesce(sum(debit), 0) from infrx.jobs where "
-                                "wallet_id = %s and settled_at is not null",
+        debited, = conn.execute("select coalesce(sum(u.charged_credits), 0) from infrx.jobs j "
+                                "join public.usage_events u on u.id = j.request_id where "
+                                "j.wallet_id = %s and j.settled_at is not null "
+                                "and u.accounting_regime = 'credit'",
                                 (person.wallet_id,)).fetchone()
     wallet = credit_wallet(person)
     assert wallet["ledger"] == stack.SIGNUP_GRANT - debited, (wallet, debited)
@@ -641,12 +645,119 @@ def test_e3b_dr02c_a_refused_credit_admission_leaves_nothing_behind(backend):
     run(body)
 
 
-def test_e3b_dr07c_credit_settlement_is_pending_on_the_settling_transaction():
-    """CREDIT-SPEND settlement (R73, R79): one debit on the CREDIT wallet, the hold released,
-    usage projected once. Pending while the settlement after terminalize's fence is a stub;
-    the day it is not, this fails until its body is written."""
-    rig("postgres", *RUN, "terminalize")
-    pytest.fail("terminalize is implemented: write the CREDIT settlement drill body now")
+# Review J3: dr07c's ADMITTED card has a fractional input rate, so the half-up rule is
+# exercised: 1200 x 400.0000125 + 340 x 1200 per million = 0.888000015 CREDIT, which is
+# 0.88800002 half up (and 0.88800001 truncated: db14).
+FRACTIONAL_CARD, FRACTIONAL_CHARGE = "rc_e3b3_fractional", Decimal("0.88800002")
+
+
+def _publish_card(card: str, input_rate: str, output_rate: str) -> None:
+    """R68: an approved card effective now, and the alias's next listing pointing new
+    admissions at it."""
+    with stack.connect() as conn:
+        conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                     "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                     "output_rate_per_million, effective_at, approved_by, provisional) values "
+                     "(%s, %s, %s, %s, %s, %s, infrx.now(), 'e3b3 drill', true)",
+                     (card, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT, stack.SEED_SERVING,
+                      input_rate, output_rate))
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) select %s, max(version) + 1, %s, %s, %s, %s, "
+                     "infrx.now(), 'e3b3 drill' from infrx.catalog_listings "
+                     "where public_model_id = %s",
+                     (stack.CREDIT_ALIAS, stack.SEED_MODEL, stack.SEED_PUBLIC_DEPLOYMENT,
+                      stack.SEED_SERVING, card, stack.CREDIT_ALIAS))
+
+
+def _newer_card() -> None:
+    """R68: an approved card published AFTER admission, effective now, and the listing that
+    points new admissions at it. It must never reach a job admitted before it."""
+    _publish_card("rc_e3b3_newer", "4000", "12000")
+
+
+def settlement_writes(request_id) -> dict:
+    """Everything the CREDIT settlement of one job wrote, each row with the transaction id
+    that wrote it (`xmin`): one id across them all is ONE settling transaction."""
+    with stack.connect() as conn:
+        def rows(sql):
+            return conn.execute(sql, (request_id,)).fetchall()
+        return {
+            "debits": rows("select amount, kind, xmin::text from infrx.credit_ledger "
+                           "where request_id = %s"),
+            "hold": rows("select state, xmin::text from infrx.credit_wallet_holds "
+                         "where request_id = %s"),
+            "usage": rows("select accounting_regime, charged_credits, rate_card_version, "
+                          "prompt_tokens, completion_tokens, xmin::text "
+                          "from public.usage_events where id = %s"),
+            "projections": rows("select kind, xmin::text from infrx.outbox where "
+                                "aggregate_id = %s and kind = 'usage_projection'"),
+            "events": rows("select event_type, xmin::text from infrx.stream_chunks "
+                           "where job_id = %s order by generation, sequence"),
+            "job": rows("select xmin::text from infrx.jobs where request_id = %s")}
+
+
+def test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet():
+    """CREDIT-SPEND / DUR-SETTLE on the real store (R64, R68, R73, R79; D5's 0018): the
+    settling commit's answer is lost, and a card published after admission is active. ONE
+    transaction wrote: the job's outcome, one `inference_debit` on the individual's CREDIT
+    wallet at the ADMITTED card, the hold `held -> settled` (reserved back to its prior value),
+    one usage projection and one CREDIT usage row, and 0017's trigger's one terminal journal
+    event, last. The identical retry replays it (the adapter's `SettlementV2` is
+    `v2.settle(admission, usage, settled_at)`); a different proposal is `AlreadyTerminal`; a
+    late cancel answers the same outcome and writes nothing. The legacy USD books never move;
+    the wallet is conserved per unit. The admitted card's rate is fractional (review J3), so
+    the charge is the half-up rounding of card x usage, not a truncation."""
+    from infrx.contracts.v2 import records as v2
+    h = rig("postgres", *RUN, "append", "terminalize", "cancel")
+    world = credit_rig(h, "postgres")
+    alpha = world.people["alpha"]
+
+    async def body():
+        usd = h.extra["balance"](alpha.org_id)
+        before = world.wallet(alpha)
+        _publish_card(FRACTIONAL_CARD, "400.00001250", "1200")
+        request = credit_request(h, alpha, world.alias)
+        admission = await h.port.admit_credit(request, b.idem(request, "s1"))
+        assert admission.rate_card.rate_card_version == FRACTIONAL_CARD, admission.rate_card
+        _newer_card()
+        lease = await running(h, admission)
+        await h.extra["stream"].append(lease, b.events("answer"))
+        tokens = b.usage(1200, 340)
+        proposal = b.outcome(request.request_id, h, tokens=tokens)
+        h.failures.crash_after_commit("complete_credit")
+        with pytest.raises(CrashAfterCommit):
+            await h.port.complete_credit(lease, proposal)
+        _, first = await h.port.get_owned_credit(alpha.org_id, admission.job_handle)
+        assert (first.state, first.settlement_state, first.debit) == (
+            JobState.succeeded, SettlementState.settled, 0), first
+        again, settlement = await h.port.complete_credit(lease, proposal)
+        assert again == first, (again, first)
+        assert settlement == v2.settle(admission, tokens, first.settled_at), \
+            f"not the admitted card's settlement: {settlement}"
+        charged = admission.rate_card.debit(1200, 340).raw("CREDIT")
+        assert charged == FRACTIONAL_CHARGE, charged
+        with pytest.raises(errors.AlreadyTerminal):
+            await h.port.complete_credit(lease, b.outcome(request.request_id, h,
+                                                          tokens=b.usage(1, 1)))
+        assert await h.port.cancel(alpha.org_id, admission.job_handle) == first
+        wrote = settlement_writes(request.request_id)
+        tx = wrote["job"][0][0]
+        assert wrote["debits"] == [(-charged, "inference_debit", tx)], \
+            f"not one debit at the admitted card in the settling transaction: {wrote}"
+        assert wrote["hold"] == [("settled", tx)], \
+            f"the hold was not released in the settling transaction: {wrote}"
+        assert wrote["usage"] == [("credit", charged, FRACTIONAL_CARD, 1200, 340, tx)], wrote
+        assert wrote["projections"] == [("usage_projection", tx)], wrote
+        assert [e for e in wrote["events"] if e[0] == "terminal"] == [("terminal", tx)] \
+            and wrote["events"][-1][0] == "terminal", f"not one terminal event, last: {wrote}"
+        after = world.wallet(alpha)
+        assert (after["ledger"], after["reserved"]) == (before["ledger"] - charged,
+                                                        before["reserved"]), (before, after)
+        assert world.holds(request.request_id)["usd"] == 0
+        assert h.extra["balance"](alpha.org_id) == usd, "the legacy USD books moved"
+        world.conserved(alpha)
+    run(body)
 
 
 # ------------------------------------------------------------------ live defects, real store
@@ -761,14 +872,137 @@ def test_e3b_db08_detects_a_credit_hold_on_the_usd_books(monkeypatch):
             "postgres")
 
 
-def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
-    """API-MODES / API-STREAM: a sync or SSE client that disconnects mid-generation must
-    cancel or detach per mode, with no orphan execution. It is a route behaviour, so it is
-    pending exactly as long as no metered route is mounted, and fails once one is."""
-    if stack.ingress_is_mounted():
-        pytest.fail("the pilot ingress is mounted: write the disconnect drill body now")
-    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect is G2's (merged), "
-                               "and the held cutover has mounted no metered route")
+def _hold_left_held():
+    """`infrx.settle_credit` with its `held -> settled` move removed: the debit lands and
+    the hold stays reserved beside it."""
+    source = stack.function_source("infrx.settle_credit", "uuid, numeric")
+    move = re.search(r"update infrx\.credit_wallet_holds set state = 'settled'.*?end if;",
+                     source, re.S)
+    assert move, "the hold move moved: the drill no longer describes 0018"
+    stack.defect(source.replace(move.group(0), "", 1))
+
+
+def _debit_at_the_active_card():
+    """`infrx.terminalize` pricing a CREDIT job at the alias's CURRENT listing's card."""
+    source = stack.function_source("infrx.terminalize", "jsonb")
+    pinned = "infrx.debit_credit(j.rate_card_version, v_in, v_out)"
+    assert source.count(pinned) == 1, "the admitted-card debit moved: the drill is stale"
+    stack.defect(source.replace(pinned, (
+        "infrx.debit_credit((select l.rate_card_version from infrx.catalog_listings l "
+        "where l.public_model_id = j.requested_model order by l.version desc limit 1), "
+        "v_in, v_out)")))
+
+
+def test_e3b_db12_detects_a_credit_hold_left_held_beside_its_debit(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-SPEND, R73): a CREDIT settlement that
+    debits and leaves its hold reserved. dr07c's own assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _hold_left_held)
+    with pytest.raises(AssertionError, match="hold was not released"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
+
+
+def _debit_truncated():
+    """`infrx.debit_credit` truncating card x usage instead of rounding it half up."""
+    source = stack.function_source("infrx.debit_credit", "text, integer, integer")
+    assert source.count("select round(") == 1, "the rounding moved: the drill is stale"
+    stack.defect(source.replace("select round(", "select trunc("))
+
+
+def test_e3b_db14_detects_a_credit_debit_truncated_instead_of_rounded(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-RATE, review J3): a debit that truncates
+    the admitted card x usage. dr07c's fractional card makes its own assertions report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _debit_truncated)
+    with pytest.raises(AssertionError, match="admitted card"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
+
+
+def test_e3b_db13_detects_a_credit_debit_at_the_active_card(monkeypatch):
+    """Intentional defect on the REAL store (CREDIT-RATE, R68): a card published after
+    admission reaching the admitted job's charge. dr07c's own assertion must report it."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _debit_at_the_active_card)
+    with pytest.raises(AssertionError, match="not the admitted card's settlement"):
+        test_e3b_dr07c_a_credit_settlement_settles_once_on_the_credit_wallet()
+
+
+def _raw_request(port: int, secret: str, body: dict, key: str):
+    """A chat request on a raw socket, so the test can leave mid-answer the way a client does:
+    by closing the connection."""
+    import json
+    import socket
+    payload = json.dumps(body).encode()
+    sock = socket.create_connection(("127.0.0.1", port), timeout=30)
+    sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                 + f"Authorization: Bearer {secret}\r\nIdempotency-Key: {key}\r\n".encode()
+                 + b"Content-Type: application/json\r\n"
+                 + f"Content-Length: {len(payload)}\r\n\r\n".encode() + payload)
+    return sock
+
+
+def _until(predicate, timeout: float = 60.0, what: str = ""):
+    import time
+    end = time.monotonic() + timeout
+    while True:
+        found = predicate()
+        if found or time.monotonic() > end:
+            assert found, f"not within {timeout}s: {what}"
+            return found
+        time.sleep(0.05)
+
+
+def test_e3b_dr11_a_client_that_disconnects_mid_generation_cancels_and_leaves_nothing_running(
+        tmp_path):
+    """API-MODES / API-STREAM / DUR-SETTLE on the mounted gateway process (G2's relay, D5's
+    0018): a client that disconnects while its answer is being generated - sync, and SSE
+    after the identity frame and the first chunk (G2's mode contract: a disconnect CANCELS,
+    never detaches) - cancels its job durably with `client_disconnected`. The output was
+    published and no usage was reported, so R21 holds the CREDIT hold `unknown` (never a
+    debit); the worker's next write is refused, it stops the engine - E2's fake vLLM sees the
+    connection close - and no attempt is left unreleased. Past the unknown-usage window the
+    reaper releases each hold: no debit, the wallet back to where it was, conserved."""
+    import pilotbox
+    if not stack.has_stack():
+        pytest.skip(f"no {harness.PROJECT} stack: run `tests/integration/run.py --layer 3`")
+    with pilotbox.journey(tmp_path) as trip:
+        alpha = trip.world.alpha
+        before = trip.wallet(alpha)
+        trip.engine.control(text="Two people unload boxes from a van onto a trolley. " * 8,
+                            delta_gap_s=0.25)
+        left = []
+        for mode in ("sync", "sse"):
+            body = {"model": stack.CREDIT_ALIAS, "stream": mode == "sse",
+                    "messages": [{"role": "user", "content": "Describe the van."}]}
+            seen = trip.engine.control()["disconnected"]
+            sock = _raw_request(trip.box.port, alpha.secret, body, f"dr11-{mode}")
+            request_id, = _until(lambda: trip.db(
+                "select request_id::text from infrx.jobs where idempotency_key = %s and "
+                "published", f"dr11-{mode}"), what=f"{mode}: a published chunk")[0]
+            if mode == "sse":
+                assert b"infrx.progress" in sock.recv(65536), "no identity frame before leaving"
+            sock.close()                                        # the client leaves
+            state = _until(lambda: trip.db(
+                "select state, outcome_cause, settlement_state from infrx.jobs where "
+                "request_id = %s and settled_at is not null", request_id), what="terminal")
+            assert state == [("cancelled", "client_disconnected", "held_unknown")], state
+            _until(lambda: trip.engine.control()["disconnected"] > seen,
+                   what=f"{mode}: the engine saw the generation stop")
+            _until(lambda: trip.db("select count(*) from infrx.attempts where job_id = %s "
+                                   "and released_at is null", request_id) == [(0,)],
+                   what=f"{mode}: every attempt released")
+            assert trip.db("select state from infrx.credit_wallet_holds where request_id = %s",
+                           request_id) == [("unknown",)]
+            assert trip.db("select count(*) from infrx.credit_ledger where request_id = %s",
+                           request_id) == [(0,)], "a disconnected job was debited"
+            trip.conserved(alpha)
+            left.append(request_id)
+        trip.db("select infrx_test.advance(%s)", DEFAULTS.unknown_usage_reconcile_s + 1)
+        for request_id in left:                       # the worker's reaper, every 10 s
+            _until(lambda: trip.db("select state from infrx.credit_wallet_holds where "
+                                   "request_id = %s", request_id) == [("released",)],
+                   what="the unknown hold released at the window")
+            assert trip.db("select settlement_state from infrx.jobs where request_id = %s",
+                           request_id) == [("released_platform_absorbed",)]
+        assert trip.wallet(alpha) == before, (before, trip.wallet(alpha))
+        trip.conserved(alpha)
 
 
 # ------------------------------------------------------------------ saturation and queue
@@ -955,13 +1189,9 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     """Forced fallback to legacy unmetered ingress (R51): a pilot configured with the shared
     gateway key (R51's forbidden setting) - the legacy path that bypasses per-tenant metering - refuses to
     start, naming the setting and not its value."""
-    from unittest import mock
     from infrx.config import RuntimeMisconfigured, validate_runtime
-    from infrx.gateway import app as composition
-    from infrx.gateway.routes import health, ingress, models
-    # G1R: a complete pilot configuration validates only as the cutover composes it.
-    with mock.patch.object(composition, "ROUTERS", (health, models, ingress)):
-        assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
+    # A complete pilot configuration validates, as the cutover composes it (dr17).
+    assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
     with pytest.raises(RuntimeMisconfigured) as refused:
         validate_runtime(_pilot_settings(tmp_path, legacy_key="shared-legacy-key"))
     # assembled from parts: tests/integration's production-pointer guard scans this file
@@ -969,22 +1199,44 @@ def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     assert "shared-legacy-key" not in str(refused.value)
 
 
-def test_e3b_dr17_a_pilot_gateway_does_not_serve_chat_through_the_legacy_route(tmp_path):
-    """Forced fallback to legacy unmetered ingress: in `pilot` mode `/v1/chat/completions`
-    must be the metered ingress, never the legacy F1 chat route (no durable admission, no
-    hold). Before the cutover the composition root mounts the legacy route, and G1R (merged)
-    makes `create_app` refuse pilot mode for it; after the cutover the route is the ingress.
-    Anything else is a failure - G1R is merged, so it is no longer a pending id."""
-    from infrx.config import RuntimeMisconfigured
-    from infrx.gateway.app import create_app
-    try:
-        app = create_app(_pilot_settings(tmp_path))
-    except RuntimeMisconfigured as refused:
-        # G1R: pilot refuses to start while chat would be served by the legacy route.
-        assert "legacy route" in str(refused)
-        return
-    served = {route.path: route.endpoint.__module__ for route in app.routes
-              if getattr(route, "path", "") == "/v1/chat/completions"}
-    if served and all(module.endswith(".ingress") for module in served.values()):
-        return
-    pytest.fail(f"pilot mode serves /v1/chat/completions from {served}")
+def test_e3b_dr17_the_pilot_serves_chat_and_jobs_only_through_the_mounted_routers(tmp_path,
+                                                                                   monkeypatch):
+    """Forced fallback to legacy unmetered ingress, after the cutover: the pilot composition
+    root, on this stack, mounts exactly `(health, models, ingress, uploads, jobs, metrics)` -
+    the metered ingress serves `/v1/chat/completions`, G3's router every jobs route, G4U's the
+    uploads, I3B's loopback `/metrics` last (the cutover's item 7, merged with M) - and no
+    route is the legacy F1 chat module (no durable admission, no hold). The
+    composition's own module check refuses a second chat handler, the legacy one included.
+
+    `create_app` builds EVERY adapter from the pilot environment - the stores on one pool,
+    the Valkey index and, since M1-L2 merged, the S3 object store on E2's MinIO (before it,
+    the object store was injected). The startup probes (the price source, the journal, the
+    bucket's HeadBucket) answer from this stack."""
+    from infrx.config import RuntimeMisconfigured, from_env
+    from infrx.gateway import app as composition
+    from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+    from infrx.observe import route as metrics
+    h = stack.pg_jobstore()
+    env = stack.pilot_env(h.extra["database"], tmp_path)
+    for name in stack.AWS_UNSET:                      # botocore reads the process environment
+        monkeypatch.delenv(name, raising=False)
+    for name in stack.s3_env():
+        monkeypatch.setenv(name, env[name])
+    app = composition.create_app(from_env(env))
+    assert composition.ROUTERS == (health, models, ingress, uploads, jobs, metrics), \
+        composition.ROUTERS
+    assert app.state.runtime.mode == "pilot"
+    served = {(method, route.path): route.endpoint.__module__ for route in app.routes
+              for method in (getattr(route, "methods", None) or ())
+              if getattr(route, "endpoint", None) is not None}
+    assert served[("POST", "/v1/chat/completions")] == ingress.__name__, served
+    assert {path: module for (method, path), module in served.items()
+            if path.startswith("/v1/jobs")} == {path: jobs.__name__ for _, path in
+                                                ingress.JOBS_ROUTES}, served
+    assert {module for (_, path), module in served.items()
+            if path.startswith("/v1/uploads")} == {uploads.__name__}, served
+    assert served[("GET", metrics.PATH)] == metrics.__name__, served
+    assert chat.__name__ not in served.values(), served
+    chat.register(app, app.state.runtime)         # the legacy route, mounted behind its back
+    with pytest.raises(RuntimeMisconfigured, match="exactly one handler"):
+        ingress.assert_route_table(app)
