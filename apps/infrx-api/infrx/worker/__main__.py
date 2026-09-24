@@ -95,7 +95,8 @@ class CreditWork:
         return PreparedWork.model_construct(
             request=work.request.request, media_refs=work.media_refs,
             prepared_refs=work.prepared_refs, budgets=work.budgets,
-            prompt_tokens=work.prompt_tokens)
+            prompt_tokens=work.prompt_tokens,
+            serving_version_id=work.request.pins.serving_version_id)
 
     async def complete(self, lease, outcome):
         settled, _settlement = await self.store.complete_credit(lease, outcome)

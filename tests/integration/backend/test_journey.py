@@ -204,6 +204,15 @@ def prepared_by_the_worker(trip, request_id: str, usage: dict) -> None:
     assert stored == usage["prompt_tokens"] == pilotbox.ENGINE_PROMPT_TOKENS, (stored, usage)
 
 
+def counted_by_the_memo(trip, request_id: str) -> bool:
+    """TOKCOST: the box's worker logged this job's count as its memo of an earlier `/tokenize`
+    answer - a video body it already had the engine count (text is asked every time)."""
+    import pilotbox
+    log = trip.box.workdir / f"worker-{trip.box.starts['worker']}.log"
+    return (f"prepared {request_id}: {pilotbox.ENGINE_PROMPT_TOKENS} prompt tokens (memo of "
+            "engine /tokenize, ") in log.read_text(errors="replace")
+
+
 def settled_once(trip, tenant, request_id: str, usage: dict, before: tuple) -> Decimal:
     """After terminal: ONE inference debit on the tenant's CREDIT wallet = the admitted card x
     usage (half up), the hold settled, reserved back to its prior value, one usage
@@ -264,7 +273,11 @@ def test_backend_journey(trip, input_kind, mode):
             (method, path, answer.status_code, answer.text)
     settled_once(trip, alpha, request_id, usage, before["alpha"][0])
     prepared_by_the_worker(trip, request_id, usage)
-    assert trip.engine.control()["tokenized"] > tokenized, "the worker never asked /tokenize"
+    # TOKCOST: every cell sends the same clip and prompt, so after the first video cell the
+    # worker answers a video body from its memo of that answer; text-sync still asks (e3bm79).
+    assert trip.engine.control()["tokenized"] > tokenized or (
+        input_kind != "text" and counted_by_the_memo(trip, request_id)), \
+        "the worker never asked /tokenize"
     assert trip.usd(alpha) == before["alpha"][1], "alpha's legacy USD books moved"
     assert (trip.wallet(beta), trip.usd(beta)) == before["beta"], "beta's books moved"
     if input_kind != "text":

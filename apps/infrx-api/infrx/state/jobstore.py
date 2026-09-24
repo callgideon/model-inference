@@ -142,6 +142,9 @@ class PreparedWork(Work):
     adds `Work.prompt_tokens` to the contract; then this class goes."""
 
     prompt_tokens: int | None = None
+    # TOKCOST: a CREDIT job's pinned serving revision (`CreditWork`), which the preparation
+    # worker's count memo is keyed by; None in the legacy regime (its `model_revision` is).
+    serving_version_id: str | None = None
 
 
 class PgJobStore:
