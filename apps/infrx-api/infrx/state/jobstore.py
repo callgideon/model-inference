@@ -38,17 +38,38 @@ OUTBOX_RETENTION_S = 7 * 86_400.0
 INT4_MAX = 2**31 - 1
 _OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", "settlement_state",
                    "debit", "settled_at", "reconcile_after")
+# D10 (0021) / F2C.b: the outcome carries the PERSISTED `result_expires_at`; it reaches the
+# record once the contract field exists (F2C.b), and is never recomputed from configuration.
+if "result_expires_at" in TerminalOutcome.model_fields:
+    _OUTCOME_FIELDS = (*_OUTCOME_FIELDS, "result_expires_at")
 
 
-def connector(dsn: str) -> Connect:
-    """The simplest `Connect`: a fresh connection per operation, `set role service_role`
-    (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does).
+#: The transaction pooler's port (Supavisor): a session there is not this client's (I8).
+TRANSACTION_PORT = 6543
+
+
+def connector(dsn: str, *, set_role: bool | None = None) -> Connect:
+    """The simplest `Connect`: a fresh connection per operation.
+
+    `set_role` (D10, S3 F6 / WR-I8-1): True runs `set role service_role` (0004: BYPASSRLS is
+    not inherited, so the role must be SET, as PostgREST does) - session state, which a
+    transaction pooler loses for this client and leaks to others; False sets nothing, which
+    is D10's dedicated login (0021 `infrx_runtime`), whose privileges and statement timeout
+    are the role's own; None (the default) sets the role only off the transaction port.
+    Server-side prepared statements are off (`prepare_threshold=None`): a pooler does not
+    keep them per client either.
     ponytail: one connection per call; a psycopg pool with the same `configure` hook
     when the gateway wires `DATABASE_POOL_*`."""
+    if set_role is None:
+        from psycopg.conninfo import conninfo_to_dict
+        set_role = str(conninfo_to_dict(dsn).get("port") or "") != str(TRANSACTION_PORT)
+
     async def connect():
         import psycopg
-        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
-        await conn.execute("set role service_role")
+        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True,
+                                                     prepare_threshold=None)
+        if set_role:
+            await conn.execute("set role service_role")
         return conn
     return connect
 

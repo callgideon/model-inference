@@ -445,9 +445,18 @@ def make_lifecycle_factory(fresh_database: Callable[[], str], dsn_for: Callable[
     from ..contracts.v2 import fixtures as v2fix
     from .lifecycle import PgLifecycle
     connect_for = connect_for or (lambda name: connector(dsn_for(name)))
+    defaults = {"upload_window_s": upload_window_s, "grace_s": grace_s,
+                "claim_ttl_s": claim_ttl_s, "retention_s": retention_s}
     credit_factory = make_credit_jobstore_factory(fresh_database, dsn_for, seed_sql, **kw)
 
-    def factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    def factory(limits: PilotSettings | None = None, *, upload_ttl_s: float | None = None,
+                grace_s: float | None = None, claim_ttl_s: float | None = None,
+                retention_s: float | None = None, **_: object) -> Harness:
+        """The window keywords are `conformance.acceptance.CONFIG`'s (F2C.d)."""
+        windows = {"upload_window_s": upload_ttl_s or defaults["upload_window_s"],
+                   "grace_s": grace_s or defaults["grace_s"],
+                   "claim_ttl_s": claim_ttl_s or defaults["claim_ttl_s"],
+                   "retention_s": retention_s or defaults["retention_s"]}
         credit = credit_factory(limits)
         name, conn = credit.extra["database"], credit.extra["credit_conn"]
         # The suite's second tenant (its content rows need a real organization, R55).
@@ -455,17 +464,20 @@ def make_lifecycle_factory(fresh_database: Callable[[], str], dsn_for: Callable[
                      "'other-fixture') on conflict (id) do nothing", (v2fix.IDS.other_org,))
 
         def reopen() -> PgLifecycle:
-            return PgLifecycle(connect_for(name), limits=limits or DEFAULTS,
-                               upload_window_s=upload_window_s, grace_s=grace_s,
-                               claim_ttl_s=claim_ttl_s, retention_s=retention_s)
+            return PgLifecycle(connect_for(name), limits=limits or DEFAULTS, **windows)
 
-        def set_capability(serving_version_id: str, input_modalities: tuple[str, ...]) -> None:
+        def set_capability(serving_version_id: str, input_modalities: tuple[str, ...],
+                           stream_output: bool = True) -> None:
             from psycopg.types.json import Jsonb
             _without_trigger(conn, "infrx.serving_versions", "serving_versions_immutable",
-                             "update infrx.serving_versions set capability = jsonb_set("
-                             "capability, '{input_modalities}', %s) "
-                             "where serving_version_id = %s",
-                             (Jsonb(list(input_modalities)), serving_version_id))
+                             "update infrx.serving_versions set capability = capability || "
+                             "%s where serving_version_id = %s",
+                             (Jsonb({"input_modalities": list(input_modalities),
+                                     "stream_output": stream_output}), serving_version_id))
+
+        # The legacy (USD) regime too, as the fake factory does: a USD balance for the
+        # consumer organization (the fixture model is priced by `seed`).
+        credit.extra["grant"](v2fix.IDS.consumer_org, "25.00")
 
         extra = {**credit.extra, "reopen": reopen, "jobs": credit.port,
                  "set_capability": set_capability}

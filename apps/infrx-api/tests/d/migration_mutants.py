@@ -46,6 +46,7 @@ RESULTS = "0014_job_results.sql"
 # D10
 READY = "0019_upload_readiness.sql"
 LIFECYCLE = "0020_content_lifecycle.sql"
+READS = "0021_read_authority.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -800,9 +801,10 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "grant update (enabled, updated_by, reason, updated_at) on infrx.feature_flags\n"
        "  to service_role;", "", "credit", "credit_role_matrix",
        "the cutover can only be done by a superuser session, outside the audited path"),
-    _m("d1r_missing_flag_row_is_open", CREDIT,
-       "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), false)",
-       "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), true)",
+    # D10: 0021 redefines `require_feature` (the flag read FOR SHARE, G8's request).
+    _m("d1r_missing_flag_row_is_open", READS,
+       "                   where f.name = p_name for share), false) then",
+       "                   where f.name = p_name for share), true) then",
        "credit", "fail_closed", "a deleted flag row enables the feature"),
     _m("d1r_rerun_resets_flags", CREDIT,
        "  ('legacy_usd_admission', true, 'migration 0006', 'pre-cutover default')\n"
@@ -1207,10 +1209,17 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "  select coalesce(i.expires_at, j.admitted_at + make_interval(secs => p_ttl_s))",
        "admission", "admission_idempotency",
        "a long job's retry mints a second billable job (01: active mappings never expire)"),
-    _m("d2_readmits_a_request_uuid", ADMISSION,
+    # D10: 0021 redefines the legacy body; the CREDIT body's copy stays in 0011.
+    _m("d2_readmits_a_request_uuid", READS,
        "  if exists (select 1 from infrx.jobs where request_id = (r->>'request_id')::uuid) then",
        "  if false then", "admission", "admission_idempotency",
-       "R6: a retry without its key is a 500, not a typed 409", occurrences=2),
+       "R6: a retry without its key is a 500, not a typed 409"),
+    _m("d2_readmits_a_request_uuid_credit", ADMISSION,
+       "'credit');\n  if v_replay is not null then\n    return v_replay;\n  end if;\n"
+       "  if exists (select 1 from infrx.jobs where request_id = (r->>'request_id')::uuid) then",
+       "'credit');\n  if v_replay is not null then\n    return v_replay;\n  end if;\n"
+       "  if false then", "admission", "admission_idempotency",
+       "R6: a CREDIT retry without its key is a 500, not a typed 409"),
     _m("d2_revoked_key_admitted", ADMISSION,
        "   where k.id = v_key and k.org_id = v_org and k.revoked_at is null",
        "   where k.id = v_key and k.org_id = v_org",
@@ -1272,23 +1281,27 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "             where (m->>'org_id')::uuid is distinct from v_org) then",
        "             where false) then",
        "admission", "admission_refusals", "a request carries another tenant's media (R55)"),
-    _m("d2_withdrawn_price_still_charged", ADMISSION,
+    _m("d2_withdrawn_price_still_charged", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "     and (pv.effective_to is null or pv.effective_to > v_now)", "",
        "admission", "admission_refusals", "a withdrawn price keeps admitting (R45)"),
     _m("d2_hold_rounds_to_nearest", ADMISSION,
        "  select (ceil((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
        "  select (round((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
        "admission", "admission_accepts", "a hold smaller than the reserved envelope (R53, §4)"),
-    _m("d2_usd_balance_unchecked", ADMISSION,
+    _m("d2_usd_balance_unchecked", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  if v_hold > coalesce(v_available, 0) then", "  if false then",
        "admission", "admission_refusals", "a hold past the available balance (DUR-CAP)"),
-    _m("d2_usd_hold_reserves_nothing", ADMISSION,
+    _m("d2_usd_hold_reserves_nothing", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  update infrx.wallets set reserved_total = reserved_total + v_hold, "
        "revision = revision + 1,",
        "  update infrx.wallets set reserved_total = reserved_total + 0, "
        "revision = revision + 1,",
        "admission", "admission_accepts", "two jobs reserve the same credit"),
-    _m("d2_usd_hold_row_missing", ADMISSION,
+    _m("d2_usd_hold_row_missing", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  values (j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now);",
        "  select j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now where false;",
        "admission", "admission_accepts", "an acceptance without its hold (DUR-ADMIT)"),
@@ -1327,19 +1340,23 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "  from public, anon, authenticated;", "admission", "d2_function_privileges",
        "the platform role probes wallets through the admission guard"),
     # --- the review's fold-ins (M2-M7) ------------------------------------------------
-    _m("d2_usd_hold_checked_against_the_ledger", ADMISSION,
+    _m("d2_usd_hold_checked_against_the_ledger", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  select w.available into v_available from infrx.wallets w",
        "  select w.ledger_total into v_available from infrx.wallets w",
        "admission", "admission_refusals",
        "two holds reserve the same USD credit (DUR-CAP: available, not the ledger)"),
-    _m("d2_zero_usd_hold_written", ADMISSION,
+    _m("d2_zero_usd_hold_written", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  if v_hold <= 0 then\n    perform infrx.refuse('invalid_request', 'a zero USD hold",
        "  if false then\n    perform infrx.refuse('invalid_request', 'a zero USD hold",
        "admission", "admission_refusals", "a zero USD hold meters nothing (M3)"),
-    _m("d2_usd_operator_key_admitted", ADMISSION, "  if v_audience = 'operator' then",
+    _m("d2_usd_operator_key_admitted", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+       "  if v_audience = 'operator' then",
        "  if false then", "admission", "admission_refusals",
        "an operator credential buys USD inference (M4)"),
-    _m("d2_usd_provider_key_admitted", ADMISSION, "  if v_audience <> 'consumer' then",
+    _m("d2_usd_provider_key_admitted", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+       "  if v_audience <> 'consumer' then",
        "  if false then", "admission", "admission_refusals",
        "a provider preview key buys public USD inference (M4)"),
     _m("d2_wallet_of_the_keys_creator", ADMISSION,
@@ -1349,10 +1366,12 @@ D2_MUTANTS: tuple[Mutant, ...] = (
     _m("d2_replay_across_regimes", ADMISSION,
        "  if v_regime is distinct from p_regime then", "  if false then",
        "admission", "admission_idempotency", "a CREDIT caller is answered a USD job (M7)"),
-    _m("d2_usd_hold_equal_to_available_refused", ADMISSION,
+    _m("d2_usd_hold_equal_to_available_refused", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  if v_hold > coalesce(v_available, 0) then", "  if v_hold >= coalesce(v_available, 0) then",
        "admission", "admission_accepts", "the last affordable USD request is refused (MC-3)"),
-    _m("d2_usd_hold_loosened_one_unit", ADMISSION,
+    _m("d2_usd_hold_loosened_one_unit", READS,  # D10: 0021 redefines `admit_legacy_usd` (P-22)
+      
        "  if v_hold > coalesce(v_available, 0) then",
        "  if v_hold > coalesce(v_available, 0) + 0.00000001 then",
        "admission", "admission_refusals",
@@ -2657,12 +2676,14 @@ D5_MUTANTS: tuple[Mutant, ...] = (
     _m("d5_amount_not_bounded", SETTLE,
        "     or v_text !~ '^-?[0-9]{1,12}(\\.[0-9]{1,8})?$' then", "     or false then",
        "admission", "adjust", "an over-scale or exponent amount reaches the ledger (R11)"),
-    _m("d5_reconcile_on_callers_clock", SETTLE,
+    _m("d5_reconcile_on_callers_clock", READS,  # D10: 0021 redefines `reconcile`
+      
        "  v_now timestamptz := infrx.now();\n  v_key text := 'reconcile:'",
        "  v_now timestamptz := coalesce((p_args->>'at')::timestamptz, infrx.now());\n"
        "  v_key text := 'reconcile:'", "admission", "reconcile_clock",
        "an operator releases an unknown hold before its window (R7)"),
-    _m("d5_reconcile_debits", SETTLE,
+    _m("d5_reconcile_debits", READS,  # D10: 0021 redefines `reconcile`
+      
        "    perform infrx.release_aged_unknown(j.request_id, v_now);\n",
        "    perform infrx.release_aged_unknown(j.request_id, v_now);\n"
        "    insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id,\n"
@@ -2670,19 +2691,22 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "      gen_random_uuid(), j.request_id, 'late' from infrx.credit_wallets w\n"
        "      where w.wallet_id = j.wallet_id;\n", "admission", "reconcile_clock",
        "late evidence becomes a delayed customer debit (02)"),
-    _m("d5_reconcile_any_tenant", SETTLE,
+    _m("d5_reconcile_any_tenant", READS,  # D10: 0021 redefines `reconcile`
+      
        "   where request_id = (p_args->>'request_id')::uuid and org_id = (p_args->>'org_id')"
        "::uuid\n   for update;",
        "   where request_id = (p_args->>'request_id')::uuid\n   for update;",
        "admission", "reconcile_tenant", "an operator path reconciles another tenant's request"),
-    _m("d5_reconcile_replay_audits_again", SETTLE,
+    _m("d5_reconcile_replay_audits_again", READS,  # D10: 0021 redefines `reconcile`
+      
        "  select * into a from infrx.audit_entries where idempotency_key = v_key;\n"
        "  if found then",
        "  select * into a from infrx.audit_entries where idempotency_key = v_key;\n"
        "  if false then", "admission", "reconcile_clock",
        "a retried reconcile fails on its own audit row (untyped 23505, a 500)"),
     # review B3 / H-B2 / CF-8: the replay is THIS request's operation
-    _m("d5_reconcile_replay_any_request", SETTLE,
+    _m("d5_reconcile_replay_any_request", READS,  # D10: 0021 redefines `reconcile`
+      
        "    if a.after->>'request_id' is distinct from j.request_id::text then",
        "    if false then", "admission", "reconcile_clock",
        "an operation id reused for ANOTHER request answers `replayed` and that request's "

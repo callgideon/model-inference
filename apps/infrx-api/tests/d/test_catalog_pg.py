@@ -78,6 +78,17 @@ class RigCatalog(PgCatalogDirectory):
             (card.rate_card_version, card.model_id, card.deployment_revision_id,
              card.serving_version_id, card.input_rate_per_million.raw("CREDIT"),
              card.output_rate_per_million.raw("CREDIT"), card.effective_at, card.approved_by))
+        # D10 (F2C.c/S3 F11): the card the effective listing names is THE card, so publishing
+        # a public deployment's card is a new listing version naming it (G8 does both in one
+        # transaction; `pgtesting.credit_hooks.publish_rate_card` is the same step).
+        self.owner.execute(
+            "insert into infrx.catalog_listings (public_model_id, version, model_id, "
+            "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+            "approved_by) select l.public_model_id, l.version + 1, l.model_id, "
+            "l.deployment_revision_id, l.serving_version_id, %s, infrx.now(), 'rig' "
+            "from infrx.catalog_listings l where l.deployment_revision_id = %s "
+            "order by l.version desc limit 1",
+            (card.rate_card_version, card.deployment_revision_id))
 
     def move_alias(self, requested_model: str, deployment_revision_id: str) -> None:
         public = self.owner.execute("select visibility = 'public' from "

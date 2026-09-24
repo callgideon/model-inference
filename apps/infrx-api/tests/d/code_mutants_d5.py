@@ -169,9 +169,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("private_resolves_a_retired_deployment", "review CF-3: a retired private deployment "
        "never resolves", " and d.visibility = 'private' and d.state <> 'retired'",
        " and d.visibility = 'private'", CATALOG, file=C),
+    # D10 (F2C.c finding 2): "the card" is the listing's; the effective check moved with it.
     _m("card_not_effective_checked", "a card is active only once effective (DB clock)",
-       "  where deployment_revision_id = %s and effective_at <= infrx.now()",
-       "  where deployment_revision_id = %s", CATALOG, file=C),
+       "  where c.effective_at <= infrx.now() and c.rate_card_version = coalesce(",
+       "  where c.rate_card_version = coalesce(", CATALOG, file=C),
     _m("a_connection_cached_across_calls", "review CF-4 (R09): a fresh connection per "
        "statement", "        conn = await self._connect()\n        try:\n            yield conn",
        '        conn = self.__dict__.get("_kept") or self.__dict__.setdefault('

@@ -362,21 +362,27 @@ begin
 end $$;
 
 -- Database content is registered where it is written, by every writer (the previous
--- runtime's admissions too): no grace - its own job protects it (`content_referenced`).
+-- runtime's admissions too): no grace - its own job protects it (`content_referenced`). A
+-- row the runtime registered first (the protocol's order) stands: the first registration
+-- wins, and the database row itself is the content either way.
 create or replace function infrx.register_database_content() returns trigger
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_now timestamptz := infrx.now();
 begin
   if tg_table_name = 'job_results' then
-    perform infrx.register_content(jsonb_build_object('org_id', new.org_id, 'kind', 'result',
-      'location', 'database', 'object_key', 'job_results/' || new.request_id,
-      'digest', new.digest, 'bytes', new.bytes, 'job_id', new.request_id,
-      'origin', 'written'), 0);
+    insert into infrx.content_objects (org_id, kind, location, object_key, digest, bytes,
+      job_id, origin, registered_at, eligible_at)
+    values (new.org_id, 'result', 'database', 'job_results/' || new.request_id, new.digest,
+      new.bytes, new.request_id, 'written', v_now, v_now)
+    on conflict (location, object_key) do nothing;
   elsif new.request_record is not null then
-    perform infrx.register_content(jsonb_build_object('org_id', new.org_id, 'kind', 'payload',
-      'location', 'database', 'object_key', 'jobs/' || new.request_id,
-      'digest', 'sha256:' || encode(sha256(convert_to(new.request_record::text, 'UTF8')), 'hex'),
-      'bytes', octet_length(new.request_record::text), 'job_id', new.request_id,
-      'origin', 'written'), 0);
+    insert into infrx.content_objects (org_id, kind, location, object_key, digest, bytes,
+      job_id, origin, registered_at, eligible_at)
+    values (new.org_id, 'payload', 'database', 'jobs/' || new.request_id,
+      'sha256:' || encode(sha256(convert_to(new.request_record::text, 'UTF8')), 'hex'),
+      octet_length(new.request_record::text), new.request_id, 'written', v_now, v_now)
+    on conflict (location, object_key) do nothing;
   end if;
   return null;
 end $$;

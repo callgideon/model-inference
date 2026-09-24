@@ -83,6 +83,7 @@ language sql immutable set search_path = infrx, public, pg_temp as $$
     when 'size_mismatch' then 'invalid_request'
     when 'digest_mismatch' then 'unsupported_media'
     when 'mime_not_accepted' then 'unsupported_media'
+    when 'media_refused' then 'unsupported_media'
     when 'invalid_manifest' then 'invalid_request'
     when 'expectation_mismatch' then 'invalid_request'
     when 'not_ready' then 'not_claimable'
@@ -582,8 +583,11 @@ language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   u infrx.media_uploads%rowtype;
 begin
-  if infrx.lifecycle_code(p_args->>'refusal') is null then
-    perform infrx.refuse('invalid_request', 'abort takes a lifecycle refusal');
+  -- F2C.a UPLOAD_ABORT_REASONS: a ticket only ever records a public reason about the
+  -- caller's own bytes.
+  if coalesce(p_args->>'refusal', '') not in ('too_large', 'size_mismatch', 'digest_mismatch',
+                                             'mime_not_accepted', 'media_refused') then
+    perform infrx.refuse('invalid_request', 'abort takes one of the upload abort reasons');
   end if;
   u := infrx.upload_row((p_args->>'org_id')::uuid, p_args->>'upload_handle', 'update');
   if u.state = 'aborted' then

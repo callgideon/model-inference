@@ -12,8 +12,9 @@ raised typed (the ingress maps them to 503), never swallowed into `None`: `None`
                          (`@<label>` picks the serving revision), newest first. Anyone else,
                          and any other endpoint, gets None (R70: never a 403).
     serving_revision     the immutable serving revision with its model version's artifact.
-    active_rate_card     the deployment's newest CREDIT card effective at the DATABASE clock
-                         (approved and CREDIT by 0007's CHECKs); unpriced is None (R69).
+    active_rate_card     the CREDIT card the deployment's effective catalog listing names
+                         (0008's pin; a private deployment no listing names: its newest
+                         effective card), at the DATABASE clock; unpriced is None (R69).
     data_access_policy   the policy version in force at the database clock.
 """
 from __future__ import annotations
@@ -44,12 +45,25 @@ _PRIVATE = f"""
     and p.slug || '/' || e.name || '-' || e.environment = %(alias)s
     and (%(label)s::text is null or s.revision_label = %(label)s)
   order by d.created_at desc, d.deployment_revision_id desc limit 1"""
+# D10 (F2C.c, S3 F11): ONE definition of "the card", the one 0008 pins at admission - the card
+# the deployment's effective catalog listing names. A card minted for the deployment and not
+# (yet) named by a listing never reprices it; only a new listing version does (G8 publishes
+# both atomically). A deployment no listing names (a private dev one) keeps its newest
+# effective card, as before.
 _ACTIVE_CARD = """
-  select rate_card_version, model_id, deployment_revision_id, serving_version_id,
-         input_rate_per_million::text, output_rate_per_million::text, effective_at, approved_by
-  from infrx.rate_card_versions
-  where deployment_revision_id = %s and effective_at <= infrx.now()
-  order by effective_at desc, created_at desc, rate_card_version desc limit 1"""
+  select c.rate_card_version, c.model_id, c.deployment_revision_id, c.serving_version_id,
+         c.input_rate_per_million::text, c.output_rate_per_million::text, c.effective_at,
+         c.approved_by
+  from infrx.rate_card_versions c
+  where c.effective_at <= infrx.now() and c.rate_card_version = coalesce(
+    (select l.rate_card_version from infrx.catalog_listings l
+      where l.deployment_revision_id = %(d)s and l.effective_at <= infrx.now()
+      order by l.version desc limit 1),
+    (select x.rate_card_version from infrx.rate_card_versions x
+      where x.deployment_revision_id = %(d)s and x.effective_at <= infrx.now()
+        and not exists (select 1 from infrx.catalog_listings l
+                         where l.deployment_revision_id = %(d)s)
+      order by x.effective_at desc, x.created_at desc, x.rate_card_version desc limit 1))"""
 _POLICY = """
   select policy_version, effective_at from infrx.data_access_policies
   where effective_at <= infrx.now() and exists (select 1 from infrx.deployment_revisions d
@@ -77,7 +91,7 @@ class PgCatalogDirectory:
         return None if row is None else _record(ServingRevision, _SERVING_FIELDS, row)
 
     async def active_rate_card(self, deployment_revision_id: str) -> RateCardSnapshot | None:
-        row = await self._db.one(_ACTIVE_CARD, (deployment_revision_id,))
+        row = await self._db.one(_ACTIVE_CARD, {"d": deployment_revision_id})
         return None if row is None else _record(RateCardSnapshot, _CARD_FIELDS, row)
 
     async def data_access_policy(self, deployment_revision_id: str) -> DataAccessPolicyRef | None:

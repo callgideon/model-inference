@@ -10,7 +10,7 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import checks_content, checks_ready, pgharness
+from . import checks_content, checks_reads, checks_ready, pgharness
 from . import migration_mutants as _d
 
 READY = _d.READY
@@ -160,6 +160,58 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "content_privileges", "a browser session claims and deletes content"),
 )
 
+READS = _d.READS
+MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
+    _m("d10_outcome_without_its_expiry", READS,
+       "        'reconcile_after', j.reconcile_after,\n        'result_expires_at', j.result_expires_at) end,",
+       "        'reconcile_after', j.reconcile_after) end,", "result_expiry_persisted",
+       "status and replay cannot state the persisted expiry, so a reader recomputes it"),
+    _m("d10_usd_priced_by_spelling", READS,
+       "  v_revision := infrx.resolve_usd_revision(r->>'model_revision');",
+       "  v_revision := r->>'model_revision';", "usd_resolution",
+       "P-22: the labelled and unlabelled spelling price at different rows"),
+    _m("d10_requested_model_dropped", READS,
+       "    jsonb_build_object('requested_model', r->>'model_revision'), v_hold);",
+       "    '{}'::jsonb, v_hold);", "usd_resolution",
+       "the caller's model string is lost beside the canonical revision"),
+    _m("d10_reconcile_race_untyped", READS,
+       "  perform pg_advisory_xact_lock(hashtextextended(v_key, 0));\n", "", "reconcile_race",
+       "duplicate reconcile audit: a racing replay dies on a raw 23505"),
+    _m("d10_consumer_reads_any_tenant", READS,
+       "   where v_org is not null and j.org_id = v_org\n", "   where true\n", "consumer_reads",
+       "bypass the tenant join: an individual lists other individuals' jobs"),
+    _m("d10_consumer_result_past_expiry", READS,
+       "  return infrx.read_result(v_org, 'infrx-result:' || p_request_id);",
+       "  return (select x.body from infrx.job_results x where x.request_id = p_request_id);",
+       "consumer_reads", "an expired or scrubbed result is shown in the App"),
+    _m("d10_browser_writes_key_scope", READS,
+       "revoke insert (audience, user_id, provider_org_id, endpoint_id),\n"
+       "       update (audience, user_id, provider_org_id, endpoint_id)\n"
+       "  on public.api_keys from anon, authenticated;",
+       "grant insert (audience, user_id, provider_org_id, endpoint_id),\n"
+       "       update (audience, user_id, provider_org_id, endpoint_id)\n"
+       "  on public.api_keys to authenticated;", "reads_privileges",
+       "let a browser write audience/provider scope"),
+    _m("d10_runtime_role_reconciles", READS,
+       "      'infrx.read_journal(jsonb)', 'infrx.expire_journal(jsonb)', 'infrx.journal_usage()']",
+       "      'infrx.read_journal(jsonb)', 'infrx.expire_journal(jsonb)', 'infrx.journal_usage()',\n"
+       "      'infrx.reconcile(jsonb)']", "reads_privileges",
+       "the runtime login can run an operator money operation"),
+    _m("d10_success_without_expiry", READS,
+       "      check (state <> 'succeeded' or result_expires_at is not null) not valid;",
+       "      check (true) not valid;", "result_expiry_persisted",
+       "a success is written with no persisted expiry and reads `unavailable` for ever"),
+    _m("d10_freeze_races_the_admission", READS,
+       "                   where f.name = p_name for share), false) then",
+       "                   where f.name = p_name), false) then", "flag_freeze_race",
+       "a regime freeze measures zero in flight while an admission that passed the flag commits"),
+    _m("d10_monitor_reads_customer_content", READS,
+       "grant select (request_id, state, admitted_at, queued_at, updated_at, deadline_at, "
+       "settled_at,\n              outcome_cause, result_expires_at) on infrx.jobs to infrx_monitor;",
+       "grant select on infrx.jobs to infrx_monitor;", "reads_privileges",
+       "the read-only monitor login reads request records (customer content)"),
+)
+
 _d._CHECKS.update({
     "ready_marker": checks_ready.check_ready_marker,
     "ready_refusals": checks_ready.check_ready_refusals,
@@ -175,6 +227,16 @@ _d._CHECKS.update({
     "content_privileges": checks_content.check_content_privileges,
     "content_races": lambda conn: checks_content.check_content_races(pgharness.connect,
                                                                      _d.MUT_DB),
+})
+_d._CHECKS.update({
+    "result_expiry_persisted": checks_reads.check_result_expiry_persisted,
+    "consumer_reads": checks_reads.check_consumer_reads,
+    "usd_resolution": checks_reads.check_usd_resolution,
+    "reads_privileges": checks_reads.check_reads_privileges,
+    "reconcile_race": lambda conn: checks_reads.check_reconcile_race(pgharness.connect,
+                                                                     _d.MUT_DB),
+    "flag_freeze_race": lambda conn: checks_reads.check_flag_freeze_race(pgharness.connect,
+                                                                         _d.MUT_DB),
 })
 _d.MUTANTS = _d.MUTANTS + MIGRATION_MUTANTS
 NAMES = tuple(m.name for m in MIGRATION_MUTANTS)
