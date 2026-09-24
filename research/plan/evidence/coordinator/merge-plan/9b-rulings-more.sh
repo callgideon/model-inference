@@ -17,6 +17,10 @@ head, body = block.split(":** *", 1)
 title, text = body.split(".* ", 1)
 m_title, m_text = flat(title), flat(text)
 assert m_text.startswith("(a) An `infrx-upload:") and "(c) `attach` is" in m_text, m_text[:80]
+# Verifier N1 (evidence/m/MPILOT-verify-e5c02f7.json): the "none" arm of (d) holds in-process only.
+m_text += (" Qualifier at numbering (verifier N1): across processes on PostgreSQL a zero-ref attach over "
+           "a job another process bound durably is accepted, not `conflict` (Limit 1: an attach with no "
+           "media leaves no row); the `none` arm of (d) holds in-process only.")
 d = (root / "evidence/d/D5-4bcac3b.md").read_text()
 cand = d.split("- **Ruling candidates.**\n", 1)[1].split("\n- **", 1)[0]
 items = [flat(l.strip()[2:]) for l in cand.splitlines() if l.strip().startswith("- (")]

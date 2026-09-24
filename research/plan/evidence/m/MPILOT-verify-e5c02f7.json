@@ -1,0 +1,66 @@
+{
+  "verdict": "pass",
+  "head": "e5c02f7",
+  "checks": [
+    {
+      "id": "V1",
+      "result": "confirmed",
+      "evidence": "I read PgAttachments.put at e5c02f7. It runs `select 1 from infrx.jobs where request_id=%s and org_id=%s for update` (no row = NotFound), then reads the binding. An exact (handle, digest) list in order commits as a no-op, anything else is Conflict, and it inserts only when the job is unbound. Connections are autocommit plus an explicit `begin`, so the isolation is READ COMMITTED and the read after the lock sees the committed rows. Probe: process A bound R1,R2 through MediaStaging.attach. A real second OS process (probe_child.py, a fresh PgAttachments over the same d6 database) then got the same results on BOTH images (plain and INFRX_D1_IMAGE=supabase): exact 'ok'; superset, reorder, subset, same handle with another digest, and (R1,R1) on the bound job each 'Conflict:state_conflict'; a foreign org's ref 'NotFound:not_found'. A get after every attempt returned [R1,R2]. Through the port, (R1,R1) on an unbound job raised InvalidRequest invalid_request. Serialization, both images: while another connection held the row `for no key update`, a `for key share` (the foreign-key check's lock mode) was acquired at once, and `for update` got LockNotAvailable under lock_timeout=1s. The head put in a second process was still waiting after 3 s and finished 'ok' only after the holder rolled back (elapsed 2.81 s). A copy with attach_not_serialized did not wait (0.068 s). Concurrent race, two OS processes putting (R1,) and (R2,) on the same fresh jobs: head 0/21 both-committed and 21/21 exactly one (plain and supabase); the attach_not_serialized mutant 7/7 (plain) and 6/7 (supabase) both-committed, leaving 2-ref bindings nobody attached. `INFRX_MUTANTS=all pytest -rs tests/m/test_pilot_mutants.py` on d6 plain: '40 passed in 154.62s', no skips. Hand-applied in copies: rebind_to_a_superset_accepted -> test_mpilot_pg__an_attach_is_write_once_and_tenant_bound 'Failed: DID NOT RAISE <class infrx.contracts.errors.Conflict>' at test_pilot_media.py:593 (the superset iteration); attach_not_serialized -> test_mpilot_pg__an_attach_waits_for_the_job_row 'AssertionError: the attach did not wait for the job row' at :637. Pristine: both pass. Supabase, the ten _pg and relay cases: '10 passed, 14 deselected'."
+    },
+    {
+      "id": "V2",
+      "result": "confirmed",
+      "evidence": "I ran the exported media_parity__an_attach_is_write_once (driver v2_driver.py) on the fake (mediastore_factory), MediaStaging (test_store.factory), MediaPreparation (test_prepare.conformance_factory), MediaUploads (test_uploads.conformance_factory) and the store alone (MediaUploads, attachments=None): all PASS. On PostgreSQL, test_mpilot_pg__the_exported_mpilot_cases_run_on_postgresql passed on both images. contracts quick: 640 passed. Hand-applied in copies: fake_attach_rebinds -> fake FAIL 'AssertionError: an attach of other refs over a bound job was accepted', also via tests/contracts/test_conformance.py -k write_once (1 failed, services.py:449), while the others still pass. in_process_rebind_accepted -> MediaStaging, MediaPreparation and MediaUploads FAIL 'an attach of no media over a bound job was accepted', and the store alone 'an attach of other refs over a bound job was accepted' (the named case test_mpilot__the_exported_write_once_case_runs_on_the_store_alone: 1 failed). Also fake_attach_accepts_a_duplicate -> fake 'an attach of one ref twice was accepted'; in_process_duplicate_accepted -> all four real adapters report the same."
+    },
+    {
+      "id": "V3",
+      "result": "confirmed",
+      "evidence": "Each case read and hand-mutated in a copy. replay_read_unguarded -> test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable: 'AssertionError: b'{\"error\":{...\"code\":\"internal_error\"...}}' / assert (500, 'internal_error') == (503, 'depend..._unavailable')'. attached_with_no_media_reads_unbound -> test_mpilot__a_text_job_attached_here_is_bound_whatever_the_record_holds: 'infrx.contracts.errors.NotFound: not_found: no staged media for job ...' (the text job's own preparation, as the evidence declares). bound_here_before_it_is_durable -> test_mpilot__a_failed_durable_attach_binds_nothing_here[unreachable] and [conflict]: 'AssertionError: assert '00000001-...' not in {...: (MediaRef(...),)} = MediaUploads.by_job'. Extra mutant of my own (the _resume gate `is not None` -> truthiness) is killed by the text-job case (400 == 200) and by two existing G cases. The same behaviour on real PostgreSQL across a restart (probe test_v3): a media job attached by process A is read back by a restarted adapter with PG up. Then a relay World (CREDIT) with PgAttachments composed accepted a job whose answer was lost, w.restart(), and the record was made unreachable two ways (a closed port, and `docker pause` of my own infrx-d6-postgres). The real get raised psycopg.OperationalError (ConnectionTimeout, its subclass, when paused). The same-key replay answered '503 dependency_unavailable; job.state=preparing outcome=None by_job={}' in both. Limit: the World's jobs are the fake store, so the relay-level job was a text job; the media binding over PG was shown at the adapter level."
+    },
+    {
+      "id": "V4",
+      "result": "confirmed",
+      "evidence": "Direct probe (test_v4) at e5c02f7. A ref whose digest shares the file's first 16 hex (same path) -> NotFound. mtime now+30 s and +59 s -> served; +61, +90 and +3600 s -> NotFound. A symlink at the path to the right bytes -> NotFound, and served again once restored. No cache root -> 'NotFound not_found'. Hand-applied in copies: disk_hash_compared_by_prefix -> 'Failed: DID NOT RAISE NotFound' at test_pilot_media.py:313 (the collided ref); disk_symlink_followed -> the same at :318 (the symlink); future_mtime_believed -> the same at :324 (the future mtime); disk_lookup_without_a_root -> 'infrx.contracts.errors.DependencyUnavailable: dependency_unavailable: no processing cache is configured' where NotFound is expected. Each dies at its own assertion."
+    },
+    {
+      "id": "V5",
+      "result": "confirmed",
+      "evidence": "Without an S3 endpoint (CORPUS_CACHE pointed at the main checkout's cache, as the lane's worktree resolves it), `pytest -rs tests/m` reproduces the lane exactly: '418 passed, 15 skipped'. The 15 skips are 12 test_s3.py cases, 2 test_s3_mutants.py cases and the empty PG mutant parametrization. With my MinIO on 55724: '431 passed, 2 skipped'. The delta is +14 run (the 12 S3 cases and the 2 S3 mutant tests all pass); the one extra skip is test_parity's corpus cache, absent from my /tmp clone, whose 7 cases pass with CORPUS_CACHE set. INFRX_M_S3_LOCAL_CREDS does not exist in the tree: test_s3's s3_env supplies the MinIO literals itself. contracts quick: '640 passed in 7.15s'. tests/g quick (the 7 files): '176 passed, 2 warnings in 22.37s'. `git diff --stat 2d1dcbe e5c02f7` touches only research/plan/evidence/m/MPILOT-078eefe.md (75+/12-). Spot-checked three table rows against the commits: 2972df1 touches attachments.py, store.py, fakes/media.py, support.py and services.py, plus the named cases and mutants; 8a31e6c is tests only (pilot_mutants.py, support.py, test_pilot_media.py), matching 'cases only'; 2d1dcbe touches prepare.py and adds the four named disk mutants and the no-root case. Every mutant and case the table names exists in pilot_mutants.py, contracts/mutants.py and test_pilot_media.py. One attribution slip is reported as N2."
+    },
+    {
+      "id": "V6",
+      "result": "confirmed",
+      "evidence": "The evidence lists as open, not fixed: Limit 8 (the gateway's own index is not re-verified, and a symlinked directory is followed), Limit 7 (deleting a previous incarnation's expired files across a restart), Limit 1 (a zero-ref attach leaves no row) and Limit 5 (MediaCollector is not composed and protects only in-process state). The 'Left, stated' paragraph repeats all four. The code matches: ProcessingCache.get trusts an own-index entry without re-hashing, sweep() walks only self.entries, and `grep -rn 'MediaCollector('` finds nothing in infrx/ outside gc.py. Grepping the fix-round diff finds no comment claiming any of the four fixed. The text-job case says outright that the record has no row and pins only the in-process side. support.Durable's comment says 'an attach of no media leaves no row (Limit 1 of MPILOT)'. No case asserts cross-process cache deletion, own-index re-verification or collector protection."
+    }
+  ],
+  "findings": [
+    {
+      "id": "N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/attachments.py",
+      "line": "52-54 (put: `if not refs: return`); store.py 332-337",
+      "claim_broken": "Ruling (d) in the evidence: 'any other binding - other refs, a superset, a subset, a reorder, none - is 409 conflict'. Across processes on PostgreSQL, 'none' over a durably bound job is accepted. Limit 1 discloses only the opposite direction (media attached elsewhere over a job attached here with none).",
+      "evidence": "Probe test_v1_write_once_across_processes, plain and supabase: process A binds R1,R2 on d6. A fresh adapter (adapter_for(tmp_path), attachments=the same PgAttachments, nothing in memory) calls attach(job, ()) and it is accepted. Output: 'fresh-process attach(()) over durably-bound job: ACCEPTED; fresh.attached -> () ; durable.get -> [med_e943..., med_b9a8...]'. That process now treats a media job as bound to no media. The relay does not reach this: _resume attaches only when attached() is None, and a fresh admission has a new job id.",
+      "minimal_fix": "Either state it in Limit 1 and in ruling (c)/(d) (a zero-ref attach is not checked against a durable binding made by another process), or in MediaStaging.attach, when refs are empty and attachments is composed, raise Conflict if `await self.attachments.get(job_id)` is not None."
+    },
+    {
+      "id": "N2",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/m/MPILOT-078eefe.md",
+      "line": "238 (PAR-5, H-N2 row)",
+      "claim_broken": "The row attributes the attachments.py wording ('staged_media keeps a handle's first description') to 'this commit' (e5c02f7), but e5c02f7 touches only the evidence file.",
+      "evidence": "`git log -S \"keeps the FIRST description\" -- apps/infrx-api/infrx/media/attachments.py` -> 2972df1. `git diff --stat 2d1dcbe e5c02f7` -> only research/plan/evidence/m/MPILOT-078eefe.md.",
+      "minimal_fix": "In that row, name 2972df1 for the attachments.py docstring wording."
+    },
+    {
+      "id": "N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/attachments.py",
+      "line": "66-73 (put, unbound branch)",
+      "claim_broken": "'One attach naming the same ref twice is invalid_request in every adapter' (Limit 9) holds at the MediaStore port. The record itself (PgAttachments.put) answers an untranslated driver error. Its only caller checks first, so this is informational.",
+      "evidence": "Probe: a second process calls PgAttachments.put(unbound_job, (R1,R1)) -> 'RAW psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"job_media_pkey\"'. It rolls back (a later get is None). Through MediaStaging.attach the same input is 'InvalidRequest invalid_request'. On a bound job the record answers Conflict.",
+      "minimal_fix": "None needed while MediaStaging.attach is the only caller. Optionally reject duplicate handles at the top of PgAttachments.put with errors.InvalidRequest."
+    }
+  ],
+  "cleanup": "I removed infrx-verify-mpilot-minio with docker rm -f. The D harness created infrx-d6-postgres and infrx-d6-postgres-supabase and removed them at interpreter exit. I paused my own d6 container once for the V3 probe and unpaused it in a finally block. No Valkey was started on 55471 or 55472. `docker ps -a | grep -E 'infrx-d6|verify-mpilot|infrx-q'` shows none of mine, and ss shows 55437/55471/55472/55724 free. One slip: I ran test_pilot_media.py without `-k 'not _pg'` while the pilot-mutant chain held d6. The pristine copy's lock sat under the runner's own TMPDIR, so my process took its own lock and the harness then raised ForeignContainer before any docker action (_created stayed False). The chain was not disturbed: 40 passed. I deleted the scratch clone, the mutant copies and the private TMPDIR. The logs and probe files remain under /tmp/claude-1000/verify-mpilot-1431078/ (probe_child.py, test_verify_probe.py, v2_driver.py, mut.py, log_*.txt). The worktree codex-mpilot was only cloned from: HEAD e5c02f7, clean status. Nothing was pushed. 55432-55436, other lanes' containers, the pilot box, AWS and hosted Supabase were not touched."
+}
