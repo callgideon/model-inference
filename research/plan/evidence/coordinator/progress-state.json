@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T19:32:00Z",
+  "updated": "2026-09-24T20:15:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "box certification RUN2 done at 4226315 (envelope 0.5/s; e2e p95 91 s/clip-min vs 45 provisional; soak 65 min clean but cut by the runner's 3600 s bound; overload: typed 429s lost mid-upload -> INTAKE-DRAIN lane; parity/served-build/resume = protocol, fixed in the merged CERTIFY-TREE); step-6 drills RUNNING on the box; then TOKCOST split, E1B L2-L7, polish+TOKCOST+INTAKE-DRAIN merges -> gate-3 -> main -> third install -> certification run3 -> release decision",
+      "phase": "run2 measured (envelope 0.5/s; e2e p95 91 s/clip-min; soak 65 min clean; overload typed-429 loss -> INTAKE-DRAIN merged); drills 1-3 measured; E1B L2/L3/L5/L6 measured through the edge (real inference on the distinct-keys rerun); all fix lanes merged at bda1586; gates running -> main -> third install -> certification run3 -> release decision",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     }
@@ -114,24 +114,24 @@
       "since": "2026-09-24T19:10:00Z"
     },
     "INTAKE-DRAIN": {
-      "phase": "handed back d502c90 (bounded drain; real-socket cases; LARGE_BODY_LIMIT=8 row); targeted verifier running -> step 14 + R108",
-      "since": "2026-09-24T19:28:00Z"
+      "phase": "MERGED a163953 (verifier pass at d502c90; R108; LARGE_BODY_LIMIT=8 at the next install); follow-ups N1 (finished-guard case), N5 (Expect: 100-continue)",
+      "since": "2026-09-24T20:05:00Z"
     },
     "FLEET": {
       "phase": "TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost",
       "since": "2026-09-24T19:25:00Z"
     },
     "CERTIFY-POLISH": {
-      "phase": "handed back 88adae2 (N1-N5, N7, N9-N15 + p50 rows; E4B list 219); targeted verifier running -> step 13",
-      "since": "2026-09-24T19:04:00Z"
+      "phase": "MERGED bda1586 (re-verify pass at 5b3c997; JSON evidence/e/CERTIFY-POLISH-verify-5b3c997.json)",
+      "since": "2026-09-24T20:12:00Z"
     },
     "E1B-gateway": {
       "phase": "first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run",
       "since": "2026-09-24T19:27:00Z"
     },
     "gate-3": {
-      "phase": "running on 95fbb90 (suites 1260 green; lists...); main fast-forwards on green",
-      "since": "2026-09-24T19:09:00Z"
+      "phase": "gate-3 on 95fbb90 in its last stages + delta gate on bda1586 running; main -> bda1586 on green; then the third install",
+      "since": "2026-09-24T20:15:00Z"
     }
   },
   "gates": {
@@ -329,6 +329,10 @@
     {
       "at": "2026-09-24T19:30:00Z",
       "what": "Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -> INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -> notes; step-6 drills started"
+    },
+    {
+      "at": "2026-09-24T20:15:00Z",
+      "what": "All 2026-09-24 fix lanes merged on claude/backend-impl (CERTIFY-TREE 4db74b6, TOKCOST 95fbb90, INTAKE-DRAIN a163953, CERTIFY-POLISH bda1586); rulings R106-R108; platform handoff 20-platform-handoff-2026-09-24.md; drills 1-3 + E1B cells measured; gates running before main moves"
     }
   ],
   "cadence_windows": [
