@@ -14,6 +14,7 @@ import datetime as dt
 import fnmatch
 import html
 import json
+import math
 import os
 import re
 import sys
@@ -38,10 +39,16 @@ CATEGORIES = {"backend": "Backend corrections", "app": "App completion", "deferr
               "baseline": "Reused baseline", "superseded": "Superseded"}
 STALE_ESTIMATE_H = 6
 STALE_VIEW_MIN = 15
+CLOCK_SKEW_H = 0.25  # a lane or update stamped further ahead of host UTC than this is future-dated
 
 
 def parse(ts):
-    return dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00")) if ts else None
+    if not ts:
+        return None
+    d = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        raise ValueError(f"timestamp {ts!r} has no UTC offset")
+    return d
 
 
 def iso(d):
@@ -64,6 +71,24 @@ def reach(start, deps):
             seen.add(i)
             stack.extend(deps(i))
     return seen
+
+
+def estimate_problem(est):
+    """Why an estimate is malformed, or None: hours are all null (unknown) or finite numbers with 0 <= o <= l <= p."""
+    if est is None:
+        return None
+    if not isinstance(est, dict):
+        return "estimate must be an object"
+    v = [est.get(k) for k in HOURS]
+    if v != [None] * 3 and not (all(type(h) in (int, float) and math.isfinite(h) for h in v) and 0 <= v[0] <= v[1] <= v[2]):
+        return f"estimate hours {v} must be all null or numbers with 0 <= optimistic <= likely <= pessimistic"
+    if est.get("confidence", "unknown") not in CONFIDENCE:
+        return f"estimate confidence {est.get('confidence')!r} not in {CONFIDENCE}"
+    try:
+        parse(est.get("at"))
+    except (TypeError, ValueError) as exc:
+        return f"estimate at: {exc}"
+    return None
 
 
 def owned_overlap(a, b):
@@ -103,13 +128,25 @@ class Model:
 
     # ---- gates, tasks, lanes -------------------------------------------------------------
     def gate(self, g, v):
-        roots, cells = self.rg[g]["requires"], v.get("cells", [])
+        roots, cells, cand = self.rg[g]["requires"], v.get("cells", []), v.get("candidate") or {}
         passed = sum(c.get("verdict") == "PASS" for c in cells)
         implemented = all(self.tasks.get(r, {}).get("status") in DONE for r in roots)
-        green = v.get("decision") == "accepted" and implemented and bool(cells) and passed == len(cells)
+        verdict = {c.get("id"): c.get("verdict") for c in cells}
+        missing = [x for r in roots for x in self.tasks.get(r, {}).get("test_ids", []) if x not in verdict]
+        bare = [c.get("id") for c in cells if c.get("verdict") == "PASS" and not c.get("evidence")]
+        src = str(cand.get("source") or "")
+        reused = [h for h in self.s.get("historical_runs", []) if src and h.get("task") not in roots and str(h.get("candidate") or "")[:7] == src[:7]]
+        why = (([] if implemented else ["its root task is not implemented"])
+               + (["required cells missing: " + ", ".join(missing)] if missing else [])
+               + ([] if cells and passed == len(cells) else ["not every cell is PASS"])
+               + (["PASS without evidence: " + ", ".join(map(str, bare))] if bare else [])
+               + ([] if src and cand.get("deployed") else ["no candidate source/deployed identity recorded"])
+               + ([f"candidate {src} is historical run {h['id']}'s candidate (task {h.get('task')}); record candidate.note to reuse it"
+                   for h in reused] if not cand.get("note") else []))
+        green = v.get("decision") == "accepted" and not why
         label = "ACCEPTED" if green else "REJECTED" if v.get("decision") == "rejected" else "PENDING"
         return {"id": g, "roots": roots, "cells": cells, "passed": passed, "implemented": implemented, "green": green,
-                "label": label, **{k: v.get(k) for k in ("candidate", "decision", "decided_at", "note")}}
+                "label": label, "why": why, "missing": missing, **{k: v.get(k) for k in ("candidate", "decision", "decided_at", "note")}}
 
     def finished(self, i):
         lanes = self.by_task.get(i)
@@ -156,7 +193,7 @@ class Model:
 
     def stale(self, lane):
         est = lane.get("estimate") or {}
-        return lane.get("activity") not in ("complete", "deferred") and est.get("likely_h") is not None and (
+        return lane.get("activity") not in ("complete", "deferred") and est.get("likely_h") is not None and not estimate_problem(est) and (
             not est.get("at") or hours(parse(est["at"]), self.now) > STALE_ESTIMATE_H)
 
     # ---- validation ------------------------------------------------------------------------
@@ -185,30 +222,25 @@ class Model:
             if g not in self.rg:
                 err(f"unknown gate {g!r}")
                 continue
-            gv, have = self.gates[g], {c.get("id") for c in v.get("cells", [])}
+            gv = self.gates[g]
             for c in v.get("cells", []):
                 if c.get("verdict") not in VERDICTS:
                     err(f"{g} cell {c.get('id')}: verdict {c.get('verdict')!r} not in {VERDICTS}")
-            missing = [x for r in gv["roots"] for x in self.tasks[r]["test_ids"] if x not in have]
-            if missing:
-                err(f"{g} lacks required cells {', '.join(missing)}")
+            if gv["missing"]:
+                err(f"{g} lacks required cells {', '.join(gv['missing'])}")
             if v.get("decision") not in (None, "accepted", "rejected"):
                 err(f"{g} decision {v.get('decision')!r} not in accepted/rejected/null")
             if v.get("decision") == "accepted" and not gv["green"]:
-                err(f"impossible gate transition: {g} decision accepted but "
-                    + ("its root task is not implemented" if not gv["implemented"] else "not every cell is PASS"))
+                err(f"impossible gate transition: {g} decision accepted but {'; '.join(gv['why'])}")
         for x in self.lanes:
             a, t, est = x.get("activity"), x.get("task"), x.get("estimate") or {}
             if a not in ACTIVITIES:
                 err(f"lane {x['id']}: activity {a!r} not in {ACTIVITIES}")
                 continue
-            v = [est.get(k) for k in HOURS]
-            if any(h is not None and not isinstance(h, (int, float)) for h in v) or (None not in v and not v[0] <= v[1] <= v[2]):
-                err(f"lane {x['id']}: estimate needs numbers with optimistic <= likely <= pessimistic")
-            if est.get("confidence", "unknown") not in CONFIDENCE:
-                err(f"lane {x['id']}: confidence {est.get('confidence')!r} not in {CONFIDENCE}")
-            if x.get("updated") and hours(self.now, parse(x["updated"])) > 0.25:
-                warn(f"lane {x['id']} updated {x['updated']} is in the future: newer updates would be rejected as stale; check the clock")
+            if estimate_problem(x.get("estimate")):
+                err(f"lane {x['id']}: {estimate_problem(x.get('estimate'))}")
+            if x.get("updated") and hours(self.now, parse(x["updated"])) > CLOCK_SKEW_H:
+                err(f"lane {x['id']} updated {x['updated']} is in the future: newer updates would be rejected as stale; check the clock")
             if self.stale(x):
                 warn(f"stale estimate: lane {x['id']} estimated at {est.get('at') or 'an unknown time'} (older than {STALE_ESTIMATE_H} h)")
             if t not in self.tasks:
@@ -267,7 +299,7 @@ class Model:
         """((effort o, l, p), (wall o, l, p)) of the task's remaining lane work; None when unknown."""
         lanes = self.by_task.get(i, [])
         vals = [[(x.get("estimate") or {}).get(k) for k in HOURS] for x in lanes if x["activity"] not in ("complete", "deferred")]
-        if not lanes or any(None in v for v in vals):
+        if not lanes or any(None in v for v in vals) or any(estimate_problem(x.get("estimate")) for x in lanes):
             return None
         if not vals:
             return (0, 0, 0), (0, 0, 0)
@@ -373,13 +405,31 @@ def impossible(prev, new):
     return None
 
 
+SHAPES = {"owned_paths": list, "commands": list, "evidence": list, "blockers": list, "wiring_requests": list, "isolation": (dict, type(None))}
+
+
+def malformed(u):
+    """Why an update's fields cannot be stored and rendered, or None."""
+    bad = [k for k, t in SHAPES.items() if k in u and not isinstance(u[k], t)]
+    if isinstance(u.get("commands"), list) and not all(isinstance(c, dict) for c in u["commands"]):
+        bad.append("commands[] (objects)")
+    if bad:
+        return "wrong type for " + ", ".join(bad)
+    return estimate_problem(u["estimate"]) if "estimate" in u else None
+
+
 def judge(model, state, u, at):
     """(lane or None, rejection reason or None) for one update."""
     task, act, lanes = u.get("task"), u.get("activity"), state["lanes"]
-    if task not in set(model.tasks) | {x["id"] for x in lanes if not x.get("task")}:
+    if not isinstance(task, str) or task not in set(model.tasks) | {x["id"] for x in lanes if not x.get("task")}:
         return None, f"unknown task ID {task!r}"
     if act not in ACTIVITIES:
         return None, f"unknown activity {act!r}"
+    if hours(model.now, at) > CLOCK_SKEW_H:
+        return None, f"future-dated: at {iso(at)} is after host UTC now {iso(model.now)} (+{CLOCK_SKEW_H * 60:g} min skew allowed); check the clock"
+    why = malformed(u)
+    if why:
+        return None, f"malformed: {why}"
     cands = [x for x in lanes if (x.get("task") or x["id"]) == task]
     if u.get("lane"):
         cands = [x for x in lanes if x["id"] == u["lane"]]

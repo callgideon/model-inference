@@ -22,7 +22,7 @@ The file name is `<TASK>-<YYYYMMDDTHHMMZ>.json`, for example `D10-20260924T2315Z
 | `lane` | when ambiguous | The lane ID. It is needed when a task has more than one lane (for example `F2C-L` and `F2C-C`). A `slice` that matches exactly one lane also works. |
 | `slice`, `head`, `base`, `branch`, `worktree`, `agent`, `owned_paths`, `isolation`, `next_action` | no | Each replaces the lane's value. `isolation` is `{ports, prefix, db}`. |
 | `commands` | no | `[{"cmd", "exit", "summary"}]`. Replaces the lane's list. |
-| `estimate` | no | `{optimistic_h, likely_h, pessimistic_h, confidence, basis, at}`. It is the **remaining** effort after inspecting the actual slice. Hours are numbers with optimistic ≤ likely ≤ pessimistic, or all `null` for unknown. `confidence` is `unknown`, `low`, `medium` or `high`. |
+| `estimate` | no | `{optimistic_h, likely_h, pessimistic_h, confidence, basis, at}`. It is the **remaining** effort after inspecting the actual slice. Hours are finite numbers with 0 ≤ optimistic ≤ likely ≤ pessimistic, or all `null` for unknown; `at` carries a UTC offset. `confidence` is `unknown`, `low`, `medium` or `high`. |
 | `blockers` | no | A list of strings, joined into the lane's `blocker`. An empty list clears it. |
 | `evidence` | no | Repo-relative paths, appended without duplicates. Box-only paths render as text, not links. |
 | `wiring_requests` | no | Replaces the lane's list. The coordinator applies wiring; the tracker only displays it. |
@@ -31,7 +31,9 @@ The file name is `<TASK>-<YYYYMMDDTHHMMZ>.json`, for example `D10-20260924T2315Z
 
 - Files are applied in `at` order. For each lane the newest checkpoint wins.
 - An update whose `at` is not newer than the lane's `updated` is **rejected as stale**. The rejection is listed in the HTML.
-- An unknown task ID, an unknown activity or an unreadable file is rejected.
+- An update whose `at` is more than 15 minutes after host UTC is **rejected as future-dated**, so one wrong clock cannot make every later genuine update stale. A lane in the overlay whose `updated` is in the future is a `check` error.
+- An unknown task ID, an unknown activity or an unreadable file (not JSON, or an `at` without a UTC offset) is rejected.
+- A malformed update is rejected before it touches a lane: an estimate that breaks the rule above, or `owned_paths`, `commands`, `evidence`, `blockers` or `wiring_requests` that is not a list (`commands` items are objects), or `isolation` that is not an object.
 - Impossible transitions are rejected:
   - leaving `complete`;
   - leaving `deferred` for anything other than `queued` or `ready`;
@@ -57,7 +59,7 @@ The file name is `<TASK>-<YYYYMMDDTHHMMZ>.json`, for example `D10-20260924T2315Z
 | `lanes[]` | `{id, task (null for support), slice, agent, branch, worktree, base, head, owned_paths[] (default: the manifest's), isolation{ports, prefix, db}, activity, started, updated, blocker, next_action, deviation, estimate{…}, evidence[], commands[], wiring_requests[]}`. `deviation` records why a lane runs before its start dependencies. |
 | `review_queue[]`, `integration_queue[]` | `{lane, task, head, since}`. Maintained by `apply-updates`. |
 | `resource_locks[]` | `{id, kind (gpu, sql, runner, integration, ports), label, holder, since, until, tasks[], windows[{task, start, end}], note}`. Tasks under one lock run serially in the ETA. A GPU task with no window gets no date. |
-| `gates{}` | BACKEND-LOCAL, BACKEND-READY, APP-LOCAL, APP-PILOT, each `{candidate{source, deployed, config}, cells[{id, verdict, evidence[]}], decision (null, accepted or rejected), decided_at, note}`. A verdict is `PASS`, `FAIL`, `BLOCKED`, `INVALID`, `NOT RUN` or `PENDING`. The cells must cover the root task's `test_ids`. A gate is green only when its decision is `accepted`, its root is implemented in the manifest and every cell is `PASS`. |
+| `gates{}` | BACKEND-LOCAL, BACKEND-READY, APP-LOCAL, APP-PILOT, each `{candidate{source, deployed, config}, cells[{id, verdict, evidence[]}], decision (null, accepted or rejected), decided_at, note}`. A verdict is `PASS`, `FAIL`, `BLOCKED`, `INVALID`, `NOT RUN` or `PENDING`. The cells must cover the root task's `test_ids`. A gate is green only when its decision is `accepted`, its root is implemented in the manifest, every required cell is present, every cell is `PASS` with evidence, and `candidate.source` and `candidate.deployed` are recorded. A candidate whose source matches a `historical_runs` candidate of a task that is not the gate's root (for example E4B-run3's `bda1586` for BACKEND-READY) blocks green unless `candidate.note` records the reuse. An `accepted` decision that fails any of these is a `check` error that names the reason. |
 | `findings[]` | `{id (RV-01…RV-12), status (open, fixed or superseded), at, source, evidence[]}`. A closed finding needs evidence. The corrective tasks come from the manifest. |
 | `historical_runs[]` | `{id, task, candidate, status, started, clock, output, scope, commit, evidence[], cells[{id, verdict, note, started, ends_earliest, ends}]}`. These are evidence scoped to their own candidate; they are never relabelled as E4C acceptance. |
 | `verification.suites[]` | `{name, cmd, result, at, candidate}`, the last recorded result. |
