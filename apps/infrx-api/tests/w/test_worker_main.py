@@ -298,27 +298,21 @@ def test_worker_main__the_process_refuses_to_start_naming_the_setting(tmp_path):
         assert f"refusing to start" in text and named in text and "Traceback" not in text, text
 
 
-def test_worker_main__the_pilot_box_runs_the_real_entry_point_on_request(tmp_path, monkeypatch):
-    """E3B's pilot box: with `real_worker` its separate worker process is `python -m
-    infrx.worker` from the API directory, on the fake engine as `UPSTREAM`, with a
-    readiness port of its own and the index in the pilot's namespace (where the real worker
-    reads it); without, the emulated composition as before."""
+def test_worker_main__the_pilot_box_runs_the_real_entry_point(tmp_path, monkeypatch):
+    """E3B's pilot box: its worker process is `python -m infrx.worker` from the API
+    directory, on the fake engine as `UPSTREAM`, with a readiness port of its own that
+    `start` waits on, and the index in the pilot's namespace (where the real worker reads
+    it); the gateway is still the box's own composition."""
     pilotbox = pilotbox_module(monkeypatch)
-    real = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1,
-                             "e3b3-ns", real_worker=True)
-    argv, cwd = real.command("worker")
-    assert (argv[1:], cwd) == (["-m", "infrx.worker"], pilotbox.harness.API_ROOT)
-    assert real.command("gateway")[0][1:] == [str(REPO / "tests" / "integration" / "backend"
-                                                  / "pilotbox.py"), "gateway"]
-    assert (real.env["UPSTREAM"], real.env["WORKER_HEALTH_PORT"]) == \
-        ("http://127.0.0.1:1", str(real.worker_port))
-    assert real.namespace == real.env[pilotbox.INDEX_ENV] == "infrx:sched:{pilot}"
-    assert {name: real.env[name] for name in pilotbox.BUILD} == pilotbox.BUILD
-    emulated = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1,
-                                 "e3b3-ns")
-    assert emulated.command("worker")[0][1:] == [str(REPO / "tests" / "integration" /
-                                                     "backend" / "pilotbox.py"), "worker"]
-    assert emulated.namespace == emulated.env[pilotbox.INDEX_ENV] == "e3b3-ns"
+    box = pilotbox.PilotBox({"S3_MEDIA_PREFIX": "p/"}, "http://127.0.0.1:1", tmp_path, 1)
+    assert box.command("worker") == (
+        [sys.executable, "-m", "infrx.worker"], pilotbox.harness.API_ROOT,
+        f"http://127.0.0.1:{box.worker_port}/readyz")
+    assert box.command("gateway")[0][1:] == [
+        str(REPO / "tests" / "integration" / "backend" / "pilotbox.py"), "gateway"]
+    assert (box.env["UPSTREAM"], box.env["WORKER_HEALTH_PORT"]) == \
+        ("http://127.0.0.1:1", str(box.worker_port))
+    assert box.namespace == box.env[pilotbox.INDEX_ENV] == "infrx:sched:{pilot}"
 
 
 # --- on PostgreSQL: the D harness, a Valkey and a MinIO of the lane's own ------------
@@ -592,12 +586,12 @@ def test_worker_main_pg__an_unreachable_database_refuses_before_readiness(tmp_pa
 
 
 def test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it(box, monkeypatch):
-    """E3B's pilot box on this lane's services: `start("worker")` with `real_worker` returns
-    once `python -m infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
+    """E3B's pilot box on this lane's services: `start("worker")` returns once `python -m
+    infrx.worker` answers `/readyz` 200, and `stop` drains it to exit 0."""
     pilotbox = pilotbox_module(monkeypatch)
     box.start_engine()
     pilot = pilotbox.PilotBox(dict(box.settings), f"http://127.0.0.1:{box.engine_port}",
-                              box.log.parent, 1, "unused", real_worker=True)
+                              box.log.parent, 1)
     try:
         pilot.start("worker", timeout=60)
         ready = asyncio.run(answer(pilot.worker_port, "/readyz", 200, within_s=0))  # once

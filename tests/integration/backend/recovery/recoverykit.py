@@ -72,14 +72,11 @@ def m_support():
     return module
 
 
-# One drill waits on work no task in tasks.json schedules; its id names the document that
-# defines it and its owner, and it is the only id here that is not a task. Everything else,
-# and the refusal of an unknown id, is E's `stack.PENDING`.
-# E3B phase 3: `G2-R1` (the held cutover) retired with the mount, so rc03 runs; `M1-L2`
-# (no S3 ObjectStore) with M1-L2's S3ObjectStore, so rc05b runs.
-OWNERS = {"I2B-R4": "the worker composition root `python -m infrx.worker` "
-                    "(infrx/worker/__main__.py) that I2B's infrx-worker.service starts: I2B "
-                    "integration request 4, owned by the coordinator (G2 brief)"}
+# Owner references: work no task in tasks.json schedules, each named by its document and
+# owner (the only ids here that are not tasks); everything else, and the refusal of an
+# unknown id, is E's `stack.PENDING`. E3B phase 3 retired `G2-R1` (rc03 runs) and `M1-L2`
+# (rc05b runs); I2B-R4 retired the last, `I2B-R4` (rc08b SIGTERMs `python -m infrx.worker`).
+OWNERS: dict[str, str] = {}
 PENDING = {**stack.PENDING, **OWNERS}
 
 

@@ -38,7 +38,7 @@ PROCESS = "test_worker_main__the_process_refuses_to_start_naming_the_setting"
 ROUND_TRIP = "test_worker_main_pg__a_job_the_gateway_admitted_runs_in_the_worker_process"
 DRAIN = "test_worker_main_pg__sigterm_drains_the_in_flight_job_and_exits_0"
 UNREACHABLE = "test_worker_main_pg__an_unreachable_database_refuses_before_readiness"
-PILOT_BOX = "test_worker_main__the_pilot_box_runs_the_real_entry_point_on_request"
+PILOT_BOX = "test_worker_main__the_pilot_box_runs_the_real_entry_point"
 PILOT_BOX_PG = "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
 PB = "../../../tests/integration/backend/pilotbox.py"      # E3B's pilot box, from `infrx/`
 
@@ -84,14 +84,12 @@ MUTANTS = (
              "        return REFUSED\n",
        '        print(f"infrx.worker: refusing to start: {refused}", file=sys.stderr)\n'
        "        return 0\n", PROCESS),
-    # item 3: E3B's pilot box can run the real entry point
-    _m("pilotbox_real_worker_emulated", "real_worker runs python -m infrx.worker",
-       PB, '        if role == "worker" and self.real_worker:\n'
-           '            return [sys.executable, "-m", "infrx.worker"], harness.API_ROOT\n', "",
-       PILOT_BOX),
-    _m("pilotbox_real_worker_private_namespace", "the real worker and the gateway share the "
-       "pilot's index namespace", PB, "        if real_worker:\n"
-                                      "            namespace = PILOT_NAMESPACE\n", "", PILOT_BOX),
+    # item 3: E3B's pilot box runs the real entry point
+    _m("pilotbox_worker_emulated", "the pilot box's worker process is python -m infrx.worker",
+       PB, '        if role == "worker":\n', "        if False:\n", PILOT_BOX),
+    _m("pilotbox_worker_private_namespace", "the worker and the gateway share the pilot's "
+       "index namespace", PB, "port: int, namespace: str = PILOT_NAMESPACE) -> None:",
+       'port: int, namespace: str = "infrx_e2:{e3b3}") -> None:', PILOT_BOX),
 )
 
 PG_MUTANTS = (
@@ -106,9 +104,8 @@ PG_MUTANTS = (
        MAIN, "        await pool.open(wait=True, "
              "timeout=settings.deployment.database_pool_connect_timeout_s)\n",
        "        pass\n", UNREACHABLE),
-    _m("pilotbox_real_worker_not_awaited", "start returns once the real worker is ready",
-       PB, "        elif self.real_worker:\n            self._wait_ready(role, "
-           'f"http://127.0.0.1:{self.worker_port}/readyz", timeout)\n', "", PILOT_BOX_PG),
+    _m("pilotbox_worker_not_awaited", "start returns once the worker process is ready",
+       PB, "        self._wait_ready(role, ready, timeout)\n", "", PILOT_BOX_PG),
 )
 
 
