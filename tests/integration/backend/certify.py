@@ -1024,6 +1024,28 @@ def answered(rows: list[dict]) -> tuple:
     return ("answered", decide.PASS if accepted else decide.FAIL, f"{accepted} accepted", "BOX")
 
 
+def short_clip(clip: dict) -> bool:
+    """01 §2.3's TTFT class: a clip of at most 30 s at no more than 720p (the long edge)."""
+    return (clip.get("duration_s", 0.0) <= CRITERIA["short_clip_max_s"]
+            and max(clip.get("width", 0), clip.get("height", 0))
+            <= CRITERIA["short_clip_max_edge_px"])
+
+
+def rung_requests(declared: int, subset: str) -> int:
+    """N14 (box run2: 54/52/40 short-clip samples of 120): a rung sends its declared
+    requests, or more until bench's own schedule - its shuffled cycle through the subset,
+    this runner's seed - holds `p95_min_accepted` short clips, so its TTFT p95 can be judged
+    at all. A subset with no short clip keeps the declared count."""
+    clips = bench.load_corpus(str(MARLIN / "corpus" / "manifest.json"), subset)[0]
+    if not any(map(short_clip, clips)):
+        return declared
+    n = declared
+    while sum(short_clip(item["clip"]) for item in bench.build_schedule(
+            n, clips, ["video_b64"], seed=SEED)) < CRITERIA["p95_min_accepted"]:
+        n += 1
+    return n
+
+
 def cap_verdict(rows: list[dict], counted: list[dict], cap_s: float) -> tuple:
     """The duration cap at admission (P-20): every attempt over the cap got the typed
     refusal, and none within it did; nothing sent over the cap judges nothing."""
@@ -1048,10 +1070,7 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float)
                 f"{len(refusals)} refused within the cap", "BOX"))
     accepted = [r for r in counted if r.get("outcome") == "accepted"]
     short = [r["ttft_s"] for r in accepted if r.get("ttft_s") is not None
-             and _duration(r, clips) <= CRITERIA["short_clip_max_s"]
-             and max(clips.get(r.get("clip_id"), {}).get("width", 0),
-                     clips.get(r.get("clip_id"), {}).get("height", 0))
-             <= CRITERIA["short_clip_max_edge_px"]]
+             and short_clip(clips.get(r.get("clip_id"), {}))]
     per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
                   if r.get("latency_s") is not None and _duration(r, clips) > 0]
     for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
@@ -1180,10 +1199,12 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
     version = f"e4b-{(report.head.get('sha') or 'nosha')[:7]}-" \
               f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     rungs, runs = [], {}
+    # the box rungs carry the p95s; the tiny scale's latency rows are unknown by design (§5)
+    requests = rung_requests(shape["envelope"]["requests"], "full") if target["scale"] == "box" \
+        else shape["envelope"]["requests"]
     for rate in shape["envelope"]["rates"]:
         name = f"envelope-r{rate}"
-        runs[name] = client(bench_argv(target, workdir, name, rate=rate,
-                                       requests=shape["envelope"]["requests"],
+        runs[name] = client(bench_argv(target, workdir, name, rate=rate, requests=requests,
                                        dataset_version=f"{version}-{name}"), env)["exit"]
         rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
                                           gateway=gateway, cap_s=cap_s)

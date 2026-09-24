@@ -1003,6 +1003,26 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
         "unknown"
 
 
+def test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95():
+    """N14, from box run2: 120 requests over the full corpus held only 54/52/40 short clips
+    (the TTFT class: at most 30 s at no more than 720p), so the TTFT p95 was unknown at every
+    rung. A box rung sends its declared requests, or the fewest more for which bench's own
+    schedule (its shuffled cycle, this runner's seed) holds 60 short clips."""
+    assert certify.short_clip({"duration_s": 30.0, "width": 1280, "height": 720})
+    assert not certify.short_clip({"duration_s": 31.0, "width": 640, "height": 360})
+    assert not certify.short_clip({"duration_s": 10.0, "width": 1920, "height": 1080})
+    clips = certify.bench.load_corpus(str(certify.MARLIN / "corpus" / "manifest.json"),
+                                      "full")[0]
+
+    def shorts(n):
+        return sum(certify.short_clip(item["clip"]) for item in certify.bench.build_schedule(
+            n, clips, ["video_b64"], seed=certify.SEED))
+    declared, needed = certify.MATRIX["box"]["envelope"]["requests"], 60
+    sized = certify.rung_requests(declared, "full")
+    assert shorts(declared) < needed <= shorts(sized) and shorts(sized - 1) < needed, sized
+    assert certify.rung_requests(1000, "full") == 1000        # never fewer than declared
+
+
 def test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause():
     """Review F4 (PERF-ENVELOPE: raw denominators include every error): a timeout or a reset
     is a failed attempt like a 5xx, and a cell that accepted nothing supports no rate - an
@@ -1180,6 +1200,8 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         "overload-raw.jsonl"]
     assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
     assert seen[-1][2] == box["overload"]["burst"]
+    assert {requests for name, _, requests in seen if name.startswith("envelope")} == {
+        certify.rung_requests(box["envelope"]["requests"], "full")}
     assert report.stages[-1]["status"] == certify.PASS
     soak = report.stages[-2]
     assert (soak["stage"], soak["status"]) == ("e4b.b.soak", certify.FAIL)

@@ -126,6 +126,7 @@ DATASET_CAP = "test_e4b_the_dataset_drill_schedules_only_clips_within_the_deploy
 CANCELLED = "test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay"
 CAP_WIRING = "test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it"
 RUN = "tests/integration/run.py"
+RUNG_SIZE = "test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95"
 TIMEOUTS = "test_e4b_each_client_run_is_bounded_by_its_own_schedule_never_a_flat_hour"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -293,7 +294,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("short_class_unfiltered", "the 6 s TTFT row is judged on clips <= 30 s only",
        '<= CRITERIA["short_clip_max_s"]', '<= 10 ** 6', RUNG),
     _m("short_class_any_resolution", "the 6 s TTFT row is judged on clips <= 720p only",
-       '<= CRITERIA["short_clip_max_edge_px"]]', '<= 10 ** 6]', RUNG),
+       '<= CRITERIA["short_clip_max_edge_px"])', '<= 10 ** 6)', RUNG),
     _m("climb_skips_a_failed_rung", "the envelope is contiguous from the lowest rung",
        "        if any(v != decide.PASS for v in core):\n            break",
        "        if any(v != decide.PASS for v in core):\n            continue", CLIMB),
@@ -610,6 +611,17 @@ MUTANTS: tuple[Mutant, ...] = (
        TIMEOUTS),
     _m("no_margin_after_the_schedule", "the last requests get bench's own timeout to finish",
        "    return requests / rate + CLIENT_MARGIN_S\n", "    return requests / rate\n", TIMEOUTS),
+    _m("v_rung_unsized", "a box rung is sized for its TTFT p95",
+       '    requests = rung_requests(shape["envelope"]["requests"], "full") if target["scale"] == "box" \\\n',
+       '    requests = shape["envelope"]["requests"] if target["scale"] == "box" \\\n', CELLS),
+    _m("tiny_rung_sized", "the tiny scale keeps its declared rung",
+       'if target["scale"] == "box" \\\n        else shape["envelope"]["requests"]',
+       'if True \\\n        else shape["envelope"]["requests"]', CELLS),
+    _m("sizing_counts_every_clip", "the rung is sized on short clips, not on every clip",
+       '    while sum(short_clip(item["clip"]) for item in bench.build_schedule(',
+       '    while sum(True for item in bench.build_schedule(', RUNG_SIZE),
+    _m("sizing_below_the_declared_rung", "a rung never sends fewer than its declared requests",
+       "    n = declared\n    while sum(", "    n = 1\n    while sum(", RUNG_SIZE),
     _m("overload_counts_capped_clips", "the cap's refusals are not overload's",
        "    rows = judged(rows, clips, cap_s)\n", "", OVERLOAD),
     _m("dataset_corpus_unfiltered", "the drill schedules only clips within the cap",
