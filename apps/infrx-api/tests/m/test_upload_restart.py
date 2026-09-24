@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import os
 import sys
 import types
 
@@ -127,12 +128,12 @@ class DiesAfter:
         return committed_then_died
 
 
-_pg = None
-try:
+# PostgreSQL only on a task-local harness the run names (`INFRX_D_TASK`, as the MPILOT PG
+# runner does): a default run - and a mutant's copy - never contends for another lane's port.
+_pg = "INFRX_D_TASK is not set" if not os.environ.get("INFRX_D_TASK") else None
+if _pg is None:
     from ..d import pgharness as _pgharness
     _pg = _pgharness.unavailable()
-except Exception as missing:                      # pragma: no cover - env without the rig
-    _pg = str(missing)
 AUTHORITIES = ["reference", pytest.param("postgres", marks=pytest.mark.skipif(
     bool(_pg), reason=f"D10's PgLifecycle needs the task-local PostgreSQL: {_pg}"))]
 
