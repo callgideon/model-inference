@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T18:30:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T18:58:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -88,8 +88,9 @@ Generated 2026-09-24T18:30:00Z from `tasks.json` (manifest v4) and `progress-sta
 - review WORKER: lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z
 - review I2B-R4-worker: MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z
 - review PREP-WORKER: MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z
-- review TOKCOST: handed back ad50b9d (count memo; R105 kept; request 1 = box /tokenize cold-vs-warm protocol); single Opus verifier running -> merge -> R107 -> focused gate -> third install since 2026-09-24T18:16:00Z
-- review CERTIFY-TREE: handed back 9b467f8 (served-build without git, deployed cap in every cell, parity within-cap + typed over-cap, R106 cancelled-replay terminal); single Opus verifier running -> merge -> focused gate -> third install -> certification run3 since 2026-09-24T18:30:00Z
+- review TOKCOST: fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -> single verifier -> step 12 -> gate-3 since 2026-09-24T18:40:00Z
+- review CERTIFY-TREE: MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z
+- review LONGCLIP: lane running (user decision 82 s -> 1200 s): serving-version candidate for the encoder budget, apply --set value set, long-clip corpus, box measurement protocol, P-23 (sub-2 fps sampling over 120 s) since 2026-09-24T18:55:00Z
 
 ## Checkpoints
 
@@ -122,6 +123,7 @@ Generated 2026-09-24T18:30:00Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-24T05:33:05Z: checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67
 - 2026-09-24T09:59:55Z: focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b
 - 2026-09-24T18:03:00Z: Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -> CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z
+- 2026-09-24T18:58:00Z: CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -> 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round
 
 ## Authorizations
 

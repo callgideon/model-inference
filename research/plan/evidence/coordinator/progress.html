@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T18:30:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T18:58:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>28</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -118,8 +118,9 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>WORKER</code> — lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z</li>
 <li>review <code>I2B-R4-worker</code> — MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z</li>
 <li>review <code>PREP-WORKER</code> — MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z</li>
-<li>review <code>TOKCOST</code> — handed back ad50b9d (count memo; R105 kept; request 1 = box /tokenize cold-vs-warm protocol); single Opus verifier running -&gt; merge -&gt; R107 -&gt; focused gate -&gt; third install since 2026-09-24T18:16:00Z</li>
-<li>review <code>CERTIFY-TREE</code> — handed back 9b467f8 (served-build without git, deployed cap in every cell, parity within-cap + typed over-cap, R106 cancelled-replay terminal); single Opus verifier running -&gt; merge -&gt; focused gate -&gt; third install -&gt; certification run3 since 2026-09-24T18:30:00Z</li>
+<li>review <code>TOKCOST</code> — fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -&gt; single verifier -&gt; step 12 -&gt; gate-3 since 2026-09-24T18:40:00Z</li>
+<li>review <code>CERTIFY-TREE</code> — MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z</li>
+<li>review <code>LONGCLIP</code> — lane running (user decision 82 s -&gt; 1200 s): serving-version candidate for the encoder budget, apply --set value set, long-clip corpus, box measurement protocol, P-23 (sub-2 fps sampling over 120 s) since 2026-09-24T18:55:00Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
@@ -150,6 +151,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-24T05:33:05Z</span> — checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67</li>
 <li><span class="meta">2026-09-24T09:59:55Z</span> — focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b</li>
 <li><span class="meta">2026-09-24T18:03:00Z</span> — Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -&gt; CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z</li>
+<li><span class="meta">2026-09-24T18:58:00Z</span> — CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -&gt; 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>

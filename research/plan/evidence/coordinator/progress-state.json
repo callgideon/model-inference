@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T18:30:00Z",
+  "updated": "2026-09-24T18:58:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -102,12 +102,16 @@
       "since": "2026-09-24T08:44:25Z"
     },
     "TOKCOST": {
-      "phase": "handed back ad50b9d (count memo; R105 kept; request 1 = box /tokenize cold-vs-warm protocol); single Opus verifier running -> merge -> R107 -> focused gate -> third install",
-      "since": "2026-09-24T18:16:00Z"
+      "phase": "fix round running (B1: pin the fail-closed memo; N1 bound; N2 evidence; R107 wording) -> single verifier -> step 12 -> gate-3",
+      "since": "2026-09-24T18:40:00Z"
     },
     "CERTIFY-TREE": {
-      "phase": "handed back 9b467f8 (served-build without git, deployed cap in every cell, parity within-cap + typed over-cap, R106 cancelled-replay terminal); single Opus verifier running -> merge -> focused gate -> third install -> certification run3",
-      "since": "2026-09-24T18:30:00Z"
+      "phase": "MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11)",
+      "since": "2026-09-24T18:58:00Z"
+    },
+    "LONGCLIP": {
+      "phase": "lane running (user decision 82 s -> 1200 s): serving-version candidate for the encoder budget, apply --set value set, long-clip corpus, box measurement protocol, P-23 (sub-2 fps sampling over 120 s)",
+      "since": "2026-09-24T18:55:00Z"
     }
   },
   "gates": {
@@ -296,6 +300,10 @@
     {
       "at": "2026-09-24T18:03:00Z",
       "what": "Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -> CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z"
+    },
+    {
+      "at": "2026-09-24T18:58:00Z",
+      "what": "CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -> 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round"
     }
   ],
   "cadence_windows": [
