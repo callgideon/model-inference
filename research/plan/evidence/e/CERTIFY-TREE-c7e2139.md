@@ -1,7 +1,9 @@
 # CERTIFY-TREE: the tree under test where the checkout has no git (`c7e2139`)
 
 Lane: CERTIFY-TREE (Opus fix lane; coordinator Fable). Branch `codex/certify-tree` from
-`origin/main` `2d4a88b`. Commits `2043223` (item 1) and `c7e2139` (item 2), plus this report.
+`origin/main` `2d4a88b`. Commits `2043223` (item 1) and `c7e2139` (item 2), plus this report
+(`7bb7b41`). The coordinator later extended the lane with item 3, the deployed duration cap
+(`e4a7106`), and item 5, R106 (`7ac77c7`, `0df3fa7`); both sections are below.
 No rebase, reset, amend, stash or push. No box, AWS, hosted Supabase, secret, stack or
 PostgreSQL was used. Every case below runs locally with `--no-stack` forms and stubs.
 
@@ -103,9 +105,245 @@ exit 0
 40 passed in 1.20s
 ```
 
+## Item 3: the deployed duration cap (`e4a7106`)
+
+The coordinator added this item after the box run at `4226315` (out `20260924T165408Z`).
+
+**What was wrong.** The box run's `e4b.a.sop-parity` FAILED with "refused by the candidate".
+- Parity runs against the engine, not the gateway. W4's E0 baseline and the release engine
+  both refuse the parity set's four 112 s clips and three 120 s clips. The engine has a
+  16,384-token encoder budget, so its ceiling is 82 s (`W4-phaseB-20260923T2155Z.md`: "video
+  item with 21504 embedding tokens exceeds the pre-allocated encoder cache size 16384").
+- `decide.parity_verdict` counts every candidate refusal as a problem, so the cell could never
+  pass on those clips.
+- The pilot's admission refuses every clip over `MAX_VIDEO_SECONDS=82` (P-20 decision B).
+- The envelope, soak and overload cells judged by the interim `applied_cap_s` (72) and the
+  engine ceiling, not by the deployed cap.
+- The envelope accepted any 4xx as the over-cap refusal.
+- The dataset drill scheduled 112 s clips.
+
+**Fix** (one commit):
+- **The cap.** `deployed_cap_s` reads `MAX_VIDEO_SECONDS` once, at the run's start, with the
+  gateway's own `pilot_from_env`. When it is unset, the tree's default (120) applies. The run
+  records it in `target.max_video_seconds` and the config pin's `deployed_max_video_seconds`,
+  and passes it to the parity, dataset and load cells. `CRITERIA["applied_cap_s"]` is removed.
+- **The refusal.** `OVER_CAP` is 400 `unsupported_media`, param `messages`. It is tied to
+  `MediaProfile.check`, and it matches the coordinator's measurement of c051 on the pilot.
+  bench.py's rows carry the status and the code; its allowlist does not keep the param.
+- **Parity.** Only the within-cap clips (c039, c024) are paired with E0.
+  - Each over-cap clip goes to the gateway through `admission_answer`, bench.py's own
+    request, and must get `OVER_CAP`.
+  - A within-cap refusal FAILs, and so does an over-cap clip the gateway accepts or refuses
+    with another answer.
+  - An engine target has no admission to ask, so those clips pend on `BOX`.
+- **Envelope.** `duration_cap` requires the typed refusal over the cap and FAILs a typed
+  refusal within it. A clip at the cap is within it. Failures, soak and overload are judged
+  over the clips within the cap.
+- **Dataset drill.** It reads `corpus-within-cap.json`, the licensed manifest less the
+  over-cap clips, with the corpus's own cache root. The first run and the resume read the
+  same file. An item refused as over the cap anyway FAILs the drill: the gateway's cap is
+  then not the runner's.
+
+Protocol amendment 5(c) records this.
+
+**Reproduction.**
+- **The refusal.** `test_e4b_the_deployed_cap_and_its_refusal_are_the_media_layers` runs the
+  M layer's `MediaProfile.pinned(pilot_from_env())` with `MAX_VIDEO_SECONDS=82`. A 112 s probe
+  raises exactly `OVER_CAP`, and an 82 s probe is admitted.
+- **The local run.** The local target (the runner's fake engine; namespace `e4b`) ran with
+  `MAX_VIDEO_SECONDS=82`, `--no-stack`, at clean `e4a7106` (report sha256 `37dd4489fd42833a`):
+  - `target.max_video_seconds` read 82.0.
+  - sop-parity passed on the 2 within-cap clips and pended on `BOX` for the 7 over-cap
+    clips ("unasked: an engine target has no admission").
+  - The dataset drill read 60 within-cap clips (the longest 72 s) and passed its client half
+    (4 accepted, then interrupted, then resumed).
+  - The envelope counted 11 of 12 attempts: the one attempt on a 112 s clip was the cap's.
+  - `release-identity` PASSED.
+  - `e4b.b.preconditions` FAILED on this host's App dev servers, the known dev-host
+    exemption.
+- **Not reproduced: the gateway's own answer.** Nothing here ran the gateway's admission
+  end to end; that needs the stack's auth and ledger. `admission_answer` is checked against
+  a stdlib server that answers the way the pilot does.
+
+**Cases:**
+- `test_e4b_the_deployed_cap_and_its_refusal_are_the_media_layers`
+- `test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_rest`
+- `test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_kept`
+- `test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap`
+- `test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it`
+- `test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures`, rewritten.
+  The 78 s "band" clip is now within the cap, and a refusal of it FAILs.
+- The other cells' cases now pass the cap: `CAP` = 82, or `TREE_CAP` = 120 for the original
+  parity case.
+
+**Mutants and their death lines** (30 new plus the rung mutants that anchor on changed
+lines; re-derived at `e4a7106` with the shared runner's `_copy`/`_prepare`/`_pytest`; every
+death is an `AssertionError` in `test_certify.py`):
+
+| Mutant | Death line |
+|---|---|
+| `cap_read_from_the_tree` | `test_certify.py:262: assert 120.0 == 82.0` |
+| `over_cap_code_typed_wrong` | `test_certify.py:268: AssertionError: assert {'code': 'uns...': 'messages'} == {'code': 'inv...': 'messages'}` |
+| `over_cap_param_typed_wrong` | `test_certify.py:268: AssertionError: assert {'code': 'uns...': 'messages'} == {'code': 'uns...'param': None}` |
+| `cap_unrecorded_in_the_target` | `test_certify.py:619: assert (None, 82.0) == (82.0, 82.0)` |
+| `cap_unrecorded_in_the_pin` | `test_certify.py:619: assert (82.0, None) == (82.0, 82.0)` |
+| `parity_judged_at_the_tree_cap` | `test_certify.py:621: AssertionError: assert {'dataset': 8...0, 'gateway')} == {'dataset': 8...0, 'gateway')}` |
+| `dataset_judged_at_the_tree_cap` | `test_certify.py:621: AssertionError: assert {'dataset': 1...0, 'gateway')} == {'dataset': 8...0, 'gateway')}` |
+| `load_cells_judged_at_the_tree_cap` | `test_certify.py:621: AssertionError: assert {'dataset': 8...0, 'gateway')} == {'dataset': 8...0, 'gateway')}` |
+| `engine_target_asked_for_admission` | `test_certify.py:626: AssertionError: assert (82.0, 'direct') == (82.0, None)` |
+| `gateway_never_asked` | `test_certify.py:621: AssertionError: assert {'dataset': 8... (82.0, None)} == {'dataset': 8...0, 'gateway')}` |
+| `parity_pairs_over_cap_clips` | `test_certify.py:316: AssertionError: assert ('FAIL', 'c01...he candidate') == ('PASS', '2 clips')` |
+| `over_cap_read_from_the_outcome` | `test_certify.py:336: AssertionError: assert 'PENDING' == 'FAIL'` |
+| `parity_cap_exclusive` | `test_certify.py:316: AssertionError: assert ('PASS', '1 clips') == ('PASS', '2 clips')` |
+| `over_cap_unasked` | `test_certify.py:322: AssertionError: assert {'c012-bbb108...mission', ...} == {'c012-bbb108...ssages'}, ...}` |
+| `over_cap_acceptance_accepted` | `test_certify.py:330: AssertionError: {'code': None, 'http_status': 200, 'param': None}` |
+| `over_cap_refusal_untyped` | `test_certify.py:330: AssertionError: {'code': 'invalid_request', 'http_status': 400, 'param': None}` |
+| `engine_target_over_cap_passes` | `test_certify.py:340: AssertionError: assert ('PASS', None, []) == ('PENDING', ['BOX'], [])` |
+| `acceptance_read_as_a_refusal` | `test_certify.py:386: AssertionError: assert [{'code': 'un...param': None}] == [{'code': 'un...param': None}]` |
+| `param_assumed` | `test_certify.py:386: AssertionError: assert [{'code': 'un...: 'messages'}] == [{'code': 'un...param': None}]` |
+| `code_unallowlisted` | `test_certify.py:386: AssertionError: assert [{'code': 'un...param': None}] == [{'code': 'un...param': None}]` |
+| `key_not_sent` | `test_certify.py:391: AssertionError: assert ('/v1/chat/co...arer ', 'm@1') == ('/v1/chat/co...56789', 'm@1')` |
+| `cap_exclusive_at_the_boundary` | `test_certify.py:876: AssertionError: assert ('duration_ca...': []}, 'BOX') == ('duration_ca...'at']}, 'BOX')` |
+| `untyped_over_cap_refusal_accepted` | `test_certify.py:869: AssertionError: assert ('duration_ca...': []}, 'BOX') == ('duration_ca...': []}, 'BOX')` |
+| `overload_counts_capped_clips` | `test_certify.py:983: assert ["refusals wi...d_request')]"] == []` |
+| `dataset_corpus_unfiltered` | `test_certify.py:563: AssertionError: assert [{'derived': ...4', ...}, ...] == [{'derived': ...4', ...}, ...]` |
+| `dataset_corpus_cap_exclusive` | `test_certify.py:563: AssertionError: assert [{'derived': ...4', ...}, ...] == [{'derived': ...4', ...}, ...]` |
+| `dataset_corpus_cache_moved` | `test_certify.py:565: AssertionError: assert '.claude/corpus-cache' == '/tmp/claude-.../corpus-cache'` |
+| `first_run_on_the_full_corpus` | `test_certify.py:587: AssertionError: assert ['/tmp/claude...hin-cap.json'] == ['/tmp/claude...hin-cap.json']` |
+| `resume_on_the_full_corpus` | `test_certify.py:587: AssertionError: assert ['/tmp/claude...anifest.json'] == ['/tmp/claude...hin-cap.json']` |
+| `capped_items_accepted` | `test_certify.py:592: assert ('PENDING', '..., no ledger)') == ('FAIL', ["it...her: ['i6']"])` |
+| `over_ceiling_judged_as_failures` | `test_certify.py:865: AssertionError: assert {'answered': ...: 'pass', ...} == {'answered': ...: 'pass', ...}` |
+| `within_cap_refusal_accepted` | `test_certify.py:876: AssertionError: assert ('duration_ca...ong']}, 'BOX') == ('duration_ca...ong']}, 'BOX')` |
+| `admitted_long_clip_accepted` | `test_certify.py:869: AssertionError: assert ('duration_ca...': []}, 'BOX') == ('duration_ca...': []}, 'BOX')` |
+
+## Item 5: R106, a cancelled job's replay is terminal (`7ac77c7`)
+
+The coordinator added this item after the box rerun at `4226315` (out `20260924T172244Z`).
+
+**R106** is the cancelled-replay rule, numbered by the coordinator at `318904e` (08 §10): a
+cancelled job's replay is terminal for that key.
+
+**What was wrong.** `e4b.a.dataset-resume` FAILed "items not terminal after the resume" for
+exactly the two items the drill's SIGINT interrupted (c037 and c059).
+- Their first attempts ended in the client's `ReadError`. A client that left is a committed
+  cancel (R21).
+- The resume re-sent each under the same key. The replay answered HTTP 200, then a stream
+  error event with code `state_conflict`. That is the relay's `_refusal` for a cancelled job
+  (R91).
+- `bench.is_terminal` treated that row as a failure. Every resume would re-send it forever,
+  so it could never become terminal.
+
+**Fix** (one commit):
+- **bench.py.** A replay (`Idempotency-Replayed: true`) whose stream answers
+  `state_conflict` is now `CANCELLED_REPLAY` (`"cancelled_by_interruption"`), and
+  `is_terminal` accepts it.
+  - Only the allowlisted code is read, never the text.
+  - A fresh request's `state_conflict`, or a replay's other error, stays a failure.
+  - The summary counts the new outcome.
+  - Narrowing: the coordinator asked for "a request that carried an Idempotency-Key". bench
+    sends that header on every request, so a condition on it could never fail and no mutant
+    could kill it. The rule reads the gateway's `Idempotency-Replayed` instead. The relay sets
+    it on every replay, a looked-up one included (`jobstore.lookup`: "marked replayed").
+- **certify.py.** The drill FAILs an item accepted twice, and a cancelled item not replayed
+  exactly once. A passing drill states what it proved, in its detail and in
+  `measured.sop`: "MARLIN-SOP: no second accepted item, nothing re-sent after it was
+  terminal, and N item(s) cancelled by the interruption, each terminal after exactly one
+  replay of its key (R106)". `measured.cancelled_by_interruption` lists the items.
+- **The ledger half: inferred from the contract, not yet seen on the box.** The conformance
+  case `dur_settle__cancel_records_its_cause_and_settles_by_r21` says a cancel carries no
+  usage, and that after output its hold stays held (`held_unknown`) until the platform
+  releases it. A drill that interrupts streams mid-output would therefore always fail
+  "reserved restored" within its 300 s wait. The reserved total now accounts for the
+  cancelled jobs' holds that are still held. A usage record for a cancelled job still FAILs
+  Σ charged, because a cancel carries no usage.
+- **The envelope.** The rerun's over-cap refusals appear in every rung (8 ×
+  `unsupported_media` at r = 0.5). A case now pins that they never lower the supported rate.
+  Item 3's cap already excludes them from failures, rejections, soak and overload.
+
+Protocol amendment 5(d) records this.
+
+**Cases:**
+- `test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption`
+  (bench)
+- `test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay`
+- The resume case (an item accepted twice) and the rung case (the supported rate with the
+  cap's refusals) are extended.
+
+**E1B list mutants**, each killed by the bench case (the runner's own results, at
+`7ac77c7`):
+- `e1bm25`: a cancelled replay not terminal.
+- `e1bm26`: never classified.
+- `e1bm27`: a fresh request classified.
+- `e1bm28`: another code classified.
+- `e1bm29`: not counted.
+
+**E4B list mutants and their death lines** (re-derived at `7ac77c7`):
+
+| Mutant | Death line |
+|---|---|
+| `cancelled_items_uncounted` | `test_certify.py:504: AssertionError: assert ([] == []` |
+| `second_replay_accepted` | `test_certify.py:510: assert [] == ["cancelled i...play: ['i3']"]` |
+| `accepted_twice_unchecked` | `test_certify.py:421: assert ["terminal it...sume: ['i1']"] == ["terminal it...once: ['i1']"]` |
+| `cancel_holds_unaccounted` | `test_certify.py:519: assert ["reserved 0 ...n's cancels)"] == []` |
+| `released_cancel_holds_counted` | `test_certify.py:520: assert ["reserved 0 ...n's cancels)"] == []` |
+| `sop_property_unstated` | `test_certify.py:541: AssertionError: assert ('PASS', 'reconciled') == ('PASS', 'rec...s key (R106)')` |
+| `over_cap_refusals_bias_the_rate` | `test_certify.py:921: AssertionError: assert {'answered': ...: 'pass', ...} == {'answered': ...: 'pass', ...}` |
+| `reserved_unchecked` | `test_certify.py:485: AssertionError: assert [] == ['reserved 0 -> 1']` |
+
+The E1B list's `e1bm07` ("a failed item is not terminal") anchored on the line item 5
+changed, and the whole E1B list reported it stale. `0df3fa7` re-anchors it, and it is still
+killed.
+
+One local run at `7ac77c7` was discarded. During it, the fake engine on the `e4b`
+namespace's port 56880 answered 1,337 prompt tokens after its first parity clip.
+`pilotbox.ENGINE_PROMPT_TOKENS` is the only 1,337 in the tree. Another process reset the
+engine; no code here was at fault. The rerun, with nothing else on the port, gave:
+- report sha256 `a229e1ec5956ce27`;
+- `release-identity` PASS at `7ac77c7`;
+- sop-parity: the 2 clips within the cap passed, the 7 over it pend on `BOX`;
+- dataset-resume, envelope and soak: PENDING on `BOX`;
+- `e4b.b.preconditions`: FAIL on this host's App dev servers, the known exemption.
+
+## Tails at the head
+
+The whole E4B list, as `make api-mutants` runs it, at `7ac77c7`. That is 189 mutants over
+46 named cases: 138 at the start of the lane, plus 14, 30 and 7 new, plus the two
+list-shape tests. `0df3fa7` changes only the E1B list's file, which no E4B case reads.
+
+```
+........................................................................ [ 37%]
+........................................................................ [ 75%]
+...............................................                          [100%]
+191 passed in 407.74s (0:06:47)
+exit 0
+```
+
+At item 3 (`e4a7106`): `184 passed in 392.72s (0:06:32)`, exit 0.
+
+`test_certify.py` + `test_endpoint_doc.py` at `0df3fa7`:
+
+```
+..............................................                           [100%]
+46 passed in 1.86s
+```
+
+`models/marlin2b/tests` (`make bench-test`) at `0df3fa7`: `68 passed in 5.72s`.
+
+The E1B list (`models/marlin2b/tests/mutants.py`) at `0df3fa7`:
+`{'mutants': 41, 'killed': 38, 'controls_survived': 3, 'not_killed': 0, 'problems': None}`.
+
+The W and G suites that load bench.py (`tests/w/test_serving.py`, `test_w4.py`,
+`test_service.py`, `tests/g`), at `7ac77c7` before the re-anchor:
+`612 passed, 2 warnings in 284.86s`.
+
 ## Verification log
 
 - 2026-09-24 (CERTIFY-TREE): Authored at `c7e2139`. The tails above come from the commands
   shown, run at that head with `TMPDIR` outside the checkout. The death lines were
   re-derived at that head. The probe ran through `main()` with no git on `PATH`. No box,
   AWS, hosted service, secret or stack was used.
+- 2026-09-24 (CERTIFY-TREE): Items 3 and 5 added at `0df3fa7` (the coordinator's two
+  requests after the box runs at `4226315`). R106 is the coordinator's ruling (`318904e`).
+  The tails come from the commands named, run at the heads stated, with `TMPDIR` outside
+  the checkout. The death lines were re-derived at those heads. The local runs used the
+  `e4b` namespace and no stack. No box, AWS, hosted service, secret or PostgreSQL was used.
