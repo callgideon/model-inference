@@ -97,3 +97,51 @@ None. The consumer matrix (01 §F2C changed-field / consumer matrix) names each 
 ## Remaining effort
 
 F2C-L: 0 h of planned work (a, b, d delivered; review fixes only). Optimistic 0.5 h, likely 1 h, pessimistic 3 h (for a review round), confidence medium. Basis: every slice is committed and green, and the verifier's findings are closed.
+
+## Fix round (2026-09-24, slice-b/d verification findings)
+
+This section is appended; nothing above it was edited. Code head: `16ce171a`, on top of `1b9c7411`. Evidence head: the commit that adds this section.
+
+**Changed paths:** `conformance/lifecycle.py` (cases), `conformance/acceptance.py` (`VERSION` → `f2c-lifecycle-acceptance.2`), `fixtures/acceptance/lifecycle.json` (regenerated), `fixtures/v2/result_read_cases.json` (regenerated; 11 → 15 rows), `v2/lifecycle.py` (`result_case_table` rows; `ContentLifecycle` docstring), `tests/contracts/mutants.py` (+9), `apps/app/tests/contracts/mutants.json` (+3), `research/plan/01-contracts.md`, `research/plan/02-durable-protocols.md`. All of these are owned paths. No SQL, route, adapter or composition change. `fakes/` is not edited: every finding was a test gap or a spec gap. The fake's behaviour was correct.
+
+### Findings
+
+For each code finding, the mutant **survived** before the fix. That run is `python -m tests.contracts.mutants <9 new>` at `1b9c7411` plus the new mutant list: 1/9 killed, 8 survived. Every mutant is **killed** after the fix. `replay(lifecycle_factory)` also reports each case-level mutant with exactly one mismatch. The check applies each mutant to a scratch copy of `infrx/`, runs `acceptance.replay`, and looks for the step that diverges.
+
+| id | Fix | Regression (fails before / passes after) |
+|---|---|---|
+| 0-M1 | `retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_acked`: sweeper `s-slow` claims gen 1 and stalls until its claim lapses. `s-a` then tombstones and acks, and the key is re-registered as gen 2. `s-c` claims gen 2, and the fake gives it fence 1 again. `tombstone(stale)` must be `claim_lost`, and the key must stay live. 02 D4 now says the fence restarts per generation, so every claim check compares `(generation, fence)` together. | `lc_tombstone_ignores_the_generation` survived → killed; replay mismatch at step 17 |
+| 2-ACI-1 | `retention_durable__claims_are_leased_and_fenced`: `tombstone(first)` is called while `second` holds the live claim, and must be `claim_lost`. | `lc_tombstone_ignores_a_newer_fence` survived → killed (replay step 12). The expiry conjunct alone is also guarded: `lc_tombstone_ignores_the_claim_expiry`, killed. |
+| 0-M2 | `admission_ready__a_job_with_no_marker_is_never_claimable` now runs in the cutover state, for each regime. An `admit_ready` job of the same organization, with a marker, is created first. Then a previous-runtime job must read `readiness() is None` and `claim_preparation` must answer `not_ready`. | `lc_claim_gate_keyed_on_the_org` (S31b) and `lc_claim_gate_any_marker` (S31) both survived → killed; replay step 5 |
+| 0-M3 | The three RESULT-EXPIRY cases that commit a success now run over `EXPECTATIONS`: `_succeeded(expectation=)` and `_owned_outcome`, which reads through `get_owned` for LEGACY and `get_owned_credit` for CARD. The configuration-change case promises both regimes' expiries before the retune. | `lcb_legacy_read_recomputes_from_configuration` (B9) survived → killed; replay step 16 |
+| 2-ACI-2 | Four rows added to `result_read_cases.json`, all `no_result`: cancelled with a `result_ref`; failed with a `result_ref`; a success without a `result_ref`; a success released free without usage but with a persisted expiry. Python and TypeScript both classify every row. | Python `lcb_failure_with_a_ref_read_as_a_result`, `lcb_success_without_a_ref_read_as_a_result` and `lcb_unbilled_success_read_as_a_result`: survived → killed. Console `V2-LC-12/13/14`: against the old table "[the suite passed]" ×3; against the new table killed ×3. |
+| 0-M4, 2-ACI-3 | 02 now has a "Scrub guard" paragraph, column by column. An UPDATE of `infrx.job_results` is allowed only if all of these hold: `old.scrubbed_at is null`, `new.scrubbed_at = infrx.now()`, `new.body = ''`, and `request_id`/`org_id`/`digest`/`bytes`/`created_at` are unchanged. The job must satisfy `j.settled_at is not null and (j.result_expires_at is null or infrx.now() >= j.result_expires_at)`. The `settled_at` term stops the scrub of an in-flight job's result, because `put_result` writes before settlement. DELETE and TRUNCATE stay forbidden. `job_results_bytes_exact` is replaced by `check (scrubbed_at is not null or bytes = octet_length(body))` + `check (scrubbed_at is null or body = '')`. `read_result` refuses a scrubbed row as `result_expired`. "Keeps no result" is defined: every non-success, and a success settled before 0018 with a NULL expiry. Expand names this as the one allowed drop-and-recreate. The `ContentLifecycle` docstring and the 01 matrix rows (`0014:24/:30/:68`) point to this text. | spec (checked against `0014_job_results.sql:15-36,68-80`, `0018:436`) |
+| 0-M5 | The `jobs` expiry check is taken out of expand (step 1). Step 2 adds it, validated, only at zero violators, and never `NOT VALID` over a violating row. The reason is that later UPDATEs re-check the constraint, and settled successes are still updated (`0017:320` journal expiry; `0016:482`, `0018:513` aged-hold release), so one violator would roll back those batches. While violators exist, the rule for new successes is held by terminalization (`0018:436`) and by conformance. The "optional → required" paragraph and the 01 `0018` row say the same. Proposed ruling 6's last sentence becomes: "It becomes required through a check added only at zero violators, never `NOT VALID` over a violating row." | spec (migrations `0016:482`, `0017:320`, `0018:436/513`) |
+| 1-RIS-1 | **The `tests/d` row above is withdrawn** ("392 passed, 5 xfailed … nothing touched the port"). That statement was false. The recorded command set no `INFRX_D_TASK`, so `pgharness.py:54` resolved to D1's namespace: container `infrx-d1-postgres`, host port 55432, database `infrx_d1`. The 332 PG-backed cases in that selection cannot pass without a live PostgreSQL. I cannot now establish which container that run used. Docker events do not reach back that far. The count is not lane evidence. F2C has no tasklocal service (`local_services('f2c') == {}`; `INFRX_D_TASK=f2c` fails collection with `KeyError: 'postgres'`). So the lane's `tests/d` evidence is the isolated run: `DOCKER_HOST=unix:///nonexistent.sock uv run --frozen pytest -q tests/d -k "not mutant"` → exit 0, **65 passed, 332 skipped**, 273 deselected. No port, container or database was touched. `tests/d`, `infrx/state` and the migrations are not in this lane's diff. The PG-backed D suites for the `TerminalOutcome` change belong to D10, in D10's own namespace. | evidence correction |
+
+### Commands (host Linux, at `16ce171a`)
+
+| Command | Exit | Result |
+|---|---|---|
+| `uv run --frozen pytest -q tests/contracts -k "not pg"` | 0 | 1162 passed, 6 deselected |
+| `uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py` | 0 | 61 passed |
+| `uv run --frozen python -m tests.contracts.mutants <every lc_/lcb_/acc_>` | 0 | **79/79 killed** (70 before + 9 new) |
+| `uv run --frozen pytest -q tests --ignore=tests/d --ignore=tests/contracts -k "not mutant and not pg"` | 0 | 1666 passed, 15 skipped |
+| `DOCKER_HOST=unix:///nonexistent.sock uv run --frozen pytest -q tests/d -k "not mutant"` | 0 | 65 passed, 332 skipped (isolated; no PostgreSQL) |
+| `node --test "tests/contracts/**/*.test.ts"` | 0 | 159 passed |
+| `make console-test` | 0 | 297 passed |
+| `make console-lint` / `make console-typecheck` | 0 / 0 | 0 errors (the same 2 warnings) / clean |
+| `node tests/contracts/run-mutants.mjs --self-test` / `--entry v2` | 0 / 0 | 14/14; **44/44 killed** (41 + V2-LC-12..14) |
+| `uv run --frozen python -m infrx.contracts.conformance.acceptance --write`, then `acceptance.replay(lifecycle_factory)` | 0 | `f2c-lifecycle-acceptance.2`, 24 recorded cases / 319 steps (was .1, 281 steps); replay `[]` |
+
+**F2C fixture hash.** Run from `infrx/contracts/fixtures`: `sha256sum v2/lifecycle_*.json v2/result_read_cases.json v1/terminal_success_expiring.json acceptance/lifecycle.json | sort -k2 | sha256sum`. That command reproduces `da29215d…` at `1b9c7411`, so it is the recorded method. The new hash is **`63ccdd1c91d416c073619fad650001424dfad362266d977f705cd767a5d9c638`**. Transcript alone: `f91767adb20e0b2441ac5e20b56dd5c9dc1f587a385913cb11e59320aa45de88`. `result_read_cases.json`: `0efe3583…1131`.
+
+**Merge compatibility.** `git merge-tree --write-tree claude/consumer-v1 codex/f2c-lifecycle`, with `claude/consumer-v1` now at `abb9fd69` (the brief named `bc43b6fb`), gives two conflicts. Both are export lists, and both resolve as a union:
+- `apps/infrx-api/infrx/contracts/v2/__init__.py:36` → `_SUBMODULES = ("fixtures", "lifecycle", "money_units", "ports", "published_fixtures", "published_model", "records")`;
+- `apps/app/lib/contracts/v2/types.ts:35` → keep both `export * from "./published-model.ts";` and `export * from "./lifecycle.ts";`.
+
+This lane does not merge. The coordinator resolves both at integration.
+
+**Open issues.** Unchanged from the list above, with one correction: the PG-backed D suites were run by nobody in this lane (1-RIS-1). A strict replay against D10 needs D10 to restart the fence at 1 for each generation, or to replay with a transcript regenerated from its own counters. 02 D4 now states the per-generation fence.
+
+**Remaining effort.** Review fixes only. Optimistic 0.25 h, likely 0.5 h, pessimistic 2 h; confidence medium. Basis: every listed finding is closed, and each has a killed mutant or a column-level spec.
