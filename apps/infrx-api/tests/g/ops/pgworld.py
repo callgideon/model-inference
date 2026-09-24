@@ -99,3 +99,53 @@ def drift(w: World) -> list:
         "union all select 'USD', org_id::text, ledger_drift, reserved_drift "
         "from infrx.wallet_reconciliation where ledger_drift <> 0 or reserved_drift <> 0"
     ).fetchall()
+
+
+# --- jobs, the way the gateway admits them and a worker settles them ------------------
+def jobs(w: World):
+    from infrx.state.jobstore import PgJobStore
+    return PgJobStore(w.connect())
+
+
+def clocked(w: World):
+    """What `builders.request` needs: this database's (frozen) clock and fresh ids."""
+    return checks_admission.World(w.owner)
+
+
+async def admit_legacy(w: World, idem_key: str, *, org: str = b.ORG_A, key: str = b.KEY_A):
+    request = b.request(clocked(w), org_id=org, key_id=key)
+    return request, await jobs(w).admit(request, b.idem(request, idem_key))
+
+
+async def admit_credit(w: World, idem_key: str, *, user: str = cc.CONSUMER_1,
+                       key: str = checks_admission.C1_KEY, **kw):
+    request = checks_admission.credit_request(clocked(w), key, personal_org(w, user), **kw)
+    return request, await jobs(w).admit_credit(request, b.idem(request, idem_key))
+
+
+async def settle(w: World, request, regime: str, *, tokens=None, text: str = "done"):
+    """A worker's durable steps with a scripted engine answer: preparation, the claim, the
+    result object and the settling transaction in the job's OWN regime."""
+    from infrx.contracts.records import Usage
+    store = jobs(w)
+    await store.prepared(await store.claim_preparation(request.request_id, "prep"))
+    lease = await store.claim(request.request_id, "worker")
+    ref = await store.put_result(request.request_id, text)
+    outcome = b.outcome(request.request_id, clocked(w),
+                        tokens=Usage.of(1200, 340) if tokens is None else tokens,
+                        result_ref=ref)
+    if regime == "legacy_usd":
+        return lease, outcome, await store.complete(lease, outcome)
+    return lease, outcome, await store.complete_credit(lease, outcome)
+
+
+def footprint(w: World) -> dict:
+    """Every row a transition may not touch, as values: the money relations of both units,
+    jobs, holds, usage, cards, listings, keys and the audit trail."""
+    tables = ("public.credit_ledger", "infrx.wallets", "infrx.credit_holds",
+              "infrx.credit_ledger", "infrx.credit_wallets", "infrx.credit_wallet_holds",
+              "infrx.signup_entitlements", "infrx.jobs", "public.usage_events",
+              "infrx.rate_card_versions", "infrx.catalog_listings", "public.api_keys",
+              "infrx.audit_entries", "infrx.feature_flags")
+    return {t: w.owner.execute(f"select md5(coalesce(string_agg(r::text, '|' order by r::text), "
+                               f"'')) from {t} r").fetchone()[0] for t in tables}

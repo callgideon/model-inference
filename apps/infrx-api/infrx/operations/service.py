@@ -36,6 +36,7 @@ from ..contracts.v2.money_units import Credit
 from ..contracts.v2.records import (AuthContextV2, BalanceV2, CredentialAudience,
                                     DeploymentRevision, DeploymentState, DigestSource,
                                     RateCardSnapshot, ServingRevision, Visibility, WalletRef)
+from .transition import unapproved
 from .ports import (AUDIT_ACTIONS, SUSPENSION_REASONS, AccountView, AuditEntry, AuditLog,
                     IdentityDirectory, KeyRow, Ledger, Registry, TenantStore, VerifiedIdentity)
 
@@ -102,6 +103,9 @@ class Operations:
     jobs: Any                            # v1 `contracts.ports.JobStore`
     accounts: AccountView
     clock: Callable[[], datetime]
+    # G8: the regime transition's flags and inventory (`transition.PgTransition`); only
+    # the PostgreSQL composition has one - a fake world has no regime to switch.
+    transitions: Any = None
 
     async def _context(self, secret: str) -> AuthContextV2:
         if not secret:
@@ -407,6 +411,34 @@ class OperatorSession:
                    "card": card.model_dump(mode="json")}
         result, _ = await self._once("publish", idempotency_key, reason, None, request, write)
         return result
+
+    async def publish_card(self, requested_model: str, *, rate_card_version: str,
+                           input_rate: str, output_rate: str, approved_by: str,
+                           effective_at: datetime, idempotency_key: str, reason: str) -> dict:
+        """G8 / P-01 / F2C-C: an operator-APPROVED card for the deployment the model's
+        effective listing serves now, published additively (a new immutable card; the
+        listing then names it). The public rate identity stays the listing's card - never
+        an id minted per release - and no historical card or job is rewritten. A
+        provisional approval is refused here: this path publishes launch prices only."""
+        why = unapproved(approved_by)
+        if why:
+            raise errors.InvalidRequest(f"publish-card publishes approved prices only: {why}")
+        deployment = await self.ops.catalog.resolve(
+            requested_model, audience=CredentialAudience.consumer, endpoint_id=None)
+        if deployment is None:
+            raise errors.NotFound("no public listing serves that model")
+        serving = await self.ops.catalog.serving_revision(deployment.serving_version_id)
+        try:
+            card = RateCardSnapshot(
+                rate_card_version=rate_card_version, model_id=serving.model_id,
+                deployment_revision_id=deployment.deployment_revision_id,
+                serving_version_id=serving.serving_version_id,
+                input_rate_per_million=input_rate, output_rate_per_million=output_rate,
+                effective_at=effective_at, approved_by=approved_by)
+        except ValueError as refused:
+            raise errors.InvalidRequest(f"not a publishable card: {refused}") from None
+        return await self.publish(serving, deployment, card, requested_model,
+                                  idempotency_key=idempotency_key, reason=reason)
 
     async def cancel_job(self, org_id: str, job_handle: str, *, idempotency_key: str,
                          reason: str) -> dict:
