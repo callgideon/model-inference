@@ -10,7 +10,7 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import checks_ready, pgharness
+from . import checks_content, checks_ready, pgharness
 from . import migration_mutants as _d
 
 READY = _d.READY
@@ -50,12 +50,16 @@ MIGRATION_MUTANTS = (
        "    if false then\n      perform infrx.lifecycle_refuse('upload_not_finalized'",
        "ready_refusals", "a job runs on bytes nobody verified (R99 (a))"),
     _m("d10_expectation_ignored", READY,
-       "    if j.rate_card_version is distinct from x->>'rate_card_version' then",
-       "    if false then", "ready_refusals",
+       "     and j.rate_card_version is distinct from x->>'rate_card_version' then",
+       "     and false then", "ready_refusals",
        "a card this deployment never approved is charged (R69; RV-05's post-commit recheck)"),
     _m("d10_capability_unchecked", READY,
-       "    perform infrx.check_pinned_capability(j, p_args->'request');", "    null;",
+       "  perform infrx.check_pinned_capability(j, p_args->'request');", "  null;",
        "ready_refusals", "an alias that moved admits video to a revision that cannot take it"),
+    _m("d10_legacy_capability_unchecked", READY,
+       "    if v_cap is null then\n      return;\n    end if;\n  end if;",
+       "    return;\n  end if;", "ready_refusals",
+       "a legacy USD job runs video on a revision that takes none (capability at ingress only)"),
     _m("d10_retiring_source_admitted", READY,
        "  if c.state = 'tombstoned' then\n    perform infrx.lifecycle_refuse('content_retiring', "
        "'source '",
@@ -89,6 +93,73 @@ MIGRATION_MUTANTS = (
        "ready_privileges", "a browser session admits, finalizes or claims directly"),
 )
 
+LIFECYCLE = _d.LIFECYCLE
+MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
+    # --- 0020: the content lifecycle -----------------------------------------------------
+    _m("d10_tombstone_skips_the_reference_recheck", LIFECYCLE,
+       "  if c.state = 'live' then\n    perform infrx.content_recheck(c, v_now);\n"
+       "    update infrx.content_objects set state = 'tombstoned'",
+       "  if c.state = 'live' then\n    update infrx.content_objects set state = 'tombstoned'",
+       "content_races",
+       "skip the live-reference check: a source deleted under a job admitted after the claim"),
+    _m("d10_claim_skips_the_reference_check", LIFECYCLE,
+       "  if c.state = 'live' then\n    perform infrx.content_recheck(c, v_now);\n  end if;\n"
+       "  update infrx.content_objects\n     set claim_generation",
+       "  update infrx.content_objects\n     set claim_generation",
+       "content_liveness", "a referenced object is claimed for deletion"),
+    _m("d10_renewed_claim_deleted", LIFECYCLE,
+       "     or c.claim_fence is distinct from (k->>'fence')::int or v_now >= c.claim_expires_at then",
+       "     or v_now >= c.claim_expires_at then", "content_protocol",
+       "delete a renewed claim: a superseded sweeper tombstones under another's fence"),
+    _m("d10_superseded_ack_accepted", LIFECYCLE,
+       "  if c.state <> 'tombstoned' or c.claim_generation is distinct from c.generation\n"
+       "     or c.claim_fence is distinct from (t->>'fence')::int then",
+       "  if c.state <> 'tombstoned' then", "content_protocol",
+       "a superseded holder's late acknowledgement finishes a delete it no longer owns"),
+    _m("d10_old_generation_ack_retires_the_new", LIFECYCLE,
+       "  if c.generation is distinct from (t->>'generation')::int or c.state = 'deleted' then\n"
+       "    return infrx.content_doc(c);",
+       "  if c.state = 'deleted' then\n    return infrx.content_doc(c);", "content_protocol",
+       "a delayed delete acknowledgement retires bytes re-created at the same key"),
+    _m("d10_candidates_include_referenced", LIFECYCLE,
+       "             and (c.state = 'tombstoned' or infrx.content_referenced(c, v_now) is null)",
+       "", "content_liveness", "a collector is offered an object a job still needs"),
+    _m("d10_legacy_running_job_unprotected", LIFECYCLE,
+       "    when c.location = 'object_store' and exists (\n        select 1 from infrx.jobs j",
+       "    when false and exists (\n        select 1 from infrx.jobs j", "content_liveness",
+       "restart turns an object the previous runtime's running job uses into a deletable one"),
+    _m("d10_open_upload_destination_unprotected", LIFECYCLE,
+       "    when c.kind = 'upload_destination' and exists (",
+       "    when false and exists (", "content_liveness",
+       "a client's bytes are deleted while its upload is still open"),
+    _m("d10_retention_recomputed_to_zero", LIFECYCLE,
+       "           and (j.settled_at is null\n"
+       "                or p_now < j.settled_at + make_interval(secs => coalesce(r.retention_s, 0))))",
+       "           and j.settled_at is null)", "content_liveness",
+       "a job's sources go the instant it ends, not after the retention its admission captured"),
+    _m("d10_scrub_before_the_expiry", LIFECYCLE,
+       "                 and (j.settled_at is null or infrx.now() < j.result_expires_at)) then",
+       "                 and j.settled_at is null) then", "content_scrub",
+       "a result is emptied while the customer is still promised it"),
+    _m("d10_running_request_scrubbed", LIFECYCLE,
+       "    if not (old.content_scrubbed_at is null and old.settled_at is not null\n",
+       "    if not (old.content_scrubbed_at is null\n", "content_scrub",
+       "a running job's request text is emptied under the worker that loads it"),
+    _m("d10_result_expiry_from_config", LIFECYCLE,
+       "  if v_scrubbed is not null or v_expires is null or infrx.now() >= v_expires then",
+       "  if v_scrubbed is not null or infrx.now() >= v_settled + interval '1 day' then",
+       "content_scrub",
+       "infer expiry from current config: an already promised result lifetime moves (RV-11)"),
+    _m("d10_scrubbed_result_reads_empty", LIFECYCLE,
+       "  if v_scrubbed is not null or v_expires is null or infrx.now() >= v_expires then",
+       "  if v_expires is null then", "content_scrub",
+       "an expired or scrubbed result answers empty text instead of result_expired"),
+    _m("d10_protocol_callable_by_browsers", LIFECYCLE,
+       "    execute format('grant execute on function %s to service_role', f);",
+       "    execute format('grant execute on function %s to service_role, authenticated', f);",
+       "content_privileges", "a browser session claims and deletes content"),
+)
+
 _d._CHECKS.update({
     "ready_marker": checks_ready.check_ready_marker,
     "ready_refusals": checks_ready.check_ready_refusals,
@@ -96,6 +167,14 @@ _d._CHECKS.update({
     "ready_privileges": checks_ready.check_ready_privileges,
     "register_guards": checks_ready.check_register_guards,
     "ready_races": lambda conn: checks_ready.check_ready_races(pgharness.connect, _d.MUT_DB),
+})
+_d._CHECKS.update({
+    "content_liveness": checks_content.check_content_liveness,
+    "content_protocol": checks_content.check_content_protocol,
+    "content_scrub": checks_content.check_content_scrub,
+    "content_privileges": checks_content.check_content_privileges,
+    "content_races": lambda conn: checks_content.check_content_races(pgharness.connect,
+                                                                     _d.MUT_DB),
 })
 _d.MUTANTS = _d.MUTANTS + MIGRATION_MUTANTS
 NAMES = tuple(m.name for m in MIGRATION_MUTANTS)

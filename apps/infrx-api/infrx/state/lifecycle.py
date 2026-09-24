@@ -36,7 +36,8 @@ from .jobstore import Connect, PgJobStore, admission_of, admission_v2_of, domain
 #: P-25 is pending: `retention_s` is a fixture value until the approved serving TTL lands.
 UPLOAD_WINDOW_S = DEFAULTS.processing_cache_ttl_s
 GRACE_S = DEFAULTS.processing_cache_ttl_s
-CLAIM_TTL_S = 60.0
+#: F2C.a D2 / M6: a claim must outlive the worst-case object-store call (M6: >= 300 s).
+CLAIM_TTL_S = 300.0
 RETENTION_S = DEFAULTS.processing_cache_ttl_s
 #: A minted handle colliding with an existing one is ~2^-190; retrying is still cheaper
 #: than reasoning about it.

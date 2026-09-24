@@ -56,7 +56,12 @@ def test_put_result__write_once_reference_and_owner_read() -> None:
             await store.put_result(request.request_id, "a different answer")
         with pytest.raises(errors.NotFound):
             await store.put_result(h.ids.uuid(), "orphan")
-        assert await store.read_result(b.ORG_A, ref) == "an answer"
+        # D10 (0020): the owner's read goes through the committed outcome and its persisted
+        # expiry, so an unsettled job's stored result is `result_pending`, never served
+        # (the served read on a settled job: tests/d/checks_content.py); another
+        # organization's reference is `not_found` first.
+        with pytest.raises(errors.ResultPending):
+            await store.read_result(b.ORG_A, ref)
         with pytest.raises(errors.NotFound):
             await store.read_result(b.ORG_B, ref)
     asyncio.run(body())

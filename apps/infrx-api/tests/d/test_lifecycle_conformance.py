@@ -21,9 +21,7 @@ _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
                                 reason=f"task-local PostgreSQL unavailable: {_reason}")
 
-_D10B = "D10.b (0020): deletion claims, tombstones and candidates are the next slice"
-PENDING: dict[str, str] = {case.__name__: _D10B for case in cases()
-                           if case.__name__.startswith("retention_durable__")}
+PENDING: dict[str, str] = {}
 
 CASES = cases()
 factory = pgtesting.make_lifecycle_factory(pgstore.fresh_database, pgharness.dsn,

@@ -267,12 +267,18 @@ def check_ready_refusals(conn) -> str:
             assert footprint(conn) == before, f"{label}: a refused admission left rows"
         # capability: the pinned revision stops taking video / streaming (a savepoint the
         # case rolls back: the catalog row is immutable, so it is patched as its owner)
-        for patch, request, expected in (
-                ('{"input_modalities": ["text"]}', credit_request(conn, world, (clip,)),
+        usd_clip = source_ref(b.ORG_A, b"refusal-usd-clip")
+        register(conn, usd_clip)
+        legacy = {"regime": "legacy_usd", "card": None}
+        for patch, request, kw, expected in (
+                ('{"input_modalities": ["text"]}', credit_request(conn, world, (clip,)), {},
                  "unsupported_media"),
                 ('{"stream_output": false}',
-                 credit_request(conn, world, mode=ExecutionMode.stream),
-                 "unsupported_parameter")):
+                 credit_request(conn, world, mode=ExecutionMode.stream), {},
+                 "unsupported_parameter"),
+                # the legacy regime's pinned revision is its canonical model_revision's
+                ('{"input_modalities": ["text"]}', b.request(world, refs=(usd_clip,)), legacy,
+                 "unsupported_media")):
             try:
                 with conn.transaction():
                     conn.execute("alter table infrx.serving_versions disable trigger "
@@ -284,7 +290,7 @@ def check_ready_refusals(conn) -> str:
                                  "serving_versions_immutable")
                     before = footprint(conn)
                     got = refusal(conn, "admit_ready",
-                                  ready_args(request, b.idem(request, patch)))
+                                  ready_args(request, b.idem(request, patch), **kw))
                     assert got == (expected, None), f"{patch}: {got}"
                     assert footprint(conn) == before, f"{patch}: a refused admission left rows"
                     raise ca._Rollback()

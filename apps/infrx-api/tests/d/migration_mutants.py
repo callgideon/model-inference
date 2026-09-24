@@ -45,6 +45,7 @@ GC = "0013_outbox_gc.sql"
 RESULTS = "0014_job_results.sql"
 # D10
 READY = "0019_upload_readiness.sql"
+LIFECYCLE = "0020_content_lifecycle.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -1374,9 +1375,10 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "  if p_args->'idem'->>'org_id' is distinct from p_args->'request'->>'org_id' then",
        "  if false then", "admission", "admission_refusals",
        "one tenant's scope answers another's request (R10)"),
-    _m("d2_admitted_request_rewritable", ADMISSION,
-       "  if new.request_record is distinct from old.request_record\n     or ",
-       "  if ", "admission", "admission_accepts",
+    # D10: 0020 redefines the guard (the expiry scrub is its one permitted change).
+    _m("d2_admitted_request_rewritable", LIFECYCLE,
+       "  elsif new.request_record is distinct from old.request_record then",
+       "  elsif false then", "admission", "admission_accepts",
        "the request a worker loads is not the one that was priced (R53)"),
     _m("d2_admission_lock_dropped", ADMISSION,
        "  perform pg_advisory_xact_lock(infrx.admission_lock_key());\n", "",
@@ -1567,7 +1569,8 @@ D2_MUTANTS: tuple[Mutant, ...] = (
     _m("d2_result_rewritable", RESULTS, "  if r.digest <> v_digest then", "  if false then",
        "admission", "results_and_prompt_tokens",
        "a second writer's answer silently stands for the stored one"),
-    _m("d2_result_read_across_tenants", RESULTS,
+    # D10: 0020 redefines `read_result` (the persisted expiry is its authority).
+    _m("d2_result_read_across_tenants", LIFECYCLE,
        "     and r.request_id = substr(p_ref, 14)::uuid and r.org_id = p_org;",
        "     and r.request_id = substr(p_ref, 14)::uuid;",
        "admission", "results_and_prompt_tokens", "a tenant reads another tenant's answer"),
@@ -1617,7 +1620,7 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
        "admission", "media_objects",
        "a foreign touch is told apart from a miss by the RAISE's line (MC-2b)"),
-    _m("d2_result_ref_shape_loose", RESULTS,
+    _m("d2_result_ref_shape_loose", LIFECYCLE,
        "   where p_ref ~ '^infrx-result:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
        "[0-9a-f]{12}$'",
        "   where p_ref ~ '^infrx-result:[0-9a-f-]{36}$'",

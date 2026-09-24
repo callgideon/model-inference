@@ -132,9 +132,15 @@ create table if not exists infrx.content_objects (
   tombstoned_at timestamptz,
   deleted_at timestamptz,
   constraint content_objects_location_key unique (location, object_key),
-  -- payload, prepared and result content serve ONE job; sources and destinations none.
+  -- payload, prepared and result content serve ONE job; sources and destinations none. A
+  -- payload or prepared object a collector DISCOVERED (written before any row existed) may
+  -- name no job: its owner is its key's organization, and only a running job that names the
+  -- key keeps it (`content_referenced`, 0020) - proposed to F2C for ContentIdentity.
   constraint content_objects_owner_by_kind check (
-    (kind in ('payload', 'prepared', 'result')) = (job_id is not null)
+    (case when kind = 'result' then job_id is not null
+          when kind in ('payload', 'prepared')
+            then job_id is not null or origin = 'discovered'
+          else job_id is null end)
     and (kind = 'upload_destination') = (upload_handle is not null)),
   constraint content_objects_written_is_measured
     check (origin <> 'written' or (digest is not null and bytes is not null)),
@@ -149,8 +155,8 @@ create table if not exists infrx.content_objects (
       'media/' || org_id::text || '/%', 'uploads/' || org_id::text || '/%',
       'payloads/' || org_id::text || '/%'])
     -- database content is `<table>/<row id>`: a result body or an admitted request record
-    else (kind, object_key) in (('result', 'job_results/' || job_id::text),
-                                ('payload', 'jobs/' || job_id::text)) end),
+    else job_id is not null and (kind, object_key) in (('result', 'job_results/' || job_id::text),
+                                                       ('payload', 'jobs/' || job_id::text)) end),
   -- R55: a destination names its OWN organization's ticket.
   constraint content_objects_destination_fk foreign key (org_id, upload_handle)
     references infrx.media_uploads (org_id, handle) on delete restrict
@@ -769,14 +775,27 @@ begin
 end $$;
 
 -- The pinned serving revision serves what the request needs (`catalog.check_capability`,
--- against the PIN, never what an alias resolves to now).
+-- against the PIN, never what an alias resolves to now). A CREDIT job pins its serving
+-- revision; a legacy USD job pins its `model_revision` (`<alias>@<label>`, canonical since
+-- P-22), whose serving revision is the one that label names - a pre-catalog model has none
+-- and no capability record to check (the ingress's check is all it ever had).
 create or replace function infrx.check_pinned_capability(j infrx.jobs, r jsonb) returns void
 language plpgsql stable security definer set search_path = infrx, public, pg_temp as $$
 declare
   v_cap jsonb;
 begin
-  select s.capability into v_cap from infrx.serving_versions s
-   where s.serving_version_id = j.serving_version_id;
+  if j.accounting_regime = 'credit' then
+    select s.capability into v_cap from infrx.serving_versions s
+     where s.serving_version_id = j.serving_version_id;
+  else
+    select s.capability into v_cap from infrx.serving_versions s
+      join public.models m on m.model_uuid = s.model_id
+     where m.id = split_part(j.model_revision, '@', 1)
+       and s.revision_label = nullif(split_part(j.model_revision, '@', 2), '');
+    if v_cap is null then
+      return;
+    end if;
+  end if;
   if v_cap is null then
     perform infrx.refuse('not_found', 'the pinned serving revision is not in the catalog');
   end if;
@@ -853,13 +872,12 @@ begin
                               'readiness', infrx.readiness_doc((v_doc->>'request_id')::uuid));
   end if;
   select * into j from infrx.jobs where request_id = (v_doc->>'request_id')::uuid;
-  if j.accounting_regime = 'credit' then
-    if j.rate_card_version is distinct from x->>'rate_card_version' then
-      perform infrx.lifecycle_refuse('expectation_mismatch',
-        'the model is not priced for this deployment');
-    end if;
-    perform infrx.check_pinned_capability(j, p_args->'request');
+  if j.accounting_regime = 'credit'
+     and j.rate_card_version is distinct from x->>'rate_card_version' then
+    perform infrx.lifecycle_refuse('expectation_mismatch',
+      'the model is not priced for this deployment');
   end if;
+  perform infrx.check_pinned_capability(j, p_args->'request');
   for m in select value from jsonb_array_elements(v_media) loop
     perform infrx.bind_source(j, m, v_i);
     v_i := v_i + 1;
