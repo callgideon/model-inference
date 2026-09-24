@@ -9,9 +9,13 @@
 # phase-3 lane's form): expect exit 0, or exit 3 with PENDING only [I2B-R4] until the worker
 # lane merges. Coordinator 2026-09-24.
 set -uo pipefail
-HEAD=$(git rev-parse --short HEAD); LOG=.claude-logs/checkpoint2-$HEAD; mkdir -p "$LOG/tmp"
+HEAD=$(git rev-parse --short HEAD); LOG=.claude-logs/checkpoint2-$HEAD; mkdir -p "$LOG"
+# TMPDIR must live OUTSIDE the repo: E4B's test_certify probes "an unknown tree" from a temp dir, and a
+# temp dir inside the checkout answers the checkout's own sha (interim run 01:29Z: 4 E4B reds, pristine
+# baseline broken). Default /tmp/claude-1000/ckpt2-<head>.
+TMP=${CKPT_TMP:-/tmp/claude-1000/ckpt2-$HEAD}; mkdir -p "$TMP"
 API=apps/infrx-api; PY=$API/.venv/bin/python
-export TMPDIR=$PWD/$LOG/tmp INFRX_D_TASK=d3 INFRX_D2_VALKEY_PORT=55464 \
+export TMPDIR=$TMP INFRX_D_TASK=d3 INFRX_D2_VALKEY_PORT=55464 \
        INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey INFRX_Q_VALKEY_PORT=55490
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_ENDPOINT_URL AWS_ENDPOINT_URL_S3
 stage() { echo "=== $1 $(date -u +%H:%M:%SZ)"; }
