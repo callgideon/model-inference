@@ -111,9 +111,10 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, 'NAMESPACES = {"e2": 0, "e3b2": 1200, "e4b": 1300}\n')
              .replace("(e3b2: 56700-56799, E2's +1200).", "(e3b2: 56700-56799, E2's +1200; e4b: 56800-56899, +1300)."))
 p = pathlib.Path("apps/infrx-api/infrx/contracts/tasklocal.py"); s = p.read_text()
-old = '    "e3b2": {"postgres": 56732},\n}\n'
+# (anchored on step 2(e)'s e3b2d line since 2026-09-24)
+old = '    "e3b2d": {"postgres": 55438, "valkey": 55468},\n}\n'
 assert s.count(old) == 1
-s = s.replace(old, '    "e3b2": {"postgres": 56732},\n    # E4B certifies on the E2 stack as namespace `e4b` (56800-56899, E4B request 1)\n'
+s = s.replace(old, old[:-2] + '    # E4B certifies on the E2 stack as namespace `e4b` (56800-56899, E4B request 1)\n'
                    '    "e4b": {"postgres": 56832},\n}\n')
 old = '    "e3b2": {"compose": (56700, tuple(range(56701, 56800)))},\n}\n'
 assert s.count(old) == 1
