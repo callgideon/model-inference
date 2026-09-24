@@ -195,9 +195,13 @@ run closed, and the coordinator's decision recorded in
   - bench.py now records a replay whose stream answers `state_conflict` as
     `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code.
   - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
-    exactly once. A passing drill states the property it proved: no second accepted item,
-    nothing re-sent after it was terminal, and each item the interruption cancelled
-    terminal after exactly one replay.
+    exactly once. A cancelled replay counts as cancelled by the interruption only when its
+    item's first attempt was the client's own tear (a transport error). Any other - a
+    platform-side failure the relay cancelled - is listed as cancelled by the platform and
+    FAILs the drill (R106's corrected text). A passing drill states the property it proved:
+    no second accepted item, nothing re-sent after it was terminal, each item the
+    interruption cancelled terminal after exactly one replay, and none cancelled by the
+    platform.
   - On the ledger a cancel carries no usage. A cancelled job's hold that is still held
     (`held_unknown`, R21) is accounted in the reserved total, not failed.
   - The envelope's over-cap refusals appear in every rung (the rerun: 8 × `unsupported_media`

@@ -495,25 +495,36 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     """R106 (a cancelled job's replay is terminal for that key), from the box rerun at
     4226315: the SIGINT tore two items' streams - a client that left, so each job is a
     committed cancel (R21) - and the resume re-sent each once under its key, answered
-    `state_conflict` (R91). Each is terminal as cancelled by the interruption, and the
-    drill states the property it proved. A second replay, a replay left a failure or an
-    item accepted twice fails it. On the ledger a cancel carries no usage, and a cancelled
-    job's hold that is still held is accounted for, not failed."""
+    `state_conflict` (R91). Each is terminal as cancelled by the interruption - only when
+    its first attempt was the client's own tear; a replay cancelled after a platform-side
+    failure is listed apart and fails the drill - and the drill states the property it
+    proved. A second replay, a replay left a failure or an item accepted twice fails it.
+    On the ledger a cancel carries no usage, and a cancelled job's hold that is still held
+    is accounted for, not failed."""
     torn = dict(_row("i3", "failed"), error_class="ReadError")
     replay = dict(_row("i3", certify.bench.CANCELLED_REPLAY), error_code="state_conflict")
     first_run, second_run = [_row("i1"), _row("i2"), torn], [replay, _row("i4"), _row("i5")]
     drill = (lambda second: certify.resume_problems(first_run, second, items=5,
                                                     first_interrupted=True))
-    assert drill(second_run) == [] and certify.cancelled_by_interruption(
-        first_run + second_run) == ["i3"]
+    assert drill(second_run) == [] and certify.cancelled_replays(first_run, second_run) == (
+        ["i3"], [])
     proved = ("MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, and "
-              "1 item(s) cancelled by the interruption, each terminal after exactly one replay "
-              "of its key (R106)")
+              "1 item(s) cancelled by the interruption (the client's own tear), each terminal "
+              "after exactly one replay of its key; none cancelled by the platform (R106)")
     assert certify.sop_property(first_run, second_run) == proved
     assert drill([*second_run, replay]) == [
         "cancelled items not terminal after exactly one replay: ['i3']"]
     assert drill([dict(replay, outcome="failed"), *second_run[1:]]) == [
         "items not terminal after the resume: ['i3']"]            # the box rerun, before R106
+    # a platform-side failure the relay cancelled (a store or journal gap) replays exactly
+    # like a tear; it is listed apart, and fails the drill (R106's corrected text)
+    for kind in ("stream_error_event", "http_502"):
+        platform = [*first_run[:2], dict(torn, error_class=kind)]
+        assert certify.cancelled_replays(platform, second_run) == ([], ["i3"]), kind
+        assert certify.resume_problems(platform, second_run, items=5,
+                                       first_interrupted=True) == [
+            "items cancelled by the platform (their first attempt was not the client's tear): "
+            "['i3']"], kind
     jobs = ("job-i1", "job-i2", "job-i4", "job-i5")
     usage, released = [Usage(job, "0.50000000") for job in jobs], [Hold(job) for job in jobs]
     before, after = Balance(Decimal("10000"), Decimal("0")), Balance(Decimal("9998"), Decimal("1"))
@@ -535,8 +546,9 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
         (*released, Hold("job-i3", state="held"), Hold("job-q1", state="held")), before,
         Balance(Decimal("9998"), Decimal("2"))) == [
         "reserved 0 -> 2 (1.00000000 held for the interruption's cancels)"]
+    written = list(first_run)
     monkeypatch.setattr(certify, "interrupted_run", lambda argv, raw, **_: (
-        raw.write_text("".join(json.dumps(r) + "\n" for r in first_run)),
+        raw.write_text("".join(json.dumps(r) + "\n" for r in written)),
         {"exit": 130, "signalled": True})[1])
     monkeypatch.setattr(certify, "client", lambda argv, env=None: (
         Path(argv[argv.index("--raw") + 1]).write_text(
@@ -550,7 +562,14 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
     entry = report.stages[-1]
     assert (entry["status"], entry["detail"]) == (certify.PASS, f"reconciled; {proved}")
-    assert entry["measured"]["cancelled_by_interruption"] == ["i3"]
+    assert (entry["measured"]["cancelled_by_interruption"],
+            entry["measured"]["cancelled_by_the_platform"]) == (["i3"], [])
+    written[-1] = dict(torn, error_class="stream_error_event")      # the platform's cancel
+    views = iter([(before, [], [])])
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
+    entry = report.stages[-1]
+    assert (entry["status"], entry["measured"]["cancelled_by_interruption"],
+            entry["measured"]["cancelled_by_the_platform"]) == (certify.FAIL, [], ["i3"])
 
 
 def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_reconciled(

@@ -452,16 +452,31 @@ def corpus_cache() -> Path:
 
 # --- dataset resume: the client half ---------------------------------------------------
 
-def cancelled_by_interruption(rows: list[dict]) -> list[str]:
-    """R106: the items whose replay answered that the interruption cancelled their job."""
-    return sorted({row["item_key"] for row in rows if row.get("outcome") == bench.CANCELLED_REPLAY})
+def torn_by_the_client(row: dict) -> bool:
+    """A first-run attempt the client itself ended: a transport error, which bench records
+    by its exception type - never a server's answer (`http_NNN`) or a platform failure
+    (`stream_error_event` and the other platform classes)."""
+    kind = row.get("error_class") or ""
+    return bool(kind) and not kind.startswith("http_") and kind not in bench.PLATFORM_ERROR_CLASSES
+
+
+def cancelled_replays(first: list[dict], second: list[dict]) -> tuple[list[str], list[str]]:
+    """R106: the items whose replay answered that their job was cancelled, split by what
+    ended the item's first-run attempt - the client's own tear (cancelled by the
+    interruption) or anything else (cancelled by the platform, which fails the drill)."""
+    firsts = {row["item_key"]: row for row in first}
+    cancelled = sorted({row["item_key"] for row in first + second
+                        if row.get("outcome") == bench.CANCELLED_REPLAY})
+    torn = [item for item in cancelled if torn_by_the_client(firsts.get(item, {}))]
+    return torn, [item for item in cancelled if item not in torn]
 
 
 def sop_property(first: list[dict], second: list[dict]) -> str:
     """The MARLIN-SOP property a drill with no client problem has proved."""
     return (f"MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, "
-            f"and {len(cancelled_by_interruption(first + second))} item(s) cancelled by the "
-            f"interruption, each terminal after exactly one replay of its key (R106)")
+            f"and {len(cancelled_replays(first, second)[0])} item(s) cancelled by the "
+            f"interruption (the client's own tear), each terminal after exactly one replay of "
+            f"its key; none cancelled by the platform (R106)")
 
 
 def resume_problems(first: list[dict], second: list[dict], *, items: int,
@@ -469,7 +484,8 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
     """The client's side of MARLIN-SOP's resume (E1B L6): an interruption that happened,
     one key per item, nothing terminal re-sent, no item accepted twice, every item
     terminal at the end - an item the interruption cancelled after exactly one replay of
-    its key (R106: a cancelled job's replay is terminal for that key)."""
+    its key (R106: a cancelled job's replay is terminal for that key), and no item the
+    platform cancelled (a replay cancelled whose first attempt was not the client's tear)."""
     problems = []
     accepted = {row["item_key"] for row in first if row.get("outcome") == "accepted"}
     if not first_interrupted or not 0 < len(accepted) < items:
@@ -497,7 +513,11 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
     if twice:
         problems.append(f"items accepted more than once: {twice}")
     replays = collections.Counter(row["item_key"] for row in second)
-    unreplayed = [item for item in cancelled_by_interruption(first + second) if replays[item] != 1]
+    torn, platform = cancelled_replays(first, second)
+    if platform:
+        problems.append(f"items cancelled by the platform (their first attempt was not the "
+                        f"client's tear): {platform}")
+    unreplayed = [item for item in torn + platform if replays[item] != 1]
     if unreplayed:
         problems.append(f"cancelled items not terminal after exactly one replay: {unreplayed}")
     return problems
@@ -674,7 +694,8 @@ def dataset_check(report: Report, target: dict, workdir: Path, cap_s: float, led
                            "replayed": sum(bool(r.get("idempotency_replayed"))
                                            for r in rows_second)},
                 "client_problems": problems or None,
-                "cancelled_by_interruption": cancelled_by_interruption(rows_first + rows_second),
+                "cancelled_by_interruption": cancelled_replays(rows_first, rows_second)[0],
+                "cancelled_by_the_platform": cancelled_replays(rows_first, rows_second)[1],
                 "sop": sop_property(rows_first, rows_second)}
     if problems:
         report.check("e4b.a.dataset-resume", FAIL, problems, measured=measured,
