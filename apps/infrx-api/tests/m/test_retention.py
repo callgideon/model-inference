@@ -406,9 +406,10 @@ METADATA = {"idempotency_key": "idem-1", "debit_credit": "400",
 
 def test_every_content_kind_goes_and_the_financial_metadata_stays(make_draft_world):
     """Uploaded, staged and prepared media, the payload envelope, the request text and the
-    result body in the database: all kept until the job's persisted boundary, all removed
-    at it. The job row - state, settlement, expiry, idempotency key, debit, digests - is
-    exactly what it was (D3): content is scrubbed and marked, never the record."""
+    result body in the database, each at its persisted boundary (F2C.b): the result exactly
+    at `result_expires_at`, everything else at settlement + the serving retention. The job
+    row - state, settlement, expiry, idempotency key, debit, digests - is exactly what it
+    was (D3): content is scrubbed and marked, never the record."""
     world = make_draft_world()
     job = new_id()
     run(world.port.admit(job, **METADATA))
@@ -418,15 +419,20 @@ def test_every_content_kind_goes_and_the_financial_metadata_stays(make_draft_wor
                                      hold_s=GRACE_S * 2))
     run(world.port.finish(job, "succeeded", result_ttl_s=RESULT_TTL_S))
     settled = run(world.port.job(job))
-    world.clock.advance(RESULT_TTL_S - 1)
+    world.clock.advance(RETENTION_S - 1)
     report = run(collector(world).sweep())
     assert deleted(report) == [upload_key(world)]           # its window closed long ago
     assert all(run(world.read(row)) for name, row in rows.items() if name != "upload")
     world.clock.advance(1)
+    served = {name: row for name, row in rows.items() if name not in ("upload", "result")}
     report = run(collector(world).sweep())
-    assert sorted(deleted(report)) == sorted(row.identity.object_key for name, row
-                                             in rows.items() if name != "upload")
+    assert sorted(deleted(report)) == sorted(row.identity.object_key for row in served.values())
     assert world.objects.objects == {}
+    assert run(world.read(rows["result"])) == "the answer"   # its own, later boundary
+    world.clock.advance(RESULT_TTL_S - RETENTION_S - 1)
+    assert deleted(run(collector(world).sweep())) == []
+    world.clock.advance(1)
+    assert deleted(run(collector(world).sweep())) == [f"job_results/{job}"]
     assert not any(key.startswith("job") for key in world.objects.deletes), \
         "database content was sent to the object store"
     for name in ("request_text", "result"):

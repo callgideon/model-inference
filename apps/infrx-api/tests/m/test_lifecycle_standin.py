@@ -169,13 +169,21 @@ class DraftLifecycle:
                        retention_s=self.retention_s) | changes
         return DraftLifecycle(self.clock, durable=self.d, **options)
 
-    def _job_live(self, job_id: str | None, now: datetime) -> bool:
+    def _job_live(self, job_id: str | None, now: datetime, kind: str = "source") -> bool:
+        """F2C.b per kind: a result until the persisted `result_expires_at` (none: it keeps
+        no result), anything else until settlement + the retention of that instant."""
         job = self.d.jobs.get(job_id)
-        return job is not None and (job.state == "live" or now < job.retain_until)
+        if job is None:
+            return False
+        if job.state == "live":
+            return True
+        until = (job.result_expires_at or job.settled_at) if kind == "result" \
+            else job.retain_until
+        return now < until
 
     def _protected(self, row: Row, now: datetime) -> bool:
         return (row.hold_until is not None and now < row.hold_until) \
-            or self._job_live(row.identity.job_id, now) \
+            or self._job_live(row.identity.job_id, now, row.identity.kind) \
             or any(gen == row.generation and self._job_live(job, now)
                    for gen, job in self.d.refs.get(row.content_id, ()))
 
@@ -225,7 +233,7 @@ class DraftLifecycle:
             job.state, job.settled_at = state, now
             if result_ttl_s is not None:
                 job.result_expires_at = now + timedelta(seconds=result_ttl_s)
-            job.retain_until = job.result_expires_at or now + timedelta(seconds=self.retention_s)
+            job.retain_until = now + timedelta(seconds=self.retention_s)
 
     async def put_body(self, object_key: str, body: str) -> None:
         self.d.bodies.setdefault(object_key, {"body": body, "scrubbed_at": None})
@@ -337,11 +345,13 @@ create table m6.content (
 create table m6.refs (content_id uuid not null references m6.content, generation int not null,
   job_id uuid not null references m6.jobs, primary key (content_id, generation, job_id));
 create table m6.bodies (object_key text primary key, body text, scrubbed_at timestamptz);
-create function m6.job_live(p_job uuid) returns boolean language sql stable as $$
-  select coalesce((select j.state = 'live' or m6.now() < j.retain_until
+create function m6.job_live(p_job uuid, p_kind text default 'source') returns boolean
+language sql stable as $$
+  select coalesce((select j.state = 'live' or m6.now() < case when p_kind = 'result'
+                     then coalesce(j.result_expires_at, j.settled_at) else j.retain_until end
                      from m6.jobs j where j.job_id = p_job), false) $$;
 create function m6.protected(c m6.content) returns boolean language sql stable as $$
-  select m6.now() < coalesce(c.hold_until, '-infinity') or m6.job_live(c.job_id)
+  select m6.now() < coalesce(c.hold_until, '-infinity') or m6.job_live(c.job_id, c.kind)
       or exists (select 1 from m6.refs r where r.content_id = c.content_id
                   and r.generation = c.generation and m6.job_live(r.job_id)) $$;
 """
@@ -480,8 +490,7 @@ class PgLifecycleStandIn:
         await self._one(
             "update m6.jobs set state = %(state)s, settled_at = m6.now(), "
             "result_expires_at = m6.now() + make_interval(secs => %(ttl)s), "
-            "retain_until = coalesce(m6.now() + make_interval(secs => %(ttl)s), "
-            "m6.now() + make_interval(secs => %(keep)s)) "
+            "retain_until = m6.now() + make_interval(secs => %(keep)s) "
             "where job_id = %(job)s and state = 'live' returning 1",
             dict(state=state, ttl=result_ttl_s, keep=self.retention_s, job=job_id))
 
