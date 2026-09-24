@@ -13,6 +13,7 @@
 | Field | Value |
 |---|---|
 | Base SHA | `a0711ac` = integration head `7c52627` + D5's branch `c67e4f5` (terminalize, `PgCatalogDirectory`, G6B adapters, `PgJobStore.lookup`) |
+| Review fix round | `c5c5395`, `fa881cf`, `e0b97f8` on `1bed457`: tests, docs and comments only (see "Review fix round"). The fix-round evidence is committed on top |
 | Implementation SHA | `60dd799` (items `88e1cfd..60dd799`, including the merge `f11f1f6` of `origin/codex/m1l2-object-store` @ `e1bb54f`). `92269a6` on top is the coordinator's save of this report's draft at the Opus session limit (evidence only). This report is committed on top of that as the lane's final head |
 | Branch / worktree | `codex/cutover-mount` / `.claude/worktrees/codex-cutover`. This lane pushed nothing; the coordinator pushed its save `92269a6` |
 | G2's cutover diff | the inline text of `G2-e5e7d3a.md` "integration_requests" 1, sha256 `bae3449513c283b09f6ad90c9164334f08405801462a979b352d2b7fc36c46b4` (the round-2 hash of that text), `git apply` clean at `a0711ac`; its hunks are in `88e1cfd` (code and tests) and `43fe900` (deploy files) |
@@ -140,7 +141,10 @@
       shaped as 40 hex digits.
     - `INFRX_IMAGE`, the image id preflight already wrote for systemd, is now also read by
       the runtime (`config.DeploymentSettings.infrx_release_sha` / `infrx_image`).
-    - A malformed value refuses startup in every mode (`validate_deployment`).
+    - A malformed value refuses startup in every mode (`validate_deployment` runs before
+      the mode is dispatched on). Since `c5c5395` the case checks dev, test and pilot,
+      with abbreviated and 39-hex commits and short or bare digests (review COMP-B1,
+      H-B1).
   - `pilot.build_info(rt)` runs in `create_app` after the composition. A pilot without
     either value refuses to start, naming it. Dev/test set the gauge only when both values
     are given.
@@ -251,9 +255,16 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
    `tests/m/test_s3.py` cases skip visibly in this lane: there is no
    `INFRX_M_S3_ENDPOINT`, and this lane owns no S3 container. The image refusal under
    "Runs" is HeadBucket against a dead endpoint.
-2. **The in-memory upload state stays (G4U limit 1, M3 limit 1).** The upload records and
-   `_resume`'s witness (`MediaUploads.by_job`) live in the process. M's stray-payload sweep
-   (G2 R2-4) is still open, and the collector is not in the lifespan (G2 request 6).
+2. **The in-memory upload state stays (G4U limit 1, M3 limit 1; owners G4U/M).** The
+   upload records and `_resume`'s witness (`MediaUploads.by_job`) live in the process. M's
+   stray-payload sweep (G2 R2-4) is still open, and the collector is not in the lifespan
+   (G2 request 6).
+   - Since the cutover mounts the upload routes, one uvicorn worker is a correctness
+     invariant. If worker A created an upload and worker B took the PUT, the PUT would 404.
+   - The unit runs `--workers 1`. Since `fa881cf` the factory case pins that, and pins the
+     110 s drain inside docker's 120 s and systemd's 150 s (`unit_two_workers`,
+     `unit_drain_shortened`).
+   - 08 §5.1 has no `WORKERS`/uvicorn row, so none was edited (review COMP-N1).
 3. **The PostgreSQL case injects `objects=` and `index=` and has no committed mutant list.**
    The coordinator asked for `objects=` to be dropped where the composition is built from
    settings. Here it stays, because this lane has no S3-compatible store (M's is 59100, not
@@ -264,11 +275,22 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
    the harness DSN is the superuser. The fakes' case kills it
    (`test_f_base__the_pool_sets_the_service_role_on_every_connection`,
    `…the_startup_probe_connects_on_its_own…`).
-4. **The edge is pinned by parsing, not by running Caddy.** This is I2B's pattern. The
-   resolver models only `@private` path patterns, `handle /health` and the catch-all. A new
-   `handle` block for a public path would need that model extended.
+4. **The edge is pinned by parsing, not by running Caddy.** This is I2B's pattern.
+   - The resolver models only `@private` path patterns, `handle /health` and the catch-all.
+     A new `handle` block for a public path without `flush_interval -1` still passes (the
+     review's H10d, H-N6 (a)); the resolver would need extending to catch it.
+   - Since `fa881cf`, the scan for directives that rewrite, compress or buffer (`header*`,
+     `encode`, `*_buffers`) covers the whole site, not only the proxy block (review COMP-B2).
+   - Dropping `--extra traces` from the Dockerfile's `uv sync` (botocore) passes tests/i
+     and tests/m. Only the in-image pilot probe at install catches it (the review's H8,
+     H-N6 (b)). This stays disclosed.
 5. **`VALKEY_URL` is required by the composition unless an index is injected.** That is
    `build_ingress_deps`'s default, from G2. 08 §5 now says so.
+   - A `VALKEY_URL` pointing at a closed port does not fail startup or readiness. The
+     scheduling index is not in `REQUIRED_CHECKS` (price_source, journal).
+   - That is G2/Q's existing design, not the cutover's. The cutover makes it the production
+     composition (review COMP-N5). G2/Q decide whether an index probe joins
+     `REQUIRED_CHECKS`.
 6. **E3B layer 0 after the mount.** `ingress_is_mounted()` is now true, so every pending case
    that probes it stops pending and fails until its body is written. That is the design:
    "fail the day `ingress` enters `ROUTERS`". There were 12 `PENDING[G2-R1…]` skips at
@@ -285,6 +307,11 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
      fails with "Left contains one more item: '0018_terminal_settlement.sql'". D5 added 0018
      (`e96449e`, in the base `a0711ac`). The harness's migration list gains it at the merge,
      as it gained 0017 at D4's (`e2a52b2`).
+
+   On the five-way merge the review simulated, the lane's 17 are resolved, and layer 0 has
+   2 other failures: the `e3bm62` anchor, and `stack.OWNERS['M3-U1']` (review H-N2). Both
+   belong to the E3B phase-3 lane. The coordinator reports that its head `b9529d1` now
+   closes them.
 7. **Dev installs.** Preflight no longer checks the composition, and M1-L2's bucket check
    runs only on the pilot path. So a dev env with no reachable bucket installs, and its unit
    then refuses to start.
@@ -321,8 +348,10 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
   (`tests/integration/test_harness.py`, D5's migration; Limits 6). This is the merge-time
   step that `e2a52b2` did for 0017.
 - **W: none.**
-- **I (I2B), `deploy/rehearse.sh`.** The rehearsal was not run here. Read against the cutover,
-  three of its steps no longer hold:
+- **I (I2B), `deploy/rehearse.sh`.** The rehearsal was not run here. The review confirms
+  the disclosure (COMP-N4, H-N4). The coordinator has routed it: the worker lane owns item
+  2. Until it is rewritten, the deploy has no end-to-end rehearsal. Read against the
+  cutover, three of its steps no longer hold:
   - Step 1 deploys dev and expects the gateway to start. A dev env now needs a bucket that
     answers HeadBucket.
   - Step 2 expects a legacy-key chat to answer 200. The ingress has no legacy-key path.
@@ -338,15 +367,21 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
   M1-L2 added `tests/m/test_s3_mutants.py`, so the `api-mutants` line needs no change for
   them. Not mine, but noticed: `tests/d/test_code_mutants_d5.py` (D5's list, merged at
   `a0711ac`) is **not** on the `api-mutants` line.
-- **Coordinator: ruling (next free R95), proposed text.** "R95 — The gateway composes its
-  durable adapters from settings or refuses (the cutover).
+- **Coordinator: ruling, proposed text.** The coordinator numbers it at the merge (R98,
+  review H-N5). "The gateway composes its durable adapters from settings or refuses (the
+  cutover).
   - `create_app` builds each adapter it is not given: D5's catalog, D4's journal and the
     job store on one pool from `DATABASE_URL`/`DATABASE_POOL_*`, and the object store from
     `S3_MEDIA_BUCKET`, which must answer HeadBucket (M1-L2).
   - It never stages media in process memory outside a test that injects the store.
   - An unset `S3_MEDIA_BUCKET`, or a store to build with no `DATABASE_URL`, refuses in
     every mode, naming the setting.
-  - An unset `INFRX_MODE` refuses to start (R44, completed)."
+  - An unset `INFRX_MODE` refuses to start (R44, completed).
+  - A pilot refuses to start without `INFRX_RELEASE_SHA` and `INFRX_IMAGE`, and exposes
+    them once as `infrx_build_info{revision, image}` on its loopback /metrics. A value not
+    of the full shape (a 40-hex commit, `sha256:<64 hex>`) refuses in every mode.
+  - The scheduling index comes from `VALKEY_URL`, or the composition refuses unless an
+    index is injected."
 
   M1-L2 proposes its own object-store ruling. The two can be one.
 - **Item 6 follow-up: decided.** The coordinator decided on 2026-09-23 to leave
@@ -362,6 +397,48 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
   - `research/workloads/marlin-sop.md:561`, and D12 at `:699`
 
   Not edited here.
+
+## Review fix round (1bed457 -> e0b97f8)
+
+This round answers the review at `a1e88dc` (`CUTOVER-review-a1e88dc.json`, verdict
+fix_required). There were three blocking findings, all of them test gaps, and every refuter
+confirmed that the shipped code is strict. `git diff --stat 1bed457 e0b97f8 -- apps/infrx-api/infrx apps/infrx-api/deploy`
+touches only a comment in `infrx/config.py`. There is no behaviour change.
+
+| Finding | Commit | What changed | Mutants killed (by name at `e0b97f8`) |
+|---|---|---|---|
+| COMP-B1 / H-N1 (a weaker shape passed) | `c5c5395`, `fa881cf` | `test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as` now also refuses the release `RELEASE[:7]`, `RELEASE[:-1]` and upper case, and the image `sha256:c0ffee`, `sha256:` + 63 hex and the bare 64 hex. `test_deploy_failclosed__a_pilot_env_carries_the_release_install_sh_deploys` adds `RELEASE[:7]` and `RELEASE[:-1]` | G `release_sha_accepts_a_short_id` (O4, `[0-9a-f]{7,40}`) `1 failed, 21 deselected`; `image_id_accepts_a_short_digest` (`{6,64}`) `1 failed, 21 deselected`; `image_id_accepts_any_sha256` (O6, `sha256:\S+`) `1 failed, 21 deselected`. I `release_shape_accepts_a_short_id` (O5, preflight `git_sha` `{7,40}`) `1 failed, 42 deselected` |
+| H-B1 ("every mode" tested in pilot only) | `c5c5395` | The code does refuse in every mode: `validate_runtime` calls `validate_deployment` before it dispatches on the mode. So the case now asserts the refusal for each malformed value in `dev`, `test` and `pilot` (`limits.MODES`). The 08 §5.1 row and item 7 keep "in every mode" | G `release_shape_refused_only_in_pilot` (H16) `1 failed, 21 deselected`; `image_shape_refused_only_in_pilot` (H6) `1 failed, 21 deselected` |
+| COMP-B2 (a site-level directive passed) | `fa881cf` | The edge case adds `Server-Timing` to `PASSTHROUGH` (08 §3). The `header*`/`encode`/`*_buffers` scan now covers the whole site with comments stripped. The only header it allows is `header Content-Type application/json` directly followed by `respond` (the @private, @health, handle_errors 413 and /health handle_response blocks) | I `edge_site_encodes_streams` (O1, site-level `encode gzip zstd`) `1 failed, 21 deselected`; `edge_site_strips_server_timing` (O2, site-level `header -Server-Timing`) `1 failed, 21 deselected` |
+| COMP-N2 (gauge asserted with `in`) | `c5c5395` | Exactly one `infrx_build_info{` line, equal to the expected one (the value renders `1.0`) | G `build_info_exposed_twice` (O3) `1 failed, 21 deselected` |
+| COMP-N1 (one worker is a correctness invariant) | `fa881cf` | The factory case pins `--workers 1` and `--timeout-graceful-shutdown 110`, and 110 < docker stop -t < TimeoutStopSec. Limits 2 states it. 08 §5.1 has no WORKERS/uvicorn row to edit | I `unit_two_workers` (O9) `1 failed, 21 deselected`; `unit_drain_shortened` (O10) `1 failed, 21 deselected` |
+| COMP-N3 / H-N3 (stale docs) | `e0b97f8` | Reworded: the README environment paragraph (M1-L2's `S3ObjectStore`, HeadBucket), the `test_composition_pg.py` docstring, the apps/README.md §7 heading, the pyproject `[tool.uv]` comment and a `config.py` comment | none (docs and comments) |
+| COMP-N4 / H-N4 (rehearse.sh) | evidence | Already disclosed to I2B. The coordinator routes it to the worker lane's item 2 (Integration requests) | — |
+| COMP-N5 (closed VALKEY_URL still ready) | evidence | Limits 5: G2/Q's existing design | — |
+| H-N2 (layer 0 on the five-way merge) | evidence | Limits 6: the coordinator reports that E3B phase 3 `b9529d1` closes `e3bm62` and `M3-U1` | — |
+| H-N5 (ruling number) | evidence | The literal "R95" is dropped; the coordinator numbers it (R98). The proposed text gains the build-info and `VALKEY_URL` clauses | — |
+| H-N6 (partly killable deploy pins) | evidence | Kept disclosed: Limits 4 covers the unmodelled `handle` block (H10d) and the `--extra traces` line (H8) | — |
+
+New mutants: six in the G list (322 -> 328) and five in the I list (197 -> 202).
+`release_sha_accepts_a_short_id` (G) and `edge_site_encodes_streams` (I) join the default
+subsets. That is why tests/g and tests/i each gain one case.
+
+Runs at `e0b97f8`: logs in `$S/cut6/`, clean tree under `apps/`. No PostgreSQL was used:
+`INFRX_D_TASK=cutover-nopg`, so any PostgreSQL harness would refuse. `INFRX_D2_VALKEY_PORT=55464`,
+`INFRX_D2_VALKEY_CONTAINER=infrx-cutover-valkey`, `INFRX_Q_VALKEY_PORT=55492`.
+
+| Run | Tail | Exit |
+|---|---|---|
+| `pytest -q tests/g/test_startup.py` | `22 passed, 2 warnings in 0.57s` | 0 |
+| G by-name, every mutant on the build case (13) | `13/13 killed` (the 7 earlier ones as before; the 6 new ones above) | 0 |
+| I by-name, every mutant on the edge, factory and release cases (18) | `18/18 killed` (the 13 earlier ones as before; the 5 new ones above) | 0 |
+| `pytest -q tests/i` | `154 passed in 158.10s (0:02:38)` | 0 |
+| `pytest -q tests/g` | `575 passed, 2 warnings in 173.75s (0:02:53)` | 0 |
+| `pytest -q tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py --ignore=tests/contracts/test_mutants.py` | `1 failed, 1025 passed in 17.49s`. The failure is the pre-existing `test_cancel_cause.py::test_dur_settle__before_0018…` (D5/F) | 1 |
+
+Not rerun in this round: the full G and I lists (`INFRX_MUTANTS=all`) and `make api-test`.
+Every mutant that names one of the four edited cases ran by name above. No other case, and
+no code, changed.
 
 ## Verification log
 
@@ -380,3 +457,7 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
   (`STREAM_A_DONE`, `STREAM_B_DONE`). The only red runs are layer 0 (Limits 6) and the 23
   pre-existing contracts failures in contracts quick and `make api-test`. None is the
   cutover's.
+- 2026-09-24: Review fix round (`1bed457` -> `e0b97f8`). The three blocking findings
+  (COMP-B1, COMP-B2, H-B1) are closed with tests and 11 new mutants. COMP-N1, COMP-N2 and
+  COMP-N3 are folded in. COMP-N4, COMP-N5, H-N2, H-N5 and H-N6 are stated in Limits and
+  Integration requests. Every count in the new section is copied from `$S/cut6/`.
