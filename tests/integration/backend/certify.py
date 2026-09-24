@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import hashlib
 import json
 import os
@@ -451,10 +452,24 @@ def corpus_cache() -> Path:
 
 # --- dataset resume: the client half ---------------------------------------------------
 
+def cancelled_by_interruption(rows: list[dict]) -> list[str]:
+    """R106: the items whose replay answered that the interruption cancelled their job."""
+    return sorted({row["item_key"] for row in rows if row.get("outcome") == bench.CANCELLED_REPLAY})
+
+
+def sop_property(first: list[dict], second: list[dict]) -> str:
+    """The MARLIN-SOP property a drill with no client problem has proved."""
+    return (f"MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, "
+            f"and {len(cancelled_by_interruption(first + second))} item(s) cancelled by the "
+            f"interruption, each terminal after exactly one replay of its key (R106)")
+
+
 def resume_problems(first: list[dict], second: list[dict], *, items: int,
                     first_interrupted: bool) -> list[str]:
     """The client's side of MARLIN-SOP's resume (E1B L6): an interruption that happened,
-    one key per item, nothing terminal re-sent, every item terminal at the end."""
+    one key per item, nothing terminal re-sent, no item accepted twice, every item
+    terminal at the end - an item the interruption cancelled after exactly one replay of
+    its key (R106: a cancelled job's replay is terminal for that key)."""
     problems = []
     accepted = {row["item_key"] for row in first if row.get("outcome") == "accepted"}
     if not first_interrupted or not 0 < len(accepted) < items:
@@ -476,6 +491,15 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
     open_items = sorted(item for item, row in last.items() if not bench.is_terminal(row))
     if open_items:
         problems.append(f"items not terminal after the resume: {open_items}")
+    acceptances = collections.Counter(row["item_key"] for row in first + second
+                                      if row.get("outcome") == "accepted")
+    twice = sorted(item for item, count in acceptances.items() if count > 1)
+    if twice:
+        problems.append(f"items accepted more than once: {twice}")
+    replays = collections.Counter(row["item_key"] for row in second)
+    unreplayed = [item for item in cancelled_by_interruption(first + second) if replays[item] != 1]
+    if unreplayed:
+        problems.append(f"cancelled items not terminal after exactly one replay: {unreplayed}")
     return problems
 
 
@@ -484,7 +508,10 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
 def reconcile_problems(rows: list[dict], usage, holds, before, after) -> list[str]:
     """MARLIN-SOP's no-duplicate property on the tenant's own ledger (G6B `TenantSession`):
     one Inference-Id per accepted item across both runs, one CREDIT usage record and one
-    hold (released) per accepted job, Σ charged = the ledger's fall, reserved restored."""
+    hold (released) per accepted job, Σ charged = the ledger's fall, reserved restored -
+    but for the holds of the jobs the interruption cancelled (R106) that are still held: a
+    cancel carries no usage, and after output its hold stays held until the platform
+    releases it (R21, `held_unknown`)."""
     problems = []
     ids: dict[str, set] = {}
     for row in rows:
@@ -515,8 +542,13 @@ def reconcile_problems(rows: list[dict], usage, holds, before, after) -> list[st
     fell = Decimal(str(before.ledger_total)) - Decimal(str(after.ledger_total))
     if charged != fell:
         problems.append(f"Σ charged {charged} != ledger fall {fell}")
-    if Decimal(str(after.reserved_total)) != Decimal(str(before.reserved_total)):
-        problems.append(f"reserved {before.reserved_total} -> {after.reserved_total}")
+    cancelled = {row.get("inference_id") for row in rows
+                 if row.get("outcome") == bench.CANCELLED_REPLAY} - {None}
+    kept = sum((Decimal(str(hold.amount)) for hold in holds
+                if hold.request_id in cancelled and str(hold.state) == "held"), Decimal(0))
+    if Decimal(str(after.reserved_total)) != Decimal(str(before.reserved_total)) + kept:
+        problems.append(f"reserved {before.reserved_total} -> {after.reserved_total}"
+                        + (f" ({kept} held for the interruption's cancels)" if kept else ""))
     return problems
 
 
@@ -641,7 +673,9 @@ def dataset_check(report: Report, target: dict, workdir: Path, cap_s: float, led
                 "resume": {"exit": resumed["exit"], "attempts": len(rows_second),
                            "replayed": sum(bool(r.get("idempotency_replayed"))
                                            for r in rows_second)},
-                "client_problems": problems or None}
+                "client_problems": problems or None,
+                "cancelled_by_interruption": cancelled_by_interruption(rows_first + rows_second),
+                "sop": sop_property(rows_first, rows_second)}
     if problems:
         report.check("e4b.a.dataset-resume", FAIL, problems, measured=measured,
                      label=target["label"])
@@ -667,7 +701,8 @@ def dataset_check(report: Report, target: dict, workdir: Path, cap_s: float, led
         time.sleep(5)
     measured["ledger"] = {"before": str(before.ledger_total), "after": str(balance.ledger_total),
                           "reserved_after": str(balance.reserved_total)}
-    report.check("e4b.a.dataset-resume", FAIL if problems else PASS, problems or "reconciled",
+    report.check("e4b.a.dataset-resume", FAIL if problems else PASS,
+                 problems or f"reconciled; {measured['sop']}",
                  measured=measured, label=target["label"])
 
 

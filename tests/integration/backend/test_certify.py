@@ -418,7 +418,8 @@ def test_e4b_the_resume_drill_counts_a_run_that_was_not_interrupted_as_proving_n
         "nothing"]
     resent = certify.resume_problems(FIRST, [*SECOND, _row("i1")], items=6,
                                      first_interrupted=True)
-    assert resent == ["terminal items re-sent by the resume: ['i1']"]
+    assert resent == ["terminal items re-sent by the resume: ['i1']",
+                      "items accepted more than once: ['i1']"]
     rekeyed = certify.resume_problems(FIRST, [_row("i3", key="sop1.other"), *SECOND[1:]],
                                       items=6, first_interrupted=True)
     assert rekeyed == ["items sent under more than one key: ['i3']"]
@@ -484,6 +485,61 @@ def test_e4b_the_ledger_reconciles_item_by_item_with_no_duplicate_accepted_item(
     assert certify.reconcile_problems(ROWS, USAGE, HOLDS, BEFORE,
                                       Balance(Decimal("9997.5"), Decimal("1"))) == [
         "reserved 0 -> 1"]
+
+
+def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp_path,
+                                                                           monkeypatch):
+    """R106 (a cancelled job's replay is terminal for that key), from the box rerun at
+    4226315: the SIGINT tore two items' streams - a client that left, so each job is a
+    committed cancel (R21) - and the resume re-sent each once under its key, answered
+    `state_conflict` (R91). Each is terminal as cancelled by the interruption, and the
+    drill states the property it proved. A second replay, a replay left a failure or an
+    item accepted twice fails it. On the ledger a cancel carries no usage, and a cancelled
+    job's hold that is still held is accounted for, not failed."""
+    torn = dict(_row("i3", "failed"), error_class="ReadError")
+    replay = dict(_row("i3", certify.bench.CANCELLED_REPLAY), error_code="state_conflict")
+    first_run, second_run = [_row("i1"), _row("i2"), torn], [replay, _row("i4"), _row("i5")]
+    drill = (lambda second: certify.resume_problems(first_run, second, items=5,
+                                                    first_interrupted=True))
+    assert drill(second_run) == [] and certify.cancelled_by_interruption(
+        first_run + second_run) == ["i3"]
+    proved = ("MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, and "
+              "1 item(s) cancelled by the interruption, each terminal after exactly one replay "
+              "of its key (R106)")
+    assert certify.sop_property(first_run, second_run) == proved
+    assert drill([*second_run, replay]) == [
+        "cancelled items not terminal after exactly one replay: ['i3']"]
+    assert drill([dict(replay, outcome="failed"), *second_run[1:]]) == [
+        "items not terminal after the resume: ['i3']"]            # the box rerun, before R106
+    jobs = ("job-i1", "job-i2", "job-i4", "job-i5")
+    usage, released = [Usage(job, "0.50000000") for job in jobs], [Hold(job) for job in jobs]
+    before, after = Balance(Decimal("10000"), Decimal("0")), Balance(Decimal("9998"), Decimal("1"))
+    ledger = (lambda usage=usage, holds=(*released, Hold("job-i3", state="held")), after=after:
+              certify.reconcile_problems(first_run + second_run, usage, holds, before, after))
+    assert ledger() == []
+    assert ledger(holds=(*released, Hold("job-i3")), after=Balance(Decimal("9998"),
+                                                                    Decimal("0"))) == []
+    assert ledger(after=Balance(Decimal("9998"), Decimal("0"))) == [
+        "reserved 0 -> 0 (1.00000000 held for the interruption's cancels)"]
+    assert ledger(usage=[*usage, Usage("job-i3", "0.50000000")],
+                  after=Balance(Decimal("9997.5"), Decimal("1"))) == [
+        "Σ charged 2.00000000 != ledger fall 2.5"]                # a cancel carries no usage
+    monkeypatch.setattr(certify, "interrupted_run", lambda argv, raw, **_: (
+        raw.write_text("".join(json.dumps(r) + "\n" for r in first_run)),
+        {"exit": 130, "signalled": True})[1])
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: (
+        Path(argv[argv.index("--raw") + 1]).write_text(
+            "".join(json.dumps(r) + "\n" for r in second_run)), {"exit": 0, "tail": ""})[1])
+    monkeypatch.setitem(certify.MATRIX["tiny"], "dataset",
+                        {"items": 5, "interrupt_after": 2, "rate": 4.0})
+    metered = {**TARGET, "metered": True, "base_url": "http://gw/v1", "bench_target": "gateway",
+               "model": "m", "label": certify.MEAS}
+    report = certify.Report(metered)
+    views = iter([(before, [], []), (after, usage, (*released, Hold("job-i3", state="held")))])
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
+    entry = report.stages[-1]
+    assert (entry["status"], entry["detail"]) == (certify.PASS, f"reconciled; {proved}")
+    assert entry["measured"]["cancelled_by_interruption"] == ["i3"]
 
 
 def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_reconciled(
@@ -865,6 +921,9 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert {row[0]: row[1] for row in rung(capped)} == {
         "duration_cap": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
         "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
+    # the box rerun: every rung carried the over-cap clips' refusals - by design, never a
+    # refusal that lowers the supported rate
+    assert certify.envelope_summary([(0.5, rung(capped))]) == (certify.PASS, (), 0.5)
     untyped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
     assert rung(untyped)[0] == ("duration_cap", "fail", {
         "over_cap_not_refused": ["over"], "within_cap_refused": [], "cap_s": CAP}, "BOX")

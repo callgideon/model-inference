@@ -186,3 +186,19 @@ run closed, and the coordinator's decision recorded in
   - `e4b.a.dataset-resume` schedules only clips within the cap, from a copy of the licensed
     manifest in the workdir that the first run and the resume both read. An item refused as
     over the cap anyway FAILs the drill: the gateway's cap is then not the runner's.
+  (d) R106, a cancelled job's replay is terminal for that key. This comes from the box rerun
+  (out `20260924T172244Z`): its dataset-resume drill FAILed "items not terminal after the
+  resume" for exactly the two items the SIGINT interrupted.
+  - Why: a torn stream is a client that left, so each job is a committed cancel (R21). The
+    resume's replay of the same key answered that committed result, `state_conflict` (R91),
+    and bench.py re-sent it as a failure every time.
+  - bench.py now records a replay whose stream answers `state_conflict` as
+    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code.
+  - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
+    exactly once. A passing drill states the property it proved: no second accepted item,
+    nothing re-sent after it was terminal, and each item the interruption cancelled
+    terminal after exactly one replay.
+  - On the ledger a cancel carries no usage. A cancelled job's hold that is still held
+    (`held_unknown`, R21) is accounted in the reserved total, not failed.
+  - The envelope's over-cap refusals appear in every rung (the rerun: 8 × `unsupported_media`
+    at r = 0.5). They are the cap's by design and never lower the supported rate.

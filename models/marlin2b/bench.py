@@ -72,6 +72,12 @@ REJECT_STATUS = {400, 401, 402, 403, 404, 409, 410, 413, 415, 422, 429}
 # A rejection a resume must NOT repeat: marlin-sop.md §3.6 quarantines these and retrying
 # them unchanged is pointless. 402 and 429 are explicitly resumable (fund, or back off).
 TERMINAL_REJECT_STATUS = {400, 401, 403, 404, 409, 410, 413, 415, 422}
+# R106, a cancelled job's replay is terminal for that key: a replay (the gateway's
+# Idempotency-Replayed) whose stream answers `state_conflict` is a job the interruption
+# cancelled - a client that left is a committed cancel (R21), and a replay answers the
+# committed result (R91). Re-issuing the item takes a new key. Only the allowlisted code is
+# read, never the text; a fresh request's `state_conflict` stays a failure.
+CANCELLED_REPLAY = "cancelled_by_interruption"
 MIN_TAIL = 3            # a reported quantile needs this many samples strictly beyond it
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
@@ -693,11 +699,12 @@ def read_attempts(path):
 
 
 def is_terminal(row):
-    """marlin-sop.md §3.5/§3.6: an item is done when it was accepted or quarantined.
+    """marlin-sop.md §3.5/§3.6: an item is done when it was accepted or quarantined, or its
+    key answers that the interruption cancelled its job (CANCELLED_REPLAY).
 
     A failure, a 429, a 402 and a cancelled request are all NOT terminal, so a resume
     re-sends them — with the same key, which is what makes the re-send safe."""
-    if row.get("outcome") == "accepted":
+    if row.get("outcome") in ("accepted", CANCELLED_REPLAY):
         return True
     return row.get("outcome") == "rejected" and row.get("http_status") in TERMINAL_REJECT_STATUS
 
@@ -882,6 +889,9 @@ async def attempt(client, cfg, item, t0, attempt_no):
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
         row["end_s"] = row["end_s"] or now()
+    if (row["outcome"], row["error_code"], row["idempotency_replayed"]) == (
+            "failed", "state_conflict", True):
+        row["outcome"] = CANCELLED_REPLAY
     ttft = None if row["first_token_s"] is None or row["send_s"] is None else \
         round(row["first_token_s"] - row["send_s"], 6)
     row["ttft_s"] = ttft
@@ -1257,6 +1267,7 @@ def summarize(rows, wall, cfg):
     rejected = [r for r in finals if r["outcome"] == "rejected"]
     failed = [r for r in finals if r["outcome"] == "failed"]
     cancelled = [r for r in finals if r["outcome"] == "cancelled"]
+    cancelled_replays = [r for r in finals if r["outcome"] == CANCELLED_REPLAY]
     out_tokens = sum(r["completion_tokens"] or 0 for r in accepted)
     # The throughput unit P-18 requires: successful VIDEO-SECONDS per second, never clips
     # per second on its own (a clips/s number without the duration mix means nothing).
@@ -1295,7 +1306,7 @@ def summarize(rows, wall, cfg):
         "max_tokens": cfg["max_tokens"],
         "profile": profile_block(cfg),
         "accepted": len(accepted), "rejected": len(rejected), "failed": len(failed),
-        "cancelled": len(cancelled),
+        "cancelled": len(cancelled), CANCELLED_REPLAY: len(cancelled_replays),
         "accepted_without_usage": sum(1 for r in accepted if r["usage_missing"]),
         # Retries collapse a request to its final attempt, so every rejected or failed
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.

@@ -123,6 +123,7 @@ CAP_SOURCE = "test_e4b_the_deployed_cap_and_its_refusal_are_the_media_layers"
 PARITY_CAP = "test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_rest"
 ADMISSION = "test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_kept"
 DATASET_CAP = "test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap"
+CANCELLED = "test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay"
 CAP_WIRING = "test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
@@ -200,7 +201,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("sum_unchecked", "Σ charged equals the ledger's fall",
        "    if charged != fell:\n", "    if False:\n", LEDGER),
     _m("reserved_unchecked", "the reserved total comes back to its value before the run",
-       "if Decimal(str(after.reserved_total)) != Decimal(str(before.reserved_total)):",
+       "if Decimal(str(after.reserved_total)) != Decimal(str(before.reserved_total)) + kept:",
        "if False:", LEDGER),
     # --- the resume drill, orchestration -----------------------------------------------
     _m("client_problems_ignored", "a client-side problem fails the drill on any target",
@@ -594,6 +595,26 @@ MUTANTS: tuple[Mutant, ...] = (
        DATASET_CAP),
     _m("capped_items_accepted", "an item refused as over the cap fails the drill",
        "    if capped:\n", "    if False:\n", DATASET_CAP),
+    # --- CERTIFY-TREE item 5: R106, a cancelled job's replay is terminal ---------------
+    _m("cancelled_items_uncounted", "the drill counts the items the interruption cancelled",
+       'if row.get("outcome") == bench.CANCELLED_REPLAY})', 'if row.get("outcome") == "cancelled"})',
+       CANCELLED),
+    _m("second_replay_accepted", "a cancelled item is terminal after exactly one replay",
+       "    if unreplayed:\n", "    if False:\n", CANCELLED),
+    _m("accepted_twice_unchecked", "no item is accepted twice across both runs",
+       "    if twice:\n", "    if False:\n", RESUME),
+    _m("cancel_holds_unaccounted", "a cancelled job's hold that is still held is accounted for",
+       "!= Decimal(str(before.reserved_total)) + kept:", "!= Decimal(str(before.reserved_total)):",
+       CANCELLED),
+    _m("released_cancel_holds_counted", "only a cancelled job's hold still held is kept",
+       '                if hold.request_id in cancelled and str(hold.state) == "held"), Decimal(0))',
+       "                if hold.request_id in cancelled), Decimal(0))", CANCELLED),
+    _m("sop_property_unstated", "a passing drill states the MARLIN-SOP property it proved",
+       "                 problems or f\"reconciled; {measured['sop']}\",",
+       '                 problems or "reconciled",', CANCELLED),
+    _m("over_cap_refusals_bias_the_rate", "the cap's refusals never lower the supported rate",
+       '    refusals = [r for r in counted if r.get("outcome") == "rejected"]\n',
+       '    refusals = [r for r in rows if r.get("outcome") == "rejected"]\n', RUNG),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

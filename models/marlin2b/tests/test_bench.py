@@ -544,6 +544,49 @@ def test_resume_after_a_lost_ack_creates_no_second_accepted_item():
         assert resumed["idempotency"]["resumed_from"] == "raw1.jsonl"
 
 
+def test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption():
+    """R106, a cancelled job's replay is terminal for that key (the E4B box rerun at
+    4226315). The interruption tore item 1's answer: a client that left, so its job is a
+    committed cancel (R21). The resume's replay of the same key answers that committed
+    result as a `state_conflict` stream event (R91). Only that shape - a replay, that code -
+    is CANCELLED_REPLAY, and it is terminal. A fresh request's `state_conflict`, or a
+    replay's other error, stays a failure that a resume re-sends."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(3, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True, lose_ack=(1,))
+        first = os.path.join(tmp, "raw1.jsonl")
+
+        def resume(n):
+            argv = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+            argv[argv.index("--raw") + 1] = os.path.join(tmp, f"raw{n}.jsonl")
+            return run_bench(argv + ["--resume", first], gw, env={"MARLIN_API_KEY": KEY})
+        argv = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+        argv[argv.index("--raw") + 1] = first
+        summary, raw, _, _ = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+        assert (summary["accepted"], summary["failed"]) == (2, 1)
+        (torn,) = [r for r in raw if r["outcome"] == "failed"]
+        conflict = {"code": "state_conflict", "type": "invalid_request_error",
+                    "message": "the job was cancelled"}
+        gw.stream_error = conflict
+        resumed, (row,), _, rc = resume(2)
+        assert rc == 0 and (row["outcome"], row["error_code"], row["idempotency_replayed"],
+                            row["idempotency_key"]) == (bench.CANCELLED_REPLAY, "state_conflict",
+                                                        True, torn["idempotency_key"])
+        assert bench.is_terminal(row) and not bench.is_terminal(torn)
+        assert (resumed[bench.CANCELLED_REPLAY], resumed["failed"], resumed["accepted"]) == (
+            1, 0, 0)
+        assert len(gw.accepted_keys) == 3, "the replay created no second accepted item"
+        gw.stream_error = {**conflict, "code": "internal_error"}
+        _, (other,), _, _ = resume(3)
+        assert other["outcome"] == "failed" and not bench.is_terminal(other)
+        fresh = FakeGateway(stream_error=conflict)
+        _, rows, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1), fresh,
+                                  env={"MARLIN_API_KEY": KEY})
+        assert [(r["outcome"], r["error_code"]) for r in rows] == [("failed", "state_conflict")] * 2
+        assert not any(bench.is_terminal(r) for r in rows)
+
+
 def test_a_resumed_upload_item_reuses_its_handle_instead_of_conflicting():
     """Staging again would change the payload under the same key: 409, not a retry (§3.3)."""
     with tempfile.TemporaryDirectory() as tmp:
