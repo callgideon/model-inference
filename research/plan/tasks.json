@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "baseline_commit": "1db98e9",
-  "status": "backend-first Marlin endpoint plan; wave-2/audit evidence preserved; endpoint completion and optimization are planned, not implemented",
+  "status": "Marlin backend wave implemented with a reported deployed metered pilot; E1B/E4B final acceptance remains open; consumer App and Lab completion remain planned; see handoff 20 and readiness review 21",
   "dependency_semantics": {
     "start_dependencies": "Code-ready dependencies: committed and reviewed interfaces/fixtures must exist before coding; implemented baseline modules may supply code without live integration. New shared revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. A dirty coordinator tree is never a worktree base.",
     "integration_dependencies": "Must have real adapter evidence before dependent task is integrated. Code-ready fake implementations satisfy only start dependencies. Baseline integrated status never certifies a later product revision.",

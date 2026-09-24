@@ -1,0 +1,58 @@
+{
+  "base": "d7dc3690",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "api_suite": {
+    "command": "make api-test",
+    "exit_code": 2,
+    "passed": 2988,
+    "failed": 90,
+    "skipped": 640,
+    "warnings": 2,
+    "duration_s": 596.08,
+    "raw_log_sha256": "c550bfe4b018068caa2f8c212d9ca742b20683555f479be3b37d0e6ea9c30e3b",
+    "failure_nodes": "api-failures.txt",
+    "diagnosed_causes": [
+      "Gateway metrics build-info test reads Linux /proc/meminfo on macOS; also invalidates 20 selected gateway mutants.",
+      "Linux deploy tests require systemd-analyze; macOS Bash 3.2 empty-array behavior, BSD realpath -m and temporary-directory behavior differ; infra/worker mutant runners inherit failing baselines.",
+      "Release-bundle test initializes a checkout with the user default branch main, then fetches into that checked-out branch; git refuses.",
+      "One W4 mutant reports survived in this unsupported environment; recheck its oracle on the supported Linux runner."
+    ],
+    "interpretation": "No full API pass claimed; these are observed local failures and prerequisite/harness issues, not evidence of 90 production defects."
+  },
+  "other_checks": [
+    {
+      "command": "make bench-test",
+      "passed": 68,
+      "exit_code": 0
+    },
+    {
+      "command": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py",
+      "passed": 38,
+      "exit_code": 0
+    },
+    {
+      "command": "make console-test console-lint console-typecheck",
+      "tests_passed": 289,
+      "lint_errors": 0,
+      "lint_warnings": 2,
+      "typecheck": "passed",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 research/plan/scripts/validate_plan.py",
+      "result": "119 tasks; gates/dependencies/ledger and Markdown links valid",
+      "exit_code": 0
+    },
+    {
+      "command": "apps/infrx-api/.venv/bin/python research/plan/evidence/v1-review-20260924/reproduce.py",
+      "result": "Three synthetic seam probes reproduce the documented defects; not acceptance passes",
+      "exit_code": 0
+    }
+  ],
+  "not_run": [
+    "Real-service Docker integration: daemon unavailable",
+    "Hosted authenticated customer journey",
+    "GPU inference/load/certification",
+    "Hosted migration or configuration changes"
+  ]
+}

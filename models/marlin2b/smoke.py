@@ -85,8 +85,8 @@ else:
     url = f"data:{mime};base64," + base64.b64encode(open(a.video, "rb").read()).decode()
 
 mm_kwargs = None if not a.mm_kwargs else (training_budget_kwargs(a.video) if a.mm_kwargs == "auto" and not a.video.startswith(("http://", "https://")) else json.loads(a.mm_kwargs) if a.mm_kwargs != "auto" else None)
-client = OpenAI(base_url=a.base_url, api_key="none")
-t0 = time.time()
+client = OpenAI(base_url=a.base_url, api_key=os.environ.get("MARLIN_API_KEY") or "none")
+t0 = time.perf_counter()
 first = None
 out = []
 stream = client.chat.completions.create(
@@ -104,9 +104,9 @@ for chunk in stream:
         usage = chunk.usage
     if chunk.choices and chunk.choices[0].delta.content:
         if first is None:
-            first = time.time()
+            first = time.perf_counter()
         out.append(chunk.choices[0].delta.content)
-dt = time.time() - t0
+dt = time.perf_counter() - t0
 text = re.sub(r"^\s*<think>.*?(</think>|$)", "", "".join(out), count=1, flags=re.S).strip()
 
 print(text)

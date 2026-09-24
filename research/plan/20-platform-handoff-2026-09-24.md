@@ -1,5 +1,7 @@
 # 20 — Platform handoff for re-planning (2026-09-24)
 
+**Follow-on review:** [21 — Consumer v1 readiness](21-v1-consumer-readiness-review-2026-09-24.md) audits code at `d7dc3690`, incorporates `726d004d` acceptance evidence, reproduces remaining integration gaps and proposes launch priorities. This handoff and its §14 retain their original operational evidence; the review does not declare the pending certification passed.
+
 Compiled 2026-09-24 from the integration head `2fe829a` of `claude/backend-impl`
 (`main` = `2d4a88b`, 5 commits behind it: `2d4a88b..2fe829a` is `4db74b6` CERTIFY-TREE plus
 four plan/evidence commits). Read-only over the repository; nothing was run against the box,

@@ -1,0 +1,27 @@
+gateway: last_used_at update failed (RuntimeError: Cannot send a request, as the client has been closed.)
+{
+  "reviewed_base": "d7dc3690",
+  "observations": [
+    {
+      "probe": "benchmark_against_real_upload_route",
+      "responses": [
+        {
+          "status": 400,
+          "code": "invalid_request"
+        }
+      ]
+    },
+    {
+      "probe": "upload_after_gateway_reconstruction",
+      "outcome": "not_found",
+      "source_bytes_present": true
+    },
+    {
+      "probe": "collector_after_gateway_reconstruction",
+      "source_deleted_after_grace": true,
+      "live_job_queries": 0,
+      "durable_attachment_queries": 0,
+      "limit": "Simulated restart with shared object store; no PostgreSQL used"
+    }
+  ]
+}

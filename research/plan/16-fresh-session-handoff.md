@@ -1,5 +1,7 @@
 # Handoff — complete the Marlin2B inference backend first
 
+> **Historical dispatch prompt, superseded for current state (2026-09-24).** The backend wave described below has largely landed. Start with [handoff 20, §14](20-platform-handoff-2026-09-24.md), [the operational tail](../../HANDOFF-20260924T2115Z.md) and [consumer v1 review 21](21-v1-consumer-readiness-review-2026-09-24.md). Do not rerun the completed F/D/M/Q/W/G waves from this prompt. Its product constraints remain applicable; its next-task list does not represent current dispatch.
+
 ## Session Metadata
 
 Updated 2026-09-22 in `model-inference`, branch `codex/wave2-platform-audit`. Imported implementation main: `271add946771ddc4efc3cbc2044758443080759b`; audit: `07dfb64`; complete App/Lab plan: `2ea562a`. Use the latest committed branch tip containing [the backend-first handoffs](18-marlin-backend-first.md), not the old App-first prompt at `2ea562a` alone. Reconcile newer main/other-session commits before choosing an integration base. This handoff supersedes the previous dispatch order, not its completed evidence or later product scope.
