@@ -21,7 +21,8 @@ import world                                            # noqa: E402
 
 import pilotbox                                         # noqa: E402
 import stack                                            # noqa: E402
-from scenarios_admission import held_request, not_executed_while_held  # noqa: E402
+from scenarios_admission import (held_request, hold_point,  # noqa: E402
+                                 not_executed_while_held)
 from scenarios_upload import complete, create, put, runs_on             # noqa: E402
 
 GATEWAY = ("upload", "admission", "readiness", "attachment", "outbox")
@@ -89,7 +90,8 @@ def retried(trip, tenant, messages, key: str) -> tuple[str, str]:
 def test_s05_a_gateway_crash_at_each_step_recovers_once(workdir, point):
     with world.composed(workdir, start=("worker",), **LEASES) as trip:
         alpha, key = trip.world.alpha, f"e3c-s05-{point}"
-        trip.box.start("gateway", INFRX_E3C_BARRIER=point)
+        trip.box.start("gateway", INFRX_E3C_BARRIER=hold_point() if point == "readiness"
+                       else point)
         if point == "upload":
             data = pilotbox.clip()
             ticket = create(trip.http, trip, alpha, data)
@@ -116,9 +118,17 @@ def test_s05_a_gateway_crash_at_each_step_recovers_once(workdir, point):
             return
         held_request(trip, alpha, messages, key)
         trip.box.reached("gateway")
-        trip.box.kill("gateway")
         (request_id, _), = world.wait_for(lambda: world.job_of(trip, alpha.org_id, key), 10,
                                           "the admission row")
+        if point == "readiness":
+            # Deterministic premise (run 1 vs run 2 differed on it): the held gateway's relay
+            # has handed the job's preparation dispatch to the index BEFORE it dies, so the
+            # worker holds a candidate for a job whose acceptance never completed.
+            world.wait_for(lambda: trip.db(
+                "select 1 from infrx.outbox where aggregate_id = %s and kind = "
+                "'prepare_dispatch' and acknowledged_at is not null", request_id), 30,
+                "the preparation dispatch relayed")
+        trip.box.kill("gateway")
         if point == "readiness":
             # nobody completes this acceptance until the client retries: nothing may run
             not_executed_while_held(trip, request_id)
