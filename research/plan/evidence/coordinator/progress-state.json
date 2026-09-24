@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T18:03:00Z",
+  "updated": "2026-09-24T18:16:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -100,6 +100,14 @@
     "PREP-WORKER": {
       "phase": "MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install",
       "since": "2026-09-24T08:44:25Z"
+    },
+    "TOKCOST": {
+      "phase": "handed back ad50b9d (count memo; R105 kept; request 1 = box /tokenize cold-vs-warm protocol); single Opus verifier running -> merge -> R107 -> focused gate -> third install",
+      "since": "2026-09-24T18:16:00Z"
+    },
+    "CERTIFY-TREE": {
+      "phase": "lane running: served-build without git (--release-sha) + worker gauge (7bb7b41), cap-aware parity/dataset/envelope (item 2/4), cancelled-replay terminal (item 5, R106) -> handback -> verifier -> merge",
+      "since": "2026-09-24T17:10:00Z"
     }
   },
   "gates": {
