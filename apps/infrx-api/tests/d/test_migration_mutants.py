@@ -120,7 +120,9 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           # D5 review round: the operator money path and exact arithmetic
           "d5_grant_replay_ignores_wallet", "d5_grant_without_wallet_lock",
           "d5_grant_concurrent_reuse_untyped", "d5_reconcile_replay_any_request",
-          "d5_credit_debit_in_float", "d5_legacy_debit_in_float")
+          "d5_credit_debit_in_float", "d5_legacy_debit_in_float",
+          # the D5 verifier's pins: the replay rule's actor half, the drift detector's holds
+          "d5_grant_actor_is_part_of_the_movement", "d5_credit_reserved_drift_blind")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 

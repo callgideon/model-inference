@@ -149,6 +149,17 @@ def test_catalog__every_lookup_opens_and_closes_its_own_connection() -> None:
     assert _ok(catalog.serving_revision(v2fix.IDS.serving_version)) is None
     assert len(opened) == 4 and len({id(c) for c in opened}) == 4, opened
     assert closed == opened, "a connection outlived its statement"
+    # verifier V-N3: a statement that RAISES closes its connection too, and the error is
+    # raised typed (a maintenance refusal: DependencyUnavailable), never answered None
+    failing = Spy([_db_error("55000", "maintenance")])
+
+    async def connect_failing():
+        opened.append(failing)
+        return failing
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(cat.PgCatalogDirectory(connect_failing).active_rate_card(
+            v2fix.IDS.prod_deployment))
+    assert len(opened) == 5 and closed == opened, "a failed statement leaked its connection"
 
 
 DEV = (v2fix.IDS.dev_deployment, v2fix.IDS.dev_endpoint, v2fix.IDS.provider_org,

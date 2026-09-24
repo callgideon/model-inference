@@ -89,6 +89,15 @@ def check_adjust(conn) -> str:
         assert (again["replayed"], again["entry"]) == (True, entry), again
         assert (rows(conn, "infrx.credit_ledger"), rows(conn, "infrx.audit_entries")) == \
             (ledger, audit), "a replay appended"
+        # the movement is wallet, kind and amount: another actor or reason for the same
+        # movement is still a replay of the FIRST entry, its actor unchanged (verifier V-N2)
+        code, again = grant(conn, wid, "12.50000000", op=op, actor="other@test",
+                            reason="a retry by another operator")
+        assert code is None, f"a replay by another actor was refused: {code}"
+        assert (again["replayed"], again["entry"]) == (True, entry) and \
+            again["entry"]["actor"] == "ops@test", again
+        assert (rows(conn, "infrx.credit_ledger"), rows(conn, "infrx.audit_entries")) == \
+            (ledger, audit), "a replay by another actor appended"
         # the same operation id for ANOTHER movement - amount, wallet or kind - is a
         # conflict, and nothing moves anywhere (review B1: each part is its own mutant)
         other_wallet = cc.wallet_of(conn, cc.CONSUMER_2)

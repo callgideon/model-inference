@@ -180,6 +180,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_connection_never_closed", "review CF-4: every statement's connection is closed",
        "        finally:\n            await conn.close()", "        finally:\n            pass",
        CONNECTIONS, file=O),
+    _m("a_connection_leaks_on_error", "verifier V-N3: a statement that raises still "
+       "closes its connection (the verifier's om6)",
+       "        try:\n            yield conn\n        finally:\n            await conn.close()",
+       "        yield conn\n        await conn.close()", CONNECTIONS, file=O),
     _m("errors_become_none", "a database error is raised, never answered as None",
        "                return await (await conn.execute(sql, params)).fetchall()\n"
        "            except Error as failed:\n                raise _typed(failed) from None",

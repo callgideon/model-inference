@@ -2615,6 +2615,21 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "admission", "adjust",
        "an operation id reused on ANOTHER wallet answers `replayed` and moves nothing there "
        "(the reviewer's rv_replay_ignores_wallet)"),
+    # verifier V-N4: the CREDIT detector's hold half (0006's view; assert_no_drift reads it)
+    _m("d5_credit_reserved_drift_blind", CREDIT,
+       "       w.reserved_total - coalesce((select sum(h.amount) from infrx.credit_wallet_holds h\n"
+       "                                    where h.wallet_id = w.wallet_id\n"
+       "                                      and h.state in ('held', 'unknown')), 0) as reserved_drift",
+       "       0::numeric as reserved_drift", "admission", "drift_detected",
+       "a CREDIT wallet reserving more than its active holds is never reported: "
+       "assert_no_drift goes blind to hold drift (the verifier's om8)"),
+    # verifier V-N2: the actor and reason are not part of the movement
+    _m("d5_grant_actor_is_part_of_the_movement", SETTLE,
+       "    if l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount <> v_amount then",
+       "    if l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount <> v_amount\n"
+       "       or l.actor <> btrim(p_args->>'actor') then", "admission", "adjust",
+       "an operator's retry of one movement under another actor is refused "
+       "idempotency_conflict instead of replayed (the verifier's om1)"),
     _m("d5_grant_replay_ignores_kind", SETTLE,
        "l.wallet_id <> w.wallet_id or l.kind <> v_kind or l.amount",
        "l.wallet_id <> w.wallet_id or l.amount", "admission", "adjust",
@@ -2905,6 +2920,7 @@ _CHECKS = {
     "credit_admitted_card": checks_settle.check_credit_rate,
     "credit_retired": checks_settle.check_credit_retired,
     "adjust": checks_operations.check_adjust,
+    "drift_detected": checks_settle.check_drift_detected,
     "allocation": checks_operations.check_allocation,
     "reconcile_clock": checks_operations.check_reconcile_clock,
     "reconcile_tenant": checks_operations.check_reconcile_tenant,
