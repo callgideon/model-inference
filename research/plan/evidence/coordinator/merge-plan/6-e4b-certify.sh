@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Merge 6: codex/e4b-certify (analysed at 5afe3d9; base 7c52627, i.e. before D5/phase 3).
+# Merge 6: codex/e4b-certify (analysed at 5afe3d9; base 7c52627, i.e. before D5/phase 3;
+# replayed at the final head 4d9360c on 2026-09-24: a2 reduced to the one caveat that remains).
 # ONE textual conflict:
 #   Makefile api-mutants - keep the integration side's lists and comment, add E4B's two comment
 #   lines and its second, root-run command (tests/integration/backend/test_e4b_mutants.py).
@@ -89,12 +90,9 @@ pairs = [
   '        "held at this commit): until then the deployed gateway is the legacy one. Nothing here",\n',
   '        "it is stale. It describes the metered endpoint **as the cutover mounts it** (G2-R1,",\n'
   '        "merged; the box serves the legacy gateway until the I2B rollout). Nothing here",\n'),
- ('             "⚠️ the fixture placeholder, not W3\'s measured pin (E4B config-pin finding)"),\n',
-  '             "W3\'s measured pin (`models/marlin2b/serving-version.json`), published since the "\n'
-  '             "cutover (E4B B1, 351d084)"),\n'),
- ('             "⚠️ a moving tag in the published record (same finding)"))),\n',
-  '             "W3\'s digest-pinned image (same record; `runtime_image_digest` stays a new "\n'
-  '             "serving version\'s, R76)"))),\n')]
+ # (the two "fixture placeholder"/"moving tag" pairs were dropped 2026-09-24: E4B's V6 e1c86c7
+ #  reads the pin note from the published release, so the final head 4d9360c has no typed caveat)
+ ]
 for old, new in pairs:
     assert s.count(old) == 1, old[:70]
     s = s.replace(old, new)
