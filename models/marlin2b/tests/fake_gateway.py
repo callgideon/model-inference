@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """In-process fake gateway for bench.py: httpx.MockTransport, SSE chat completions,
-the contracts-v1 upload handshake and scripted rejections. No network, no server.
+the mounted upload contract (G4U, routes/uploads.py) and scripted rejections. No network,
+no server.
 
     gw = FakeGateway(statuses={0: 429, 1: 402})
     async with httpx.AsyncClient(transport=gw.transport()) as c: ...
 
 It is a test double for the client, not a model of the real gateway's behaviour.
 """
-import asyncio, json, uuid
+import asyncio, hashlib, json, re, uuid
 
 import bench
 
@@ -20,6 +21,14 @@ def _sleep(seconds):
 
 import httpx
 
+# routes/uploads.py over media/uploads.py: the four constraint fields create takes, the
+# media types the store accepts, and the digest spelling. test_upload_conformance holds
+# every answer below to the mounted router's, probe by probe.
+UPLOAD_CONSTRAINTS = frozenset({"max_bytes", "bytes", "accepted_mime", "digest"})
+UPLOAD_MIME = frozenset({"video/mp4", "video/webm", "video/quicktime"})
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+HANDLE = re.compile(r"upl_[A-Za-z0-9_-]{22,64}")
+
 
 class FakeGateway:
     def __init__(self, ttft=0.01, token_gap=0.001, tokens=3, usage=True, statuses=None,
@@ -29,7 +38,7 @@ class FakeGateway:
                  escape_key=False, upload_url=None, put_status=200, truncate_stream=False,
                  finish_reason="stop", retry_after="3", chat_override=None, stream_error=None,
                  hostile_fields=None, extra_headers=None, idempotent=False, lose_ack=(),
-                 bad_handle=False):
+                 bad_handle=False, bad_destination_ref=None, complete_override=None):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
@@ -43,7 +52,13 @@ class FakeGateway:
         self.echo_key_in_code, self.echo_key_in_long_body = echo_key_in_code, echo_key_in_long_body
         self.echo_key_in_json_message = echo_key_in_json_message
         self.echo_pad, self.escape_key = echo_pad, escape_key
+        # upload_url: a hostile create answer that also names a URL of its own (the shape the
+        # pre-E1C client followed); the client must never send bytes or a bearer there.
+        # Requests to any host but the first one seen land in `foreign`.
         self.upload_url, self.put_status = upload_url, put_status
+        self.bad_destination_ref, self.complete_override = bad_destination_ref, complete_override
+        self.home, self.foreign = None, []
+        self.upload_calls = []    # (method, path) of every upload-route request
         self.truncate_stream, self.finish_reason = truncate_stream, finish_reason
         self.retry_after = retry_after
         # chat_override(request) -> a Response, or raises a transport exception: one knob
@@ -76,22 +91,13 @@ class FakeGateway:
 
     async def __call__(self, request):
         path = request.url.path
-        if request.method == "PUT":
-            if self.put_status >= 400:
-                return httpx.Response(self.put_status, text="AccessDenied")
+        self.home = self.home or request.url.host
+        if request.url.host != self.home:
+            self.foreign.append((request.method, request.url.host, path,
+                                 bool(request.headers.get("authorization"))))
             return httpx.Response(200, json={"ok": True})
-        if path.endswith("/uploads"):
-            # contracts/ids.py: `upl_` + 22..64 of [A-Za-z0-9_-]. A shorter handle is what
-            # the client must refuse rather than send back as a reference.
-            handle = (self.bad_handle if isinstance(self.bad_handle, str)
-                      else "up_short" if self.bad_handle
-                      else f"upl_{len(self.uploads):04d}" + "z" * 18)
-            self.uploads[handle] = json.loads(request.content or b"{}")
-            url = self.upload_url or ("https://fake-upload.invalid/" + handle)
-            return httpx.Response(200, json={"handle": handle, "upload": {
-                "method": "PUT", "url": url, "headers": {}}})
-        if path.endswith("/complete"):
-            return httpx.Response(200, json={"handle": path.split("/")[-2], "status": "ready"})
+        if "/uploads" in path:
+            return self._upload(request, path)
         if not path.endswith("/chat/completions"):
             return httpx.Response(404, json={"error": {"message": "no route", "code": "not_found"}})
 
@@ -160,6 +166,79 @@ class FakeGateway:
             headers["server-timing"] = f"{self.hostile_fields};dur=1.0, queue;dur=2.5"
         headers.update(self.extra_headers)
         return httpx.Response(200, headers=headers, content=self._stream(rid, body))
+
+    # -------------------------------------------------- uploads (routes/uploads.py)
+
+    def _upload(self, request, path):
+        self.upload_calls.append((request.method, path))
+        auth = request.headers.get("authorization", "")
+        if not auth.startswith("Bearer ") or len(auth) <= len("Bearer "):
+            return self._error(401, "invalid_api_key", "no key")
+        parts = path.rstrip("/").split("/")          # ['', 'v1', 'uploads', handle?, 'complete'?]
+        if request.method == "POST" and parts[-1] == "uploads":
+            return self._create(request, auth)
+        handle = parts[3] if len(parts) > 3 else ""
+        upload = self.uploads.get(handle)
+        if not HANDLE.fullmatch(handle) or upload is None or upload["owner"] != auth:
+            return self._error(404, "not_found", "not an upload handle")
+        if request.method == "PUT" and len(parts) == 4:
+            if self.put_status >= 400:     # the refusal quotes the planted URL, as a leak bait
+                return httpx.Response(self.put_status, text=f"AccessDenied {self.upload_url}")
+            mime = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+            if mime not in UPLOAD_MIME:
+                return self._error(400, "unsupported_media", "the destination takes media")
+            upload["data"], upload["mime"] = request.content, mime
+            return httpx.Response(204)
+        if request.method == "POST" and parts[-1] == "complete":
+            return self._complete(request, handle, upload)
+        return self._error(404, "not_found", "no route")
+
+    def _create(self, request, auth):
+        try:
+            body = json.loads(request.content or b"{}")
+        except ValueError:
+            body = None
+        if not isinstance(body, dict) or set(body) - UPLOAD_CONSTRAINTS:
+            return self._error(400, "invalid_request", "unknown upload constraints")
+        mimes = body.get("accepted_mime", sorted(UPLOAD_MIME))
+        if not isinstance(mimes, list) or not mimes or not set(mimes) <= UPLOAD_MIME \
+                or ("digest" in body and not DIGEST.fullmatch(str(body["digest"]))):
+            return self._error(400, "invalid_request", "bad constraint")
+        # contracts/ids.py: `upl_` + 22..64 of [A-Za-z0-9_-]. A shorter handle is what
+        # the client must refuse rather than send back as a reference.
+        handle = (self.bad_handle if isinstance(self.bad_handle, str)
+                  else "up_short" if self.bad_handle
+                  else f"upl_{len(self.uploads):04d}" + "z" * 18)
+        self.uploads[handle] = {"owner": auth, "constraints": body, "data": None,
+                                "state": "created"}
+        ticket = {"upload_handle": handle,
+                  "destination_ref": self.bad_destination_ref or "infrx-upload:" + handle,
+                  "max_bytes": body.get("max_bytes", 1 << 30), "accepted_mime": mimes,
+                  "state": "created", "expires_at": "2026-09-27T12:00:00Z"}
+        if self.upload_url:            # a URL the frozen UploadCreated does not carry
+            ticket |= {"url": self.upload_url, "upload": {
+                "method": "PUT", "url": self.upload_url,
+                "headers": {"authorization": "Bearer planted"}}}
+        return httpx.Response(201, json=ticket)
+
+    def _complete(self, request, handle, upload):
+        if request.content and json.loads(request.content) != {}:
+            return self._error(400, "invalid_request", "completion takes no fields")
+        data, want = upload["data"], upload["constraints"]
+        if data is None:
+            return self._error(400, "invalid_request", "no object was uploaded")
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        if ("bytes" in want and len(data) != want["bytes"]) or \
+                ("digest" in want and digest != want["digest"]):
+            return self._error(400, "unsupported_media", "the bytes do not match")
+        upload["state"] = "finalized"
+        o = self.complete_override or {}
+        return httpx.Response(200, json={
+            "upload_handle": o.get("upload_handle", handle), "state": "finalized",
+            "media": {"handle": handle, "kind": "upload",
+                      "digest": o.get("media_digest", digest),
+                      "bytes": o.get("media_bytes", len(data)), "mime": upload["mime"],
+                      "duration_s": None}})
 
     def _json_error_body(self, obj, key):
         """Serialise by hand so the key can be \\uXXXX-escaped in the wire bytes: a client

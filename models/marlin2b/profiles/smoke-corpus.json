@@ -1,0 +1,131 @@
+{
+ "schema_version": 1,
+ "corpus_version": "e1-2026-09-20",
+ "cache_root_env": "CORPUS_CACHE",
+ "cache_root_default": ".claude/corpus-cache",
+ "api_limits": {
+  "max_clip_duration_s": 120,
+  "max_pixels_per_frame": 200704
+ },
+ "derived_from": {
+  "manifest": "models/marlin2b/corpus/manifest.json",
+  "sha256": "386a2d89c26c1bbff4df03004239b3153651901ffcda76f36c3ce5fc23095e18",
+  "why": "E1C hosted smoke: one in-cap clip (5 s) and the explicit over-cap control (112 s > 82 s)"
+ },
+ "prompts": [
+  {
+   "id": "p06",
+   "kind": "text",
+   "text": "Is any on-screen text, logo or caption visible? Quote it exactly if so."
+  },
+  {
+   "id": "p15",
+   "kind": "detail",
+   "text": "Describe the smallest detail you can reliably identify and when it is visible."
+  }
+ ],
+ "clips": [
+  {
+   "id": "c015-nasasteve-240p-tiny",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "240p-tiny",
+   "display_width": 426,
+   "display_height": 240,
+   "recipe": {
+    "start_s": 104.0,
+    "duration_s": 5,
+    "scale": [
+     426,
+     240
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p15",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c015-nasasteve-240p-tiny.mp4",
+   "derived": {
+    "duration_s": 5.0,
+    "bytes": 37094,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 426,
+    "height": 240,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 150,
+    "aspect": "71:40",
+    "display_aspect_ratio": "71:40",
+    "rotation_metadata": null,
+    "sha256": "1a313f0a058ce65a82732594333cc39e6cd716b5d49b3743c473829309195cb3",
+    "source_upscaled": false
+   },
+   "status": "built"
+  },
+  {
+   "id": "c051-tos720p-360p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "360p-16x9",
+   "display_width": 640,
+   "display_height": 360,
+   "recipe": {
+    "start_s": 398.0,
+    "duration_s": 112,
+    "scale": [
+     640,
+     360
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p06",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c051-tos720p-360p-16x9.mp4",
+   "derived": {
+    "duration_s": 112.0,
+    "bytes": 8076770,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 24.0,
+    "pix_fmt": "yuv420p",
+    "frames": 2688,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "b063a8f349d6fdd475d9dbb68a451cb77d3ec0e94212688cdfaa238159d8f4f0",
+    "source_upscaled": false
+   },
+   "status": "built"
+  }
+ ],
+ "negatives": []
+}

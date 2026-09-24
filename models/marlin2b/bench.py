@@ -80,6 +80,22 @@ TERMINAL_REJECT_STATUS = {400, 401, 403, 404, 409, 410, 413, 415, 422}
 # non-stream answer, stay what they were: the sync replay is a 409, terminal by its status.
 CANCELLED_REPLAY = "cancelled_by_interruption"
 MIN_TAIL = 3            # a reported quantile needs this many samples strictly beyond it
+# E1C: every derived summary names the parser that classified its rows. Raw rows are never
+# rewritten; a later parser re-derives from them and says which version it is.
+PARSER_VERSION = "e1c.1"
+# Declared bound on open-loop driver lag (first attempts, send - scheduled). Above it the
+# client, not the target, shaped the offered load, and the cell is INVALID. The E1B box
+# cells measured 0.02-0.27 s (the 8-burst's base64 encoding); 1 s is the default bound.
+DEFAULT_MAX_DRIVER_LAG_S = 1.0
+# §1: a run with no profile has declared no bounds, target or identity; its mechanics may be
+# clean but its numbers are not a qualifying measurement (BENCH-VALIDITY "unbounded profile").
+UNPROFILED = "unprofiled: no --profile declares this run's bounds, target and identity"
+# ...and one against a non-local (paid) target does not start at all (tasks.json E1C: "no paid
+# run starts unbounded"), unless an explicit opt-out names why. `smoke` is itself a bound:
+# (max requests incl. warm-up, max output tokens per request). `certify` is certify's runner
+# until E2C passes it profiles (wiring request); it is logged in the summary and stays INVALID.
+UNPROFILED_OPT_OUT = {"smoke": (4, 512), "certify": None}
+RESULT_SCHEMA = "infrx.run-result/1"
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
 # and nothing else. `upload://` (this client's previous spelling) is refused at ingress by
@@ -222,11 +238,13 @@ def refuse_key_in_args(a, key):
 CODE_OK = re.compile(r"[a-z0-9_]{1,64}")            # error.code / error.type / finish_reason
 ID_OK = re.compile(r"[A-Za-z0-9-]{1,64}")           # Inference-Id (a UUID passes)
 TIMING_NAME_OK = re.compile(r"[a-z0-9_-]{1,32}")    # Server-Timing metric names
+MODEL_OK = re.compile(r"[A-Za-z0-9._/@:-]{1,128}")  # the served model (the R62 pin) in chunks
 # An upload handle is server-controlled and it goes into the request body AND into the
 # resume state, so it is allowlisted like every other server string: contracts/ids.py
 # spells it `upl_` + 22..64 of [A-Za-z0-9_-] and nothing else may be sent back as a ref.
 HANDLE_OK = re.compile(r"upl_[A-Za-z0-9_-]{22,64}")
 LABEL_OK = re.compile(r"[a-z0-9-]{1,64}")           # our own slugged --label
+TIMESTAMP_OK = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})")
 # A URL label is a digest, never text from the URL: a capability URL can carry its secret
 # in the FILE NAME (cdn.invalid/v/<token>.mp4) or in the HOST (a tunnel subdomain), so
 # neither may be recorded. Only a container extension from this fixed list survives.
@@ -438,12 +456,37 @@ def parse_args(argv=None):
     ap.add_argument("--report", default=None,
                     help="read a summary JSONL (--out) and print the sweep report; runs nothing")
     ap.add_argument("--retries", type=int, default=0, help="retry 429/503 this many times, honouring Retry-After")
+    ap.add_argument("--max-driver-lag", type=float, default=DEFAULT_MAX_DRIVER_LAG_S,
+                    help="open loop: a first attempt sent later than this after its scheduled "
+                         "arrival makes the cell INVALID (the driver limited the offered load)")
+    ap.add_argument("--expect-model", default=None,
+                    help="the served model identity (the R62 pin the stream reports); a fresh "
+                         "answer from any other model makes the cell INVALID")
+    ap.add_argument("--validate-raw", default=None,
+                    help="re-derive the validity of an existing raw file (read-only; the raw "
+                         "rows are never rewritten) and print it; runs nothing")
+    ap.add_argument("--profile", default=None,
+                    help="run profile JSON (profiles/run-profile.v1.schema.json): the run "
+                         "refuses to start unless it validates against these flags")
+    ap.add_argument("--key-inventory", default=None,
+                    help="sanitized JSON of the target's active key id prefixes (the "
+                         "coordinator's read-only op); a paid profiled run needs it (P-24)")
+    ap.add_argument("--unprofiled", choices=sorted(UNPROFILED_OPT_OUT), default=None,
+                    help="run WITHOUT --profile against a non-local target, logged and "
+                         "INVALID: 'smoke' (at most 4 requests of <= 512 output tokens) or "
+                         "'certify' (certify's runner, until E2C passes it profiles)")
+    ap.add_argument("--validate-only", action="store_true",
+                    help="validate --profile against the other flags and print the verdict; "
+                         "no request, no provisioning")
+    ap.add_argument("--intentional-resume", action="store_true",
+                    help="with --validate-raw: the file is a --resume run, so its replays are "
+                         "the resume's own and labelled, not unexpected")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--no-warmup", action="store_true")
     ap.add_argument("--dry-run-transport", default=None,
                     help="import path 'module:callable' returning an httpx transport (tests/dry runs, no network)")
     a = ap.parse_args(argv)
-    if a.report:
+    if a.report or a.validate_raw:
         return a
     if not a.video and not a.corpus:
         ap.error("pass a video or --corpus")
@@ -461,6 +504,8 @@ def parse_args(argv=None):
     if a.cancel_fraction and a.cancel_after is None:
         ap.error("--cancel-fraction needs --cancel-after")
     a.tenant_env = [t.strip() for t in a.tenant_keys.split(",") if t.strip()]
+    if a.unprofiled and a.profile:
+        ap.error("--unprofiled is for a run without --profile")
     return a
 
 
@@ -544,7 +589,8 @@ def load_corpus(path, subset="fast"):
                       # to be declared with any throughput number, not decoration.
                       "codec": c["derived"].get("codec"), "fps": c["derived"].get("fps"),
                       "frames": c["derived"].get("frames"),
-                      "sha256": c["derived"]["sha256"], "prompt_id": c["prompt"],
+                      "sha256": c["derived"]["sha256"], "bytes": c["derived"].get("bytes"),
+                      "prompt_id": c["prompt"],
                       "prompt": prompts[c["prompt"]]["text"], "prompt_kind": prompts[c["prompt"]]["kind"]})
     if not clips:
         sys.exit(f"no built clips in {path} subset {subset}; run corpus/build.py build")
@@ -742,6 +788,8 @@ def apply_resume(schedule, previous):
             continue
         if row is not None and row.get("upload_handle"):
             item["upload_handle"] = row["upload_handle"]
+        # A key the interrupted run already sent: its replay is the resume's own, labelled.
+        item["resumed"] = row is not None
         remaining.append(item)
     return remaining, skipped
 
@@ -762,7 +810,7 @@ def messages_for(item, media_ref=None):
                                          {"type": "text", "text": item["prompt"]}]}]
 
 
-async def media_ref_for(item, cfg, client, row):
+async def media_ref_for(item, cfg, client, row, now=None):
     """The media reference for this attempt, doing the upload handshake when asked."""
     form, clip = item["form"], item["clip"]
     path = clip["path"] if clip else cfg["video"]
@@ -787,8 +835,10 @@ async def media_ref_for(item, cfg, client, row):
         handle = item.get("upload_handle")
         if handle is None:
             t = CLOCK()
+            row["upload_start_s"] = now() if now else None
             handle = await upload(client, cfg, path, row, item["tenant"])
             row["upload_s"] = round(CLOCK() - t, 4)
+            row["upload_end_s"] = now() if now else None
         row["upload_handle"] = handle
         return UPLOAD_REF_SCHEME + handle
     raise ValueError(f"unknown form {form}")
@@ -801,40 +851,64 @@ def read_and_digest(path):
 
 
 class UploadFailed(RuntimeError):
-    """Carries no text: the status lands in row["upload_status"], the class in error_class.
-    httpx's raise_for_status() message would quote the signed destination URL."""
+    """Carries no text: the status lands in row["upload_status"], the stage it stopped at
+    in row["upload_stage"], the class in error_class."""
+
+
+def answer_of(response):
+    """A JSON object answer, or {}: a non-JSON or non-object body contributes nothing."""
+    try:
+        data = response.json()
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 async def upload(client, cfg, path, row, tenant=0):
-    """POST /v1/uploads -> PUT to the returned constrained destination ->
-    POST /v1/uploads/{handle}/complete. Contracts v1 shape; unverified until M3/G4."""
-    body, digest = await asyncio.to_thread(read_and_digest, path)   # 35 MB read + sha off the loop
-    mime = mimetypes.guess_type(path)[0] or "video/mp4"
-    cfg = {**cfg, "headers": cfg["headers_for"](tenant)}   # the staging tenant owns the object
-    r = await client.post(cfg["base"] + "/uploads", headers=cfg["headers"],
-                          json={"purpose": "video", "filename": os.path.basename(path),
-                                "bytes": len(body), "sha256": digest, "content_type": mime})
+    """The MOUNTED upload contract (apps/infrx-api/infrx/gateway/routes/uploads.py), three
+    calls, all on the gateway's own origin with the staging tenant's bearer:
+
+        POST {base}/uploads  {max_bytes, bytes, accepted_mime, digest}  -> 201 UploadCreated
+        PUT  {base}/uploads/{handle}  Content-Type = the media type      -> 204
+        POST {base}/uploads/{handle}/complete  (no body)                 -> 200 UploadCompleted
+
+    The destination is built from --base-url and the allowlisted handle, never from the
+    answer: UploadCreated carries no URL, and a URL or header an answer adds anyway is
+    ignored, so no server-named origin ever receives the bytes or the key (RV-07). The
+    ticket must name `infrx-upload:<handle>` and the completion must name the same handle,
+    bytes and digest, or the upload is refused before chat ever sees the reference."""
+    body, hexdigest = await asyncio.to_thread(read_and_digest, path)  # 35 MB read + sha off the loop
+    digest, mime = "sha256:" + hexdigest, mimetypes.guess_type(path)[0] or "video/mp4"
+    headers = cfg["headers_for"](tenant)            # the staging tenant owns the object
+    row["upload_stage"] = "create"
+    r = await client.post(cfg["base"] + "/uploads", headers=headers,
+                          json={"max_bytes": len(body), "bytes": len(body),
+                                "accepted_mime": [mime], "digest": digest})
     row["upload_status"] = r.status_code
-    if r.status_code >= 400:
+    ticket = answer_of(r) if r.status_code < 400 else {}
+    # The handle goes into a path, the request body AND the resume state, so it is
+    # allowlisted like any other server string: `upl_` + 22..64 (contracts/ids.py).
+    handle = allow(ticket.get("upload_handle"), HANDLE_OK, cfg["key"], fallback=None)
+    if handle is None or ticket.get("destination_ref") != UPLOAD_REF_SCHEME + handle:
         raise UploadFailed()
-    created = r.json()
-    dest = created.get("upload") or created
-    put = await client.request(dest.get("method", "PUT"), dest["url"], content=body,
-                              headers={"content-type": mime, **(dest.get("headers") or {})})
+    row["upload_expires_at"] = allow(ticket.get("expires_at"), TIMESTAMP_OK, cfg["key"],
+                                     fallback=None)
+    row["upload_stage"] = "put"
+    put = await client.put(f"{cfg['base']}/uploads/{handle}", content=body,
+                           headers={**headers, "content-type": mime})
     row["upload_status"] = put.status_code
     if put.status_code >= 400:
         raise UploadFailed()
-    done = await client.post(f"{cfg['base']}/uploads/{created['handle']}/complete", headers=cfg["headers"],
-                             json={"sha256": digest, "bytes": len(body)})
+    row["upload_stage"] = "complete"
+    done = await client.post(f"{cfg['base']}/uploads/{handle}/complete",
+                             headers={k: v for k, v in headers.items() if k != "content-type"})
     row["upload_status"] = done.status_code
-    if done.status_code >= 400:
+    completed = answer_of(done) if done.status_code < 400 else {}
+    media = completed.get("media") if isinstance(completed.get("media"), dict) else {}
+    if (completed.get("upload_handle"), media.get("digest"), media.get("bytes")) != (
+            handle, digest, len(body)):
         raise UploadFailed()
-    # The handle goes back out in the request body and into the resume state, so it is
-    # allowlisted like any other server string: `upl_` + 22..64 (contracts/ids.py).
-    handle = allow((done.json() or {}).get("handle", created["handle"]), HANDLE_OK, cfg["key"],
-                   fallback=None)
-    if handle is None:
-        raise UploadFailed()
+    row["upload_stage"] = "finalized"
     return handle
 
 
@@ -876,9 +950,16 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "error_code": None, "error_type": None, "body_sha256": None, "body_bytes": None,
            "inference_id": None, "retry_after": None,
            "server_timing": None, "prompt_tokens": None, "completion_tokens": None, "usage_missing": None,
-           "content_chars": 0, "upload_s": None, "upload_status": None, "media_sent": False,
+           "content_chars": 0, "upload_s": None, "upload_status": None, "upload_stage": None,
+           "upload_expires_at": None, "media_sent": False,
            "finish_reason": None,
            "stream_complete": None, "schedule_lag_s": None,
+           # E1C: how this attempt came to be sent, and what the server did with it -
+           # resend: first | transport_retry (in-run 429/503 retry) | resume (a key the
+           # interrupted run already sent); served: fresh | replay | None (nothing served).
+           "resend": ("transport_retry" if attempt_no else
+                      "resume" if item.get("resumed") else "first"),
+           "served": None, "served_model": None, "upload_start_s": None, "upload_end_s": None,
            # request-level fields, filled by run_one() on the attempt that ends the request
            "request_send_s": None, "request_latency_s": None, "latency_from_scheduled_s": None}
     now = lambda: round(CLOCK() - t0, 6)
@@ -890,6 +971,7 @@ async def attempt(client, cfg, item, t0, attempt_no):
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
         row["end_s"] = row["end_s"] or now()
+    row["served"] = served_as(row)
     if (row["outcome"], row["error_class"], row["error_code"], row["idempotency_replayed"]) == (
             "failed", "stream_error_event", "state_conflict", True):
         row["outcome"] = CANCELLED_REPLAY
@@ -908,7 +990,7 @@ async def attempt(client, cfg, item, t0, attempt_no):
 
 async def _send(client, cfg, item, row, now):
     """Issue the request and fill `row`. Returning early is fine: attempt() finalises."""
-    ref = await media_ref_for(item, cfg, client, row)
+    ref = await media_ref_for(item, cfg, client, row, now)
     payload = {"model": cfg["model"], "messages": messages_for(item, ref),
                "max_tokens": item["max_tokens"], "temperature": 0, "stream": True}
     # vLLM streams usage only when asked. The infrx gateway always sends its usage frame, and
@@ -958,6 +1040,11 @@ async def _send(client, cfg, item, row, now):
             return
         usage, saw_done = None, False
         cancel_at = item.get("cancel_at_s")
+        # dataset.py's result export: the text of THIS attempt, kept out of every row. A
+        # measurement run passes no sink and records character counts only, as always.
+        sink = cfg.get("outputs")
+        if sink is not None:
+            sink[item["item_key"]] = parts = []
         async for line in resp.aiter_lines():
             # A client disconnect, not a timeout: leaving the `stream` block closes the
             # connection. R21 makes client_cancelled billable with authoritative usage, so
@@ -979,6 +1066,8 @@ async def _send(client, cfg, item, row, now):
                 continue
             if chunk.get("usage"):
                 usage = chunk["usage"]
+            if chunk.get("model") and row["served_model"] is None:
+                row["served_model"] = allow(chunk["model"], MODEL_OK, cfg["key"])
             if chunk.get("error"):
                 row["outcome"] = "failed"
                 row["error_class"] = "stream_error_event"
@@ -995,6 +1084,8 @@ async def _send(client, cfg, item, row, now):
                     row["first_token_s"] = row["first_token_s"] or now()
                     row["last_token_s"] = now()
                     row["content_chars"] += len(text)
+                    if sink is not None:
+                        parts.append(text)
         row["end_s"] = now()
         row["usage_missing"] = usage is None
         if isinstance(usage, dict):   # authoritative usage only, never chunk counting; ints only
@@ -1147,6 +1238,15 @@ def resource_summary(samples):
 # ---------------------------------------------------------------- drivers
 
 
+def past_deadline(cfg, t0):
+    """The profile's bounds.max_duration_s, enforced: no new request after it."""
+    limit = cfg.get("max_duration_s")
+    if limit is not None and CLOCK() - t0 > limit:
+        cfg["stopped_by"] = "bounds.max_duration_s"
+        return True
+    return False
+
+
 async def run_open_loop(client, cfg, schedule, rows):
     t0 = CLOCK()
     tasks = []
@@ -1154,9 +1254,23 @@ async def run_open_loop(client, cfg, schedule, rows):
         delay = item["arrival_s"] - (CLOCK() - t0)
         if delay > 0:
             await SLEEP(delay)                  # arrivals never wait for completions
+        if past_deadline(cfg, t0):
+            break
         tasks.append(asyncio.create_task(run_one(client, cfg, item, t0, rows)))
-    await asyncio.gather(*tasks)
+    if tasks:
+        await drain(cfg, tasks, cfg.get("max_drain_s"))
     return CLOCK() - t0
+
+
+async def drain(cfg, tasks, timeout):
+    """bounds.max_drain_s: what is still open after `timeout` is cancelled (a client
+    disconnect, billable per R21) and its rows are missing, so the cell reads INVALID."""
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    if pending:
+        cfg["stopped_by"] = "bounds.max_drain_s"
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def run_closed_loop(client, cfg, schedule, rows):
@@ -1166,14 +1280,19 @@ async def run_closed_loop(client, cfg, schedule, rows):
     t0 = CLOCK()
 
     async def worker():
-        while True:
+        while not past_deadline(cfg, t0):
             try:
                 item = queue.get_nowait()
             except asyncio.QueueEmpty:
                 return
             await run_one(client, cfg, item, t0, rows)
 
-    await asyncio.gather(*(worker() for _ in range(cfg["concurrency"])))
+    # No new item after max_duration_s (past_deadline); what is in flight then gets
+    # max_drain_s, the same bound as the open loop's tail, and is cancelled after it.
+    limit = cfg.get("max_duration_s")
+    timeout = None if limit is None else \
+        max(0.0, limit - (CLOCK() - t0)) + (cfg.get("max_drain_s") or 0.0)
+    await drain(cfg, [asyncio.create_task(worker()) for _ in range(cfg["concurrency"])], timeout)
     return CLOCK() - t0
 
 
@@ -1259,30 +1378,266 @@ def profile_block(cfg):
     }
 
 
-def summarize(rows, wall, cfg):
+def served_as(row):
+    """fresh | replay | None. A row written before E1C has no `served`; this derives the same
+    answer from the fields it does carry, so old raw files classify exactly as new ones."""
+    if row.get("idempotency_replayed"):
+        return "replay"
+    return "fresh" if row.get("outcome") == "accepted" else None
+
+
+OUTCOMES = ("accepted", "rejected", "failed", "cancelled", CANCELLED_REPLAY)
+
+
+def finals_of(rows):
     finals = {}
-    for r in rows:                                        # last attempt per request decides its outcome
+    for r in rows:                                        # last attempt per request decides
         finals[r["seq"]] = r
-    finals = list(finals.values())
+    return list(finals.values())
+
+
+def validity(rows, *, scheduled, open_loop, max_lag_s, intentional_resume=False,
+             expect_model=None, interrupted=False, extra_reasons=()):
+    """BENCH-VALIDITY: may this cell's numbers be read as capacity at all?
+
+    INVALID, with every reason, when: a replay the run did not intend (any replay unless the
+    run is a resume, and then only on the keys the interrupted run sent); a scheduled item
+    with no attempt, or an interrupted run; open-loop driver lag above the declared bound;
+    a fresh answer from a model other than the declared one (or none reported when one was
+    declared); counters that do not add up. Zero replay is necessary, not sufficient."""
+    finals = finals_of(rows)
+    reasons = list(extra_reasons)
+    replays = [r for r in finals if served_as(r) == "replay"]
+    # A pre-E1C row carries no `resend`; in a declared resume its replays are the resume's.
+    unexpected = [r for r in replays
+                  if not (intentional_resume and r.get("resend", "resume") == "resume")]
+    if unexpected:
+        reasons.append(f"unexpected replay: {len(unexpected)} answer(s) served from the "
+                       f"idempotency store, not fresh inference")
+    missing = None if scheduled is None else scheduled - len(finals)
+    if missing:
+        reasons.append(f"missing attempts: {missing} of {scheduled} scheduled item(s) have no row")
+    if interrupted:
+        reasons.append("interrupted: the schedule did not run to its end")
+    lags = [r["schedule_lag_s"] for r in rows
+            if r.get("attempt") == 0 and r.get("schedule_lag_s") is not None]
+    lag_max = max(lags) if lags else None
+    if open_loop and max_lag_s is not None and lag_max is not None and lag_max > max_lag_s:
+        reasons.append(f"driver lag {lag_max:.3f} s exceeds the declared {max_lag_s} s: the "
+                       f"client limited the offered load")
+    fresh = [r for r in finals if served_as(r) == "fresh"]
+    observed = sorted({r.get("served_model") for r in fresh} - {None})
+    if expect_model is not None:
+        if any(m != expect_model for m in observed):
+            reasons.append(f"identity mismatch: served {observed}, declared {expect_model!r}")
+        elif fresh and not observed:
+            reasons.append("identity unverified: the target reported no served model")
+    buckets = {o: sum(1 for r in finals if r.get("outcome") == o) for o in OUTCOMES}
+    accepted = buckets["accepted"]
+    accepted_replayed = sum(1 for r in finals if r.get("outcome") == "accepted"
+                            and served_as(r) == "replay")
+    per_seq = {}
+    for r in rows:
+        per_seq[r["seq"]] = per_seq.get(r["seq"], 0) + 1
+    checks = {
+        "every final has a known outcome": sum(buckets.values()) == len(finals),
+        "fresh + replayed == accepted": len(fresh) + accepted_replayed == accepted,
+        "every attempt of a request is on file": all(
+            per_seq[r["seq"]] == (r.get("retries") or 0) + 1 for r in finals),
+    }
+    broken = [name for name, ok in checks.items() if not ok]
+    if broken:
+        reasons.append("counters do not reconcile: " + "; ".join(broken))
+    return {"parser_version": PARSER_VERSION,
+            "verdict": "INVALID" if reasons else "VALID", "reasons": reasons,
+            "intentional_resume": intentional_resume,
+            "scheduled": scheduled, "finals": len(finals), "missing_attempts": missing,
+            "fresh_accepted": len(fresh), "accepted_replayed": accepted_replayed,
+            "replayed": len(replays), "unexpected_replayed": len(unexpected),
+            "transport_retries": sum(1 for r in rows if r.get("attempt", 0) > 0),
+            "driver_lag_max_s": lag_max, "driver_lag_bound_s": max_lag_s,
+            "identity": {"declared": expect_model, "observed": observed},
+            "outcomes": buckets, "reconciliation": checks}
+
+
+def stage_blocks(fresh):
+    """Per-stage durations in seconds, from ONE process's monotonic clock (CLOCK), over fresh
+    answers only. Admission is the response head (the gateway's accept/refuse decision);
+    first_output is the first streamed content delta (TTFT) - a non-streamed first response
+    would not be comparable and is never produced by this client. Queue, preparation and
+    engine phases come only from the target's Server-Timing (`phases`); fetch and
+    reconciliation are not stages of a streamed answer and are reported as absent."""
+    spans = {"upload": ("upload_start_s", "upload_end_s"), "admission": ("send_s", "first_byte_s"),
+             "first_output": ("send_s", "first_token_s"), "terminal": ("send_s", "end_s")}
+    out = {}
+    for name, (a, b) in spans.items():
+        out[name], _ = percentile_block(
+            fresh, name, get=lambda r, a=a, b=b: (None if r.get(a) is None or r.get(b) is None
+                                                  else r[b] - r[a]))
+    out["clock"] = "one process, time.perf_counter; no cross-host comparison without a sync bound"
+    out["ttft_kind"] = "streamed first content delta"
+    out["not_measured"] = ["fetch", "reconciliation"]
+    return out
+
+
+def profile_reasons(rows, cfg):
+    """What only the declared profile can make INVALID. S3 F5: a P4 (overload) cell that saw
+    no 429/503 exercised no overload delivery, whatever else it measured."""
+    profile = cfg.get("run_profile")
+    if not profile:
+        return (UNPROFILED,)
+    if profile["measurement"]["profile_class"] == "P4" and not any(
+            r.get("http_status") in (429, 503) for r in rows):
+        return ("P4 observed no 429/503: the overload path was not exercised",)
+    return ()
+
+
+def overload_by_path(rows, cfg):
+    """S3 F5: refusals and what became of them, keyed by the hop the requests entered. A
+    refusal delivered is a 429/503 status the client read; a transport loss is an attempt that
+    ended in a transport error with no status at all (the intake-drain ReadError)."""
+    path = ((cfg.get("run_profile") or {}).get("target") or {}).get("path") or "undeclared"
+    lost = [r for r in rows if r["outcome"] == "failed" and r["http_status"] is None
+            and r["error_class"] not in PLATFORM_ERROR_CLASSES and r["send_s"] is not None]
+    return {path: {"status_429": sum(1 for r in rows if r["http_status"] == 429),
+                   "status_503": sum(1 for r in rows if r["http_status"] == 503),
+                   "retry_after_present": sum(1 for r in rows if r["http_status"] in (429, 503)
+                                              and r["retry_after"] is not None),
+                   "transport_losses": len(lost),
+                   "transport_loss_classes": _counts(lost, "error_class")}}
+
+
+def peak_in_flight(rows):
+    """Most attempts open at once, from their send/end stamps (the actual concurrency)."""
+    edges = sorted([(r["send_s"], 1) for r in rows if r.get("send_s") is not None]
+                   + [(r["end_s"], -1) for r in rows if r.get("send_s") is not None
+                      and r.get("end_s") is not None])
+    peak = level = 0
+    for _, step in edges:
+        level += step
+        peak = max(peak, level)
+    return peak
+
+
+def video_hour_cost(price, wall_s, clip_seconds, slo_clip_seconds=None):
+    """§6: attributable infrastructure USD / (unique successful in-contract clip-seconds /
+    3600). No price evidence -> unavailable, never zero; a price not from cloud-pricing.md
+    -> estimated, labelled with its source and date."""
+    if not price:
+        return {"status": "unavailable", "usd_per_successful_video_hour": None,
+                "reason": "no price evidence declared (profile measurement.price)"}
+    infra = price["usd_per_hour"] * price["instances"] * wall_s / 3600
+    status = "sourced" if "cloud-pricing.md" in price["source"] else "estimated"
+    per = lambda secs: round(infra / (secs / 3600), 6) if secs else None
+    return {"status": status, "label": f"{status} ({price['source']}, {price['as_of']})",
+            "infrastructure_usd": round(infra, 6), "clip_seconds": clip_seconds,
+            "usd_per_successful_video_hour": per(clip_seconds),
+            "usd_per_slo_qualified_video_hour": per(slo_clip_seconds),
+            "formula": "infrastructure USD over the cell's wall time / (unique successful "
+                       "in-contract clip-seconds / 3600)",
+            "not_included": "idle and warm-up outside the cell, control plane"}
+
+
+def measurement_block(res, rows, finals, fresh, cfg, valid):
+    """The §6 result fields, one place, with every denominator named. Charges (CREDIT, USD)
+    are the ledger's and are not observed by this client; they are never converted into or
+    out of the infrastructure cost, which is labelled on its own."""
+    profile = cfg.get("run_profile") or {}
+    w, m = profile.get("workload") or {}, profile.get("measurement") or {}
+    cap = w.get("max_clip_duration_s", 82.0)
+    deliberate = [r for r in finals if r["clip_id"] in set(w.get("expected_invalid") or ())]
+    offers = [r for r in finals if r not in deliberate]
+    count = lambda rs, o: sum(1 for r in rs if r["outcome"] == o)
+    in_contract = {r["item_key"]: r for r in fresh
+                   if r["media_sent"] and r["duration_s"] is not None and r["duration_s"] <= cap}
+    clip_s = round(sum(r["duration_s"] for r in in_contract.values()), 3)
+    wall = res["wall_s"] or 0.0
+    sends = sorted(r["send_s"] for r in rows if r["attempt"] == 0 and r["send_s"] is not None)
+    classes = {"text": [r for r in fresh if not r["media_sent"]]}
+    for lo, hi in ((0, 30), (30, 60), (60, cap)):
+        classes[f"video_{lo}-{hi:g}s"] = [r for r in fresh if r["media_sent"] and
+                                          r["duration_s"] is not None and lo < r["duration_s"] <= hi]
+    t = (m.get("thresholds") or {}).get("ttft_s")
+    e = (m.get("thresholds") or {}).get("e2e_s")
+    meets = [r for r in fresh if (t is None or (r["ttft_s"] or float("inf")) <= t)
+             and (e is None or (r["request_latency_s"] or float("inf")) <= e)]
+    gated = t is not None or e is not None
+    slo_clip_s = sum(in_contract[k]["duration_s"] for k in {r["item_key"] for r in meets}
+                     if k in in_contract) if gated else None
+    failed_offers = count(offers, "failed")
+    return {
+        "schema": RESULT_SCHEMA, "profile_schema": profile.get("schema"),
+        "run_id": (profile.get("identity") or {}).get("run_id"),
+        "profile_sha256": cfg.get("profile_sha256"), "candidate": profile.get("identity"),
+        "corpus_sha256": cfg.get("corpus_sha256"),
+        "counts": {"offered": valid["scheduled"], "attempts": len(rows),
+                   "valid_offers": len(offers), "deliberate_invalid": len(deliberate),
+                   "deliberate_invalid_refused": count(deliberate, "rejected"),
+                   "fresh_accepted": len(fresh), "replayed": valid["replayed"],
+                   "rejected": count(offers, "rejected"), "failed": failed_offers,
+                   "timed_out": sum(1 for r in offers if r["outcome"] == "failed"
+                                    and "Timeout" in (r["error_class"] or "")),
+                   "cancelled": count(offers, "cancelled"), "completed": res["accepted"]},
+        "error_rate": {"value": round(failed_offers / len(offers), 6) if offers else None,
+                       "denominator": "valid offers (every scheduled item except the "
+                                      "declared deliberate-invalid ones), admitted or not"},
+        "accepted_service_success": {
+            "value": round(len(fresh) / (len(fresh) + failed_offers), 6)
+            if fresh or failed_offers else None,
+            "denominator": "fresh accepted + failed valid offers"},
+        "actual_rate_per_s": round((len(sends) - 1) / (sends[-1] - sends[0]), 4)
+        if len(sends) > 1 and sends[-1] > sends[0] else None,
+        "peak_in_flight": peak_in_flight(rows), "warmup_count": cfg.get("warmups", 0),
+        "target_path": ((profile.get("target") or {}).get("path") or "undeclared"),
+        "overload_by_target_path": overload_by_path(rows, cfg),
+        "driver_lag": {"max_s": valid["driver_lag_max_s"], "bound_s": valid["driver_lag_bound_s"]},
+        "latency_by_class": {name: {"ttft_s": percentile_block(rs, "ttft_s")[0],
+                                    "e2e_s": percentile_block(rs, "request_latency_s")[0]}
+                             for name, rs in classes.items()},
+        "successful_clip_seconds": clip_s,
+        "clip_seconds_per_hour": round(clip_s / wall * 3600, 3) if wall else None,
+        "slo_goodput": ({"thresholds": m.get("thresholds"), "qualified": len(meets),
+                         "per_valid_offer": round(len(meets) / len(offers), 6) if offers else None}
+                        if gated else {"status": "not gated: no threshold declared"}),
+        "charges": {"credit": None, "usd": None,
+                    "note": "ledger charges are not observed by the client; reconcile them "
+                            "from the usage resource (E3C/E4C), in their own units"},
+        "infrastructure_cost": video_hour_cost(m.get("price"), wall, clip_s, slo_clip_s),
+        "telemetry": list(m.get("telemetry") or []),
+        "reconciliation": valid["reconciliation"],
+        "stop_cleanup": {"stopped_by": cfg.get("stopped_by") or
+                         ("interrupted" if cfg.get("interrupted") else "schedule_end"),
+                         "declared_cleanup": profile.get("cleanup"),
+                         "cleanup_executed_by_client": False},
+        "verdict": valid["verdict"], "reasons": valid["reasons"],
+    }
+
+
+def summarize(rows, wall, cfg):
+    finals = finals_of(rows)
     accepted = [r for r in finals if r["outcome"] == "accepted"]
+    # RV-08: capacity is FRESH inference only. A replayed answer is the idempotency store's,
+    # so every rate, percentile and work count below is over `fresh`; `accepted` stays the
+    # count of accepted answers of any kind, and the replays are counted apart.
+    fresh = [r for r in accepted if served_as(r) == "fresh"]
     rejected = [r for r in finals if r["outcome"] == "rejected"]
     failed = [r for r in finals if r["outcome"] == "failed"]
     cancelled = [r for r in finals if r["outcome"] == "cancelled"]
     cancelled_replays = [r for r in finals if r["outcome"] == CANCELLED_REPLAY]
-    out_tokens = sum(r["completion_tokens"] or 0 for r in accepted)
+    out_tokens = sum(r["completion_tokens"] or 0 for r in fresh)
     # The throughput unit P-18 requires: successful VIDEO-SECONDS per second, never clips
     # per second on its own (a clips/s number without the duration mix means nothing).
-    video_seconds = sum(r["duration_s"] or 0 for r in accepted if r["media_sent"])
+    video_seconds = sum(r["duration_s"] or 0 for r in fresh if r["media_sent"])
     suppressed = []
     pct = {}
     for field, src, scale in (("ttft_s", "ttft_s", 1.0), ("latency_s", "request_latency_s", 1.0),
                               ("tpot_ms", "tpot_s", 1000.0)):
-        block, sup = percentile_block(accepted, src, scale)
+        block, sup = percentile_block(fresh, src, scale)
         pct[field] = block
         suppressed += sup
     # Coordinated omission: when the driver cannot keep up, latency from the SEND time
     # hides the wait it caused. Reported from the scheduled arrival as well (open loop).
-    pct["latency_from_scheduled_s"], _ = percentile_block(accepted, "latency_from_scheduled_s")
+    pct["latency_from_scheduled_s"], _ = percentile_block(fresh, "latency_from_scheduled_s")
     # First attempts only: a retried attempt's send - scheduled includes the previous
     # attempt and the Retry-After wait, which is not driver lag and must not invalidate
     # an open-loop cell. Per-attempt lag stays in the raw rows.
@@ -1290,11 +1645,19 @@ def summarize(rows, wall, cfg):
     lag_block, _ = percentile_block(firsts, "schedule_lag_s")
     lags = [r["schedule_lag_s"] for r in firsts if r.get("schedule_lag_s") is not None]
     lag_block["max"] = round(max(lags), 6) if lags else None
-    cold = [r for r in accepted if r["cold"] is True]
-    warm = [r for r in accepted if r["cold"] is False]
+    cold = [r for r in fresh if r["cold"] is True]
+    warm = [r for r in fresh if r["cold"] is False]
     cold_ttft, _ = percentile_block(cold, "ttft_s")
     warm_ttft, _ = percentile_block(warm, "ttft_s")
-    prompt_tokens = [r["prompt_tokens"] for r in accepted if r["prompt_tokens"] is not None]
+    prompt_tokens = [r["prompt_tokens"] for r in fresh if r["prompt_tokens"] is not None]
+    scheduled = len(cfg.get("run_schedule") or []) if cfg.get("run_schedule") is not None \
+        else len(finals)
+    valid = validity(rows, scheduled=scheduled, open_loop=bool(cfg["args"].rate),
+                     max_lag_s=getattr(cfg["args"], "max_driver_lag", DEFAULT_MAX_DRIVER_LAG_S),
+                     intentional_resume=bool(cfg.get("resumed_from")),
+                     expect_model=getattr(cfg["args"], "expect_model", None),
+                     interrupted=bool(cfg.get("interrupted")),
+                     extra_reasons=profile_reasons(rows, cfg))
     res = {
         # our own label, slugged into LABEL_OK (it also names the raw file)
         "label": slug(cfg["args"].label), "target": cfg["args"].target, "model": cfg["model"],
@@ -1306,12 +1669,21 @@ def summarize(rows, wall, cfg):
         "requests": len(finals), "attempts": len(rows),
         "max_tokens": cfg["max_tokens"],
         "profile": profile_block(cfg),
-        "accepted": len(accepted), "rejected": len(rejected), "failed": len(failed),
+        "unprofiled_opt_out": getattr(cfg["args"], "unprofiled", None),
+        "parser_version": PARSER_VERSION,
+        "accepted": len(accepted), "accepted_fresh": len(fresh),
+        "accepted_replayed": len(accepted) - len(fresh),
+        "capacity_basis": "fresh accepted answers only; replays excluded (RV-08)",
+        "validity": valid,
+        "retry_policy": {"client_retries_429_503": cfg["retries"], "http_library_retries": 0,
+                         "observed_transport_retries": valid["transport_retries"]},
+        "rejected": len(rejected), "failed": len(failed),
         "cancelled": len(cancelled), CANCELLED_REPLAY: len(cancelled_replays),
         "accepted_without_usage": sum(1 for r in accepted if r["usage_missing"]),
         # Retries collapse a request to its final attempt, so every rejected or failed
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
-        "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
+        "denominators": {"latency_samples": len(fresh), "rejected_excluded": len(rejected),
+                         "replayed_excluded": len(accepted) - len(fresh),
                          "failed_excluded": len(failed), "cancelled_excluded": len(cancelled),
                          "cancelled_replay_excluded": len(cancelled_replays),
                          "scheduled": len(finals),
@@ -1347,12 +1719,17 @@ def summarize(rows, wall, cfg):
         "prompt_tokens_median": round(statistics.median(prompt_tokens), 1) if prompt_tokens else None,
         "interrupted": False,        # _run() sets this true for a partial, Ctrl-C run
         "wall_s": round(wall, 2),
-        "req_per_s": round(len(accepted) / wall, 3) if wall else None,
+        "req_per_s": round(len(fresh) / wall, 3) if wall else None,
         "out_tok_per_s": round(out_tokens / wall, 1) if wall else None,
         # Successful work, in the unit P-18 asks for, always beside its profile block.
         "video_seconds_accepted": round(video_seconds, 3),
         "video_s_per_s": round(video_seconds / wall, 3) if wall else None,
-        "phases": phase_blocks(accepted),
+        "phases": phase_blocks(fresh),
+        "stages_s": stage_blocks(fresh),
+        # Output length beside every speed number: a shorter answer is not a faster server.
+        "output_lengths": {"completion_tokens": percentile_block(fresh, "completion_tokens")[0],
+                           "content_chars": percentile_block(fresh, "content_chars")[0],
+                           "completion_tokens_total": out_tokens},
         "resources": resource_summary(cfg.get("samples") or []),
         "percentiles": pct, "schedule_lag_s": lag_block,
         "suppressed_percentiles": sorted(set(suppressed)),
@@ -1360,6 +1737,7 @@ def summarize(rows, wall, cfg):
                            f"(p50>=6, p95>=60, p99>=300)",
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    res["measurement"] = measurement_block(res, rows, finals, fresh, cfg, valid)
     for legacy, (field, q) in {"ttft_p50": ("ttft_s", 50), "ttft_p95": ("ttft_s", 95),
                                "latency_p50": ("latency_s", 50), "latency_p95": ("latency_s", 95),
                                "tpot_p50_ms": ("tpot_ms", 50), "tpot_p95_ms": ("tpot_ms", 95)}.items():
@@ -1421,7 +1799,11 @@ def make_config(a, clips=None, manifest=None):
         print("note: --target gateway does not send mm_processor_kwargs (server-side budget)",
               file=sys.stderr)
     mm_fixed = resolve_mm_kwargs(a, video=a.video) if not a.corpus else None   # probes once
+    profile = getattr(a, "run_profile", None)
+    bounds = (profile or {}).get("bounds") or {}
     return {"args": a, "key": tuple(dict.fromkeys([key, *keys])), "headers": headers,
+            "run_profile": profile, "profile_sha256": getattr(a, "profile_sha256", None),
+            "max_duration_s": bounds.get("max_duration_s"), "max_drain_s": bounds.get("max_drain_s"),
             "headers_for": headers_for, "tenants": len(keys),
             "base": a.base_url.rstrip("/"),
             "model": a.model, "max_tokens": a.max_tokens, "concurrency": a.concurrency,
@@ -1450,6 +1832,9 @@ async def execute(a, state):
     cfg = state["cfg"] = make_config(a, clips, manifest)
     cfg["raw_file"], cfg["state"] = state["raw_file"], state
     cfg["dataset_version"] = a.dataset_version or (manifest or {}).get("corpus_version") or "adhoc"
+    if a.corpus and os.path.isfile(a.corpus):
+        with open(a.corpus, "rb") as f:
+            cfg["corpus_sha256"] = sha256(f.read()).hexdigest()
     prompt = a.prompt
     if not a.corpus and prompt is None:
         prompt = smoke_namespace()["canonical_prompt"](a.weights, "caption")
@@ -1468,6 +1853,7 @@ async def execute(a, state):
         schedule, cfg["skipped_terminal"] = apply_resume(schedule, read_attempts(a.resume))
         forget_cold(schedule)
         cfg["resumed_from"] = os.path.basename(a.resume)
+    cfg["run_schedule"] = schedule          # what THIS run set out to send: the missing-attempt base
     write_row(cfg, run_fingerprint(cfg))     # the raw file's first line, before any attempt
     rows = state["rows"]
     # asyncio's default handler prints the exception MESSAGE of an unretrieved task.
@@ -1484,6 +1870,7 @@ async def execute(a, state):
             # request an idempotent replay of the warm-up instead of a request.
             warm = make(1, rate=None, dataset_version=cfg["dataset_version"] + ".warmup")
             await run_one(client, cfg, warm[0], CLOCK(), [])   # warm-up, not counted
+            cfg["warmups"] = 1
         state["t0"] = CLOCK()
         sampler_task = (asyncio.create_task(sample_resources(cfg, state["t0"], cfg["samples"]))
                         if a.sample_interval > 0 else None)
@@ -1522,6 +1909,12 @@ def cell_warnings(s):
                    f"dismissed")
     if s.get("interrupted"):
         out.append("run was interrupted: partial")
+    v = s.get("validity")
+    if v is None:
+        out.append("validity not derived: this cell predates parser e1c.1 (re-derive it "
+                   "with --validate-raw; its accepted count includes any replays)")
+    elif v.get("verdict") != "VALID":
+        out.append(f"{v.get('verdict')}: " + "; ".join(v.get("reasons") or []))
     profile = s.get("profile") or {}
     if s.get("cold_requests") and profile.get("engine_state") != "restarted":
         out.append(f"cold/warm split reported with engine_state="
@@ -1533,6 +1926,25 @@ def cell_warnings(s):
     if not s.get("accepted"):
         out.append("no accepted request: nothing in this row is a measurement")
     return out
+
+
+def validate_raw(path, *, intentional_resume=False, max_lag_s=DEFAULT_MAX_DRIVER_LAG_S,
+                 expect_model=None, stream=sys.stdout):
+    """Re-derive a raw file's validity with this parser. Read-only: the raw rows and any
+    summary already written from them are never rewritten or reclassified; the answer names
+    its parser version and the digest of the exact file it read."""
+    with open(path, "rb") as f:
+        digest = sha256(f.read()).hexdigest()
+    profile = read_fingerprint(path) or {}
+    rows = read_attempts(path)
+    res = validity(rows, scheduled=None if intentional_resume else profile.get("requests"),
+                   open_loop=any(r.get("schedule_lag_s") is not None for r in rows),
+                   max_lag_s=max_lag_s, intentional_resume=intentional_resume,
+                   expect_model=expect_model)
+    res.update(source=os.path.basename(path), source_sha256=digest, derived=True,
+               note="derived from raw rows; the rows and any stored summary are unchanged")
+    print(json.dumps(res, sort_keys=True), file=stream)
+    return 0 if res["verdict"] == "VALID" else 1
 
 
 def is_legacy(cell):
@@ -1608,6 +2020,69 @@ def print_legacy(legacy, stream):
               f"{c.get('req_per_s')} req/s — p50-grade, no tail", file=stream)
 
 
+def check_profile(a):
+    """--profile against these flags and the schedule they declare. No request is made: the
+    schedule is bench's own pure function, the corpus is read from its manifest only."""
+    import runprofile
+    if not a.profile:                    # --unprofiled: would the opt-out start this run?
+        why = unprofiled_refusal(a) if a.unprofiled else "--validate-only needs --profile"
+        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "derived": {},
+                                  "warnings": [UNPROFILED] if a.unprofiled else [],
+                                  "errors": [why] if why else []}, False)
+    try:
+        with open(a.profile, encoding="utf-8") as f:
+            profile = json.load(f)
+    except (OSError, ValueError) as e:
+        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "warnings": [],
+                                  "derived": {}, "errors": [f"--profile unreadable: "
+                                                            f"{type(e).__name__}"]}, False)
+    clips = load_corpus(a.corpus, a.subset)[0] if a.corpus else []
+    schedule = build_schedule(a.requests, clips, [f.strip() for f in a.forms.split(",")
+                                                  if f.strip()],
+                              prompt=a.prompt, rate=a.rate, seed=a.seed, video=a.video,
+                              burst=a.burst, max_tokens_mix=a.max_tokens_mix,
+                              tenants=max(len(a.tenant_env), 1),
+                              dataset_version=a.dataset_version or "",
+                              profile_version=a.profile_version)
+    warmups = int(not a.rate and not a.corpus and not a.no_warmup)   # a warm-up is a request
+    keys = tuple(k for k in [api_key(), *(os.environ.get(n, "").strip() for n in a.tenant_env)]
+                 if k)
+    inventory = None
+    if a.key_inventory:
+        try:
+            with open(a.key_inventory, encoding="utf-8") as f:
+                inventory = json.load(f)
+        except (OSError, ValueError) as e:
+            inventory = {"unreadable": type(e).__name__}
+    verdict = runprofile.validate(profile, a, schedule + schedule[:warmups], keys=keys,
+                                  carries_key=carries_key, local=runprofile.is_local(a),
+                                  key_env=KEY_ENV, inventory=inventory)
+    if verdict["runnable"]:
+        a.run_profile, a.profile_sha256 = profile, verdict["derived"]["profile_sha256"]
+        a.max_driver_lag = profile["measurement"]["max_driver_lag_s"]
+        a.expect_model = profile["identity"]["model_revision"]
+    return verdict
+
+
+def unprofiled_refusal(a):
+    """Why a run with no --profile may not start, or None. Free targets (an injected
+    transport, loopback) need no profile; a paid one needs --unprofiled and its bound."""
+    import runprofile
+    if runprofile.is_local(a):
+        return None
+    if not a.unprofiled:
+        return ("--base-url is not a local target and no --profile bounds this run "
+                "(consumer-v1/05 section 1); pass a runnable "
+                f"--profile, or an explicit --unprofiled {{{','.join(sorted(UNPROFILED_OPT_OUT))}}}")
+    cap = UNPROFILED_OPT_OUT[a.unprofiled]
+    sent = a.requests + int(not a.rate and not a.corpus and not a.no_warmup)
+    if cap and (sent > cap[0] or max(a.max_tokens_mix) > cap[1]):
+        return (f"--unprofiled {a.unprofiled} is at most {cap[0]} requests (warm-up included) "
+                f"of <= {cap[1]} output tokens; this run is {sent} of <= "
+                f"{max(a.max_tokens_mix)}: declare a --profile")
+    return None
+
+
 def main(argv=None):
     """Wrapper only: nothing may reach stderr around _run() either. A traceback would
     carry the exception message; only its type and its frames may be printed."""
@@ -1625,6 +2100,26 @@ def _run(argv=None):
     a = parse_args(argv)
     if a.report:
         return report(a.report)
+    if a.validate_raw:
+        return validate_raw(a.validate_raw, intentional_resume=a.intentional_resume,
+                            max_lag_s=a.max_driver_lag, expect_model=a.expect_model)
+    if a.validate_only or a.profile:
+        refuse_key_in_args(a, (api_key(),))
+        verdict = check_profile(a)
+        if a.validate_only:
+            print(json.dumps(verdict, indent=2, sort_keys=True))
+            return 0 if verdict["runnable"] else 2
+        if not verdict["runnable"]:
+            print("refusing to start: the run profile does not validate against this run\n"
+                  + json.dumps({k: verdict[k] for k in ("errors", "blocks")}, indent=2),
+                  file=sys.stderr)
+            return 2
+    elif why := unprofiled_refusal(a):
+        print(f"refusing to start: {why}", file=sys.stderr)
+        return 2
+    elif a.unprofiled:
+        print(f"note: --unprofiled {a.unprofiled}: no run profile bounds this run; it is "
+              f"recorded as unprofiled_opt_out and its verdict is INVALID", file=sys.stderr)
     refuse_key_in_args(a, tuple(dict.fromkeys([api_key(), *tenant_keys(a)])))
     raw = raw_path(a)                        # exit 2 before anything is opened or printed
     for path in (raw, a.out):
@@ -1651,6 +2146,7 @@ def _run(argv=None):
             return 130
         wall = state["wall"] if state["wall"] is not None else \
             (CLOCK() - state["t0"] if state["t0"] else 0.0)
+        cfg["interrupted"] = state["interrupted"]
         res = summarize(state["rows"], wall, cfg)
         res["interrupted"] = state["interrupted"]   # a partial run must never read as complete
         res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")

@@ -376,6 +376,9 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["rejected"] == 2 and summary["failed"] == 2      # 429/402 rejected, 500/503 failed
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
+                                           # E1C: a replayed answer has its own bucket, so
+                                           # latency_samples + the *_excluded sum to scheduled
+                                           "replayed_excluded": 0,
                                            "failed_excluded": 2, "cancelled_excluded": 0,
                                            "cancelled_replay_excluded": 0, "scheduled": 8, "skipped_terminal_on_resume": 0,
                                            "attempts": 8, "rejected_attempts": 2,
@@ -636,6 +639,9 @@ def test_an_upload_handle_that_is_not_a_contract_handle_is_never_sent_back():
         assert summary["accepted"] == 0 and summary["failed"] == 2
         assert all(r["error_class"] == "UploadFailed" for r in raw)
         assert not gw.seen, "no chat request may carry a reference we cannot vouch for"
+        # E1C: nor may the handle go back out in a PUT/complete path (the route would 404 it,
+        # but a path built from an unvetted server string is the client's own injection)
+        assert {m for m, _ in gw.upload_calls} == {"POST"} and len(gw.upload_calls) == 2
 
 
 # A second tenant's key that would PASS the error-code allowlist on its own: all
@@ -729,6 +735,8 @@ def test_the_handle_grammar_is_enforced_at_both_edges():
             assert summary["accepted"] == 0 and summary["failed"] == 2, handle
             assert all(r["error_class"] == "UploadFailed" for r in raw), handle
             assert not gw.seen, f"a chat request carried the malformed handle {handle!r}"
+            assert all(p == "/v1/uploads" for _, p in gw.upload_calls), \
+                f"the malformed handle {handle!r} went back out in a path"
 
 
 def test_a_rejected_429_item_is_resumed_with_the_same_key():
