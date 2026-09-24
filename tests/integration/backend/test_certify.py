@@ -772,7 +772,7 @@ def test_e4b_scrape_reads_the_series_the_soak_judges(tmp_path):
     assert certify.scrape(page.as_uri()) == {"rss_mib": 1024.0, "gpu_used_mib": 2.0,
                                              "drift": 0.0, "unsettleable": 1.0,
                                              "running": 2.0, "waiting": None,
-                                             "revision": "0123abc"}
+                                             "revision": "0123abc", "process": "gateway"}
     assert certify.scrape((tmp_path / "absent").as_uri()) is None
 
 
@@ -893,17 +893,18 @@ def test_e4b_a_checkout_without_git_is_the_named_release_and_the_report_says_so(
     (bin_ / "git").write_text("#!/bin/sh\nexit 1\n")        # a git that runs and cannot answer
     (bin_ / "git").chmod(0o755)
     monkeypatch.setattr(certify.harness, "REPO_ROOT", checkout)
-    monkeypatch.setattr(certify, "scrape", lambda url: {"revision": release})
+    pages = {"http://gw/metrics": "gateway", "http://wk/metrics": "worker"}
+    monkeypatch.setattr(certify, "scrape", lambda url: {"revision": release, "process": pages[url]})
     monkeypatch.setenv("INFRX_CERTIFY_GATEWAY_IMAGE", image)
     monkeypatch.setenv("INFRX_CERTIFY_RELEASE_IMAGE", image)
     named = {"sha": release, "dirty": None, "source": "--release-sha (no git)"}
     monkeypatch.setenv("PATH", str(empty))
     assert certify.release_head(release) == named and certify.release_head(None) is None
     report = certify.Report(TARGET, release_sha=release)
-    served = certify.served_build_check(report, "http://gw/metrics")
+    served = certify.served_build_check(report, *pages)
     assert (served["status"], served["detail"]) == (certify.PASS, (
-        f"the gateway serves the report's tree {release} (--release-sha (no git)), "
-        "from the release image"))
+        f"the gateway and the worker serve the report's tree {release} (--release-sha (no git)), "
+        "the gateway from the release image"))
     doc = json.loads(report.as_json())
     assert doc["git_head"] == doc["git_head_end"] == named
     assert (doc["stages"][-1]["stage"], doc["stages"][-1]["status"],
@@ -917,8 +918,9 @@ def test_e4b_a_checkout_without_git_is_the_named_release_and_the_report_says_so(
     assert report.head == {"sha": None, "dirty": None}
     monkeypatch.setattr(certify.run, "git_head", lambda: dict(CLEAN))
     report = certify.Report(TARGET, release_sha=release)
-    assert certify.served_build_check(report, "http://gw/metrics")["detail"] == [
-        f"the gateway serves {release}, the report's tree is {'c' * 40}"]
+    assert certify.served_build_check(report, *pages)["detail"] == [
+        f"the gateway serves {release}, the report's tree is {'c' * 40}",
+        f"the worker serves {release}, the report's tree is {'c' * 40}"]
     doc = json.loads(report.as_json())
     assert doc["git_head"] == doc["git_head_end"] == CLEAN
     assert doc["stages"][-1]["detail"] == [f"the tree is {'c' * 40}, not the release {release}"]
@@ -926,37 +928,45 @@ def test_e4b_a_checkout_without_git_is_the_named_release_and_the_report_says_so(
 
 def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch):
     """Review F3: on the box the report's hashes are the release the endpoint serves - the
-    gateway's own `infrx_build_info` revision is the report's tree, and it runs the image
-    install.sh built for that release. Anything unknown fails; nothing is typed in."""
+    gateway's and the worker's own `infrx_build_info` revisions (each read from that
+    process's page) are the report's tree, and the gateway runs the image install.sh built
+    for that release. Anything unknown fails; nothing is typed in."""
     sha, image = "0123abc" + "0" * 33, "sha256:" + "1" * 64
-    served = {"revision": "0123abc"}
-    assert certify.served_build_problems(served, sha, image, image) == []
-    assert certify.served_build_problems({"revision": "9999999"}, sha, image, image) == [
+    gw, wk = ({"revision": "0123abc", "process": name} for name in ("gateway", "worker"))
+    problems = (lambda gateway=gw, tree=sha, running=image, release=image, worker=wk:
+                certify.served_build_problems(gateway, tree, running, release, worker))
+    assert problems() == []
+    assert problems({**gw, "revision": "9999999"}) == [
         f"the gateway serves 9999999, the report's tree is {sha}"]
-    assert certify.served_build_problems({"revision": "0123ab"}, sha, image, image) == [
-        f"the gateway serves 0123ab, the report's tree is {sha}"]      # review V5: < 7 chars
-    assert certify.served_build_problems(served, None, image, image) == [
-        "the gateway serves 0123abc, the report's tree is None"]
-    assert "publishes no infrx_build_info" in first(
-        certify.served_build_problems({"revision": None}, sha, image, image))
-    assert "unreadable" in first(certify.served_build_problems(None, sha, image, image))
-    assert certify.served_build_problems(served, sha, None, image) == [
+    assert problems({**gw, "revision": "0123ab"}) == [
+        f"the gateway serves 0123ab, the report's tree is {sha}"]       # review V5: < 7 chars
+    assert problems(tree=None) == ["the gateway serves 0123abc, the report's tree is None",
+                                   "the worker serves 0123abc, the report's tree is None"]
+    assert "publishes no infrx_build_info" in first(problems({"revision": None}))
+    assert "unreadable" in first(problems(None))
+    assert problems(running=None) == [
         "INFRX_CERTIFY_GATEWAY_IMAGE is unset: the serving image is unrecorded"]
-    assert certify.served_build_problems(served, sha, image, None) == [
+    assert problems(release=None) == [
         "INFRX_CERTIFY_RELEASE_IMAGE is unset: the release image is unrecorded"]
     other = "sha256:" + "2" * 64
-    assert certify.served_build_problems(served, sha, other, image) == [
-        f"the gateway runs {other}, not the release image {image}"]
+    assert problems(running=other) == [f"the gateway runs {other}, not the release image {image}"]
+    # CERTIFY-TREE: the worker's gauge is judged as the gateway's, from its own page
+    assert problems(worker={**wk, "revision": "9999999"}) == [
+        f"the worker serves 9999999, the report's tree is {sha}"]
+    assert problems(worker=None) == ["the worker's /metrics is unreadable: its build is unknown"]
+    assert problems(worker=gw) == [
+        "the worker's /metrics is the gateway's page: its build is unread"]
     monkeypatch.setattr(certify.run, "git_head", lambda: {"sha": sha, "dirty": False})
-    monkeypatch.setattr(certify, "scrape", lambda url: served)
+    pages = {"http://gw/metrics": gw, "http://wk/metrics": wk}
+    monkeypatch.setattr(certify, "scrape", pages.get)
     monkeypatch.setenv("INFRX_CERTIFY_GATEWAY_IMAGE", image)
     monkeypatch.setenv("INFRX_CERTIFY_RELEASE_IMAGE", image)
     report = certify.Report(TARGET)
-    certify.served_build_check(report, "http://gw/metrics")
+    certify.served_build_check(report, *pages)
     assert (report.stages[-1]["stage"], report.stages[-1]["status"]) == ("e4b.b.served-build",
                                                                          certify.PASS)
     monkeypatch.delenv("INFRX_CERTIFY_GATEWAY_IMAGE")
-    certify.served_build_check(report, "http://gw/metrics")
+    certify.served_build_check(report, *pages)
     assert report.stages[-1]["status"] == certify.FAIL
 
 
@@ -979,14 +989,14 @@ def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path
     monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
     monkeypatch.setattr(certify, "config_pin_check", lambda *a: None)
     served_status = {"status": certify.PASS}
-    monkeypatch.setattr(certify, "served_build_check", lambda report, url: report.check(
+    monkeypatch.setattr(certify, "served_build_check", lambda report, *urls: report.check(
         "e4b.b.served-build", served_status["status"], "stub"))
     monkeypatch.setattr(certify, "engine_checks",
                         lambda report, target, workdir, args: seen.update(
                             label=target["label"], reported=report.target["label"]))
     box = ["--no-stack", "--box", "--release-sha", CLEAN["sha"], "--target", "http://gw/v1",
            "--engine-url", "http://engine", "--metrics-url", "http://gw/metrics",
-           "--workdir", str(tmp_path)]
+           "--worker-metrics-url", "http://wk/metrics", "--workdir", str(tmp_path)]
     for ready, label in ((certify.PASS, certify.MEAS), (certify.FAIL, certify.UNVERIFIED)):
         monkeypatch.setattr(certify, "preconditions_check",
                             lambda report, target, box_run, ready=ready: report.check(
@@ -1046,19 +1056,21 @@ def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypa
 
 
 def test_e4b_a_box_run_names_its_release_and_reads_its_metrics(tmp_path, monkeypatch):
-    """Reviews F2/F3: `--box` without `--release-sha` (the release it certifies) or without
-    `--metrics-url` (where the served build is read) is refused before anything runs; with
-    both it starts (stopped here at its first step, before any network)."""
+    """Reviews F2/F3: `--box` without `--release-sha` (the release it certifies), without
+    `--metrics-url` or without `--worker-metrics-url` (where the gateway's and the worker's
+    builds are read) is refused before anything runs; with all three it starts (stopped here
+    at its first step, before any network)."""
     monkeypatch.setattr(certify, "release_hashes",
                         lambda: (_ for _ in ()).throw(RuntimeError("stopped at the first step")))
     box = ["--box", "--no-stack", "--target", "http://gw/v1", "--engine-url", "http://engine",
            "--workdir", str(tmp_path), "--report", str(tmp_path / "r.json")]
-    release, metrics = ["--release-sha", "c" * 40], ["--metrics-url", "http://gw/metrics"]
-    for missing in (release, metrics):
-        argv = box + (metrics if missing is release else release)
+    needed = (["--release-sha", "c" * 40], ["--metrics-url", "http://gw/metrics"],
+              ["--worker-metrics-url", "http://wk/metrics"])
+    for missing in needed:
+        argv = box + [arg for flags in needed if flags is not missing for arg in flags]
         with pytest.raises(SystemExit):
             certify.main(argv)
-    assert certify.main(box + release + metrics) == 1
+    assert certify.main(box + [arg for flags in needed for arg in flags]) == 1
     assert json.loads((tmp_path / "r.json").read_text())["stages"][0]["stage"] == "runner-error"
 
 if __name__ == "__main__":

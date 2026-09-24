@@ -160,3 +160,7 @@ run closed, and the coordinator's decision recorded in
   and the served-build cell names that source. The state stays unknown, so `release-identity`
   still FAILs (§6.3, R97): only a run with git proves one clean SHA. Git that runs is never
   overridden - a SHA other than `--release-sha` stays a FAIL of both entries.
+  (b) The served build is read from both processes: `--box` also needs `--worker-metrics-url`
+  (box: `http://127.0.0.1:8002/metrics`, the worker's `infrx_build_info{process="worker"}`
+  since I2B-R4). `e4b.b.served-build` FAILs unless the gateway's and the worker's revisions
+  are each the report's tree, each read from a page whose `process` label is that process's.

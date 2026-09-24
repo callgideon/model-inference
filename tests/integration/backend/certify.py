@@ -5,7 +5,8 @@
     # the box, inside the coordinator's maintenance window (E4B box protocol):
     E4B_WINDOW_OK=1 INFRX_API_KEY=... python tests/integration/backend/certify.py --no-stack \\
         --box --target http://127.0.0.1:8001/v1 --engine-url http://127.0.0.1:8000 \\
-        --metrics-url http://127.0.0.1:8001/metrics --inventory <inventory.sh output> \\
+        --metrics-url http://127.0.0.1:8001/metrics --worker-metrics-url http://127.0.0.1:8002/metrics \\
+        --release-sha <the full release SHA> --inventory <inventory.sh output> \\
         --parity-baseline <W4 E0 parity.jsonl> --report <path>
 
 The protocol - checks, cells, criteria, shapes - is predeclared in
@@ -754,31 +755,36 @@ def scrape(url: str) -> dict | None:
                   if series == name and set(labels.items()) <= set(have)]
         return sum(values) if values else None
     mib = (lambda value: None if value is None else round(value / 2 ** 20, 1))
+    build = next((dict(labels) for (series, labels), value
+                  in samples.items() if series == "infrx_build_info" and value == 1), {})
     return {"rss_mib": mib(total("infrx_process_resident_bytes")),
             "gpu_used_mib": mib(total("infrx_gpu_memory_bytes", state="used")),
             "drift": total("infrx_reconciliation_drift"),
             "unsettleable": total("infrx_unsettleable_jobs"),
             "running": total("vllm:num_requests_running"),
             "waiting": total("vllm:num_requests_waiting"),
-            "revision": next((dict(labels).get("revision") for (series, labels), value
-                              in samples.items() if series == "infrx_build_info" and value == 1),
-                             None)}
+            "revision": build.get("revision"), "process": build.get("process")}
 
 
-def served_build_problems(scraped: dict | None, head_sha: str | None,
-                          gateway_image: str | None, release_image: str | None) -> list[str]:
-    """Review F3: the report's hashes are the release the box serves. The gateway names its
-    revision (`infrx_build_info`), which must be the report's tree, and it runs the image
-    install.sh built and tagged for that release (`infrx-runtime:<release>`)."""
+def served_build_problems(gateway: dict | None, head_sha: str | None, gateway_image: str | None,
+                          release_image: str | None, worker: dict | None) -> list[str]:
+    """Review F3: the report's hashes are the release the box serves. The gateway and the
+    worker (I2B-R4) each name their revision on their own /metrics (`infrx_build_info`, its
+    `process` label saying whose page it is), which must be the report's tree, and the
+    gateway runs the image install.sh built and tagged for that release."""
     problems = []
-    revision = (scraped or {}).get("revision")
-    if scraped is None:
-        problems.append("the gateway's /metrics is unreadable: its build is unknown")
-    elif revision is None:
-        problems.append("the gateway publishes no infrx_build_info{revision} (I3B request: "
-                        "set it at startup), so the build it serves is unknown")
-    elif not (head_sha and len(str(revision)) >= 7 and head_sha.startswith(str(revision))):
-        problems.append(f"the gateway serves {revision}, the report's tree is {head_sha}")
+    for process, scraped in (("gateway", gateway), ("worker", worker)):
+        revision = (scraped or {}).get("revision")
+        if scraped is None:
+            problems.append(f"the {process}'s /metrics is unreadable: its build is unknown")
+        elif revision is None:
+            problems.append(f"the {process} publishes no infrx_build_info{{revision}}, so the "
+                            "build it serves is unknown")
+        elif scraped.get("process") != process:
+            problems.append(f"the {process}'s /metrics is the {scraped.get('process')}'s page: "
+                            "its build is unread")
+        elif not (head_sha and len(str(revision)) >= 7 and head_sha.startswith(str(revision))):
+            problems.append(f"the {process} serves {revision}, the report's tree is {head_sha}")
     if not gateway_image:
         problems.append("INFRX_CERTIFY_GATEWAY_IMAGE is unset: the serving image is unrecorded")
     if not release_image:
@@ -788,14 +794,16 @@ def served_build_problems(scraped: dict | None, head_sha: str | None,
     return problems
 
 
-def served_build_check(report: Report, metrics_url: str) -> dict:
+def served_build_check(report: Report, metrics_url: str, worker_metrics_url: str) -> dict:
     tree = report.head.get("sha")
     problems = served_build_problems(scrape(metrics_url), tree,
                                      os.environ.get("INFRX_CERTIFY_GATEWAY_IMAGE"),
-                                     os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"))
+                                     os.environ.get("INFRX_CERTIFY_RELEASE_IMAGE"),
+                                     scrape(worker_metrics_url))
     return report.check("e4b.b.served-build", FAIL if problems else PASS,
-                        problems or f"the gateway serves the report's tree {tree} "
-                                    f"({report.head.get('source', 'git')}), from the release image")
+                        problems or f"the gateway and the worker serve the report's tree {tree} "
+                                    f"({report.head.get('source', 'git')}), the gateway from "
+                                    "the release image")
 
 
 def preconditions_check(report: Report, target: dict, box: bool) -> dict:
@@ -1120,6 +1128,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="parity.jsonl to pair with (box: W4's E0 run)")
     parser.add_argument("--metrics-url", help="the gateway's /metrics, read during the soak "
                                                "(box: http://127.0.0.1:8001/metrics)")
+    parser.add_argument("--worker-metrics-url", help="the worker's /metrics, where its build "
+                                                      "is read (box: http://127.0.0.1:8002/metrics)")
     parser.add_argument("--inventory", type=Path,
                         help="measure/inventory.sh's output from the box (the deployed engine)")
     parser.add_argument("--box", action="store_true",
@@ -1144,6 +1154,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--box certifies a deployed endpoint: give --target and --engine-url")
     if args.box and not args.metrics_url:
         parser.error("--box needs --metrics-url: the gateway's build is read from it (F3)")
+    if args.box and not args.worker_metrics_url:
+        parser.error("--box needs --worker-metrics-url: the worker's build is read from it")
     if args.box and not args.release_sha:
         parser.error("--box needs --release-sha: the release the box serves, compared with "
                      "this checkout's own SHA (review F2)")
@@ -1163,7 +1175,8 @@ def main(argv: list[str] | None = None) -> int:
             config_pin_check(report, args.inventory)
             if args.box:
                 # review V4: a box whose served build is not the release measures nothing
-                served = served_build_check(report, args.metrics_url)["status"]
+                served = served_build_check(report, args.metrics_url,
+                                            args.worker_metrics_url)["status"]
                 ready = ready if served == PASS else FAIL
             report.target["label"] = target["label"] = target_label(target, args.box, ready)
             if args.box:
