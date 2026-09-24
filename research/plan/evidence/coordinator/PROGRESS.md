@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-24 22:03Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 1, updated 2026-09-24 22:02Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-24 22:05Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 2, updated 2026-09-24 22:05Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -108,7 +108,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 1.3 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 3.3 h remaining at generation) |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 1.3 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 3.2 h remaining at generation) |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -126,7 +126,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | Lane | Task / slice | Activity | Branch | Base → head | Isolation | Updated | Blocker / next | Estimate |
 |---|---|---|---|---|---|---|---|---|
 | S3 | S3 all | complete | codex/s3-reconcile | dff31efc → 289eef6e | none | 2026-09-24 21:58Z | — | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 21:58Z; basis: merged (fff8416e; edits fdbbf87c) |
-| TRACKER | support 06-progress-tracker (support) | running | codex/tracker | dff31efc → — | none | 2026-09-24 21:40Z | Overlay schema 2, renderer, apply-updates, check, tests; v46 preserved. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
+| TRACKER | support 06-progress-tracker (support) | review | codex/tracker | dff31efc → 7fa0e76f | none | 2026-09-24 22:04Z | Coordinator review; merge; run apply-updates at each lane handback. | 0.5–3 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-24 22:04Z; basis: one review/fix round plus schema tweaks when real lane update files arrive |
 | E2C | E2C all | running | codex/e2c-verify | dff31efc → — | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-24 21:40Z | Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | F2C-L | F2C a/b/d | running | codex/f2c-lifecycle | dff31efc → — | none | 2026-09-24 21:40Z | Hand back after slice a so D10/M5/W5 can start; then slices b, d. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | F2C-C | F2C c | running | codex/f2c-catalog | dff31efc → — | none | 2026-09-24 21:40Z | Slice c + fixtures; exports via wiring request; P-22 amendment text. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
@@ -143,7 +143,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: empty.
+- Review queue: TRACKER.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -329,6 +329,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-24 22:04Z UTC, TRACKER: running → review; head 7fa0e76f; estimate likely unknown → 1.5 h (one review/fix round plus schema tweaks when real lane update files arrive)
 - 2026-09-24 22:02Z UTC, tracker: forecast E4: none → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E1C, E2C, E3A, E3C, E4, E4C, F2C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5)
 - 2026-09-24 22:02Z UTC, tracker: forecast E3A: none → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E1C, E2C, E3A, E3C, E4C, F2C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5)
 - 2026-09-24 22:02Z UTC, tracker: forecast E4C: none → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E1C, E2C, E3C, E4C, F2C, G7, G8, I8, M5, M6, W5)

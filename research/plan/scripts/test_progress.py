@@ -177,6 +177,7 @@ class Updates(Base):
         super().setUp()
         for x in self.state["lanes"]:  # fixture: every lane last updated before the test's update files
             x["updated"] = "2026-09-24T21:00:00Z"
+        self.state["review_queue"], self.state["integration_queue"] = [], []
 
     def lane(self, i):
         return next(x for x in self.state["lanes"] if x["id"] == i)

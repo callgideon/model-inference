@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 1,
-  "updated": "2026-09-24T22:02:40Z",
+  "revision": 2,
+  "updated": "2026-09-24T22:05:05Z",
   "agent_slots": {
     "total": 14,
     "active": 12,
@@ -200,27 +200,50 @@
       "branch": "codex/tracker",
       "worktree": ".claude/worktrees/codex-tracker",
       "base": "dff31efc",
-      "head": null,
+      "head": "7fa0e76f",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
+      "updated": "2026-09-24T22:04:00Z",
       "blocker": null,
-      "next_action": "Overlay schema 2, renderer, apply-updates, check, tests; v46 preserved.",
+      "next_action": "Coordinator review; merge; run apply-updates at each lane handback.",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 0.5,
+        "likely_h": 1.5,
+        "pessimistic_h": 3,
+        "confidence": "medium",
+        "basis": "one review/fix round plus schema tweaks when real lane update files arrive",
+        "at": "2026-09-24T22:04:00Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/coordinator/TRACKER-7fa0e76.md"
+      ],
+      "commands": [
+        {
+          "cmd": "cd research/plan/scripts && python3 -m unittest test_progress",
+          "exit": 0,
+          "summary": "22 tests OK"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/progress.py check",
+          "exit": 0,
+          "summary": "PASS 133 tasks, 0 errors, 11 overlap warnings"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS 887 links / 179 docs; ledger current"
+        },
+        {
+          "cmd": "chrome --headless --dump-dom progress.html#activity=running (and 4 other presets)",
+          "exit": 0,
+          "summary": "JSON parsed; filters 70/9/57/1/133 of 133; stale banner verified"
+        }
+      ],
       "owned_paths": [
         "research/plan/scripts/progress.py",
         "research/plan/scripts/test_progress.py",
@@ -228,7 +251,11 @@
         "research/plan/evidence/coordinator/PROGRESS.md",
         "research/plan/evidence/coordinator/progress.html",
         "research/plan/evidence/coordinator/tracker-v46/",
-        "research/plan/evidence/coordinator/updates/README.md"
+        "research/plan/evidence/coordinator/updates/README.md",
+        "research/plan/evidence/coordinator/TRACKER-*"
+      ],
+      "wiring_requests": [
+        "Optional: add `cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan` to make check"
       ]
     },
     {
@@ -659,7 +686,14 @@
       "commands": []
     }
   ],
-  "review_queue": [],
+  "review_queue": [
+    {
+      "since": "2026-09-24T22:04:00Z",
+      "lane": "TRACKER",
+      "task": "TRACKER",
+      "head": "7fa0e76f"
+    }
+  ],
   "integration_queue": [],
   "resource_locks": [
     {
@@ -1374,6 +1408,12 @@
       "at": "2026-09-24T22:02:40Z",
       "by": "tracker",
       "what": "forecast E4: none → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E1C, E2C, E3A, E3C, E4, E4C, F2C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T22:04:00Z",
+      "by": "TRACKER",
+      "what": "running → review; head 7fa0e76f; estimate likely unknown → 1.5 h (one review/fix round plus schema tweaks when real lane update files arrive)",
+      "source": "updates/TRACKER-20260924T2204Z.json"
     }
   ],
   "history": {
@@ -1391,9 +1431,14 @@
       "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
     }
   },
-  "ingested": {},
+  "ingested": {
+    "TRACKER-20260924T2204Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:04:00Z"
+    }
+  },
   "eta": {
-    "computed_at": "2026-09-24T22:02:40Z",
+    "computed_at": "2026-09-24T22:05:05Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
