@@ -47,6 +47,8 @@ def test_s12_a_missing_or_skipped_case_is_never_a_pass():
 
 def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
     only_pass = junit(*((f"test_{sid}_x", "pass", "") for sid in runner.SCENARIOS),
+                      *((f"{c['case']}_x", "pass", "") for c in runner.CONTROLS.values()
+                        if c.get("case")),
                       *((f"test_nc_{nc[3:].replace('-', '_')}__{c['scenario']}_x", "pass", "")
                         for nc, c in runner.CONTROLS.items()))
     result = runner.classify(only_pass)
@@ -55,9 +57,9 @@ def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
         {nc for nc, c in runner.CONTROLS.items() if c.get("revert")}
     assert runner.gate(result) == "NOT RUN" and runner.EXIT["NOT RUN"] == 3
     blocked = runner.classify(only_pass.replace(
-        '<testcase classname="m" name="test_s03_x"></testcase>',
-        '<testcase classname="m" name="test_s03_x"><skipped message="BLOCKED[M5] x"/>'
-        '</testcase>'))
+        '<testcase classname="m" name="test_s03_create_put_complete_x"></testcase>',
+        '<testcase classname="m" name="test_s03_create_put_complete_x"><skipped '
+        'message="BLOCKED[M5] x"/></testcase>'))
     assert blocked["scenarios"]["s03"]["status"] == "BLOCKED"
     assert blocked["controls"]["nc-upload-restart"]["status"] == "NOT RUN", \
         "a control over a scenario that did not pass proves nothing"
@@ -67,10 +69,24 @@ def test_s12_the_gate_is_the_worst_status_and_exits_as_e2c_does():
 
 
 def test_s12_a_control_that_is_not_detected_fails_the_gate():
-    result = runner.classify(junit(("test_s01_journey", "pass", ""),
+    result = runner.classify(junit(("test_s01_cli_identity_x", "pass", ""),
                                    ("test_nc_journey_revoke__s01_x", "fail", "not detected")))
     assert result["controls"]["nc-journey-revoke"]["status"] == "FAIL"
     assert runner.gate(result) == "FAIL"
+
+
+def test_s12_a_control_counts_over_the_case_it_guards_not_the_whole_scenario():
+    """nc-credit-cutover removes the grant's uniqueness: it is meaningful when the grant case
+    passes, whatever another s09 case waits for; over a red guarded case it proves nothing."""
+    result = runner.classify(junit(
+        ("test_s09_concurrent_signup_callbacks_x", "pass", ""),
+        ("test_s09_the_credit_transition_x", "skip", "BLOCKED[G8] no command"),
+        ("test_nc_credit_cutover__s09_x", "pass", ""),
+        ("test_s07_one_persisted_expiry_x", "fail", "RV-11"),
+        ("test_nc_result_expiry__s07_x", "pass", "")))
+    assert result["scenarios"]["s09"]["status"] == "BLOCKED"
+    assert result["controls"]["nc-credit-cutover"]["status"] == "PASS"
+    assert result["controls"]["nc-result-expiry"]["status"] == "NOT RUN"
 
 
 def test_s12_the_matrix_covers_the_brief_and_the_task():

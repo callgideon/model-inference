@@ -91,10 +91,13 @@ SCENARIOS = {
 # reverted in a scratch tree (`--control NC=TREE`), so it is NOT RUN until that is done.
 CONTROLS = {
     "nc-journey-revoke": {"oracle": "BACKEND-JOURNEY", "scenario": "s01",
+                          "case": "test_s01_cli_identity",
                           "mechanism": "bypass revoke-ignored (gateway)"},
     "nc-journey-tenant": {"oracle": "BACKEND-JOURNEY", "scenario": "s02",
+                          "case": "test_s02_two_gateways",
                           "mechanism": "bypass tenant-blind (gateway B)"},
     "nc-upload-restart": {"oracle": "UPLOAD-RESTART", "scenario": "s03",
+                          "case": "test_s03_create_put_complete",
                           "mechanism": "bypass upload-local (both gateways)"},
     "nc-admission-ready": {"oracle": "ADMISSION-READY", "scenario": "s04",
                            "mechanism": "revert the F2C/D10/W5/G7 readiness-barrier commits",
@@ -103,11 +106,14 @@ CONTROLS = {
                              "mechanism": "revert the D10/M6 durable-liveness commits",
                              "revert": True},
     "nc-result-expiry": {"oracle": "RESULT-EXPIRY", "scenario": "s07",
+                         "case": "test_s07_one_persisted_expiry",
                          "mechanism": "bypass expiry-recompute (gateway)"},
     "nc-roles-browser": {"oracle": "CREDIT-CUTOVER", "scenario": "s10",
+                         "case": "test_s10_the_browser_roles",
                          "mechanism": "DB defect: INSERT on public.credit_ledger granted to "
                                       "authenticated"},
     "nc-credit-cutover": {"oracle": "CREDIT-CUTOVER", "scenario": "s09",
+                          "case": "test_s09_concurrent_signup_callbacks",
                           "mechanism": "DB defect: signup grant uniqueness dropped (E3B db09)"},
     "nc-verify-repro": {"oracle": "VERIFY-REPRO", "scenario": "s12",
                         "mechanism": "classify(): a skipped / missing required case"},
@@ -147,11 +153,14 @@ def classify(junit_xml: str, only: set[str] | None = None) -> dict:
         if not match or match.group("sid") not in SCENARIOS:
             continue
         status, reason = case_status(case)
+        properties = {prop.get("name"): prop.get("value") for prop in case.iter("property")}
         nc = match.group("nc")
         entry = controls.get(f"nc-{nc.replace('_', '-')}") if nc else scenarios[match["sid"]]
         if entry is None:
             continue
         entry["cases"][name] = status
+        if properties:
+            entry.setdefault("properties", {})[name] = properties
         if reason:
             entry["reasons"].append(f"{name}: {reason}")
     for sid, entry in scenarios.items():
@@ -159,17 +168,22 @@ def classify(junit_xml: str, only: set[str] | None = None) -> dict:
             entry["reasons"].append("not selected (--only)")
         entry["status"] = worst(entry["cases"].values()) if entry["cases"] else NOT_RUN
     for nc, entry in controls.items():
-        control, scenario = CONTROLS[nc], scenarios[CONTROLS[nc]["scenario"]]
+        control = CONTROLS[nc]
+        scenario = scenarios[control["scenario"]]
+        # The plain case(s) the control removes a check from; absent a `case`, the scenario.
+        guarded = worst(status for name, status in scenario["cases"].items()
+                        if name.startswith(control["case"])) if control.get("case") \
+            else scenario["status"]
         detected = worst(entry["cases"].values()) if entry["cases"] else NOT_RUN
         if control.get("revert"):
             entry["status"] = NOT_RUN
             entry["reasons"].append("needs the lane's fix reverted: --control "
                                     f"{nc}=<scratch tree with the fix reverted>")
-        elif scenario["status"] != PASS:
+        elif guarded != PASS:
             # The control it removes is absent on this tree: nothing to detect yet.
             entry["status"] = NOT_RUN if detected in (PASS, FAIL) else detected
-            entry["reasons"].append(f"{control['scenario']} is {scenario['status']}: the "
-                                    "control is not present, so removing it proves nothing")
+            entry["reasons"].append(f"{control.get('case', control['scenario'])} is {guarded}: "
+                                    "the control is not present, so removing it proves nothing")
         else:
             entry["status"] = detected
     return {"scenarios": scenarios, "controls": controls}
@@ -229,7 +243,8 @@ def pytest_run(out: Path, name: str, files: list[str], keyword: str | None,
         # A scratch tree (a negative control's revert): its package and its migrations.
         env.update(PYTHONPATH=str(tree / "apps/infrx-api"), INFRX_E2_REPO_ROOT=str(tree))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
-            f"--junitxml={junit}", *files, *(["-k", keyword] if keyword else [])]
+            "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
+            *(["-k", keyword] if keyword else [])]
     began = time.monotonic()
     with log.open("w") as sink:
         try:
@@ -338,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         "label": "orchestration on real PostgreSQL/PostgREST/Valkey/S3-compatible services "
                  "with a controlled protocol engine (tests/integration/fake_vllm.py); not "
                  "Marlin quality, not GPU capacity, not hosted behaviour",
-        "head": run.git_head(), "namespace": harness.NAMESPACE, "project": harness.PROJECT,
+        "head": report.head, "head_end": run.git_head(), "namespace": harness.NAMESPACE, "project": harness.PROJECT,
         "ports": harness.PORTS, "started": started.isoformat(timespec="seconds"),
         "seconds": round(time.monotonic() - clock, 1), "stack": {
             "usable": usable, "why_not": why or None,
