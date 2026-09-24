@@ -1965,6 +1965,46 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if False:\n                pass",
        "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
        dies_by=("AttributeError",)),
+    # PREP-WORKER: prepared(..., prompt_tokens=) stores preparation's exact count once
+    _m("fake_prepared_drops_the_count", "prepared stores the count",
+       S, "            job.prompt_tokens = prompt_tokens\n", "",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once",
+       "credit_prepare__the_count_reaches_the_credit_work"),
+    _m("fake_prepared_count_unbounded", "a count past max_input_tokens or below 0 is refused",
+       S, "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
+          "job.request.max_input_tokens:", "            if False:",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once"),
+    _m("fake_prepared_count_bound_exclusive", "a count of exactly max_input_tokens is stored",
+       S, "not 0 <= prompt_tokens <= job.request.max_input_tokens:",
+       "not 0 <= prompt_tokens < job.request.max_input_tokens:",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once"),
+    _m("fake_prepared_count_untyped", "a bool or non-integer count is invalid_request",
+       S, "        if prompt_tokens is not None and (isinstance(prompt_tokens, bool)\n"
+          "                                          or not isinstance(prompt_tokens, int)):",
+       "        if False:",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once"),
+    _m("fake_refused_count_changes_state", "a refused count changes nothing",
+       S, "            # PREP-WORKER: the count must fit the input ceiling the hold was sized on.\n"
+          "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
+          "job.request.max_input_tokens:\n"
+          "                raise errors.ContextLengthExceeded(\n"
+          "                    f\"the prepared prompt ({prompt_tokens} tokens) exceeds "
+          "max_input_tokens\")\n"
+          "            now = self.clock.now()\n            job.prepared = tuple(media)\n",
+       "            now = self.clock.now()\n            job.prepared = tuple(media)\n"
+       "            job.state = JobState.queued\n"
+       "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
+       "job.request.max_input_tokens:\n"
+       "                raise errors.ContextLengthExceeded(\n"
+       "                    f\"the prepared prompt ({prompt_tokens} tokens) exceeds "
+       "max_input_tokens\")\n",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once"),
+    _m("fake_load_work_drops_the_count", "the lease holder's Work carries the count",
+       S, "                        prompt_tokens=job.prompt_tokens)", "                        )",
+       "dur_fence__prepared_stores_the_exact_prompt_count_once"),
+    _m("fake_credit_work_drops_the_count", "the CREDIT lease holder's WorkV2 carries the count",
+       S, "budgets=job.budgets, prompt_tokens=job.prompt_tokens)", "budgets=job.budgets)",
+       "credit_prepare__the_count_reaches_the_credit_work"),
     _m("credit_free_outcome_settles", "a free CREDIT outcome has no settlement record",
        S, "        return settled, self.jobs[lease.job_id].settlement",
        "        return settled, (self.jobs[lease.job_id].settlement\n"

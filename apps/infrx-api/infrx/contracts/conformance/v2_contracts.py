@@ -1061,6 +1061,22 @@ async def credit_settle__at_the_admitted_card_on_the_credit_wallet_only(factory)
         errors.NotFound)
 
 
+async def credit_prepare__the_count_reaches_the_credit_work(factory):
+    """PREP-WORKER: a CREDIT job's preparation lease reads its request - and no count yet -
+    through `load_work_credit` (R46: the preparation read path of the CREDIT door), and the
+    count `prepared(..., prompt_tokens=)` stores reaches the inference lease's
+    `WorkV2.prompt_tokens`; `prepared` answers the CREDIT admission."""
+    harness = factory()
+    request = _credit_request(harness)
+    admission = await harness.port.admit_credit(request, b_idem(request))
+    lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+    before = await harness.port.load_work_credit(lease)
+    assert before.request.request == request and before.prompt_tokens is None
+    assert await harness.port.prepared(lease, (), prompt_tokens=1337) == admission
+    work = await harness.port.load_work_credit(await harness.port.claim(request.request_id,
+                                                                        "worker-a"))
+    assert work.prompt_tokens == 1337, work.prompt_tokens
+
 async def credit_settle__a_free_outcome_moves_no_credit(factory):
     """CREDIT-SPEND: a free cause (invalid media) settles nothing: no settlement
     record, the hold released, the ledger unchanged."""
@@ -1202,6 +1218,7 @@ def credit_jobstore_cases() -> list[Callable]:
         credit_admit__refusals_leave_no_job_and_no_hold,
         credit_admit__a_replay_is_pinned_and_never_crosses_regimes,
         credit_admit__lookup_answers_the_pinned_admission,
+        credit_prepare__the_count_reaches_the_credit_work,
         credit_settle__at_the_admitted_card_on_the_credit_wallet_only,
         credit_settle__a_free_outcome_moves_no_credit,
         credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet,

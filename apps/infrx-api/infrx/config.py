@@ -161,6 +161,8 @@ MUST_BE_POSITIVE = (
     "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
     "max_preparing_jobs", "idempotency_ttl_s", "unknown_usage_reconcile_s",
     "max_index_items", "max_index_bytes",
+    # PREP-WORKER: the worker's preparation pool size (a zero pool cannot start).
+    "preparation_concurrency",
 )
 
 

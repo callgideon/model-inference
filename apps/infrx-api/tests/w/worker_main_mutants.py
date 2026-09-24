@@ -50,9 +50,9 @@ MUTANTS = (
        MAIN, '(("DATABASE_URL", limits.database_url),\n'
              '                                        ("VALKEY_URL"', '(("VALKEY_URL"',
        REFUSALS),
-    _m("main_cache_dir_unchecked", "PROCESSING_CACHE_DIR is an absolute readable directory",
-       MAIN, "    if not (os.path.isabs(root) and os.path.isdir(root) and "
-             "os.access(root, os.R_OK | os.X_OK)):",
+    _m("main_cache_dir_unchecked", "PROCESSING_CACHE_DIR is an absolute writable directory",
+       MAIN, "    if not (os.path.isabs(root) and os.path.isdir(root)\n"
+             "            and os.access(root, os.R_OK | os.W_OK | os.X_OK)):",
        "    if False:", REFUSALS),
     _m("main_store_defaulted_to_in_memory",
        "no S3_MEDIA_BUCKET, no worker: the object store is never process memory (M1-L2)",

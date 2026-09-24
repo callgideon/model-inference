@@ -125,6 +125,7 @@ class _Job:
     preparation_lease: Lease | None = None
     preparation_attempts: int = 0
     prepared: tuple[MediaRef, ...] = ()
+    prompt_tokens: int | None = None         # preparation's exact count (PREP-WORKER)
     queued_at: datetime | None = None         # start of the current queued interval
     outcome: TerminalOutcome | None = None
     reservations: dict[ReservationKind, CapacityReservation] = field(default_factory=dict)
@@ -740,8 +741,12 @@ class FakeJobStore:
         self.failures.after_commit("claim_preparation")
         return lease
 
-    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = ()) -> Admission:
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = (), *,
+                       prompt_tokens: int | None = None) -> Admission:
         self.failures.before("prepared")
+        if prompt_tokens is not None and (isinstance(prompt_tokens, bool)
+                                          or not isinstance(prompt_tokens, int)):
+            raise errors.InvalidRequest("prompt_tokens must be an integer")
         async with self._lock:
             # r1 R46: fenced on the preparation lease. `_fence_preparation` also runs
             # R29's deadline check, so a preparation worker that comes back late finds
@@ -752,8 +757,13 @@ class FakeJobStore:
             for ref in media:
                 if ref.org_id != job.request.org_id:
                     raise errors.Forbidden("prepared media must belong to the job's org")
+            # PREP-WORKER: the count must fit the input ceiling the hold was sized on.
+            if prompt_tokens is not None and not 0 <= prompt_tokens <= job.request.max_input_tokens:
+                raise errors.ContextLengthExceeded(
+                    f"the prepared prompt ({prompt_tokens} tokens) exceeds max_input_tokens")
             now = self.clock.now()
             job.prepared = tuple(media)
+            job.prompt_tokens = prompt_tokens
             job.state = JobState.queued
             job.queued_at = now
             job.preparation_lease = None          # the phase is over; nothing to fence
@@ -777,7 +787,8 @@ class FakeJobStore:
                 raise errors.NotFound(f"job {job.id} is a CREDIT job: use load_work_credit")
             return Work(request=job.request, media_refs=job.request.media,
                         prepared_refs=job.prepared,
-                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)
+                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets,
+                        prompt_tokens=job.prompt_tokens)
 
     async def load_work_credit(self, lease: Lease) -> WorkV2:
         """contracts v2: the fenced work of a CREDIT job, with the **admitted** card and
@@ -791,7 +802,7 @@ class FakeJobStore:
                                           wallet_id=job.credit.wallet_id, policy=job.policy)
             return WorkV2(request=request, media_refs=job.request.media,
                           prepared_refs=job.prepared, rate_card=job.credit.rate_card,
-                          budgets=job.budgets)
+                          budgets=job.budgets, prompt_tokens=job.prompt_tokens)
 
     def _fence_for_work(self, lease: Lease) -> _Job:
         """The fence `load_work` and `load_work_credit` share: preparation or inference."""

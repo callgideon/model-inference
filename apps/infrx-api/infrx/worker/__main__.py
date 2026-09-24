@@ -10,9 +10,10 @@ index, the build-info gauge), so the two processes cannot disagree about a store
   without its identity or metering settings, a bad deployment value), then what this process
   needs in every mode: `DATABASE_URL` (D's `PgJobStore` and `PgStreamStore` on one pool -
   never an in-memory store), `VALKEY_URL` (Q's index), `PROCESSING_CACHE_DIR` (an absolute,
-  readable directory: the prepared media the gateway wrote, which M's `local_uri` finds on
-  disk) and `S3_MEDIA_BUCKET` (answering HeadBucket, as the gateway requires). A refusal
-  names the setting, never a value, and exits 2 before a listener is bound or a job claimed.
+  writable directory: preparation materializes the media there, and M's `local_uri` finds
+  a file another worker process prepared on disk) and `S3_MEDIA_BUCKET` (answering
+  HeadBucket, as the gateway requires). A refusal names the setting, never a value, and
+  exits 2 before a listener is bound or a job claimed.
 * **The CREDIT regime's work doors** (W request 5, D5): `CreditWork` routes the runner's
   `load_work`/`complete` to `load_work_credit`/`complete_credit`.
 * **Readiness and metrics** on `127.0.0.1:WORKER_HEALTH_PORT` (8002: what install.sh's
@@ -26,9 +27,12 @@ index, the build-info gauge), so the two processes cannot disagree about a store
   store, then exit 0. A runner or the reaper that died ends the process non-zero, for the
   unit's `Restart=always`.
 
-Not here: preparation. No product process claims a preparation lease yet (E3B phase 3's
-pilot box emulates M's preparation worker), so an admitted job reaches this process only
-once something has called `prepared(...)` with preparation's exact prompt count.
+* **Preparation** (PREP-WORKER): a second pool on `prepare_dispatch` candidates
+  (`preparation.PreparationRunner`, `PREPARATION_CONCURRENCY` runners) claims each
+  admitted job's preparation lease, prepares its media through M's `MediaPreparation`
+  (the attach D2's tables record, the object store, the shared processing cache), counts
+  its prompt with the engine's own `/tokenize` and queues it with `prepared(...,
+  prompt_tokens=)`; the inference pool then runs it. Same index, same stores, same drain.
 """
 from __future__ import annotations
 
@@ -43,9 +47,11 @@ from types import SimpleNamespace
 import httpx
 
 from ..config import RuntimeMisconfigured, from_env, runtime_mode, validate_runtime
+from ..contracts.records import OutboxKind
 from ..contracts.v2.money_units import CREDIT_REGIME
 from ..gateway import pilot
 from ..media import fetch
+from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
 from ..observe.metrics import Registry
 from ..state.jobstore import PgJobStore, PreparedWork
@@ -53,6 +59,7 @@ from ..state.journal import PgStreamStore
 from .attempt import AttemptRunner
 from .engine import VllmEngine
 from .loop import WorkerLoop
+from .preparation import PreparationRunner
 from .service import WorkerService
 
 log = logging.getLogger("infrx.worker")
@@ -108,9 +115,10 @@ def compose(settings, *, objects=None, index=None):
     if missing:
         raise RuntimeMisconfigured(mode, missing)
     root = limits.processing_cache_dir
-    if not (os.path.isabs(root) and os.path.isdir(root) and os.access(root, os.R_OK | os.X_OK)):
+    if not (os.path.isabs(root) and os.path.isdir(root)
+            and os.access(root, os.R_OK | os.W_OK | os.X_OK)):
         raise RuntimeMisconfigured(
-            mode, detail="PROCESSING_CACHE_DIR must be an absolute path to a readable directory")
+            mode, detail="PROCESSING_CACHE_DIR must be an absolute path to a writable directory")
     rt = SimpleNamespace(settings=settings, mode=mode, metrics=Registry("worker"))
     pilot.build_info(rt)                  # the gateway's gauge, from the same two settings
     objects = objects if objects is not None else pilot.object_store(settings)
@@ -119,6 +127,7 @@ def compose(settings, *, objects=None, index=None):
     jobs = CreditWork(store) if deployment.accounting_regime == CREDIT_REGIME else store
     media = MediaPreparation(objects, limits=limits,
                              cache=ProcessingCache(root, ttl_s=limits.processing_cache_ttl_s))
+    media.attachments = PgAttachments(connect)    # R99 (c): the attach `prepare` reads
     engine = VllmEngine(httpx.AsyncClient(base_url=settings.upstream,
                                           timeout=httpx.Timeout(600, connect=10)),
                         served_model=SERVED_MODEL, clock=Wall, limits=limits,
@@ -128,12 +137,17 @@ def compose(settings, *, objects=None, index=None):
                            engine=engine, clock=Wall, worker_id=worker_id,
                            count_prompt_tokens=lambda work: work.prompt_tokens,
                            put_result=store.put_result, limits=limits)
-    loop = WorkerLoop(scheduler=index if index is not None else pilot.valkey_index(limits),
-                      runner=runner, worker_id=worker_id, limits=limits)
+    scheduler = index if index is not None else pilot.valkey_index(limits)
+    loop = WorkerLoop(scheduler=scheduler, runner=runner, worker_id=worker_id, limits=limits)
+    preparation = WorkerLoop(
+        scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
+        runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
+                                 limits=limits), limits=limits)
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
-                            metrics=rt.metrics)
+                            metrics=rt.metrics, preparation=preparation,
+                            preparation_concurrency=limits.preparation_concurrency)
     return service, pool
 
 

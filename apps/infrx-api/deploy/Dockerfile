@@ -16,7 +16,7 @@ FROM ghcr.io/astral-sh/uv:0.11.8@sha256:3b7b60a81d3c57ef471703e5c83fd4aaa33abcd4
 FROM python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
 # Least privilege: one uid per process role, one shared group for the media root the
-# gateway writes and the worker reads. No process in this image runs as root.
+# worker's preparation writes (PREP-WORKER). No process in this image runs as root.
 RUN groupadd --system --gid 10000 infrx \
  && useradd --system --uid 10001 --gid infrx --no-create-home --shell /usr/sbin/nologin infrx-gateway \
  && useradd --system --uid 10002 --gid infrx --no-create-home --shell /usr/sbin/nologin infrx-worker

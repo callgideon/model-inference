@@ -22,22 +22,22 @@ compose yet is INJECTED, each named here and in the evidence:
   host counts its fetches - one line per lookup, admission and fetch in `INFRX_E3B_CALLS`, so
   a journey can prove a replay or a key conflict fetched, staged and admitted nothing.
 
-and, in the same process, **M's preparation worker, emulated**: no process claims a
-preparation lease in the product yet. A `WorkerLoop` on the preparation kind claims each
-`prepare_dispatch` candidate, waits for the relay's attach (this process's copy; M's
-`PgAttachments` records it durably too), and reports `prepared` with `media.prepare(job)`
-and the fake engine's prompt count.
+Nothing prepares a job in this process (PREP-WORKER retired the emulation that did): the
+gateway admits, attaches (M's `PgAttachments`, durably) and relays the `prepare_dispatch`.
 
 **worker** - ALWAYS a process of its own (review J2; M's pilot-media merge made it
 possible for video), and since I2B-R4 the product's: `python -m infrx.worker`, composed from
 the same environment by the pilot's own composition root - W3's `WorkerService` over W2's
 loop and runner, W's `VllmEngine` on `UPSTREAM` (E2's fake vLLM), D's stores on one pool,
-`local_uri` from a `MediaPreparation` over the object store built from settings and the
-shared `PROCESSING_CACHE_DIR` (M: found on disk by content hash), W request 5's
-`CreditWork`, and its loopback `/readyz` on `WORKER_HEALTH_PORT`, which `start` waits for.
-Nothing of it is emulated here any more. The one thing the box chooses for it is the index
-namespace: the worker reads the pilot's (`infrx:sched:{pilot}`, Q2's default), so the
-gateway's index is put there too, and `close` removes it like every E2 key.
+a `MediaPreparation` over the object store built from settings and the shared
+`PROCESSING_CACHE_DIR`, W request 5's `CreditWork`, and its loopback `/readyz` on
+`WORKER_HEALTH_PORT`, which `start` waits for. Since PREP-WORKER it also PREPARES every
+job: its second pool claims the preparation lease, prepares the media, counts the prompt
+with the engine's own `/tokenize` (E2's fake vLLM answers the count it reports as usage)
+and queues the job. Nothing of it is emulated here any more. The one thing the box
+chooses for it is the index namespace: the worker reads the pilot's (`infrx:sched:{pilot}`,
+Q2's default), so the gateway's index is put there too, and `close` removes it like every
+E2 key.
 """
 from __future__ import annotations
 
@@ -67,9 +67,10 @@ PORT_ENV, INDEX_ENV, CALLS_ENV = (
 PILOT_NAMESPACE = "infrx:sched:{pilot}"
 MEDIA_HOST = "media.e3b3.example"
 PUBLIC_ADDRESS = "93.184.216.34"          # what MEDIA_HOST resolves to (G2's own choice)
-# The fake engine counts every prompt as this many tokens; the emulated preparation reports
-# the same, so the worker's context check and the settled usage agree (no tokenizer here).
-PROMPT_TOKENS = 1200
+# What E2's fake engine counts every prompt as on the box (its /tokenize and its usage): not
+# its default 1200, the retired emulation's constant, so a stored count can only have come
+# from the worker's /tokenize (PREP-WORKER review J-F1).
+ENGINE_PROMPT_TOKENS = 1337
 log = logging.getLogger("e3b3.pilotbox")
 
 
@@ -134,40 +135,13 @@ class Counted:
         return await self.store.admit(*args, **kw)
 
 
-class Prepare:
-    """M's preparation worker, emulated (see the module docstring)."""
-
-    def __init__(self, rt) -> None:
-        self.rt = rt
-
-    async def run(self, job_id: str):
-        from infrx.contracts import errors
-        media, jobs = self.rt.media_store, self.rt.relay.jobs
-        for _ in range(200):                  # the attach lands just after the commit
-            if job_id in media.by_job:
-                break
-            await asyncio.sleep(0.05)
-        else:
-            return None                       # bound by another process: not ours
-        try:
-            lease = await jobs.claim_preparation(job_id, "e3b3-prep")
-            refs = await media.prepare(job_id, media.profile_version)
-            await jobs.prepared(lease, refs, prompt_tokens=PROMPT_TOKENS)
-        except errors.DomainError as refused:
-            log.warning("preparation of %s refused: %s", job_id, refused.code)
-            return None
-        return job_id
-
-
 async def gateway() -> None:
     import httpx
     import uvicorn
 
     from infrx.config import from_env
-    from infrx.contracts.records import OutboxKind
     from infrx.gateway.app import create_app
     from infrx.media import fetch
-    from infrx.worker import WorkerLoop
     settings = from_env()
     token = settings.supabase_key
     sb = httpx.AsyncClient(base_url=settings.supabase_url, timeout=httpx.Timeout(5, connect=2),
@@ -192,18 +166,7 @@ async def gateway() -> None:
         transport=httpx.MockTransport(serve))
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=int(os.environ[PORT_ENV]),
                                            log_level="warning"))
-    serving = asyncio.create_task(server.serve())
-    while not server.started and not serving.done():
-        await asyncio.sleep(0.05)
-    preparation = WorkerLoop(scheduler=queue, runner=Prepare(rt), worker_id="e3b3-prep",
-                             kind=OutboxKind.prepare_dispatch, limits=settings.pilot)
-    preparing = asyncio.create_task(preparation.run(concurrency=2, stop_when_idle=False))
-    try:
-        await serving
-    finally:
-        preparation.draining = True
-        preparing.cancel()
-        await asyncio.gather(preparing, return_exceptions=True)
+    await server.serve()
 
 
 # ------------------------------------------------------------------ the test's side
@@ -387,6 +350,15 @@ class Journey:
         else leaves the second as it was and moves the first by one (G3's MODES_409 shape)."""
         return self.calls("lookup"), self.footprint()
 
+    def preparation_of(self, request_id: str) -> tuple:
+        """(the worker that prepared the job, the worker that ran it, the prompt count
+        preparation stored): who prepared it and where its count came from."""
+        workers = dict(self.db("select distinct on (kind) kind, worker_id from infrx.attempts "
+                               "where job_id = %s order by kind, acquired_at desc", request_id))
+        stored, = self.one("select prepared_prompt_tokens from infrx.jobs where request_id = %s",
+                           request_id)
+        return workers.get("preparation"), workers.get("inference"), stored
+
     def handle_of(self, request_id: str) -> str:
         return self.one("select job_handle from infrx.jobs where request_id = %s",
                         request_id)[0]
@@ -484,6 +456,7 @@ def journey(workdir: Path):
     world = stack.provision_two_tenants()
     engine = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
     with stack.journey_postgrest(world.database) as rest, engine:
+        engine.control(prompt_tokens=ENGINE_PROMPT_TOKENS)
         with pilot_box(world.database, workdir, rest, engine.base_url) as box:
             yield Journey(world, box, engine)
 

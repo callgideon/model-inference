@@ -194,6 +194,16 @@ def looked_up(before: tuple) -> tuple:
     return before[0] + 1, before[1]
 
 
+def prepared_by_the_worker(trip, request_id: str, usage: dict) -> None:
+    """PREP-WORKER (review J-F1): the box's worker process prepared the job - the same worker
+    as ran it, nothing in the gateway process - and the count it stored is the engine's
+    (`/tokenize`), which the fake engine also reports as the usage."""
+    import pilotbox
+    preparer, runner, stored = trip.preparation_of(request_id)
+    assert preparer is not None and preparer == runner, (preparer, runner)
+    assert stored == usage["prompt_tokens"] == pilotbox.ENGINE_PROMPT_TOKENS, (stored, usage)
+
+
 def settled_once(trip, tenant, request_id: str, usage: dict, before: tuple) -> Decimal:
     """After terminal: ONE inference debit on the tenant's CREDIT wallet = the admitted card x
     usage (half up), the hold settled, reserved back to its prior value, one usage
@@ -233,6 +243,7 @@ def test_backend_journey(trip, input_kind, mode):
     wallets conserved."""
     alpha, beta = trip.world.alpha, trip.world.beta
     before = {tenant.name: (trip.wallet(tenant), trip.usd(tenant)) for tenant in (alpha, beta)}
+    tokenized = trip.engine.control()["tokenized"]
     messages = messages_for(trip, alpha, input_kind)
     key = f"e3b3-{input_kind}-{mode}"
     request_id, handle, usage = RUN[mode](trip, alpha, messages, key)
@@ -252,6 +263,8 @@ def test_backend_journey(trip, input_kind, mode):
         assert (answer.status_code, error_code(answer)) == (404, "not_found"), \
             (method, path, answer.status_code, answer.text)
     settled_once(trip, alpha, request_id, usage, before["alpha"][0])
+    prepared_by_the_worker(trip, request_id, usage)
+    assert trip.engine.control()["tokenized"] > tokenized, "the worker never asked /tokenize"
     assert trip.usd(alpha) == before["alpha"][1], "alpha's legacy USD books moved"
     assert (trip.wallet(beta), trip.usd(beta)) == before["beta"], "beta's books moved"
     if input_kind != "text":
@@ -340,6 +353,9 @@ def test_backend_journey__dataset_client_resume(trip, tmp_path, record_property)
         assert len(holds) == 1 and len(ledger) <= 1, (request_id, holds, ledger)
         if state == "succeeded":
             assert holds == [("settled",)] and len(ledger) == 1, (request_id, holds, ledger)
+            prompt, = trip.one("select prompt_tokens from public.usage_events where id = %s",
+                               request_id)
+            prepared_by_the_worker(trip, request_id, {"prompt_tokens": prompt})
             succeeded.add(key.removeprefix("sop1."))
         else:
             assert ledger == [], (request_id, state, ledger)

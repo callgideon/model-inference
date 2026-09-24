@@ -78,6 +78,16 @@ SEEDED_CREATED = 1_758_000_000     # a fixed `created` base when --seed is given
 # that round trip 800 ms. It is still a race rather than a synchronisation; see README.md's
 # residual limit. This is the only fault path in this file that waits at all.
 CANCEL_GAP_S = 0.2
+# PREP-WORKER: vLLM's `POST /tokenize` for a chat body. The count is the one this fake reports
+# as `usage.prompt_tokens` (`prompt_tokens`), so preparation's count and the settled usage
+# agree as they do on a real engine. A video part is expanded as the pinned profile expands
+# it on vLLM (marlin-sop.md §1.5: one `video_token_id` per merged patch, `size.longest_edge
+# // 2048` of them for a full-resolution clip) inside that count. `tokenize_fault`:
+# `unexpanded` answers ONE placeholder per video (what a tokenizer that skips the multimodal
+# processor would say), `down` answers 503.
+VIDEO_TOKEN_ID = 248057            # research/models/marlin2b/config.json `video_token_id`
+PIXELS_PER_TOKEN = 2048
+TOKENIZE_FAULTS = ("none", "unexpanded", "down")
 
 
 class UnknownFault(ValueError):
@@ -115,6 +125,11 @@ class FakeVllmApp:
         self.text, self.prompt_tokens, self.model = text, prompt_tokens, model
         self.limits, self.stall_real_s = limits, stall_real_s
         self.delta_gap_s = delta_gap_s
+        self.tokenize_fault, self.tokenize_delay_s = "none", 0.0
+        # PREP-WORKER review L8: a /tokenize count that disagrees with the usage the chat
+        # route reports (None: the same number, as a real engine's should be).
+        self.tokenize_count: int | None = None
+        self.tokenized: list[dict] = []           # every /tokenize body, as received
         self.rng = Random(seed) if seed is not None else None
         self.emitted = 0
         self.drained = False
@@ -221,6 +236,8 @@ class FakeVllmApp:
             return await self._json(send, 200, {"cancelled": sorted(self.cancelled)})
         if path == "/v1/chat/completions" and method == "POST":
             return await self._chat(scope, body, send, receive)
+        if path == "/tokenize" and method == "POST":
+            return await self._tokenize(self._body_json(body), send)
         await self._json(send, 404, {"error": {"message": "no route", "type": "not_found_error",
                                                "code": "not_found"}})
 
@@ -262,7 +279,9 @@ class FakeVllmApp:
         return {"fault": self.default_fault.value, "drained": self.drained,
                 "cancelled": sorted(self.cancelled), "requests": len(self.seen),
                 "text": self.text, "prompt_tokens": self.prompt_tokens,
-                "delta_gap_s": self.delta_gap_s, "disconnected": self.disconnected}
+                "delta_gap_s": self.delta_gap_s, "disconnected": self.disconnected,
+                "tokenize_fault": self.tokenize_fault, "tokenize_delay_s": self.tokenize_delay_s,
+                "tokenize_count": self.tokenize_count, "tokenized": len(self.tokenized)}
 
     def control(self, payload: dict) -> dict:
         """Set the process-wide default. Used when the client under test cannot be made to
@@ -280,10 +299,38 @@ class FakeVllmApp:
             self.prompt_tokens = int(payload["prompt_tokens"])
         if "delta_gap_s" in payload:          # E3B phase 3: a generation slow enough to leave
             self.delta_gap_s = max(0.0, float(payload["delta_gap_s"]))
+        if payload.get("tokenize_fault") in TOKENIZE_FAULTS:
+            self.tokenize_fault = payload["tokenize_fault"]
+        if "tokenize_delay_s" in payload:     # PREP-WORKER: a preparation slow enough to drain
+            self.tokenize_delay_s = max(0.0, float(payload["tokenize_delay_s"]))
+        if "tokenize_count" in payload:
+            self.tokenize_count = None if payload["tokenize_count"] is None \
+                else int(payload["tokenize_count"])
         if payload.get("reset"):
             self.cancelled.clear()
             self.seen.clear()
         return self.state()
+
+    async def _tokenize(self, request: dict, send) -> None:
+        """vLLM's `/tokenize` for a chat body: `{count, max_model_len, tokens}`."""
+        self.tokenized.append(request)
+        if self.tokenize_delay_s:
+            import asyncio
+            await asyncio.sleep(self.tokenize_delay_s)
+        if self.tokenize_fault == "down":
+            return await self._json(send, 503, {"error": {"message": "tokenizer unavailable",
+                                                          "type": "server_error"}})
+        videos = sum(1 for message in request.get("messages") or ()
+                     if isinstance(message, dict) and isinstance(message.get("content"), list)
+                     for part in message["content"]
+                     if isinstance(part, dict) and part.get("type") == "video_url")
+        size = ((request.get("mm_processor_kwargs") or {}).get("size") or {})
+        expanded = int(size.get("longest_edge", 0)) // PIXELS_PER_TOKEN
+        pads = videos * (1 if self.tokenize_fault == "unexpanded" else expanded)
+        count = self.prompt_tokens if self.tokenize_count is None else self.tokenize_count
+        tokens = [VIDEO_TOKEN_ID] * min(pads, count) + [1] * max(0, count - pads)
+        return await self._json(send, 200, {"count": count, "max_model_len":
+                                            self.limits.max_context_tokens, "tokens": tokens})
 
     def _fault_for(self, scope, request: dict) -> EngineFault:
         """Header beats body beats process default, so one request can be scripted without

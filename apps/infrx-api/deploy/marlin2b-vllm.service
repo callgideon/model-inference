@@ -13,7 +13,7 @@ Environment=HOME=/home/ubuntu
 # publish and read-only media mount are W3's; preflight.py checks them before a pilot.
 EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000
-ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}
+ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2770 ${PROCESSING_CACHE_DIR}
 ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh
 # W3's request: 30 s, because nothing is in flight by then - the worker is PartOf= this
 # unit and ordered After= it, so it drains first. systemd waits longer than docker, or it
