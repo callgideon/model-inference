@@ -931,6 +931,79 @@ MUTANTS += (
        STEP + "45-s3-check.sh", "tests/m/test_s3.py'", "tests/m/test_s3.py || true'", S3C),
 )
 
+# --- I8 (consumer v1): pooler budget, transaction-pooler semantics, env schema, least
+# privilege. The docker cases (tests/i/pooler.py) run their own PostgreSQL + PgBouncer.
+BUDGET_PY, POOLER_PY = "../../infra/runbooks/pool_budget.py", "tests/i/pooler.py"
+PROBE_PY = "../../infra/runbooks/privilege_probe.py"
+ADMITS = "test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits"
+TXN_CASES = ("test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler",
+             "test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler",
+             "test_ops_continuous__the_composed_runtime_pool_is_safe_on_the_transaction_pooler")
+ENVCHECK_REFUSES = "test_deploy_failclosed__envcheck_refuses_a_file_the_runtime_would_start_on"
+UNIT_REFUSES = "test_deploy_failclosed__each_runtime_unit_refuses_to_start_on_a_refused_env_file"
+LEAST = "test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail"
+MUTANTS += (
+    _m("budget_forgets_the_worker_pool", "every pool of the pooler's clients is counted",
+       BUDGET_PY, '"worker pool (inference + preparation + reaper)", mode, 1, pool_min, pool_max,',
+       '"worker pool (inference + preparation + reaper)", mode, 1, pool_min, 0,', ADMITS),
+    _m("budget_session_limit_raised", "the session pooler admits 15 clients, measured",
+       BUDGET_PY, "SESSION_LIMIT = 15 ", "SESSION_LIMIT = 25 ", ADMITS),
+    _m("budget_one_gateway_process", "uvicorn --workers multiplies the gateway's pool",
+       BUDGET_PY, "return int(found.group(1)) if found else 1", "return 1",
+       "test_ops_continuous__the_budget_counts_every_gateway_process"),
+    _m("stand_in_pooler_in_session_mode", "the stand-in hands server connections between "
+       "clients at transaction boundaries, as 6543 does",
+       POOLER_PY, "dbname={DATABASE} pool_mode=transaction pool_size=2",
+       "dbname={DATABASE} pool_mode=session pool_size=2", *TXN_CASES),
+    _m("stand_in_pooler_replays_prepares", "the stand-in, like 6543, supports no prepared "
+       "statements", POOLER_PY, "max_prepared_statements = 0", "max_prepared_statements = 100",
+       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler"),
+    _m("runtime_adds_a_session_statement", "no new session-only statement reaches the pool",
+       "infrx/gateway/pilot.py", '        await conn.execute("set role service_role")\n',
+       '        await conn.execute("set role service_role")\n'
+       '        await conn.execute("set search_path = infrx, public")\n',
+       "test_ops_continuous__the_runtime_sends_no_other_session_only_statement"),
+    _m("pool_budget_step_env_as_mount", "the env file reaches the budget over stdin only",
+       STEP + "71-pool-budget.sh", '"${sets[@]}" < "$env_file"', '"${sets[@]}"',
+       "test_ops_continuous__the_pool_budget_step_hands_the_env_file_over_stdin"),
+    # the env schema
+    _m("envcheck_accepts_unknown_names", "a name outside the schema refuses the start",
+       P, "for name in sorted(set(seen) - schema_names())]", "for name in ()]",
+       "test_ops_continuous__the_runtime_ignores_a_mistyped_name_which_envcheck_refuses",
+       ENVCHECK_REFUSES, UNIT_REFUSES),
+    _m("envcheck_accepts_doubled_names", "a name set twice refuses the start",
+       P, '            problems.append(f"{name}: set twice (systemd would take the last)")\n',
+       "            pass\n", ENVCHECK_REFUSES),
+    _m("envcheck_ignores_the_schema_version", "a file written for another schema refuses",
+       P, "    elif header[len(SCHEMA_HEADER):].strip() != schema_id():",
+       "    elif False:", ENVCHECK_REFUSES),
+    _m("envcheck_skips_the_runtime_probe", "the runtime's own validation runs at start",
+       P, '    problems += verdict["problems"]\n    return {"ok": not problems, "schema"',
+       '    return {"ok": not problems, "schema"', ENVCHECK_REFUSES),
+    _m("schema_id_ignores_the_names", "the schema id moves with the names it covers",
+       P, '"\\n".join(sorted(schema_names()))', '"\\n".join(sorted(MODES))',
+       "test_deploy_failclosed__the_schema_id_moves_with_the_names_it_covers"),
+    _m("envcheck_refusal_exits_zero", "a refused env file fails the unit's start",
+       P, '        return 0 if verdict["ok"] else REFUSED\n    if args.command == "manifest":',
+       '        return 0\n    if args.command == "manifest":', UNIT_REFUSES),
+    _m("gateway_starts_unchecked", "the gateway unit checks its env file before it starts",
+       "deploy/marlin2b-gateway.service", "ExecStartPre=/bin/sh -c 'exec docker run",
+       "#ExecStartPre=/bin/sh -c 'exec docker run", UNIT_REFUSES),
+    # least privilege
+    _m("probe_passes_an_allowed_operation", "an operation that succeeds fails its check",
+       PROBE_PY, '"pass": got.startswith("denied"),', '"pass": got != "error",', LEAST),
+    _m("probe_ignores_role_membership", "membership in a privileged role fails the probe",
+       PROBE_PY, '"select not exists (select 1 from pg_roles r where r.rolname = any(%(privileged)s) "',
+       '"select true or exists (select 1 from pg_roles r where r.rolname = any(%(privileged)s) "',
+       LEAST),
+    _m("probe_passes_without_function_list", "no D10 function list is PENDING, not a pass",
+       PROBE_PY, '"got": "PENDING: no --allow-functions list given", "pass": False,',
+       '"got": "PENDING: no --allow-functions list given", "pass": True,', LEAST),
+    _m("probe_runs_without_its_dsn", "the DSN comes from the environment or nothing runs",
+       PROBE_PY, "    if not dsn:\n", "    if False:\n",
+       "test_ops_continuous__the_probe_refuses_to_run_without_its_dsn_in_the_environment"),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
@@ -953,6 +1026,11 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copy2(REPO / "models" / "marlin2b" / "serving-version.json", engine / "serving-version.json")
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
+    # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
+    for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
+                 ("apps", "app", "supabase", "migrations")):
+        if REPO.joinpath(*part).exists():
+            shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)
     for name in ("pyproject.toml", "uv.lock"):
         shutil.copy2(API_DIR / name, api / name)
     return api
@@ -995,3 +1073,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

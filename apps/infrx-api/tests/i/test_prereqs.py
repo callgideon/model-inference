@@ -46,7 +46,8 @@ def test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys():
                  "model pin", "usage sink"):
         assert role in roles, role
     body = preflight.render({"MAX_INFLIGHT": "8", "INFRX_MODE": "dev", "NOT_DECLARED": "x"})
-    assert body == "INFRX_MODE=dev\nMAX_INFLIGHT=8\n", "render passed an undeclared key"
+    assert body == (f"{preflight.SCHEMA_HEADER}{preflight.schema_id()}\n"
+                    "INFRX_MODE=dev\nMAX_INFLIGHT=8\n"), "render passed an undeclared key"
 
 
 def test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer():

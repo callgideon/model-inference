@@ -23,8 +23,8 @@ PgBouncer is a stand-in, not Supavisor: the coordinator's probe on the real 6543
 (infra/runbooks/privilege_probe.py --pooler-semantics) confirms the hosted behaviour.
 
 Nothing here touches a container it did not create: the names carry the `infrx-i8-` prefix,
-every container is labelled with this checkout, a foreign one is refused, and an flock on the
-port range keeps two runs apart. Everything is removed at teardown.
+every container is labelled as an I8 harness's, a foreign one is refused, and an flock on the
+PostgreSQL port keeps two runs (a checkout and its mutation copies) apart. Everything is removed at teardown.
 """
 from __future__ import annotations
 
@@ -51,8 +51,10 @@ DATABASE = SERVICE.database                        # infrx_i8
 # The three ways in: straight to PostgreSQL, and the pooler's two modes.
 PG_DIRECT, TXN, SESSION = "direct", "transaction", "session"
 PASSWORD = "infrx-i8-local"        # a throwaway local literal, never a secret
-LABEL = "ai.infrx.i8.checkout"
-CHECKOUT = str(Path(__file__).resolve().parents[4])
+# Created by an I8 harness (this checkout or a mutation copy of it): the flock below, not
+# the path, is what keeps two runs apart.
+LABEL = "ai.infrx.i8.harness"
+CHECKOUT = "infrx-i8"
 
 
 def _docker(*args, check=True):
@@ -85,6 +87,7 @@ auth_file = /etc/pgbouncer/userlist.txt
 server_round_robin = 0
 max_client_conn = 400
 max_prepared_statements = 0
+query_wait_timeout = 10
 ignore_startup_parameters = extra_float_digits
 """
 
@@ -100,7 +103,7 @@ class Stack:
 
     def up(self, extra_users: dict[str, str] | None = None) -> "Stack":
         self.users.update(extra_users or {})
-        path = Path(tempfile.gettempdir()) / f"infrx-i8-pooler-{PORTS[PG]}.lock"
+        path = Path("/tmp") / f"infrx-i8-pooler-{PORTS[PG]}.lock"   # not TMPDIR: copies too
         self._lock = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
         fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a second run is refused
         for name in (BOUNCER, PG):
@@ -108,7 +111,7 @@ class Stack:
             if owner is None:
                 continue
             if owner != CHECKOUT:
-                raise RuntimeError(f"refusing to touch {name}: not created by this checkout")
+                raise RuntimeError(f"refusing to touch {name}: not created by an I8 harness")
             _docker("rm", "-f", "-v", name, check=False)          # our crashed run
         if _docker("network", "inspect", NETWORK, check=False).returncode != 0:
             _docker("network", "create", "--label", f"{LABEL}={CHECKOUT}", NETWORK)
