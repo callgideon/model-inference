@@ -3,7 +3,7 @@
 **Generated** by `tests/integration/backend/endpoint_doc.py --write` from the code at
 the commit this file is in; `tests/integration/backend/test_endpoint_doc.py` fails when
 it is stale. It describes the metered endpoint **as the cutover mounts it** (G2-R1,
-held at this commit): until then the deployed gateway is the legacy one. Nothing here
+merged; the box serves the legacy gateway until the I2B rollout). Nothing here
 is a measured limit or an SLO: measured limits are the box's (E4B-release-decision.md).
 
 ## Model
@@ -12,8 +12,8 @@ is a measured limit or an SLO: measured limits are the box's (E4B-release-decisi
 |---|---|---|
 | requested model (pinned) | `nemostation/marlin-2b@2026-09-01` | G6B `marlin_release` / contracts v2 fixtures |
 | rate card | `rc_marlin2b_20260901T000000Z_provisional_p01` | provisional until P-01 decides the rates |
-| serving revision's engine-options digest | `sha256:4444444444444444444444444444444444444444444444444444444444444444` | ⚠️ not W3's measured pin `sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147` (E4B config-pin finding) |
-| runtime image | `vllm/vllm-openai:nightly` | ⚠️ not W3's measured pin `vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42` (E4B config-pin finding) |
+| serving revision's engine-options digest | `sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147` | W3's measured pin (`models/marlin2b/serving-version.json`) |
+| runtime image | `vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42` | W3's measured pin (`models/marlin2b/serving-version.json`) |
 
 ## Routes
 

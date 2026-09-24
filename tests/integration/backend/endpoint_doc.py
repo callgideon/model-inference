@@ -258,7 +258,7 @@ def render() -> str:
         "**Generated** by `tests/integration/backend/endpoint_doc.py --write` from the code at",
         "the commit this file is in; `tests/integration/backend/test_endpoint_doc.py` fails when",
         "it is stale. It describes the metered endpoint **as the cutover mounts it** (G2-R1,",
-        "held at this commit): until then the deployed gateway is the legacy one. Nothing here",
+        "merged; the box serves the legacy gateway until the I2B rollout). Nothing here",
         "is a measured limit or an SLO: measured limits are the box's (E4B-release-decision.md).",
         "",
         "## Model",
