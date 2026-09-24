@@ -44,6 +44,7 @@ INSIDE = "test_prep_worker__a_video_count_inside_the_pinned_budget_is_the_count"
 NO_COUNT = "test_prep_worker__a_tokenizer_that_cannot_count_prepares_nothing"
 REQUEUE = "test_prep_worker__a_refused_attempt_is_requeued_when_its_lease_lapses"
 RENEW = "test_prep_worker__the_lease_is_renewed_while_preparation_runs"
+HUNG = "test_prep_worker__a_tokenizer_that_never_answers_is_bounded_by_the_budget"
 SERVICE = "test_prep_worker__the_service_prepares_and_drains_its_preparation_pool"
 DEAD = "test_prep_worker__a_dead_preparation_runner_ends_the_service"
 COMPOSE = "test_prep_worker__the_worker_composes_the_preparation_pool"
@@ -65,7 +66,8 @@ MUTANTS = (
        P, "        await self.jobs.prepared(lease, refs, prompt_tokens=count)",
        "        await self.jobs.prepared(lease, refs)", TEXT, VIDEO),
     _m("prep_count_guessed", "the count is the engine's /tokenize answer, never a constant",
-       P, "        count = await engine_prompt_tokens(self.engine, prepared)",
+       P, "        count = await engine_prompt_tokens(self.engine, prepared,\n"
+          "                                           timeout_s=self.limits.preparation_timeout_s)",
        "        count = 1200", TEXT),
     _m("prep_tokenize_without_the_generation_prompt",
        "the engine counts the prompt the chat route renders (the generation prompt)",
@@ -75,8 +77,13 @@ MUTANTS = (
        P, '        ask["mm_processor_kwargs"] = budget', "        pass", VIDEO),
     _m("prep_tokenizer_errors_untyped", "a tokenizer that does not answer is "
        "dependency_unavailable, never an untyped error",
-       P, "    except (httpx.HTTPError, ValueError) as failed:",
-       "    except ValueError as failed:", CHECKED),
+       P, "    except (httpx.HTTPError, ValueError, TimeoutError) as failed:",
+       "    except (ValueError, TimeoutError) as failed:", CHECKED),
+    _m("prep_tokenizer_wait_unbounded", "a tokenizer that never answers is refused at the "
+       "preparation budget, never waited on", P, "        async with asyncio.timeout(timeout_s):",
+       "        async with asyncio.timeout(None):", HUNG),
+    _m("prep_tokenizer_bound_not_the_budget", "the tokenizer's bound is PREPARATION_TIMEOUT_S",
+       P, "timeout_s=self.limits.preparation_timeout_s)", "timeout_s=600.0)", HUNG),
     _m("prep_count_shape_unchecked", "a bool, negative or non-integer count is no count",
        P, "    if isinstance(count, bool) or not isinstance(count, int) or count < 0:",
        "    if count is None:", CHECKED),
@@ -193,7 +200,8 @@ PG_MUTANTS = (
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
        "runner=PreparationRunner(jobs=store, media=media,", PG_RUN),
     _m("prep_count_guessed_on_postgresql", "the stored count and the settled usage are the "
-       "engine's count", P, "        count = await engine_prompt_tokens(self.engine, prepared)",
+       "engine's count", P, "        count = await engine_prompt_tokens(self.engine, prepared,\n"
+       "                                           timeout_s=self.limits.preparation_timeout_s)",
        "        count = 1200", PG_RUN),
     _m("service_preparation_drain_unbounded_on_postgresql", "SIGTERM releases a preparation at "
        "PREPARATION_LEASE_TTL_S; the process exits 0 inside the unit's budget",

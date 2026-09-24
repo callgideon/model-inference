@@ -133,7 +133,7 @@ class WorkerService:
         drains = [self.loop.drain(bound)]
         if self.preparation is not None:
             drains.append(self.preparation.drain(self.loop.limits.preparation_lease_ttl_s))
-        report, *prepared = await asyncio.gather(*drains)
+        report, *reports = await asyncio.gather(*drains)
         for pool in (self._pool, self._preparing):
             if pool is not None:
                 await asyncio.gather(pool, return_exceptions=True)
@@ -146,7 +146,7 @@ class WorkerService:
         self.last_drain = report
         log.warning("drained: %d finished, %d released %s, ended %s", report.finished,
                     report.released, list(report.released_jobs), list(report.ended))
-        for held in prepared:
+        for held in reports:
             log.warning("drained preparation: %d finished, %d released %s, ended %s",
                         held.finished, held.released, list(held.released_jobs),
                         list(held.ended))

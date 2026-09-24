@@ -23,7 +23,8 @@
    `video_token_id`s per two-frame patch of the pinned budget (`models/marlin2b/tokens.py`,
    marlin-sop.md §1.5) - one placeholder is a tokenizer that skipped the multimodal
    processor, and more than the budget is an engine not running the pinned profile. No
-   answer, or one that fails a check, is `dependency_unavailable`.
+   answer within `PREPARATION_TIMEOUT_S`, or one that fails a check, is
+   `dependency_unavailable`.
 5. `prepared(lease, refs, prompt_tokens=count)`.
 
 **A typed refusal anywhere prepares nothing** (a fetch or stage `not_found`, an
@@ -65,18 +66,22 @@ TOKENS_PER_PATCH, PIXELS_PER_TOKEN = 196, 2048
 ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05
 
 
-async def engine_prompt_tokens(engine, prepared) -> int:
-    """The engine's own count of `prepared`'s prompt, or `dependency_unavailable`."""
+async def engine_prompt_tokens(engine, prepared, *,
+                               timeout_s: float = DEFAULTS.preparation_timeout_s) -> int:
+    """The engine's own count of `prepared`'s prompt, or `dependency_unavailable` - also when
+    no answer comes within `timeout_s` (the preparation budget: a hung tokenizer must not hold
+    a preparation runner past the phase its lease fences)."""
     body = engine.upstream_body(prepared)
     ask = {"model": body["model"], "messages": body["messages"], "add_generation_prompt": True}
     budget = body.get("mm_processor_kwargs")
     if budget:
         ask["mm_processor_kwargs"] = budget
     try:
-        answer = await engine.client.post(TOKENIZE_PATH, json=ask)
+        async with asyncio.timeout(timeout_s):
+            answer = await engine.client.post(TOKENIZE_PATH, json=ask)
         answer.raise_for_status()
         found = answer.json()
-    except (httpx.HTTPError, ValueError) as failed:
+    except (httpx.HTTPError, ValueError, TimeoutError) as failed:
         raise errors.DependencyUnavailable(
             f"the engine's tokenizer did not answer ({type(failed).__name__})") from None
     count = found.get("count") if isinstance(found, dict) else None
@@ -145,7 +150,8 @@ class PreparationRunner:
         # another organization (`not_found`), before anything is counted or stored.
         prepared = prepared_request(work.model_copy(update={"prepared_refs": refs}), 0,
                                     limits=self.limits)
-        count = await engine_prompt_tokens(self.engine, prepared)
+        count = await engine_prompt_tokens(self.engine, prepared,
+                                           timeout_s=self.limits.preparation_timeout_s)
         await self.jobs.prepared(lease, refs, prompt_tokens=count)
         return count
 

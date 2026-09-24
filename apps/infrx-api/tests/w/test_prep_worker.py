@@ -377,6 +377,24 @@ def test_prep_worker__a_refused_attempt_is_requeued_when_its_lease_lapses(tmp_pa
     assert second.cause == "prepared" and work.prompt_tokens == COUNT
 
 
+def test_prep_worker__a_tokenizer_that_never_answers_is_bounded_by_the_budget(tmp_path):
+    """An engine that never answers `/tokenize` holds a preparation runner no longer than
+    `PREPARATION_TIMEOUT_S` (0.3 s here): the attempt is refused `dependency_unavailable`
+    and the job stays `preparing` for `recover`."""
+    async def never():
+        await asyncio.Event().wait()
+    prep = Prep(tmp_path, limits=DEFAULTS.replace(preparation_timeout_s=0.3),
+                transport=tokenizer(never))
+
+    async def case():
+        request = await prep.admit()
+        return await within(prep.runner.run(request.request_id), 5.0), await prep.state(request)
+
+    result, state = run(case())
+    assert isinstance(result, PreparationResult), result
+    assert result.refusal == "dependency_unavailable" and state is JobState.preparing, result
+
+
 def test_prep_worker__the_lease_is_renewed_while_preparation_runs(tmp_path):
     """R52: a preparation that outlives the lease TTL keeps its lease - renewed while the
     engine counts - and still queues the job (40 s of store time against a 30 s lease)."""
