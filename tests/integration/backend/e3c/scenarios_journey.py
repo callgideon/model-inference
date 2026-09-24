@@ -184,3 +184,60 @@ def test_nc_journey_tenant__s02_detects_a_gateway_that_serves_another_tenants_jo
                     foreign_404(trip, b, trip.world.beta, handle)
         finally:
             other.stop("gateway")
+
+
+DATASET = world.harness.REPO_ROOT / "models" / "marlin2b" / "dataset.py"
+
+
+def test_s01_the_external_dataset_client_resumes_uploads_across_a_gateway_restart(workdir):
+    """E1C's resumable dataset client (`models/marlin2b/dataset.py`, run as the external
+    client it is - never copied) uploads and infers four items, is interrupted, the gateway
+    is SIGKILLed and replaced, and the same command resumes: one job and one settlement per
+    item, every result exported, the wallet conserved (UPLOAD-RESTART + BACKEND-JOURNEY)."""
+    import json
+    import os
+    import signal
+    import subprocess
+    if not DATASET.exists():
+        world.blocked("E1C", why="no resumable dataset client (models/marlin2b/dataset.py)")
+    with world.composed(workdir) as trip:
+        alpha = trip.world.alpha
+        (workdir / "clip.mp4").write_bytes(pilotbox.clip())
+        manifest = workdir / "items.jsonl"
+        manifest.write_text("".join(json.dumps({
+            "id": f"item-{n}", "video": "clip.mp4", "prompt": f"What happens? ({n})",
+            "max_tokens": 64, "start_s": 0, "end_s": 8}) + "\n" for n in range(4)))
+        state = workdir / "run.sqlite"
+        state.unlink(missing_ok=True)
+        argv = [sys.executable, str(DATASET), "run", "--manifest", str(manifest), "--state",
+                str(state), "--dataset-version", "e3c-s01", "--base-url",
+                f"{trip.box.url}/v1", "--model", stack.CREDIT_ALIAS, "--retain-output",
+                "text", "--form", "upload", "--concurrency", "2"]
+        env = {**os.environ, "INFRX_API_KEY": alpha.secret}
+        trip.engine.control(delta_gap_s=0.05)
+        first = subprocess.Popen(argv, env=env, cwd=str(workdir), stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.STDOUT, start_new_session=True)
+        world.wait_for(lambda: trip.db("select count(*) from infrx.jobs where org_id = %s",
+                                       alpha.org_id)[0][0] >= 1, 60, "the first item admitted")
+        os.killpg(first.pid, signal.SIGINT)
+        first.wait(timeout=60)
+        trip.box.kill("gateway")
+        trip.box.start("gateway")
+        trip.engine.control(delta_gap_s=0.0)
+        resumed = subprocess.run(argv, env=env, cwd=str(workdir), capture_output=True,
+                                 text=True, timeout=600)
+        assert resumed.returncode == 0, resumed.stdout[-1500:] + resumed.stderr[-1500:]
+        results, failures = workdir / "results.jsonl", workdir / "failures.jsonl"
+        exported = subprocess.run([sys.executable, str(DATASET), "export", "--state",
+                                   str(state), "--results", str(results), "--failures",
+                                   str(failures)], cwd=str(workdir), capture_output=True,
+                                  text=True, timeout=60)
+        assert exported.returncode == 0, exported.stderr[-1500:]
+        rows = [json.loads(line) for line in results.read_text().splitlines() if line.strip()]
+        assert len(rows) == 4 and not failures.read_text().strip(), (rows, failures.read_text())
+        jobs = trip.db("select request_id::text, idempotency_key from infrx.jobs where "
+                       "org_id = %s", alpha.org_id)
+        assert len(jobs) == 4 and len({key for _, key in jobs}) == 4, jobs
+        for request_id, _ in jobs:
+            world.settled_once(trip, request_id)
+        trip.conserved(alpha)
