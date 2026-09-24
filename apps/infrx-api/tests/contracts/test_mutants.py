@@ -22,7 +22,7 @@ from infrx.contracts.conformance import SUITES, V2_SUITES
 
 from . import mutants as mutation_list
 from . import test_cancel_cause, test_config_and_imports, test_fixtures, test_money
-from .v2 import test_conformance_v2
+from .v2 import test_conformance_v2, test_lifecycle
 
 ALL = mutation_list.MUTANTS
 # F2P wire-in item 6: the v2 cases are named by the same list and killed by the same runner.
@@ -30,7 +30,7 @@ CASE_NAMES = {case.__name__ for suites in (SUITES, V2_SUITES)
               for _name, (cases, _runner) in suites.items() for case in cases()}
 # F2R: record and config invariants die in these modules, which the runner also targets.
 RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports,
-                                    test_conformance_v2, test_cancel_cause)
+                                    test_conformance_v2, test_cancel_cause, test_lifecycle)
                 for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a
@@ -44,7 +44,10 @@ SUBSET = ("heartbeat_stores_the_callers_lease", "cap_org_not_counted", "debit_ro
           "units_are_interchangeable", "raw_answers_any_unit", "a_request_may_name_a_wallet",
           "the_grant_key_includes_the_campaign", "the_hold_rounds_like_a_charge",
           "the_charge_rounds_up", "settle_ignores_certainty", "revocation_is_ignored",
-          "a_v1_payload_is_silently_accepted", "the_grant_amount_changes")
+          "a_v1_payload_is_silently_accepted", "the_grant_amount_changes",
+          # F2C.a: the three pre-F2C behaviours the lifecycle ports exist to remove
+          "lc_reopen_loses_the_tickets", "lc_missing_marker_reads_as_empty",
+          "lc_manifest_reference_ignored")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
