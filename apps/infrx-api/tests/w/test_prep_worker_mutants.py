@@ -15,14 +15,12 @@ from ..contracts import mutants as shared
 from . import loop_mutants, mutants as w1_list, w3_mutants, w4_mutants, worker_main_mutants
 from . import prep_worker_mutants as mutation_list
 
-MEMORY, CONTRACT, PG = (mutation_list.MUTANTS, mutation_list.CONTRACT_MUTANTS,
-                        mutation_list.PG_MUTANTS)
-ALL = MEMORY + CONTRACT + PG
+MEMORY, PG = mutation_list.MUTANTS, mutation_list.PG_MUTANTS
+ALL = MEMORY + PG
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-SUBSET = ("prep_count_guessed", "service_preparation_not_started", "fake_prepared_drops_the_count")
-SELECTED = (MEMORY + CONTRACT) if FULL_RUN else tuple(m for m in MEMORY + CONTRACT
-                                                      if m.name in SUBSET)
+SUBSET = ("prep_count_guessed", "service_preparation_not_started")
+SELECTED = MEMORY if FULL_RUN else tuple(m for m in MEMORY if m.name in SUBSET)
 SELECTED_PG = PG if FULL_RUN else ()
 
 
@@ -32,22 +30,20 @@ def test_the_list_is_well_formed():
     names = [m.name for m in ALL]
     assert len(set(names)) == len(names), "duplicate mutant names"
     others = (w1_list.MUTANTS + loop_mutants.MUTANTS + w3_mutants.MUTANTS + w4_mutants.MUTANTS
-              + worker_main_mutants.MUTANTS + worker_main_mutants.PG_MUTANTS)
+              + worker_main_mutants.MUTANTS + worker_main_mutants.PG_MUTANTS
+              + shared.MUTANTS)
     assert not set(names) & {m.name for m in others}
-    conformance = {mutation_list.DUR, mutation_list.CREDIT}
     for mutant in ALL:
         assert mutant.cases and mutant.invariant, mutant.name
         for case in mutant.cases:
-            known = conformance if mutant in CONTRACT else CASES
-            assert case in known, f"{mutant.name} names unknown case {case}"
+            assert case in CASES, f"{mutant.name} names unknown case {case}"
     assert set(SUBSET) <= set(names)
 
 
 def test_every_case_is_covered_by_a_mutant():
     """A case no single edit can break proves nothing."""
     covered = {case for mutant in ALL for case in mutant.cases}
-    missing = (CASES | {mutation_list.DUR, mutation_list.CREDIT}) - covered
-    assert missing == set(), f"cases no mutant can break: {sorted(missing)}"
+    assert CASES - covered == set(), f"cases no mutant can break: {sorted(CASES - covered)}"
 
 
 def test_every_anchor_is_in_the_source_as_often_as_declared():
@@ -60,7 +56,7 @@ def test_every_anchor_is_in_the_source_as_often_as_declared():
 
 def test_the_service_free_list_names_no_postgresql_case():
     """The default list runs anywhere; a missing harness skips only what needs it."""
-    assert not any("_pg__" in case for m in MEMORY + CONTRACT for case in m.cases)
+    assert not any("_pg__" in case for m in MEMORY for case in m.cases)
     assert all("_pg__" in case for m in PG for case in m.cases)
 
 

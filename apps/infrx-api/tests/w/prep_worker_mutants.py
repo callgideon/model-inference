@@ -2,13 +2,15 @@
 """R32/R83 for PREP-WORKER (I2B-R5): every invariant the preparation loop claims is killable
 by a named case, through the shared runner (`tests/contracts/mutants.py`).
 
-Three lists. `MUTANTS` names the service-free cases of `tests/w/test_prep_worker.py` (the
+Two lists. `MUTANTS` names the service-free cases of `tests/w/test_prep_worker.py` (the
 runner and the service on F's fakes, E2's fake engine in process, the composition), so it
-runs anywhere. `CONTRACT_MUTANTS` are edits to F's fake store killed by the two exported
-conformance cases this lane added (`dur_fence__prepared_stores_the_exact_prompt_count_once`,
-`credit_prepare__the_count_reaches_the_credit_work`), on F's own runner. `PG_MUTANTS` name
-the `_pg__` cases (the real `python -m infrx.worker` on PostgreSQL): the copy inherits the
-lane's harness settings (`INFRX_D_TASK`, its Valkey, its MinIO).
+runs anywhere. `PG_MUTANTS` name the `_pg__` cases (the real `python -m infrx.worker` on
+PostgreSQL): the copy inherits the lane's harness settings (`INFRX_D_TASK`, its Valkey, its
+MinIO). The fake-store edits the two exported conformance cases this lane added kill
+(`dur_fence__prepared_stores_the_exact_prompt_count_once`,
+`credit_prepare__the_count_reaches_the_credit_work`) are in F's own list,
+`tests/contracts/mutants.py` (`fake_prepared_*`, `fake_*_drops_the_count`), where R32
+requires every exported case to be covered.
 
     uv run --frozen pytest -q tests/w/test_prep_worker_mutants.py
     INFRX_MUTANTS=all INFRX_D_TASK=d5 INFRX_D2_VALKEY_PORT=55467 \\
@@ -30,7 +32,6 @@ P = "worker/preparation.py"
 V = "worker/service.py"
 MAIN = "worker/__main__.py"
 PORTS = "contracts/ports.py"
-S = "contracts/fakes/state.py"
 FV = "../../../tests/integration/fake_vllm.py"          # E2's fake engine, from `infrx/`
 
 SIG = "test_prep_worker__prepared_takes_a_keyword_count_on_every_adapter"
@@ -49,8 +50,6 @@ COMPOSE = "test_prep_worker__the_worker_composes_the_preparation_pool"
 READ_ONLY = "test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup"
 PG_RUN = "test_prep_worker_pg__the_worker_process_prepares_and_runs_an_admitted_job"
 PG_DRAIN = "test_prep_worker_pg__sigterm_releases_a_preparation_and_the_next_worker_prepares_it"
-DUR = "dur_fence__prepared_stores_the_exact_prompt_count_once"
-CREDIT = "credit_prepare__the_count_reaches_the_credit_work"
 
 _WAIT = "{waiting, self._pool, self._reaper, *self.loop._tasks,\n"
 _PREP_DRAIN = "self.preparation.drain(self.loop.limits.preparation_lease_ttl_s)"
@@ -184,43 +183,6 @@ MUTANTS = (
        READ_ONLY),
 )
 
-#: F's fake store: the prompt count the two conformance cases pin.
-CONTRACT_MUTANTS = (
-    _m("fake_prepared_drops_the_count", "prepared stores the count",
-       S, "            job.prompt_tokens = prompt_tokens\n", "", DUR, CREDIT),
-    _m("fake_prepared_count_unbounded", "a count past max_input_tokens or below 0 is refused",
-       S, "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
-          "job.request.max_input_tokens:", "            if False:", DUR),
-    _m("fake_prepared_count_bound_exclusive", "a count of exactly max_input_tokens is stored",
-       S, "not 0 <= prompt_tokens <= job.request.max_input_tokens:",
-       "not 0 <= prompt_tokens < job.request.max_input_tokens:", DUR),
-    _m("fake_prepared_count_untyped", "a bool or non-integer count is invalid_request",
-       S, "        if prompt_tokens is not None and (isinstance(prompt_tokens, bool)\n"
-          "                                          or not isinstance(prompt_tokens, int)):",
-       "        if False:", DUR),
-    _m("fake_refused_count_changes_state", "a refused count changes nothing",
-       S, "            # PREP-WORKER: the count must fit the input ceiling the hold was sized on.\n"
-          "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
-          "job.request.max_input_tokens:\n"
-          "                raise errors.ContextLengthExceeded(\n"
-          "                    f\"the prepared prompt ({prompt_tokens} tokens) exceeds "
-          "max_input_tokens\")\n"
-          "            now = self.clock.now()\n            job.prepared = tuple(media)\n",
-       "            now = self.clock.now()\n            job.prepared = tuple(media)\n"
-       "            job.state = JobState.queued\n"
-       "            if prompt_tokens is not None and not 0 <= prompt_tokens <= "
-       "job.request.max_input_tokens:\n"
-       "                raise errors.ContextLengthExceeded(\n"
-       "                    f\"the prepared prompt ({prompt_tokens} tokens) exceeds "
-       "max_input_tokens\")\n", DUR),
-    _m("fake_load_work_drops_the_count", "the lease holder's Work carries the count",
-       S, "                        prompt_tokens=job.prompt_tokens)", "                        )",
-       DUR),
-    _m("fake_credit_work_drops_the_count", "the CREDIT lease holder's WorkV2 carries the count",
-       S, "budgets=job.budgets, prompt_tokens=job.prompt_tokens)", "budgets=job.budgets)",
-       CREDIT),
-)
-
 PG_MUTANTS = (
     _m("main_preparation_pool_absent_on_postgresql", "the worker process prepares the jobs "
        "the gateway admits (nothing else does)",
@@ -252,12 +214,8 @@ PG_RUNNER = Runner(name="prep-worker-pg", targets=(SUITE_FILE,),
 
 
 def run_mutant(mutant) -> Result:
-    """`MUTANTS` take the shared runner's baseline; the other two lists are not a module's
-    `MUTANTS`, so their cases run unmutated first, once per process (R83 (b))."""
-    if mutant in CONTRACT_MUTANTS:
-        cases = tuple(sorted({case for m in CONTRACT_MUTANTS for case in m.cases}))
-        return shared.pristine(cases, shared.CONTRACTS) or shared.run_mutant(
-            mutant, shared.CONTRACTS)
+    """`MUTANTS` take the shared runner's baseline; `PG_MUTANTS` is not a module's
+    `MUTANTS`, so its cases run unmutated first, once per process (R83 (b))."""
     if mutant in PG_MUTANTS:
         cases = tuple(sorted({case for m in PG_MUTANTS for case in m.cases}))
         return shared.pristine(cases, PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
