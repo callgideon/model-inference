@@ -201,14 +201,27 @@ credentials disabled.
 **Which code each run saw.** `f7d9b03..92269a6` changes two files:
 `apps/infrx-api/tests/i/mutants.py` (`60dd799`, one I mutant's anchor) and this report.
 
-**On the final code (`92269a6`, same code as `60dd799`), `$S/cut4/`:**
+**On the final code (`92269a6`/`a1e88dc`, same code as `60dd799`), `$S/cut4/` (`streamA.out`, `streamB.out`, one log per run):**
 
 | Run | Tail | Exit |
 |---|---|---|
 | layer 0, repo root: `INFRX_E2_NAMESPACE=e3b2 apps/infrx-api/.venv/bin/python -m pytest -q -rfEs tests/integration` (no stack) | `17 failed, 149 passed, 86 skipped, 2 warnings in 24.28s`. The 17 are the 15 of Limits 6 plus rc05b and the harness migration set (Limits 6). The anchor guard `test_run.py::test_every_mutant_anchor_occurs_as_declared_on_the_checkout` passes (`1 passed, 50 deselected` by name) | 1 |
 | G by-name, items 1/7 (`python -m tests.g.mutants` with 11 names) | `11/11 killed` | 0 |
 | G6B by-name, items 6/8 (`python -m tests.g.ops.mutants` with 4 names) | `4/4 killed` | 0 |
-| tests/g whole; tests/i; tests/contracts (quick); tests/d focused on d3 (jobstore, streamstore and CREDIT conformance, catalog, operations, composition); I by-name (items 2/7); `INFRX_MUTANTS=all` for the G, G6B, G3 jobs, G4U uploads, I and M S3 lists; `make api-test` | **still running at handback** (`$S/cut4/streamA.out`, `streamB.out`, one log per run). Not quoted here | — |
+| tests/g whole | `574 passed, 2 warnings in 210.19s (0:03:30)` | 0 |
+| tests/i | `153 passed in 175.31s (0:02:55)` | 0 |
+| tests/contracts, quick (no `INFRX_MUTANTS`) | `23 failed, 1045 passed in 45.24s`. The 23 are the pre-existing `test_cancel_cause.py::test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record` plus its pristine-baseline fallout in `tests/contracts/test_mutants.py`: 19 subset mutants and 3 runner self-tests (Integration requests, D5 / F). None is the cutover's | 1 |
+| tests/d focused on d3: `test_jobstore_conformance.py`, `test_streamstore_conformance.py`, `test_credit_jobstore_conformance.py`, `test_catalog_pg.py`, `test_operations_pg.py`, `test_composition_pg.py` | `151 passed, 5 xfailed, 2 warnings in 226.50s (0:03:46)` | 0 |
+| I by-name, items 2/7 (`python tests/i/mutants.py` with 5 names) | `5/5 killed`: `release_not_required_in_pilot`, `release_shape_unchecked`, `release_not_supplied`, `install_passes_no_release` each `1 failed, 42 deselected`; `preflight_refusal_ignored` `1 failed, 10 deselected` | 0 |
+| `INFRX_MUTANTS=all` G list `tests/g/test_mutants.py` | `329 passed in 1339.94s (0:22:19)` | 0 |
+| `INFRX_MUTANTS=all` G6B list `tests/g/ops/test_mutants.py` | `72 passed in 218.46s (0:03:38)` | 0 |
+| `INFRX_MUTANTS=all` G3 list `tests/g/jobs/test_jobs_mutants.py` | `85 passed in 323.80s (0:05:23)` | 0 |
+| `INFRX_MUTANTS=all` G4U list `tests/g/uploads/test_uploads_mutants.py` | `42 passed in 147.06s (0:02:27)` | 0 |
+| `INFRX_MUTANTS=all` I list `tests/i/test_mutants.py` | `204 passed in 750.03s (0:12:30)`. The `f7d9b03` failure is gone | 0 |
+| `INFRX_MUTANTS=all` M1-L2 list `tests/m/test_s3_mutants.py` | `14 passed, 14 skipped in 61.88s` (skip: "no S3-compatible endpoint", Limits 1) | 0 |
+| `make api-test` (`PYTEST_ADDOPTS="-rfEs -p no:cacheprovider"`), 23:40:23Z–00:16:08Z | `23 failed, 3497 passed, 14 skipped, 5 xfailed, 2 warnings in 2134.05s (0:35:34)`. The 23 are the same pre-existing case and fallout as contracts quick. The 14 skips are M1-L2's S3 cases with no endpoint (12 in `tests/m/test_s3.py`, 2 in its list) | 2 |
+
+The earlier results below are superseded by these runs, and are kept for the record.
 
 **At `f7d9b03`, from the lane's first session (`$S/final.log`, `$S/mut3-*.log`), all with `INFRX_MUTANTS=all`:**
 
@@ -363,3 +376,7 @@ in-image pilot probe reports only `PENDING(W3)`, exit 2.
   added for rc05b, the 0018 harness entry and W (none). The final-code rerun of the focused
   suites, the full mutant lists and `make api-test` was still running at handback. Nothing
   here quotes it.
+- 2026-09-24: Quoted every final-code run from `$S/cut4/` after both streams ended
+  (`STREAM_A_DONE`, `STREAM_B_DONE`). The only red runs are layer 0 (Limits 6) and the 23
+  pre-existing contracts failures in contracts quick and `make api-test`. None is the
+  cutover's.
