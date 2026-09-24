@@ -369,7 +369,7 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     monkeypatch.setattr(certify, "tenant_ledger", lambda: None)
     certify.dataset_check(report, metered, tmp_path)
     assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
-                                                                          ["D5"])
+                                                                          ["BOX"])
     views = iter([(BEFORE, [], []), (AFTER, USAGE, HOLDS)])
     certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
     assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]["detail"]

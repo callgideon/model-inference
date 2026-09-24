@@ -204,7 +204,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '    if resumed["exit"] != 0:\n', "    if False:\n", DATASET),
     _m("engine_target_skips_to_ledger", "the engine target stops at the client half, pending on the box",
        '    if not target["metered"]:\n', "    if False:\n", DATASET),
-    _m("missing_ledger_passes", "no ledger adapter is PENDING on D5, never PASS",
+    _m("missing_ledger_passes", "no ledger adapter is PENDING on the box, never PASS",
        'report.check("e4b.a.dataset-resume", PENDING,\n                     '
        '"client invariants hold; `infrx',
        'report.check("e4b.a.dataset-resume", PASS,\n                     '

@@ -446,8 +446,8 @@ def reconcile_problems(rows: list[dict], usage, holds, before, after) -> list[st
 
 
 def tenant_ledger():
-    """The provisioned client's own view (G6B `Operations.tenant(secret)`), or None while no
-    PostgreSQL adapter is wired (`build_operations` refuses until D5)."""
+    """The provisioned client's own view (G6B `Operations.tenant(secret)`), or None where
+    `build_operations` refuses: without the deployment's DATABASE_URL (off the box)."""
     from infrx.operations import cli
     try:
         ops = cli.build_operations()
@@ -563,8 +563,8 @@ def dataset_check(report: Report, target: dict, workdir: Path, ledger=None,
     if ledger is None:
         report.check("e4b.a.dataset-resume", PENDING,
                      "client invariants hold; `infrx.operations.cli.build_operations` refuses "
-                     "(no PostgreSQL AccountView/Ledger adapter), so the tenant's ledger cannot "
-                     "be read", owners=("D5",), measured=measured, label=target["label"])
+                     "without the deployment's DATABASE_URL, so the tenant's ledger cannot be "
+                     "read here", owners=("BOX",), measured=measured, label=target["label"])
         return
     end = time.monotonic() + settle_wait_s
     while True:
