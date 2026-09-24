@@ -1,0 +1,137 @@
+{
+  "head": "88adae20a74a9187f030f3715042a0d5f754a851",
+  "base": "4db74b6 (integration head after the CERTIFY-TREE merge); round = 12 commits 08cc0aa..88adae2 on codex/certify-polish (88adae2 adds only the lane's evidence; code head 7456816)",
+  "verdict": "fix_required",
+  "python": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/infrx-impl/apps/infrx-api/.venv/bin/python (imports resolved to the clone: certify from /tmp/claude-1000/polish-chk/tests/integration/backend/certify.py, bench from /tmp/claude-1000/polish-chk/models/marlin2b/bench.py; printed by probes/sizing.log)",
+  "blocking": [
+    {
+      "id": "B1",
+      "title": "N5 labels the interruption's own canonical cancel 'cancelled by the platform' and FAILs the drill: an item in flight at the SIGINT has NO first-run row, so torn_by_the_client({}) is False",
+      "evidence": "certify.py:476 `torn = [item for item in cancelled if torn_by_the_client(firsts.get(item, {}))]`; torn_by_the_client (:461) needs a first-run row with a transport error_class. bench writes no row for an attempt the SIGINT cancelled: attempt() catches `Exception` (bench.py:887), not asyncio.CancelledError, so the cancelled task never reaches write_row. Reproduced: probes/sigint/repro.py - a slow SSE server, bench --rate 20 --requests 3, SIGINT at 3 s with all three mid-stream -> server saw 3 POSTs, bench exit 130, 0 rows. Box run2's own rows (results/E4B-box-4226315/run2-20260924T172244Z/work) show the shape: seq 7 (c3e9c044) first row failed/ReadError, seq 10 (643711ed) NO first-run row; both resumed stream_error_event/state_conflict/replayed. Re-judged at 88adae2 (rows re-classified as bench now records them): cancelled_replays -> (['c3e9c044'], ['643711ed']); resume_problems -> [\"items cancelled by the platform (their first attempt was not the client's tear): ['643711ed5385eff08e8689ca7f1d62cf']\"] -> e4b.a.dataset-resume FAIL. The same rows at 4db74b6 give resume_problems [] (probes/run2_old.log). So the round reintroduces a false FAIL of the cell R106 was made for, on the next box run (at 1.0/s with p50 ~17 s several items are in flight at the SIGINT). R106 (9b3b851) reserves the platform label for a platform-side cancel; an item whose key replayed (so it was sent in the first run) but has no first-run row was cut by the client's own exit. The lane's CANCELLED case models only the ReadError item, though its docstring cites the rerun's two torn items. Fails closed (never a false pass).",
+      "fix": "Count a cancelled item with no first-run row as the client's tear (e.g. `torn = [item for item in cancelled if item not in firsts or torn_by_the_client(firsts[item])]` - verifier mutant vv_no_first_row_is_a_tear shows this passes every existing lane case), or make bench record the attempt the interruption cancelled (catch asyncio.CancelledError in attempt(), set an error_class such as 'CancelledError', write the row, re-raise). Add to the CANCELLED case a first run with NO row for the cancelled item (run2's 643711ed shape) expecting ([item], []) and a PASS, plus a mutant restoring `firsts.get(item, {})`."
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "P1",
+      "title": "N15 does not change run2's r=2.0 cap failure: c051's row was a ReadError with no status, not a 429",
+      "evidence": "run2 envelope-r2.0-raw.jsonl: c051-tos720p-360p-16x9 seq 76 failed, http_status None, error_class ReadError, 83 ms after send (the coordinator's diagnosis: the gateway's CLOSE_CODES 429 answered mid-upload never reaches the client - INTAKE-DRAIN). Re-judged at 88adae2 (probes/run2_rungs.log): r=2.0 duration_cap FAIL {over_cap_not_refused: [c051], over_cap_refused_for_capacity: []}; envelope_summary (:1104-1118) folds every rung's cap row, so the envelope cell FAILs on it. N15's code is right (a status-less transport error cannot be excused), but it only takes effect once INTAKE-DRAIN (merge-plan step 14) lets the typed 429 reach a mid-upload client.",
+      "fix": "Coordinator: sequence the next box run after INTAKE-DRAIN, or note the dependency in 5(e)."
+    },
+    {
+      "id": "P2",
+      "title": "admission_answer's Retry-After honouring and its 60 s cap are correct but unpinned",
+      "evidence": "Behaviour (probes/test_polish_probes.py, urlopen and time.sleep monkeypatched): exactly 2 calls, then the second 429 is returned; waits '0'->0.0, '3600'->60.0, absent->1.0, '-5'->0.0, HTTP-date->1.0, 'inf'->60.0; 'nan' -> ValueError from time.sleep (unreachable: this gateway sends integers). Verifier mutants through the shared runner (verifier-mutants.log): vv_retry_after_ignored (sleep 1.0) SURVIVED, vv_retry_uncapped (no min(...,60)) SURVIVED ('2 passed'); vv_retry_any_refusal (retry any first refusal) died by exception (RemoteDisconnected when the fake server ran out of replies), not by assertion; vv_retry_every_429 KILLED at test_certify.py:396 (assertion).",
+      "fix": "In the ADMISSION case, record certify.time.sleep and assert the waits (e.g. [0.0] for '0', [60.0] for '3600'); optionally a reply-count guard so an extra retry dies by assertion."
+    },
+    {
+      "id": "P3",
+      "title": "A second 429 in parity FAILs the cell under the label 'not refused as over the cap'",
+      "evidence": "The second 429 returns {http_status 429, code capacity_exhausted, param None}; parity_check :438 `answer != OVER_CAP` -> wrong -> FAIL. That is right for parity (the cell must positively observe the typed refusal; parity runs on the idle box before the load cells, so a repeated 429 there is itself abnormal) and the answer is shown beside the clip, but the list label claims the clip was not refused as over the cap when it was never judged.",
+      "fix": "Optional: list it apart (as the rungs do with over_cap_refused_for_capacity)."
+    },
+    {
+      "id": "P4",
+      "title": "N14 sizes the rung to exactly 60 scheduled short clips: zero headroom",
+      "evidence": "rung_requests(120, 'full') = 135 -> 60 short clips (134 -> 59). One short-clip failure (1/135 is within max_failure_rate 0.01) or rejection leaves 59 accepted samples, and ttft_p95_short is unknown -> the rung PENDING. Fails closed.",
+      "fix": "Optional: size for 60 plus the failures the rate allows."
+    },
+    {
+      "id": "P5",
+      "title": "The report does not carry each client run's bound",
+      "evidence": "Local report at 88adae2: no timeout field anywhere; load_cells/dataset_check keep only client(...)['exit'], so a future exit 124 does not name the bound it hit (run.shell's 'timed out after N s' is in the dropped tail).",
+      "fix": "Optional: record client_timeout_s(argv) beside client_exits and the soak's client_exit."
+    },
+    {
+      "id": "P6",
+      "title": "measured.sop says 'none cancelled by the platform' in a FAIL that lists one",
+      "evidence": "sop_property (:480) always ends 'none cancelled by the platform (R106)'; dataset_check writes it into measured even when problems exist. On run2's rows at the head: cancelled_by_the_platform ['643711ed'] while sop says 'none cancelled by the platform'.",
+      "fix": "Optional: write sop only when there is no problem, or state the platform count."
+    }
+  ],
+  "answers": {
+    "1_N12": "certify.py:624-629 client_timeout_s = requests/rate + CLIENT_MARGIN_S (900) when --rate is present, else CLIENT_TIMEOUT_S 3600 (parity.py); client() (:632-634) passes it to run.shell; the soak goes through sampled_run -> client, so its bound is round(rate*14400)/rate + 900 = 15300 s at every possible soak rate (0.25/0.5/1.0 = half of a 0.5/1.0/2.0 supported rung). Box cells, computed with the runner's own functions and bench's seeded schedule (probes/sizing.log): envelope 135 req @0.5 -> 1170.0 s (seeded last arrival 276.3 s, +600 = 876.3, slack 293.7); @1.0 -> 1035.0 (138.2, slack 296.8); @2.0 -> 967.5 (69.1, slack 298.4); soak @0.25 3600 req -> 15300 (last 14218.1, slack 481.9); @0.5 7200 req -> 15300 (14458.9, slack 241.1); @1.0 14400 req -> 15300 (14348.4, slack 351.6); dataset resume 24 @1.0 -> 924.0 (first run keeps interrupted_run's 1800 s); overload 32 @1000 burst 32 -> 900.03; parity 3600. So no declared cell's schedule plus bench's 600 s request timeout exceeds its run.shell bound (smallest slack 241 s). Caveat: bench's --timeout 600 is httpx's per-operation timeout, not a total per request. Mutants: v_soak_cut_at_an_hour dies at test_certify.py:1259 AssertionError {'envelope-r0...sonl': 3600.0} == {... 15300.0}; schedule_ignores_the_rate :1259 (4500.0); no_margin_after_the_schedule :1259 (14400.0).",
+    "2_N15": "overloaded (:1055) = 429 AND error_code in OVERLOAD_CODES; cap_verdict (:1061) judges over-cap rows minus the overloaded ones and lists those in over_cap_refused_for_capacity; an over-cap 200 still FAILs (lane assertion test_certify.py:994; v_any_over_cap_refusal_excused dies :977, v_capacity_refusal_judged_as_the_cap :990, capacity_refusals_unrecorded :990 - assertions). admission_answer (:372-400) loops `for attempt in (1, 2)` and retries only `refused.code == 429 and attempt == 1`, so it cannot loop: a second 429 falls through and is returned as {429, code, param}; in parity that is != OVER_CAP -> FAIL (P3: right, label imprecise). Retry-After: sleep(min(max(1.0 if None else value, 0), 60)) - honoured and capped (probes), but unpinned (P2). admission_not_retried_after_capacity dies :396 (assertion); verifier vv_retry_every_429 killed :396. On run2's data N15 changes nothing (P1).",
+    "3_N5_N7": "bench.py:893-895 requires (failed, stream_error_event, state_conflict, replayed True) - matches 5(d) and R106's 'a stream error event in stream mode'; the sync 409 stays terminal by status (a 500 carrying the code stays a non-terminal failure, test_bench :594-601). certify: torn_by_the_client (:461) = non-empty error_class, not http_*, not in PLATFORM_ERROR_CLASSES; cancelled_replays (:469) splits torn/platform; resume_problems FAILs a platform cancel (:522-525) and still demands exactly one replay of each; dataset_check records cancelled_by_the_platform (:719). R106 at 9b3b851 says 'cancelled by the interruption only when the first attempt was the client's own tear; a platform-side cancel is listed apart and fails the drill' - the head follows the letter for a first row that exists, but misses the tear bench never records (B1). E1B: e1bm27 re-anchored with the same edit (True -> row['idempotency_replayed']) and dies test_bench.py:592; e1bm28 (code -> any) :588; e1bm30 (stream_error_event -> row['error_class']) :599; e1bm31 (denominator -> 0) :582 - all AssertionError in test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption. E4B: v_platform_cancel_counted_as_the_interruption :532, platform_cancel_passes :533, stream_error_counted_as_a_tear :532, http_answer_counted_as_a_tear :532, platform_cancels_unrecorded :580 - assertions in the CANCELLED case.",
+    "4_N14": "Reproduced with the runner's own functions (probes/sizing.log): full subset 64 built clips, 28 short (<= 30 s and long edge <= 1280); bench.build_schedule(n, clips, ['video_b64'], seed=20260922): 120 -> 54 short (run2's first-rung count), 134 -> 59, 135 -> 60; rung_requests(120, 'full') == 135. The clip order is independent of rate and max-tokens mix (asserted for all three rates: the shuffle precedes any expovariate draw). Mutants: v_rung_unsized :1228, tiny_rung_sized :1204, sizing_counts_every_clip :1047, sizing_below_the_declared_rung :1048; verifier vv_rung_sized_on_another_seed (seed=0) killed. Headroom: P4.",
+    "5_N1_N4_N9_N10": "Re-derived at 88adae2 with the lane's _layout copies and --tb=line (lane-deaths.log), each an assertion in the named case and equal to the lane's table: N1 v_cancelled_from_any_non_accepted :553; N2 v_parity_param_ignored :333; N3 v_capped_second_run_only :694; N4 v_soak_judges_over_cap :1128, soak_cap_breach_unreported :1131, soak_reports_a_cap_pass :1137, soak_gateway_unwired :1232; N9 e1bm31 test_bench.py:582; N10 criterion_dropped_from_the_runner :744, superseded_criterion_revived :745, superseded_row_unmarked :746, superseded_envelope_row_unmarked :748. N11 spot-check (n11-spot.log): cap_read_from_the_tree :262, over_ceiling_judged_as_failures :977, capped_items_accepted :687, overload_counts_capped_clips :1149, cap_exclusive_at_the_boundary :1002 - match the refreshed table. All 28 of this round's E4B mutants re-derived; all match.",
+    "7_local_run": "Completes (19.5 s, exit 1 on the known e4b.b.preconditions local exemption: this host's App dev servers). release-identity PASS at 88adae2 clean (start and end); target.max_video_seconds 82.0; config-pin PENDING BOX with deployed_max_video_seconds 82.0; sop-parity PENDING BOX (pass, 2 clips, 7 over-cap unasked); dataset-resume PENDING BOX with cancelled_by_interruption [] and cancelled_by_the_platform [] (first run exit 130 signalled, 4 attempts/4 accepted; resume 8 attempts - the in-flight items left no first-run row here too); envelope PENDING BOX, rows 'p95 None, p50 0.022 over 5 accepted samples (needs 60)' and 'p95 None, p50 0.257 over 11 ...'; soak PENDING BOX 0/19. over_cap_refused_for_capacity does not appear locally (the engine target's duration_cap is 'an engine target has no admission'); it is in the gateway rung rows (probes/run2_rungs.log). No per-run timeout field in the report (P5). Report sha256 6b8f97b0a358c45af1f14459197730feb869d791d810db516f5dc213f8beafb6."
+  },
+  "runs": [
+    {
+      "what": "E4B mutant list, whole: INFRX_MUTANTS=all python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py",
+      "env": "clone /tmp/claude-1000/polish-chk at 88adae2, worktree venv, no stack",
+      "result_counts": "219 passed in 483.79s (0:08:03), exit 0 (217 mutants over 48 cases + 2 list tests; 189 -> 217, +28 this round)",
+      "log": "/tmp/claude-1000/polish-chk-logs/e4b-mutants-all.log"
+    },
+    {
+      "what": "tests/integration/backend/test_certify.py + test_endpoint_doc.py",
+      "env": "clone at 88adae2",
+      "result_counts": "48 passed in 2.11s",
+      "log": "/tmp/claude-1000/polish-chk-logs/certify-tests.log"
+    },
+    {
+      "what": "models/marlin2b/tests",
+      "env": "clone at 88adae2",
+      "result_counts": "68 passed in 6.01s",
+      "log": "/tmp/claude-1000/polish-chk-logs/marlin-tests.log"
+    },
+    {
+      "what": "E1B list: python models/marlin2b/tests/mutants.py --report <json>",
+      "env": "clone at 88adae2",
+      "result_counts": "mutants 43, killed 40, controls_survived 3, not_killed 0, problems None, exit 0",
+      "log": "/tmp/claude-1000/polish-chk-logs/e1b-mutants.log, /tmp/claude-1000/polish-chk-logs/e1b-mutants.json"
+    },
+    {
+      "what": "W/G suites that load bench.py: (apps/infrx-api) pytest -q tests/w/test_serving.py tests/w/test_w4.py tests/w/test_service.py tests/g",
+      "env": "clone at 88adae2, no stack",
+      "result_counts": "612 passed, 2 warnings in 286.94s (0:04:46), exit 0",
+      "log": "/tmp/claude-1000/polish-chk-logs/wg-bench-suites.log"
+    },
+    {
+      "what": "This round's 28 E4B mutants' death lines + 5 N11 spot-checks, --tb=line on the lane's _layout copies",
+      "env": "clone at 88adae2",
+      "result_counts": "33/33 assertion deaths in the named case, lines equal to the lane's tables",
+      "log": "/tmp/claude-1000/polish-chk-logs/lane-deaths.log, /tmp/claude-1000/polish-chk-logs/n11-spot.log, /tmp/claude-1000/polish-chk-logs/lane_death.py"
+    },
+    {
+      "what": "E1B death lines e1bm27/28/30/31",
+      "env": "throwaway copies of models/marlin2b",
+      "result_counts": "4/4 AssertionError: e1bm27 test_bench.py:592, e1bm28 :588, e1bm30 :599, e1bm31 :582",
+      "log": "/tmp/claude-1000/polish-chk-logs/e1b-deaths.log, /tmp/claude-1000/polish-chk-logs/e1b_deaths.py"
+    },
+    {
+      "what": "Verifier's own mutants through the shared R83 runner (6)",
+      "env": "e4b_mutants.run on throwaway copies",
+      "result_counts": "killed 2 by assertion (vv_retry_every_429 :396, vv_rung_sized_on_another_seed); survived 2 (vv_retry_after_ignored, vv_retry_uncapped -> P2); broken_runner 1 (vv_retry_any_refusal: RemoteDisconnected exception death); survived 1 by design (vv_no_first_row_is_a_tear, B1's proposed fix: compatible with every existing case)",
+      "log": "/tmp/claude-1000/polish-chk-logs/verifier-mutants.log, /tmp/claude-1000/polish-chk-logs/verifier_mutants.py"
+    },
+    {
+      "what": "Verifier probes: B1 (synthetic + box run2 rows), N15 retry waits x6, nan Retry-After, run2 r=2.0 c051",
+      "env": "clone at 88adae2",
+      "result_counts": "10 passed in 0.31s (they pin the head's current behaviour)",
+      "log": "/tmp/claude-1000/polish-chk-logs/probes/test_polish_probes.py, /tmp/claude-1000/polish-chk-logs/probes/probes.log"
+    },
+    {
+      "what": "SIGINT reproduction: bench with 3 streams in flight, SIGINT at 3 s",
+      "env": "local stub SSE server on an ephemeral port",
+      "result_counts": "server saw 3 POSTs; bench exit 130; 0 raw rows",
+      "log": "/tmp/claude-1000/polish-chk-logs/probes/sigint/repro.py, /tmp/claude-1000/polish-chk-logs/probes/sigint/repro.log"
+    },
+    {
+      "what": "Box run2 rows re-judged: dataset drill at 88adae2 vs 4db74b6; envelope/soak at 88adae2; sizing and bounds",
+      "env": "run2 artefacts in the worktree's models/marlin2b/results/E4B-box-4226315/run2-20260924T172244Z (read only)",
+      "result_counts": "88adae2: dataset-resume problems ['items cancelled by the platform ... 643711ed...']; 4db74b6: []. Envelope r=2.0 duration_cap still FAIL on c051 (ReadError). Bounds/sizing as in answers 1 and 4",
+      "log": "/tmp/claude-1000/polish-chk-logs/probes/run2_resume.log, /tmp/claude-1000/polish-chk-logs/probes/run2_old.log, /tmp/claude-1000/polish-chk-logs/probes/run2_rungs.log, /tmp/claude-1000/polish-chk-logs/probes/sizing.log"
+    },
+    {
+      "what": "Local certify run: MAX_VIDEO_SECONDS=82 INFRX_E2_NAMESPACE=e2 CORPUS_CACHE=<main checkout>/.claude/corpus-cache certify.py --no-stack",
+      "env": "clone at 88adae2, TMPDIR and workdir in the logs dir, fake engine on e2 port 55580 (released after)",
+      "result_counts": "exit 1 (preconditions FAIL, the known local exemption); release-identity PASS; all load/drill cells PENDING BOX; see answers.7_local_run",
+      "log": "/tmp/claude-1000/polish-chk-logs/local-run/report.json, /tmp/claude-1000/polish-chk-logs/local-run/stdout.log"
+    }
+  ],
+  "not_run": "No pilot box, AWS, hosted service, stack, e4b/e3b2 namespace, push, rebase, reset, amend or stash. make check as a whole was not run (only the suites named in the brief).",
+  "containers_removed": [],
+  "containers_note": "No container was created: every run was stack-free. Before and after: infrx-gate-minio, infrx-d2-postgres, gideon-migration-order-test-caae059890 (other sessions', untouched). The clone's tree is clean at 88adae2 apart from this file."
+}
