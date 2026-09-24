@@ -1,0 +1,76 @@
+{
+  "verdict": "pass",
+  "head": "b9529d1",
+  "checks": [
+    {
+      "id": "SETUP",
+      "result": "confirmed",
+      "evidence": "Before starting, `docker ps -a | grep infrx-e2` and `ss -ltn` over 55500-55599 were both empty. I made a scratch clone with `git clone --shared` in /tmp/claude-1000/verify-e3b3-890963/head at b9529d1, and `uv sync --frozen --all-extras` exited 0. Everything ran in namespace e2 (INFRX_E2_NAMESPACE unset) with a private TMPDIR. `run.py --layer 2 --keep` gave `exit 0 (all stages passed)`: preflight, services, migrate, rls, then teardown SKIP (--keep)."
+    },
+    {
+      "id": "V1",
+      "result": "confirmed",
+      "evidence": "Reading b9529d1: pilotbox.py has no INFRX_E3B_EMBED_WORKER and no InMemoryObjectStore any more (the 4ac1419..b9529d1 diff removes `embedded`, `EMBED_ENV` and the InMemoryObjectStore worker). `pilot_box()` always calls `box.start(\"worker\")` and then `box.start(\"gateway\")`. The worker builds `MediaPreparation(composition.object_store(settings), cache=ProcessingCache(pilot.processing_cache_dir))`, where `infrx.gateway.pilot.object_store` is an S3ObjectStore built from S3_MEDIA_BUCKET, and `ProcessingCache.get` falls back to `_load(key, mime)`, which finds the file on disk by content hash. The journey, dr11 and rc03 all go through `pilotbox.journey`. Live on my stack, `pytest -v test_journey.py test_drills.py recovery/test_recovery.py -k 'backend_journey or dr11 or dr17 or dr07c or db14 or rc03'` gave `15 passed`: all nine cells, the dataset resume, dr07c, db14, dr11, dr17 and rc03. My probe (probes/test_probe_v1.py) printed `PIDS gateway 946969 ...pilotbox.py gateway | worker 946968 ...pilotbox.py worker`. The reviewer's p10 (video_url sync) gave `P10 200 [('succeeded','completed')] [('inference','e3b3-worker'),('preparation','e3b3-prep')]`. With the worker stopped, an async job was still `preparing` after 6 s. After restarting the worker (new pid 948984) it ended `succeeded completed`, so the gateway process cannot run inference on its own. e3bm74 was killed through the runner: `killed`, `test_journey.py:74` (video_url-sync)."
+    },
+    {
+      "id": "V2",
+      "result": "confirmed",
+      "evidence": "The three video_upload cells PASSED live (sync, sse, async). Each one runs G4U's handshake (`trip.upload`: 201, then 204, then 200), sends a chat that names the destination_ref, checks the media kind is 'upload' and that exactly one prepared ref exists, and checks that beta's use of the ref gets 404 not_found. At the head `stack.OWNERS: dict[str, str] = {}`. e3bm75 was killed through the runner at `test_journey.py:74` (video_upload-sync)."
+    },
+    {
+      "id": "V3",
+      "result": "confirmed",
+      "evidence": "`Journey.footprint` counts rows (jobs, credit_wallet_holds, credit_holds, outbox, idempotency), the S3 KeyCount under the box's S3_MEDIA_PREFIX, fetch calls and admit calls. `looked_up()` requires lookups to go up by exactly 1 with the footprint unchanged, and it is asserted after every replay (lines 85, 151, 180) and after every cross-mode 409 (line 246). The sync replay asserts `again.json() == body`. The counters are live, not vacuous: the journey's calls.log recorded `17 admit, 3 fetch, 49 lookup`. I applied the reviewer's two single edits live to a COPY of infrx at mutA and mutM (via PYTHONPATH, which the pilot-box subprocesses inherit; `infrx from .../mutA/infrx/__init__.py`). A (`if idem.key is None:` -> `if True:`): `9 failed` at test_journey.py:85/151/180, 'R91: the replay prepared or staged something'. M (`except errors.IdempotencyConflict: return None`): `9 failed` at test_journey.py:246, 'R91/R94: the sync|sse conflict was not answered by the lookup alone'. Through the runner: e3bm70 killed at :85, e3bm71 at :246, e3bm64 at :82."
+    },
+    {
+      "id": "V4",
+      "result": "confirmed",
+      "evidence": "`run.make_env()` probed live with my stack up returned `{'PYTEST_ADDOPTS': '-rfEs', 'INFRX_M_S3_ENDPOINT': 'http://127.0.0.1:55500', 'INFRX_M_S3_LOCAL_CREDS': '1'}`. With no state file it returned `{'PYTEST_ADDOPTS': '-rfEs'}`. `suites()` passes `env=make_env()` to each make target. e3bm72 was killed (test_run.py::test_the_make_targets_run_m1l2s_s3_cases_on_this_stacks_minio). The pilot box removes stack.AWS_UNSET and sets MinIO literals, and M's test_s3.s3_env does its own delenv/setenv. IR3F-2(b) is stated as open: the evidence says '(b) needed: an in-block D harness task ... Until then the canonical layer-3 run cannot run make api-test in this lane, and the gate above is --only-suites', and the Handback lists 'the canonical gate's D port (IR3F-2b)' under Left. There is no e3b2d/56733/56762 in tasklocal.py or run.py at the head. (See nonblocking N2 about INFRX_M_S3_LOCAL_CREDS having no reader on this branch.)"
+    },
+    {
+      "id": "V5",
+      "result": "confirmed",
+      "evidence": "I ran all 14 mutants one at a time with `mutants.py --layer all --only <id>` on my e2 stack. Each report was `{mutants 1, killed 1, problems null}`, with these death lines: e3bm41 test_stage.py:235, e3bm58 :239, e3bm61 test_recovery.py:463, e3bm62 test_drills.py:1226, e3bm64 test_journey.py:82, e3bm67 test_recovery.py:286, e3bm70 test_journey.py:85, e3bm71 :246, e3bm72 test_run (S3 make-env case), e3bm74 test_journey.py:74, e3bm75 :74, e3bm76 test_stage.py:153, e3bm77 test_recovery.py:275, e3bm78 test_journey.py:244. Every one died on the first attempt; the fake vLLM startup transient the lane reported did not recur in this batch (N1 records a separate one-off collision in the layer-0 suite). J3: dr07c uses FRACTIONAL_CARD 400.00001250/1200 and expects 0.88800002, and db14 (trunc) passed as a detection case live. J4: `Journey.conserved` recomputes `RateCardSnapshot.debit` from `infrx.job_admission`'s card and the usage row. My live SQL probe (probes/test_probe_j4.py) doubles `infrx.debit_credit` on the journey clone: the control passed unmutated, and the mutant gave `J4 D KILLED: beta 59e63e5a-...: charged 0.97200000, card x usage 0.48600000`. J9: rc03 asserts `settled_at` is null at the retry, sends the same key while the job is in flight, finds zero unreleased attempts, and checks the worker pid is unchanged; it passed live and e3bm77 is killed. H-N2: the stage case requires each owner id to appear in a `pending(\"<id>\"` call (e3bm76 killed). H-N5: the docstring's R94 wording, e3bm78 killed. H-N3: e3bm61 is at :463, as the evidence says."
+    },
+    {
+      "id": "V6",
+      "result": "confirmed",
+      "evidence": "Layer 0 from the scratch root with no stack (private TMPDIR, e2): `154 passed, 103 skipped`, exit 0, and the only PENDING is `[I2B-R4]` (l0b.log). A first layer-0 run had 1 transient failure, a port collision on 55582 (N1); rerun clean. The gate report is at .../scratchpad/e3b3/fx/l3-a7a2388.json. The path cited in the task, .../scratchpad/fx/, does not exist; the evidence's `$SC/fx` resolves to scratchpad/e3b3/fx. Its sha256 is 1b883d9a13192d79... and its log is 9b4c2d356b366b7e..., both matching the evidence. It records `git_head` = `git_head_end` = a7a238822ec9 with dirty False at both ends, namespace e3b2, exit 3. backend PENDING: `passed 143, pending 1, failed 0, pending_by_id {I2B-R4: 1}, stale_pending null`. mutants PASS: `{mutants 252, killed 248, controls_survived 4, not_killed 0, problems null}`. canary PASS, and teardown removed 4. I independently reproduced the backend stage on my e2 stack (stage PostgREST up, BACKEND_SUITE, run.classify): `143 passed, 1 skipped`, `STAGE PENDING {passed 143, pending 1, failed 0, stale_pending null, pending_by_id {I2B-R4: 1}}`. `git diff --stat a7a2388 b9529d1` shows only research/plan/evidence/e/E3B-e57b820.md (184+). The per-finding table names real commits, all on the branch with matching subjects and test-only file stats. I spot-checked every death line in the table (not just three) against the tests and against the runner output above, and all match."
+    },
+    {
+      "id": "V7",
+      "result": "confirmed",
+      "evidence": "`pytest tests/integration/test_run.py tests/integration/backend/test_stage.py tests/integration/backend/recovery/test_mutant_list_i3b.py`: `64 passed in 11.38s`. The anchor guard `test_every_mutant_anchor_occurs_as_declared_on_the_checkout` lives in test_run.py and is included. `cd apps/infrx-api && pytest -q -rfEs tests/i`: `153 passed in 173.45s`. Layer 0 is clean (V6), and the full backend tree passed 143 with 1 pending (V6)."
+    }
+  ],
+  "findings": [
+    {
+      "id": "N1",
+      "severity": "nonblocking",
+      "file": "tests/integration/test_fake_vllm.py",
+      "line": "327",
+      "claim_broken": "V6/V7: a layer-0 run from the scratch root with no stack gives 154 passed / 103 skipped",
+      "evidence": "My first run was `env -u INFRX_E2_NAMESPACE TMPDIR=<private> pytest -q -rfEs tests/integration` right after my stack was torn down, with none of my fake_vllm processes alive (checked with ps). It gave `1 failed, 153 passed, 103 skipped`: test_killing_the_engine_process_is_a_transport_failure_and_it_restarts failed with `RuntimeError: fake vLLM exited 3 during startup on port 55582: ... [Errno 98] ... address already in use`, raised at test_fake_vllm.py:327 on the FIRST start, not the restart. The test alone then passed 3/3, and a full rerun gave `154 passed, 103 skipped`. TEST_PORT = harness.PORTS['fake_vllm'] + 1, a fixed port per namespace that layer-0/1 runs bind without the preflight's port check. So another checkout running the e2-namespace fake-vLLM tests at the same moment collides. This is the same class as the lane's F-12 transient (Limit 6/8). I did not see the lane's e3bm70/71/64 transient: all 14 mutants were killed on the first attempt.",
+      "minimal_fix": "Record it as a known flake alongside Limit 6. A later round could give the fake vLLM tests an ephemeral port (bind port 0 and read it back), or run them under the namespace's port lock."
+    },
+    {
+      "id": "N2",
+      "severity": "nonblocking",
+      "file": "tests/integration/run.py",
+      "line": "430",
+      "claim_broken": "H-B1 evidence: 'INFRX_M_S3_LOCAL_CREDS=1 (M1-L2's S3 cases run instead of skipping)'",
+      "evidence": "`git grep -n INFRX_M_S3_LOCAL_CREDS b9529d1 -- apps Makefile` prints nothing: at this head no code reads the flag, and M's tests/m/test_s3.py sets MinIO's literals itself through s3_env(). The only reader is on codex/m1l2-object-store's tip ba26ca4 (`apps/infrx-api/tests/m/test_s3.py:50 LOCAL_FLAG = \"INFRX_M_S3_LOCAL_CREDS\"`), and `git merge-base --is-ancestor ba26ca4 b9529d1` is false. On this branch only INFRX_M_S3_ENDPOINT changes behaviour, and the flag becomes load-bearing only after IR3F-1 merges M1-L2's tip. Also, make_env() keys only on harness.load_state() (the state file), not on the containers being up.",
+      "minimal_fix": "Change the evidence text only: say the flag is read by M1-L2's tip ba26ca4 (after IR3F-1) and is inert at b9529d1. No code change is needed."
+    },
+    {
+      "id": "N3",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/test_drills.py",
+      "line": "648-651",
+      "claim_broken": "J3 evidence: 'the half-up rule runs on the real store' (dr07c's fractional card)",
+      "evidence": "`python3 -c \"from decimal import Decimal as D,ROUND_HALF_UP,ROUND_HALF_EVEN,ROUND_DOWN; x=D(1200)*D('400.0000125')/D(10**6)+D(340)*D(1200)/D(10**6); q=D('0.00000001'); print(x, x.quantize(q,ROUND_HALF_UP), x.quantize(q,ROUND_HALF_EVEN), x.quantize(q,ROUND_DOWN))\"` prints `0.888000015 0.88800002 0.88800002 0.88800001`. db14 therefore kills truncation, which was the reviewer's mutant T and is J3's stated scope. But a half-even (banker's) rounding defect in infrx.debit_credit or in money.debit would give the same 0.88800002 and survive. Note that money.py's arithmetic context defaults to ROUND_HALF_EVEN, and only the explicit quantize uses ROUND_HALF_UP.",
+      "minimal_fix": "Optionally, add a second fractional usage or card whose 9th-decimal tie sits after an even digit (for example one yielding x.xxxxxxx25) so that half-up and half-even disagree. Otherwise word the claim as 'rounds rather than truncates'."
+    }
+  ],
+  "cleanup": "I removed only what I created. harness.down() removed ['infrx-e2-clickhouse','infrx-e2-postgres','infrx-e2-s3','infrx-e2-valkey'] and stack.postgrest_down() removed 'infrx-e3b-postgrest' (the stage PostgREST I started). The journey PostgREST containers (infrx-e3bj-postgrest) and the pilot boxes closed with their fixtures, each deleting its MinIO prefix and Valkey namespace. After teardown, `docker ps -a | grep -c infrx-e2-` returned 0, no infrx-e3b-/infrx-e3bj- container remains, no infrx-e2 network or volume remains, and nothing listens on 55500-55599. The infrx-e3b2-* containers, network and volumes visible on the host belong to another lane: I never touched them and never used namespace e3b2. `ps -eo pid,args | grep -E 'fake_vllm|pilotbox.py'` shows no process of mine. I also killed my own leftover Monitor `tail -f` (pid 1120965). I deleted the scratch clone, both mutant infrx copies and the private TMPDIRs. The logs, JSON reports and the two probe files remain in /tmp/claude-1000/verify-e3b3-890963/ (probes/test_probe_v1.py, probes/test_probe_j4.py, mut-e3bm*.json, backend.log, l0.log, l0b.log, tests-i.log). The reviewed worktree codex-e3b3 was never written to: HEAD b9529d1, porcelain empty. I did not use ports 55432-55499 or 55600+, and did not touch the pilot box, AWS, hosted Supabase or any secret."
+}

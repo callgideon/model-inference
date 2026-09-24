@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T00:39:07Z",
+  "updated": "2026-09-24T00:39:51Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -106,8 +106,8 @@
       "since": "2026-09-23T22:02:17Z"
     },
     "E3B-phase3": {
-      "phase": "fix round HANDED BACK b9529d1 (J2 fixed: worker always its own process after the M merge; M3-U1 retired, video_upload cells run; J1 footprint; H-B1; 14 mutants killed; gate at a7a2388 exit 3 PENDING only I2B-R4) → single verifier wf_959f82dd-e03 on namespace e2",
-      "since": "2026-09-24T00:20:08Z"
+      "phase": "verifier PASS at b9529d1 (wf_959f82dd-e03; JSON evidence/e/E3B3-verify-b9529d1.json) → CLEARED for merge unit step 2; N1–N3 nonblocking",
+      "since": "2026-09-24T00:39:51Z"
     },
     "merge-plan": {
       "phase": "MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main",

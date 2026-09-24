@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T00:39:07Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T00:39:51Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -86,7 +86,7 @@ Generated 2026-09-24T00:39:07Z from `tasks.json` (manifest v4) and `progress-sta
 - review M1-L2: verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json) since 2026-09-23T22:09:07Z
 - review E4B: verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json) since 2026-09-23T22:24:46Z
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
-- review E3B-phase3: fix round HANDED BACK b9529d1 (J2 fixed: worker always its own process after the M merge; M3-U1 retired, video_upload cells run; J1 footprint; H-B1; 14 mutants killed; gate at a7a2388 exit 3 PENDING only I2B-R4) → single verifier wf_959f82dd-e03 on namespace e2 since 2026-09-24T00:20:08Z
+- review E3B-phase3: verifier PASS at b9529d1 (wf_959f82dd-e03; JSON evidence/e/E3B3-verify-b9529d1.json) → CLEARED for merge unit step 2; N1–N3 nonblocking since 2026-09-24T00:39:51Z
 - review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
 - review M-pilot-media: fix round HANDED BACK e5c02f7 (write-once attach on every adapter, O4/O5/O6, disk-lookup hardening; pilot list 40 killed) → single verifier wf_475160a3-662 on d6 + MinIO 55724 since 2026-09-24T00:39:07Z
 - review CUTOVER: HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w) since 2026-09-24T00:20:08Z
