@@ -27,6 +27,14 @@ only if the item was never sent; a sent item always keeps its handle (same paylo
 
 Output retention is declared, not defaulted: `--retain-output text` keeps the answer in the
 journal for export; `digest` keeps only its sha256 and length.
+
+A paid run is bounded before it starts (consumer-v1/05 section 1): against anything but a
+local target (the fake transport, loopback) `run` refuses without a runnable `--profile`
+(profiles/run-profile.v1.schema.json, with `--key-inventory`). The manifest is the schedule,
+one closed-loop request per item, so the profile's allowlist, request/token/byte/spend bounds
+(outstanding holds included) are checked against it by runprofile.validate, bench's own
+check; at run time no item is taken after bounds.max_duration_s and what is still in flight
+after bounds.max_drain_s is cancelled (it stays `sent`: a rerun replays it under its key).
 """
 import argparse, asyncio, hashlib, json, os, re, sqlite3, sys, time
 from datetime import datetime, timezone
@@ -35,6 +43,7 @@ from types import SimpleNamespace
 import httpx
 
 import bench
+import runprofile
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -236,6 +245,45 @@ async def process(item, cfg, journal, a, limits, stats):
     journal.put(item["id"], **fields)
 
 
+def check_profile(a):
+    """None when this run may start, else why not. The manifest (or its --only subset) is the
+    schedule runprofile.validate checks, bench's check unchanged: a dataset has no seed (its
+    order is the manifest's) and its output-budget mix is the items' distinct max_tokens."""
+    local = runprofile.is_local(a)
+    if not a.profile:
+        return None if local else [
+            "--base-url is not a local target: a paid dataset run needs a runnable --profile "
+            "(consumer-v1/05 section 1)"]
+    try:
+        with open(a.profile, encoding="utf-8") as f:
+            profile = json.load(f)
+        inventory = None
+        if a.key_inventory:
+            with open(a.key_inventory, encoding="utf-8") as f:
+                inventory = json.load(f)
+    except (OSError, ValueError) as e:
+        return [f"--profile or --key-inventory unreadable: {type(e).__name__}"]
+    # ponytail: one small dict per item in memory; aggregate the manifest instead if a
+    # dataset ever outgrows that (the profile lists every item id already).
+    schedule = [{"clip_id": item["id"], "form": a.form if item["video"] else "text",
+                 "duration_s": None, "max_tokens": item["max_tokens"],
+                 "clip": {"bytes": os.path.getsize(item["video"])
+                          if os.path.isfile(item["video"]) else None} if item["video"] else None}
+                for item in iter_manifest(a.manifest, read_ids(a.only) if a.only else None)]
+    run = SimpleNamespace(base_url=a.base_url, target="gateway", tenant_env=[], video=None,
+                          corpus=a.manifest, dataset_version=a.dataset_version, seed=None,
+                          forms=a.form, rate=None, concurrency=a.concurrency,
+                          max_tokens_mix=sorted({item["max_tokens"] for item in schedule}),
+                          dry_run_transport=a.dry_run_transport)
+    verdict = runprofile.validate(profile, run, schedule, keys=(bench.api_key(),),
+                                  carries_key=bench.carries_key, local=local,
+                                  key_env=bench.KEY_ENV, inventory=inventory)
+    if verdict["runnable"]:
+        a.bounds = profile["bounds"]
+        return None
+    return verdict["errors"] + ([] if local else verdict["blocks"])
+
+
 async def run(a, journal, stats, transport=None):
     keys = (bench.api_key(),)
     headers = {"content-type": "application/json", "accept": "text/event-stream",
@@ -251,23 +299,47 @@ async def run(a, journal, stats, transport=None):
                "media_base_url": "", "mm_fixed": None, "video": None, "outputs": {},
                "client": client}
 
+        bounds, t0 = getattr(a, "bounds", None) or {}, time.monotonic()
+        limit = bounds.get("max_duration_s")
+
+        def past_deadline():
+            if limit is not None and time.monotonic() - t0 > limit:
+                stats["stopped_by"] = "bounds.max_duration_s"
+                return True
+            return False
+
         async def worker():
             while (item := await queue.get()) is not None:
-                try:
-                    await process(item, cfg, journal, a, limits, stats)
-                except Exception as e:          # one item's fault never ends the run
-                    stats["failed"] += 1
-                    journal.put(item["id"], state="failed", error_class=type(e).__name__)
+                if not past_deadline():             # after it: left unsent, resumable
+                    try:
+                        await process(item, cfg, journal, a, limits, stats)
+                    except Exception as e:          # one item's fault never ends the run
+                        stats["failed"] += 1
+                        journal.put(item["id"], state="failed", error_class=type(e).__name__)
                 stats["finished"] += 1
 
         workers = [asyncio.create_task(worker()) for _ in range(a.concurrency)]
-        for item in iter_manifest(a.manifest, only, stats):
-            await queue.put(item)                        # blocks: the queue is the bound
-            stats["read_ahead_max"] = max(stats["read_ahead_max"],
-                                          stats["read"] - stats["finished"])
-        for _ in workers:
-            await queue.put(None)
-        await asyncio.gather(*workers)
+
+        async def feed():
+            for item in iter_manifest(a.manifest, only, stats):
+                if past_deadline():
+                    break
+                await queue.put(item)                    # blocks: the queue is the bound
+                stats["read_ahead_max"] = max(stats["read_ahead_max"],
+                                              stats["read"] - stats["finished"])
+            for _ in workers:
+                await queue.put(None)
+            await asyncio.gather(*workers)
+
+        try:
+            await asyncio.wait_for(feed(), None if limit is None
+                                   else limit + bounds["max_drain_s"])
+        except asyncio.TimeoutError:
+            stats["stopped_by"] = "bounds.max_drain_s"     # in flight: cancelled, still `sent`
+        finally:
+            for w in workers:
+                w.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
 
 
 def export(journal, results=None, failures=None):
@@ -319,6 +391,10 @@ def parse_args(argv):
     r.add_argument("--retries", type=int, default=0, help="429/503 retries within this run")
     r.add_argument("--timeout", type=float, default=600.0)
     r.add_argument("--dry-run-transport", default=None)
+    r.add_argument("--profile", default=None,
+                   help="run profile JSON (bench's schema); required for a non-local target")
+    r.add_argument("--key-inventory", default=None,
+                   help="the target's active key id prefixes; a paid profiled run needs it")
     e = sub.add_parser("export")
     e.add_argument("--state", required=True)
     e.add_argument("--results", default=None)
@@ -332,17 +408,23 @@ def parse_args(argv):
 def main(argv=None):
     bench.mute_library_logging()
     a = parse_args(list(sys.argv[1:] if argv is None else argv))
+    if a.cmd == "run":                  # every refusal before the journal or a request exists
+        bench.refuse_key_in_args(a, (bench.api_key(),))
+        if not bench.api_key() and not a.dry_run_transport:
+            raise SystemExit(f"export {bench.KEY_ENV[0]} or {bench.KEY_ENV[1]}")
+        refused = check_profile(a)
+        if refused:
+            print(bench.dump_line({"refused": refused}, (bench.api_key(),), sort_keys=True))
+            return 2
     journal = Journal(a.state)
     if a.cmd == "export":
         print(json.dumps(export(journal, a.results, a.failures), sort_keys=True))
         return 0
-    bench.refuse_key_in_args(a, (bench.api_key(),))
-    if not bench.api_key() and not a.dry_run_transport:
-        raise SystemExit(f"export {bench.KEY_ENV[0]} or {bench.KEY_ENV[1]}")
     journal.check_meta({k: str(getattr(a, k)) for k in FINGERPRINT})
     stats = dict.fromkeys(("read", "finished", "read_ahead_max", "sent", "skipped_terminal",
                            "changed", "done", "failed", "quarantined", "expired",
                            "replayed"), 0)
+    stats["stopped_by"] = None
     transport = bench.load_transport(a.dry_run_transport) if a.dry_run_transport else None
     t0, code = time.monotonic(), 0
     try:

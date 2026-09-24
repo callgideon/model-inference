@@ -213,3 +213,136 @@ def test_digest_retention_keeps_no_output_text():
         results, _ = exported(tmp)
         assert results[0]["output"] is None and results[0]["output_chars"] > 0
         assert len(results[0]["output_sha256"]) == 64
+
+
+# ------------------------------------------------------------------ E1C fix round
+
+
+def test_a_resume_under_any_other_run_identity_is_refused_before_any_request():
+    """Oracle (fix round 0-M2 / 2-E1C-ACC-04): the fingerprint pinning only the model. A
+    resume against another gateway (base URL) is the double-billing case - that gateway's
+    idempotency store does not know the keys - and another dataset version, form or profile
+    version re-keys or re-shapes every item."""
+    changes = {"--model": "nemostation/marlin-2b@2026-10-01", "--base-url": "http://gw2.test/v1",
+               "--dataset-version": "ds-other", "--form": "video_b64",
+               "--profile-version": "v2"}
+    with tempfile.TemporaryDirectory() as tmp:
+        path = manifest(tmp, n_video=1, n_text=1)
+        gw = FakeGateway(idempotent=True, lose_ack=(0,))
+        run(argv(tmp, path, "--concurrency", "1"), gw)
+        for flag, value in changes.items():
+            other = argv(tmp, path) + [flag, value]              # argparse: the last one wins
+            before = (len(gw.seen), len(gw.uploads))
+            try:
+                run(other, gw)
+            except SystemExit as e:
+                field = flag[2:].replace("-", "_")
+                assert f"{field} was" in str(e), (flag, str(e))
+            else:
+                raise AssertionError(f"a resume under another {flag} was not refused")
+            assert (len(gw.seen), len(gw.uploads)) == before, flag
+
+
+def test_an_edited_video_after_a_lost_ack_is_refused_not_resent_under_its_old_key():
+    """Oracle (fix round d09): a key without the media digest re-sends the edited clip under the
+    key the server already holds for the old bytes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = manifest(tmp, n_video=1, n_text=0)
+        gw = FakeGateway(idempotent=True, lose_ack=(0,))
+        run(argv(tmp, path, "--form", "video_b64"), gw)            # ep0 sent, answer lost
+        with open(os.path.join(tmp, "media", "ep0.mp4"), "ab") as f:
+            f.write(b"re-cut")
+        before = len(gw.seen)
+        code, stats = run(argv(tmp, path, "--form", "video_b64"), gw)
+        assert code == 1 and stats["changed"] == 1 and stats["sent"] == 0, stats
+        assert len(gw.seen) == before
+
+
+def test_output_retention_must_be_declared():
+    """Oracle (fix round d04): a default retention keeps answers the operator never agreed to
+    keep."""
+    args = argv("/nonexistent", "items.jsonl")
+    i = args.index("--retain-output")
+    with contextlib.redirect_stderr(io.StringIO()):
+        try:
+            dataset.parse_args(args[:i] + args[i + 2:])
+        except SystemExit as e:
+            assert e.code == 2
+        else:
+            raise AssertionError("run without --retain-output was accepted")
+
+
+def profile(tmp, path, n, **over):
+    """A dataset run profile for `path` (test_profile's builder, retargeted at a manifest)."""
+    import runprofile
+    from test_profile import profile_for
+    ids = [json.loads(line)["id"] for line in open(path, encoding="utf-8") if line.strip()]
+    p = profile_for([{"id": i} for i in ids], path, **{
+        "target.allowlist": ["gw.test"], "workload.dataset_version": "ds-test",
+        "workload.forms": ["upload"], "workload.max_tokens_mix": [64, 512],
+        "measurement.concurrency": 2, "bounds.max_requests": n, **over})
+    p["workload"]["manifest_sha256"] = runprofile.file_sha256(path)
+    out = os.path.join(tmp, "profile.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(p, f)
+    return out
+
+
+def test_a_dataset_run_is_bounded_by_its_profile_and_a_paid_one_needs_it():
+    """Oracle (fix round 2-E1C-ACC-01): dataset.py had no profile, no host allowlist and no
+    request, token, spend or duration bound, so `run --base-url https://<any>/v1` over a
+    manifest of any size started. A non-local target now needs a runnable profile; a profile
+    that does not bound the manifest refuses the run; neither case sends anything."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = manifest(tmp, n_video=2, n_text=2)
+        gw = FakeGateway(idempotent=True)
+        paid = argv(tmp, path)
+        i = paid.index("--dry-run-transport")
+        paid = paid[:i] + paid[i + 2:]
+        paid[paid.index("--base-url") + 1] = "https://gw.test/v1"
+        from test_profile import routed_to     # the paid host's requests would reach `gw`
+        with contextlib.redirect_stderr(io.StringIO()), routed_to(gw):
+            for extra in ((), ("--profile", profile(tmp, path, 4))):   # no inventory: blocked
+                code, stats = run(paid + list(extra), gw)
+                assert code == 2 and stats.get("refused") and not gw.seen and not gw.uploads, \
+                    (extra, stats)
+            for over, needle in (({"bounds.max_requests": 3}, "bounds.max_requests"),
+                                 ({"bounds.max_output_tokens": 100}, "output-token ceiling"),
+                                 ({"bounds.spend.max_usd": 0.00001}, "spend"),
+                                 ({"target.allowlist": ["other.test"]}, "allowlist")):
+                p = profile(tmp, path, 4, **over)
+                code, stats = run(argv(tmp, path, "--profile", p), gw)
+                assert code == 2 and any(needle in e for e in stats["refused"]), (over, stats)
+                assert not gw.seen and not gw.uploads, over
+        assert not os.path.exists(os.path.join(tmp, "run.sqlite")), "a refused run wrote state"
+        code, stats = run(argv(tmp, path, "--profile", profile(tmp, path, 4)), gw)
+        assert code == 0 and stats["done"] == 4, stats
+
+
+def test_a_dataset_run_stops_taking_items_at_its_declared_duration():
+    """Oracle (fix round 2-E1C-ACC-01): max_duration_s declared but never enforced - a slow
+    target lets the dataset run on for as long as the manifest lasts. What was not sent stays
+    resumable under its key."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = manifest(tmp, n_video=0, n_text=6)
+        p = profile(tmp, path, 6, **{"bounds.max_duration_s": 0.05, "bounds.max_drain_s": 5,
+                                     "workload.max_tokens_mix": [512]})
+        gw = FakeGateway(idempotent=True, ttft=0.04)
+        code, stats = run(argv(tmp, path, "--profile", p), gw)
+        assert stats["stopped_by"] == "bounds.max_duration_s" and 0 < stats["sent"] < 6, stats
+        code, stats = run(argv(tmp, path), gw)                  # no profile: local, resumes
+        _, left = exported(tmp)
+        assert not left and len(gw.accepted_keys) == 6 == len(set(gw.accepted_keys))
+    with tempfile.TemporaryDirectory() as tmp:          # what is in flight gets max_drain_s
+        path = manifest(tmp, n_video=0, n_text=4)
+        p = profile(tmp, path, 4, **{"bounds.max_duration_s": 0.05, "bounds.max_drain_s": 0.1,
+                                     "workload.max_tokens_mix": [512]})
+        gw = FakeGateway(idempotent=True, ttft=1.5)
+        code, stats = run(argv(tmp, path, "--profile", p), gw)
+        assert stats["stopped_by"] == "bounds.max_drain_s" and stats["wall_s"] < 1.0, stats
+        assert stats["done"] == 0 and stats["sent"] == 2, stats
+        gw.ttft = 0.01
+        run(argv(tmp, path), gw)                          # the cancelled two replay, once
+        results, left = exported(tmp)
+        assert len(results) == 4 and not left
+        assert len(gw.accepted_keys) == 4 == len(set(gw.accepted_keys))

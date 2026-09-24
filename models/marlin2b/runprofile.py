@@ -146,13 +146,26 @@ def validate(profile, a, schedule, *, keys=(), carries_key=lambda v, k: False, l
     if m["profile_class"] == "P4" and target["path"] != "public-edge":
         errors.append("P4 overload must enter through the public edge (S3 F5): a direct "
                       "gateway cell cannot show drained-429 delivery through Caddy")
+    # target.path is checked against the run, not taken on trust: the engine is bench's
+    # --target direct, both gateway hops are --target gateway, and the public edge is TLS on
+    # its default port of a non-loopback host (the gateway port behind Caddy is not the edge).
+    wants = "direct" if target["path"] == "direct-engine" else "gateway"
+    if a.target != wants:
+        errors.append(f"target.path {target['path']} needs --target {wants}, the run uses "
+                      f"--target {a.target}")
+    if target["path"] == "public-edge" and (url.scheme != "https" or host in LOOPBACK
+                                            or url.port not in (None, 443)):
+        errors.append("target.path public-edge needs an https base URL on a non-loopback host "
+                      "with no explicit port: this base URL bypasses the edge (S3 F5)")
 
     source = a.corpus or a.video
     if not source or not os.path.isfile(source):
         errors.append("workload: the manifest/video to hash is not a local file")
     elif file_sha256(source) != w["manifest_sha256"]:
         errors.append("workload.manifest_sha256 does not match the run's manifest")
-    for name, got in (("dataset_version", a.dataset_version), ("seed", a.seed),
+    # a run with no seed (dataset.py: the manifest order is the schedule) pins none
+    for name, got in (("dataset_version", a.dataset_version),
+                      ("seed", w["seed"] if a.seed is None else a.seed),
                       ("forms", [f.strip() for f in a.forms.split(",") if f.strip()]),
                       ("max_tokens_mix", list(a.max_tokens_mix))):
         if w[name] != got:
@@ -183,7 +196,7 @@ def validate(profile, a, schedule, *, keys=(), carries_key=lambda v, k: False, l
     if a.video and not a.corpus and os.path.isfile(a.video):
         sizes = [os.path.getsize(a.video)] * len(media)
     checks = (("max_requests", n, "scheduled requests"),
-              ("max_output_tokens_per_request", max(a.max_tokens_mix), "--max-tokens"),
+              ("max_output_tokens_per_request", max(a.max_tokens_mix, default=0), "--max-tokens"),
               ("max_output_tokens", out_tokens, "scheduled output-token ceiling"))
     for bound, value, what in checks:
         if value > bounds[bound]:

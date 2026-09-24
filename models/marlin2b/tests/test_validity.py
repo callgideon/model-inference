@@ -46,6 +46,14 @@ def test_an_unexpected_replay_invalidates_the_cell_and_never_counts_as_capacity(
         assert second["denominators"]["latency_samples"] == 4
         assert second["video_seconds_accepted"] == sum(r["duration_s"] for r in raw
                                                        if r["served"] == "fresh")
+        # fix round 0-M1: the §6 block and the output totals are over the same fresh rows
+        fresh = [r for r in raw if r["served"] == "fresh"]
+        m = second["measurement"]
+        assert m["counts"]["fresh_accepted"] == 4 and m["counts"]["replayed"] == 4, m["counts"]
+        assert m["successful_clip_seconds"] == round(sum(r["duration_s"] for r in fresh), 3)
+        assert second["output_lengths"]["completion_tokens_total"] == \
+            sum(r["completion_tokens"] for r in fresh) < \
+            sum(r["completion_tokens"] for r in raw), "the replays carry usage too"
         assert {r["served"] for r in raw} == {"fresh", "replay"}
         assert all(r["resend"] == "first" for r in raw)
         assert "INVALID" in " ".join(bench.cell_warnings(second))
@@ -67,6 +75,10 @@ def test_a_resume_labels_its_replays_and_they_do_not_invalidate_it():
         assert v["replayed"] == 2 and v["unexpected_replayed"] == 0
         assert [(r["resend"], r["served"]) for r in raw] == [("resume", "replay")] * 2
         assert resumed["accepted_fresh"] == 0 and resumed["req_per_s"] == 0
+        m = resumed["measurement"]           # fix round 0-M1: nothing fresh, no capacity
+        assert (m["counts"]["fresh_accepted"], m["successful_clip_seconds"],
+                resumed["output_lengths"]["completion_tokens_total"],
+                resumed["out_tok_per_s"]) == (0, 0, 0, 0), m
     # ...but only the keys the interrupted run sent: a replay on an item it never reached is
     # a collision with some other cell, and stays unexpected inside a resume too
     stray = rows(2)

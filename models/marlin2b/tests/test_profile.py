@@ -183,6 +183,19 @@ def test_every_flag_must_sit_inside_the_declared_target_workload_and_bounds():
                 clips, manifest, **{"measurement.fault_schedule": [
                     {"at_s": 1, "target": "infrx-worker", "action": "kill"}]})),
                 "not an allowed fault target"),
+            # fix round 0-M4: the schedule's output-token ceiling, the customer-traffic
+            # window, and a tenant key env the profile never declared
+            "output ceiling": (argv_for(tmp, manifest, profile_for(
+                clips, manifest, **{"bounds.max_output_tokens": 1000})),
+                "scheduled output-token ceiling"),
+            "fault on customer traffic": (argv_for(tmp, manifest, profile_for(
+                clips, manifest, **{"target.allowed_fault_targets": ["infrx-worker"],
+                                    "target.customer_traffic": True,
+                                    "measurement.fault_schedule": [
+                                        {"at_s": 1, "target": "infrx-worker", "action": "kill"}]})),
+                "maintenance window"),
+            "tenant env": (argv_for(tmp, manifest, good, tenant_keys="E1C_OTHER_KEY"),
+                           "not declared in target.tenant_key_env"),
         }
         for why, (args, needle) in cases.items():
             code, v = validate_only(args)
@@ -259,11 +272,12 @@ def test_p4_enters_through_the_public_edge_and_must_observe_refusals():
         assert code == 2 and any("public edge" in e for e in v["errors"])
         edge = profile_for(clips, manifest, **{"measurement.profile_class": "P4",
                                                "target.path": "public-edge"})
-        quiet, _, _, _ = run_bench(argv_for(tmp, manifest, edge), FakeGateway(),
+        https = ("--base-url", "https://fake.invalid/v1")          # the edge is TLS, no port
+        quiet, _, _, _ = run_bench(argv_for(tmp, manifest, edge, *https), FakeGateway(),
                                    env={"MARLIN_API_KEY": KEY})
         assert quiet["validity"]["verdict"] == "INVALID"
         assert any("P4 observed no 429" in r for r in quiet["validity"]["reasons"])
-        loud, _, _, _ = run_bench(argv_for(tmp, manifest, edge),
+        loud, _, _, _ = run_bench(argv_for(tmp, manifest, edge, *https),
                                   FakeGateway(statuses={1: 429, 2: 503}, retry_after="0"),
                                   env={"MARLIN_API_KEY": KEY})
         assert loud["validity"]["verdict"] == "VALID", loud["validity"]
@@ -380,3 +394,173 @@ def test_the_hosted_smoke_template_refuses_until_filled_and_then_fits_its_comman
         code, v = smoke(filled)
         assert code == 0 and v["runnable"], v
         assert v["derived"]["scheduled_requests"] == 4 and v["derived"]["target_path"] == "public-edge"
+        # fix round: the evidence's unprofiled smoke command parses and would start as written
+        # (--unprofiled smoke), and one request more would not; neither sends anything
+        for n, want in (("4", 0), ("5", 2)):
+            args = SMOKE_ARGV + ["--out", os.path.join(tmp, "b.jsonl"), "--unprofiled", "smoke",
+                                 "--validate-only"]
+            args[args.index("--requests") + 1] = n
+            out, gw = io.StringIO(), FakeGateway()
+            with contextlib.redirect_stdout(out), routed_to(gw):
+                assert bench.main(args) == want, (n, out.getvalue())
+            assert json.loads(out.getvalue())["warnings"] == [bench.UNPROFILED]
+            assert not gw.seen and not gw.uploads and gw.home is None
+
+
+# ------------------------------------------------------------------ E1C fix round
+
+
+def test_the_drain_bound_cuts_what_is_still_in_flight_in_either_loop():
+    """Oracle (fix round 0-B1): a closed-loop run checked the deadline only before taking new
+    work, so a request in flight at max_duration_s ran on to --timeout (measured 1.51 s against
+    a 0.05 s + 0.1 s profile); an open-loop drain with no timeout waits the same. Past the
+    declared duration + drain what is open is cancelled, its rows are missing, the cell is
+    INVALID and says which bound stopped it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        closed = profile_for(clips, manifest, **{"bounds.max_duration_s": 0.05,
+                                                 "bounds.max_drain_s": 0.1})
+        opened = profile_for(clips, manifest, **{"bounds.max_duration_s": 1,
+                                                 "bounds.max_drain_s": 0.1,
+                                                 "measurement.arrival": "open-loop",
+                                                 "measurement.rate_per_s": 100.0})
+        for mode, p, kw in (("closed", closed, {}), ("open", opened, {"rate": 100.0})):
+            summary, raw, _, _ = run_bench(argv_for(tmp, manifest, p, **kw),
+                                           FakeGateway(ttft=1.5), env={"MARLIN_API_KEY": KEY})
+            assert summary["wall_s"] < 1.0, (mode, summary["wall_s"])
+            assert summary["measurement"]["stop_cleanup"]["stopped_by"] == \
+                "bounds.max_drain_s", mode
+            v = summary["validity"]
+            assert v["verdict"] == "INVALID" and v["missing_attempts"] == 4 - len(raw) > 0, \
+                (mode, v)
+
+
+def test_the_duration_bound_holds_at_run_time_when_poisson_arrivals_overshoot_it():
+    """Oracle (fix round p05): the preflight checks n/rate against max_duration_s, but Poisson
+    arrivals overshoot their mean; without the run-time check in the open loop the late
+    arrivals are still sent and the cell reads as a complete schedule."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        rate, n = 100.0, 4
+        seed = next(s for s in range(200) if bench.build_schedule(
+            n, clips, ["video_b64"], rate=rate, seed=s)[-1]["arrival_s"] > 2 * n / rate)
+        p = profile_for(clips, manifest, **{"bounds.max_duration_s": n / rate,
+                                            "workload.seed": seed,
+                                            "measurement.arrival": "open-loop",
+                                            "measurement.rate_per_s": rate})
+        summary, raw, _, _ = run_bench(argv_for(tmp, manifest, p, rate=rate, seed=seed),
+                                       FakeGateway(), env={"MARLIN_API_KEY": KEY})
+        assert len(raw) < n and summary["measurement"]["stop_cleanup"]["stopped_by"] == \
+            "bounds.max_duration_s", (len(raw), summary["measurement"]["stop_cleanup"])
+        assert summary["validity"]["verdict"] == "INVALID"
+
+
+def test_the_profile_identity_and_lag_bound_are_applied_to_the_run():
+    """Oracle (fix round 0-M3): a profiled run that falls back to the default 1 s lag bound and
+    to no identity check at all - the profile's model_revision and max_driver_lag_s declared
+    but never applied."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        other = profile_for(clips, manifest, **{"identity.model_revision": "marlin2b@other"})
+        summary, raw, _, _ = run_bench(argv_for(tmp, manifest, other), FakeGateway(),
+                                       env={"MARLIN_API_KEY": KEY})
+        assert {r["served_model"] for r in raw} == {"marlin2b"}       # the fake echoes --model
+        assert any(r.startswith("identity mismatch") for r in summary["validity"]["reasons"]), \
+            summary["validity"]
+        tight = profile_for(clips, manifest, **{"measurement.arrival": "open-loop",
+                                                "measurement.rate_per_s": 100.0,
+                                                "measurement.max_driver_lag_s": 1e-9})
+        summary, raw, _, _ = run_bench(argv_for(tmp, manifest, tight, rate=100.0),
+                                       FakeGateway(), env={"MARLIN_API_KEY": KEY})
+        v = summary["validity"]
+        assert v["driver_lag_bound_s"] == 1e-9 and v["driver_lag_max_s"] > 1e-9, v
+        assert any("driver lag" in r for r in v["reasons"]), v
+
+
+def test_the_declared_target_path_must_be_the_path_the_run_takes():
+    """Oracle (fix round 2-E1C-ACC-03): target.path was declaration-only - a P4 cell declared
+    public-edge while it went to the gateway port behind Caddy's back (S3 F5), or a
+    direct-engine profile ran through the gateway. Also the enum itself (p02)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        edge = lambda **o: profile_for(clips, manifest, **{"target.path": "public-edge", **o})
+        cases = {
+            "enum": (argv_for(tmp, manifest, profile_for(
+                clips, manifest, **{"target.path": "direct-db"})), "must be one of"),
+            "edge on the gateway port": (argv_for(
+                tmp, manifest, edge(**{"measurement.profile_class": "P4",
+                                       "target.allowlist": ["127.0.0.1:8001"]}),
+                "--base-url", "http://127.0.0.1:8001/v1"), "public-edge"),
+            "edge over plain http": (argv_for(tmp, manifest, edge()), "public-edge"),
+            "edge on an explicit port": (argv_for(
+                tmp, manifest, edge(**{"target.allowlist": ["fake.invalid:8443"]}),
+                "--base-url", "https://fake.invalid:8443/v1"), "public-edge"),
+            "engine through the gateway": (argv_for(tmp, manifest, profile_for(
+                clips, manifest, **{"target.path": "direct-engine"})), "--target direct"),
+            "gateway declared, engine run": (argv_for(tmp, manifest, profile_for(
+                clips, manifest), "--target", "direct"), "--target gateway"),
+        }
+        for why, (args, needle) in cases.items():
+            code, v = validate_only(args)
+            assert code == 2 and any(needle in e for e in v["errors"]), (why, v["errors"])
+        code, v = validate_only(argv_for(tmp, manifest, edge(), "--base-url",
+                                         "https://fake.invalid/v1"))
+        assert code == 0 and v["derived"]["target_path"] == "public-edge", v
+
+
+def test_an_unprofiled_run_against_a_paid_target_refuses_to_start():
+    """Oracle (fix round 0-B2 / 2-E1C-ACC-01, tasks.json E1C "no paid run starts unbounded"):
+    a run with no --profile against a non-local target dispatched its requests and was only
+    labelled INVALID afterwards. It now exits 2 before any request, unless the explicit,
+    logged opt-out is given - `smoke` capped at 4 requests of <= 512 tokens, `certify` for
+    certify's runner until E2C passes it profiles."""
+    paid = ["--base-url", "https://paid.invalid/v1"]
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+
+        def go(*extra, **kw):
+            gw = FakeGateway()
+            args = argv_for(tmp, manifest, {}, **kw)
+            args = args[:args.index("--profile")] + list(extra)     # no profile at all
+            args.remove("--dry-run-transport")
+            args.remove("fake_gateway:transport")
+            with routed_to(gw), contextlib.redirect_stderr(io.StringIO()) as err:
+                try:
+                    summary, raw, _, rc = run_bench(args, gw, env={"MARLIN_API_KEY": KEY})
+                except ValueError:                           # nothing printed: refused
+                    summary, raw, rc = None, None, None
+            return gw, summary, raw, err.getvalue()
+
+        gw, summary, _, err = go(*paid)
+        assert summary is None and not gw.seen and not gw.uploads and gw.home is None
+        assert "refusing to start" in err and "--profile" in err
+        for extra, kw in ((("--unprofiled", "smoke"), {"requests": 5}),
+                          (("--unprofiled", "smoke"), {"max_tokens": 1024})):
+            gw, summary, _, err = go(*paid, *extra, **kw)
+            assert summary is None and not gw.seen, (extra, kw)
+        for kind in ("smoke", "certify"):
+            gw, summary, raw, err = go(*paid, "--unprofiled", kind)
+            assert len(gw.seen) == 4 and len(raw) == 4, kind
+            assert summary["unprofiled_opt_out"] == kind and f"--unprofiled {kind}" in err
+            assert summary["validity"]["verdict"] == "INVALID"
+            assert bench.UNPROFILED in summary["validity"]["reasons"]
+        # a local target needs no opt-out (the fake, loopback): its runs are free
+        gw, summary, raw, _ = go("--base-url", "http://127.0.0.1:9/v1")
+        assert len(raw) == 4 and summary["unprofiled_opt_out"] is None
+
+
+@contextlib.contextmanager
+def routed_to(gw):
+    """Every httpx client bench opens goes to `gw`, whatever host it names: the run believes
+    it is talking to a paid endpoint, and the fake counts what actually left."""
+    import httpx
+    real = httpx.AsyncClient
+
+    class Routed(real):
+        def __init__(self, *args, **kw):
+            super().__init__(*args, **{**kw, "transport": gw.transport()})
+    httpx.AsyncClient = Routed
+    try:
+        yield
+    finally:
+        httpx.AsyncClient = real

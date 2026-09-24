@@ -90,6 +90,11 @@ DEFAULT_MAX_DRIVER_LAG_S = 1.0
 # §1: a run with no profile has declared no bounds, target or identity; its mechanics may be
 # clean but its numbers are not a qualifying measurement (BENCH-VALIDITY "unbounded profile").
 UNPROFILED = "unprofiled: no --profile declares this run's bounds, target and identity"
+# ...and one against a non-local (paid) target does not start at all (tasks.json E1C: "no paid
+# run starts unbounded"), unless an explicit opt-out names why. `smoke` is itself a bound:
+# (max requests incl. warm-up, max output tokens per request). `certify` is certify's runner
+# until E2C passes it profiles (wiring request); it is logged in the summary and stays INVALID.
+UNPROFILED_OPT_OUT = {"smoke": (4, 512), "certify": None}
 RESULT_SCHEMA = "infrx.run-result/1"
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
@@ -466,6 +471,10 @@ def parse_args(argv=None):
     ap.add_argument("--key-inventory", default=None,
                     help="sanitized JSON of the target's active key id prefixes (the "
                          "coordinator's read-only op); a paid profiled run needs it (P-24)")
+    ap.add_argument("--unprofiled", choices=sorted(UNPROFILED_OPT_OUT), default=None,
+                    help="run WITHOUT --profile against a non-local target, logged and "
+                         "INVALID: 'smoke' (at most 4 requests of <= 512 output tokens) or "
+                         "'certify' (certify's runner, until E2C passes it profiles)")
     ap.add_argument("--validate-only", action="store_true",
                     help="validate --profile against the other flags and print the verdict; "
                          "no request, no provisioning")
@@ -495,6 +504,8 @@ def parse_args(argv=None):
     if a.cancel_fraction and a.cancel_after is None:
         ap.error("--cancel-fraction needs --cancel-after")
     a.tenant_env = [t.strip() for t in a.tenant_keys.split(",") if t.strip()]
+    if a.unprofiled and a.profile:
+        ap.error("--unprofiled is for a run without --profile")
     return a
 
 
@@ -1247,15 +1258,19 @@ async def run_open_loop(client, cfg, schedule, rows):
             break
         tasks.append(asyncio.create_task(run_one(client, cfg, item, t0, rows)))
     if tasks:
-        # bounds.max_drain_s: what is still open after it is cancelled (a client disconnect,
-        # billable per R21) and its rows are missing, so the cell reads INVALID.
-        _, pending = await asyncio.wait(tasks, timeout=cfg.get("max_drain_s"))
-        if pending:
-            cfg["stopped_by"] = "bounds.max_drain_s"
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+        await drain(cfg, tasks, cfg.get("max_drain_s"))
     return CLOCK() - t0
+
+
+async def drain(cfg, tasks, timeout):
+    """bounds.max_drain_s: what is still open after `timeout` is cancelled (a client
+    disconnect, billable per R21) and its rows are missing, so the cell reads INVALID."""
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    if pending:
+        cfg["stopped_by"] = "bounds.max_drain_s"
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def run_closed_loop(client, cfg, schedule, rows):
@@ -1272,7 +1287,12 @@ async def run_closed_loop(client, cfg, schedule, rows):
                 return
             await run_one(client, cfg, item, t0, rows)
 
-    await asyncio.gather(*(worker() for _ in range(cfg["concurrency"])))
+    # No new item after max_duration_s (past_deadline); what is in flight then gets
+    # max_drain_s, the same bound as the open loop's tail, and is cancelled after it.
+    limit = cfg.get("max_duration_s")
+    timeout = None if limit is None else \
+        max(0.0, limit - (CLOCK() - t0)) + (cfg.get("max_drain_s") or 0.0)
+    await drain(cfg, [asyncio.create_task(worker()) for _ in range(cfg["concurrency"])], timeout)
     return CLOCK() - t0
 
 
@@ -1649,6 +1669,7 @@ def summarize(rows, wall, cfg):
         "requests": len(finals), "attempts": len(rows),
         "max_tokens": cfg["max_tokens"],
         "profile": profile_block(cfg),
+        "unprofiled_opt_out": getattr(cfg["args"], "unprofiled", None),
         "parser_version": PARSER_VERSION,
         "accepted": len(accepted), "accepted_fresh": len(fresh),
         "accepted_replayed": len(accepted) - len(fresh),
@@ -2003,10 +2024,11 @@ def check_profile(a):
     """--profile against these flags and the schedule they declare. No request is made: the
     schedule is bench's own pure function, the corpus is read from its manifest only."""
     import runprofile
-    if not a.profile:
-        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "warnings": [],
-                                  "derived": {}, "errors": ["--validate-only needs --profile"]},
-                                 False)
+    if not a.profile:                    # --unprofiled: would the opt-out start this run?
+        why = unprofiled_refusal(a) if a.unprofiled else "--validate-only needs --profile"
+        return runprofile.finish({"schema": runprofile.SCHEMA_ID, "blocks": [], "derived": {},
+                                  "warnings": [UNPROFILED] if a.unprofiled else [],
+                                  "errors": [why] if why else []}, False)
     try:
         with open(a.profile, encoding="utf-8") as f:
             profile = json.load(f)
@@ -2042,6 +2064,25 @@ def check_profile(a):
     return verdict
 
 
+def unprofiled_refusal(a):
+    """Why a run with no --profile may not start, or None. Free targets (an injected
+    transport, loopback) need no profile; a paid one needs --unprofiled and its bound."""
+    import runprofile
+    if runprofile.is_local(a):
+        return None
+    if not a.unprofiled:
+        return ("--base-url is not a local target and no --profile bounds this run "
+                "(consumer-v1/05 section 1); pass a runnable "
+                f"--profile, or an explicit --unprofiled {{{','.join(sorted(UNPROFILED_OPT_OUT))}}}")
+    cap = UNPROFILED_OPT_OUT[a.unprofiled]
+    sent = a.requests + int(not a.rate and not a.corpus and not a.no_warmup)
+    if cap and (sent > cap[0] or max(a.max_tokens_mix) > cap[1]):
+        return (f"--unprofiled {a.unprofiled} is at most {cap[0]} requests (warm-up included) "
+                f"of <= {cap[1]} output tokens; this run is {sent} of <= "
+                f"{max(a.max_tokens_mix)}: declare a --profile")
+    return None
+
+
 def main(argv=None):
     """Wrapper only: nothing may reach stderr around _run() either. A traceback would
     carry the exception message; only its type and its frames may be printed."""
@@ -2073,6 +2114,12 @@ def _run(argv=None):
                   + json.dumps({k: verdict[k] for k in ("errors", "blocks")}, indent=2),
                   file=sys.stderr)
             return 2
+    elif why := unprofiled_refusal(a):
+        print(f"refusing to start: {why}", file=sys.stderr)
+        return 2
+    elif a.unprofiled:
+        print(f"note: --unprofiled {a.unprofiled}: no run profile bounds this run; it is "
+              f"recorded as unprofiled_opt_out and its verdict is INVALID", file=sys.stderr)
     refuse_key_in_args(a, tuple(dict.fromkeys([api_key(), *tenant_keys(a)])))
     raw = raw_path(a)                        # exit 2 before anything is opened or printed
     for path in (raw, a.out):
