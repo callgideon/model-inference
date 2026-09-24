@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T02:13:25Z",
+  "updated": "2026-09-24T02:51:40Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,15 +11,9 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; box half + release decision after the rollout (BACKEND-READY not claimed)",
+      "phase": "software half MERGED 66eed31; the pilot cannot serve until PREP-WORKER lands (tasks.json 27af05a); box half + release decision after the rollout",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
-    },
-    "I2B-R4-worker": {
-      "lane": "codex-worker / codex/i2b-r4-worker",
-      "phase": "HANDED BACK e540963 (impl fb8babb; layer-3 backend 144/0/0, no PENDING) → single verifier wf_c8d406f4-b7b → step 8b",
-      "since": "2026-09-24T02:13:25Z",
-      "note": "python -m infrx.worker composition root; rehearsal PASSED; the pilot box on the real entry point"
     },
     "PREP-WORKER": {
       "lane": "codex-prepw / codex/prep-worker",
@@ -106,8 +100,8 @@
       "since": "2026-09-24T00:20:08Z"
     },
     "I2B-R4-worker": {
-      "phase": "handed back e540963 → verifier wf_c8d406f4-b7b",
-      "since": "2026-09-24T02:13:25Z"
+      "phase": "MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json)",
+      "since": "2026-09-24T02:51:40Z"
     }
   },
   "gates": {
@@ -443,6 +437,11 @@
       "merged": "cutover code 1bed457 merged daeff13 (unit) + fix round 141e169 merged 865d352 (step 3b); R98",
       "at": "2026-09-24T01:29:18Z",
       "note": "review fix_required on 3 test gaps at a1e88dc → one fix round → verifier pass at 141e169 (VER-N1 nonblocking: longer-than-shape values unpinned)"
+    },
+    "I2B-R4-worker": {
+      "merged": "I2B-R4 worker @ e540963 merged --no-ff (405f633, step 8b) after the verifier pass",
+      "at": "2026-09-24T02:51:40Z",
+      "note": "python -m infrx.worker composition root; rehearsal PASSED; the pilot box on the real entry point; F1/F2 nonblocking"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"

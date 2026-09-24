@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T02:13:25Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T02:51:40Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,8 +66,7 @@ Generated 2026-09-24T02:13:25Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; box half + release decision after the rollout (BACKEND-READY not claimed) since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
-- I2B-R4-worker: codex-worker / codex/i2b-r4-worker — HANDED BACK e540963 (impl fb8babb; layer-3 backend 144/0/0, no PENDING) → single verifier wf_c8d406f4-b7b → step 8b since 2026-09-24T02:13:25Z — python -m infrx.worker composition root; rehearsal PASSED; the pilot box on the real entry point
+- E4B: codex-e4b / codex/e4b-certify — software half MERGED 66eed31; the pilot cannot serve until PREP-WORKER lands (tasks.json 27af05a); box half + release decision after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - PREP-WORKER: codex-prepw / codex/prep-worker — DISPATCHED (Opus) from 01103c9: the product preparation loop (prepare_dispatch → claim_preparation → MediaPreparation → exact prompt_tokens via the engine's /tokenize → prepared); acceptance = E3B journeys on the real worker with the box's emulation deleted since 2026-09-24T02:13:25Z — BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
@@ -88,7 +87,7 @@ Generated 2026-09-24T02:13:25Z from `tasks.json` (manifest v4) and `progress-sta
 - review CUTOVER: MERGED: code daeff13 + fix round 865d352 (verifier pass at 141e169; JSON evidence/g/CUTOVER-verify-141e169.json) since 2026-09-24T01:29:18Z
 - review ROLLOUT-PREP: MERGED 22761a4 (f0a1a82) since 2026-09-24T00:59:03Z
 - review WORKER: lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z
-- review I2B-R4-worker: handed back e540963 → verifier wf_c8d406f4-b7b since 2026-09-24T02:13:25Z
+- review I2B-R4-worker: MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z
 
 ## Checkpoints
 
