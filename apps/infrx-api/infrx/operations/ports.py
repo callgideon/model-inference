@@ -22,10 +22,12 @@ from ..contracts.v2.records import (CredentialAudience, CreditLedgerEntry, Deplo
                                     RateCardSnapshot, ServingRevision, SignupGrant,
                                     UsageHistory, WalletRef)
 
-# D1 `infrx.audit_entries.action` CHECK, verbatim (0003_pilot_durable_schema.sql). Closed:
-# a new operator write that fits none of these is a D migration first, not a new string.
+# `infrx.audit_entries.action` CHECK, verbatim (0003's four, extended by 0009 with the
+# headless operator actions). Closed: a new operator write that fits none of these is a D
+# migration first, not a new string.
 AUDIT_ACTIONS = ("admin_grant", "admin_set_suspension", "admin_set_entitlements",
-                 "calibration_label")
+                 "calibration_label", "admin_key_issue", "admin_key_revoke", "admin_publish",
+                 "admin_job_cancel", "admin_reconcile", "admin_adjust")
 
 # D1 `organizations_suspension_reason_check`: a closed code, never free text (R59 (2)).
 SUSPENSION_REASONS = ("abuse", "nonpayment", "security", "operator_request", "other")

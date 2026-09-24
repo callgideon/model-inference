@@ -41,7 +41,7 @@ def test_api_ops__a_verified_individual_is_granted_keyed_and_reads_its_balance()
         assert tenant.auth.org_id == ORG_A and tenant.auth.user_id == USER_A
         assert tenant.auth.audience is CredentialAudience.consumer
         assert balance.available == INITIAL_SIGNUP_GRANT
-        assert [e.action for e in w.audit.entries] == ["admin_grant", "admin_set_entitlements"]
+        assert [e.action for e in w.audit.entries] == ["admin_grant", "admin_key_issue"]
         assert all(e.actor_principal == fakes.OPERATOR_KEY for e in w.audit.entries)
     run(go())
 

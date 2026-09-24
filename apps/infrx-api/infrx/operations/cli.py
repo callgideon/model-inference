@@ -81,6 +81,10 @@ def parser() -> argparse.ArgumentParser:
     cmd("publish-marlin", "--provider-org", "--created-at", "--effective-at")
     cmd("cancel", "--org", "--job")
     cmd("reconcile", "--org", "--request")
+    # G8 reads: no idempotency key and no reason, since nothing is written.
+    sub.add_parser("account").add_argument("--user", required=True)
+    # A consumer's own statement, authenticated by the key file `issue-key` wrote.
+    sub.add_parser("statement").add_argument("--key-file", required=True)
     return p
 
 
@@ -98,8 +102,17 @@ def _issued(a, issued: service.IssuedKey) -> dict:
             "secret_file": a.secret_file if issued.secret is not None else None}
 
 
+def _read_secret(path: str) -> str:
+    with open(path) as f:
+        return f.read().strip()
+
+
 async def dispatch(ops: service.Operations, secret: str, a) -> dict:
+    if a.cmd == "statement":
+        return await (await ops.tenant(secret)).statement()
     op = await ops.operator(secret)
+    if a.cmd == "account":
+        return await op.account(a.user)
     k = {"idempotency_key": a.idempotency_key, "reason": a.reason}
     if a.cmd == "grant":
         return await op.grant_initial(a.user, **k)
@@ -135,7 +148,10 @@ def main(argv=None, *, ops=None, environ=os.environ, prompt=getpass.getpass) -> 
     argv = sys.argv[1:] if argv is None else list(argv)
     refuse_secret_argv(argv)
     a = parser().parse_args(argv)
-    secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()
+    if a.cmd == "statement":
+        secret = _read_secret(a.key_file)
+    else:
+        secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()
     try:
         result = asyncio.run(dispatch(ops or build_operations(), secret, a))
     except errors.DomainError as e:

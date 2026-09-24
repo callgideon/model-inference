@@ -220,8 +220,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return await self.ops.jobs.get_owned(self.auth.key_id, job_handle)",
        "test_api_ops__a_tenant_reads_only_its_own_usage_holds_and_jobs"),
     _m("cancel_audited_under_the_wrong_action", "a cancellation is audited in the D1 vocabulary",
-       S, "\"job_cancel\": \"admin_set_entitlements\",", "\"job_cancel\": \"calibration_label\",",
+       S, "\"publish\": \"admin_publish\", \"job_cancel\": \"admin_job_cancel\",",
+       "\"publish\": \"admin_publish\", \"job_cancel\": \"admin_set_entitlements\",",
        "test_api_ops__operator_cancellation_is_tenant_scoped_and_audited"),
+    _m("reconcile_audited_as_a_grant", "a reconciliation is audited as one, never as a grant",
+       S, "\"adjustment\": \"admin_adjust\", \"reconcile\": \"admin_reconcile\",",
+       "\"adjustment\": \"admin_adjust\", \"reconcile\": \"admin_grant\",",
+       "test_api_ops__reconciliation_waits_for_its_interval_and_is_audited"),
     _m("reconcile_at_a_future_clock", "reconciliation is decided at the present time",
        S, "operation_id,\n                                                    self.principal, self.ops.clock())",
        "operation_id,\n                                                    self.principal, self.ops.clock().replace(year=9999))",
@@ -295,6 +300,17 @@ MUTANTS: tuple[Mutant, ...] = (
        X, "    return bench.allow(err.get(\"code\") if isinstance(err, dict) else None, bench.CODE_OK, key)",
        "    return err.get(\"code\") if isinstance(err, dict) else None",
        "test_api_auth__the_client_key_never_reaches_argv_or_state"),
+    # --- G8 point 1: the trusted account and statement reads --------------------
+    _m("account_skips_the_binding", "an account read resolves the wallet through its binding",
+       S, "            wallet = await self.ops.bound_wallet(identity)\n        usage =",
+       "            wallet = await self.ops.wallets.consumer_wallet_for_user(user_id)\n        usage =",
+       "test_credit_identity__the_account_read_is_the_individuals_own_exact_credit"),
+    _m("spent_page_cap_ignored", "a page-capped spend is never reported as complete",
+       S, "    if len(usage.entries) >= USAGE_PAGE:", "    if False:",
+       "test_credit_spend__a_statement_never_reports_a_short_spend_as_complete"),
+    _m("statement_carries_the_usd_statement", "the CREDIT statement never carries USD (R73)",
+       S, '_NOT_CREDIT = {"schema_version", "legacy_usd"}', '_NOT_CREDIT = {"schema_version"}',
+       "test_credit_spend__a_statement_never_reports_a_short_spend_as_complete"),
     # --- the CLI ---------------------------------------------------------------
     _m("cli_accepts_a_key_on_argv", "a key on argv is refused before any prompt",
        C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",
@@ -325,7 +341,8 @@ MUTANTS: tuple[Mutant, ...] = (
 
 #: The shared runner (R83), in the repository's shape, every named case required to notice.
 RUNNER = Runner(name="g-ops", package="", targets=(SUITE,), layout=_layout,
-                extra_args=(f"--ignore={SUITE}/test_mutants.py",), require_every_case=True)
+                extra_args=(f"--ignore={SUITE}/test_mutants.py",
+                            f"--ignore-glob={SUITE}/test_*_pg.py"), require_every_case=True)
 
 
 def run_mutant(mutant: Mutant) -> Result:
@@ -333,10 +350,14 @@ def run_mutant(mutant: Mutant) -> Result:
 
 
 def case_names() -> set[str]:
-    """Every `test_*` function in this suite except the list's own claims."""
+    """Every `test_*` function in this suite except the list's own claims and G8's
+    real-PostgreSQL suites (`test_*_pg.py`): those prove the D adapters under the logic
+    these mutants edit, which fake-level cases here claim; their failure oracles are the
+    recorded fail-first runs (G8 evidence). A PG case in a mutant subprocess would contend
+    for the harness port's lock with the in-process D suites of `make api-mutants`."""
     names = set()
     for path in sorted((API_DIR / SUITE).glob("test_*.py")):
-        if path.name == "test_mutants.py":
+        if path.name == "test_mutants.py" or path.name.endswith("_pg.py"):
             continue
         tree = ast.parse(path.read_text())
         names |= {n.name for n in tree.body

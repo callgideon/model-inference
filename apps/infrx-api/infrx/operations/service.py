@@ -48,14 +48,15 @@ _ALPHABET = string.ascii_letters + string.digits
 MAX_IDEMPOTENCY_KEY = 255
 MAX_REASON = 500                         # audit_entries.reason CHECK 1..500
 
-# D1's action vocabulary is closed and has no word for key, publication, cancellation
-# or reconciliation writes. Each operation is filed under the nearest action and names
-# itself in `after.operation`; the evidence asks D for dedicated actions.
+# Each operator write under its own 0009 audit action (G8: a reconciliation or an
+# adjustment filed as a grant misreads in an audit); it also names itself in
+# `after.operation`. `transition` flips the platform-wide admission flags (no org).
 ACTION = {
-    "key_issue": "admin_set_entitlements", "key_revoke": "admin_set_entitlements",
-    "publish": "admin_set_entitlements", "job_cancel": "admin_set_entitlements",
-    "suspension": "admin_set_suspension",
-    "signup_grant": "admin_grant", "adjustment": "admin_grant", "reconcile": "admin_grant",
+    "key_issue": "admin_key_issue", "key_revoke": "admin_key_revoke",
+    "publish": "admin_publish", "job_cancel": "admin_job_cancel",
+    "suspension": "admin_set_suspension", "signup_grant": "admin_grant",
+    "adjustment": "admin_adjust", "reconcile": "admin_reconcile",
+    "transition": "admin_set_entitlements",
 }
 assert set(ACTION.values()) <= set(AUDIT_ACTIONS)
 
@@ -158,6 +159,16 @@ class TenantSession:
         wallet = await self.ops.wallets.consumer_wallet_for_user(self.auth.user_id)
         return BalanceV2.of(v2ports.resolve_wallet(self.auth, wallet))
 
+    async def statement(self) -> dict:
+        """G8: the individual's own exact CREDIT state - available, reserved and spent as
+        exact decimal strings - beside its holds and per-unit usage (R73). The wallet is
+        the credential's individual's (R66), never looked up by an id anyone supplied."""
+        balance, holds, usage = await self.balance(), await self.holds(), await self.usage()
+        return {"org_id": self.auth.org_id, "user_id": self.auth.user_id,
+                "credit": {**balance.model_dump(mode="json", exclude=_NOT_CREDIT),
+                           **_spent(usage)},
+                "holds": [_hold(h) for h in holds], "usage_totals": usage.totals()}
+
     async def quote(self, requested_model: str):
         """The pins and card a request for this model would be admitted at now.
         Private-to-others is NotFound (R70); unpriced is InvalidRequest (R69)."""
@@ -211,6 +222,28 @@ class OperatorSession:
             # for an individual whose verification is not recorded.
             raise errors.NotFound("no verified individual with that id")
         return identity
+
+    # --- G8: the trusted account read -------------------------------------------
+    async def account(self, user_id: str) -> dict:
+        """A verified individual's personal consumer account, resolved from the v2
+        identity - the organization the individual created and owns, which the wallet
+        binding then freezes - never from whichever membership came first. A wallet bound
+        to another organization is Forbidden (R66). Exact CREDIT strings; a read, so no
+        audit row."""
+        identity = await self._identity(user_id)
+        org = identity.personal_org_id
+        wallet = None
+        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:
+            wallet = await self.ops.bound_wallet(identity)
+        usage = await self.ops.accounts.usage(org)
+        credit = ({"wallet_id": None, "unit": "CREDIT"} if wallet is None else
+                  BalanceV2.of(wallet).model_dump(mode="json", exclude=_NOT_CREDIT))
+        return {"user_id": user_id, "personal_org_id": org,
+                "verification_evidence_ref": identity.verification_evidence_ref,
+                "suspension": await self.ops.tenants.suspension(org),
+                "credit": {**credit, **_spent(usage)},
+                "holds": [_hold(h) for h in await self.ops.accounts.holds(org)],
+                "usage_totals": usage.totals()}
 
     # --- G6B.a: keys, suspension, grant, adjustment ---------------------------
     async def issue_key(self, user_id: str, name: str, *, idempotency_key: str,
@@ -400,6 +433,28 @@ class OperatorSession:
 
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
+
+
+#: A `BalanceV2`'s fields that are not the CREDIT wallet's own (the statement is exact
+#: CREDIT; the legacy USD statement is never mixed into it, R73).
+_NOT_CREDIT = {"schema_version", "legacy_usd"}
+
+#: `AccountView.usage` is one page (the newest `usage_records` rows, at most 500).
+USAGE_PAGE = 500
+
+
+def _spent(usage) -> dict:
+    """Settled CREDIT spend: the CREDIT usage total, exact. A full page may have left
+    older rows out, so it answers None rather than a short sum.
+    ponytail: one page; D10's settled-debit read (D10.c) replaces it."""
+    if len(usage.entries) >= USAGE_PAGE:
+        return {"spent": None, "spent_complete": False}
+    return {"spent": usage.totals().get("CREDIT", str(Credit("0"))), "spent_complete": True}
+
+
+def _hold(hold) -> dict:
+    return {"request_id": hold.request_id, "state": hold.state.value, "amount": str(hold.amount),
+            "unit": "CREDIT"}
 
 
 def marlin_release(*, provider_org_id: str, created_at: datetime, effective_at: datetime,
