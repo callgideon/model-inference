@@ -1,0 +1,578 @@
+{
+  "verdict": "pass",
+  "lenses_returned": 2,
+  "head": "c035ee4",
+  "reviews": [
+    {
+      "lens": "loop",
+      "verdict_hint": "fix_required",
+      "findings": [
+        {
+          "id": "L1",
+          "severity": "blocking",
+          "file": "apps/infrx-api/infrx/worker/preparation.py",
+          "line": "10-11, 124-127",
+          "claim_broken": "Module docstring step 1: 'A lost claim (another worker holds it, the job moved on or ended) is reported, never retried here.' No case in tests/w/test_prep_worker.py runs a refused claim_preparation through PreparationRunner.run, so the try/except that turns a lost claim into a PreparationResult can be deleted without any failure. Under that mutant, a prepare_dispatch offered twice (the index is only a hint, 02 §4: relay redelivery or reconciler repair) makes the runner raise not_claimable. The crash-only service then drains and exits, taking the inference pool down with it.",
+          "evidence": "Hand mutant hm5: replace `try: lease = await self.jobs.claim_preparation(...) except errors.DomainError as refused: return PreparationResult(...)` with a bare `lease = await self.jobs.claim_preparation(job_id, self.worker_id)`. It SURVIVED `pytest tests/w/test_prep_worker.py -k 'not _pg__'` (28 passed) and SURVIVED the _pg__ cases plus my PG probes on d6 (5 passed). My probe test_probe__a_duplicated_candidate_is_a_lost_claim_not_a_dead_runner (in /tmp/claude-1000/review-prepw-loop-330125/test_review_probe.py) enqueues the same job's candidate twice. Pristine it prints `DIED [] LIVE True REFUSALS ['not_claimable', None]` and passes; under hm5 it is KILLED.",
+          "minimal_fix": "Add the duplicated-candidate case (two candidates for one job through the WorkerService: the second result is refusal not_claimable, _died()==[], live True) and the hm5 mutant to prep_worker_mutants.MUTANTS."
+        },
+        {
+          "id": "L2",
+          "severity": "blocking",
+          "file": "apps/infrx-api/infrx/worker/preparation.py",
+          "line": "38, 121",
+          "claim_broken": "'The lease is renewed every third of PREPARATION_LEASE_TTL_S while the attempt runs (R52)'. The RENEW case always injects renew_every_s=0.01, so the default cadence the product runs with is never exercised. With `ttl * 3`, any preparation longer than the 30 s TTL loses its lease before the first renewal. The fence then refuses `prepared`, and after three retries the job ends preparation_failed.",
+          "evidence": "Hand mutant hm4: `limits.preparation_lease_ttl_s / 3` -> `limits.preparation_lease_ttl_s * 3`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed). My probe test_probe__the_default_renewal_keeps_a_long_preparation_alive (TTL 0.3 s, no renew_every_s, the fake clock moved 1.6 s during a held /tokenize) passes pristine with `cause='prepared' ... queued`, and hm4 is KILLED by it.",
+          "minimal_fix": "Add a case that builds the runner without renew_every_s (a short PREPARATION_LEASE_TTL_S, a tokenize held past several TTLs, expected result prepared/queued), and list the `/ 3` -> `* 3` mutant."
+        },
+        {
+          "id": "L3",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/preflight.py",
+          "line": "210 (and infrx/config.py:157 MUST_BE_POSITIVE)",
+          "claim_broken": "The infrx/worker/__main__.py docstring says a bad deployment value is refused with exit 2, naming the setting, before a listener is bound. The 08 §5.1 row makes PREPARATION_CONCURRENCY the worker's preparation pool size and settable through preflight.TUNABLE. Before this lane, 0 was harmless because MediaPreparation's gate uses max(1, n). Now 0 is accepted and the preparation pool raises ValueError. WORKER_CONCURRENCY got a positive_int shape for exactly this reason; PREPARATION_CONCURRENCY did not.",
+          "evidence": "PYTHONPATH=. uv run python /tmp/claude-1000/review-prepw-loop-330125/zero.py prints `preflight PREPARATION_CONCURRENCY=0: []`, `preflight WORKER_CONCURRENCY=0: ['WORKER_CONCURRENCY: the value is not a valid positive_int']`, `validate_runtime: accepted, preparation_concurrency = 0` and `preparation pool: ValueError concurrency must be at least 1`. The real process on PG (probe test_probe_pg__preparation_concurrency_zero_is_not_refused_at_startup) exits `EXIT 1` rather than 2 and logs `ERROR infrx.worker preparation died; draining for a restart` twice (the pool task sits in both _died() and _preparation_tasks()[:1]). Under Restart=always this is a crash loop.",
+          "minimal_fix": "Add \"PREPARATION_CONCURRENCY\": \"positive_int\" to TUNABLE_SHAPES and \"preparation_concurrency\" to config.MUST_BE_POSITIVE (or refuse it in compose), with a case asserting exit 2 naming PREPARATION_CONCURRENCY."
+        },
+        {
+          "id": "L4",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/state/jobstore.py",
+          "line": "262-276",
+          "claim_broken": "Ruling-candidate text (ports.py prepared): 'a count below 0 or above the job's max_input_tokens ... is context_length_exceeded; either way nothing changes.' F's fake meets this for any int. PostgreSQL does not for a count >= 2**31: it raises an untyped psycopg error. engine_prompt_tokens accepts an answer without `tokens` (`if tokens is not None and ...`), so a text /tokenize reply {\"count\": 2147483648} reaches `prepared`, and the untyped error kills the worker process.",
+          "evidence": "Probe test_probe_pg__an_int32_overflowing_count_is_typed_like_the_fake (d6, plain image) prints `FAKE (('ContextLengthExceeded', 'context_length_exceeded', ...), None)` and `PG (('NumericValueOutOfRange', None, 'value \"2147483648\" is out of range for type integer CONTEXT: PL/pgSQL function prepare(jsonb) line 52 at IF'), None)`. A real vLLM always returns `tokens`, so this is reachable only from a misbehaving engine.",
+          "minimal_fix": "In PgJobStore.prepared, raise errors.ContextLengthExceeded when prompt_tokens > 2**31-1 (such a count exceeds any max_input_tokens), and add 2**31 to the bad counts in dur_fence__prepared_stores_the_exact_prompt_count_once. Optionally also require `tokens` in engine_prompt_tokens."
+        },
+        {
+          "id": "L5",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/service.py",
+          "line": "135",
+          "claim_broken": "'Its drain bound is PREPARATION_LEASE_TTL_S: an attempt still running then is released' (service.py docstring, 08 §5.1 row). Only the upper side is pinned: the lane's mutant drain(bound) dies on `took < 3.0`. A drain that releases in-flight preparations almost at once instead of letting them finish inside the TTL survives.",
+          "evidence": "Hand mutant hm7: `self.preparation.drain(self.loop.limits.preparation_lease_ttl_s)` -> `self.preparation.drain(0.1)`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed): PG_DRAIN and SERVICE log the same `1 finished, 1 released` line either way.",
+          "minimal_fix": "In SERVICE or PG_DRAIN, add an attempt whose tokenize answers after the SIGTERM but inside PREPARATION_LEASE_TTL_S. Assert it ends 'prepared' (drain line `ended [(job, 'prepared')]`), not released."
+        },
+        {
+          "id": "L6",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/preparation.py",
+          "line": "16-17, 65",
+          "claim_broken": "'wait (bounded) for the admitting gateway's durable attach, which lands just after the admission commits'. The product default ATTACH_WAIT_S is never used by a case: Prep injects attach_wait_s, and the PG cases are text-only, where _media is never called. With 0 s, a worker that claims before the attach lands answers not_found and costs a full lease TTL per retry.",
+          "evidence": "Hand mutant hm8: `ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05` -> `0.0, 0.05`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed), including my PG video probe, where the attach had already landed.",
+          "minimal_fix": "Add a case that builds PreparationRunner with no attach_wait_s and an attach landing about 0.2 s after the claim (as VIDEO does), expecting prepared. Or pin the default in the list."
+        },
+        {
+          "id": "L7",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/preparation.py",
+          "line": "35-36, 134-136, 160-165",
+          "claim_broken": "'Anything untyped propagates: W3's crash-only service drains and exits.' An untyped error from the renewal task (for example the store unreachable on heartbeat) is swallowed by `gather(renewing, return_exceptions=True)`. It is never logged, and the attempt carries on without renewals.",
+          "evidence": "Probe test_probe__an_untyped_renewal_failure_is_swallowed (heartbeat raises RuntimeError, renew_every_s=0.01, tokenize held 0.1 s) prints `RESULT PreparationResult(... cause='prepared' ...) LOGGED []`. Correctness holds because the fence still guards `prepared`, but the docstring claim is false and the failure is invisible.",
+          "minimal_fix": "After the gather, re-raise (or at least log.error) a non-DomainError exception from `renewing`. Otherwise narrow the docstring to exclude the renewal."
+        },
+        {
+          "id": "L8",
+          "severity": "nonblocking",
+          "file": "tests/integration/fake_vllm.py",
+          "line": "_tokenize (count = self.prompt_tokens)",
+          "claim_broken": "'prompt_tokens is exact and engine-derived' holds in every run only because the fake's /tokenize count and its chat usage.prompt_tokens both return self.prompt_tokens. The fake ignores the messages entirely, so the equality is true by construction, and the claim is only as strong as the fake. What pins the body the loop sends is the exact-dict assertion in TEXT and the part/mm_processor_kwargs assertions in VIDEO.",
+          "evidence": "From source: fake_vllm.py `_tokenize` returns count=self.prompt_tokens; the chat route reports usage.prompt_tokens=self.prompt_tokens. On the pinned engine (vllm-openai nightly a8d1aa9c, read via gh api), POST /tokenize with TokenizeChatRequest goes through online_renderer.preprocess_chat. That is the chat path ('Copied from GenerateBaseServing._preprocess_chat'), with mm_processor_kwargs passed as prompt_extras and skip_mm_cache=True, so it should return the expanded video placeholders and the same count as usage. add_generation_prompt already defaults to True there. This is unmeasured on the box. The tokenize pass also skips the multimodal cache, so each video is decoded twice per job (latency is ⚠️ TO BE VERIFIED).",
+          "minimal_fix": "Before the pilot, run a box probe on the pinned image: for one text job and one 10 s clip, show that the stored prepared_prompt_tokens equals the engine's usage.prompt_tokens. Quote it in the evidence as the real-engine check, and record the double decode as a latency limit."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "hm1_count_minus_one",
+          "edit": "preparation.py: `await self.jobs.prepared(lease, refs, prompt_tokens=count)` -> `prompt_tokens=count - 1`",
+          "result": "killed (fake and PostgreSQL)",
+          "killed_by": "test_prep_worker__a_text_job_is_queued_with_the_engines_own_count[legacy]; test_prep_worker_pg__the_worker_process_prepares_and_runs_an_admitted_job"
+        },
+        {
+          "name": "hm2_swallow_store_zero",
+          "edit": "engine_prompt_tokens: `except (httpx.HTTPError, ValueError): raise DependencyUnavailable` -> `return 0`",
+          "result": "killed",
+          "killed_by": "test_prep_worker__the_engines_answer_is_checked_and_never_guessed[not-json]"
+        },
+        {
+          "name": "hm3_store_estimate",
+          "edit": "_prepare: on DependencyUnavailable, `count = work.request.max_input_tokens`",
+          "result": "killed",
+          "killed_by": "test_prep_worker__a_tokenizer_that_cannot_count_prepares_nothing[down-False]"
+        },
+        {
+          "name": "hm4_renew_after_ttl",
+          "edit": "`limits.preparation_lease_ttl_s / 3` -> `limits.preparation_lease_ttl_s * 3`",
+          "result": "SURVIVED lane suite (fake + PG) -> finding L2",
+          "killed_by": "only by reviewer probe test_probe__the_default_renewal_keeps_a_long_preparation_alive"
+        },
+        {
+          "name": "hm5_claim_refusal_escapes",
+          "edit": "remove the try/except DomainError around claim_preparation in PreparationRunner.run",
+          "result": "SURVIVED lane suite (fake + PG) -> finding L1",
+          "killed_by": "only by reviewer probe test_probe__a_duplicated_candidate_is_a_lost_claim_not_a_dead_runner"
+        },
+        {
+          "name": "hm6_prep_pool_size_is_inference_size",
+          "edit": "service.start: `concurrency=self.preparation_concurrency` -> `concurrency=self.concurrency`",
+          "result": "killed",
+          "killed_by": "test_prep_worker__the_service_prepares_and_drains_its_preparation_pool"
+        },
+        {
+          "name": "hm7_prep_drain_immediate",
+          "edit": "`self.preparation.drain(self.loop.limits.preparation_lease_ttl_s)` -> `self.preparation.drain(0.1)`",
+          "result": "SURVIVED (fake + PG) -> finding L5",
+          "killed_by": "none"
+        },
+        {
+          "name": "hm8_attach_wait_zero",
+          "edit": "`ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05` -> `0.0, 0.05`",
+          "result": "SURVIVED (fake + PG) -> finding L6",
+          "killed_by": "none"
+        },
+        {
+          "name": "hm9_tokens_optional_for_video",
+          "edit": "`video = tokens.count(VIDEO_TOKEN_ID) if tokens is not None else -1` -> `else most`",
+          "result": "killed",
+          "killed_by": "test_prep_worker__the_engines_answer_is_checked_and_never_guessed[no-tokens]"
+        },
+        {
+          "name": "hm10_pg_type_check_dropped",
+          "edit": "jobstore.py PgJobStore.prepared: delete the bool/non-int InvalidRequest check",
+          "result": "killed on PostgreSQL",
+          "killed_by": "tests/d/test_jobstore_conformance.py::test_jobstore_conformance_on_postgres[dur_fence__prepared_stores_the_exact_prompt_count_once]"
+        },
+        {
+          "name": "lane list (INFRX_MUTANTS=all tests/w/test_prep_worker_mutants.py)",
+          "edit": "the lane's own MUTANTS + CONTRACT_MUTANTS + PG_MUTANTS on d6/valkey 55471/MinIO 55724",
+          "result": "56 passed (every lane mutant killed, the PG list included, none skipped)",
+          "killed_by": "the lane's named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "uv run --frozen pytest -q tests/w/test_prep_worker.py (service-free)",
+          "exit": 0,
+          "tail": "28 passed, 2 skipped in 3.13s"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-review-prepw-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1 uv run --frozen pytest -q tests/w/test_prep_worker.py -k _pg__ (plain image)",
+          "exit": 0,
+          "tail": "2 passed, 28 deselected in 27.54s"
+        },
+        {
+          "cmd": "same env: pytest tests/d/test_jobstore_conformance.py tests/d/test_credit_jobstore_conformance.py -k 'prepared_stores_the_exact_prompt_count_once or the_count_reaches_the_credit_work or preparation or dur_fence' (plain, then INFRX_D1_IMAGE=supabase), plus the _pg__ cases on supabase",
+          "exit": 0,
+          "tail": "plain: 15 passed, 71 deselected in 14.18s | supabase: 15 passed, 71 deselected in 53.28s | supabase _pg__: 2 passed, 28 deselected in 28.41s"
+        },
+        {
+          "cmd": "same env: INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_prep_worker_mutants.py",
+          "exit": 0,
+          "tail": "56 passed in 517.92s (0:08:37)"
+        },
+        {
+          "cmd": "same env: uv run --frozen pytest -q tests/w",
+          "exit": 0,
+          "tail": "246 passed, 2 skipped in 639.22s (skips: empty PG mutant parameter sets without INFRX_MUTANTS=all)"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts --ignore=tests/contracts/test_mutants.py",
+          "exit": 0,
+          "tail": "1038 passed in 20.48s"
+        },
+        {
+          "cmd": "same env: pytest tests/w/test_review_probe.py (reviewer probes: PG video job through the worker process, two worker processes racing 8 jobs, PREPARATION_CONCURRENCY=2 with 3 jobs)",
+          "exit": 0,
+          "tail": "video: ROW ('succeeded','completed',1337,1,0), tokenized 1 | race: 8 rows attempts=1, tokenized 8 == n, PREP WORKERS {worker-a42f4cbc, worker-c3d20a75} | concurrency: MID tokenized 2, readyz preparing 2, all 3 succeeded | 3 passed in 18.63s"
+        },
+        {
+          "cmd": "same env: pytest tests/w/test_review_probe.py -k stays_down (R93+R29 end to end, /tokenize down, PREPARATION_LEASE_TTL_S=1)",
+          "exit": 0,
+          "tail": "STATUS failed/preparation_failed ROW ('failed','preparation_failed',None,3,0) SETTLE ('released_free',) TOKENIZED 3 CHAT 0 | 1 passed"
+        },
+        {
+          "cmd": "same env: pytest tests/w/test_review_probe.py -k 'int32 or untyped_renewal or concurrency_zero'",
+          "exit": 1,
+          "tail": "FAKE ContextLengthExceeded vs PG NumericValueOutOfRange | RESULT prepared LOGGED [] | EXIT 1, 'preparation died' x2, ValueError concurrency must be at least 1 | 3 failed (the defects L4, L7, L3)"
+        },
+        {
+          "cmd": "python3 mut.py <hand mutant> -- tests/w/test_prep_worker.py [-k 'not _pg__' | + tests/w/test_review_probe.py -k _pg__]",
+          "exit": 0,
+          "tail": "hm1/hm2/hm3/hm6/hm9/hm10 KILLED; hm4/hm5/hm7/hm8 SURVIVED on the lane suite (fake + PG); hm4 and hm5 KILLED by reviewer probes"
+        },
+        {
+          "cmd": "gh api repos/vllm-project/vllm/contents/vllm/entrypoints/serve/tokenize/{serving,protocol}.py and vllm/renderers/online_renderer.py ?ref=a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b (the pinned serve.sh image)",
+          "exit": 0,
+          "tail": "create_tokenize -> online_renderer.preprocess_chat(..., skip_mm_cache=True); TokenizeChatRequest has add_generation_prompt (default True) and mm_processor_kwargs; count=len(input_ids)"
+        }
+      ],
+      "fabrication_check": "Every result quoted above is copied from output in this session: the pytest tails, the probe prints (STATUS/ROW/ENGINE/ATTEMPTS/MID/FAKE/PG/RESULT/EXIT) and the mut.py KILLED/SURVIVED lines. The vLLM statements come from source fetched at the pinned commit with gh api. I did not run a real vLLM, so real-engine count equality is marked unmeasured (L8). Review scope was the committed head c035ee4 in my own shared clone at /tmp/claude-1000/review-prepw-loop-330125/head, never the read-only worktree. The lane's evidence file is not committed, so I did not review it.",
+      "cleanup": "Removed the container I created, infrx-review-prepw-minio (docker rm -f -v). The d6 PostgreSQL container and the infrx-review-prepw-valkey Valkey were created and torn down by the harness; docker ps -a shows no infrx-d6-* or infrx-review-prepw-* container left. My Monitor (tail -f) is stopped. No process of mine is left: the fake vLLM and worker processes were stopped by Box.close, and ss shows 55437/55471/55472/55724/55700-55719 free. I never touched infrx-d3/ckpt2/d5/prepw/e4b containers, the other reviewer's review-prepw-journey processes, the forbidden ports, the pilot box, AWS or secrets. The scratch clone is left, with no source edits (git status clean after restoring every mutant and removing the probe file). The probes are kept for reproduction at /tmp/claude-1000/review-prepw-loop-330125/test_review_probe.py and zero.py: copy them to head/apps/infrx-api/tests/w/ to rerun. The whole directory can be removed with rm -rf /tmp/claude-1000/review-prepw-loop-330125."
+    },
+    {
+      "lens": "journey",
+      "verdict_hint": "fix_required",
+      "findings": [
+        {
+          "id": "J-F1",
+          "severity": "blocking",
+          "file": "tests/integration/backend/pilotbox.py (+ tests/integration/backend/test_journey.py)",
+          "line": "pilotbox.py:25-40 (docstring), 4f924fa message; test_journey.py:225-270 and pilotbox.py Journey.conserved",
+          "claim_broken": "4f924fa says the E3B pilot box no longer emulates preparation and that the box's worker process (python -m infrx.worker) prepares every job. The pilotbox docstring says 'Nothing prepares a job in this process' and that the worker 'counts the prompt with the engine's own /tokenize'. No case on the box can kill either claim. The journeys cannot tell who prepared a job or where its count came from.",
+          "evidence": "Hand mutant M3b, applied to a scratch clone at c035ee4: `git show 01103c9:tests/integration/backend/pilotbox.py > tests/integration/backend/pilotbox.py`, which brings back the gateway-side Prepare WorkerLoop with prepared(..., prompt_tokens=PROMPT_TOKENS) where PROMPT_TOKENS=1200, plus __main__.py `metrics=rt.metrics, preparation=preparation,` -> `metrics=rt.metrics, preparation=None,`, so the real worker prepares nothing. With it, all 13 acceptance cases PASS: the 9 test_backend_journey cells, dataset_client_resume and dr11 in one run (hm-m3b.log), then rc03 and rc08b (hm-m3b3.log: '2 passed, 15 deselected in 26.21s'; their first failures were `[Errno 98] ... 55580: address already in use`, an ephemeral port another lane was using, and the pristine code failed the same way at that moment). Only the reviewer probe caught it: 'PROBE text ... attempts=[('inference', 'worker-0d3f1a8e'), ('preparation', 'e3b3-prep')] prepared_prompt_tokens=1200 usage.prompt_tokens=1337 tokenize_calls=0'. Hand mutant M1 (preparation.py `count = await engine_prompt_tokens(self.engine, prepared)` -> `count = 1200`) also passes all 13 box cases (hm-m1.log: '2 failed, 13 passed', the 2 failures being the probe). Only tests/w prep_count_guessed and the lane's PG list kill M1. Root cause: the box's fake engine defaults to prompt_tokens=1200, the same value as the retired constant. No journey reads infrx.attempts(kind='preparation').worker_id, jobs.prepared_prompt_tokens or the fake's `tokenized` counter. Journey.conserved compares usage_events (the engine's usage) with card x usage, so it holds whoever prepared the job and whatever count was stored.",
+          "minimal_fix": "In pilotbox.journey, after the engine starts, call `engine.control(prompt_tokens=1337)` or any value other than 1200. In test_backend_journey (and the resume case), assert for each request_id: the 'preparation' row in infrx.attempts has the same worker_id as the 'inference' row; jobs.prepared_prompt_tokens == usage['prompt_tokens']; and trip.engine.control()['tokenized'] grew. Add a tests/integration/mutants.py entry `count = 1200` in preparation.py, named on test_backend_journey[text-sync]. The reviewer probe (/tmp/claude-1000/review-prepw-journey-330323/test_probe_prep.py) is a working version of these assertions: it passes on c035ee4 and kills M1 and M3b."
+        },
+        {
+          "id": "J-F2",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/preparation.py",
+          "line": "PreparationRunner.run (120-137); service.py stop() 'drained preparation' line",
+          "claim_broken": "The worker writes no log line per preparation, so its log cannot show that the loop prepared a job or called /tokenize. The 'drained preparation: N finished' line counts runner tasks, not preparations.",
+          "evidence": "The pristine worker log for the whole journey module (9 cells + resume), bt-journey/pilotbox0/worker-1.log, has exactly 4 lines: 'INFO botocore.credentials Found credentials in environment variables.' / 'WARNING infrx.worker preparation of 275bb9aa-7a2c-475a-8b54-ce580881a9ec refused: already_terminal' / 'WARNING infrx.worker drained: 10 finished, 0 released [], ended []' / 'WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []'. The 2 is PREPARATION_CONCURRENCY runners; about 20 jobs were prepared. A refused claim_preparation (for example M2's claim refusals) is not logged at all. Per-job proof came only from DB rows (see J-F1's probe).",
+          "minimal_fix": "In PreparationRunner.run, after prepared(), add `log.info(\"prepared %s: %d prompt tokens (engine /tokenize)\", job_id, count)`, and log a refused claim at info level. Optional; no claim depends on it."
+        },
+        {
+          "id": "J-F3",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/contracts/README.md",
+          "line": "131 (R46 row)",
+          "claim_broken": "The frozen contracts README still says '`heartbeat` refuses a preparation lease rather than no-opping'. This contradicts R52, the port docstring bd10d47 corrected ('this text used to say a preparation lease is refused; R52, the fake and PostgreSQL all renew it'), and the preparation loop, which renews through heartbeat every PREPARATION_LEASE_TTL_S/3.",
+          "evidence": "`git grep -n 'heartbeat. refuses a preparation lease' c035ee4 -- apps/infrx-api/infrx/contracts/README.md` -> README.md:131. ports.py:139-145 at c035ee4 says the opposite. This is F-owned text the lane left unchanged.",
+          "minimal_fix": "Integration request to F and the coordinator: align README R46's heartbeat sentence with R52 (a preparation lease renews, never past preparation_deadline_at), next to the lane's prepared(..., prompt_tokens=) ruling candidate."
+        },
+        {
+          "id": "J-F4",
+          "severity": "nonblocking",
+          "file": "tests/integration/backend/e4b_mutants.py",
+          "line": "engine_target_skips_to_ledger, published_digest_read_from_the_record",
+          "claim_broken": "Question 5 asks whether the E4B certify list still passes. The default subset does. The full list (INFRX_MUTANTS=all) has 2 survivors. This was already true at the lane's base and is not a PREP-WORKER regression.",
+          "evidence": "With TMPDIR outside the checkout, `pytest tests/integration/backend/test_e4b_mutants.py tests/integration/backend/test_certify.py` -> '34 passed in 11.12s'. With INFRX_MUTANTS=all -> '2 failed, 138 passed in 350.38s': 'engine_target_skips_to_ledger is survived ... 1 passed, 28 deselected' and 'published_digest_read_from_the_record is survived ... 1 passed, 28 deselected'. The same two survive at base 01103c9 ('2 failed, 138 deselected in 7.61s'). The lane changed nothing under tests/integration/backend except pilotbox.py.",
+          "minimal_fix": "None for this lane. Report to E4B's owner as a pre-existing survivor pair."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "M1 prep_count_constant_1200 (reviewer)",
+          "edit": "apps/infrx-api/infrx/worker/preparation.py: `        count = await engine_prompt_tokens(self.engine, prepared)` -> `        count = 1200`",
+          "result": "SURVIVED all 13 box acceptance cases (9 journey cells, dataset resume, dr11, rc03, rc08b: 13 passed). Killed by the reviewer probe (prepared_prompt_tokens=1200, usage=1337, tokenize_calls=0). The lane's service-free list also kills it: prep_count_guessed '2 failed, 28 deselected'.",
+          "killed_by": "tests/w test_prep_worker__a_text_job_is_queued_with_the_engines_own_count (lane mutant prep_count_guessed) and the reviewer probe. No E3B box case kills it (J-F1)."
+        },
+        {
+          "name": "M2 prep_without_claim_preparation (reviewer)",
+          "edit": "preparation.py: `            lease = await self.jobs.claim_preparation(job_id, self.worker_id)` -> `            lease = await self.jobs.claim(job_id, self.worker_id)`",
+          "result": "KILLED: '1 failed, 14 deselected in 127.12s'. The job stays preparing and the sync client dies with httpx.ReadTimeout, a timeout rather than an assertion.",
+          "killed_by": "tests/integration/backend/test_journey.py::test_backend_journey[text-sync]"
+        },
+        {
+          "name": "M3b box_reemulates_preparation + worker_pool_off (reviewer)",
+          "edit": "tests/integration/backend/pilotbox.py replaced by its 01103c9 version (gateway Prepare WorkerLoop, prepared(..., prompt_tokens=PROMPT_TOKENS=1200)); __main__.py `metrics=rt.metrics, preparation=preparation,` -> `metrics=rt.metrics, preparation=None,`",
+          "result": "SURVIVED all 13 box acceptance cases (11 passed in one run, rc03 and rc08b '2 passed' on re-run after an ephemeral-port collision). Only the reviewer probe failed: attempts=[('inference','worker-0d3f1a8e'),('preparation','e3b3-prep')], tokenize_calls=0.",
+          "killed_by": "none among the lane's or E3B's cases; only the reviewer probe (J-F1)"
+        },
+        {
+          "name": "M5 worker_preparation_pool_absent_on_the_box (reviewer)",
+          "edit": "__main__.py `metrics=rt.metrics, preparation=preparation,` -> `metrics=rt.metrics, preparation=None,` (box unchanged)",
+          "result": "KILLED: '1 failed, 15 deselected in 67.20s'. until_terminal times out and run_async then raises KeyError: 'cause', not an assertion.",
+          "killed_by": "tests/integration/backend/test_journey.py::test_backend_journey[text-async]"
+        },
+        {
+          "name": "e3bm64",
+          "edit": "relay.py Idempotency-Replayed header -> pass (list anchor)",
+          "result": "killed (mutants.py --layer all --only e3bm64: mutants 1, killed 1)",
+          "killed_by": "test_backend_journey[text-sync]"
+        },
+        {
+          "name": "e3bm70",
+          "edit": "relay.py `if idem.key is None:` -> `if True:`",
+          "result": "killed",
+          "killed_by": "test_backend_journey[text-sync]"
+        },
+        {
+          "name": "e3bm71",
+          "edit": "relay.py IdempotencyConflict swallowed at the lookup",
+          "result": "killed",
+          "killed_by": "test_backend_journey[text-sync]"
+        },
+        {
+          "name": "e3bm74",
+          "edit": "retired by 4f924fa (the anchor is removed from the list)",
+          "result": "not run: `mutants.py --layer all --only e3bm74` -> mutants 0, exit 0 (the runner accepts an unknown id silently). Its replacement, M's local_uri_misses_the_disk, was run and killed ('2 failed, 22 deselected').",
+          "killed_by": "tests/m test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process (replacement)"
+        },
+        {
+          "name": "e3bm75",
+          "edit": "uploads.py `if not source.startswith(UPLOAD_REF_SCHEME):` -> `if True:`",
+          "result": "killed",
+          "killed_by": "test_backend_journey[video_upload-sync]"
+        },
+        {
+          "name": "e3bm78",
+          "edit": "ingress.py `if request.execution_mode is not ExecutionMode.async_:` -> `if True:`",
+          "result": "killed",
+          "killed_by": "test_backend_journey[text-sync]"
+        },
+        {
+          "name": "i3bm117",
+          "edit": "I3B list anchor (the worker process's SIGTERM drain)",
+          "result": "killed (mutants 1, killed 1)",
+          "killed_by": "test_i3b_rc08b (per the list)"
+        },
+        {
+          "name": "lane: prep_count_guessed, prep_media_skipped, main_preparation_pool_absent",
+          "edit": "as in tests/w/prep_worker_mutants.py",
+          "result": "3/3 killed (python -m tests.w.prep_worker_mutants ...)",
+          "killed_by": "TEXT / VIDEO / COMPOSE cases of tests/w/test_prep_worker.py"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "docker ps -a; ss -ltn | grep ':555[0-9][0-9]' (namespace check before start)",
+          "exit": 0,
+          "tail": "no infrx-e2-* containers; 'no 555xx listeners' (other lanes: infrx-ckpt2-minio, infrx-d5-*, infrx-e4b-*, infrx-prepw-minio, infrx-q3-valkey-55498; none touched)"
+        },
+        {
+          "cmd": "TMPDIR=<scratch>/tmp python tests/integration/run.py --layer 2 --keep --report layer2.json (INFRX_E2_NAMESPACE unset, AWS_* unset)",
+          "exit": 0,
+          "tail": "preflight PASS, services PASS, migrate PASS, rls PASS, teardown SKIP (--keep); 'exit 0 (all stages passed)'"
+        },
+        {
+          "cmd": "python -m pytest tests/integration/backend/test_journey.py tests/integration/backend/test_drills.py tests/integration/backend/recovery/test_recovery.py -k 'backend_journey or dr11 or rc03 or rc08b' (pristine c035ee4)",
+          "exit": 0,
+          "tail": "PASSED text-sync/sse/async, video_url-sync/sse/async, video_upload-sync/sse/async, dataset_client_resume, dr11, rc03, rc08b; '13 passed, 61 deselected, 1 warning in 54.83s'"
+        },
+        {
+          "cmd": "grep PROMPT_TOKENS|prepared(|prepare_dispatch|WorkerLoop|claim_preparation tests/integration/backend/pilotbox.py; git grep '.prepared(|claim_preparation(' -- apps/infrx-api/infrx",
+          "exit": 0,
+          "tail": "pilotbox.py: only line 26 (docstring: 'relays the `prepare_dispatch`'). No PROMPT_TOKENS, no prepared( call, no WorkerLoop. In infrx/, only worker/preparation.py:125/149 call claim_preparation/prepared, besides ports, state and conformance."
+        },
+        {
+          "cmd": "reviewer probe test_probe_prep.py on pristine (engine prompt_tokens=1337; reads infrx.attempts, jobs.prepared_prompt_tokens, usage_events, fake 'tokenized')",
+          "exit": 0,
+          "tail": "PROBE text ... attempts=[('inference', 'worker-47c446ef'), ('preparation', 'worker-47c446ef')] prepared_prompt_tokens=1337 usage.prompt_tokens=1337 tokenize_calls=1 | PROBE video_url ... same worker, 1337/1337, tokenize_calls=1 | '2 passed in 7.94s'"
+        },
+        {
+          "cmd": "cat bt-journey/pilotbox0/worker-1.log (the pristine journey module's worker)",
+          "exit": 0,
+          "tail": "4 lines: botocore credentials; 'preparation of 275bb9aa-... refused: already_terminal'; 'drained: 10 finished, 0 released [], ended []'; 'drained preparation: 2 finished, 0 released [], ended []'. No per-job preparation or tokenize line exists (J-F2)."
+        },
+        {
+          "cmd": "reviewer probe test_probe_prep_down.py (fake tokenize_fault=down, async text job, pristine)",
+          "exit": 0,
+          "tail": "PROBE-DOWN 66bfc460-... took=109.1s status=failed/preparation_failed attempts=[preparation gen 1,2,3 all 'worker-aae2d51b'] holds=[('released',)] ledger=[] tokenized=3; worker log shows 3x 'refused: dependency_unavailable' (03:54:52, 03:55:31, 03:56:02); '1 passed in 116.06s'"
+        },
+        {
+          "cmd": "hand mutant M1 (count = 1200) + 13 box cases + probe",
+          "exit": 1,
+          "tail": "13 box cases PASSED; probe FAILED (prepared_prompt_tokens=1200 usage=1337 tokenize_calls=0); '2 failed, 13 passed, 61 deselected in 60.56s'"
+        },
+        {
+          "cmd": "hand mutant M2 (claim instead of claim_preparation), test_backend_journey[text-sync]",
+          "exit": 1,
+          "tail": "httpx.ReadTimeout; '1 failed, 14 deselected in 127.12s'"
+        },
+        {
+          "cmd": "hand mutant M3b (01103c9 pilotbox + preparation=None), 13 box cases + probe; rc03/rc08b re-run",
+          "exit": 1,
+          "tail": "first run: 11 box cases PASSED, probe 2 FAILED (preparation worker 'e3b3-prep', 1200, tokenize_calls=0), rc03/rc08b ERROR '[Errno 98] ... 55580' (ephemeral port; pristine failed identically then: TIME-WAIT 127.0.0.1:55580 -> 127.0.0.1:55437). Re-run: rc03, rc08b '2 passed, 15 deselected in 26.21s'"
+        },
+        {
+          "cmd": "hand mutant M5 (preparation=None), test_backend_journey[text-async]",
+          "exit": 1,
+          "tail": "KeyError: 'cause' after until_terminal timeout; '1 failed, 15 deselected in 67.20s' (first attempt hit the 55580 ephemeral collision, retried)"
+        },
+        {
+          "cmd": "for id in e3bm64 e3bm70 e3bm71 e3bm74 e3bm75 e3bm78 i3bm117: python tests/integration/mutants.py --layer all --only $id",
+          "exit": 0,
+          "tail": "e3bm64/70/71/75/78 killed; i3bm117 killed; e3bm74: mutants 0 (retired). The first pass without --layer all ran 0 mutants for every e3bm id (default layer 1) and was discarded."
+        },
+        {
+          "cmd": "python -m tests.w.prep_worker_mutants prep_count_guessed prep_media_skipped main_preparation_pool_absent; python -m tests.m.pilot_mutants local_uri_misses_the_disk",
+          "exit": 0,
+          "tail": "3/3 killed; local_uri_misses_the_disk killed '2 failed, 22 deselected in 1.29s' (1/1)"
+        },
+        {
+          "cmd": "python -c 'import run; r=run.Report(); run.backend(r)' (the backend stage the way run.py runs it, stack up, detached)",
+          "exit": 0,
+          "tail": "[ok] backend: postgrest/13.0.4, passed 188, pending 0, failed 0, not_run null, stale_pending null, pending_by_id {}; backend-teardown PASS; EXIT 0 (177.4 s)"
+        },
+        {
+          "cmd": "TMPDIR outside checkout: pytest tests/integration/backend/test_e4b_mutants.py tests/integration/backend/test_certify.py",
+          "exit": 0,
+          "tail": "'34 passed in 11.12s'"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest tests/integration/backend/test_e4b_mutants.py (head and base 01103c9)",
+          "exit": 1,
+          "tail": "head: '2 failed, 138 passed in 350.38s' (engine_target_skips_to_ledger, published_digest_read_from_the_record survive); base 01103c9: the same 2 fail, so pre-existing (J-F4)"
+        },
+        {
+          "cmd": "harness.down(); harness.clear_state(); stack.postgrest_down()",
+          "exit": 0,
+          "tail": "removed ['infrx-e2-clickhouse', 'infrx-e2-postgres', 'infrx-e2-s3', 'infrx-e2-valkey']; foreign []; no infrx-e2 containers/networks/volumes; no 555xx listeners"
+        },
+        {
+          "cmd": "layer 0 (no stack): python -m pytest -q -rs tests/integration from the scratch root",
+          "exit": 0,
+          "tail": "'202 passed, 103 skipped, 2 warnings in 35.68s'; PENDING[ markers: 0; every skip is 'no infrx-e2 stack'/'no seeded fixtures'/'no infrx-e3b-postgrest of this checkout'"
+        }
+      ],
+      "fabrication_check": "Every quoted line and count was copied from files my own runs wrote under /tmp/claude-1000/review-prepw-journey-330323/ (journey.log, hm-m*.log, probe-down.log, mut-*.json, backend.log, e4b-all.log, layer0.log, layer2.json). The scratch clones and pytest basetemps were deleted afterwards; the logs are kept. I did not reproduce the lane's '16 passed, 3 skipped' on e4b. My selection is the 13 cases the question names; the other 3 need the stage PostgREST and ran inside the backend stage's 188. 'Journey.conserved' was checked by reading the code. It uses usage_events (engine usage), not the prepared count, which is why M1 and M3b survive it. The engine-derived count is shown by the probe's DB rows, not by any worker log line; the worker writes none per job. The 55580 bind failures came from other lanes' clients using it as an ephemeral source port (observed with ss: 55580->55437 and 55580->56832). They were retried and are not counted as kills. The read-only worktree codex-prepw was only read (brief located in infrx-impl/.claude/handoff/wave3/PREP-WORKER.md; git grep at c035ee4); nothing was run or edited in it.",
+      "cleanup": "Removed through the harness: my E2-namespace stack (infrx-e2-clickhouse, infrx-e2-postgres, infrx-e2-s3, infrx-e2-valkey). The backend stage's PostgREST was removed by its own backend-teardown (PASS). Verified afterwards: no infrx-e2 containers, networks or volumes; no listeners on 55500-55599; the state file was cleared. Processes: everything I started (pytest runs, pilot box gateways and workers, fake vLLM, mutant runners) has exited; `ps` shows none. The 55580 ephemeral-port holders belonged to other lanes and were left alone. Scratch clones (head, mut, base) and temp directories were deleted. Only logs, probes and scripts remain (896K) in /tmp/claude-1000/review-prepw-journey-330323/. I did not touch another lane's containers, the forbidden ports, the pilot box, AWS, hosted Supabase or secrets."
+    }
+  ],
+  "confirmed_blocking": [],
+  "downgraded_to_nonblocking": [
+    {
+      "id": "L1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/worker/preparation.py",
+      "line": "10-11, 124-127",
+      "claim_broken": "Module docstring step 1: 'A lost claim (another worker holds it, the job moved on or ended) is reported, never retried here.' No case in tests/w/test_prep_worker.py runs a refused claim_preparation through PreparationRunner.run, so the try/except that turns a lost claim into a PreparationResult can be deleted without any failure. Under that mutant, a prepare_dispatch offered twice (the index is only a hint, 02 §4: relay redelivery or reconciler repair) makes the runner raise not_claimable. The crash-only service then drains and exits, taking the inference pool down with it.",
+      "evidence": "Hand mutant hm5: replace `try: lease = await self.jobs.claim_preparation(...) except errors.DomainError as refused: return PreparationResult(...)` with a bare `lease = await self.jobs.claim_preparation(job_id, self.worker_id)`. It SURVIVED `pytest tests/w/test_prep_worker.py -k 'not _pg__'` (28 passed) and SURVIVED the _pg__ cases plus my PG probes on d6 (5 passed). My probe test_probe__a_duplicated_candidate_is_a_lost_claim_not_a_dead_runner (in /tmp/claude-1000/review-prepw-loop-330125/test_review_probe.py) enqueues the same job's candidate twice. Pristine it prints `DIED [] LIVE True REFUSALS ['not_claimable', None]` and passes; under hm5 it is KILLED.",
+      "minimal_fix": "Add the duplicated-candidate case (two candidates for one job through the WorkerService: the second result is refusal not_claimable, _died()==[], live True) and the hm5 mutant to prep_worker_mutants.MUTANTS.",
+      "lens": "loop",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Reproduced at c035ee4 in a scratch copy made with git archive, with uv sync --frozen --all-extras. I applied hm5, which replaces the try/except around claim_preparation in PreparationRunner.run (preparation.py:124-127) with a bare `lease = await self.jobs.claim_preparation(job_id, self.worker_id)`. The mutant survived every existing test.\n(1) `pytest -q tests/w/test_prep_worker.py -k 'not _pg__'`: 28 passed, 2 deselected.\n(2) `pytest -q tests/w -k 'not _pg__ and not mutants'`: 178 passed.\n(3) The PG cases, run with INFRX_D_TASK=d6, my own Valkey (55478, container infrx-refute-valkey) and my own MinIO (infrx-refute-minio on 55726 with the E2 literals), `pytest -q tests/w/test_prep_worker.py -k _pg__`: 2 passed.\nThe only lost-claim test, `test_prep_worker__a_refused_attempt_is_requeued_when_its_lease_lapses`, calls `prep.store.claim_preparation` directly and never goes through runner.run. prep_worker_mutants.py has no mutant for the claim refusal.\nI then ran my own probe. It enqueues the same job's prepare_dispatch candidate twice into the FakeScheduler and runs it through the file's `service(prep)`, a WorkerService. Under hm5 it printed `DIED [<Task ... prep-w-1 ... exception=NotClaimable('not_claimable: job ... is queued, not preparing')>] LIVE False RESULTS [('prepared', None)]`, so a runner died and the service went not-live. On the pristine code it printed `DIED [] LIVE True RESULTS [(None, 'not_claimable'), ('prepared', None)]`.\nSo the gap is real, but the shipped code is correct. The head handles a lost claim as a PreparationResult, and nothing in this merge ships a wrong count, a lost or duplicated preparation, a stuck job or a leaked lease. The defect is a missing test and mutant that would guard the handling against regression, which makes it nonblocking under the given rubric.\nCleanup: I removed the MinIO container and the scratch directory. The harness had already removed the Valkey and d6 containers, and none remain.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I reproduced it. I built a scratch copy from `git archive c035ee4` (removed afterwards), ran `uv sync --frozen --all-extras` and used TMPDIR inside my scratchpad. In apps/infrx-api/infrx/worker/preparation.py:124-127 (PreparationRunner.run) I applied hm5, which replaces the try/except around `claim_preparation` with a bare `lease = await self.jobs.claim_preparation(job_id, self.worker_id)`. With the mutant in place, `.venv/bin/python -m pytest -q tests/w/test_prep_worker.py tests/w/test_loop.py tests/w/test_service.py tests/w/test_worker_main.py -k 'not _pg__'` gave \"104 passed, 6 deselected\". The mutant survives every non-PG worker suite, and no entry in tests/w/*mutants*.py targets claim_preparation.\n\nI ran the reviewer's probe test_probe__a_duplicated_candidate_is_a_lost_claim_not_a_dead_runner. On pristine code it prints `DIED [] LIVE True REFUSALS ['not_claimable', None]` and passes. Under hm5 it prints `DIED [<Task ... prep-w-1 ... exception=NotClaimable('not_claimable: job ... is queued, not preparing')>] LIVE False REFUSALS [None]` and fails. So a redelivered prepare_dispatch kills the preparation runner task and the service reports itself not live.\n\nI did not run the two _pg__ cases, so for those I rely on the reviewer's report. One is the happy path and one is SIGTERM release, and neither delivers a duplicate candidate, which fits their survival.\n\nThe coverage gap is real. The code at c035ee4 is correct, though: the lost claim is reported and is not fatal. Merging as-is would not ship a wrong count, a lost or duplicated preparation, a stuck job or a leaked lease. The only risk is that a future regression on this path goes undetected. That makes it nonblocking. The fix is to add the duplicated-candidate case to test_prep_worker.py and hm5 to prep_worker_mutants.MUTANTS.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    },
+    {
+      "id": "L2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/worker/preparation.py",
+      "line": "38, 121",
+      "claim_broken": "'The lease is renewed every third of PREPARATION_LEASE_TTL_S while the attempt runs (R52)'. The RENEW case always injects renew_every_s=0.01, so the default cadence the product runs with is never exercised. With `ttl * 3`, any preparation longer than the 30 s TTL loses its lease before the first renewal. The fence then refuses `prepared`, and after three retries the job ends preparation_failed.",
+      "evidence": "Hand mutant hm4: `limits.preparation_lease_ttl_s / 3` -> `limits.preparation_lease_ttl_s * 3`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed). My probe test_probe__the_default_renewal_keeps_a_long_preparation_alive (TTL 0.3 s, no renew_every_s, the fake clock moved 1.6 s during a held /tokenize) passes pristine with `cause='prepared' ... queued`, and hm4 is KILLED by it.",
+      "minimal_fix": "Add a case that builds the runner without renew_every_s (a short PREPARATION_LEASE_TTL_S, a tokenize held past several TTLs, expected result prepared/queued), and list the `/ 3` -> `* 3` mutant.",
+      "lens": "loop",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I reproduced the coverage gap, but the shipped code is correct. At c035ee4, preparation.py:121 reads `self.renew_every_s = renew_every_s or limits.preparation_lease_ttl_s / 3`, which means a renewal every 10 s against the 30 s TTL. So the product does not ship a lost lease or a failed preparation. The gap is in the tests: the only lease cases in tests/w/test_prep_worker.py (lines 355 and 390) inject renew_every_s=0.01, so no test runs the default cadence. prep_worker_mutants.py also has no `/ 3` mutant.\n\nReproduction: in a scratch made with git archive c035ee4 (apps/infrx-api, tests and models), I ran `sed -i 's|limits.preparation_lease_ttl_s / 3|limits.preparation_lease_ttl_s * 3|' infrx/worker/preparation.py`, then `uv run --frozen pytest -q tests/w/test_prep_worker.py`.\n- Mutant: `28 passed, 2 skipped in 1.96s`, so it survives.\n- Pristine: `28 passed, 2 skipped in 2.05s`.\n\nI then wrote a probe with PREPARATION_LEASE_TTL_S=0.3 and no renew_every_s. It holds /tokenize while the fake clock advances 8 x 0.2 s, with 0.15 s real sleeps in between.\n- Pristine: passes, and the job ends `queued`.\n- Mutant: `AssertionError: PreparationResult(... cause=None, refusal='stale_lease', ... detail='stale_lease: preparation lease expired at 2026-09-20 12:00:00.300000+00:00')`, so the probe kills it.\n\nThe finding is real as a gap in tests and in the mutant list. It is not a defect in the merged behaviour, so it counts as nonblocking under the rubric. I removed the scratch, and no containers were created.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I reproduced the coverage gap, but it is not a defect in the product. At c035ee4, preparation.py:121 is `self.renew_every_s = renew_every_s or limits.preparation_lease_ttl_s / 3`, which is correct. The composition root (worker/__main__.py:144) builds PreparationRunner without renew_every_s, so the product uses the correct TTL/3 cadence. The only test that gives renewal real work (test_prep_worker.py:355, RENEW) and the one at :390 both inject renew_every_s=0.01. No test and no entry in tests/w/prep_worker_mutants.py covers the default expression. Reproduction in a git-archive scratch of c035ee4 (apps/infrx-api + tests + Makefile, `uv sync --frozen --all-extras`, TMPDIR in scratch): I ran `sed -i 's#limits.preparation_lease_ttl_s / 3#limits.preparation_lease_ttl_s * 3#' infrx/worker/preparation.py`, and grep showed `121: self.renew_every_s = renew_every_s or limits.preparation_lease_ttl_s * 3`. Then `.venv/bin/python -m pytest -q tests/w/test_prep_worker.py` gave `28 passed, 2 skipped` with the mutant in place, the same result as the unmutated code. So the hm4 mutant survives as claimed. I did not rerun the 2 skipped PG cases because no PG was started. The mutant list has no default-cadence entry, so they would only kill hm4 if they happened to exercise it, and the reviewer reports they did not. Severity: the code being merged is correct, so this merge ships no lost, duplicated, stuck or double-prepared preparation and no leaked lease. What is missing is a test that would catch a future regression of the default cadence. That fits \"coverage/cosmetic gap\", so it is nonblocking. The suggested fix is sound: add a case without renew_every_s that uses a short PREPARATION_LEASE_TTL_S and holds /tokenize past several TTLs, and list the `/ 3`->`* 3` mutant.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [
+    {
+      "id": "J-F1",
+      "votes": [
+        {
+          "refuted": true,
+          "reason": "The box-level gap is real, but the finding fails as a blocking defect. I did not rerun the box mutants, because the E2 stack would have used the shared 55500-55599 block, where the reviewer had already hit port collisions.\n\nWhat I checked by reading c035ee4:\n- tests/integration/fake_vllm.py:121 defaults to `prompt_tokens: int = 1200`.\n- No test under tests/integration/backend reads jobs.prepared_prompt_tokens, the worker_id of the 'preparation' attempt, or the fake's `tokenized` counter.\n- So the journeys cannot tell who prepared a job or where its count came from, as the reviewer says.\n\nWhere the claim fails:\n1. The product claims can be killed.\n   - M1 (`count = 1200`) is `prep_count_guessed` in apps/infrx-api/tests/w/prep_worker_mutants.py:68, plus `prep_count_guessed_on_postgresql` at :233.\n   - I ran it in a scratch made from `git archive c035ee4 | tar -x` with `uv sync --frozen --all-extras`: `PYTHONPATH=. .venv/bin/python -m pytest -q tests/w/test_prep_worker_mutants.py` gave `8 passed, 1 skipped in 25.37s`. That run includes test_mutant_is_killed[prep_count_guessed] and [service_preparation_not_started], so both are killed.\n   - The worker-prepares claim can also be killed on the box. `preparation=None` in __main__.py on its own leaves nothing to prepare jobs on the box, since 4f924fa removed the gateway-side emulation. I reached this by reading the code; I did not run it.\n2. M3b only survives because it also puts back the old test harness's gateway-side Prepare WorkerLoop. That is a change to the tests, not to the product. What it shows is that the box journeys add no check of their own on provenance or the count. It does not show that product code can ship a wrong count.\n3. The code at c035ee4 is correct. The reviewer's own probe passes on it, so a merge would not ship a wrong prompt count or a lost or double preparation.\n\nWhat is left is a gap in integration-level coverage plus a docstring that promises more than the journeys check. That is nonblocking. The suggested fix is still worthwhile: call `engine.control(prompt_tokens=1337)` on the box and assert the preparation worker_id, prepared_prompt_tokens and `tokenized`. My scratch directory has been removed; I created no containers.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": true,
+          "reason": "This is a real gap in the box tests, but calling it blocking is wrong: the lane's own unit mutant list already kills both product mutations the finding relies on. I checked this at c035ee4 in a scratch copy (git archive, then uv sync --frozen --all-extras).\n\n1. Pristine run: `pytest tests/w/test_prep_worker.py -k \"engines_own_count or composes_the_preparation_pool\"` gave '3 passed'.\n2. M1 (preparation.py `count = await engine_prompt_tokens(self.engine, prepared)` changed to `count = 1200`): `-k engines_own_count` gave '2 failed' (test_prep_worker__a_text_job_is_queued_with_the_engines_own_count[legacy] and [credit]). This mutation is already listed as prep_count_guessed in apps/infrx-api/tests/w/prep_worker_mutants.py:67-69.\n3. The product half of M3b (worker/__main__.py `preparation=preparation,` changed to `preparation=None,`): `-k composes_the_preparation_pool` gave '1 failed' (test_prep_worker__the_worker_composes_the_preparation_pool). This mutation is already listed at prep_worker_mutants.py:163-164, named on COMPOSE.\n\nThe only other thing M3b does is bring back the old pilotbox.py, which puts preparation back inside the test harness. That is a change to test code, not a product regression. Without it, a worker that prepares nothing leaves every box journey stuck, so the box journeys would still catch that.\n\nA merge therefore cannot ship a guessed prompt count or a worker that skips preparation without failing the lane's registered mutant list. I did not re-run the box. The reviewer's logs (hm-m1.log, hm-m3b.log, hm-m3b3.log) credibly show that the 13 box cases do not check who prepared a job or where its count came from. The fake engine's default of 1200 is the same as the retired constant, and Journey.conserved compares only the usage rows. That makes the box-level claim in the pilotbox docstring and the 4f924fa commit message unkillable on the box. It is a coverage and evidence-wording gap, and the reviewer's suggested probe assertions would still be a worthwhile nonblocking follow-up.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "L3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/preflight.py",
+      "line": "210 (and infrx/config.py:157 MUST_BE_POSITIVE)",
+      "claim_broken": "The infrx/worker/__main__.py docstring says a bad deployment value is refused with exit 2, naming the setting, before a listener is bound. The 08 §5.1 row makes PREPARATION_CONCURRENCY the worker's preparation pool size and settable through preflight.TUNABLE. Before this lane, 0 was harmless because MediaPreparation's gate uses max(1, n). Now 0 is accepted and the preparation pool raises ValueError. WORKER_CONCURRENCY got a positive_int shape for exactly this reason; PREPARATION_CONCURRENCY did not.",
+      "evidence": "PYTHONPATH=. uv run python /tmp/claude-1000/review-prepw-loop-330125/zero.py prints `preflight PREPARATION_CONCURRENCY=0: []`, `preflight WORKER_CONCURRENCY=0: ['WORKER_CONCURRENCY: the value is not a valid positive_int']`, `validate_runtime: accepted, preparation_concurrency = 0` and `preparation pool: ValueError concurrency must be at least 1`. The real process on PG (probe test_probe_pg__preparation_concurrency_zero_is_not_refused_at_startup) exits `EXIT 1` rather than 2 and logs `ERROR infrx.worker preparation died; draining for a restart` twice (the pool task sits in both _died() and _preparation_tasks()[:1]). Under Restart=always this is a crash loop.",
+      "minimal_fix": "Add \"PREPARATION_CONCURRENCY\": \"positive_int\" to TUNABLE_SHAPES and \"preparation_concurrency\" to config.MUST_BE_POSITIVE (or refuse it in compose), with a case asserting exit 2 naming PREPARATION_CONCURRENCY.",
+      "lens": "loop"
+    },
+    {
+      "id": "L4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/jobstore.py",
+      "line": "262-276",
+      "claim_broken": "Ruling-candidate text (ports.py prepared): 'a count below 0 or above the job's max_input_tokens ... is context_length_exceeded; either way nothing changes.' F's fake meets this for any int. PostgreSQL does not for a count >= 2**31: it raises an untyped psycopg error. engine_prompt_tokens accepts an answer without `tokens` (`if tokens is not None and ...`), so a text /tokenize reply {\"count\": 2147483648} reaches `prepared`, and the untyped error kills the worker process.",
+      "evidence": "Probe test_probe_pg__an_int32_overflowing_count_is_typed_like_the_fake (d6, plain image) prints `FAKE (('ContextLengthExceeded', 'context_length_exceeded', ...), None)` and `PG (('NumericValueOutOfRange', None, 'value \"2147483648\" is out of range for type integer CONTEXT: PL/pgSQL function prepare(jsonb) line 52 at IF'), None)`. A real vLLM always returns `tokens`, so this is reachable only from a misbehaving engine.",
+      "minimal_fix": "In PgJobStore.prepared, raise errors.ContextLengthExceeded when prompt_tokens > 2**31-1 (such a count exceeds any max_input_tokens), and add 2**31 to the bad counts in dur_fence__prepared_stores_the_exact_prompt_count_once. Optionally also require `tokens` in engine_prompt_tokens.",
+      "lens": "loop"
+    },
+    {
+      "id": "L5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "135",
+      "claim_broken": "'Its drain bound is PREPARATION_LEASE_TTL_S: an attempt still running then is released' (service.py docstring, 08 §5.1 row). Only the upper side is pinned: the lane's mutant drain(bound) dies on `took < 3.0`. A drain that releases in-flight preparations almost at once instead of letting them finish inside the TTL survives.",
+      "evidence": "Hand mutant hm7: `self.preparation.drain(self.loop.limits.preparation_lease_ttl_s)` -> `self.preparation.drain(0.1)`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed): PG_DRAIN and SERVICE log the same `1 finished, 1 released` line either way.",
+      "minimal_fix": "In SERVICE or PG_DRAIN, add an attempt whose tokenize answers after the SIGTERM but inside PREPARATION_LEASE_TTL_S. Assert it ends 'prepared' (drain line `ended [(job, 'prepared')]`), not released.",
+      "lens": "loop"
+    },
+    {
+      "id": "L6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/preparation.py",
+      "line": "16-17, 65",
+      "claim_broken": "'wait (bounded) for the admitting gateway's durable attach, which lands just after the admission commits'. The product default ATTACH_WAIT_S is never used by a case: Prep injects attach_wait_s, and the PG cases are text-only, where _media is never called. With 0 s, a worker that claims before the attach lands answers not_found and costs a full lease TTL per retry.",
+      "evidence": "Hand mutant hm8: `ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05` -> `0.0, 0.05`. It SURVIVED the service-free suite (28 passed) and the PG cases plus probes (5 passed), including my PG video probe, where the attach had already landed.",
+      "minimal_fix": "Add a case that builds PreparationRunner with no attach_wait_s and an attach landing about 0.2 s after the claim (as VIDEO does), expecting prepared. Or pin the default in the list.",
+      "lens": "loop"
+    },
+    {
+      "id": "L7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/preparation.py",
+      "line": "35-36, 134-136, 160-165",
+      "claim_broken": "'Anything untyped propagates: W3's crash-only service drains and exits.' An untyped error from the renewal task (for example the store unreachable on heartbeat) is swallowed by `gather(renewing, return_exceptions=True)`. It is never logged, and the attempt carries on without renewals.",
+      "evidence": "Probe test_probe__an_untyped_renewal_failure_is_swallowed (heartbeat raises RuntimeError, renew_every_s=0.01, tokenize held 0.1 s) prints `RESULT PreparationResult(... cause='prepared' ...) LOGGED []`. Correctness holds because the fence still guards `prepared`, but the docstring claim is false and the failure is invisible.",
+      "minimal_fix": "After the gather, re-raise (or at least log.error) a non-DomainError exception from `renewing`. Otherwise narrow the docstring to exclude the renewal.",
+      "lens": "loop"
+    },
+    {
+      "id": "L8",
+      "severity": "nonblocking",
+      "file": "tests/integration/fake_vllm.py",
+      "line": "_tokenize (count = self.prompt_tokens)",
+      "claim_broken": "'prompt_tokens is exact and engine-derived' holds in every run only because the fake's /tokenize count and its chat usage.prompt_tokens both return self.prompt_tokens. The fake ignores the messages entirely, so the equality is true by construction, and the claim is only as strong as the fake. What pins the body the loop sends is the exact-dict assertion in TEXT and the part/mm_processor_kwargs assertions in VIDEO.",
+      "evidence": "From source: fake_vllm.py `_tokenize` returns count=self.prompt_tokens; the chat route reports usage.prompt_tokens=self.prompt_tokens. On the pinned engine (vllm-openai nightly a8d1aa9c, read via gh api), POST /tokenize with TokenizeChatRequest goes through online_renderer.preprocess_chat. That is the chat path ('Copied from GenerateBaseServing._preprocess_chat'), with mm_processor_kwargs passed as prompt_extras and skip_mm_cache=True, so it should return the expanded video placeholders and the same count as usage. add_generation_prompt already defaults to True there. This is unmeasured on the box. The tokenize pass also skips the multimodal cache, so each video is decoded twice per job (latency is ⚠️ TO BE VERIFIED).",
+      "minimal_fix": "Before the pilot, run a box probe on the pinned image: for one text job and one 10 s clip, show that the stored prepared_prompt_tokens equals the engine's usage.prompt_tokens. Quote it in the evidence as the real-engine check, and record the double decode as a latency limit.",
+      "lens": "loop"
+    },
+    {
+      "id": "J-F2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/preparation.py",
+      "line": "PreparationRunner.run (120-137); service.py stop() 'drained preparation' line",
+      "claim_broken": "The worker writes no log line per preparation, so its log cannot show that the loop prepared a job or called /tokenize. The 'drained preparation: N finished' line counts runner tasks, not preparations.",
+      "evidence": "The pristine worker log for the whole journey module (9 cells + resume), bt-journey/pilotbox0/worker-1.log, has exactly 4 lines: 'INFO botocore.credentials Found credentials in environment variables.' / 'WARNING infrx.worker preparation of 275bb9aa-7a2c-475a-8b54-ce580881a9ec refused: already_terminal' / 'WARNING infrx.worker drained: 10 finished, 0 released [], ended []' / 'WARNING infrx.worker drained preparation: 2 finished, 0 released [], ended []'. The 2 is PREPARATION_CONCURRENCY runners; about 20 jobs were prepared. A refused claim_preparation (for example M2's claim refusals) is not logged at all. Per-job proof came only from DB rows (see J-F1's probe).",
+      "minimal_fix": "In PreparationRunner.run, after prepared(), add `log.info(\"prepared %s: %d prompt tokens (engine /tokenize)\", job_id, count)`, and log a refused claim at info level. Optional; no claim depends on it.",
+      "lens": "journey"
+    },
+    {
+      "id": "J-F3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/README.md",
+      "line": "131 (R46 row)",
+      "claim_broken": "The frozen contracts README still says '`heartbeat` refuses a preparation lease rather than no-opping'. This contradicts R52, the port docstring bd10d47 corrected ('this text used to say a preparation lease is refused; R52, the fake and PostgreSQL all renew it'), and the preparation loop, which renews through heartbeat every PREPARATION_LEASE_TTL_S/3.",
+      "evidence": "`git grep -n 'heartbeat. refuses a preparation lease' c035ee4 -- apps/infrx-api/infrx/contracts/README.md` -> README.md:131. ports.py:139-145 at c035ee4 says the opposite. This is F-owned text the lane left unchanged.",
+      "minimal_fix": "Integration request to F and the coordinator: align README R46's heartbeat sentence with R52 (a preparation lease renews, never past preparation_deadline_at), next to the lane's prepared(..., prompt_tokens=) ruling candidate.",
+      "lens": "journey"
+    },
+    {
+      "id": "J-F4",
+      "severity": "nonblocking",
+      "file": "tests/integration/backend/e4b_mutants.py",
+      "line": "engine_target_skips_to_ledger, published_digest_read_from_the_record",
+      "claim_broken": "Question 5 asks whether the E4B certify list still passes. The default subset does. The full list (INFRX_MUTANTS=all) has 2 survivors. This was already true at the lane's base and is not a PREP-WORKER regression.",
+      "evidence": "With TMPDIR outside the checkout, `pytest tests/integration/backend/test_e4b_mutants.py tests/integration/backend/test_certify.py` -> '34 passed in 11.12s'. With INFRX_MUTANTS=all -> '2 failed, 138 passed in 350.38s': 'engine_target_skips_to_ledger is survived ... 1 passed, 28 deselected' and 'published_digest_read_from_the_record is survived ... 1 passed, 28 deselected'. The same two survive at base 01103c9 ('2 failed, 138 deselected in 7.61s'). The lane changed nothing under tests/integration/backend except pilotbox.py.",
+      "minimal_fix": "None for this lane. Report to E4B's owner as a pre-existing survivor pair.",
+      "lens": "journey"
+    }
+  ]
+}

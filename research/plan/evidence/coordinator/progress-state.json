@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T02:51:40Z",
+  "updated": "2026-09-24T04:28:30Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "PREP-WORKER": {
       "lane": "codex-prepw / codex/prep-worker",
-      "phase": "DISPATCHED (Opus) from 01103c9: the product preparation loop (prepare_dispatch → claim_preparation → MediaPreparation → exact prompt_tokens via the engine's /tokenize → prepared); acceptance = E3B journeys on the real worker with the box's emulation deleted",
+      "phase": "early review PASS at c035ee4 (wf_6bad9e38-f8b; all nine journeys on the real worker, backend 188/0/0; 10 nonblocking/downgraded items sent to the lane to fold in) → handback → targeted verifier → merge + focused gate",
       "since": "2026-09-24T02:13:25Z",
       "note": "BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b"
     }
@@ -102,6 +102,10 @@
     "I2B-R4-worker": {
       "phase": "MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json)",
       "since": "2026-09-24T02:51:40Z"
+    },
+    "PREP-WORKER": {
+      "phase": "early review pass at c035ee4 (JSON evidence/w/PREP-WORKER-review-c035ee4.json); lane folding L1-L8, J-F2-J-F4",
+      "since": "2026-09-24T04:28:30Z"
     }
   },
   "gates": {
