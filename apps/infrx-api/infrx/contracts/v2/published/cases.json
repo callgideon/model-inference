@@ -317,7 +317,8 @@
           ],
           120
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -363,7 +364,8 @@
             "top_logprobs"
           ]
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -379,7 +381,8 @@
           ],
           true
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -400,7 +403,8 @@
             "video/webm"
           ]
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -446,7 +450,8 @@
             "top_logprobs"
           ]
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -461,7 +466,8 @@
           ],
           172800
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -476,7 +482,8 @@
           ],
           3600
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -491,7 +498,8 @@
           ],
           86400
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -507,7 +515,8 @@
           ],
           1
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [
@@ -529,7 +538,8 @@
           ],
           4096
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [],
@@ -543,7 +553,8 @@
           ],
           60
         ]
-      ]
+      ],
+      "profile_patches": []
     },
     {
       "expected": [],
@@ -555,6 +566,52 @@
             "unsupported_parameters"
           ],
           []
+        ]
+      ],
+      "profile_patches": []
+    },
+    {
+      "expected": [
+        "capability.execution_modes"
+      ],
+      "name": "SSE streaming on a deployment without it",
+      "patches": [],
+      "profile_patches": [
+        [
+          [
+            "capability",
+            "execution_modes"
+          ],
+          [
+            "async",
+            "sync"
+          ]
+        ]
+      ]
+    },
+    {
+      "expected": [
+        "capability.input_modalities",
+        "capability.video"
+      ],
+      "name": "video input on a text-only deployment",
+      "patches": [],
+      "profile_patches": [
+        [
+          [
+            "capability",
+            "input_modalities"
+          ],
+          [
+            "text"
+          ]
+        ],
+        [
+          [
+            "capability",
+            "video"
+          ],
+          null
         ]
       ]
     }

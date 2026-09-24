@@ -1,0 +1,63 @@
+{
+ "task": "E1C",
+ "slice": "E1C.1-E1C.4 + coordinator update 1 (S3 F5, F8/P-24)",
+ "activity": "review",
+ "head": "2531dc49",
+ "worktree": ".claude/worktrees/codex-e1c-client",
+ "branch": "codex/e1c-client",
+ "owned_paths": [
+  "models/marlin2b/bench.py",
+  "models/marlin2b/tests/",
+  "models/marlin2b/dataset.py",
+  "models/marlin2b/runprofile.py",
+  "models/marlin2b/profiles/",
+  "research/plan/evidence/e/E1C-2531dc4.md"
+ ],
+ "commands": [
+  {
+   "cmd": "make bench-test (base dff31efc)",
+   "exit": 0,
+   "summary": "68 passed"
+  },
+  {
+   "cmd": "make bench-test (2531dc49)",
+   "exit": 0,
+   "summary": "96 passed (+28: conformance 4, dataset 6, validity 8, profile 10)"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py",
+   "exit": 0,
+   "summary": "38 passed"
+  },
+  {
+   "cmd": "apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py (detached)",
+   "exit": 0,
+   "summary": "80 mutants: 77 killed, 3 controls survived, 0 problems (37 new E1C)"
+  },
+  {
+   "cmd": "bench.py --validate-raw <committed E1B raw>",
+   "exit": 0,
+   "summary": "bda1586 L2/L3 VALID; 4226315 L2-r0.5/L2-r1.0/L3/L5 INVALID (unexpected replay); counts equal stored summaries"
+  }
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 8,
+  "confidence": "med",
+  "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds",
+  "at": "2026-09-24T22:15Z"
+ },
+ "blockers": [
+  "UPLOAD-RESTART needs M5 durable uploads (codex/m5-uploads empty at 22:05Z)",
+  "hosted smoke is the coordinator's (command in the evidence)"
+ ],
+ "wiring_requests": [
+  "certify.py bench_argv: pass --profile/--key-inventory per cell; rung_verdicts FAIL on validity != VALID",
+  "after that: make --profile mandatory for non-local gateway targets in bench._run (E1C one-line flip)",
+  "coordinator: append E1B-protocol.md section 5 items 9-11 (replay INVALID, per-cell dataset version, P4 through the edge with observed 429/503)"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E1C-2531dc4.md"
+ ]
+}

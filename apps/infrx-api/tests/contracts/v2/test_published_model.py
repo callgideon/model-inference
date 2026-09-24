@@ -35,7 +35,8 @@ TS = (API.parent / "app" / "lib" / "contracts" / "v2" / "published-model.ts").re
 
 CREDIT_DOC = pf.load("published_marlin_credit.json")
 LEGACY_DOC = pf.load("published_marlin_legacy_usd.json")
-PROFILE = pm.ServingProfile.model_validate(pf.load("serving_profile_marlin.json"))
+PROFILE_DOC = pf.load("serving_profile_marlin.json")
+PROFILE = pm.ServingProfile.model_validate(PROFILE_DOC)
 CASES = pf.load("cases.json")
 ALIASES = pf.load("alias_compatibility.json")
 
@@ -49,11 +50,10 @@ def _deployment():
 
 
 def _project(**overrides):
-    profile = pf.deployed_profile()
     kw = dict(serving=_serving(), deployment=_deployment(), listing_version=1,
               regime="credit", credit_card=v2fix.BUILDERS["rate_card_marlin.json"](),
               credit_provisional=True, usd_price=pf._canonical_usd_row(),
-              capability=profile.capability, retention=profile.retention, owned_by="nemostation",
+              capability=PROFILE.capability, profile=PROFILE, owned_by="nemostation",
               available=True, as_of=pf.AS_OF)
     kw.update(overrides)
     return pm.project(**kw)
@@ -128,6 +128,9 @@ def test_the_profile_follows_the_deployment_ceilings():
 # --- failure oracles: never published ----------------------------------------
 @pytest.mark.parametrize("visibility,state", [
     (Visibility.private, DeploymentState.ready_private),
+    # records.py constructs private+active (only public rows are constrained), so the
+    # visibility half of the guard is the only thing refusing this one
+    (Visibility.private, DeploymentState.active),
     *[(Visibility.public, s) for s in DeploymentState if s is not DeploymentState.active]])
 def test_a_private_or_deactivated_deployment_is_never_published(visibility, state):
     """Oracle: a private dev, proposed, draining or retired deployment in the catalog."""
@@ -162,10 +165,58 @@ def test_unpriced_or_mispriced_fails_closed(overrides):
 ], ids=["tools", "structured-output", "live-video", "past-deployment-output"])
 def test_a_capability_the_serving_revision_does_not_declare_is_refused(patch):
     """Oracle: tool calling, JSON-schema output or live video published for a serving
-    revision whose capability record says no, or limits past the deployment's."""
+    revision whose capability record says no, or limits past the deployment's. The profile
+    here accepts the claim (a runtime configured past its revision), so only the
+    declaration or the deployment ceiling can refuse it."""
     capability = pf.deployed_profile().capability.model_copy(update=patch)
     with pytest.raises(errors.InvalidRequest):
-        _project(capability=capability)
+        _project(capability=capability, profile=_accepting(capability))
+
+
+def _accepting(capability: pm.Capability) -> pm.ServingProfile:
+    return pm.ServingProfile(capability=capability, retention=PROFILE.retention)
+
+
+def _declaring(**update) -> dict:
+    serving = _serving()
+    return {"serving": serving.model_copy(
+        update={"capability": serving.capability.model_copy(update=update)})}
+
+
+@pytest.mark.parametrize("overrides", [
+    _declaring(input_modalities=("text",)),
+    _declaring(output_modalities=()),
+    _declaring(stream_output=False),
+    {"deployment": _deployment().model_copy(
+        update={"serving_version_id": "d0000009-0000-4000-8000-000000000009"})},
+], ids=["video-on-a-text-only-revision", "text-out-of-a-revision-without-it",
+        "stream-on-a-non-streaming-revision", "deployment-pins-another-serving-revision"])
+def test_a_projection_the_serving_revision_does_not_back_is_refused(overrides):
+    """Oracle: video input, text output or SSE streaming published for a serving revision
+    that does not declare it, or a capability read from a revision the deployment does not
+    serve. The deployed profile accepts all of it, so only the declaration check refuses."""
+    with pytest.raises(errors.InvalidRequest):
+        _project(**overrides)
+
+
+@pytest.mark.parametrize("patch,path", [
+    ({"video": PROFILE.capability.video.model_copy(update={"max_seconds": 120})},
+     "capability.video.max_seconds"),
+    ({"parameters": tuple(sorted([*pf.ACCEPTED_PARAMETERS, "tools"])),
+      "unsupported_parameters": tuple(p for p in pf.REFUSED_PARAMETERS if p != "tools")},
+     "capability.parameters"),
+], ids=["stale-120s-cap", "tools-the-runtime-refuses"])
+def test_project_refuses_what_the_serving_profile_refuses(patch, path):
+    """Oracle: the one producer emitting a record `violations` would flag (RV-01, P-20):
+    the 120 s cap against the deployed 82 s, or tools a revision declares while the
+    validator refuses them. The profile check lives in `project`, not beside it; an
+    understated cap is still published."""
+    with pytest.raises(errors.InvalidRequest, match=path):
+        _project(capability=PROFILE.capability.model_copy(update=patch),
+                 **_declaring(tools=True))
+    understated = PROFILE.capability.model_copy(update={"video": PROFILE.capability.video
+                                                         .model_copy(update={"max_seconds": 60})})
+    assert _project(capability=understated).capability.video.max_seconds == 60
 
 
 def test_a_legacy_regime_projection_shows_no_credit_rate():
@@ -190,7 +241,9 @@ def test_the_profile_check_names_exactly_what_is_overclaimed(case):
     rate or retention figure the serving profile refuses - and no false alarm for an
     honest understatement."""
     record = pm.PublishedModel.model_validate(pf.apply_patches(CREDIT_DOC, case["patches"]))
-    assert [v.split(":")[0] for v in pm.violations(record, PROFILE)] == case["expected"]
+    profile = pm.ServingProfile.model_validate(pf.apply_patches(PROFILE_DOC,
+                                                                case["profile_patches"]))
+    assert [v.split(":")[0] for v in pm.violations(record, profile)] == case["expected"]
 
 
 def test_the_fixtures_themselves_are_honest():

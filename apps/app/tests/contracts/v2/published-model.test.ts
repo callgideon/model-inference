@@ -24,11 +24,12 @@ const text = (name: string) => readFileSync(new URL(name, DIR), "utf8");
 const load = (name: string) => JSON.parse(text(name));
 
 type Patch = [string[], unknown];
-type Case = { name: string; patches: Patch[]; expected?: string[] };
+type Case = { name: string; patches: Patch[]; expected?: string[]; profile_patches?: Patch[] };
 
 const CREDIT = load("published_marlin_credit.json");
 const LEGACY = load("published_marlin_legacy_usd.json");
-const PROFILE = parseServingProfile(load("serving_profile_marlin.json"));
+const PROFILE_DOC = load("serving_profile_marlin.json");
+const PROFILE = parseServingProfile(PROFILE_DOC);
 const CASES = load("cases.json") as { refusals: Case[]; violations: Case[] };
 const ALIASES = load("alias_compatibility.json") as {
   cases: { requested: string; credit: Record<string, unknown>; legacy_usd: Record<string, unknown> }[];
@@ -67,9 +68,11 @@ for (const c of CASES.refusals) {
 
 for (const c of CASES.violations) {
   test(`profile check, as in Python: ${c.name}`, () => {
-    // Oracle: a projection advertising what the deployed profile refuses, or a false alarm.
+    // Oracle: a projection advertising what the deployed profile refuses (or a profile
+    // serving less: no SSE, no video), or a false alarm.
     const record = parsePublishedModel(applyPatches(CREDIT, c.patches));
-    assert.deepEqual(paths(profileViolations(record, PROFILE)), c.expected);
+    const profile = parseServingProfile(applyPatches(PROFILE_DOC, c.profile_patches!));
+    assert.deepEqual(paths(profileViolations(record, profile)), c.expected);
   });
 }
 

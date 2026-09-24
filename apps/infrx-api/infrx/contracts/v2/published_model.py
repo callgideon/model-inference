@@ -41,7 +41,9 @@ Rules this module is the single statement of (proposed ruling R109):
 * **A projection never advertises what serving refuses.** `violations` compares a
   projection with the `ServingProfile` the running deployment actually enforces: a cap may
   be advertised at or below the enforced one, a vocabulary only as a subset, the declared
-  preprocessing constraints and every retention figure exactly.
+  preprocessing constraints and every retention figure exactly. `project` takes that
+  profile and refuses any record `violations` flags, so the one producer cannot emit an
+  overclaim; the retention it publishes is the profile's own.
 * **Serving keeps content.** `ServingRetention` cannot state zero data retention or that
   turning trace capture off deletes serving content: payloads, media and results have
   their own lifecycles (RV-01, RV-03, P-25).
@@ -382,13 +384,15 @@ def catalog_problems(published: Iterable[PublishedModel]) -> list[str]:
 def project(*, serving: ServingRevision, deployment: DeploymentRevision, listing_version: int,
             regime: AccountingRegime | str, credit_card: RateCardSnapshot | None,
             credit_provisional: bool, usd_price: PriceSnapshot | None, capability: Capability,
-            retention: ServingRetention, owned_by: str, available: bool,
+            profile: ServingProfile, owned_by: str, available: bool,
             as_of: datetime) -> PublishedModel:
     """The published record, or the refusal that keeps a model out of the catalog.
 
     `credit_card` is the card the effective catalog listing names (the public rate
     identity), not the newest card for the deployment; `usd_price` is the effective
-    `price_versions` row for the canonical revision."""
+    `price_versions` row for the canonical revision. `capability` is what to advertise
+    (at most `profile.capability`); `profile` is what the running deployment enforces
+    (`serving_profile`), and a record it would flag is refused here, not after."""
     if (deployment.visibility is not Visibility.public
             or deployment.state is not DeploymentState.active):
         raise errors.NotFound("model")                   # R70: never listed, never hinted
@@ -432,7 +436,7 @@ def project(*, serving: ServingRevision, deployment: DeploymentRevision, listing
     if (capability.max_input_tokens > deployment.max_input_tokens
             or capability.max_output_tokens > deployment.max_output_tokens):
         raise errors.InvalidRequest("the capability exceeds the deployment's validated limits")
-    return PublishedModel(
+    record = PublishedModel(
         object="model", id=serving.public_model_id,
         created=int(serving.created_at.timestamp()), owned_by=owned_by,
         model_revision=serving.model_revision,
@@ -441,8 +445,13 @@ def project(*, serving: ServingRevision, deployment: DeploymentRevision, listing
         deployment_revision_id=deployment.deployment_revision_id,
         serving=ServingIdentity.of(serving), capability=capability,
         pricing=Pricing(regime=regime, credit=credit, legacy_usd=usd),
-        retention=retention, availability="available" if available else "unavailable",
+        retention=profile.retention, availability="available" if available else "unavailable",
         availability_as_of=as_of)
+    problems = violations(record, profile)
+    if problems:
+        raise errors.InvalidRequest("the projection advertises what the serving profile "
+                                    "refuses: " + "; ".join(problems))
+    return record
 
 
 # --- the profile-vs-projection check (G7 calls this in CI) ---------------------

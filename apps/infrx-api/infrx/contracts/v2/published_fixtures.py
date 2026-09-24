@@ -81,15 +81,16 @@ def published(regime: str) -> pm.PublishedModel:
         deployment=v2fix.BUILDERS["deployment_revision_public.json"](), listing_version=1,
         regime=regime, credit_card=v2fix.BUILDERS["rate_card_marlin.json"]() if credit else None,
         credit_provisional=True, usd_price=_canonical_usd_row(),
-        capability=profile.capability, retention=profile.retention, owned_by=OWNED_BY,
+        capability=profile.capability, profile=profile, owned_by=OWNED_BY,
         available=True, as_of=AS_OF)
 
 
 # --- refusal and violation cases (both languages apply the same patches) -------------
 # A case is a list of `[path, value]` patches applied to the credit-regime projection;
 # a `null` value deletes the key. `refusals`: the patched record must not parse.
-# `violations`: it parses, and `violations(record, deployed_profile())` names exactly
-# `expected` (an empty list: honest).
+# `violations`: it parses, and `violations(record, profile)` names exactly `expected` (an
+# empty list: honest), where `profile` is `deployed_profile()` with the case's
+# `profile_patches` applied (a deployment serving less than Marlin does).
 _TOOLS_ADVERTISED = [(["capability", "parameters"], sorted([*ACCEPTED_PARAMETERS, "tools"])),
                      (["capability", "unsupported_parameters"],
                       [p for p in REFUSED_PARAMETERS if p != "tools"])]
@@ -157,6 +158,11 @@ VIOLATIONS = (
     ("a lower cap than enforced is honest", [(["capability", "video", "max_seconds"], 60)], []),
     ("a refusal left unnamed is not a claim",
      [(["capability", "unsupported_parameters"], [])], []),
+    ("SSE streaming on a deployment without it", [], ["capability.execution_modes"],
+     [(["capability", "execution_modes"], ["async", "sync"])]),
+    ("video input on a text-only deployment", [],
+     ["capability.input_modalities", "capability.video"],
+     [(["capability", "input_modalities"], ["text"]), (["capability", "video"], None)]),
 )
 
 
@@ -181,8 +187,9 @@ def _cases() -> dict[str, Any]:
         "base": "published_marlin_credit.json",
         "profile": "serving_profile_marlin.json",
         "refusals": [{"name": n, "patches": patches(p)} for n, p in REFUSALS],
-        "violations": [{"name": n, "patches": patches(p), "expected": e}
-                       for n, p, e in VIOLATIONS],
+        "violations": [{"name": n, "patches": patches(p), "expected": e,
+                        "profile_patches": patches(pp[0] if pp else [])}
+                       for n, p, e, *pp in VIOLATIONS],
     }
 
 
