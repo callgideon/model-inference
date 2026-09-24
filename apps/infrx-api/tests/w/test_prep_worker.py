@@ -26,6 +26,7 @@ import logging
 import os
 import pathlib
 import time
+import uuid
 
 import httpx
 import pytest
@@ -46,8 +47,9 @@ from infrx.state.jobstore import PgJobStore
 from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request
 from infrx.worker import __main__ as worker_main
 from infrx.worker.fakes import m2_local_uri
-from infrx.worker.preparation import (PreparationRunner, PreparationResult, VIDEO_TOKEN_ID,
-                                      engine_prompt_tokens)
+from infrx.worker.preparation import (MEMO_ENTRIES, CountMemo, PreparationRunner,
+                                      PreparationResult, VIDEO_TOKEN_ID, engine_prompt_tokens,
+                                      memo_key)
 from tests.m.support import mp4
 from tests.w.test_engine import Box as ClockBox
 from tests.w.test_engine import video_work
@@ -120,18 +122,39 @@ class Prep:
     async def get(self, job_id):                   # `attachments.get`
         return self.attached.get(job_id)
 
-    async def admit(self, *, video: bool = False, org_id: str = b.ORG_A):
-        refs = ((await self.media.materialize(org_id, DATA_URL)),) if video else ()
+    async def admit(self, *, video: bool = False, org_id: str = b.ORG_A, clip: bytes = CLIP,
+                    text: str | None = None, model_revision: str = b.MODEL):
+        """`text` replaces the builders' prompt; another `model_revision` is priced first."""
+        url = "data:video/mp4;base64," + base64.b64encode(clip).decode()
+        org_id = v2fix.IDS.consumer_org if self.credit else org_id
+        refs = ((await self.media.materialize(org_id, url)),) if video else ()
         if self.credit:
-            request = b.request(self.harness, org_id=v2fix.IDS.consumer_org,
-                                key_id=v2fix.IDS.consumer_key,
+            request = b.request(self.harness, org_id=org_id, key_id=v2fix.IDS.consumer_key,
                                 model_revision=v2fix.REQUESTED_MODEL, refs=refs)
-            await self.store.admit_credit(request, b.idem(request, request.request_id))
         else:
             self.harness.extra["grant"](org_id, "25.00")
-            request = b.request(self.harness, org_id=org_id, refs=refs)
+            if model_revision != b.MODEL:
+                self.store.set_price(model_revision, b.price(model_revision=model_revision))
+            request = b.request(self.harness, org_id=org_id, refs=refs,
+                                key_id=b.KEY_B if org_id == b.ORG_B else b.KEY_A,
+                                model_revision=model_revision)
+        if text is not None:
+            request = request.model_copy(update={"messages": tuple(
+                {**message, "content": text if isinstance(message["content"], str) else [
+                    {**part, "text": text} if part["type"] == "text" else part
+                    for part in message["content"]]} for message in request.messages)})
+        if self.credit:
+            await self.store.admit_credit(request, b.idem(request, request.request_id))
+        else:
             await self.store.admit(request, b.idem(request, request.request_id), ())
         return request
+
+    async def prepare(self, **admitted):
+        """Admit a job, its attach landed, one attempt: (request, result, stored count)."""
+        request = await self.admit(**admitted)
+        self.attached[request.request_id] = request.media
+        result = await self.runner.run(request.request_id)
+        return request, result, self.store.jobs[request.request_id].prompt_tokens
 
     def candidate(self, request) -> IndexEvent:
         return IndexEvent(event_id=self.harness.ids.event_id(), job_id=request.request_id,
@@ -265,6 +288,146 @@ def test_prep_worker__a_media_ref_of_another_org_is_not_found(tmp_path):
     result, state = run(case())
     assert result.refusal == "not_found", result
     assert state is JobState.preparing and len(prep.app.tokenized) == 1
+
+
+# ------------------------------------------------------------------ TOKCOST: the count memo
+
+@pytest.mark.parametrize("video", [True, False], ids=["video", "text"])
+def test_prep_worker__a_repeated_video_body_is_counted_by_the_engine_once(tmp_path, video,
+                                                                          caplog):
+    """TOKCOST: the same video body (one organization, clip, prompt and revision) prepared twice
+    is counted by the engine ONCE: the second job stores the memo of that checked answer,
+    without waiting for the engine's tokenizer (held 0.3 s here; 16.8 s for a 5 s clip on the
+    pilot), and its log line says memo - never an engine latency. Text is asked every time
+    (4-6 ms on the pilot, and no digest of a text prompt is held)."""
+    caplog.set_level(logging.INFO, logger="infrx.worker")
+    prep = Prep(tmp_path)
+    prep.app.control({"tokenize_delay_s": 0.3})
+
+    async def case():
+        timed = []
+        for _ in range(2):
+            began = time.monotonic()
+            timed.append((*(await prep.prepare(video=video)), time.monotonic() - began))
+        return timed
+
+    (first, one, stored, took), (second, two, again, retook) = run(case())
+    assert (one.cause, two.cause, stored, again) == ("prepared", "prepared", COUNT, COUNT), \
+        (one, two)
+    assert len(prep.app.tokenized) == (1 if video else 2), prep.app.tokenized
+    assert took >= 0.3 and (retook < 0.3) is video, (took, retook)
+    lines = [record.getMessage() for record in caplog.records if record.name == "infrx.worker"]
+    source = "memo of engine /tokenize" if video else "engine /tokenize"
+    for request, how in ((first, "engine /tokenize"), (second, source)):
+        assert any(line.startswith(f"prepared {request.request_id}: {COUNT} prompt tokens "
+                                   f"({how}, ") for line in lines), (how, lines)
+
+
+# the variants of one memoized video body that are NOT that body
+OTHER_BODIES = {"prompt": {"text": "What happens?"},
+                "clip": {"clip": mp4(seconds=10.0, width=320)},     # same length, other bytes
+                "organization": {"org_id": b.ORG_B},                # its own file path
+                "revision": {"model_revision": "nemostation/marlin-2b@tokcost"}}
+
+
+@pytest.mark.parametrize("variant", sorted(OTHER_BODIES))
+def test_prep_worker__a_memo_answers_only_its_own_body_media_and_revision(tmp_path, variant):
+    """R105 with the memo: the stored count is the engine's tokenization of the exact body. One
+    job's count is memoized, then the fake engine counts differently (1000): another prompt,
+    another clip, another organization or another serving revision is ASKED and stored at
+    1000, while the memoized body itself is still its memo (1337)."""
+    prep = Prep(tmp_path)
+
+    async def case():
+        await prep.prepare(video=True)
+        prep.app.control({"tokenize_count": 1000})
+        _, other, stored = await prep.prepare(video=True, **OTHER_BODIES[variant])
+        _, same, memoized = await prep.prepare(video=True)
+        return other, stored, same, memoized
+
+    other, stored, same, memoized = run(case())
+    assert (other.cause, stored, len(prep.app.tokenized)) == ("prepared", 1000, 2), \
+        (other, stored, prep.app.tokenized)
+    assert (same.cause, memoized) == ("prepared", COUNT), (same, memoized)
+
+
+def test_prep_worker__the_memo_key_names_the_media_digests_and_the_credit_revision(tmp_path):
+    """The facts the `/tokenize` body does not spell out in full are in the key too: every
+    prepared ref's whole digest at its profile (the file path carries 16 hex of one), and a
+    CREDIT job's pinned serving revision, which `CreditWork` carries to the runner (the
+    requested model can be an alias, which moves to another revision)."""
+    prep = Prep(tmp_path, credit=True)
+
+    async def case():
+        request = await prep.admit(video=True)
+        lease = await prep.store.claim_preparation(request.request_id, "prep-w")
+        return await prep.jobs.load_work(lease), await prep.store.load_work_credit(lease)
+
+    work, credit = run(case())
+    assert work.serving_version_id == credit.request.pins.serving_version_id, work
+    prepared, ask = prepared_request(work, 0), {"model": "marlin2b", "messages": []}
+    source, = prepared.media
+
+    def media(**changed):
+        return prepared.model_copy(update={"media": (source.model_copy(update=changed),)})
+    keys = [memo_key(work, prepared, ask),
+            memo_key(work.model_copy(update={"serving_version_id": str(uuid.uuid4())}),
+                     prepared, ask),
+            memo_key(work, media(digest="sha256:" + "0" * 64), ask),
+            memo_key(work, media(profile_version="v2"), ask)]
+    assert len(set(keys)) == 4 and keys[0] == memo_key(work, prepared, dict(ask)), keys
+
+
+def test_prep_worker__a_stale_memo_is_asked_again(tmp_path):
+    """The memo never outlives `PROCESSING_CACHE_TTL_S` (the product's bound: the retention of
+    the media it counted): at its life the same body is asked again and the new answer is
+    stored; a second before it, the memo answers."""
+    ttl, now = DEFAULTS.processing_cache_ttl_s, [0.0]
+    assert Prep(tmp_path).runner.memo.ttl_s == ttl
+    prep = Prep(tmp_path, memo=CountMemo(ttl_s=ttl, clock=lambda: now[0]))
+
+    async def case():
+        await prep.prepare(video=True)
+        prep.app.control({"tokenize_count": 1000})
+        now[0] = ttl - 1
+        fresh = (await prep.prepare(video=True))[2]
+        now[0] = ttl
+        return fresh, (await prep.prepare(video=True))[2]
+
+    assert run(case()) == (COUNT, 1000)
+    assert len(prep.app.tokenized) == 2, prep.app.tokenized
+
+
+def test_prep_worker__a_refused_video_count_is_never_memoized(tmp_path):
+    """TOKCOST fix round (verifier B1), R105 fail-closed: an answer a check refused (here one
+    unexpanded placeholder, count 1000) prepares nothing AND memoizes nothing - the same body
+    again is asked, and stored at the engine's checked count, never at the refused one."""
+    prep = Prep(tmp_path)
+    prep.app.control({"tokenize_fault": "unexpanded", "tokenize_count": 1000})
+
+    async def case():
+        _, refused, _ = await prep.prepare(video=True)
+        prep.app.control({"tokenize_fault": "none", "tokenize_count": None})
+        _, again, stored = await prep.prepare(video=True)
+        return refused, again, stored
+
+    refused, again, stored = run(case())
+    assert refused.refusal == "dependency_unavailable", refused
+    assert (again.cause, stored) == ("prepared", COUNT), (again, stored)
+    assert len(prep.app.tokenized) == 2, prep.app.tokenized
+
+
+def test_prep_worker__the_memo_is_bounded_least_recently_used_first(tmp_path):
+    """At most `MEMO_ENTRIES` counts - 1024 in the product runner's memo (verifier N1) - so a
+    long-lived worker's memo stays bounded: a third body evicts the least recently USED one
+    (two entries here) - the first, read again, stays."""
+    memo = CountMemo(ttl_s=60.0, entries=2)
+    memo.put("a", 1)
+    memo.put("b", 2)
+    assert memo.get("a") == 1
+    memo.put("c", 3)
+    assert (memo.get("a"), memo.get("b"), memo.get("c"), len(memo.counts)) == (1, None, 3, 2)
+    assert Prep(tmp_path).runner.memo.entries == MEMO_ENTRIES == 1024
 
 
 def tokenizer(*answers):

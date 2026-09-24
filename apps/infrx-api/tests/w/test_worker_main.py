@@ -186,7 +186,8 @@ def test_worker_main__the_composition_is_the_pilots_stores_and_settings(tmp_path
     class Store:
         async def load_work_credit(self, lease):
             calls.append(("load_work_credit", lease))
-            return type("W", (), {"request": type("R", (), {"request": "req"}),
+            pins = type("P", (), {"serving_version_id": "sv"})      # TOKCOST: the pin
+            return type("W", (), {"request": type("R", (), {"request": "req", "pins": pins}),
                                   "media_refs": (), "prepared_refs": (), "budgets": None,
                                   "prompt_tokens": 7})()
 
@@ -196,7 +197,7 @@ def test_worker_main__the_composition_is_the_pilots_stores_and_settings(tmp_path
 
     routed = worker_main.CreditWork(Store())
     work = asyncio.run(routed.load_work("lease"))
-    assert (work.request, work.prompt_tokens) == ("req", 7)
+    assert (work.request, work.prompt_tokens, work.serving_version_id) == ("req", 7, "sv")
     assert asyncio.run(routed.complete("lease", "outcome")) == "settled"
     assert calls == [("load_work_credit", "lease"), ("complete_credit", "lease")]
 

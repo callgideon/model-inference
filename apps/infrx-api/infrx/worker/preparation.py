@@ -30,6 +30,23 @@
    tokenizer's latency (`prepared <job>: <n> prompt tokens (engine /tokenize, <ms> ms)`); a
    lost claim is logged at INFO too, a refused attempt at WARNING.
 
+**TOKCOST: a repeated video body is counted by the engine once per process.** The real
+engine's `/tokenize` decodes and preprocesses the clip (vLLM's `create_tokenize` renders
+with `skip_mm_cache=True`: its own processor-only cache, never the one the chat route
+reads), measured at 16.8 s for a 5 s clip on the pilot. `CountMemo` keeps the engine's
+CHECKED count of a video body, keyed by `memo_key`: the job's serving revision (its
+`model_revision` and, in the CREDIT regime, its pinned `serving_version_id`), every prepared
+media digest at its profile and the exact `/tokenize` body (the served model, the rebuilt
+messages with the tenant's own `file://` path, the generation prompt, the pinned budget) -
+so the memo answers only a question the engine already answered, word for word, for the
+same bytes and the same revision (R105), and never across tenants (the path names the
+organization). A hit is logged `(memo of engine /tokenize, <ms> ms)`, never as the engine's
+latency. Text is always asked (4-6 ms, and no digest of a text prompt is held). The memo
+lives in this process only: the worker is `PartOf=` the engine's unit, so an engine restart
+- the only way a serving revision changes - restarts the worker and empties it. Bounded by
+`MEMO_ENTRIES` and by `PROCESSING_CACHE_TTL_S` (it never outlives the retention of the media
+it counted).
+
 **A typed refusal anywhere prepares nothing** (a fetch or stage `not_found`, an
 `unsupported_media`, the tokenizer's `dependency_unavailable`, a count past the job's
 ceiling): the lease is left to lapse, `recover` requeues the job with a fresh
@@ -49,8 +66,11 @@ the lease lapses and `recover` requeues.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import httpx
@@ -70,6 +90,58 @@ VIDEO_TOKEN_ID = 248057
 TOKENS_PER_PATCH, PIXELS_PER_TOKEN = 196, 2048
 # The attach lands just after the admission commits; the emulation this replaces waited 10 s.
 ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05
+# TOKCOST: the video counts one worker process remembers (a key and an int, ~200 bytes each).
+MEMO_ENTRIES = 1024
+
+
+def tokenize_body(engine, prepared) -> dict:
+    """The exact `/tokenize` body for `prepared`: what the chat route will be sent, as
+    `VllmEngine.upstream_body` builds it (the served model, the rebuilt messages, the pinned
+    `mm_processor_kwargs` of a video), plus the generation prompt."""
+    body = engine.upstream_body(prepared)
+    ask = {"model": body["model"], "messages": body["messages"], "add_generation_prompt": True}
+    budget = body.get("mm_processor_kwargs")
+    if budget:
+        ask["mm_processor_kwargs"] = budget
+    return ask
+
+
+def memo_key(work, prepared, ask: dict) -> str:
+    """What a memoized count answers for, and nothing else: the job's serving revision (its
+    `model_revision` and, in the CREDIT regime, its pinned `serving_version_id` - an alias
+    alone can move to another revision), every prepared media digest at its profile, and the
+    exact `/tokenize` body `ask` (whose `file://` path also names the organization)."""
+    facts = [prepared.model_revision, getattr(work, "serving_version_id", None),
+             sorted(f"{ref.digest}@{ref.profile_version}" for ref in prepared.media), ask]
+    return hashlib.sha256(json.dumps(facts, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+class CountMemo:
+    """TOKCOST: the engine's checked count of an exact video body, in this process (see the
+    module docstring). At most `entries` (the least recently used goes first) and none older
+    than `ttl_s` since the engine answered."""
+
+    def __init__(self, *, ttl_s: float, entries: int = MEMO_ENTRIES,
+                 clock=time.monotonic) -> None:
+        self.ttl_s, self.entries, self.clock = ttl_s, entries, clock
+        self.counts: OrderedDict[str, tuple[float, int]] = OrderedDict()
+
+    def get(self, key: str) -> int | None:
+        found = self.counts.get(key)
+        if found is None:
+            return None
+        if self.clock() - found[0] >= self.ttl_s:
+            del self.counts[key]
+            return None
+        self.counts.move_to_end(key)
+        return found[1]
+
+    def put(self, key: str, count: int) -> None:
+        self.counts[key] = (self.clock(), count)
+        self.counts.move_to_end(key)
+        if len(self.counts) > self.entries:
+            self.counts.popitem(last=False)
 
 
 async def engine_prompt_tokens(engine, prepared, *,
@@ -77,11 +149,8 @@ async def engine_prompt_tokens(engine, prepared, *,
     """The engine's own count of `prepared`'s prompt, or `dependency_unavailable` - also when
     no answer comes within `timeout_s` (the preparation budget: a hung tokenizer must not hold
     a preparation runner past the phase its lease fences)."""
-    body = engine.upstream_body(prepared)
-    ask = {"model": body["model"], "messages": body["messages"], "add_generation_prompt": True}
-    budget = body.get("mm_processor_kwargs")
-    if budget:
-        ask["mm_processor_kwargs"] = budget
+    ask = tokenize_body(engine, prepared)
+    budget = ask.get("mm_processor_kwargs")
     try:
         async with asyncio.timeout(timeout_s):
             answer = await engine.client.post(TOKENIZE_PATH, json=ask)
@@ -90,6 +159,13 @@ async def engine_prompt_tokens(engine, prepared, *,
     except (httpx.HTTPError, ValueError, TimeoutError) as failed:
         raise errors.DependencyUnavailable(
             f"the engine's tokenizer did not answer ({type(failed).__name__})") from None
+    return checked_count(found, budget)
+
+
+def checked_count(found, budget: dict | None) -> int:
+    """R105: the `/tokenize` answer `found` is the count only when it is one (an integer and
+    exactly that many tokens; for a video, `budget`, the pinned number of `video_token_id`s),
+    or `dependency_unavailable`. Nothing is memoized before this has passed (TOKCOST)."""
     count = found.get("count") if isinstance(found, dict) else None
     tokens = found.get("tokens") if isinstance(found, dict) else None
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
@@ -122,7 +198,7 @@ class PreparationRunner:
 
     def __init__(self, *, jobs, media, engine, worker_id: str,
                  limits: PilotSettings = DEFAULTS, attach_wait_s: float = ATTACH_WAIT_S,
-                 renew_every_s: float | None = None) -> None:
+                 renew_every_s: float | None = None, memo: CountMemo | None = None) -> None:
         self.jobs = jobs                         # ports.JobStore (CreditWork in CREDIT)
         self.media = media                       # M's MediaPreparation
         self.engine = engine                     # VllmEngine: its body and its /tokenize
@@ -130,6 +206,8 @@ class PreparationRunner:
         self.limits = limits
         self.attach_wait_s = attach_wait_s
         self.renew_every_s = renew_every_s or limits.preparation_lease_ttl_s / 3
+        # One per process: the pool's runners share this runner (TOKCOST).
+        self.memo = CountMemo(ttl_s=limits.processing_cache_ttl_s) if memo is None else memo
 
     async def run(self, job_id: str) -> PreparationResult:
         try:
@@ -162,13 +240,24 @@ class PreparationRunner:
         # another organization (`not_found`), before anything is counted or stored.
         prepared = prepared_request(work.model_copy(update={"prepared_refs": refs}), 0,
                                     limits=self.limits)
+        # TOKCOST: a video body the engine already counted here is its memoized answer.
+        key = memo_key(work, prepared, tokenize_body(self.engine, prepared)) if refs else None
         asked = time.monotonic()
-        count = await engine_prompt_tokens(self.engine, prepared,
-                                           timeout_s=self.limits.preparation_timeout_s)
+        count, source = (self.memo.get(key) if key else None), "memo of engine /tokenize"
+        if count is None:
+            count, source = await self._ask(prepared), "engine /tokenize"
+            if key:
+                self.memo.put(key, count)
         took_ms = (time.monotonic() - asked) * 1000
         await self.jobs.prepared(lease, refs, prompt_tokens=count)
-        log.info("prepared %s: %d prompt tokens (engine /tokenize, %.0f ms)", lease.job_id,
-                 count, took_ms)
+        log.info("prepared %s: %d prompt tokens (%s, %.0f ms)", lease.job_id, count, source,
+                 took_ms)
+        return count
+
+    async def _ask(self, prepared) -> int:
+        """The engine's own count, checked, within the preparation budget."""
+        count = await engine_prompt_tokens(self.engine, prepared,
+                                           timeout_s=self.limits.preparation_timeout_s)
         return count
 
     async def _media(self, job_id: str) -> tuple[MediaRef, ...]:

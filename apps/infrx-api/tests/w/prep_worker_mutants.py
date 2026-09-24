@@ -62,6 +62,13 @@ DEAD = "test_prep_worker__a_dead_preparation_runner_ends_the_service"
 COMPOSE = "test_prep_worker__the_worker_composes_the_preparation_pool"
 READ_ONLY = "test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup"
 PG_RUN = "test_prep_worker_pg__the_worker_process_prepares_and_runs_an_admitted_job"
+# TOKCOST: the count memo
+REPEAT = "test_prep_worker__a_repeated_video_body_is_counted_by_the_engine_once"
+OWN_BODY = "test_prep_worker__a_memo_answers_only_its_own_body_media_and_revision"
+KEY = "test_prep_worker__the_memo_key_names_the_media_digests_and_the_credit_revision"
+STALE = "test_prep_worker__a_stale_memo_is_asked_again"
+BOUNDED = "test_prep_worker__the_memo_is_bounded_least_recently_used_first"
+NOT_MEMOIZED = "test_prep_worker__a_refused_video_count_is_never_memoized"   # fix round B1
 PG_DRAIN = "test_prep_worker_pg__sigterm_releases_a_preparation_and_the_next_worker_prepares_it"
 
 _WAIT = "{waiting, self._pool, self._reaper, *self.loop._tasks,\n"
@@ -234,6 +241,63 @@ MUTANTS = (
        "startup",
        MAIN, "os.access(root, os.R_OK | os.W_OK | os.X_OK)", "os.access(root, os.R_OK | os.X_OK)",
        READ_ONLY),
+    # --- TOKCOST: the count memo (R105: only the engine's answer to the exact body) -------
+    _m("prep_memo_never_consulted", "a repeated video body is its memoized count, the engine "
+       "asked once", P, "count, source = (self.memo.get(key) if key else None), ",
+       "count, source = None, ", REPEAT),
+    _m("prep_memo_never_filled", "the engine's checked video count is memoized",
+       P, "                self.memo.put(key, count)", "                pass", REPEAT),
+    _m("prep_memo_holds_text", "a text body is asked every time (no digest of a text prompt "
+       "is held)", P, "tokenize_body(self.engine, prepared)) if refs else None",
+       "tokenize_body(self.engine, prepared)) if True else None", REPEAT),
+    _m("prep_memo_hit_logged_as_the_engine", "a memo hit is logged as the memo, never as an "
+       "engine latency", P, '"memo of engine /tokenize"', '"engine /tokenize"', REPEAT),
+    _m("prep_memo_key_without_the_body", "the memo answers only the exact /tokenize body "
+       "(prompt, clip file, organization)", P,
+       'for ref in prepared.media), ask]', "for ref in prepared.media)]", OWN_BODY),
+    _m("prep_memo_key_without_the_model_revision", "the memo never answers for another "
+       "serving revision (the job's model_revision)",
+       P, "    facts = [prepared.model_revision, ", "    facts = [None, ", OWN_BODY),
+    _m("prep_memo_key_without_the_serving_pin", "the memo never answers for another serving "
+       "revision (a CREDIT job's pinned serving_version_id)",
+       P, 'getattr(work, "serving_version_id", None),', "None,", KEY),
+    _m("prep_memo_key_without_the_media_digests", "the memo answers only the same bytes (every "
+       "whole media digest)", P,
+       'sorted(f"{ref.digest}@{ref.profile_version}" for ref in prepared.media)', "[]", KEY),
+    _m("prep_memo_key_without_the_media_profile", "the memo answers only the same prepared "
+       "profile", P, 'f"{ref.digest}@{ref.profile_version}"', 'f"{ref.digest}"', KEY),
+    _m("main_credit_work_drops_the_serving_revision", "CreditWork carries the job's pinned "
+       "serving revision to the preparation runner",
+       MAIN, "serving_version_id=work.request.pins.serving_version_id)",
+       "serving_version_id=None)", KEY),
+    _m("prep_memo_never_expires", "a memoized count older than its life is asked again",
+       P, "        if self.clock() - found[0] >= self.ttl_s:", "        if False:", STALE),
+    _m("prep_memo_expiry_exclusive", "a count exactly at its life is stale",
+       P, "        if self.clock() - found[0] >= self.ttl_s:",
+       "        if self.clock() - found[0] > self.ttl_s:", STALE),
+    _m("prep_memo_ttl_not_the_retention", "the product memo lives PROCESSING_CACHE_TTL_S, the "
+       "retention of the media it counted", P, "CountMemo(ttl_s=limits.processing_cache_ttl_s)",
+       'CountMemo(ttl_s=float("inf"))', STALE),
+    _m("prep_memo_unbounded", "the memo holds at most MEMO_ENTRIES counts",
+       P, "        if len(self.counts) > self.entries:", "        if False:", BOUNDED),
+    _m("prep_memo_evicts_the_recently_used", "the least recently USED count goes first",
+       P, "        self.counts.move_to_end(key)\n        return found[1]",
+       "        return found[1]", BOUNDED),
+    # --- TOKCOST fix round: B1 (R105 fail-closed) and N1 (the product bound) -------------
+    _m("prep_memo_holds_a_refused_count", "a count a check refused is never memoized (R105 "
+       "fail-closed): the checks run before the put (verifier B1)",
+       P, "            count, source = await self._ask(prepared), \"engine /tokenize\"\n"
+          "            if key:\n                self.memo.put(key, count)\n",
+       "            ask = tokenize_body(self.engine, prepared)\n"
+       "            found = (await self.engine.client.post(TOKENIZE_PATH, json=ask)).json()\n"
+       "            if key:\n                self.memo.put(key, found[\"count\"])\n"
+       "            count = checked_count(found, ask.get(\"mm_processor_kwargs\"))\n"
+       "            source = \"engine /tokenize\"\n", NOT_MEMOIZED),
+    _m("prep_memo_bound_not_1024", "the memo holds at most 1024 counts (verifier N1)",
+       P, "MEMO_ENTRIES = 1024", "MEMO_ENTRIES = 10**9", BOUNDED),
+    _m("prep_runner_memo_unbounded", "the product runner's memo is bounded by MEMO_ENTRIES "
+       "(verifier N1)", P, "CountMemo(ttl_s=limits.processing_cache_ttl_s)",
+       "CountMemo(ttl_s=limits.processing_cache_ttl_s, entries=10**9)", BOUNDED),
 )
 
 PG_MUTANTS = (
