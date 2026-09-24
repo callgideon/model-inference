@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-24 22:31Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 7, updated 2026-09-24 22:31Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-24 22:36Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 9, updated 2026-09-24 22:36Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `2cae9a4c`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `179a1a0b`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V0 current evidence; bands with active work: V0, V1, V2, V3, V4.
-- Agent slots: 16 total, 12 active lanes, 2 reserved.
-- Validation: 0 error(s), 13 warning(s).
+- Agent slots: 16 total, 11 active lanes, 2 reserved.
+- Validation: 0 error(s), 11 warning(s).
 
 ### Actionable blockers
 
@@ -108,7 +108,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 1.8 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 2.8 h remaining at generation) |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | elapsed 1.8 h since ≈2026-09-24 20:46Z; expected end 2026-09-25 01:01Z–2026-09-25 01:20Z (≤ 2.7 h remaining at generation) |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -129,7 +129,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | TRACKER | support 06-progress-tracker (support) | complete | codex/tracker | dff31efc → 803f6cb1 | none | 2026-09-24 22:31Z | merged into claude/consumer-v1 at 2cae9a4c; the coordinator runs apply-updates at each handback | 0–0.5 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:31Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 803f6cb1) |
 | E2C | E2C all | running | codex/e2c-verify | dff31efc → — | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-24 21:40Z | Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | F2C-L | F2C b/d (slice a accepted for consumption at 2d5e4743; read-only verifier on a) | running | codex/f2c-lifecycle | dff31efc → d566c83b | none | 2026-09-24 22:31Z | slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table | 5–12 h remaining (likely 8 h), confidence medium, estimated 2026-09-24 22:31Z; basis: lane's own estimate for b+d at slice-a handback |
-| F2C-C | F2C c | review | codex/f2c-catalog | dff31efc → d414607d | none | 2026-09-24 22:15Z | Slice c + fixtures; exports via wiring request; P-22 amendment text. | 0.5–4 h remaining (likely 1.5 h), confidence medium, estimated 2026-09-24 22:15Z; basis: contract, fixtures and both suites done; left: review fixes and applying wiring requests |
+| F2C-C | F2C c | complete | codex/f2c-catalog | dff31efc → b8de6171 | none | 2026-09-24 22:36Z | merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:36Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171) |
 | E1C | E1C E1C.1-E1C.4 + coordinator update 1 (S3 F5, F8/P-24) | review | codex/e1c-client | dff31efc → 2531dc49 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 22:15Z | UPLOAD-RESTART needs M5 durable uploads (codex/m5-uploads empty at 22:05Z); hosted smoke is the coordinator's (command in the evidence) | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-09-24 22:15Z; basis: UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds |
 | I8 | I8 code/config slices only | running | codex/i8-operate | dff31efc → — | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-24 21:40Z | Code/config slices; every live box step is a coordinator op serialized after run3. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | D10 | D10 all (SQL writer) | running | codex/d10-durable | dff31efc → — | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-24 21:58Z | Wire 0010 media_uploads and jobs.result_expires_at (S3 F9); role-bound login or SET LOCAL (F6); P-02 USD inventory with G8. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
@@ -143,7 +143,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: E1C, F2C-C.
+- Review queue: E1C.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -163,7 +163,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## Validation
 
 - warning: overlapping writers: E2C (running) and F2C-L (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/contracts/
-- warning: overlapping writers: E2C (running) and F2C-C (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/contracts/v2/test_published_model.py
 - warning: overlapping writers: E2C (running) and I8 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/i/
 - warning: overlapping writers: E2C (running) and D10 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/d/
 - warning: overlapping writers: E2C (running) and M5 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
@@ -171,7 +170,6 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E2C (running) and G7 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/
 - warning: overlapping writers: E2C (running) and G8 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/ops/
 - warning: overlapping writers: E2C (running) and M6 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
-- warning: overlapping writers: F2C-L (running) and F2C-C (review) both own apps/infrx-api/infrx/contracts/ / apps/infrx-api/infrx/contracts/v2/published_model.py (+5 more)
 - warning: overlapping writers: E1C (review) and E3C (running) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
 - warning: overlapping writers: E1C (review) and E4C (queued) both own research/plan/evidence/e/E1C-2531dc4.md / research/plan/evidence/e/
 - warning: overlapping writers: G7 (running) and G8 (running) both own apps/infrx-api/tests/g/ / apps/infrx-api/tests/g/ops/
@@ -335,6 +333,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-24 22:36Z UTC, F2C-C: review → complete; head b8de6171; estimate likely 1 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171))
+- 2026-09-24 22:28Z UTC, F2C-C: review → review; head 35d1e32a; estimate likely 1.5 → 1 h (0-F1, 0-F2, 2-F2C-C-R1, 2-F2C-C-R2 closed with regressions; left: wiring requests, R109/P-22 application)
 - 2026-09-24 22:31Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5)
 - 2026-09-24 22:31Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5)
 - 2026-09-24 22:31Z UTC, tracker: forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, I8, M5, M6, W5)

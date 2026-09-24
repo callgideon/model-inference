@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "2cae9a4c",
+  "integration_head": "179a1a0b",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 7,
-  "updated": "2026-09-24T22:31:34Z",
+  "revision": 9,
+  "updated": "2026-09-24T22:36:33Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -390,53 +390,53 @@
       "branch": "codex/f2c-catalog",
       "worktree": ".claude/worktrees/codex-f2c-catalog",
       "base": "dff31efc",
-      "head": "d414607d",
+      "head": "b8de6171",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T22:15:00Z",
+      "updated": "2026-09-24T22:36:32Z",
       "blocker": null,
-      "next_action": "Slice c + fixtures; exports via wiring request; P-22 amendment text.",
+      "next_action": "merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided",
       "estimate": {
-        "optimistic_h": 0.5,
-        "likely_h": 1.5,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "contract, fixtures and both suites done; left: review fixes and applying wiring requests",
-        "at": "2026-09-24T22:15Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171)",
+        "at": "2026-09-24T22:36:32Z"
       },
       "evidence": [
         "research/plan/evidence/f/F2C-catalog-d414607.md"
       ],
       "commands": [
         {
+          "cmd": "cd apps/infrx-api && uv run --frozen python -m infrx.contracts.v2.published_fixtures",
+          "exit": 0,
+          "summary": "would change nothing after --write (deterministic; only cases.json changed this round)"
+        },
+        {
           "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts/v2/test_published_model.py",
           "exit": 0,
-          "summary": "89 passed (new)"
+          "summary": "98 passed (89 + 9); 36 failed against the unfixed module"
         },
         {
           "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts --deselect tests/contracts/v2/test_v1_projection_pg.py",
           "exit": 0,
-          "summary": "1164 passed (1075 existing + 89 new), 3 deselected"
-        },
-        {
-          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/contracts",
-          "exit": 1,
-          "summary": "1164 passed, 3 failed: test_v1_projection_pg HarnessBusy (port 55432 held by codex-e2c-verify; nothing altered); environment, not product"
+          "summary": "1173 passed, 3 deselected (port 55432 held by infrx-d1-postgres)"
         },
         {
           "cmd": "cd apps/app && node --test tests/contracts/v2/published-model.test.ts",
           "exit": 0,
-          "summary": "52/52 (new)"
+          "summary": "54/54"
         },
         {
           "cmd": "make console-test",
           "exit": 0,
-          "summary": "341/341 (289 existing + 52 new)"
+          "summary": "343/343"
         },
         {
           "cmd": "make console-typecheck",
@@ -449,14 +449,14 @@
           "summary": "0 errors, 2 pre-existing warnings"
         },
         {
-          "cmd": "python3 scratchpad/f2c-c/mutate.py <worktree>",
+          "cmd": "python3 <scratchpad>/f2c-fix/mutants.py",
           "exit": 0,
-          "summary": "18/18 ad-hoc mutants killed (12 py, 6 ts)"
+          "summary": "15/15 killed (12 reviewer survivors + 3 declaration guards)"
         },
         {
-          "cmd": "G7 seam regression (evidence appendix A) against dff31efc GET /v1/models",
-          "exit": 1,
-          "summary": "2 failed as intended: 25 validation errors; tools + 120 s vs 82 s violations; zdr refused"
+          "cmd": "python3 <scratchpad>/f2c-c/mutate.py <worktree>",
+          "exit": 0,
+          "summary": "18/18 killed (lane's original set)"
         }
       ],
       "owned_paths": [
@@ -467,15 +467,11 @@
         "apps/app/lib/contracts/v2/published-model.ts",
         "apps/app/tests/contracts/v2/published-model.test.ts",
         "research/plan/evidence/f/F2C-catalog-d414607.md",
-        "research/plan/evidence/coordinator/updates/F2C-C-20260924T2215Z.json"
+        "research/plan/evidence/coordinator/updates/F2C-C-20260924T2228Z.json"
       ],
       "deviation": "Dispatched with S3 (session-03 dispatch 1); S3's committed reconciliation may unblock F2C (brief 06).",
       "wiring_requests": [
-        "apps/infrx-api/infrx/contracts/v2/__init__.py: _SUBMODULES += published_fixtures, published_model (evidence §9.1)",
-        "apps/app/lib/contracts/v2/types.ts: export * from \"./published-model.ts\" after the money-units re-export (evidence §9.2)",
-        "15-pending-inputs.md P-22 amendment (evidence §4); 08 §10 R109 (evidence §5)",
-        "G7: adopt the seam regression (appendix A) in tests/g; D10: run alias_compatibility.json against real PostgreSQL",
-        "coordinator box check: hosted listing names rc_marlin2b_2026_09_provisional; price_versions holds the two HOSTED_USD_ROWS"
+        "unchanged from F2C-C-20260924T2215Z.json (evidence section 9); R109 wording change in the evidence Fix round section"
       ]
     },
     {
@@ -840,12 +836,6 @@
       "lane": "E1C",
       "task": "E1C",
       "head": "2531dc49"
-    },
-    {
-      "since": "2026-09-24T22:15:00Z",
-      "lane": "F2C-C",
-      "task": "F2C",
-      "head": "d414607d"
     }
   ],
   "integration_queue": [],
@@ -1666,6 +1656,18 @@
       "at": "2026-09-24T22:31:34Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T22:28:00Z",
+      "by": "F2C-C",
+      "what": "review → review; head 35d1e32a; estimate likely 1.5 → 1 h (0-F1, 0-F2, 2-F2C-C-R1, 2-F2C-C-R2 closed with regressions; left: wiring requests, R109/P-22 application)",
+      "source": "updates/F2C-C-20260924T2228Z.json"
+    },
+    {
+      "at": "2026-09-24T22:36:32Z",
+      "by": "F2C-C",
+      "what": "review → complete; head b8de6171; estimate likely 1 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171))",
+      "source": "updates/F2C-C-20260924T223632Z.json"
     }
   ],
   "history": {
@@ -1724,10 +1726,18 @@
     "F2C-L-20260924T223134Z.json": {
       "status": "applied",
       "at": "2026-09-24T22:31:34Z"
+    },
+    "F2C-C-20260924T2228Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:28:00Z"
+    },
+    "F2C-C-20260924T223632Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:36:32Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T22:31:34Z",
+    "computed_at": "2026-09-24T22:36:33Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
