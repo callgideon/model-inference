@@ -194,3 +194,15 @@ This is a fast-forward, never a merge commit.
 - Step 8b added: the worker composition root (branch codex/i2b-r4-worker, I2B-R4), gated on WORKER_VERIFY; it carries I's rehearse.sh change for the release tree (the G5 finding).
 - Heads moved since the analysis: D5 4bfdbf0 (code 8554b47), phase 3 ≥ 1fa825b (fix round running; contains M pilot 8b91648), cutover a1e88dc, M1-L2 ba26ca4 (contains cutover f7d9b03), M pilot 8b91648, E4B 4d9360c, rollout-prep f0a1a82. The scripts' SHA pins (Makefile line resolutions, 6a/6a2) are assert-guarded: re-run `git merge-tree` per step before replay and expect step 4's Makefile to already carry the s3 line.
 - The release carries D5's FINAL 0018 (only D5 changed it since the base); the rollout's plan digest is recomputed on the day (W6/W7).
+
+## Amendment 2026-09-24T01:05Z (coordinator): the cutover verdict and the unit
+
+The cutover review at a1e88dc returned fix_required on three findings that are all TEST GAPS
+(shape pins not killable by weaker regexes; the edge directive scan too narrow; "every mode"
+tested in pilot only) — every refuter confirmed the shipped code is strict. The unit (steps
+1–4) therefore ran with the cutover at 1bed457 (its code head 60dd799 unchanged since the
+review), and the cutover's tests-only fix round merges as **step 3b** before checkpoint 2, which
+is the gate that moves `main`. Nothing reached `main` on this amendment. Steps 1–4 were
+rehearsed clean on scratch clones at the final heads (D5 f142074, phase 3 b9529d1, cutover
+1bed457, M1-L2 ba26ca4) with the merged-tree suites green (layer 0 154, contracts 1030, D 660,
+G 574, I 153, M+W 591) before the real run.
