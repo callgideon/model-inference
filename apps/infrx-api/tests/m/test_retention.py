@@ -160,11 +160,29 @@ def test_candidates_come_from_the_store_in_bounded_pages(make_world):
 
     async def asked(*, after, limit):
         limits.append(limit)
-    report = run(collector(world, port=Interpose(world.port, candidates=asked),
-                           page_size=2).sweep())
+
+    async def suspends(*args):                    # a real store's round trip yields
+        await asyncio.sleep(0)
+    port = Interpose(world.port, candidates=asked, claim=suspends)
+    report = run(collector(world, port=port, page_size=2, concurrency=1).sweep())
     assert sorted(deleted(report)) == sorted(key(n) for n in range(5))
     assert (report.pages, report.max_batch, limits) == (3, 2, [2, 2, 2])
+    assert report.max_in_flight == 1
     assert world.objects.objects == {}
+
+
+@pytest.mark.parametrize("stray", ["secrets/keys.json", "media/../payloads/x.json",
+                                   "../media/x/source"])
+def test_a_row_naming_a_key_outside_the_media_prefixes_is_never_deleted(make_world, stray):
+    """A corrupt or foreign row must not reach the bucket: only keys M writes (media/,
+    uploads/, payloads/) and no `..` segment; anything else is kept and reported."""
+    world = make_world()
+    run(world.write("source", stray))
+    run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    report = run(collector(world).sweep())
+    assert deleted(report) == [key(1)] and report.retained == {"foreign_key": 1}
+    assert stray in world.objects.objects
 
 
 def test_an_attach_before_the_claim_or_the_tombstone_keeps_the_object(make_world):
@@ -575,6 +593,32 @@ def test_a_runtime_restarted_mid_delete_finishes_it_and_keeps_live_work(make_wor
     report = run(collector(world, holder="replacement").sweep())
     assert deleted(report) == [key(1)] and report.max_pending_delete_s == CLAIM_TTL_S
     assert run(world.read(live_row)) == b"content" and run(world.read(fresh)) == b"content"
+
+
+def test_the_schedule_survives_a_failed_pass(make_world, caplog):
+    """`run()` logs a pass that raised and runs the next one; it never stops collecting."""
+    import logging
+    world = make_world()
+    run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    failures, passes = [1], []
+
+    async def broken(*, after, limit):
+        if failures:
+            failures.pop()
+            raise RuntimeError("a bug in one pass")
+
+    async def sleep(seconds):
+        passes.append(seconds)
+        if len(passes) == 2:
+            raise asyncio.CancelledError
+    with caplog.at_level(logging.INFO, logger="infrx.media.retention"):
+        with pytest.raises(asyncio.CancelledError):
+            run(collector(world, port=Interpose(world.port, candidates=broken)).run(
+                5.0, sleep=sleep))
+    assert passes == [5.0, 5.0] and "retention sweep failed" in caplog.text
+    assert "retention sweep: 1 deleted" in caplog.text
+    assert key(1) not in world.objects.objects
 
 
 def test_pg_an_unreachable_database_fails_the_pass_and_deletes_nothing(caplog):

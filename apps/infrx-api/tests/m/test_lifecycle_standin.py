@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import itertools
+import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -748,11 +749,15 @@ def f2c_world() -> World:
 
 
 WORLDS = {"f2c": f2c_world, "fake": fake_world, "pg": pg_world}
+#: `INFRX_M6_WORLDS=f2c,fake` narrows the worlds: the mutant runs, one pytest process per
+#: mutant, then start no container.
+SELECTED = tuple(name for name in os.environ.get("INFRX_M6_WORLDS", "f2c,fake,pg").split(",")
+                 if name in WORLDS)
 #: The worlds with every operation point 2 needs (holds, database content, result expiry).
-DRAFT_WORLDS = ("fake", "pg")
+DRAFT_WORLDS = tuple(name for name in ("fake", "pg") if name in SELECTED)
 
 
-@pytest.fixture(params=sorted(WORLDS))
+@pytest.fixture(params=SELECTED)
 def make_world(request):
     return WORLDS[request.param]
 
