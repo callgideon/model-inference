@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T07:43:50Z",
+  "updated": "2026-09-24T08:44:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,15 +11,9 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half MERGED; PILOT RELEASE 27af05a DEPLOYED on the box 05:43Z (metered gateway live behind the edge; hosted 0003-0018 applied; operator seed applied); box half (smoke, E1B L2-L7, certify --box) waits for the preparation loop",
+      "phase": "pilot release 27af05a deployed (cannot complete jobs); the preparation loop merged 28f3153 → focused gate → main → SECOND INSTALL → smoke (operator key: user decision) → E1B L2-L7 → certify --box",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
-    },
-    "PREP-WORKER": {
-      "lane": "codex-prepw / codex/prep-worker",
-      "phase": "HANDED BACK 01b11ca (impl 4f7e32a; review folds + 3 self-found fixes; lists 58/58 + W3 85/85; journeys on the real worker with engine-exact counts) → targeted verifier wf_c74fcd96-71b → merge step 10 → focused gate → main → second install",
-      "since": "2026-09-24T02:13:25Z",
-      "note": "BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b"
     }
   },
   "reviews": {
@@ -104,8 +98,8 @@
       "since": "2026-09-24T02:51:40Z"
     },
     "PREP-WORKER": {
-      "phase": "handed back 01b11ca → verifier wf_c74fcd96-71b",
-      "since": "2026-09-24T07:43:50Z"
+      "phase": "MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install",
+      "since": "2026-09-24T08:44:25Z"
     }
   },
   "gates": {
@@ -450,6 +444,11 @@
       "merged": "I2B-R4 worker @ e540963 merged --no-ff (405f633, step 8b) after the verifier pass",
       "at": "2026-09-24T02:51:40Z",
       "note": "python -m infrx.worker composition root; rehearsal PASSED; the pilot box on the real entry point; F1/F2 nonblocking"
+    },
+    "PREP-WORKER": {
+      "merged": "PREP-WORKER @ 01b11ca merged --no-ff (28f3153, step 10) + R104-R105 (0e0506a) + F3 (933dda3)",
+      "at": "2026-09-24T08:44:25Z",
+      "note": "the product preparation loop: engine-exact prompt_tokens via /tokenize; the pilot box emulation retired; verifier pass at 01b11ca"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"
