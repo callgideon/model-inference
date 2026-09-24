@@ -35,7 +35,6 @@ import httpx
 import pytest
 
 from infrx.config import RuntimeMisconfigured, from_env
-from infrx.contracts import errors
 from infrx.contracts.records import MediaKind, MediaRef, OutboxKind
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.media.fetch import digest_of
@@ -291,12 +290,8 @@ def test_worker_main__the_process_refuses_to_start_naming_the_setting(tmp_path):
 
 # --- on PostgreSQL: the D harness, a Valkey and a MinIO of the lane's own ------------
 
-def services():
-    """(pgharness, vkstore, s3 client) or a visible skip naming what is missing."""
-    from ..d import pgharness, vkstore
-    reason = vkstore.unavailable()          # pgharness's docker check included
-    if reason:
-        pytest.skip(f"I2B-R4: the D harness is unavailable: {reason}")
+def s3_bucket():
+    """(client, endpoint) of the lane's MinIO with the test bucket made, or a visible skip."""
     endpoint = os.environ.get("INFRX_M_S3_ENDPOINT", "")
     if not endpoint or os.environ.get("INFRX_M_S3_LOCAL_CREDS") != "1":
         pytest.skip("I2B-R4: no local S3 endpoint - start a MinIO and export "
@@ -313,6 +308,16 @@ def services():
         if exists.response["Error"]["Code"] not in ("BucketAlreadyOwnedByYou",
                                                     "BucketAlreadyExists"):
             raise
+    return s3, endpoint
+
+
+def services():
+    """(pgharness, vkstore, s3 client, endpoint) or a visible skip naming what is missing."""
+    from ..d import pgharness, vkstore
+    reason = vkstore.unavailable()          # pgharness's docker check included
+    if reason:
+        pytest.skip(f"I2B-R4: the D harness is unavailable: {reason}")
+    s3, endpoint = s3_bucket()
     vkstore.ensure()
     return pgharness, vkstore, s3, endpoint
 
@@ -518,4 +523,36 @@ def test_worker_main_pg__sigterm_drains_the_in_flight_job_and_exits_0(box):
     log = box.log.read_text()
     assert code == 0, log
     assert box.row(request_id) == ("succeeded", "completed", "settled"), log
-    assert "drained: 1 finished, 0 released" in log, log
+    # W3's drain record: both runners stopped inside the bound, nothing released, and the
+    # one attempt in flight ended `completed`.
+    assert f"drained: 2 finished, 0 released [], ended [('{request_id}', 'completed')]" \
+        in log, log
+
+
+def test_worker_main_pg__an_unreachable_database_refuses_before_readiness(tmp_path):
+    """The pool is opened before the listener is bound: with the bucket answering and the
+    database not, the process exits 2 naming DATABASE_URL and `/readyz` never answered."""
+    _, endpoint = s3_bucket()
+    port = free_port()
+    settings = environment(tmp_path, S3_ENDPOINT_URL=endpoint, WORKER_HEALTH_PORT=str(port),
+                           DATABASE_POOL_CONNECT_TIMEOUT_S="2")
+    log = tmp_path / "unreachable.log"
+    process = start_worker(settings, log)
+
+    async def watch():
+        answered, deadline = [], time.monotonic() + 60
+        while process.poll() is None and time.monotonic() < deadline:
+            try:
+                answered.append((await http_get(port, "/readyz"))[0])
+            except OSError:
+                pass
+            await asyncio.sleep(0.05)
+        return answered
+
+    try:
+        answered = asyncio.run(watch())
+    finally:
+        code = stop_worker(process, signal.SIGKILL)
+    text = log.read_text()
+    assert code == worker_main.REFUSED and "DATABASE_URL did not answer" in text, (code, text)
+    assert answered == [] and "do-not-print" not in text, (answered, text)
