@@ -19,10 +19,10 @@ Publish AuthContext, NormalizedRequest, price/lease/outcome/envelope types, all 
 
 ## Critical Files
 
-- [apps/infrx-api/gateway.py](../../../apps/infrx-api/gateway.py)
-- [apps/infrx-api/tests/test_gateway_auth.py](../../../apps/infrx-api/tests/test_gateway_auth.py)
-- [apps/infrx-api/tests/test_inflight.py](../../../apps/infrx-api/tests/test_inflight.py)
-- [apps/infrx-api/tests/test_media.py](../../../apps/infrx-api/tests/test_media.py)
+- `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
+- `apps/infrx-api/tests/test_gateway_auth.py` (retired at the cutover, 88e1cfd)
+- `apps/infrx-api/tests/test_inflight.py` (retired at the cutover, 88e1cfd)
+- `apps/infrx-api/tests/test_media.py` (retired at the cutover, 88e1cfd)
 - [apps/app/package.json](../../../apps/app/package.json)
 
 ## Files Modified

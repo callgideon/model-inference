@@ -19,8 +19,8 @@ MediaStore stages normalized payloads and returns immutable owned refs. Preparat
 
 ## Critical Files
 
-- [apps/infrx-api/gateway.py](../../../apps/infrx-api/gateway.py)
-- [apps/infrx-api/tests/test_media.py](../../../apps/infrx-api/tests/test_media.py)
+- `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
+- `apps/infrx-api/tests/test_media.py` (retired at the cutover, 88e1cfd)
 - [research/production-api/10-implementation-spec.md](../../../research/production-api/10-implementation-spec.md)
 - [models/marlin2b/tokens.py](../../../models/marlin2b/tokens.py)
 

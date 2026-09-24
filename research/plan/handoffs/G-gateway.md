@@ -19,7 +19,7 @@ Route handlers consume shared ports; no direct financial or queue-state writes. 
 
 ## Critical Files
 
-- [apps/infrx-api/gateway.py](../../../apps/infrx-api/gateway.py)
+- `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
 - [apps/infrx-api/client_example.py](../../../apps/infrx-api/client_example.py)
 - [research/production-api/10-implementation-spec.md](../../../research/production-api/10-implementation-spec.md)
 - [research/traces/06-feedback-and-judge-spec.md](../../../research/traces/06-feedback-and-judge-spec.md)

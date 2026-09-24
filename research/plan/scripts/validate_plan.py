@@ -29,6 +29,7 @@ def closure(tasks, roots):
 
 def markdown_destinations(source):
     """Read inline destinations including Next.js route names with parentheses."""
+    source = re.sub(r'^```.*?^```', '', source, flags=re.M | re.S)   # code is not a link
     for match in re.finditer(r'\[[^\]\n]+\]\(', source):
         start = match.end()
         depth = 1

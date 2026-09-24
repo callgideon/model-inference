@@ -20,7 +20,7 @@ Engine yields canonical events/usage; worker coordinates Scheduler, JobStore, St
 ## Critical Files
 
 - [models/marlin2b/serve.sh](../../../models/marlin2b/serve.sh)
-- [apps/infrx-api/gateway.py](../../../apps/infrx-api/gateway.py)
+- `apps/infrx-api/gateway.py` (retired at the cutover, 43fe900)
 - [research/production-api/10-implementation-spec.md](../../../research/production-api/10-implementation-spec.md)
 
 ## Files Modified
