@@ -130,6 +130,14 @@ def test_an_upload_ticket_is_one_fact():
     assert lc.UploadTicket.model_validate(
         {**created, "state": "aborted", "refusal": "mime_not_accepted"}).refusal is \
         lc.LifecycleRefusal.mime_not_accepted
+    for internal in ("claim_lost", "not_ready", "reference_live", "not_found"):
+        with pytest.raises(pydantic.ValidationError):
+            lc.UploadTicket.model_validate({**created, "state": "aborted", "refusal": internal})
+    # F10: a measured duration is a finite number, not a bool or a numeric string.
+    for duration in (True, "2", float("inf"), -1.0):
+        with pytest.raises(pydantic.ValidationError):
+            lc.UploadTicket.model_validate(
+                {**body, "finalized": {**done, "duration_s": duration}})
 
 
 def test_constraints_default_to_the_deployment_and_refuse_everything_else():
@@ -137,6 +145,7 @@ def test_constraints_default_to_the_deployment_and_refuse_everything_else():
                                         allowed_mime=frozenset({"video/webm", "video/mp4"}))
     assert (parsed.max_bytes, parsed.accepted_mime) == (4096, ("video/mp4", "video/webm"))
     for body in (None, [], {"bytes": 4097}, {"bytes": 0}, {"digest": "md5:0"},
+                 {"schema_version": 2},
                  {"accepted_mime": []}, {"accepted_mime": ["video/mp4", "video/mp4"]},
                  {"accepted_mime": ["Video/MP4"]}, {"storage_ref": "media/x"}):
         with pytest.raises(errors.InvalidRequest) as refused:

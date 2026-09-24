@@ -64,6 +64,12 @@ test("a missing required or an unexpected field throws, deterministically", () =
   assert.throws(() => decodeUploadTicket({ ...loose, finalized: { ...finalized, bytes: 1 } }), TypeError, "forged size");
   assert.throws(() => decodeUploadTicket({ ...done, destination_ref: "s3://bucket/key" }), TypeError);
   assert.throws(() => decodeUploadTicket({ ...done, created_at: "2026-09-22T12:00:00+00:00" }), TypeError);
+  // An aborted ticket carries a public upload reason only - never an internal refusal.
+  const created = fixture("lifecycle_upload_created.json");
+  assert.equal(decodeUploadTicket({ ...created, state: "aborted", refusal: "media_refused" }).refusal, "media_refused");
+  for (const internal of ["claim_lost", "not_ready", "reference_live"]) {
+    assert.throws(() => decodeUploadTicket({ ...created, state: "aborted", refusal: internal }), TypeError, internal);
+  }
 });
 
 test("an empty manifest is ready-with-zero; a missing marker is not_ready", () => {
