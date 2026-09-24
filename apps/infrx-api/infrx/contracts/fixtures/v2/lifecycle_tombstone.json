@@ -1,0 +1,9 @@
+{
+  "content_id": "70000001-0000-4000-8000-000000000001",
+  "fence": 2,
+  "generation": 1,
+  "location": "object_store",
+  "object_key": "media/a0000002-0000-4000-8000-000000000002/v1/a1a1a1a1a1a1a1a1/source",
+  "schema_version": 2,
+  "tombstoned_at": "2026-09-29T12:00:00Z"
+}

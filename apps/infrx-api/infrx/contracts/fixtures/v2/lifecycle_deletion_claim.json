@@ -1,0 +1,9 @@
+{
+  "claimed_at": "2026-09-29T12:00:00Z",
+  "content_id": "70000001-0000-4000-8000-000000000001",
+  "expires_at": "2026-09-29T12:01:00Z",
+  "fence": 2,
+  "generation": 1,
+  "holder": "collector-a",
+  "schema_version": 2
+}

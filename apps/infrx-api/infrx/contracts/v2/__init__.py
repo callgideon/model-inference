@@ -33,7 +33,7 @@ SURFACE_VERSION = "contracts-v2.0"
 
 SCHEMA_VERSION = 2
 
-_SUBMODULES = ("fixtures", "money_units", "ports", "records")
+_SUBMODULES = ("fixtures", "lifecycle", "money_units", "ports", "records")
 
 __all__ = ["SCHEMA_VERSION", "SURFACE_VERSION", *_SUBMODULES]
 
