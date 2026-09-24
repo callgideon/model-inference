@@ -1,0 +1,141 @@
+{
+  "verdict": "pass",
+  "head": "01b11ca",
+  "checks": [
+    {
+      "id": "V1-L1",
+      "result": "confirmed",
+      "evidence": "Hand mutant: in preparation.py run(), the claim's `except errors.DomainError` narrowed to `errors.NotFound`, so not_claimable escapes. It dies at test_prep_worker.py:593 with `AssertionError: [('prepared', '')]` (a_candidate_offered_twice_is_a_lost_claim_not_a_dead_runner). On the pristine tree the case passes: outcomes [('', 'not_claimable'), ('prepared', '')], died == [], live True, preparation_attempts 1."
+    },
+    {
+      "id": "V1-L2",
+      "result": "confirmed",
+      "evidence": "Hand mutant: `preparation_lease_ttl_s / 3` changed to `* 3`. It dies at test_prep_worker.py:461 with `PreparationResult(... refusal='stale_lease', detail='stale_lease: preparation lease expired at 2026-09-20 12:00:00.300000+00:00')` (the_default_renewal_keeps_a_long_preparation_alive, which injects no cadence)."
+    },
+    {
+      "id": "V1-L3",
+      "result": "confirmed",
+      "evidence": "Real process: `python -m infrx.worker` with PREPARATION_CONCURRENCY=0 exits 2 and logs `infrx.worker: refusing to start: INFRX_MODE='dev': PREPARATION_CONCURRENCY must be positive`, with no traceback. preflight.tunables: '=0' gives ['PREPARATION_CONCURRENCY: the value is not a valid positive_int'] and '=2' gives []. Hand mutant (the name removed from config.MUST_BE_POSITIVE) dies at test_prep_worker.py:671 `(2, \"... botocore.credentials ...\")`. That kill comes from the name check only, because the exit is 2 either way (see finding F1)."
+    },
+    {
+      "id": "V1-L4",
+      "result": "confirmed",
+      "evidence": "_pg__a_count_past_postgresql_int_is_context_length_exceeded passed on d6 plain (P1: 40 passed) and on INFRX_D1_IMAGE=supabase (P2: 8 passed, 53 deselected). The conformance case dur_fence__prepared_stores_the_exact_prompt_count_once (it includes 2**31) is PASSED on both images. Hand mutant (INT4_MAX guard -> `if False:`) dies at test_prep_worker.py:829 with `AssertionError: <class 'psycopg.errors.NumericValueOutOfRange'>`."
+    },
+    {
+      "id": "V1-L5",
+      "result": "confirmed",
+      "evidence": "Hand mutant: service.stop's `self.preparation.drain(...preparation_lease_ttl_s)` changed to `drain(0)`. It dies at test_prep_worker.py:562 with `AssertionError: (<JobState.preparing>, <JobState.preparing>)`: the third job, which answers 0.3 s into a 0.5 s bound, is released instead of prepared."
+    },
+    {
+      "id": "V1-L6",
+      "result": "confirmed",
+      "evidence": "The video case uses the product ATTACH_WAIT_S; the attach lands 0.2 s after the claim and the case passes. Hand mutant (ATTACH_WAIT_S 10.0 -> 0.1) dies at test_prep_worker.py:219 with `refusal='not_found', detail='not_found: job ... has no durable attach'`."
+    },
+    {
+      "id": "V1-L7",
+      "result": "confirmed",
+      "evidence": "Hand mutant (`raise died` -> `pass`) dies at test_prep_worker.py:491: `assert PreparationResult(... cause='prepared' ...) is RuntimeError`. End-to-end probe (WorkerService, heartbeat raising RuntimeError, serve(asyncio.Event())): log `prep-w-0 died; draining for a restart` plus traceback; `drained:` and `drained preparation: 2 finished` lines; serve returned; live False; runners_dead 1. The prepared job stays queued."
+    },
+    {
+      "id": "V1-L8",
+      "result": "confirmed",
+      "evidence": "_pg__a_tokenize_count_that_disagrees_with_the_usage_settles_at_the_usage passed on plain and on supabase: stored 1000, usage_events 1337, settled at usage. Hand mutant (the fake ignores tokenize_count) dies at test_prep_worker.py:803 with `assert ('succeeded',...', 1337, 1, 0) == ('succeeded',...', 1000, 1, 0)`."
+    },
+    {
+      "id": "V1-JF2",
+      "result": "confirmed",
+      "evidence": "Removing the log.info in _prepare kills both text cases at test_prep_worker.py:195 `AssertionError: []`. The PG case asserts `INFO infrx.worker prepared <id>: 1337 prompt tokens (engine /tokenize, ` in the worker log (P1 pass). In the race probe each process logs one `prepared` line per job it prepared (3+3=6 for 6 jobs)."
+    },
+    {
+      "id": "V1-JF3",
+      "result": "confirmed",
+      "evidence": "contracts/README.md R46 row now reads '`heartbeat` **renews** a preparation lease, never past `preparation_deadline_at` (R52 ...)'. The old bullet is marked 'Superseded by R52'. ports.JobStore.heartbeat's docstring says the same. This matches the R52 row (renews; claim_preparation and heartbeat clamp expires_at to preparation_deadline_at)."
+    },
+    {
+      "id": "V2-fe2a82a",
+      "result": "confirmed",
+      "evidence": "Hand mutant (asyncio.timeout around /tokenize removed) dies at test_prep_worker.py:405 `AssertionError: timed out`. Fake-store probe (a /tokenize that never answers, runner bound 0.3 s, store limits default, clock +31 s and recover() after each attempt): three attempts, each `dependency_unavailable` after 0.3 s. The job then ends state failed, cause preparation_failed, settlement released_free, debit 0, preparation_attempts 3, every reservation inactive (MAX_PREPUBLICATION_RETRIES 2 = three claims). The lease is left to lapse, not released, as the evidence says."
+    },
+    {
+      "id": "V2-4f7e32a",
+      "result": "confirmed",
+      "evidence": "`INFRX_MUTANTS=all pytest tests/w/test_w3_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py -k 'not pg_mutant'`: 154 passed, 6 failed. stop_ignores_its_bound, stop_does_not_await_the_pool and run_undoes_an_early_drain are all killed. The 6 failures were broken_runner in W3's perf-pilot sweep cases, caused by my environment: my TMPDIR (/tmp/claude-1000/verify-prepw-...) contains 'verify', which matches the `bench` stub's `*verify*` pattern in tests/w/test_serving.py. That is pre-existing and not this lane's code. With TMPDIR=/tmp/claude-1000/vpw883401-tmp the sweep cases give 4 passed, and the 6 mutants give `6 passed, 81 deselected`. Totals: W3 85/85, I2B-R4 13/13, prep 50/50. PG list (`-k pg_mutant`, d6): `12 passed` (prep 8 + worker_main 4)."
+    },
+    {
+      "id": "V2-49c7a00",
+      "result": "confirmed",
+      "evidence": "`INFRX_MUTANTS=all pytest tests/contracts/test_mutants.py -k 'fake_prepared or drops_the_count or fake_tokenize or fake_refused_count or well_formed or covered or anchor or pristine'`: 11 passed. The list is well formed; every case is covered. All 7 fake-store mutants are killed: fake_prepared_drops_the_count, fake_prepared_count_unbounded, fake_prepared_count_bound_exclusive, fake_prepared_count_untyped, fake_refused_count_changes_state, fake_load_work_drops_the_count, fake_credit_work_drops_the_count. (The fake_tokenize_* mutants are in the prep list; all killed in the 50/50.)"
+    },
+    {
+      "id": "V3-suite",
+      "result": "confirmed",
+      "evidence": "d6 plain: tests/w/test_prep_worker.py gives `40 passed in 34.49s` (36 service-free + 4 _pg__). d6 supabase: `-k _pg__` over test_prep_worker.py and test_worker_main.py gives `8 passed`. Mutant lists: 50/50 service-free and 8/8 PG, with MinIO on 55724 and valkey 55471."
+    },
+    {
+      "id": "V3-hand-mutants",
+      "result": "confirmed",
+      "evidence": "(a) prompt_tokens=count -> 1200: `test_prep_worker.py:189: AssertionError: assert (1200 == 1337)` (text legacy+credit), :222 (video), :388 (requeue). (b) claim_preparation -> claim: `:187 PreparationResult(... refusal='not_claimable', detail='not_claimable: job ... is preparing, not queued')` and 10 more named deaths (219, 244, 257, 356, 382, 406, 491, 560, 593). Two renewal cases hang on this mutant (finding F2). (c) `len(tokens) != count` -> `> count`: `:322 AssertionError: ('disagreeing', 3)`. (d) video range check -> `if False:`: `:322 ('below-one-per-patch', 40)`, `('past-the-budget', 3000)`, `('unexpanded', 40)`, and `:356 PreparationResult(... cause='prepared' ...)`."
+    },
+    {
+      "id": "V3-two-process-race",
+      "result": "confirmed",
+      "evidence": "Scratch-only probe on d6 plain (mut clone tests/w/test_verify_race.py): two `python -m infrx.worker` processes, PREPARATION_CONCURRENCY=3 each, 6 CREDIT jobs, each prepare_dispatch offered 3 times (the relay's plus 2 fresh event ids), tokenize_delay_s 0.3. All 6 rows are ('succeeded', stored 1337, preparation_attempts 1, 1 preparation attempt row, 1 inference row, usage 1337). Preparing workers: worker-2721dde0 x3, worker-88c130c4 x3. `prepared` log lines 3+3=6; `not claimed` lines 9+3=12 (= the 12 duplicates); `refused` 0; both processes exited 0; `1 passed in 6.24s`."
+    },
+    {
+      "id": "V4",
+      "result": "confirmed",
+      "evidence": "On the fakes: `jobstore-dur_fence__prepared_stores_the_exact_prompt_count_once` and `credit_prepare__the_count_reaches_the_credit_work` PASSED; the whole conformance gives 231 passed. On PostgreSQL (INFRX_D_TASK=d6), plain and supabase: test_jobstore_conformance_on_postgres[dur_fence__prepared_stores_the_exact_prompt_count_once] and test_credit_jobstore_conformance_on_postgres[credit_prepare__the_count_reaches_the_credit_work] PASSED. Whole files: `82 passed, 4 xfailed` on plain (73.6 s) and on supabase (344.8 s). prepared_takes_a_keyword_count_on_every_adapter passes. Hand mutant port_prepared_count_positional (the `*` removed in ports.py) dies at test_prep_worker.py:164 `AssertionError: JobStore.prepared`. The heartbeat docstring and the README R46 row match R52."
+    },
+    {
+      "id": "V5",
+      "result": "confirmed",
+      "evidence": "infrx-worker.service mounts `-v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR}` read-write. marlin2b-gateway.service and marlin2b-vllm.service both `install -d -o 10001 -g 10000 -m 2770`. preflight TUNABLE_SHAPES has PREPARATION_CONCURRENCY positive_int. flag() returns a list, so the ':ro' mutant cannot pass the substring check. tests/i: `159 passed`. `python -m tests.i.mutants` for worker_reads_media_only, media_root_created_by_docker, media_root_not_group_writable and the 11 other worker_* mutants: `14/14 killed`. Real process with a 0555 PROCESSING_CACHE_DIR: exit 2, `PROCESSING_CACHE_DIR must be an absolute path to a writable directory`, no traceback. Least privilege still open (request 3): the root is owned 10001 (the gateway), group-writable 2770, and the gateway still mounts it read-write although in the product only the worker's `prepare` writes it (`cache.put` is only in media/prepare.py:446). Target state: worker as owner/only writer, gateway `:ro`."
+    },
+    {
+      "id": "V6",
+      "result": "confirmed",
+      "evidence": "grep: pilotbox.py has no PROMPT_TOKENS, prepared(, WorkerLoop or claim_preparation (only ENGINE_PROMPT_TOKENS = 1337). test_worker_main.py has no Box.prepare, claim_preparation or .prepared( (its PROMPT_TOKENS = 1200 is the fake engine's default count). `git grep .prepared(` in infrx/ outside conformance: only worker/preparation.py:169. E2 stack, base namespace, layer 2 --keep (exit 0): journeys, dr11, rc03 and rc08b give `16 passed, 3 skipped` (the 3 are layer-3 PostgREST). The 9 cells assert preparer==runner, stored==usage==1337 and that /tokenize was asked; the resume asserts the first two. dr11/rc03/rc08b carry no such assertion (files unchanged). A read-only SQL probe over their clones showed all 5 jobs prepared by the worker that ran them, stored 1337, usage 1337 on the 3 succeeded (dr11's 2 are cancelled, no usage). mutants.py --only: e3bm79 killed (test_journey.py:204 AssertionError); e3bm64, e3bm70, e3bm71, e3bm75, e3bm78 and i3bm117 killed. run.backend(Report()): `backend PASS {passed 188, pending 0, failed 0, stale_pending null, pending_by_id {}}`; backend-teardown removed infrx-e3b-postgrest."
+    },
+    {
+      "id": "V7",
+      "result": "confirmed",
+      "evidence": "Evidence R25-R27 read: no lane run exited 0/3. Each stage passed in at least one run; the failures are all fake-vLLM `address already in use`. My `run.py --layer 3 --only-suites --canary --report` from a second scratch clone: run 1 FAILED at services, `failed to bind host port 127.0.0.1:55500/tcp: address already in use` twice (the same ephemeral-range class; the rest ran without services). I reran once. Run 2 gives `exit 0 (all stages passed)`: preflight, services, rls 731, backend {188,0,0} 141.9 s, engine 8, suites {passed 302, skipped 3}, mutants {252, killed 248, controls_survived 4, not_killed 0, pending 0}, canary PASS, teardown PASS. API suites without D: `tests/w tests/i tests/g tests/m tests/contracts` gives `2510 passed, 4 skipped` (3 empty PG parametrizations + tests/m/test_parity.py corpus cache absent in my clone). `tests/q tests/j tests/t` gives `518 passed`. With tests/d's 670 collected, the total is 3702 = 3694 + 3 skipped + 5 xfailed, so it matches R20 (the parity skip is environmental). `git diff --stat 4f7e32a 01b11ca`: 1 file, research/plan/evidence/w/PREP-WORKER-4f7e32a.md, +428. Noted, not judged: the lane's Limit 8 discloses two tests/contracts runs on the default d1 (55432)."
+    },
+    {
+      "id": "V8",
+      "result": "confirmed",
+      "evidence": "The evidence lists as open: video /tokenize on the real engine (Limit 1, fail-closed), a text job prepared before the CREDIT rechecks (Limit 2, 0019), a permanent refusal costing up to 3 lapsed leases (Limit 3), a media root writable by both (Limit 5), a double decode (Limits 1/4). A grep of the non-evidence diff finds no text claiming any of them fixed. The only new ⚠️ is the 08 §5.1 PREPARATION_CONCURRENCY row. No case claims real-engine video tokenization: the video cases run on the fake, which expands to longest_edge//2048 by construction. The packaging case keeps the gateway's rw mount and does not claim least privilege. My V2 probe reproduced Limit 3's retry path."
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_prep_worker.py",
+      "line": "668",
+      "claim_broken": "The zero-pool refusal is killed locally, with nothing sent to AWS. Under a mutant that accepts PREPARATION_CONCURRENCY=0, the worker in this case goes on to HeadBucket against the public AWS S3 endpoint: environment() sets no S3_ENDPOINT_URL. Exit is 2 either way, so only the name assertion kills.",
+      "evidence": "A control run with PREPARATION_CONCURRENCY=2 and the same environment() exits 2 with `S3_MEDIA_BUCKET did not answer HeadBucket (403)` (AWS answering the MinIO literal credentials). The hand mutant (name removed from MUST_BE_POSITIVE) dies at :671 `(2, \"... INFO botocore.credentials Found credentials in environment variables...`. The lane's own death line for main_zero_preparation_pool_accepted shows the same. Disclosure: my control run and my L3 hand mutant each made one such HeadBucket (403) with the non-secret MinIO literals.",
+      "minimal_fix": "Pass S3_ENDPOINT_URL=\"http://127.0.0.1:9\" in that case's environment(...), so a mutant fails locally. Optionally assert the refusal text rather than exit 2 alone."
+    },
+    {
+      "id": "F2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_prep_worker.py",
+      "line": "425",
+      "claim_broken": "The file's rule, 'a hang is an assertion here, not a stuck run', is not kept. the_lease_is_renewed_while_preparation_runs (:425) and the_default_renewal_keeps_a_long_preparation_alive (:453) await gate[\"asked\"] with no bound. A defect that never reaches /tokenize hangs those cases instead of failing them.",
+      "evidence": "Hand mutant claim_preparation -> claim: pytest sat in test_prep_worker__the_lease_is_renewed_while_preparation_runs for more than 10 minutes (the newest pytest tmp dir was that case) until I killed it. With those two cases deselected, the same mutant dies in 11 named cases.",
+      "minimal_fix": "`assert await within(gate[\"asked\"].wait(), 5.0) != \"timed out\"` in both cases."
+    },
+    {
+      "id": "F3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/media/prepare.py",
+      "line": "453",
+      "claim_broken": "Moving `prepare` into the long-lived worker assumed nothing else changed. In fact MediaPreparation.prepared_by_job now grows by one entry per prepared video job for the life of the worker process. Its only remover, media/gc.py, is composed nowhere (the evidence's Limit 5 names the unswept disk cache, not this map).",
+      "evidence": "Service-free probe: after each of 5 prepared video jobs, len(prep.media.prepared_by_job) is 1, 2, 3, 4, 5. grep: prepared_by_job is written only at prepare.py:453 and read only by media/gc.py, which neither worker/__main__.py nor gateway/pilot.py composes.",
+      "minimal_fix": "After `self.media.prepare(...)` in PreparationRunner._media, pop the job's entry (`self.media.prepared_by_job.pop(job_id, None)`): nothing in the worker reads it. Or record it with Limit 5."
+    }
+  ],
+  "cleanup": "Everything I started is removed. The harness removed infrx-d6-postgres, infrx-d6-postgres-supabase and infrx-verify-prepw-valkey at exit. I removed infrx-verify-prepw-minio. My layer-2 --keep stack (infrx-e2-*) went down via harness.down(). Both layer-3 gate runs tore down their own stack and infrx-e3b-postgrest. docker ps -a shows no infrx-d6-*, infrx-verify-prepw-*, infrx-e2-* or infrx-e3b-* container, and no infrx-e2 volume or network. ps shows no fake_vllm.py or infrx.worker process from my clones. Nothing listens on 55437, 55471, 55472, 55724 or 55500-55599. One hung probe pytest (mine, pid 1225044) was killed and its hand mutation restored; the mut clone's only change is the untracked scratch probe tests/w/test_verify_race.py. The lane worktree codex-prepw was never edited or run in. Pre-existing infrx-d2-postgres (55433) and gideon-migration-order-test-* were not touched. Disclosure (see F1): my PREPARATION_CONCURRENCY=2 control and my L3 hand mutant each made one HeadBucket to the public AWS S3 endpoint through the test's environment() helper, using the local MinIO literal credentials, answered 403. There was no other AWS contact and none with the pilot box or hosted Supabase. Scratch clones and logs remain under /tmp/claude-1000/verify-prepw-883401 (head, e2, mut, logs/, probe/): gate_report.json, gate_report_run1.json, E_*.log, P*/M*/A*.log."
+}
