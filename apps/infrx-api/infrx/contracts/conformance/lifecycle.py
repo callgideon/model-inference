@@ -34,7 +34,7 @@ from .. import errors
 from ..records import (ExecutionMode, IdempotencyRef, LeaseKind, MediaKind, MediaRef,
                        TerminalOutcome, UploadState)
 from ..v2 import fixtures as v2fix
-from ..v2.lifecycle import (REFUSAL_ERRORS, AdmissionExpectation, ContentIdentity, ContentKind, ContentLocation,
+from ..v2.lifecycle import (MAX_PAGE, REFUSAL_ERRORS, AdmissionExpectation, ContentIdentity, ContentKind, ContentLocation,
                             ContentOrigin, LifecycleRefusal as R, LifecycleState, ReadinessState,
                             ReadOutcome, Tombstone, UploadConstraints, read_outcome,
                             readiness_view, refusal_of)
@@ -47,6 +47,10 @@ ORG, OTHER = IDS.consumer_org, IDS.other_org
 MP4 = frozenset({"video/mp4", "video/webm"})
 CARD = AdmissionExpectation(accounting_regime=AccountingRegime.credit,
                             rate_card_version=v2fix.RATE_CARD_VERSION)
+LEGACY = AdmissionExpectation(accounting_regime=AccountingRegime.legacy_usd)
+# Both regimes admit through `admit_ready`; a case about admission runs for each, so an
+# adapter that forgets the legacy marker cannot pass (W5 would refuse every legacy job).
+EXPECTATIONS = (CARD, LEGACY)
 
 
 # --- helpers (records only; nothing here reads a fake's attributes) -----------------------
@@ -104,15 +108,28 @@ async def _refused(call, reason: R) -> errors.DomainError:
     raise AssertionError(f"expected the refusal {reason}")
 
 
-async def _nothing_admitted(harness, request, idem, available) -> None:
+def _balances(harness):
+    """Available CREDIT and available USD: a refusal or a scrub moves neither."""
+    return (hook(harness, "credit_balance")(IDS.consumer_wallet)["available"],
+            hook(harness, "balance")(ORG)["available"])
+
+
+async def _nothing_admitted(harness, request, idem, before) -> None:
     jobs = hook(harness, "jobs")
     assert await jobs.lookup(request.org_id, idem) is None, "a refused admission left a job"
-    assert hook(harness, "credit_balance")(IDS.consumer_wallet)["available"] == available, \
-        "a refused admission moved CREDIT"
+    assert _balances(harness) == before, "a refused admission moved money"
 
 
-def _available(harness):
-    return hook(harness, "credit_balance")(IDS.consumer_wallet)["available"]
+def _previous_admit(harness, expectation):
+    """The PREVIOUS runtime's admission for this regime: it writes no marker."""
+    jobs = hook(harness, "jobs")
+    if expectation.accounting_regime is AccountingRegime.credit:
+        return jobs.admit_credit
+    return lambda request, idem: jobs.admit(request, idem, ())
+
+
+def _key(name: str, expectation) -> str:
+    return f"{name}-{expectation.accounting_regime.value}"
 
 
 def _at(harness, instant: datetime) -> None:
@@ -152,7 +169,8 @@ async def upload_restart__the_tenant_handle_and_window_are_the_stores(factory):
     for smuggled in ({"org_id": OTHER}, {"expires_at": "2030-01-01T00:00:00Z"},
                      {"upload_handle": "upl_" + "x" * 30}, {"destination_ref": "s3://b/k"},
                      {"max_bytes": "4096"}, {"max_bytes": True}, {"accepted_mime": "video/mp4"},
-                     {"max_bytes": (1 << 26) + 1}, {"accepted_mime": ["image/png"]}):
+                     {"max_bytes": (1 << 26) + 1}, {"accepted_mime": ["image/png"]},
+                     {"schema_version": 2}):
         try:
             UploadConstraints.parse(smuggled, max_media_bytes=1 << 26, allowed_mime=MP4)
         except errors.InvalidRequest as refused:
@@ -186,9 +204,18 @@ async def upload_restart__one_handle_names_one_set_of_bytes(factory):
                                                             allowed_mime=MP4))
     handle = ticket.upload_handle
     first = await port.acknowledge_put(ORG, handle, bytes=len(data), digest=_digest(data))
+    harness.clock.advance(1)            # a retry later must not rewrite when they arrived
     assert await port.acknowledge_put(ORG, handle, bytes=len(data), digest=_digest(data)) == first
     await _refused(port.acknowledge_put(ORG, handle, bytes=len(other), digest=_digest(other)),
                    R.bytes_changed)
+    await _refused(port.acknowledge_put(ORG, handle, bytes=len(data) + 1, digest=_digest(data)),
+                   R.bytes_changed)
+    try:
+        await port.acknowledge_put(ORG, handle, bytes=len(data), digest="md5:0")
+    except errors.InvalidRequest:
+        pass
+    else:
+        raise AssertionError("a malformed digest was received")
     forged = _ref(other, handle=handle, kind=MediaKind.upload)
     await _refused(port.complete(ORG, handle, forged), R.bytes_changed)
     for foreign in (_ref(data, org=OTHER, handle=handle, kind=MediaKind.upload),
@@ -199,6 +226,9 @@ async def upload_restart__one_handle_names_one_set_of_bytes(factory):
     done = await port.complete(ORG, handle, ref)
     assert await port.complete(ORG, handle, ref) == done
     await _refused(port.complete(ORG, handle, forged), R.bytes_changed)
+    for changed in ({"mime": "video/webm"}, {"bytes": len(data) + 1}):
+        await _refused(port.complete(ORG, handle, MediaRef.model_validate(
+            {**ref.model_dump(), **changed})), R.bytes_changed)
     await _refused(port.acknowledge_put(ORG, handle, bytes=len(data), digest=_digest(data)),
                    R.upload_not_open)
 
@@ -212,6 +242,8 @@ async def upload_restart__the_window_bounds_completion_and_use(factory):
     data = b"window"
     open_ticket = await port.create(ORG, UploadConstraints.parse({}, max_media_bytes=1 << 26,
                                                                  allowed_mime=MP4))
+    second = await port.create(ORG, UploadConstraints.parse({}, max_media_bytes=1 << 26,
+                                                            allowed_mime=MP4))
     done, ref = await _uploaded(harness, data)
     assert await port.resolve(ORG, done.upload_handle) == done
     _at(harness, open_ticket.expires_at)
@@ -222,11 +254,43 @@ async def upload_restart__the_window_bounds_completion_and_use(factory):
                                       kind=MediaKind.upload)), R.upload_expired)
     _at(harness, done.expires_at)
     await _refused(port.resolve(ORG, done.upload_handle), R.upload_expired)
+    assert await port.expire(1) == 1, "expire exceeded its limit"
     assert await port.expire(100) == 1
     assert await port.expire(100) == 0, "expire is not idempotent"
+    await _refused(port.resolve(ORG, second.upload_handle), R.upload_expired)
     await _refused(port.resolve(ORG, open_ticket.upload_handle), R.upload_expired)
     await _refused(port.abort(ORG, open_ticket.upload_handle, R.too_large), R.upload_not_open)
     assert (await port.complete(ORG, done.upload_handle, ref)).state is UploadState.finalized
+
+
+async def upload_restart__oversize_puts_and_aborts_are_final_everywhere(factory):
+    """A put over the ticket's cap is `too_large`; M's own abort is persisted (another
+    process sees it), idempotent, limited to the public upload reasons, and refused on a
+    finalized ticket."""
+    harness = factory()
+    port, reopen = harness.port, hook(harness, "reopen")
+    data = b"x" * 64
+    small = await port.create(ORG, UploadConstraints.parse(
+        {"max_bytes": 16}, max_media_bytes=1 << 26, allowed_mime=MP4))
+    await _refused(port.acknowledge_put(ORG, small.upload_handle, bytes=len(data),
+                                        digest=_digest(data)), R.too_large)
+    aborted = await port.abort(ORG, small.upload_handle, R.media_refused)
+    assert (aborted.state, aborted.refusal) == (UploadState.aborted, R.media_refused)
+    await _refused(reopen().resolve(ORG, small.upload_handle), R.upload_not_finalized)
+    assert await reopen().abort(ORG, small.upload_handle, R.media_refused) == aborted
+    await _refused(port.complete(ORG, small.upload_handle,
+                                 _ref(data, handle=small.upload_handle, kind=MediaKind.upload)),
+                   R.upload_not_open)
+    other = await port.create(ORG, UploadConstraints.parse({}, max_media_bytes=1 << 26,
+                                                           allowed_mime=MP4))
+    for internal in (R.claim_lost, R.not_ready, R.not_found):
+        try:
+            await port.abort(ORG, other.upload_handle, internal)
+        except errors.InvalidRequest:
+            continue
+        raise AssertionError(f"a ticket recorded the internal refusal {internal}")
+    done, _ref_ = await _uploaded(harness, b"finalized-then-aborted")
+    await _refused(port.abort(ORG, done.upload_handle, R.too_large), R.upload_not_open)
 
 
 async def upload_restart__a_failed_check_is_final(factory):
@@ -258,103 +322,134 @@ async def upload_restart__a_failed_check_is_final(factory):
 # --- ADMISSION-READY -----------------------------------------------------------------------
 async def admission_ready__a_text_job_is_ready_with_an_empty_manifest(factory):
     """RV-05: a text-only admission commits a marker with ZERO sources - completed, not
-    missing - visible to another process, and preparation may claim it."""
+    missing - visible to another process, and preparation may claim it. In BOTH regimes."""
     harness = factory()
-    request = _request(harness)
-    admission, readiness = await harness.port.admit_ready(request, _idem(request), CARD)
-    assert readiness is not None and readiness.sources == () and \
-        readiness.job_id == admission.request_id == request.request_id
-    assert readiness.ready_at == admission.admitted_at
-    assert await hook(harness, "reopen")().readiness(request.request_id) == readiness
-    view = readiness_view(request.request_id, readiness)
-    assert (view.state, view.source_count) == (ReadinessState.ready, 0)
-    lease = await harness.port.claim_preparation(request.request_id, "prep-a")
-    assert lease.kind is LeaseKind.preparation
+    for expectation in EXPECTATIONS:
+        request = _request(harness)
+        admission, readiness = await harness.port.admit_ready(
+            request, _idem(request, _key("text", expectation)), expectation)
+        assert readiness is not None and readiness.sources == () and \
+            readiness.job_id == admission.request_id == request.request_id, expectation
+        assert readiness.ready_at == admission.admitted_at
+        assert await hook(harness, "reopen")().readiness(request.request_id) == readiness
+        view = readiness_view(request.request_id, readiness)
+        assert (view.state, view.source_count) == (ReadinessState.ready, 0)
+        lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+        assert lease.kind is LeaseKind.preparation
 
 
 async def admission_ready__a_job_with_no_marker_is_never_claimable(factory):
-    """The other half of RV-05: a job the previous runtime admitted (no marker) reads as
-    NOT READY - never as an empty manifest - and preparation cannot claim it."""
+    """The other half of RV-05: a job the previous runtime admitted - `admit` or
+    `admit_credit`, which never write a marker - reads NOT READY, never an empty
+    manifest, and preparation cannot claim it."""
     harness = factory()
-    request = _request(harness)
-    await hook(harness, "jobs").admit_credit(request, _idem(request, "previous-runtime"))
-    assert await harness.port.readiness(request.request_id) is None
-    assert await hook(harness, "reopen")().readiness(request.request_id) is None
-    view = readiness_view(request.request_id, None)
-    assert view.state is ReadinessState.not_ready and view.source_count is None
-    await _refused(harness.port.claim_preparation(request.request_id, "prep-a"), R.not_ready)
+    for expectation in EXPECTATIONS:
+        request = _request(harness)
+        await _previous_admit(harness, expectation)(
+            request, _idem(request, _key("previous", expectation)))
+        assert await harness.port.readiness(request.request_id) is None, expectation
+        assert await hook(harness, "reopen")().readiness(request.request_id) is None
+        view = readiness_view(request.request_id, None)
+        assert view.state is ReadinessState.not_ready and view.source_count is None
+        await _refused(harness.port.claim_preparation(request.request_id, "prep-a"),
+                       R.not_ready)
 
 
 async def admission_ready__the_manifest_is_the_orgs_own_live_content(factory):
     """A forged manifest admits nothing: another tenant's ref, a digest unlike the content
-    row, a ref never staged, a repeated source. A valid one records each source against
-    its content row and generation."""
+    row, a ref never staged, a repeated source, a key that is not source content, an upload
+    whose ticket names other content. A valid one records each source against its content
+    row and generation. In both regimes."""
     harness = factory()
     port = harness.port
-    before = _available(harness)
     good = await _staged(harness, b"own-clip")
     foreign = await _staged(harness, b"their-clip", org=OTHER)
     forged_digest = MediaRef.model_validate({**good.model_dump(), "digest": _digest(b"lie")})
     never = _ref(b"never-staged")
-    for n, (refs, reason) in enumerate((
-            ((foreign,), R.not_found), ((forged_digest,), R.not_found), ((never,), R.not_found),
-            ((good, good), R.invalid_manifest))):
-        request = _request(harness, refs)
-        idem = _idem(request, f"forged-{n}")
-        await _refused(port.admit_ready(request, idem, CARD), reason)
-        await _nothing_admitted(harness, request, idem, before)
-    request = _request(harness, (good,))
-    admission, readiness = await port.admit_ready(request, _idem(request, "valid"), CARD)
-    (source,) = readiness.sources
-    assert source.ref == good and source.generation >= 1
-    refs = await port.references(source.content_id)
-    assert [(r.job_id, r.generation) for r in refs] == [(admission.request_id, source.generation)]
+    pending = await port.create(ORG, UploadConstraints.parse({}, max_media_bytes=1 << 26,
+                                                             allowed_mime=MP4))
+    not_source = _ref(b"a-destination", handle="med_" + "d" * 40)
+    await port.register(ContentIdentity(
+        org_id=ORG, kind=ContentKind.upload_destination, location=ContentLocation.object_store,
+        object_key=not_source.storage_ref, digest=not_source.digest, bytes=not_source.bytes,
+        upload_handle=pending.upload_handle, origin=ContentOrigin.written))
+    done, _upload = await _uploaded(harness, b"uploaded-clip")
+    elsewhere = MediaRef.model_validate({**good.model_dump(), "kind": MediaKind.upload,
+                                         "handle": done.upload_handle})
+    forged = (((foreign,), R.not_found), ((forged_digest,), R.not_found),
+              ((never,), R.not_found), ((good, good), R.invalid_manifest),
+              ((not_source,), R.not_found), ((elsewhere,), R.not_found))
+    for expectation in EXPECTATIONS:
+        before = _balances(harness)
+        for n, (refs, reason) in enumerate(forged):
+            request = _request(harness, refs)
+            idem = _idem(request, _key(f"forged-{n}", expectation))
+            await _refused(port.admit_ready(request, idem, expectation), reason)
+            await _nothing_admitted(harness, request, idem, before)
+        request = _request(harness, (good,))
+        admission, readiness = await port.admit_ready(
+            request, _idem(request, _key("valid", expectation)), expectation)
+        (source,) = readiness.sources
+        assert source.ref == good and source.generation >= 1
+        refs = await port.references(source.content_id)
+        assert (admission.request_id, source.generation) in [(r.job_id, r.generation)
+                                                            for r in refs]
 
 
 async def admission_ready__a_refused_expectation_or_capability_admits_nothing(factory):
     """The rechecks RV-05 found after the commit run inside it: a card this runtime did
-    not approve, or a pinned revision that cannot take the request, admits nothing."""
+    not approve, or a pinned revision that cannot take the request's media or stream its
+    output, admits nothing. (A legacy expectation has no card and no pinned revision.)"""
     harness = factory()
     port = harness.port
-    before = _available(harness)
+    before = _balances(harness)
     request = _request(harness)
     other_card = AdmissionExpectation(accounting_regime=AccountingRegime.credit,
                                       rate_card_version="rc_not_this_runtime")
     await _refused(port.admit_ready(request, _idem(request), other_card), R.expectation_mismatch)
     await _nothing_admitted(harness, request, _idem(request), before)
     clip = await _staged(harness, b"needs-video")
-    hook(harness, "set_capability")(IDS.serving_version, ("text",))
-    request = _request(harness, (clip,))
-    try:
-        await port.admit_ready(request, _idem(request, "cap"), CARD)
-    except errors.UnsupportedMedia:
-        pass
-    else:
-        raise AssertionError("a revision without video input admitted a video job")
-    await _nothing_admitted(harness, request, _idem(request, "cap"), before)
+    for capability, mode, refs, refusal in (
+            (("text",), ExecutionMode.async_, (clip,), errors.UnsupportedMedia),
+            (("text", "video"), ExecutionMode.stream, (), errors.UnsupportedParameter)):
+        hook(harness, "set_capability")(IDS.serving_version, capability,
+                                        stream_output=mode is not ExecutionMode.stream)
+        request = _request(harness, refs, mode=mode)
+        idem = _idem(request, f"cap-{mode.value}")
+        try:
+            await port.admit_ready(request, idem, CARD)
+        except refusal:
+            pass
+        else:
+            raise AssertionError(f"the pinned revision took {capability} / {mode}")
+        await _nothing_admitted(harness, request, idem, before)
 
 
 async def admission_ready__a_replay_answers_the_recorded_marker(factory):
     """The same key answers the first admission and ITS marker, not a second one."""
     harness = factory()
     clip = await _staged(harness, b"replayed")
-    request = _request(harness, (clip,))
-    first = await harness.port.admit_ready(request, _idem(request), CARD)
-    again = await harness.port.admit_ready(request, _idem(request), CARD)
-    assert again[0].replayed and again[0].request_id == first[0].request_id
-    assert again[1] == first[1], "a replay recorded another marker"
+    for expectation in EXPECTATIONS:
+        request = _request(harness, (clip,))
+        idem = _idem(request, _key("replay", expectation))
+        first = await harness.port.admit_ready(request, idem, expectation)
+        again = await harness.port.admit_ready(request, idem, expectation)
+        assert again[0].replayed and again[0].request_id == first[0].request_id
+        assert again[1] == first[1], "a replay recorded another marker"
 
 
 async def admission_ready__an_expired_upload_cannot_be_admitted(factory):
     """R99(b) at the admission boundary: a finalized upload past its window admits
     nothing, however the request reached the store."""
     harness = factory()
-    before = _available(harness)
+    before = _balances(harness)
     done, ref = await _uploaded(harness, b"late-upload")
     _at(harness, done.expires_at)
-    request = _request(harness, (ref,))
-    await _refused(harness.port.admit_ready(request, _idem(request), CARD), R.upload_expired)
-    await _nothing_admitted(harness, request, _idem(request), before)
+    for expectation in EXPECTATIONS:
+        request = _request(harness, (ref,))
+        idem = _idem(request, _key("late", expectation))
+        await _refused(harness.port.admit_ready(request, idem, expectation), R.upload_expired)
+        await _nothing_admitted(harness, request, idem, before)
 
 
 # --- RETENTION-DURABLE ---------------------------------------------------------------------
@@ -418,7 +513,7 @@ async def retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_ack
     delayed acknowledgement of the old tombstone cannot retire it."""
     harness = factory()
     port = harness.port
-    before = _available(harness)
+    before = _balances(harness)
     clip = await _staged(harness, b"retired")
     row = await _eligible(harness, clip)
     tombstone = await port.tombstone(await port.claim(row.content_id, row.generation, "s-a"))
@@ -429,6 +524,9 @@ async def retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_ack
     await _refused(port.register(_written(clip)), R.content_retiring)
     deleted = await port.acknowledge_delete(tombstone)
     assert deleted.state is LifecycleState.deleted
+    assert await port.acknowledge_delete(tombstone) == deleted, "a repeated ack is not idempotent"
+    request = _request(harness, (clip,))
+    await _refused(port.admit_ready(request, _idem(request, "deleted"), CARD), R.not_found)
     reborn = await port.register(_written(clip))
     assert (reborn.content_id, reborn.generation, reborn.state) == (
         row.content_id, row.generation + 1, LifecycleState.live)
@@ -443,9 +541,14 @@ async def retention_durable__claims_are_leased_and_fenced(factory):
     higher fence; the superseded holder can neither tombstone nor acknowledge."""
     harness = factory()
     port = harness.port
-    row = await _eligible(harness, await _staged(harness, b"fenced"))
+    clip = await _staged(harness, b"fenced")
+    fresh = await port.register(_written(clip))
+    await _refused(port.claim(fresh.content_id, fresh.generation, "s-a"), R.not_eligible)
+    row = await _eligible(harness, clip)
     await _refused(port.claim(row.content_id, row.generation + 1, "s-a"), R.claim_lost)
     first = await port.claim(row.content_id, row.generation, "s-a")
+    assert row.content_id not in {r.content_id for r in await _all_candidates(port)}, \
+        "a row under an unexpired claim is offered to another sweeper"
     await _refused(port.claim(row.content_id, row.generation, "s-b"), R.claim_held)
     _at(harness, first.expires_at)
     await _refused(port.tombstone(first), R.claim_lost)
@@ -455,6 +558,31 @@ async def retention_durable__claims_are_leased_and_fenced(factory):
     stale = Tombstone.model_validate({**tombstone.model_dump(), "fence": first.fence})
     await _refused(port.acknowledge_delete(stale), R.claim_lost)
     assert (await port.acknowledge_delete(tombstone)).state is LifecycleState.deleted
+
+
+async def retention_durable__an_unfinished_delete_is_reconciled_by_a_higher_fence(factory):
+    """A sweeper that tombstoned and died before acknowledging does not strand the key:
+    while its claim is live nobody else touches the row; once it lapses the tombstoned row
+    is a candidate again, a new holder re-claims it with a higher fence, finishes the
+    delete, and the key can be registered again as the next generation."""
+    harness = factory()
+    port = harness.port
+    clip = await _staged(harness, b"crashed-sweeper")
+    row = await _eligible(harness, clip)
+    first = await port.claim(row.content_id, row.generation, "s-dead")
+    await port.tombstone(first)                        # ... and the holder dies here
+    assert row.content_id not in {r.content_id for r in await _all_candidates(port)}
+    await _refused(port.claim(row.content_id, row.generation, "s-b"), R.claim_held)
+    _at(harness, first.expires_at)
+    offered = {r.content_id: r for r in await _all_candidates(port)}
+    assert row.content_id in offered, "an unfinished delete is never offered again"
+    assert offered[row.content_id].state is LifecycleState.tombstoned
+    second = await port.claim(row.content_id, row.generation, "s-b")
+    assert second.fence > first.fence
+    tombstone = await port.tombstone(second)
+    assert tombstone.fence == second.fence
+    assert (await port.acknowledge_delete(tombstone)).state is LifecycleState.deleted
+    assert (await port.register(_written(clip))).generation == row.generation + 1
 
 
 async def retention_durable__eligibility_survives_restart_and_discovery(factory):
@@ -472,6 +600,10 @@ async def retention_durable__eligibility_survives_restart_and_discovery(factory)
     rediscovered = await later.register(ContentIdentity.model_validate(
         {**_written(clip).model_dump(), "origin": ContentOrigin.discovered}))
     assert rediscovered.eligible_at == row.eligible_at, "a restart reset the grace"
+    await _refused(later.register(ContentIdentity.model_validate(
+        {**_written(clip).model_dump(), "org_id": OTHER})), R.not_found)
+    await _refused(later.register(ContentIdentity.model_validate(
+        {**_written(clip).model_dump(), "digest": _digest(b"other bytes")})), R.bytes_changed)
     orphan = await later.register(ContentIdentity(
         org_id=ORG, kind=ContentKind.source, location=ContentLocation.object_store,
         object_key=f"media/{ORG}/v1/0123456789abcdef/source", origin=ContentOrigin.discovered))
@@ -541,6 +673,11 @@ async def retention_durable__candidates_page_without_loss_or_repeat(factory):
         pass
     else:
         raise AssertionError("limit 0 accepted")
+    more = [await port.register(_written(_ref(f"bulk-{n}".encode())))
+            for n in range(MAX_PAGE - len(rows) + 1)]
+    _at(harness, max(row.eligible_at for row in more))
+    page = await port.candidates(after=None, limit=MAX_PAGE + 5)
+    assert len(page.items) == MAX_PAGE and page.next_cursor is not None, "the page is unbounded"
     try:
         await port.candidates(after="not-a-cursor", limit=2)
     except errors.InvalidCursor:
@@ -628,7 +765,7 @@ async def result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgot
     request, admission, outcome = await _succeeded(harness, "scrubbed",
                                                    before_complete=put_result)
     row = registered["row"]
-    before = _available(harness)
+    before = _balances(harness)
     hook(harness, "retune")(result_ttl_s=1.0)
     _at(harness, max(row.eligible_at, outcome.result_expires_at - timedelta(seconds=1)))
     assert harness.clock.now() < outcome.result_expires_at, "fixture: grace < result TTL"
@@ -641,7 +778,7 @@ async def result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgot
     assert kept == outcome, "scrubbing content changed the terminal outcome"
     assert read_outcome(kept, harness.clock.now()) is ReadOutcome.expired
     assert (await jobs.lookup(ORG, _idem(request, "scrubbed")))[1] == outcome
-    assert _available(harness) == before, "scrubbing moved money"
+    assert _balances(harness) == before, "scrubbing moved money"
 
 
 def cases() -> list[Callable]:
@@ -650,6 +787,7 @@ def cases() -> list[Callable]:
         upload_restart__the_tenant_handle_and_window_are_the_stores,
         upload_restart__one_handle_names_one_set_of_bytes,
         upload_restart__the_window_bounds_completion_and_use,
+        upload_restart__oversize_puts_and_aborts_are_final_everywhere,
         upload_restart__a_failed_check_is_final,
         admission_ready__a_text_job_is_ready_with_an_empty_manifest,
         admission_ready__a_job_with_no_marker_is_never_claimable,
@@ -661,6 +799,7 @@ def cases() -> list[Callable]:
         retention_durable__admission_wins_over_a_claim_that_has_not_tombstoned,
         retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_acked,
         retention_durable__claims_are_leased_and_fenced,
+        retention_durable__an_unfinished_delete_is_reconciled_by_a_higher_fence,
         retention_durable__eligibility_survives_restart_and_discovery,
         retention_durable__an_upload_protects_its_destination_and_source,
         retention_durable__a_payload_is_protected_by_its_job_once_admitted,
