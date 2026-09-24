@@ -41,7 +41,7 @@ import enum
 from datetime import timedelta
 from typing import Protocol, runtime_checkable
 
-from pydantic import Field, StrictInt, ValidationError, model_validator
+from pydantic import Field, StrictFloat, StrictInt, ValidationError, model_validator
 
 from .. import errors, ids
 from ..records import (Admission, IdempotencyRef, JobState, Lease, MediaRef, NormalizedRequest,
@@ -51,6 +51,7 @@ from .records import AccountingRegime, AdmissionV2, RecordV2, Sha256, Timestamp,
 # The one reference form a caller may name (R61(1)); media/uploads.py and
 # gateway/routes/validate.py spell the same string today.
 DESTINATION_SCHEME = "infrx-upload:"
+CONSTRAINT_NAMES = frozenset({"max_bytes", "bytes", "accepted_mime", "digest"})
 MAX_PAGE = 1000
 # ponytail: one fixed retry hint for `content_retiring`; a per-sweep estimate if clients
 # ever retry too hard. The window is normally one collector pass.
@@ -102,6 +103,7 @@ class LifecycleRefusal(enum.StrEnum):
     size_mismatch = "size_mismatch"
     digest_mismatch = "digest_mismatch"
     mime_not_accepted = "mime_not_accepted"
+    media_refused = "media_refused"                # M's probe refused the container
     invalid_manifest = "invalid_manifest"
     expectation_mismatch = "expectation_mismatch"  # the pinned card is not the runtime's
     not_ready = "not_ready"
@@ -124,6 +126,7 @@ REFUSAL_ERRORS: dict[LifecycleRefusal, type[errors.DomainError]] = {
     LifecycleRefusal.size_mismatch: errors.InvalidRequest,
     LifecycleRefusal.digest_mismatch: errors.UnsupportedMedia,
     LifecycleRefusal.mime_not_accepted: errors.UnsupportedMedia,
+    LifecycleRefusal.media_refused: errors.UnsupportedMedia,
     LifecycleRefusal.invalid_manifest: errors.InvalidRequest,
     LifecycleRefusal.expectation_mismatch: errors.InvalidRequest,
     LifecycleRefusal.not_ready: errors.NotClaimable,
@@ -133,6 +136,13 @@ REFUSAL_ERRORS: dict[LifecycleRefusal, type[errors.DomainError]] = {
     LifecycleRefusal.claim_held: errors.NotClaimable,
     LifecycleRefusal.claim_lost: errors.StaleLease,
 }
+
+
+# The only reasons an upload ticket may record as aborted: all public, all about the
+# caller's own bytes, so a browser-safe ticket can never carry an internal refusal.
+UPLOAD_ABORT_REASONS = frozenset({
+    LifecycleRefusal.too_large, LifecycleRefusal.size_mismatch, LifecycleRefusal.digest_mismatch,
+    LifecycleRefusal.mime_not_accepted, LifecycleRefusal.media_refused})
 
 
 def refuse(reason: LifecycleRefusal, detail: str) -> errors.DomainError:
@@ -181,7 +191,9 @@ class UploadConstraints(RecordV2):
         never ignored."""
         if not isinstance(body, dict):
             raise refuse(LifecycleRefusal.invalid_constraints, "constraints are an object")
-        # An unknown name is refused by the record itself (`extra="forbid"`).
+        if set(body) - CONSTRAINT_NAMES:            # `schema_version` is a field, not a name
+            raise refuse(LifecycleRefusal.invalid_constraints,
+                         f"unknown constraints {sorted(map(str, set(body) - CONSTRAINT_NAMES))}")
         values = {"max_bytes": max_media_bytes, "accepted_mime": tuple(sorted(allowed_mime)),
                   **{name: value for name, value in body.items() if value is not None}}
         try:
@@ -215,7 +227,7 @@ class FinalizedSource(RecordV2):
     bytes: StrictInt = Field(ge=0)
     mime: str = Field(min_length=1)
     profile_version: str = Field(min_length=1)
-    duration_s: float = Field(ge=0)
+    duration_s: StrictFloat = Field(ge=0, allow_inf_nan=False)
     finalized_at: Timestamp
 
 
@@ -231,7 +243,7 @@ class UploadTicket(RecordV2):
     expires_at: Timestamp
     received: UploadReceipt | None = None
     finalized: FinalizedSource | None = None
-    refusal: LifecycleRefusal | None = None       # why it was aborted
+    refusal: LifecycleRefusal | None = None       # why it was aborted: UPLOAD_ABORT_REASONS
 
     @model_validator(mode="after")
     def _one_fact(self) -> UploadTicket:
@@ -244,6 +256,8 @@ class UploadTicket(RecordV2):
             raise ValueError("finalized exactly when a finalized source is recorded")
         if (self.state is UploadState.aborted) != (self.refusal is not None):
             raise ValueError("aborted exactly when a refusal is recorded")
+        if self.refusal is not None and self.refusal not in UPLOAD_ABORT_REASONS:
+            raise ValueError("a ticket records only a public upload refusal")
         if received is not None and (received.bytes > c.max_bytes or not
                                      self.created_at <= received.received_at < self.expires_at):
             raise ValueError("a receipt is within the cap and the window")
@@ -291,8 +305,9 @@ class UploadRepository(Protocol):
 
     async def abort(self, org_id: str, upload_handle: str,
                     refusal: LifecycleRefusal) -> UploadTicket:
-        """M's own final refusal (an unreadable container, ...). Idempotent; a finalized
-        ticket is `upload_not_open`."""
+        """M's own final refusal, one of `UPLOAD_ABORT_REASONS` (else `invalid_request`).
+        Idempotent: an aborted ticket answers as it stands; a finalized or expired one is
+        `upload_not_open`."""
 
     async def resolve(self, org_id: str, upload_handle: str) -> UploadTicket:
         """The finalized ticket for use (R99): `not_found`, then `upload_expired` from
@@ -393,7 +408,10 @@ class ReadinessStore(Protocol):
         `content_retiring`, `invalid_manifest` for a repeat) - and (c) the manifest, its
         references and the marker. A refusal admits nothing: no job, hold or outbox. A
         replay answers the recorded pair; a job the previous runtime admitted replays with
-        `None` (it has no marker)."""
+        `None` (it has no marker). Both regimes: a legacy expectation names no card and has
+        no pinned revision to recheck. `JobStore.admit` and `CreditJobStore.admit_credit`
+        NEVER write a marker - a job they admit is `not_ready` until its preparation
+        deadline ends it (the cutover rule in 02)."""
 
     async def readiness(self, job_id: str) -> ExecutionReadiness | None:
         """The committed marker, or None when none was ever completed."""
@@ -636,7 +654,7 @@ __all__ = [
     "ContentLifecycle", "ContentLocation", "ContentObject", "ContentOrigin", "ContentPage",
     "ContentReference", "DESTINATION_SCHEME", "DeletionClaim", "ExecutionReadiness",
     "FinalizedSource", "LifecycleRefusal", "LifecycleState", "MAX_PAGE", "ManifestSource",
-    "REFUSAL_ERRORS", "ReadinessState", "ReadinessStore", "ReadinessView", "Tombstone",
+    "REFUSAL_ERRORS", "ReadinessState", "UPLOAD_ABORT_REASONS", "CONSTRAINT_NAMES", "ReadinessStore", "ReadinessView", "Tombstone",
     "ReadOutcome", "UploadConstraints", "UploadReceipt", "UploadRepository", "UploadTicket",
     "read_outcome", "readiness_view", "refusal_of", "refusal_table", "refuse",
     "result_case_table",

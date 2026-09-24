@@ -27,10 +27,15 @@ def test_the_fixture_root_holds_exactly_the_two_revisions():
     """F2P wire-in item 7: `fixtures/` holds `v1/` (claimed above) and `v2/` (claimed by
     `contracts.v2.fixtures`, whose bytes and field map `tests/contracts/v2/test_fixtures_v2.py`
     checks) and nothing else. A third directory or a stray file at the root would be a
-    fixture neither guard claims."""
+    fixture neither guard claims. F2C.d adds `acceptance/`: exactly the one transcript
+    `contracts.conformance.acceptance` regenerates byte-for-byte (tests/contracts/v2/
+    test_lifecycle.py)."""
+    from infrx.contracts.conformance import acceptance
     from infrx.contracts.v2 import fixtures as v2fix
     root = fixtures.DIR.parent
-    assert {p.name for p in root.iterdir()} - {"__init__.py", "__pycache__"} == {"v1", "v2"}
+    assert {p.name for p in root.iterdir()} - {"__init__.py", "__pycache__"} == {
+        "v1", "v2", "acceptance"}
+    assert [p.name for p in (root / "acceptance").iterdir()] == [acceptance.PATH.name]
     on_disk = {p.name for p in (root / "v2").iterdir()}
     assert on_disk == set(v2fix.MODELS) | set(v2fix.TABLES), on_disk ^ (
         set(v2fix.MODELS) | set(v2fix.TABLES))

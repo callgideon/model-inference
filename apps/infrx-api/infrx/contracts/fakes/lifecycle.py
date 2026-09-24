@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -28,13 +29,14 @@ from ..v2.lifecycle import (MAX_PAGE, AdmissionExpectation, ContentIdentity, Con
                             ContentReference, DeletionClaim, ExecutionReadiness,
                             FinalizedSource, LifecycleRefusal as R, LifecycleState,
                             ManifestSource, Tombstone, UploadConstraints, UploadReceipt,
-                            UploadTicket, DESTINATION_SCHEME, refuse)
+                            UploadTicket, DESTINATION_SCHEME, UPLOAD_ABORT_REASONS, refuse)
 from ..v2.records import AccountingRegime, AdmissionV2
 
 UPLOAD_TTL_S = DEFAULTS.processing_cache_ttl_s        # the window MediaUploads uses today
 GRACE_S = DEFAULTS.processing_cache_ttl_s             # MediaCollector's grace today
 CLAIM_TTL_S = 60.0
 RETENTION_S = DEFAULTS.processing_cache_ttl_s         # P-25 pending: a fixture value only
+SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 @dataclass
@@ -105,6 +107,8 @@ class FakeLifecycle:
                 raise errors.InvalidRequest("bytes is a nonnegative integer")
             if bytes > ticket.constraints.max_bytes:
                 raise refuse(R.too_large, "over the ticket's max_bytes")
+            if not isinstance(digest, str) or not SHA256.fullmatch(digest):
+                raise errors.InvalidRequest("digest is sha256:<64 hex>")
             receipt = UploadReceipt(bytes=bytes, digest=digest, received_at=self.clock.now())
             if ticket.received is not None:
                 if (ticket.received.bytes, ticket.received.digest) != (bytes, digest):
@@ -150,12 +154,14 @@ class FakeLifecycle:
                 duration_s=source.duration_s, finalized_at=self.clock.now()))
 
     async def abort(self, org_id: str, upload_handle: str, refusal: R) -> UploadTicket:
+        if refusal not in UPLOAD_ABORT_REASONS:
+            raise errors.InvalidRequest("a ticket records only a public upload refusal")
         async with self.d.lock:
             ticket = self._owned(org_id, upload_handle)
             if ticket.state is UploadState.aborted:
                 return ticket
-            if ticket.state is not UploadState.created:
-                raise refuse(R.upload_not_open, f"upload is {ticket.state}")
+            if ticket.state is not UploadState.created or self.clock.now() >= ticket.expires_at:
+                raise refuse(R.upload_not_open, f"upload is {ticket.state} or past its window")
             return self._put(ticket, state=UploadState.aborted, refusal=R(refusal))
 
     async def resolve(self, org_id: str, upload_handle: str) -> UploadTicket:
