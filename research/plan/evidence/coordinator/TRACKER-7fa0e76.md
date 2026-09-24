@@ -76,3 +76,79 @@ Headful Chromium enforces a minimum window width of 500 px, so the 390 px checks
 ## Remaining effort (TRACKER)
 
 Optimistic 0.5 h, likely 1.5 h, pessimistic 3 h; confidence medium. Basis: one review/fix round, plus schema adjustments once the first real lane update files arrive. Ongoing checkpoints are coordinator runs of `apply-updates`, not lane work.
+
+## Fix round (2026-09-24, host UTC 22:24Z)
+
+Base `dff31efc`; reviewed head `f1a202ab`; fix commit **`32bbe9a8`** (code, tests, README); this section, the update file and the regenerated overlay/outputs follow in the next commit on `codex/tracker`. Owned paths only.
+
+### Changes (file:line at `32bbe9a8`)
+
+- **Future-dated updates (0-TRK-1, 1-TRK-R1, 2-TRK-3).** `judge()` rejects an update whose `at` is more than `CLOCK_SKEW_H` = 15 min past host UTC (`progress.py:42`, `:428-429`), before it touches a lane. A future-dated lane in the overlay is now a `check` error, not a warning (`:242-243`). Timestamps without a UTC offset are unreadable (`parse`, `:45-51`).
+- **Malformed updates (0-TRK-4).** There is one estimate rule, `estimate_problem` (`:76-92`): hours are all null, or finite numbers with 0 ≤ o ≤ l ≤ p; confidence is in the enum; `at` parses. `judge()` uses it, together with list/object shape checks (`SHAPES`/`malformed`, `:408-419`), and rejects `malformed: …` updates (`:430-432`). `validate()` uses the same rule (`:240-241`). If a malformed overlay estimate is hand-edited in, the forecast becomes `unknown` and no date is produced (`:302`).
+- **Gates (0-TRK-3, 2-TRK-4).** `gate()` (`:130-149`) is green only when all of the following hold:
+  - the decision is `accepted`;
+  - the root is implemented;
+  - every required `test_id` cell is present;
+  - every cell is PASS, with evidence;
+  - `candidate.source` and `candidate.deployed` are recorded;
+  - no source matches a `historical_runs` candidate of a non-root task (E4B-run3 `bda1586` for BACKEND-READY), unless `candidate.note` records the reuse.
+
+  An `accepted` decision that fails any of these conditions is an `impossible gate transition` error, and the error names the reasons (`:233-234`).
+- **Tests decoupled from live state (2-TRK-1).** `Base.pin()` (`test_progress.py:36-54`) freezes the parts that live progress changes:
+  - non-baseline task status → `planned`;
+  - lanes as dispatched at `f1a202ab` (the `LANES` list);
+  - gates with no decision and cells NOT RUN;
+  - inputs and findings open;
+  - no GPU windows;
+  - slots and ETA parameters.
+
+  Structure still comes from `tasks.json`. `test_committed_overlay_passes_check` still checks the live overlay against the live manifest at host UTC. The oracles that used a fixed prefix now assert structure instead: the path ends at E3C and contains D10.
+- **New oracles.**
+  - exclusive lock over the independent pair W5 and G7 (`:275`);
+  - GPU window start at NOW+30 h gives finish ≥ NOW+36 h (`:289`);
+  - integration-queue bound (`:300`);
+  - wall-clock < serial sum of task durations, and two F2C slices take the max, not the sum (`:258`);
+  - a remaining task with no lane → `unknown`, no date (`:242`);
+  - overlay: unknown IDs, schema and estimate order (`:113`);
+  - required cells FAIL / NOT RUN / missing (`:167`);
+  - candidate identity, evidence and historical reuse (`:179`);
+  - invalid verdict and invalid decision (`:193`);
+  - every transition rule, with the rejection logged (`:354`);
+  - future-dated update, followed by a genuine update that applies (`:376`);
+  - malformed files through the real `cmd_apply` path (`:385`);
+  - same-batch ordering: the older update is applied, not rejected as stale (`:341`).
+- `updates/README.md` documents the future-dated rule, the malformed-update rule and the stricter gate rule.
+
+**Note on 0-TRK-2.** The suggested E1B-vs-E4C case cannot separate the GPU lock bound. E1B precedes E4C through `E4B.integration_dependencies` (`tasks.json`: `["I3B", "E1B", "M4", "W4"]`), which `rdeps` looks through, so the dependency path already equals dur(E1B) + dur(E4C) and ties the lock bound. The lock oracle therefore adds a lock over two independent tasks in the test. It also has a positive control: without the lock, the forecast is shorter than their sum.
+
+### Commands (worktree root unless noted)
+
+| Command | Exit | Result |
+|---|---|---|
+| `cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan` | 0 | 38 OK (31 test_progress + 7 test_validate_plan) |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS; ledger current |
+| `python3 research/plan/scripts/progress.py check` | 0 | PASS: 133 tasks, 15 lanes, 4 gates PENDING, 0 errors, 11 warnings (the overlap warnings) |
+| `python3 research/plan/scripts/progress.py apply-updates` | 0 | applied `TRACKER-20260924T2224Z.json`; overlay revision 2 → 3; re-rendered |
+| Scratch copy (`git ls-files research \| tar`): new `test_progress.py` against the `f1a202ab` `progress.py` | 1 | FAILED (failures=5, errors=1): future_lane_is_an_error, overlay_unknown_ids…, candidate_identity…, every_required_cell…, future_dated_update…; malformed_update (ERROR: TypeError in the ETA) |
+| Scratch mutation run: 43 single-line mutants of `progress.py` × `test_progress` | — | **43/43 killed**. These include every mutant the review reported as surviving: eta-no-lock-serial, eta-no-window-start, eta-no-integ-queue, eta-naive-sum, eta-sum-parallel-slices, eta-no-lanes-zero, gate-no-cells-required, gate-empty-cells-ok, label-ignore-green, missing-cells-err-removed, verdict-validation-removed, decision-enum-removed, unknown-task-ref-removed, schema-check-removed, estimate-order-removed, impossible-complete-terminal, impossible-deferred, judge-unknown-activity, judge-ambiguous-removed, judge-lane-mismatch, apply-no-log-reject, apply-unreadable-crash. New mutants were added for the new checks: judge-no-future, judge-no-malformed, judge-no-shape, gate-no-evidence, gate-no-candidate, gate-no-historical, future-lane-warn-only, parse-naive-ok, eta-bad-estimate-counted, apply-unsorted, escape-removed, atomic-direct-write |
+| `git merge-tree --write-tree claude/consumer-v1 codex/tracker` → `c926a65a`; `git archive` to scratch; both suites | 0 | 38 OK (S3 implemented there). The `f1a202ab` test file on the same tree fails, as the review reported: `dependency path E2C → D10 → M5 → G7 → E1C → E3C` |
+| The same merged tree: `validate_plan.py`; `progress.py check` | 0 / 0 | PASS (891 links / 182 docs); PASS with 0 errors and 12 warnings |
+| The merged tree with simulated later progress: F2C, E2C, D10, M5, E1B, G7 and E1C implemented, three lanes complete, all estimates set, P-01 resolved, RV-01 fixed, the M6 lane removed; then `test_progress` | 0 | 31 OK |
+| CLI repro in scratch at host 22:23Z: `D10-20991231T0000Z.json`, a genuine `D10-<now>.json`, an `M5` update with a string `likely_h`, and a non-JSON file; then `apply-updates` twice; then `check` | 0 | future → `REJECTED … future-dated`; genuine → applied; string estimate → `REJECTED … malformed`; non-JSON → `REJECTED … unreadable`; second run "nothing new"; check PASS |
+
+### Findings closed
+
+0-TRK-1, 1-TRK-R1, 2-TRK-3 (future-dated), 0-TRK-2 and 2-TRK-2 (resource/naive-sum ETA oracles), 2-TRK-1 (tests pinned), 0-TRK-3 (required cells), 0-TRK-4 (malformed updates), 0-TRK-5 (no-lane unknown), 0-TRK-6 (overlay and transition oracles), 2-TRK-4 (candidate identity).
+
+### Wiring requests
+
+Unchanged. Optionally, add `cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan` to `make check`.
+
+### Open issues
+
+- A string estimate that the coordinator **hand-edits** into the overlay makes the forecast `unknown` and is reported by `check`. The lane card's `est_text` would still fail to format it. Update files cannot introduce such an estimate any more, because they are rejected at `judge()`.
+- The 15-minute skew allowance is shared by the `judge()` rejection and the `check` error (`CLOCK_SKEW_H`). Tune it there.
+
+### Remaining effort (TRACKER)
+
+Optimistic 0 h, likely 0.5 h, pessimistic 2 h; confidence medium. Basis: the fix round is done; what remains is re-verification follow-up.

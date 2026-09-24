@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 2,
-  "updated": "2026-09-24T22:05:05Z",
+  "revision": 3,
+  "updated": "2026-09-24T22:24:27Z",
   "agent_slots": {
     "total": 14,
     "active": 12,
@@ -200,7 +200,7 @@
       "branch": "codex/tracker",
       "worktree": ".claude/worktrees/codex-tracker",
       "base": "dff31efc",
-      "head": "7fa0e76f",
+      "head": "32bbe9a8",
       "isolation": {
         "ports": null,
         "prefix": null,
@@ -208,25 +208,30 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T22:04:00Z",
+      "updated": "2026-09-24T22:24:00Z",
       "blocker": null,
-      "next_action": "Coordinator review; merge; run apply-updates at each lane handback.",
+      "next_action": "Coordinator re-verification of the fix round; merge; run apply-updates at each lane handback.",
       "estimate": {
-        "optimistic_h": 0.5,
-        "likely_h": 1.5,
-        "pessimistic_h": 3,
+        "optimistic_h": 0,
+        "likely_h": 0.5,
+        "pessimistic_h": 2,
         "confidence": "medium",
-        "basis": "one review/fix round plus schema tweaks when real lane update files arrive",
-        "at": "2026-09-24T22:04:00Z"
+        "basis": "fix round done; remaining is re-verification follow-up only",
+        "at": "2026-09-24T22:24:00Z"
       },
       "evidence": [
         "research/plan/evidence/coordinator/TRACKER-7fa0e76.md"
       ],
       "commands": [
         {
-          "cmd": "cd research/plan/scripts && python3 -m unittest test_progress",
+          "cmd": "cd research/plan/scripts && python3 -m unittest test_progress test_validate_plan",
           "exit": 0,
-          "summary": "22 tests OK"
+          "summary": "38 tests OK (31 + 7)"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS; ledger current"
         },
         {
           "cmd": "python3 research/plan/scripts/progress.py check",
@@ -234,14 +239,14 @@
           "summary": "PASS 133 tasks, 0 errors, 11 overlap warnings"
         },
         {
-          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "cmd": "scratch mutation run: 43 mutants of progress.py x test_progress",
           "exit": 0,
-          "summary": "PASS 887 links / 179 docs; ledger current"
+          "summary": "43/43 killed"
         },
         {
-          "cmd": "chrome --headless --dump-dom progress.html#activity=running (and 4 other presets)",
+          "cmd": "git merge-tree --write-tree claude/consumer-v1 codex/tracker (c926a65a), archive, run both suites + validate_plan + check",
           "exit": 0,
-          "summary": "JSON parsed; filters 70/9/57/1/133 of 133; stale banner verified"
+          "summary": "38 OK; validate PASS; check PASS 0 errors"
         }
       ],
       "owned_paths": [
@@ -691,7 +696,7 @@
       "since": "2026-09-24T22:04:00Z",
       "lane": "TRACKER",
       "task": "TRACKER",
-      "head": "7fa0e76f"
+      "head": "32bbe9a8"
     }
   ],
   "integration_queue": [],
@@ -1414,6 +1419,12 @@
       "by": "TRACKER",
       "what": "running → review; head 7fa0e76f; estimate likely unknown → 1.5 h (one review/fix round plus schema tweaks when real lane update files arrive)",
       "source": "updates/TRACKER-20260924T2204Z.json"
+    },
+    {
+      "at": "2026-09-24T22:24:00Z",
+      "by": "TRACKER",
+      "what": "review → review; head 32bbe9a8; estimate likely 1.5 → 0.5 h (fix round done; remaining is re-verification follow-up only)",
+      "source": "updates/TRACKER-20260924T2224Z.json"
     }
   ],
   "history": {
@@ -1435,10 +1446,14 @@
     "TRACKER-20260924T2204Z.json": {
       "status": "applied",
       "at": "2026-09-24T22:04:00Z"
+    },
+    "TRACKER-20260924T2224Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:24:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T22:05:05Z",
+    "computed_at": "2026-09-24T22:24:27Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
