@@ -22,7 +22,7 @@ judge = ["anthropic>=0.40,<1"]
 dev = ["pytest>=8.3,<9"]
 
 [tool.uv]
-# gateway.py and infrx/ are used from the source tree (pythonpath below), the
+# infrx/ is used from the source tree (pythonpath below), the
 # deployment unit is the checkout itself; there is nothing to build or install.
 package = false
 

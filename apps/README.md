@@ -174,7 +174,7 @@ A trigger on `auth.users` insert creates the profile, org and owner
 membership. A SQL function `org_usage_summary(org_id, from, to, key_id)`
 returns the tiles in one query.
 
-## 7. Gateway changes (`apps/infrx-api/gateway.py`)
+## 7. Gateway changes (`apps/infrx-api/infrx/gateway/`; the `gateway.py` shim is retired)
 
 - Replace the single `GATEWAY_API_KEY` with Supabase lookup:
   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` in `/etc/marlin2b-gateway.env`;
