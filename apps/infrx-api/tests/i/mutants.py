@@ -1058,6 +1058,9 @@ MUTANTS += (
     _m("delivery_repeats_tickets", "only pages repeat while firing",
        OBS + "deliver.py", 'repeat = alert["severity"] == "page" and last is not None',
        "repeat = last is not None", DELIVERY),
+    _m("test_alert_unmarked", "the delivery test cannot be mistaken for a real alert",
+       OBS + "deliver.py", 'text = (f"[TEST {word}] infrx', 'text = (f"[{word}] infrx',
+       "test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runbook"),
     _m("observe_timer_hourly", "the monitoring cycle runs every minute",
        "deploy/infrx-observe.timer", "OnUnitActiveSec=60s", "OnUnitActiveSec=1h",
        "test_ops_continuous__the_monitoring_units_are_valid_and_scheduled"),
@@ -1068,6 +1071,10 @@ MUTANTS += (
     _m("observe_install_env_world_readable", "the monitor's env files are root 0600",
        STEP + "72-observe-install.sh", 'chmod 0600 "$tmp"; mv', 'chmod 0644 "$tmp"; mv',
        "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"),
+    _m("alert_test_without_destination_runs", "no P-25 destination is BLOCKED (exit 3)",
+       STEP + "74-alert-test.sh",
+       '[ -f "$conf" ] || { echo "BLOCKED: no $conf (P-25: destination, owner, escalation)" >&2; exit 3; }\n',
+       "", "test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_prints_the_url"),
 )
 
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is

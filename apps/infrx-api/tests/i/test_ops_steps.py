@@ -165,3 +165,21 @@ def test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_nam
     assert run_step((STEPS / "72-observe-install.sh").read_text(), stub, env=env).returncode == 2
     assert not canary.exists()
 
+
+def test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_prints_the_url(
+        tmp_path):
+    """74-alert-test.sh: without /etc/infrx-alert.env it is BLOCKED (exit 3); with it, the
+    marked test goes to the configured URL (here an unreachable https one: exit 4, SEND
+    FAILED), the URL never printed; a RESOLVE that is not a nonce is refused."""
+    step = (STEPS / "74-alert-test.sh").read_text()
+    conf = tmp_path / "infrx-alert.env"
+    env = {"REPO": str(support.REPO), "ALERT_ENV": str(conf)}
+    stub = stubs(tmp_path)
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 3 and "BLOCKED" in done.stderr and "P-25" in done.stderr
+    url = f"https://127.0.0.1:9/{support.MARKER}"
+    conf.write_text(f"ALERT_WEBHOOK_URL={url}\nALERT_OWNER=sofia\nALERT_ESCALATION=pager\n")
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 4 and "test firing nonce=" in done.stdout
+    assert support.MARKER not in done.stdout + done.stderr
+    assert run_step(step, stub, env={**env, "RESOLVE": "not-a-nonce"}).returncode == 2

@@ -388,3 +388,22 @@ def test_ops_continuous__the_monitoring_units_are_valid_and_scheduled():
     service = (DEPLOY / "infrx-observe.service").read_text()
     assert "EnvironmentFile=-/etc/infrx-alert.env" in service and "Type=oneshot" in service
 
+
+def test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runbook(
+        monkeypatch, tmp_path):
+    """Slice 4: the delivery proof sends ONE message that cannot be mistaken for a real
+    alert, carrying the owner, the escalation and the runbook; its recovery reuses the
+    nonce. Without a destination it is BLOCKED (exit 3), never a pass."""
+    monkeypatch.setenv("ALERT_OWNER", "sofia")
+    monkeypatch.setenv("ALERT_ESCALATION", "pager")
+    code, sent = _deliver(monkeypatch, tmp_path, [], "--test", url="https://hooks.example.invalid/x")
+    assert code == 0 and len(sent) == 1 and sent[0]["test"] is True
+    text = sent[0]["text"]
+    assert text.startswith("[TEST FIRING]") and "NO ACTION REQUIRED" in text
+    assert "Owner: sofia" in text and "Escalation: pager" in text and "#delivery-test" in text
+    nonce = sent[0]["nonce"]
+    code, sent = _deliver(monkeypatch, tmp_path, [], "--test-resolve", nonce,
+                          url="https://hooks.example.invalid/x")
+    assert code == 0 and sent[0]["text"].startswith("[TEST RESOLVED]") and nonce in sent[0]["text"]
+    code, sent = _deliver(monkeypatch, tmp_path, [], "--test")
+    assert code == 3 and sent == []
