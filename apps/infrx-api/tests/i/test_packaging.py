@@ -80,12 +80,19 @@ def test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies
     """The cutover (G2 request 1, R48): the gateway unit runs `uvicorn --factory
     infrx.gateway.app:create_app`, a callable of the code the image copies; the retired
     `gateway.py` shim is gone, and every path the Dockerfile copies or compiles exists and
-    is let into the build context by `Dockerfile.dockerignore`."""
+    is let into the build context by `Dockerfile.dockerignore`. One uvicorn worker: the
+    mounted upload routes keep their records in the process (G4U limit 1), so a second
+    worker would 404 a PUT the first created. Its drain (110 s) ends before docker's stop
+    (120 s), which ends before systemd's (150 s)."""
     import importlib
 
-    argv = docker_run("marlin2b-gateway.service")
+    name = "marlin2b-gateway.service"
+    argv = docker_run(name)
     command = argv[argv.index("${INFRX_IMAGE}") + 1:]
     assert command[:3] == ["uvicorn", "--factory", "infrx.gateway.app:create_app"], command
+    assert flag(command, "--workers") == ["1"], command
+    assert flag(command, "--timeout-graceful-shutdown") == ["110"], command
+    assert 110 < stop_seconds(name) < int(unit(name)["TimeoutStopSec"][0])
     module, _, name = command[2].partition(":")
     assert callable(getattr(importlib.import_module(module), name))
     assert not (support.API_DIR / "gateway.py").exists()
@@ -465,9 +472,12 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     assert envelopes == {404: _envelope("not_found"), 413: _envelope("request_too_large")}
 
 
-#: G3 request (e) / G2 E3B2: what must cross the edge untouched, each way.
+#: G3 request (e) / G2 E3B2 / 08 §3: what must cross the edge untouched, each way.
 PASSTHROUGH = ("Location", "Retry-After", "Preference-Applied", "Idempotency-Replayed",
-               "Inference-Id", "Last-Event-ID", "Prefer", "Idempotency-Key")
+               "Inference-Id", "Server-Timing", "Last-Event-ID", "Prefer", "Idempotency-Key")
+#: Directives that rewrite, compress or buffer what crosses the edge.
+REWRITES = ("header", "header_up", "header_down", "encode", "request_buffers",
+            "response_buffers", "buffer_requests", "buffer_responses")
 
 
 def _edge_block(text: str, path: str) -> str:
@@ -510,12 +520,14 @@ def test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffe
     assert set(reached.values()) == {block}
     assert re.search(r"^\t\treverse_proxy 127\.0\.0\.1:8001 \{$", block, re.M), block
     assert re.search(r"^\s*flush_interval -1$", block, re.M), "a stream would be buffered"
-    for directive in ("header_up", "header_down", "encode", "request_buffers",
-                      "response_buffers", "buffer_requests", "buffer_responses"):
-        assert not re.search(rf"^\s*{directive}\b", block, re.M), directive
-    for name in PASSTHROUGH:                      # comments aside, nowhere in the site
-        code = "\n".join(line.split("#")[0] for line in text.splitlines())
-        assert name.lower() not in code.lower(), name
+    code = [line.split("#")[0].strip() for line in text.splitlines()]   # comments aside
+    for at, line in enumerate(code):              # the whole site, not only the proxy block
+        if (line.split() or [""])[0] in REWRITES:  # only a respond block's own Content-Type
+            following = next(later for later in code[at + 1:] if later)
+            assert line == "header Content-Type application/json" \
+                and following.startswith("respond "), line
+    for name in PASSTHROUGH:                      # nowhere in the site
+        assert name.lower() not in "\n".join(code).lower(), name
     read = int(re.search(r"read_timeout (\d+)s", block).group(1))
     assert read > DEFAULTS.sse_keepalive_s
     size = int(re.search(r"max_size (\d+)MiB", text).group(1)) * 2**20
