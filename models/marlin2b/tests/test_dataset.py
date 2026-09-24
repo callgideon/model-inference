@@ -81,7 +81,14 @@ def test_interrupt_then_resume_leaves_exactly_one_logical_result_per_item():
                 signal.raise_signal(signal.SIGINT)
             return None
         gw = FakeGateway(idempotent=True, lose_ack=(1,), chat_override=interrupt)
-        code, first = run(argv(tmp, path, "--form", "upload"), gw)
+        # A background job (`cmd &`, the mutant runner under setsid/nohup) starts with SIGINT
+        # ignored, and asyncio.run only installs its Ctrl-C handler over the default one: give
+        # this case the terminal's disposition, or the "Ctrl-C" never lands.
+        previous = signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            code, first = run(argv(tmp, path, "--form", "upload"), gw)
+        finally:
+            signal.signal(signal.SIGINT, previous)
         assert code == 130 and first["interrupted"], first
         assert first["done"] < 6, "the interruption must land mid-run for this case to mean anything"
 
