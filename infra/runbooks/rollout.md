@@ -39,7 +39,7 @@ it into `INFRX_SET` itself (default 32, the old box value), and a name given twi
 | `INFRX_MODE` | `pilot`, explicit (50-install runs install.sh in pilot mode; unset refuses to start since the cutover) | R44 |
 | `MODEL_ID`, `MAX_INFLIGHT`, `USAGE_LOG`, `UPSTREAM`, `VALKEY_URL`, `PROCESSING_CACHE_DIR` | installer defaults (`VALKEY_URL=valkey://127.0.0.1:6379/0`, loopback only) | preflight `local_values` |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | SSM `supabase_url`, `supabase_service_role_key` | present |
-| `DATABASE_URL` | SSM `pg_journal_url` | **missing** (P4) |
+| `DATABASE_URL` | SSM `pg_journal_url` | **created 2026-09-24T01:03Z (v1, SecureString)** by the coordinator: the session-pooler DSN (`postgres.<ref>@aws-0-us-east-2.pooler.supabase.com:5432/postgres?sslmode=require`, password = `/INFRX-SUPABASE-PROD/db_password`, composed in-process, never on a command line); read-only check: connects, `rolbypassrls` true, member of `service_role` (the pool's `set role service_role` hook works); rollback `aws ssm delete-parameter` |
 | `GATEWAY_API_KEY` | never (R51: forbidden in pilot, not read) | - |
 | `INFRX_IMAGE`, `INFRX_RELEASE_SHA` | written by install.sh/preflight from the build and `RELEASE` (`--release`); both required in pilot: `infrx_build_info{revision,image}` on `/metrics`, which the edge keeps private (404) | cutover lane |
 | `S3_MEDIA_BUCKET` | `llm-bootcamp-641134885443` (prefix default `infrx/`, `S3_ENDPOINT_URL` unset) | session-02, 2026-09-23T20:59Z; the instance role already permits |
@@ -205,3 +205,4 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
   the edge-swap and W9 blocks added; W9's host command run on the real bucket (40 passed);
   P3/P4 re-checked by a preflight dry-run on `0645e65` with the real SSM values (names only
   printed). Steps 25/45/93 tested against stubs (`tests/i/test_rollout.py`, 8 mutants).
+- 2026-09-24 (coordinator): `/model-inference/pg_journal_url` created (P4 closed); the login is the project's `postgres.<ref>` pooler login (a dedicated login role stays a follow-up: 0004 creates none).

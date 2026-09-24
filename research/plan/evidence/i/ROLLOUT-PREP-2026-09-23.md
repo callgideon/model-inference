@@ -211,7 +211,7 @@ replaces it whole from the manifest, so nothing there has to pre-exist.
 ## Requests to the coordinator (names only)
 
 1. **`/model-inference/pg_journal_url`** (SecureString): the session-pooler DSN of the login
-   role D's 0004 note names. Install refuses (exit 2) without it.
+   role D's 0004 note names. Install refuses (exit 2) without it. **Done 2026-09-24T01:03Z (coordinator): created v1 with the `postgres.<ref>` pooler login (0004 creates no login role; a dedicated one is a follow-up).**
 2. **`infrx.worker.__main__`** (the worker composition root, W3/I2B-R4): install refuses until
    it is in the runtime image.
 3. **`rehearse.sh` on the release tree** (I / cutover lane): its dev deploy needs
