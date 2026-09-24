@@ -218,9 +218,14 @@ class PilotBox:
         inherited = {name: value for name, value in os.environ.items()
                      if name not in stack.AWS_UNSET}
         self.worker_port = free_port()
+        # Both processes import the `infrx` this one does - the checkout's, or a mutation
+        # run's copy that E's runner puts on PYTHONPATH - never a package beside their cwd.
+        package = str(Path(importlib.util.find_spec("infrx").origin).resolve().parents[1])
+        path = os.pathsep.join(filter(None, (package, inherited.get("PYTHONPATH"))))
         self.env = {**inherited, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
                     CALLS_ENV: str(workdir / "calls.log"), "UPSTREAM": engine_url,
-                    "WORKER_HEALTH_PORT": str(self.worker_port), "PYTHONUNBUFFERED": "1"}
+                    "WORKER_HEALTH_PORT": str(self.worker_port), "PYTHONPATH": path,
+                    "PYTHONUNBUFFERED": "1"}
         self.workdir, self.port, self.namespace = workdir, port, namespace
         self.processes: dict[str, subprocess.Popen] = {}
         self.starts = {"gateway": 0, "worker": 0}
@@ -229,22 +234,21 @@ class PilotBox:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
 
-    def command(self, role: str) -> tuple[list[str], Path, str]:
-        """What runs `role`, from where, and the readiness it answers on: the worker is
-        I2B-R4's entry point, run from the API directory whose `infrx` it imports."""
+    def command(self, role: str) -> tuple[list[str], str]:
+        """What runs `role` (from the repository root, `infrx` on PYTHONPATH) and the
+        readiness it answers on: the worker is I2B-R4's entry point."""
         if role == "worker":
-            return ([sys.executable, "-m", "infrx.worker"], harness.API_ROOT,
+            return ([sys.executable, "-m", "infrx.worker"],
                     f"http://127.0.0.1:{self.worker_port}/readyz")
-        return ([sys.executable, str(Path(__file__).resolve()), role], harness.REPO_ROOT,
-                self.url + "/readyz")
+        return [sys.executable, str(Path(__file__).resolve()), role], self.url + "/readyz"
 
     def start(self, role: str, timeout: float = 60.0) -> None:
         self.starts[role] += 1
-        argv, cwd, ready = self.command(role)
+        argv, ready = self.command(role)
         logfile = open(self.workdir / f"{role}-{self.starts[role]}.log", "wb")
         self.processes[role] = subprocess.Popen(
             argv, env=self.env, stdout=logfile, stderr=subprocess.STDOUT,
-            start_new_session=True, cwd=str(cwd))
+            start_new_session=True, cwd=str(harness.REPO_ROOT))
         logfile.close()
         self._wait_ready(role, ready, timeout)
 
