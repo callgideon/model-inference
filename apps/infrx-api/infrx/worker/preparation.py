@@ -159,6 +159,13 @@ async def engine_prompt_tokens(engine, prepared, *,
     except (httpx.HTTPError, ValueError, TimeoutError) as failed:
         raise errors.DependencyUnavailable(
             f"the engine's tokenizer did not answer ({type(failed).__name__})") from None
+    return checked_count(found, budget)
+
+
+def checked_count(found, budget: dict | None) -> int:
+    """R105: the `/tokenize` answer `found` is the count only when it is one (an integer and
+    exactly that many tokens; for a video, `budget`, the pinned number of `video_token_id`s),
+    or `dependency_unavailable`. Nothing is memoized before this has passed (TOKCOST)."""
     count = found.get("count") if isinstance(found, dict) else None
     tokens = found.get("tokens") if isinstance(found, dict) else None
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:

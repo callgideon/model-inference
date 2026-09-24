@@ -68,6 +68,7 @@ OWN_BODY = "test_prep_worker__a_memo_answers_only_its_own_body_media_and_revisio
 KEY = "test_prep_worker__the_memo_key_names_the_media_digests_and_the_credit_revision"
 STALE = "test_prep_worker__a_stale_memo_is_asked_again"
 BOUNDED = "test_prep_worker__the_memo_is_bounded_least_recently_used_first"
+NOT_MEMOIZED = "test_prep_worker__a_refused_video_count_is_never_memoized"   # fix round B1
 PG_DRAIN = "test_prep_worker_pg__sigterm_releases_a_preparation_and_the_next_worker_prepares_it"
 
 _WAIT = "{waiting, self._pool, self._reaper, *self.loop._tasks,\n"
@@ -282,6 +283,21 @@ MUTANTS = (
     _m("prep_memo_evicts_the_recently_used", "the least recently USED count goes first",
        P, "        self.counts.move_to_end(key)\n        return found[1]",
        "        return found[1]", BOUNDED),
+    # --- TOKCOST fix round: B1 (R105 fail-closed) and N1 (the product bound) -------------
+    _m("prep_memo_holds_a_refused_count", "a count a check refused is never memoized (R105 "
+       "fail-closed): the checks run before the put (verifier B1)",
+       P, "            count, source = await self._ask(prepared), \"engine /tokenize\"\n"
+          "            if key:\n                self.memo.put(key, count)\n",
+       "            ask = tokenize_body(self.engine, prepared)\n"
+       "            found = (await self.engine.client.post(TOKENIZE_PATH, json=ask)).json()\n"
+       "            if key:\n                self.memo.put(key, found[\"count\"])\n"
+       "            count = checked_count(found, ask.get(\"mm_processor_kwargs\"))\n"
+       "            source = \"engine /tokenize\"\n", NOT_MEMOIZED),
+    _m("prep_memo_bound_not_1024", "the memo holds at most 1024 counts (verifier N1)",
+       P, "MEMO_ENTRIES = 1024", "MEMO_ENTRIES = 10**9", BOUNDED),
+    _m("prep_runner_memo_unbounded", "the product runner's memo is bounded by MEMO_ENTRIES "
+       "(verifier N1)", P, "CountMemo(ttl_s=limits.processing_cache_ttl_s)",
+       "CountMemo(ttl_s=limits.processing_cache_ttl_s, entries=10**9)", BOUNDED),
 )
 
 PG_MUTANTS = (

@@ -398,16 +398,36 @@ def test_prep_worker__a_stale_memo_is_asked_again(tmp_path):
     assert len(prep.app.tokenized) == 2, prep.app.tokenized
 
 
-def test_prep_worker__the_memo_is_bounded_least_recently_used_first():
-    """At most `MEMO_ENTRIES` counts (two here), so a long-lived worker's memo stays bounded:
-    a third body evicts the least recently USED one - the first, read again, stays."""
+def test_prep_worker__a_refused_video_count_is_never_memoized(tmp_path):
+    """TOKCOST fix round (verifier B1), R105 fail-closed: an answer a check refused (here one
+    unexpanded placeholder, count 1000) prepares nothing AND memoizes nothing - the same body
+    again is asked, and stored at the engine's checked count, never at the refused one."""
+    prep = Prep(tmp_path)
+    prep.app.control({"tokenize_fault": "unexpanded", "tokenize_count": 1000})
+
+    async def case():
+        _, refused, _ = await prep.prepare(video=True)
+        prep.app.control({"tokenize_fault": "none", "tokenize_count": None})
+        _, again, stored = await prep.prepare(video=True)
+        return refused, again, stored
+
+    refused, again, stored = run(case())
+    assert refused.refusal == "dependency_unavailable", refused
+    assert (again.cause, stored) == ("prepared", COUNT), (again, stored)
+    assert len(prep.app.tokenized) == 2, prep.app.tokenized
+
+
+def test_prep_worker__the_memo_is_bounded_least_recently_used_first(tmp_path):
+    """At most `MEMO_ENTRIES` counts - 1024 in the product runner's memo (verifier N1) - so a
+    long-lived worker's memo stays bounded: a third body evicts the least recently USED one
+    (two entries here) - the first, read again, stays."""
     memo = CountMemo(ttl_s=60.0, entries=2)
     memo.put("a", 1)
     memo.put("b", 2)
     assert memo.get("a") == 1
     memo.put("c", 3)
     assert (memo.get("a"), memo.get("b"), memo.get("c"), len(memo.counts)) == (1, None, 3, 2)
-    assert CountMemo(ttl_s=60.0).entries == MEMO_ENTRIES
+    assert Prep(tmp_path).runner.memo.entries == MEMO_ENTRIES == 1024
 
 
 def tokenizer(*answers):
