@@ -17,7 +17,10 @@ is recorded by reference (its registry digest), the runtime image by id and by t
 bundle it is built from, the env file by NAMES only.
 
 `verify` checks a restored directory against a manifest: every file present, same size,
-same sha256, nothing extra. Exit 0 equal, 1 different.
+same sha256, nothing extra. With `--serving-version` it also re-checks the restored bytes
+against the release's pins: a mirror replaced whole (objects and manifest together, or a
+stale one) matches its own manifest and is still not the served model. Exit 0 equal, 1
+different or refused.
 """
 from __future__ import annotations
 
@@ -141,7 +144,13 @@ def verify(a) -> int:
             print(f"{label}: {path}")
     equal = not (missing or extra or changed)
     print(f"{'EQUAL' if equal else 'DIFFERENT'} files={len(have)} manifest_files={len(want)}")
-    return 0 if equal else 1
+    problems = []
+    if a.serving_version:
+        entries = [{"path": p, "sha256": digest} for p, (_, digest) in have.items()]
+        problems, _ = pin_problems(entries, json.loads(Path(a.serving_version).read_text()))
+        for problem in problems:
+            print(f"REFUSED: {problem}", file=sys.stderr)
+    return 0 if equal and not problems else 1
 
 
 def main(argv=None) -> int:
@@ -157,6 +166,7 @@ def main(argv=None) -> int:
     v = sub.add_parser("verify")
     v.add_argument("--weights", required=True)
     v.add_argument("--manifest", required=True)
+    v.add_argument("--serving-version", help="the release's serving-version.json: its pins too")
     a = ap.parse_args(argv)
     return manifest(a) if a.command == "manifest" else verify(a)
 

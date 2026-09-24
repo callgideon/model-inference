@@ -4,10 +4,14 @@ SERVES a real in-cap video job with its result and settleable usage, and timings
 pass a readiness for a cold start.
 
 Failure oracles: a tree without the preparation loop (27af05a) or with unapplied migrations,
-unknown config names or no recorded evidence is NOT known-good; a backup is shown holding
+a hosted schema newer than the tree with no recorded both-versions proof, unknown config
+names or no recorded evidence is NOT known-good; a backup is shown holding
 the release it really holds; the journey fails on a public 503 after readiness, a failed or
 empty job, or unsettleable usage, and in maintenance on anything admitted; install.sh labels
-an engine that was not restarted as NOT a cold start.
+an engine that was not restarted as NOT a cold start. drift.py's settlement check (the
+drill's last step) passes a settled job of EITHER regime - a CREDIT job's USD debit is 0 by
+design (0018, R64), its charge is the CREDIT ledger's inference_debit - and fails an
+unsettled job, a CREDIT job with no ledger debit, and any wallet drift.
 """
 from __future__ import annotations
 
@@ -19,9 +23,11 @@ import runpy
 import subprocess
 import sys
 import tarfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import support
+from .pooler import PASSWORD, PG_DIRECT
 from .test_ops_steps import STEPS, calls, run_step, stubs
 from .test_scripts import Host
 
@@ -74,8 +80,17 @@ def test_ops_recover__a_known_good_target_is_judged_by_its_tree_and_its_record(t
     assert failed(good, sets=("MAX_VIDEO_SECONDS", "LARGE_BODY_LIMIT")) == (
         "NOT-KNOWN-GOOD", ["config"])
     assert failed("f" * 40)[1] == ["commit"]
+    # hosted ahead of the tree: the old code on a newer schema is a claim until proven with
+    # both versions (brief §I8.6) - no proof recorded, no target
     beyond = judge(good, "0020", ["MAX_VIDEO_SECONDS"], None, registry, repo)
-    assert beyond["verdict"] == "KNOWN-GOOD" and "applied beyond the tree: 0019-0020" in json.dumps(beyond)
+    assert beyond["verdict"] == "NOT-KNOWN-GOOD" and "applied beyond the tree: 0019-0020" in json.dumps(beyond)
+    assert [c["check"] for c in beyond["checks"] if not c["ok"]] == ["migrations"]
+    proven = {"releases": [{**registry["releases"][1], "schema_proof": {
+        "through": "0020", "evidence": ["evidence/good.md"]}}]}
+    assert judge(good, "0020", [], None, proven, repo)["verdict"] == "KNOWN-GOOD"
+    assert judge(good, "0021", [], None, proven, repo)["verdict"] == "NOT-KNOWN-GOOD"   # not that far
+    proven["releases"][0]["schema_proof"]["evidence"] = ["evidence/absent.md"]
+    assert judge(good, "0020", [], None, proven, repo)["verdict"] == "NOT-KNOWN-GOOD"   # no evidence
     unlisted = judge(good, "0018", [], None, {"releases": []}, repo)
     assert unlisted["verdict"] == "NOT-KNOWN-GOOD"
     # the release bundle, listed read-only in the release prefix
@@ -211,3 +226,109 @@ def test_ops_recover__an_install_never_reports_readiness_as_a_cold_start(tmp_pat
     cold = Host(tmp_path / "cold", monkeypatch)
     done = cold.run("install.sh", INFRX_MODE="pilot", ENGINE="restart", PREFLIGHT=cold.pilot_preflight())
     assert done.returncode == 0 and "(cold start: engine restarted, weights loaded)" in done.stdout
+
+
+# --- drift.py --request-id: the settlement check, on the real schema ------------------------
+DRIFT = support.REPO / "infra" / "runbooks" / "drift.py"
+JOB = ("insert into infrx.jobs (request_id, job_handle, org_id, model_revision, execution_mode, "
+       "state, operation, payload_ref, payload_digest, max_input_tokens, max_output_tokens, "
+       "maximum_hold, consent_version, trace_mode, admitted_at, deadline_at, "
+       "budget_preparation_s, budget_queue_wait_s, budget_generation_s, budget_first_token_s, "
+       "budget_stall_s, preparation_deadline_at, accounting_regime, price_version, "
+       "price_snapshot, wallet_id, model_id, requested_model, deployment_revision_id, "
+       "serving_version_id, rate_card_version, policy_version, outcome_cause, settlement_state, "
+       "usage_certainty, usage_prompt_tokens, usage_completion_tokens, debit, settled_at, "
+       "result_ref) values (%(id)s::uuid, %(id)s::text, %(org)s::uuid, 'nemostation/marlin-2b@1', 'async', "
+       "%(state)s, 'chat.completions', 'infrx-payload:x', 'sha256:' || repeat('a', 64), 100, "
+       "16, 1, 1, 'off', now() - interval '1 minute', now() + interval '10 minutes', 120, 10, "
+       "300, 60, 20, now() + interval '2 minutes', %(regime)s, %(pv)s, %(snapshot)s, "
+       "%(pin)s::uuid, %(pin)s::uuid, %(model)s, %(pin)s::uuid, %(pin)s::uuid, %(card)s, "
+       "%(card)s, %(cause)s, "
+       "%(settlement)s, %(usage)s, %(tokens)s, %(tokens)s, %(debit)s, %(at)s, %(ref)s)")
+
+
+def _job(conn, regime: str, settled: bool) -> str:
+    import uuid
+    rid, credit = str(uuid.uuid4()), regime == "credit"
+    pin = str(uuid.uuid4()) if credit else None
+    conn.execute(JOB, {
+        "id": rid, "org": str(uuid.uuid4()), "state": "succeeded" if settled else "queued",
+        "regime": regime, "pv": None if credit else "pv-1", "snapshot": None if credit else "{}",
+        "pin": pin, "model": "marlin2b" if credit else None,
+        "card": "card-1" if credit else None, "cause": "completed" if settled else None,
+        "settlement": "settled" if settled else None,
+        "usage": "authoritative" if settled else None, "tokens": 10 if settled else None,
+        "debit": 0.5 if settled and not credit else 0,
+        "at": datetime.now(timezone.utc) if settled else None,
+        "ref": f"infrx-result:{rid}" if settled else None})
+    return rid
+
+
+def test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled(
+        i8_stack, tmp_path):
+    """drift.py --request-id against a throwaway database with the real schema (0001-0018)
+    on the i8 PostgreSQL. The password comes from a stub `aws` on PATH (the local literal);
+    nothing reaches SSM. Rows are written with `session_replication_role = replica` so no
+    trigger or foreign key needs the admission path around them (D's to test)."""
+    import uuid
+
+    import psycopg
+
+    from infrx.state import migrations
+    base = i8_stack.dsn(PG_DIRECT)
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute("drop database if exists infrx_i8_drift")
+        admin.execute("create database infrx_i8_drift")
+    try:
+        with psycopg.connect(base.replace("/infrx_i8?", "/infrx_i8_drift?"), autocommit=True) as conn:
+            for _, sql in migrations.sql_for(shim=True, clock=False):
+                conn.execute(sql)
+            conn.execute("set session_replication_role = replica")
+            usd, credit = _job(conn, "legacy_usd", True), _job(conn, "credit", True)
+            unsettled, no_debit = _job(conn, "legacy_usd", False), _job(conn, "credit", True)
+            conn.execute("insert into infrx.credit_holds (request_id, org_id, amount, state) "
+                         "select request_id, org_id, 1, 'settled' from infrx.jobs "
+                         "where request_id = %s", (usd,))
+            conn.execute("insert into infrx.credit_holds (request_id, org_id, amount, state) "
+                         "select request_id, org_id, 1, 'held' from infrx.jobs "
+                         "where request_id = %s", (unsettled,))
+            for rid in (credit, no_debit):
+                conn.execute("insert into infrx.credit_wallet_holds (request_id, org_id, "
+                             "wallet_id, rate_card_version, amount, state) select request_id, "
+                             "org_id, wallet_id, rate_card_version, 1, 'settled' from infrx.jobs "
+                             "where request_id = %s", (rid,))
+            conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+                         "operation_id, request_id, actor) select wallet_id, 'consumer', "
+                         "'inference_debit', -0.25, request_id, request_id, 'platform' "
+                         "from infrx.jobs where request_id = %s", (credit,))
+            stub = stubs(tmp_path, "aws", outputs={"aws": PASSWORD + "\n"})
+            conninfo = (f"host=127.0.0.1 port={conn.info.port} dbname=infrx_i8_drift "
+                        "user=postgres connect_timeout=10")
+
+            def settled(rid):
+                done = subprocess.run([sys.executable, str(DRIFT), "--conninfo", conninfo,
+                                       "--request-id", rid], capture_output=True, text=True,
+                                      env={**os.environ, "PATH": f"{stub}{os.pathsep}{os.environ['PATH']}"})
+                assert PASSWORD not in done.stdout + done.stderr, "the password was printed"
+                verdict = done.stdout.strip().splitlines()[-1] if done.stdout.strip() else done.stderr
+                assert done.returncode in (0, 1), done.stderr
+                return done.returncode == 0 and verdict.endswith(" SETTLED")
+
+            assert settled(usd), "a settled USD job"
+            assert settled(credit), "a settled CREDIT job: debit 0, charged in its own ledger"
+            assert not settled(unsettled), "a queued job with a held hold"
+            assert not settled(no_debit), "a CREDIT job marked settled with no ledger debit"
+            # any wallet drift fails the check, whatever the job says
+            conn.execute("set session_replication_role = origin")
+            user, org = str(uuid.uuid4()), str(uuid.uuid4())
+            conn.execute("insert into auth.users (id, email) values (%s, %s)",
+                         (user, f"i8-{user[:8]}@example.com"))
+            conn.execute("insert into public.organizations (id, name, slug, created_by) "
+                         "values (%s, 'i8', %s, %s)", (org, f"i8-{org[:8]}", user))
+            conn.execute("set session_replication_role = replica")
+            conn.execute("insert into infrx.credit_holds (request_id, org_id, amount, state) "
+                         "values (%s, %s, 1, 'held')", (str(uuid.uuid4()), org))
+            assert not settled(usd), "wallet drift must fail the settlement check"
+    finally:
+        with psycopg.connect(base, autocommit=True) as admin:
+            admin.execute("drop database if exists infrx_i8_drift with (force)")

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # I8 slice 5, box: restore the served model from the durable mirror (80-mirror-artifacts.sh)
-# onto replacement ephemeral storage and time each phase separately.
+# onto replacement ephemeral storage and time each phase separately. The fetched bytes are
+# verified against the mirror's manifest AND the release's serving-version.json pins (a
+# stale or replaced mirror matches its own manifest). SCOPE: this is a same-instance WEIGHTS
+# restore - fresh directory, same host, its docker images and env files still present. A
+# replacement INSTANCE (fresh NVMe, images from a durable store, env from SSM names) is not
+# covered here: the engine image is pinned by registry digest, which `docker load` of a
+# saved tar does not restore, so it needs a registry copy (e.g. ECR) - open, I8 evidence.
 #   MODE=fetch (default, no service impact): fetch into a fresh directory, verify every file
 #       against the mirror's manifest; prints fetch_s and verify_s; CLEANUP=1 removes it.
 #   MODE=swap  (MAINTENANCE WINDOW - the single GPU serves nothing while the engine loads):
@@ -32,13 +38,16 @@ wait_up() { local deadline=$(( SECONDS + $2 )); until curl -fsS -o /dev/null --m
   [ "$SECONDS" -lt "$deadline" ] || return 1; sleep 2; done; }
 
 fetch() {
+  # the pins come from the release's own checkout
+  [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] || { echo "the checkout is not $RELEASE" >&2; exit 2; }
   mkdir -p "$staged"
   local s; s=$(t)
   aws s3 cp --only-show-errors --region us-east-1 "${MIRROR_URL}manifest.json" "$nvme/restore-$id/manifest.json"
   aws s3 sync --only-show-errors --no-progress --region us-east-1 "${MIRROR_URL}weights/" "$staged/"
   echo "timing fetch_s=$(since "$s") restore_id=$id bytes=$(du -sb "$staged" | cut -f1)"
   s=$(t)
-  python3 "$repo/infra/runbooks/artifacts.py" verify --weights "$staged" --manifest "$nvme/restore-$id/manifest.json"
+  python3 "$repo/infra/runbooks/artifacts.py" verify --weights "$staged" --manifest "$nvme/restore-$id/manifest.json" \
+    --serving-version "$repo/models/marlin2b/serving-version.json"
   echo "timing verify_s=$(since "$s")"
 }
 

@@ -124,6 +124,20 @@ def test_ops_continuous__the_budget_counts_every_gateway_process(tmp_path):
     assert BUDGET["main"](["--runtime-port", "5432", "--set", "DATABASE_POOL_MAX_SIZE=6"]) == 0
 
 
+def test_ops_continuous__the_budget_reserves_headroom_and_counts_the_startup_peak():
+    """The two bounds the brief names besides the pools: the reserved headroom, and a
+    concurrent startup whose peak exceeds the steady one. Oracle: a verdict that ignores the
+    headroom passes MAX_SIZE=7 (peak 15 = the limit, no slot for a dead client); one that
+    reads only the steady peak passes MIN_SIZE=MAX_SIZE=6 (startup 14 > steady 13)."""
+    assert BUDGET["main"](["--runtime-port", "5432", "--set", "DATABASE_POOL_MAX_SIZE=7"]) == 1
+    assert BUDGET["main"](["--runtime-port", "5432", "--set", "DATABASE_POOL_MAX_SIZE=7",
+                           "--headroom", "0"]) == 0
+    both = BUDGET["budget"]({"DATABASE_POOL_MIN_SIZE": "6", "DATABASE_POOL_MAX_SIZE": "6"},
+                            UNITS, runtime_mode="session")
+    # startup: gateway min 6 + its probe 1 + worker 6 + operator CLI 1; steady: 6 + 6 + 1
+    assert both["verdicts"]["session"]["peak"] == 14 and not both["ok"]
+
+
 # --- 2. transaction pooling: what the runtime's patterns do ----------------------------
 @pytest.fixture
 def txn(i8_stack):

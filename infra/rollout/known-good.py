@@ -12,8 +12,10 @@ Checks, each printed with its evidence:
   preparation   the tree has the preparation loop: infrx/worker/preparation.py and the worker
                 composition root runs a PreparationRunner (27af05a has neither)
   migrations    every migration the tree carries is applied on hosted (<= --applied, the
-                version `migrate.py plan` reports); applied ones it does not know are listed:
-                the additive-compatibility claim for them is D's (0001-0018 are additive)
+                version `migrate.py plan` reports). Hosted AHEAD of the tree passes only with
+                the record's `schema_proof` {"through": NNNN, "evidence": [...]} reaching
+                --applied: brief §I8.6 wants additive compatibility PROVEN with both versions
+                (the old code's store tests on the newer schema), not assumed
   config        every tunable name the current install passes (--set, INFRX_SET's names)
                 exists in the candidate's preflight schema - else its install refuses
   record        infra/rollout/known-good.json lists it known_good with evidence files that
@@ -70,18 +72,23 @@ def judge(sha: str, applied: str, sets: list[str], bundles: str | None, registry
     check("preparation", prep and "PreparationRunner(" in main,
           "infrx/worker/preparation.py and PreparationRunner in the worker root"
           if prep else "no preparation loop: video jobs would never be prepared")
+    entry = next((r for r in registry["releases"] if r["sha"] == sha), None)
     files = git(repo, "ls-tree", "--name-only", sha, f"{MIGRATIONS}/").stdout.split()
     versions = sorted(Path(f).name[:4] for f in files if re.match(r"\d{4}_", Path(f).name))
     newest = versions[-1] if versions else "0000"
-    check("migrations", newest <= applied,
+    proof = (entry or {}).get("schema_proof") or {}
+    proven = (proof.get("through", "0000") >= applied and bool(proof.get("evidence"))
+              and all((repo / p).exists() for p in proof["evidence"]))
+    check("migrations", newest == applied or (newest < applied and proven),
           f"tree carries up to {newest}; hosted has {applied}"
-          + (f"; applied beyond the tree: {int(newest) + 1:04d}-{applied} (additive: D's claim)"
-             if newest < applied else ""))
+          + ("" if newest >= applied else
+             f"; applied beyond the tree: {int(newest) + 1:04d}-{applied} "
+             + (f"(proven: {proof['evidence']})" if proven else
+                "with no schema_proof reaching it: prove the old code on the newer schema")))
     names = schema_names(show(repo, sha, "apps/infrx-api/deploy/preflight.py") or "")
     missing = sorted(set(sets) - names)
     check("config", not missing, "every --set name is in its schema" if not missing
           else f"its install would refuse --set {', '.join(missing)}")
-    entry = next((r for r in registry["releases"] if r["sha"] == sha), None)
     absent = [p for p in (entry or {}).get("evidence", []) if not (repo / p).exists()]
     check("record", entry is not None and entry.get("known_good") is True and not absent,
           "not in known-good.json" if entry is None else

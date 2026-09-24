@@ -224,6 +224,39 @@ def test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the
         RULES["rules"], evaluator.parse(out.read_text()))}
 
 
+class _Recorder:
+    """A connection that records every statement collect() sends and answers empty."""
+
+    def __init__(self):
+        self.sql = []
+
+    def transaction(self):
+        import contextlib
+        return contextlib.nullcontext()
+
+    def execute(self, sql, params=None):
+        self.sql.append(" ".join(sql.split()))
+        return self
+
+    def fetchall(self):
+        return []
+
+    def fetchone(self):
+        return (0,)
+
+
+def test_ops_continuous__durable_truth_sends_only_reads_inside_a_read_only_transaction():
+    """Until D10's read-only login exists the monitor runs as the runtime login (today's
+    privileged `postgres`): the read-only transaction is the only thing between it and a
+    write. Oracle: dropping `set transaction read only`, or any statement that is not a
+    SELECT or a SET LOCAL, fails here."""
+    conn = _Recorder()
+    DURABLE["collect"](conn)
+    assert conn.sql[0] == "set transaction read only"
+    others = [s for s in conn.sql[1:] if not re.match(r"(select|set local) ", s)]
+    assert others == [] and len(conn.sql) > 10
+
+
 def test_ops_continuous__durable_truth_uses_the_transaction_port_by_default():
     runtime = "postgresql://u:p@db.example:5432/postgres?sslmode=require"
     moved = DURABLE["dsn_from_env"]({"DATABASE_URL": runtime})

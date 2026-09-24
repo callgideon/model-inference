@@ -61,6 +61,10 @@ preparation loop (F7). Every step below is one coordinator op; log each before i
 1. **Choose the target by its tree and its record**, never by a backup (coordinator host):
    `apps/infrx-api/.venv/bin/python infra/rollout/known-good.py --list --applied 0018 --set S3_MEDIA_BUCKET --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY --set LARGE_BODY_LIMIT --set DATABASE_POOL_MAX_SIZE --bundles s3://llm-bootcamp-641134885443/releases/`
    (`--applied` = the version hosted's `migrate.py plan` reports). Pick a `KNOWN-GOOD` one.
+   Hosted ahead of the target's tree (e.g. after D10's migrations) is `NOT-KNOWN-GOOD` until
+   the target's record carries a `schema_proof` reaching `--applied`: the target's own store
+   tests run on the newer schema, recorded as evidence (additive compatibility proven with
+   both versions, not assumed).
 2. **The box can reinstall it**: `infra/rollout/ssm.sh infra/rollout/steps/85-known-good-box.sh TARGET=<sha>`
    (bundle on the NVMe matches its sha256, commit in the checkout, image cached or not; the
    backups listed with what they hold). Exit 1: run the target's W1 fetch step first.

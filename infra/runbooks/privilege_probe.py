@@ -76,13 +76,16 @@ IDENTITY = (
 )
 
 
-def attempt(conn, sql: str, params=None) -> tuple[str, object]:
-    """('ok', first value or None) or ('error', SQLSTATE), always rolled back."""
+def attempt(conn, sql: str, params=None, *, bounded: bool = True) -> tuple[str, object]:
+    """('ok', first value or None) or ('error', SQLSTATE), always rolled back. `bounded`
+    adds the probe's own SET LOCAL timeouts; the identity checks go without, since one of
+    them reads the login's statement_timeout and would otherwise read the probe's 5s."""
     import psycopg
     try:
         with conn.transaction(force_rollback=True):
-            conn.execute("set local statement_timeout = '5s'")
-            conn.execute("set local lock_timeout = '1s'")
+            if bounded:
+                conn.execute("set local statement_timeout = '5s'")
+                conn.execute("set local lock_timeout = '1s'")
             cur = conn.execute(sql, params)
             row = cur.fetchone() if cur.description else None
             return "ok", (row[0] if row else None)
@@ -95,7 +98,7 @@ def probe(conn, role: str, functions: list[str]) -> list[dict]:
     results = []
     params = {"role": role, "privileged": list(PRIVILEGED)}
     for name, sql in IDENTITY:
-        kind, value = attempt(conn, sql, params)
+        kind, value = attempt(conn, sql, params, bounded=False)     # catalog reads of its own row
         results.append({"check": name, "expect": True,
                         "got": value if kind == "ok" else f"error {value}",
                         "pass": kind == "ok" and value is True})

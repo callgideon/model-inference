@@ -43,7 +43,8 @@ print(f"listed back: {len(listed)} objects, {len(files) - len(bad)}/{len(files)}
 sys.exit(1 if bad else 0)
 PY
 aws s3 cp --only-show-errors "${MIRROR_URL}manifest.json" "$out/readback.json"
-cmp -s "$out/manifest.json" "$out/readback.json" && echo "manifest read back equal: $(sha256sum < "$out/manifest.json" | cut -c1-64)"
+cmp -s "$out/manifest.json" "$out/readback.json" || { echo "manifest read back DIFFERENT from the one uploaded" >&2; exit 1; }
+echo "manifest read back equal: $(sha256sum < "$out/manifest.json" | cut -c1-64)"
 echo "== access (read-only; 'unknown' when the role may not read it)"
 aws s3api get-bucket-versioning --bucket "$bucket" --output text 2>/dev/null || echo "versioning: unknown"
 aws s3api get-public-access-block --bucket "$bucket" --output text 2>/dev/null || echo "public access block: unknown"

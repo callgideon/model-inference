@@ -1164,6 +1164,62 @@ MUTANTS += (
        "test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good"),
 )
 
+# --- I8 fix round (review of 103d20a/d2f90ce): oracles the review found missing -------------
+DRIFT_PY = "../../infra/runbooks/drift.py"
+READ_ONLY = "test_ops_continuous__durable_truth_sends_only_reads_inside_a_read_only_transaction"
+HEADROOM = "test_ops_continuous__the_budget_reserves_headroom_and_counts_the_startup_peak"
+SETTLES = "test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled"
+INSTALL_OBSERVE = "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"
+MUTANTS += (
+    _m("durable_not_read_only", "the monitor's one transaction is read-only",
+       OBS + "durable.py", '        conn.execute("set transaction read only")\n', "", READ_ONLY),
+    _m("durable_writes", "the monitor sends reads only",
+       OBS + "durable.py", '        conn.execute("set transaction read only")\n',
+       '        conn.execute("create table if not exists infrx.i8_monitor_wrote (x int)")\n',
+       READ_ONLY),
+    _m("budget_headroom_ignored", "the verdict keeps the reserved headroom free",
+       BUDGET_PY, '"ok": peak + headroom <= limit}', '"ok": peak <= limit}', HEADROOM),
+    _m("budget_startup_ignored", "a concurrent startup above the steady peak is the peak",
+       BUDGET_PY, "peak = max(startup, steady)", "peak = steady", HEADROOM),
+    _m("art_pins_ignored", "the tokenizer, template and config pins refuse other bytes",
+       ART, "        if by_name.get(name) != model[field]:", "        if False:", PINS),
+    _m("art_verify_missing_ignored", "a restore that lost a file is DIFFERENT",
+       ART, "    missing = sorted(set(want) - set(have))", "    missing = []", ROUND),
+    _m("art_verify_extra_ignored", "a restore that gained a file is DIFFERENT",
+       ART, "    extra = sorted(set(have) - set(want))", "    extra = []", ROUND),
+    _m("restore_trusts_a_replaced_mirror", "restored bytes are checked against the release's pins",
+       ART, "    if a.serving_version:", "    if False:", ROUND),
+    _m("mirror_readback_mismatch_passes", "a manifest that reads back different fails the mirror",
+       STEP + "80-mirror-artifacts.sh",
+       '|| { echo "manifest read back DIFFERENT from the one uploaded" >&2; exit 1; }', "|| true",
+       ROUND),
+    _m("probe_attrs_blind", "a BYPASSRLS (or superuser...) login fails the probe",
+       PROBE_PY, '"select not (rolsuper or rolbypassrls', '"select true or (rolsuper or rolbypassrls',
+       LEAST),
+    _m("probe_timeout_identity_blind", "a login with no statement_timeout fails the probe",
+       PROBE_PY, "\"select current_setting('statement_timeout') not in ('0', '0ms')\"",
+       '"select true"', LEAST),
+    _m("probe_identity_reads_its_own_timeout", "the timeout check reads the login's, not the probe's",
+       PROBE_PY, "attempt(conn, sql, params, bounded=False)", "attempt(conn, sql, params)", LEAST),
+    _m("drift_credit_charge_unchecked", "a CREDIT job settles only with its ledger debit",
+       DRIFT_PY, '"then debit = 0 and exists (select 1 from infrx.credit_ledger',
+       '"then true or exists (select 1 from infrx.credit_ledger', SETTLES),
+    _m("drift_usd_only", "a settled CREDIT job is SETTLED (its USD debit is 0 by design)",
+       DRIFT_PY, ',\n           [("succeeded", "settled", "credit", True, "authoritative")])', ",)",
+       SETTLES),
+    _m("drift_ignores_wallet_drift", "wallet drift fails the settlement check",
+       DRIFT_PY, '                           and seen["wallet drift rows"] == [(0,)]\n', "", SETTLES),
+    _m("known_good_assumes_additive", "a schema ahead of the tree needs a recorded proof",
+       KG, "newest == applied or (newest < applied and proven)", "newest <= applied", JUDGED),
+    _m("canary_timer_without_p24", "the recurring canary waits for P-24's approval",
+       STEP + "72-observe-install.sh", 'if [ -n "${P24_APPROVED:-}" ]; then', "if true; then",
+       INSTALL_OBSERVE),
+    _m("canary_key_defaulted", "the canary key has no default",
+       STEP + "72-observe-install.sh",
+       ': "${CANARY_KEY_PARAM:?the SSM name of the canary tenant key - no default, P-24 bounds its spend}"',
+       "CANARY_KEY_PARAM=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}", INSTALL_OBSERVE),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in

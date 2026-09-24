@@ -11,7 +11,9 @@ non-terminal jobs by state, jobs by state in the window. No row content, no iden
 This is the one hosted read the coordinator runs after a drill or a rollout (runbooks:
 reconcile.md, rollback.md step 7, rollout.md W12); it exists so a permission rule can name it.
 `--request-id` (I8, the rollback drill's settlement check after verify-journey.sh) adds that
-one job's state, settlement state, whether it debited and its hold's state - states only.
+one job's state, settlement state, regime, whether it was charged and its hold's state -
+states only. "Charged" is in the job's own unit (R64): a USD job's `debit > 0`; a CREDIT
+job's `debit` is 0 by design (0018) and its charge is its one CREDIT `inference_debit`.
 """
 import argparse
 import subprocess
@@ -35,11 +37,16 @@ QUERIES = (
      "select state, count(*) from infrx.jobs where created_at > now() - (%s || ' hours')::interval group by 1 order by 1"),
 )
 SETTLEMENT = (
-    ("the job: state, settlement, debited, usage",
-     "select state, settlement_state, debit > 0, usage_certainty from infrx.jobs where request_id = %s"),
-    ("its hold", "select state from infrx.credit_holds where request_id = %s"),
+    ("the job: state, settlement, regime, charged, usage",
+     "select state, settlement_state, accounting_regime, case accounting_regime when 'credit' "
+     "then debit = 0 and exists (select 1 from infrx.credit_ledger l where l.request_id = "
+     "j.request_id and l.kind = 'inference_debit') else debit > 0 end, usage_certainty "
+     "from infrx.jobs j where request_id = %s"),
+    ("its hold", "select state from infrx.credit_holds where request_id = %s union all "
+                 "select state from infrx.credit_wallet_holds where request_id = %s"),
 )
-SETTLED = [("succeeded", "settled", True, "authoritative")]
+SETTLED = ([("succeeded", "settled", "legacy_usd", True, "authoritative")],
+           [("succeeded", "settled", "credit", True, "authoritative")])
 
 
 def password() -> str:
@@ -70,10 +77,10 @@ def main() -> int:
             if a.request_id:
                 rows = {}
                 for label, sql in SETTLEMENT:
-                    c.execute(sql, (str(a.request_id),))
+                    c.execute(sql, (str(a.request_id),) * sql.count("%s"))
                     rows[label] = c.fetchall()
                     print(f"{label:32} {rows[label]}")
-                settled = (rows[SETTLEMENT[0][0]] == SETTLED
+                settled = (rows[SETTLEMENT[0][0]] in SETTLED
                            and rows[SETTLEMENT[1][0]] in ([], [("settled",)])
                            and seen["wallet drift rows"] == [(0,)]
                            and seen["credit-wallet drift rows"] == [(0,)])

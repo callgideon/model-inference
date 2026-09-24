@@ -129,7 +129,9 @@ def test_ops_continuous__one_observe_cycle_probes_exports_evaluates_and_delivers
 def test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name(tmp_path):
     """72-observe-install.sh: the four units from the release's deploy dir, the canary key
     and (when P-25 names one) the webhook read from SSM on the box into 0600 files - by
-    parameter NAME on the command line, the value only in the file - then the timers."""
+    parameter NAME on the command line, the value only in the file - then the timers.
+    Oracle (P-24): no canary key parameter is a refusal (no default key), and the recurring
+    canary timer is enabled only with P24_APPROVED=<ref>; the observe timer always is."""
     secret = f"{support.MARKER}-ssm-value"
     stub = stubs(tmp_path, "aws", "systemctl", "git", outputs={"aws": secret + "\n"})
     (stub / "git.out").write_text("c" * 40 + "\n")
@@ -142,7 +144,22 @@ def test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_nam
     clip.write_bytes(b"x")
     env = {"RELEASE": "c" * 40, "CANARY_VIDEO": str(clip), "INFRX_ROOT": str(root),
            "REPO": str(support.REPO), "ALERT_WEBHOOK_PARAM": "/model-inference/alert_webhook",
-           "ALERT_OWNER": "sofia"}
+           "ALERT_OWNER": "sofia", "CANARY_KEY_PARAM": "/model-inference/canary_key"}
+    # the canary key has no default (never the certify key by accident): refused, nothing written
+    no_key = {k: v for k, v in env.items() if k != "CANARY_KEY_PARAM"}
+    done = run_step((STEPS / "72-observe-install.sh").read_text(), stub, env=no_key)
+    assert done.returncode != 0 and "CANARY_KEY_PARAM" in done.stderr
+    assert not (root / "etc" / "infrx-canary.env").exists() and calls(stub) == []
+    # without P-24's approval the recurring canary (288 requests a day) is not enabled
+    done = run_step((STEPS / "72-observe-install.sh").read_text(), stub, env=env)
+    assert done.returncode == 0, done.stderr
+    systemctl = [c["argv"] for c in calls(stub) if c["tool"] == "systemctl"]
+    assert ["enable", "--now", "infrx-observe.timer"] in systemctl
+    assert not any("infrx-canary.timer" in a or "infrx-canary.service" in a
+                   for argv in systemctl for a in argv), systemctl
+    assert "BLOCKED (P-24)" in done.stdout + done.stderr
+    (stub / "calls.log").unlink()
+    env["P24_APPROVED"] = "P-24/2026-09-25"
     done = run_step((STEPS / "72-observe-install.sh").read_text(), stub, env=env)
     assert done.returncode == 0, done.stderr
     assert secret not in done.stdout + done.stderr
@@ -162,10 +179,12 @@ def test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_nam
     unit = (root / "etc" / "systemd" / "system" / "infrx-observe.service").read_text()
     assert "Environment=REPO=/opt/infrx/observe" in unit and "/home/ubuntu" not in unit
     ssm = [c["argv"] for c in calls(stub) if c["tool"] == "aws"]
-    assert [a[a.index("--name") + 1] for a in ssm] == ["/model-inference/e4b_api_key",
+    assert [a[a.index("--name") + 1] for a in ssm] == ["/model-inference/canary_key",
                                                         "/model-inference/alert_webhook"]
-    assert ["enable", "--now", "infrx-observe.timer", "infrx-canary.timer"] in \
-        [c["argv"] for c in calls(stub) if c["tool"] == "systemctl"]
+    systemctl = [c["argv"] for c in calls(stub) if c["tool"] == "systemctl"]
+    assert ["enable", "--now", "infrx-observe.timer"] in systemctl
+    assert ["enable", "--now", "infrx-canary.timer"] in systemctl
+    assert "P-24/2026-09-25" in done.stdout
     # another checkout than RELEASE: refused before anything is written
     (stub / "git.out").write_text("d" * 40 + "\n")
     canary.unlink()

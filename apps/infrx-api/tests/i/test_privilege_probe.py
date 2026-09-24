@@ -5,8 +5,9 @@ on one function). D10 supplies the real login and its function list; the probe i
 parameterized by both.
 
 Failure oracles: the privileged configurations cannot pass - today's runtime login
-(`postgres`), a login that is a member of service_role, and one over-granted table
-privilege each fail the probe, naming the check. The DSN never reaches the output.
+(`postgres`), a login that is a member of service_role, one over-granted table privilege,
+a BYPASSRLS login and a login with no statement_timeout of its own each fail the probe,
+naming the check. The DSN never reaches the output.
 """
 from __future__ import annotations
 
@@ -85,6 +86,24 @@ def test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fa
     assert {"the login is no member of a privileged role",
             "denied: become service_role"} <= set(lines[-1]["failed"])
     _sql(i8_stack, f"revoke service_role from {ROLE}")
+
+    # least privilege in every grant, but BYPASSRLS - the hosted `postgres` login's attribute
+    # (D-31): exactly the attribute check fails
+    _sql(i8_stack, f"alter role {ROLE} bypassrls")
+    code, lines = _run(runtime, "--role", ROLE, "--allow-functions", str(functions))
+    assert code == 1 and lines[-1]["failed"] == [
+        "the login is not superuser, bypassrls, createrole, createdb or replication"]
+    _sql(i8_stack, f"alter role {ROLE} nobypassrls")
+
+    # no role-level statement_timeout: nothing bounds a statement on a pooled connection
+    # (fresh server connections: the role default is read at a server's session start)
+    _sql(i8_stack, f"alter role {ROLE} reset statement_timeout")
+    i8_stack.write_bouncers()
+    code, lines = _run(runtime, "--role", ROLE, "--allow-functions", str(functions))
+    assert code == 1 and lines[-1]["failed"] == [
+        "statements are bounded by the login's own default (survives transaction pooling)"]
+    _sql(i8_stack, f"alter role {ROLE} set statement_timeout = '15s'")
+    i8_stack.write_bouncers()
 
     # today's runtime login: the project's `postgres` (superuser here, bypassrls on hosted)
     code, lines = _run(i8_stack.dsn(TXN), "--role", ROLE, "--allow-functions", str(functions))

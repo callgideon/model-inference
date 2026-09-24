@@ -3,10 +3,13 @@
 A fake `aws` maps s3://bucket/key onto a local directory, so the mirror step and the
 restore step run end to end against it (sync, cp, list-objects-v2) with no AWS.
 
-Failure oracles: a directory that does not serve the pinned bytes is refused before any
-upload; a restore whose bytes differ from the mirror's manifest (a tampered, truncated or
-extra object) is DIFFERENT, exit 1; the env file reaches the manifest as names only; the
-policy read never prints its token or a connection string, and says BLOCKED without one.
+Failure oracles: a directory that does not serve the pinned bytes - any shard, tokenizer,
+chat template, config or generation config - is refused before any upload; a restore whose
+bytes differ from the mirror's manifest (a tampered, lost or extra object) is DIFFERENT,
+exit 1; a mirror replaced whole (objects and manifest together) is refused against the
+release's pins; a manifest that reads back different fails the mirror; the env file reaches
+the manifest as names only; the policy read never prints its token or a connection string,
+and says BLOCKED without one.
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import hashlib
 import http.server
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -51,6 +55,9 @@ elif args[:2] == ["s3", "cp"]:
     src, dst = local(args[2]), local(args[3])
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
+    if dst.name == "readback.json" and os.environ.get("FAKE_READBACK_SUFFIX"):
+        with dst.open("a") as handle:            # the store answers other bytes
+            handle.write(os.environ["FAKE_READBACK_SUFFIX"])
 elif args[:2] == ["s3api", "list-objects-v2"]:
     bucket, prefix = args[args.index("--bucket") + 1], args[args.index("--prefix") + 1]
     base = root / bucket
@@ -117,6 +124,18 @@ def test_ops_recover__the_manifest_pins_the_served_bytes_and_records_names_only(
     done = run("manifest", "--weights", str(weights), "--serving-version", str(pinned),
                "--release", "c" * 40, "--out", str(out))
     assert done.returncode == 2 and "REFUSED: the weight shards" in done.stderr and not out.exists()
+    (weights / "model-00002-of-00002.safetensors").write_bytes(b"shard-2")
+    # every other pin refuses on its own: the right weights with another tokenizer, chat
+    # template, config or generation config are not the served model either
+    pins = runpy.run_path(str(ARTIFACTS))["PINNED"]
+    for field, name in pins.items():
+        original = (weights / name).read_bytes()
+        (weights / name).write_bytes(original + b" ")
+        done = run("manifest", "--weights", str(weights), "--serving-version", str(pinned),
+                   "--release", "c" * 40, "--out", str(out))
+        assert done.returncode == 2 and f"REFUSED: {name} is not the pinned {field}" in done.stderr
+        assert not out.exists()
+        (weights / name).write_bytes(original)
 
 
 def test_ops_recover__the_real_serving_record_has_the_fields_the_manifest_checks():
@@ -168,6 +187,34 @@ def test_ops_recover__mirror_then_restore_round_trips_and_detects_a_changed_obje
     shutil.rmtree(tmp_path / "replacement")
     done = run_step((STEPS / "81-restore-artifacts.sh").read_text(), stub, env=restore)
     assert done.returncode == 1 and "changed: tokenizer.json" in done.stdout
+    (mirrored / "weights" / "tokenizer.json").write_bytes(b"{tok}")
+    # an object lost and a stray one gained: both DIFFERENT
+    (mirrored / "weights" / "config.json").rename(tmp_path / "config.json.kept")
+    (mirrored / "weights" / "stray.bin").write_bytes(b"stray")
+    shutil.rmtree(tmp_path / "replacement")
+    done = run_step((STEPS / "81-restore-artifacts.sh").read_text(), stub, env=restore)
+    assert done.returncode == 1 and "missing: config.json" in done.stdout \
+        and "extra: stray.bin" in done.stdout and "DIFFERENT" in done.stdout
+    (tmp_path / "config.json.kept").rename(mirrored / "weights" / "config.json")
+    (mirrored / "weights" / "stray.bin").unlink()
+    # a replaced mirror - objects AND manifest changed together - matches its own manifest
+    # but not the release's pins: refused against serving-version.json
+    (mirrored / "weights" / "chat_template.jinja").write_bytes(b"{{other}}")
+    doc = json.loads((mirrored / "manifest.json").read_text())
+    for entry in doc["files"]:
+        if entry["path"] == "chat_template.jinja":
+            entry.update(bytes=len(b"{{other}}"), sha256=sha(b"{{other}}"))
+    (mirrored / "manifest.json").write_text(json.dumps(doc))
+    shutil.rmtree(tmp_path / "replacement")
+    done = run_step((STEPS / "81-restore-artifacts.sh").read_text(), stub, env=restore)
+    assert done.returncode == 1 and "EQUAL files=8" in done.stdout
+    assert "REFUSED: chat_template.jinja is not the pinned chat_template_digest" in done.stderr
+    (mirrored / "weights" / "chat_template.jinja").write_bytes(b"{{t}}")
+    # the manifest read back from the store differs from the one uploaded: a failed mirror
+    done = run_step((STEPS / "80-mirror-artifacts.sh").read_text(), stub,
+                    env={**env, "FAKE_READBACK_SUFFIX": " "})
+    assert done.returncode == 1 and "manifest read back DIFFERENT" in done.stderr
+    assert "manifest read back equal" not in done.stdout
 
     # refusals before anything is fetched or moved
     for bad in ({"MIRROR_URL": "s3://approved-bucket"}, {"MIRROR_URL": "https://x/"}):

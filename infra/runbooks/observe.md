@@ -88,7 +88,10 @@ if every component says healthy. `canary.sh` prints `http=` and seconds per kind
 journal. `CanaryNotConfigured`: `/etc/infrx-canary.env` lacks `INFRX_CANARY_KEY` (the
 canary tenant's scoped key, from SSM by `72-observe-install.sh`). `CanaryStale`: the timer
 is not running (`systemctl list-timers`). The canary is bounded (one text + one in-cap
-video per 10 minutes, max_tokens 8/16) and charged to the canary tenant (P-24).
+video per 10 minutes, max_tokens 8/16) and charged to the canary tenant (P-24):
+`72-observe-install.sh` takes the key's SSM name with no default and enables the timer only
+with `P24_APPROVED=<ref>`; without it `CanaryStale`/`CanaryFailed` cannot fire (no samples)
+and nothing proves the public path between drills.
 
 ## Database pool
 
