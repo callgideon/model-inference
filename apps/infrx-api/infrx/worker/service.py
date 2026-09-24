@@ -25,6 +25,12 @@ What it adds to the loop, each for a stated reason:
 * **Crash-only.** A runner or the reaper ends only when drained or by dying, so `serve()`
   returns on the first one that ends: it drains what still runs, and the service manager
   restarts the process at full strength instead of it running short, live, for ever.
+* **Reconciliation gauges** (S3 F4): the reaper tick IS the periodic reconciliation pass,
+  so after each successful `recover` the service publishes `record_reconciliation` on its
+  `metrics`: the drift rows of 0003/0006's detector views and the unknown-usage hold
+  backlog (`reconciliation`, `PgReconciliation` in the product) and the size of the sweep's
+  own `unsettleable` set. A failed read is counted in `reap_errors` and publishes nothing
+  (the last pass stands, and its age is what an alert reads).
 * **Preparation** (PREP-WORKER): an optional second `WorkerLoop` on `prepare_dispatch`
   (`preparation.PreparationRunner`), `preparation_concurrency` runners, started, watched and
   drained with the inference pool. Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt
@@ -38,10 +44,11 @@ import ipaddress
 import json
 import logging
 import signal
+import time
 from dataclasses import asdict, dataclass, field
 
 from ..contracts.records import IndexEvent
-from ..observe.metrics import CONTENT_TYPE
+from ..observe.metrics import CONTENT_TYPE, record_reconciliation
 from .loop import DrainReport, WorkerLoop
 
 log = logging.getLogger("infrx.worker")
@@ -54,6 +61,31 @@ METRICS_PATH = "/metrics"       # I2B-R4: the process's Registry (build info), w
 REAP_INTERVAL_S = 10.0
 HEALTH_TIMEOUT_S = 2.0          # an engine slower than this to say "ready" is not ready
 REQUEST_TIMEOUT_S = 5.0         # a probe connection that sends nothing is dropped
+# S3 F4: one read-only statement over the detector views (0003 `wallet_reconciliation`, 0006
+# `credit_wallet_reconciliation`) and both regimes' unknown-usage holds.
+RECONCILIATION_SQL = (
+    "select (select count(*) from infrx.wallet_reconciliation"
+    " where ledger_drift <> 0 or reserved_drift <> 0)"
+    " + (select count(*) from infrx.credit_wallet_reconciliation"
+    " where ledger_drift <> 0 or reserved_drift <> 0),"
+    " (select count(*) from infrx.credit_holds where state = 'unknown')"
+    " + (select count(*) from infrx.credit_wallet_holds where state = 'unknown')")
+
+
+class PgReconciliation:
+    """`async () -> (drift rows, unknown holds)` over one `Connect` (`state.jobstore`:
+    autocommit, `service_role`). Reads only; D owns every table it names."""
+
+    def __init__(self, connect) -> None:
+        self._connect = connect
+
+    async def __call__(self) -> tuple[int, int]:
+        conn = await self._connect()
+        try:
+            drift, unknown = await (await conn.execute(RECONCILIATION_SQL)).fetchone()
+        finally:
+            await conn.close()
+        return int(drift), int(unknown)
 
 
 @dataclass
@@ -69,6 +101,7 @@ class WorkerService:
     metrics: object | None = None                # observe.metrics.Registry, on GET /metrics
     preparation: WorkerLoop | None = None        # PREP-WORKER: the prepare_dispatch pool
     preparation_concurrency: int = 1
+    reconciliation: object | None = None         # S3 F4: async () -> (drift, unknown holds)
     reaped: int = 0
     reap_errors: int = 0
     last_drain: DrainReport | None = None
@@ -98,6 +131,7 @@ class WorkerService:
             self.reap_errors += 1
             log.warning("recover failed: %s", type(failure).__name__)
             return 0
+        await self._reconciled()
         for event in events:
             try:
                 await self.loop.scheduler.enqueue(event)
@@ -106,6 +140,20 @@ class WorkerService:
                 log.warning("enqueue after recover failed: %s", type(failure).__name__)
         self.reaped += len(events)
         return len(events)
+
+    async def _reconciled(self) -> None:
+        """S3 F4: publish this pass (see the module docstring); nothing without both a
+        registry and a reader."""
+        if self.metrics is None or self.reconciliation is None:
+            return
+        try:
+            drift, unknown = await self.reconciliation()
+        except Exception as failure:              # the database is down: the last pass stands
+            self.reap_errors += 1
+            log.warning("reconciliation read failed: %s", type(failure).__name__)
+            return
+        record_reconciliation(self.metrics, drift=drift, holds_unknown=unknown,
+                              unsettleable=len(self.jobs.unsettleable), now=time.time())
 
     async def _reap_forever(self) -> None:
         while True:

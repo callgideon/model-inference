@@ -36,6 +36,10 @@ PREP_CRASH = "test_w5_crash__a_preparation_that_dies_mid_way_is_prepared_once"
 ENGINE_CRASH = "test_w5_crash__engine_output_before_the_journal_commit_is_never_relayed_or_billed"
 CANCEL = "test_w5_crash__a_cancel_during_preparation_or_before_the_claim_runs_nothing_more"
 A = "worker/attempt.py"
+V = "worker/service.py"
+# S3 F4: the reconciliation gauges
+GAUGES = "test_w5_reconcile__each_reaper_tick_publishes_the_reconciliation_gauges"
+PG_VIEWS = "test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds"
 
 MUTANTS = (
     # --- 1. the readiness barrier (RV-05, ADMISSION-READY) -------------------------------
@@ -101,6 +105,24 @@ MUTANTS = (
           "            if job.state is not JobState.queued:",
        "            now = self.clock.now()\n            if job.state is not JobState.queued:",
        CANCEL),
+    # --- S3 F4: the reconciliation pass publishes its gauges ------------------------------
+    _m("w5_reconciliation_not_published", "each reaper tick publishes the reconciliation "
+       "gauges (the negative control: no runtime producer, as before S3 F4)",
+       V, "        await self._reconciled()\n", "", GAUGES),
+    _m("w5_reconciliation_unsettleable_dropped", "infrx_unsettleable_jobs is the reaper's own "
+       "unsettleable set", V, "unsettleable=len(self.jobs.unsettleable)", "unsettleable=0",
+       GAUGES),
+    _m("w5_reconciliation_failure_kills_the_reaper", "a failed reconciliation read is counted "
+       "and the reaper lives on", V,
+       "        except Exception as failure:              # the database is down: the last "
+       "pass stands", "        except ZeroDivisionError as failure:", GAUGES),
+)
+
+PG_MUTANTS = (
+    _m("w5_reconciliation_ignores_the_usd_view", "drift counts both regimes' detector views",
+       V, '    "select (select count(*) from infrx.wallet_reconciliation"\n'
+          '    " where ledger_drift <> 0 or reserved_drift <> 0)"\n    " + (',
+       '    "select (', PG_VIEWS),
 )
 
 
@@ -109,9 +131,15 @@ def case_names() -> set[str]:
 
 
 RUNNER = Runner(name="w5", targets=(SUITE_FILE,), layout=prep_worker_mutants._layout)
+PG_RUNNER = Runner(name="w5-pg", targets=(SUITE_FILE,), layout=prep_worker_mutants._pg_layout,
+                   env=("INFRX_D_TASK",))
 
 
 def run_mutant(mutant) -> Result:
+    """`PG_MUTANTS` is not a module's `MUTANTS`: its cases run unmutated first (R83 (b))."""
+    if mutant in PG_MUTANTS:
+        cases = tuple(sorted({case for m in PG_MUTANTS for case in m.cases}))
+        return shared.pristine(cases, PG_RUNNER) or shared.run_mutant(mutant, PG_RUNNER)
     return shared.run_mutant(mutant, RUNNER)
 
 

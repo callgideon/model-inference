@@ -15,11 +15,13 @@ from . import loop_mutants, mutants as w1_list, prep_worker_mutants, w3_mutants,
 from . import w5_mutants as mutation_list
 from . import worker_main_mutants
 
-ALL = mutation_list.MUTANTS
+MEMORY, PG = mutation_list.MUTANTS, mutation_list.PG_MUTANTS
+ALL = MEMORY + PG
 CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("w5_readiness_barrier_media_only",)
-SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
+SELECTED = MEMORY if FULL_RUN else tuple(m for m in MEMORY if m.name in SUBSET)
+SELECTED_PG = PG if FULL_RUN else ()
 
 
 def test_the_list_is_well_formed():
@@ -53,14 +55,33 @@ def test_every_anchor_is_in_the_source_as_often_as_declared():
     assert moved == [], f"anchors no longer in the source: {moved}"
 
 
+def test_the_service_free_list_names_no_postgresql_case():
+    """The default list runs anywhere; a missing harness skips only what needs it."""
+    assert not any("_pg__" in case for m in MEMORY for case in m.cases)
+    assert all("_pg__" in case for m in PG for case in m.cases)
+
+
 def test_the_named_cases_pass_on_the_pristine_tree():
     """R83 (b): a case that fails on its own would 'kill' every mutant naming it."""
-    cases = tuple(sorted({case for mutant in ALL for case in mutant.cases}))
+    cases = tuple(sorted({case for mutant in MEMORY for case in mutant.cases}))
     assert shared.pristine(cases, mutation_list.RUNNER) is None
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
+    result = mutation_list.run_mutant(mutant)
+    assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                           f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                           f"what they claim.")
+
+
+@pytest.mark.parametrize("mutant", SELECTED_PG, ids=[m.name for m in SELECTED_PG])
+def test_pg_mutant_is_killed(mutant):
+    """On the lane's D harness (`INFRX_D_TASK`; a visible skip without it)."""
+    from ..d import pgharness
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"PostgreSQL harness unavailable: {reason}")
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "

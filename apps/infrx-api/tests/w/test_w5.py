@@ -28,8 +28,11 @@ from infrx.contracts.records import (HoldState, IndexEvent, JobState, OutboxKind
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.v2.lifecycle import AdmissionExpectation
 from infrx.contracts.v2.records import AccountingRegime
-from infrx.worker import WorkerLoop
+from infrx.observe import alerts
+from infrx.observe.metrics import Registry
+from infrx.worker import WorkerLoop, WorkerService
 from infrx.worker.preparation import PreparationResult, PreparationRunner
+from infrx.worker.service import PgReconciliation
 from tests.w.test_loop import ScriptEngine, World, candidate, delta, queued, usage_event
 from tests.w.test_prep_worker import COUNT, Prep, outcome, within
 
@@ -438,3 +441,79 @@ def test_w5_crash__a_cancel_during_preparation_or_before_the_claim_runs_nothing_
     world, other, engine, results = run(queued_then_cancelled())
     assert [r.refusal for r in results] == ["already_terminal"] and engine.started == 0
     assert world.jobs.outbox_kinds(other.request_id).count(OutboxKind.usage_projection) == 1
+
+
+# --------------------------------------------------------------------------- S3 F4: reconciliation
+class Reads:
+    """A reconciliation reader answering `(drift rows, unknown holds)` in turn, or raising."""
+
+    def __init__(self, *answers) -> None:
+        self.answers = list(answers)
+
+    async def __call__(self) -> tuple[int, int]:
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+def gauges(registry: Registry) -> dict[str, float]:
+    """The reconciliation series of one scrape, by name (the process label dropped)."""
+    names = ("infrx_reconciliation_drift", "infrx_holds_unknown", "infrx_unsettleable_jobs",
+             "infrx_reconciliation_last_success_timestamp_seconds")
+    found = {name: value for (name, _), value in alerts.parse(registry.render()).items()
+             if name in names}
+    runs = {dict(labels)["result"]: value for (name, labels), value
+            in alerts.parse(registry.render()).items()
+            if name == "infrx_reconciliation_runs_total"}
+    return {**found, **{f"runs_{result}": value for result, value in runs.items()}}
+
+
+def test_w5_reconcile__each_reaper_tick_publishes_the_reconciliation_gauges():
+    """S3 F4: the worker's reaper tick is the periodic reconciliation pass, so it publishes
+    `infrx_reconciliation_drift`, `infrx_holds_unknown` and `infrx_unsettleable_jobs` (the
+    reaper's own unsettleable set) on the worker's /metrics - the series the
+    ReconciliationDrift/UnsettleableJobs alerts and the soak's `reconciled_at_end` read. A
+    failed read is counted and leaves the last pass standing; the reaper lives on."""
+    async def case():
+        world, registry = World(), Registry("worker")
+        engine = ScriptEngine()
+        service = WorkerService(
+            loop=WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
+                            worker_id="worker-w5", limits=world.limits),
+            jobs=world.jobs, engine=engine, metrics=registry, reap_interval_s=3600,
+            reconciliation=Reads((2, 1), RuntimeError("the database is gone"), (0, 0)))
+        world.jobs.unsettleable["00000000-0000-4000-8000-00000000dead"] = "journal full"
+        await service.reap_once()
+        first = gauges(registry)
+        await outcome(service.reap_once())
+        failed, errors_after = gauges(registry), service.reap_errors
+        await service.reap_once()
+        return first, failed, errors_after, gauges(registry)
+
+    first, failed, errors_after, healthy = run(case())
+    assert first == {"infrx_reconciliation_drift": 2, "infrx_holds_unknown": 1,
+                     "infrx_unsettleable_jobs": 1, "runs_drift": 1}, first
+    assert failed == first and errors_after == 1, (failed, errors_after)
+    assert (healthy.get("infrx_reconciliation_drift"), healthy.get("runs_ok")) == (0, 1), healthy
+    assert healthy.get("infrx_reconciliation_last_success_timestamp_seconds", 0) > 0
+
+
+def test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds():
+    """On PostgreSQL (the D harness, task w5): `PgReconciliation` reads 0003/0006's detector
+    views and the unknown-usage holds as the worker's `service_role` - zero drift on a
+    consistent database, one drift row once a wallet summary disagrees with its ledger."""
+    from tests.d import pgharness, pgstore
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"W5: the D harness is unavailable: {reason}")
+    from infrx.state.jobstore import connector
+    name = pgstore.fresh_database()
+    read = PgReconciliation(connector(pgharness.dsn(name)))
+    clean = run(read())
+    with pgharness.connect(name) as conn:
+        conn.execute("set session_replication_role = replica")      # past the summary guard
+        conn.execute("insert into infrx.wallets (org_id, ledger_total, reserved_total) "
+                     "values (gen_random_uuid(), 1, 0)")
+    drifted = run(read())
+    assert clean == (0, 0) and drifted == (1, 0), (clean, drifted)
