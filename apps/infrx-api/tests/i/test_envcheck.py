@@ -82,9 +82,10 @@ def test_deploy_failclosed__the_schema_id_moves_with_the_names_it_covers(monkeyp
 
 
 def _pre_line(name: str) -> str:
-    (line,) = [v for v in re.sub(r"\\\n\s*", " ", (DEPLOY / name).read_text()).splitlines()
-               if v.startswith("ExecStartPre=/bin/sh")]
-    return line.partition("=")[2]
+    lines = [v for v in re.sub(r"\\\n\s*", " ", (DEPLOY / name).read_text()).splitlines()
+             if v.startswith("ExecStartPre=/bin/sh")]
+    assert len(lines) == 1, f"{name} has no envcheck ExecStartPre (or more than one)"
+    return lines[0].partition("=")[2]
 
 
 @pytest.mark.parametrize("name", ["marlin2b-gateway.service", "infrx-worker.service"])
