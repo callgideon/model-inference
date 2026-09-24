@@ -112,19 +112,40 @@ def need_stack():
 
 # ------------------------------------------------------------------ fault points
 
-# point -> (module, class, method, before|after, only when the call returned something).
-# Each is a step of the real code path the brief names; the box process holds there.
+# point -> candidates (module, class, method, before|after, only when the call returned
+# something); the first that exists in the tree is held. Each is a step of the real code path
+# the brief names. F2C-L R110 folds the post-commit rechecks and attach into `admit_ready`, so
+# on a tree that has it `admission` holds after that one transaction and `readiness` (the
+# post-admission step) no longer exists (`has_point`): the race it holds open is gone.
 POINTS = {
-    "upload": ("infrx.media.uploads", "MediaUploads", "put_upload", "after", False),
-    "admission": ("infrx.state.jobstore", "PgJobStore", "admit_credit", "after", False),
-    "readiness": ("infrx.gateway.routes.relay", "Relay", "_admitted", "before", False),
-    "attachment": ("infrx.media.attachments", "PgAttachments", "put", "after", False),
-    "prep": ("infrx.state.jobstore", "PgJobStore", "prepared", "before", False),
-    "outbox": ("infrx.state.jobstore", "PgJobStore", "dispatch_pending", "after", True),
-    "claim": ("infrx.state.jobstore", "PgJobStore", "claim", "after", False),
-    "output": ("infrx.state.journal", "PgStreamStore", "append", "after", True),
-    "settle": ("infrx.state.jobstore", "PgJobStore", "complete_credit", "before", False),
+    "upload": (("infrx.media.uploads", "MediaUploads", "put_upload", "after", False),),
+    "admission": (("infrx.state.jobstore", "PgJobStore", "admit_ready", "after", False),
+                  ("infrx.state.jobstore", "PgJobStore", "admit_credit", "after", False)),
+    "readiness": (("infrx.gateway.routes.relay", "Relay", "_admitted", "before", False),),
+    "attachment": (("infrx.media.attachments", "PgAttachments", "put", "after", False),),
+    "prep": (("infrx.state.jobstore", "PgJobStore", "prepared", "before", False),),
+    "outbox": (("infrx.state.jobstore", "PgJobStore", "dispatch_pending", "after", True),),
+    "claim": (("infrx.state.jobstore", "PgJobStore", "claim", "after", False),),
+    "output": (("infrx.state.journal", "PgStreamStore", "append", "after", True),),
+    "settle": (("infrx.state.jobstore", "PgJobStore", "complete_credit", "before", False),),
 }
+
+
+def point_target(point: str):
+    """(owner class, candidate) of the first candidate this tree has, else None."""
+    for candidate in POINTS[point]:
+        module, cls, attr = candidate[:3]
+        try:
+            owner = getattr(importlib.import_module(module), cls)
+        except (ImportError, AttributeError):
+            continue
+        if callable(getattr(owner, attr, None)):
+            return owner, candidate
+    return None
+
+
+def has_point(point: str) -> bool:
+    return point_target(point) is not None
 
 
 def _summary(args) -> list:
@@ -139,18 +160,22 @@ def _summary(args) -> list:
 
 
 def install_barrier(point: str, marker: Path) -> None:
-    module, cls, attr, when, needs_result = POINTS[point]
-    owner = getattr(importlib.import_module(module), cls)
+    found = point_target(point)
+    if found is None:
+        raise BypassTargetMissing(f"fault point {point}: none of {POINTS[point]}")
+    owner, (_, _, attr, when, needs_result) = found
     original = getattr(owner, attr)
     fired: list[int] = []
 
     async def hold(args) -> None:
+        """Held until the test SIGKILLs the process, or releases it by deleting the marker."""
         fired.append(os.getpid())
         partial = marker.with_suffix(".part")
         partial.write_text(json.dumps({"point": point, "pid": os.getpid(),
                                        "jobs": _summary(args)}))
         partial.replace(marker)
-        await asyncio.Event().wait()             # until the test's SIGKILL
+        while marker.exists():
+            await asyncio.sleep(0.05)
 
     async def barrier(self, *args, **kw):
         if when == "before" and not fired:
@@ -294,17 +319,22 @@ class Box(pilotbox.PilotBox):
         return [sys.executable, str(Path(__file__).resolve()), role], ready
 
     def start(self, role: str, timeout: float = 60.0, **env: str) -> None:
+        """Start `role` (`bind_retried`), with `env` added for this start only."""
         base = self.env
         self.env = {**base, **env}
         (self.workdir / f"barrier-{role}.json").unlink(missing_ok=True)
         try:
-            super().start(role, timeout)
+            bind_retried(lambda: super(Box, self).start(role, timeout))
         finally:
             self.env = base
 
     def kill(self, role: str) -> int | None:
         """SIGKILL the process group THIS box started for `role` (never one found by name)."""
         return self.stop(role, signal.SIGKILL, timeout=10.0)
+
+    def release(self, role: str) -> None:
+        """Let a held process continue past its fault point."""
+        (self.workdir / f"barrier-{role}.json").unlink()
 
     def reached(self, role: str, timeout: float = 60.0) -> dict:
         """The fault point's marker, once the process holds there."""
@@ -335,6 +365,19 @@ def set_clock(database: str, seconds: float) -> None:
         conn.execute("select infrx_test.set_offset(%s)", (seconds,))
 
 
+def bind_retried(start, attempts: int = 10):
+    """`start()`, retried on a bind collision: the e3c block lies inside the kernel's
+    ephemeral range (E2's documented limit) and a just-stopped server's connections can hold
+    its port for a moment on this busy host."""
+    for attempt in range(attempts):
+        try:
+            return start()
+        except RuntimeError as failed:
+            if "address already in use" not in str(failed) or attempt == attempts - 1:
+                raise
+            time.sleep(2.0)
+
+
 @contextlib.contextmanager
 def composed(workdir: Path, *, start=("worker", "gateway"), **env: str):
     """E3B's journey stack with this lane's Box: two tenants on a fresh clone, PostgREST over
@@ -344,18 +387,22 @@ def composed(workdir: Path, *, start=("worker", "gateway"), **env: str):
     need_stack()
     world = stack.provision_two_tenants()
     engine = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
-    with stack.journey_postgrest(world.database) as rest, engine:
-        engine.control(prompt_tokens=pilotbox.ENGINE_PROMPT_TOKENS)
-        with psycopg.connect(harness.pg_dsn(world.database), autocommit=True) as conn:
-            conn.execute("select infrx_test.unfreeze(), infrx_test.set_offset(0)")
-        box = Box(stack.pilot_env(world.database, workdir, rest, **env), engine.base_url,
-                  workdir, stack.GATEWAY_PORT)
+    with stack.journey_postgrest(world.database) as rest:
+        bind_retried(engine.start)
         try:
-            for role in start:
-                box.start(role)
-            yield pilotbox.Journey(world, box, engine)
+            engine.control(prompt_tokens=pilotbox.ENGINE_PROMPT_TOKENS)
+            with psycopg.connect(harness.pg_dsn(world.database), autocommit=True) as conn:
+                conn.execute("select infrx_test.unfreeze(), infrx_test.set_offset(0)")
+            box = Box(stack.pilot_env(world.database, workdir, rest, **env), engine.base_url,
+                      workdir, stack.GATEWAY_PORT)
+            try:
+                for role in start:
+                    box.start(role)
+                yield pilotbox.Journey(world, box, engine)
+            finally:
+                box.close()
         finally:
-            box.close()
+            engine.stop()
 
 
 # ------------------------------------------------------------------ a scenario's reads and actions
@@ -408,15 +455,56 @@ def money(trip, request_id: str) -> dict:
                                  request_id)[0][0]}
 
 
+def durably_ready(trip, request_id: str) -> bool:
+    """Whether the store records the job as eligible to execute (F2C-L `ReadinessStore.
+    readiness`, D10's adapter). A tree with no readiness record has no durable eligibility
+    at all: False, so executing such a job is executing before eligibility (RV-05)."""
+    import asyncio as _asyncio
+
+    from infrx.state.jobstore import PgJobStore, connector
+    store = PgJobStore(connector(harness.pg_dsn(trip.world.database)))
+    if not callable(getattr(store, "readiness", None)):
+        return False
+    return _asyncio.run(store.readiness(request_id)) is not None
+
+
+def executed(trip, request_id: str) -> dict:
+    """What ran for the job: preparation claims, a stored prompt count, inference attempts,
+    debits."""
+    counted, = trip.one("select prepared_prompt_tokens is not null from infrx.jobs where "
+                        "request_id = %s", request_id)
+    return {"preparation": attempts(trip, request_id, "preparation"), "prepared": int(counted),
+            "inference": attempts(trip, request_id, "inference"),
+            "debits": len(money(trip, request_id)["debits"])}
+
+
 def attempts(trip, request_id: str, kind: str = "inference") -> int:
     return trip.db("select count(*) from infrx.attempts where job_id = %s and kind = %s",
                    request_id, kind)[0][0]
 
 
 def terminal(trip, request_id: str, timeout: float = 60.0) -> str:
-    return wait_for(lambda: next((state for _, state in trip.db(
-        "select request_id, state from infrx.jobs where request_id = %s", request_id)
-        if state in pilotbox.FINISHED), None), timeout, f"job {request_id} terminal")
+    try:
+        return wait_for(lambda: next((state for _, state in trip.db(
+            "select request_id, state from infrx.jobs where request_id = %s", request_id)
+            if state in pilotbox.FINISHED), None), timeout, f"job {request_id} terminal")
+    except AssertionError as late:
+        raise AssertionError(f"{late}; {diagnose(trip, request_id)}") from None
+
+
+def diagnose(trip, request_id: str) -> dict:
+    """The durable facts about a stuck job, for the failure message (ids and states only)."""
+    return {
+        "now": str(trip.one("select infrx.now()")[0]),
+        "job": trip.db("select state, attempts, published, settlement_state, outcome_cause, "
+                       "preparation_deadline_at::text, queue_deadline_at::text from infrx.jobs "
+                       "where request_id = %s", request_id),
+        "attempts": trip.db("select kind, generation, worker_id, expires_at::text, "
+                            "released_at is not null from infrx.attempts where job_id = %s "
+                            "order by kind, generation", request_id),
+        "outbox": trip.db("select kind, claimed_at is not null, acknowledged_at is not null "
+                          "from infrx.outbox where aggregate_id = %s order by created_at",
+                          request_id)}
 
 
 def settled_once(trip, request_id: str) -> None:

@@ -78,6 +78,9 @@ SCENARIOS = {
     "s11": {"title": "reconcile under active settlement / cancel / collector", "row": 9,
             "test_ids": ["CREDIT-CUTOVER", "RETENTION-DURABLE"], "lanes": ["D10", "G8", "M6"],
             "seam": None},
+    "s13": {"title": "discovery publishes only what admission serves (coordinator update 1)",
+            "row": None, "test_ids": ["CATALOG-TRUTH"], "lanes": ["F2C", "G7"],
+            "seam": "RV-01"},
     "s12": {"title": "the verdict itself: missing service BLOCKED, skip never PASS, broken "
                      "seam FAIL", "row": None, "test_ids": ["VERIFY-REPRO"], "lanes": ["E2C"],
             "seam": None},

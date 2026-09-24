@@ -4,7 +4,6 @@ over a passing scenario; and the matrix covers the brief. Collected by `pytest
 tests/integration` (layer 1) and by the runner (these are s12's cases)."""
 from __future__ import annotations
 
-import importlib
 import json
 import sys
 from pathlib import Path
@@ -98,9 +97,11 @@ def test_s12_scenario_modules_are_not_collected_by_the_default_suites():
 def test_s12_every_fault_point_and_bypass_names_code_that_exists():
     """A renamed seam must fail HERE, loudly, not turn a crash drill into a no-op."""
     import world
-    for point, (module, cls, attr, when, _) in world.POINTS.items():
-        assert when in ("before", "after")
-        assert callable(getattr(getattr(importlib.import_module(module), cls), attr)), point
+    for point, candidates in world.POINTS.items():
+        assert all(c[3] in ("before", "after") for c in candidates), point
+        # `readiness` may legitimately vanish (F2C-L R110: one-phase admission); every other
+        # step of the brief's crash list must exist in the tree
+        assert world.has_point(point) or point == "readiness", point
     assert set(world.BYPASSES) >= {"upload-local", "expiry-recompute", "revoke-ignored",
                                    "tenant-blind"}
 
