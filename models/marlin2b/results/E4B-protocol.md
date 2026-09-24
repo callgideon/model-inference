@@ -55,7 +55,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 
 | Cell | Driver | Passes when |
 |---|---|---|
-| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused |
+| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one bound, and a clip over it gets the typed refusal* |
 | `e4b.b.soak` | `bench.py` open loop at `soak.rate` for `soak.seconds`, the target's `/metrics` scraped every `soak.sample_s` | failure rate below `max_failure_rate`; growth (second half's maximum over the first half's, `decide.growth`) of `infrx_process_resident_bytes` ≤ `max_host_growth_mib` and of used GPU memory ≤ `max_gpu_growth_mib`; `infrx_reconciliation_drift` and `infrx_unsettleable_jobs` 0 at the end; latency p50 of the last third ≤ `soak_latency_drift` × the first third's |
 | `e4b.b.overload` | `bench.py --burst <burst>`: `burst` requests from one key at one instant | at least one accepted; at least one refused; **every** refusal is a 429 carrying a numeric `Retry-After` and one of `overload_codes`; no 5xx and no platform-caused failure |
 | `e4b.b.recovery` | I3B's `rc*`/`bk*` drills: local = the backend suite's `recovery/` cases on the E2 stack; box = I3B's runbook drills, executed by the coordinator from the E4B box protocol | every drill passes, or pends on a typed owner |
@@ -74,7 +74,7 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 | `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion) |
 | `max_gpu_growth_mib` | 256 | `decide.MAX_GPU_GROWTH_MIB` |
 | `soak_latency_drift` | 1.5 | E4B engineering criterion, provisional (P-18) |
-| `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72` |
+| `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |
 | `engine_ceiling_s` | 82 | `decide.ceiling_s(<encoder budget of the pinned flags>)`: 16,384 tokens today (W4 P-20 record) |
 | `overload_codes` | capacity_exhausted, journal_capacity_exhausted, rate_limited | `errors.RETRY_AFTER_CODES` minus `dependency_unavailable` (a dependency, not overload) |
 
@@ -192,13 +192,37 @@ run closed, and the coordinator's decision recorded in
   - Why: a torn stream is a client that left, so each job is a committed cancel (R21). The
     resume's replay of the same key answered that committed result, `state_conflict` (R91),
     and bench.py re-sent it as a failure every time.
-  - bench.py now records a replay whose stream answers `state_conflict` as
-    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code.
+  - bench.py now records a replay whose stream answered `state_conflict` as
+    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code, and
+    only a stream error event (`stream_error_event`) counts: the sync replay is a 409, which
+    is already terminal by its status.
   - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
-    exactly once. A passing drill states the property it proved: no second accepted item,
-    nothing re-sent after it was terminal, and each item the interruption cancelled
-    terminal after exactly one replay.
+    exactly once. A cancelled replay counts as cancelled by the interruption only when its
+    item's first attempt was the client's own tear (a transport error), or when the item has
+    no first-run row at all (in flight at the SIGINT, cut before bench wrote one). Any other - a
+    platform-side failure the relay cancelled - is listed as cancelled by the platform and
+    FAILs the drill (R106's corrected text). A passing drill states the property it proved:
+    no second accepted item, nothing re-sent after it was terminal, each item the
+    interruption cancelled terminal after exactly one replay, and none cancelled by the
+    platform.
   - On the ledger a cancel carries no usage. A cancelled job's hold that is still held
     (`held_unknown`, R21) is accounted in the reserved total, not failed.
   - The envelope's over-cap refusals appear in every rung (the rerun: 8 × `unsupported_media`
     at r = 0.5). They are the cap's by design and never lower the supported rate.
+  (e) The post-merge polish round, from the CERTIFY-TREE verifier's findings and box run2 at
+  `4226315` (out `20260924T172244Z`). None of the §5 numbers moved.
+  - Rewording in place: 5(d) was reworded on the same day, before main, to match R106's
+    corrected text (`9b3b851`). In (c), §4's envelope row and §5's `applied_cap_s` row are
+    marked superseded in place.
+  - Each bench run's timeout is its own schedule, requests over rate, plus 900 s. The soak
+    gets its seconds plus 900; a flat hour cut run2's 4 h soak at exit 124.
+  - A box rung sends its declared 120 requests, or the fewest more for which bench's
+    schedule holds 60 short clips (135 on today's corpus). The TTFT p95 was unknown at every
+    run2 rung, with 54, 52 and 40 samples.
+  - Capacity is checked before duration. An over-cap attempt refused 429 with an overload
+    code is not judged by the duration cap. Parity asks such a 429 once more after its
+    Retry-After.
+  - On a gateway, the soak reports a breach of the cap.
+  - Each latency row prints its p50 and accepted count beside the p95. run2's e2e p95 of
+    about 91 s per clip-minute against the provisional 45 s is a measurement, and the
+    criterion stands.

@@ -324,11 +324,19 @@ def test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_re
     assert sorted(asked) == sorted(Path(clips[clip]["file"]).name for clip in over)
     c051 = Path(clips["c051-tos720p-360p-16x9"]["file"]).name
     for answer in ({"http_status": 200, "code": None, "param": None},
-                   {"http_status": 400, "code": "invalid_request", "param": None}):
+                   {"http_status": 400, "code": "invalid_request", "param": None},
+                   # the relay's answer for an ADMITTED job that then failed preparation
+                   # (`_refusal`, cause invalid_media): admission let the clip through
+                   {"http_status": 400, "code": "unsupported_media", "param": None}):
         replies[c051] = answer
         entry = cell()
         assert (entry["status"], entry["detail"]["not refused as over the cap"]) == (
             certify.FAIL, ["c051-tos720p-360p-16x9"]), answer
+    replies[c051] = {"http_status": 429, "code": "capacity_exhausted", "param": None}
+    entry = cell()                 # refused for capacity even when asked again: never judged
+    assert (entry["status"], entry["detail"]["not refused as over the cap"],
+            entry["detail"]["capacity twice, unjudged"]) == (
+        certify.FAIL, [], ["c051-tos720p-360p-16x9"])
     replies.clear()
     candidate[0] = [row(clip, **budget) if clip == within[1] else r for clip, r in
                     zip(certify.parity.PARITY_SET, e0)]
@@ -355,15 +363,23 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         (200, {"choices": []}),
         (400, {"error": {"code": "unsupported_media"}}),
         (400, {"error": {"code": "certify_0123456789", "param": "messages"}}),
-        (400, {"error": "a sentence"})]
+        (400, {"error": "a sentence"}),
+        # N15: capacity first - asked once more after its Retry-After, then judged
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "3600"}),
+        (400, {"error": {"code": "unsupported_media", "param": "messages"}}),
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"}),
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"})]
 
     class Gateway(http.server.BaseHTTPRequestHandler):
         def do_POST(self):                                   # noqa: N802 - the stdlib's name
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             seen.append((self.path, self.headers["authorization"], body))
-            status, doc = replies.pop(0)
+            status, doc, *headers = replies.pop(0) if replies else (   # a guard, not a crash
+                418, {"error": {"code": "no_reply_left"}})
             data = json.dumps(doc).encode()
             self.send_response(status)
+            for name, value in (headers[0] if headers else {}).items():
+                self.send_header(name, value)
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -378,15 +394,21 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         video = tmp_path / "c051.mp4"
         video.write_bytes(b"\0\0\0\x18ftypmp42")
         target = {"base_url": f"http://127.0.0.1:{server.server_port}/v1", "model": "m@1"}
+        waits = []
+        monkeypatch.setattr(certify.time, "sleep", waits.append)
         answers = [certify.admission_answer(target, {"prompt": "Caption it."}, video)
-                   for _ in range(5)]
+                   for _ in range(7)]
+        monkeypatch.undo()
     finally:
         server.shutdown()
         server.server_close()
     assert answers == [certify.OVER_CAP, {"http_status": 200, "code": None, "param": None},
                        {"http_status": 400, "code": "unsupported_media", "param": None},
                        {"http_status": 400, "code": certify.bench.UNKNOWN, "param": "messages"},
-                       {"http_status": 400, "code": None, "param": None}]
+                       {"http_status": 400, "code": None, "param": None}, certify.OVER_CAP,
+                       {"http_status": 429, "code": "capacity_exhausted", "param": None}]
+    assert len(seen) == 9 and not replies                     # each 429 asked once more
+    assert waits == [60.0, 0.0]            # the header's wait, capped at 60 s ("3600", "0")
     path, auth, body = seen[0]
     assert (path, auth, body["model"]) == ("/v1/chat/completions",
                                            "Bearer sk-certify-0123456789", "m@1")
@@ -492,25 +514,46 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     """R106 (a cancelled job's replay is terminal for that key), from the box rerun at
     4226315: the SIGINT tore two items' streams - a client that left, so each job is a
     committed cancel (R21) - and the resume re-sent each once under its key, answered
-    `state_conflict` (R91). Each is terminal as cancelled by the interruption, and the
-    drill states the property it proved. A second replay, a replay left a failure or an
-    item accepted twice fails it. On the ledger a cancel carries no usage, and a cancelled
-    job's hold that is still held is accounted for, not failed."""
+    `state_conflict` (R91). Each is terminal as cancelled by the interruption - only when
+    its first attempt was the client's own tear; a replay cancelled after a platform-side
+    failure is listed apart and fails the drill - and the drill states the property it
+    proved. A second replay, a replay left a failure or an item accepted twice fails it.
+    On the ledger a cancel carries no usage, and a cancelled job's hold that is still held
+    is accounted for, not failed."""
     torn = dict(_row("i3", "failed"), error_class="ReadError")
     replay = dict(_row("i3", certify.bench.CANCELLED_REPLAY), error_code="state_conflict")
     first_run, second_run = [_row("i1"), _row("i2"), torn], [replay, _row("i4"), _row("i5")]
     drill = (lambda second: certify.resume_problems(first_run, second, items=5,
                                                     first_interrupted=True))
-    assert drill(second_run) == [] and certify.cancelled_by_interruption(
-        first_run + second_run) == ["i3"]
+    assert drill(second_run) == [] and certify.cancelled_replays(first_run, second_run) == (
+        ["i3"], [])
     proved = ("MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, and "
-              "1 item(s) cancelled by the interruption, each terminal after exactly one replay "
-              "of its key (R106)")
+              "1 item(s) cancelled by the interruption (the client's own tear), each terminal "
+              "after exactly one replay of its key; 0 cancelled by the platform (R106)")
     assert certify.sop_property(first_run, second_run) == proved
     assert drill([*second_run, replay]) == [
         "cancelled items not terminal after exactly one replay: ['i3']"]
     assert drill([dict(replay, outcome="failed"), *second_run[1:]]) == [
         "items not terminal after the resume: ['i3']"]            # the box rerun, before R106
+    # a platform-side failure the relay cancelled (a store or journal gap) replays exactly
+    # like a tear; it is listed apart, and fails the drill (R106's corrected text)
+    for kind in ("stream_error_event", "http_502"):
+        platform = [*first_run[:2], dict(torn, error_class=kind)]
+        assert certify.cancelled_replays(platform, second_run) == ([], ["i3"]), kind
+        assert certify.resume_problems(platform, second_run, items=5,
+                                       first_interrupted=True) == [
+            "items cancelled by the platform (their first attempt was not the client's tear): "
+            "['i3']"], kind
+        assert certify.sop_property(platform, second_run).endswith(
+            "0 item(s) cancelled by the interruption (the client's own tear), each terminal "
+            "after exactly one replay of its key; 1 cancelled by the platform (R106)"), kind
+    # verifier B1, box run2's 643711ed: an item in flight at the SIGINT has NO first-run
+    # row (bench's task is cancelled before it writes one); its key replayed, so it was
+    # sent, and the client's own exit cut it - the interruption's, and the drill passes
+    unrowed = dict(_row("i6", certify.bench.CANCELLED_REPLAY), error_code="state_conflict")
+    assert certify.cancelled_replays(first_run, [*second_run, unrowed]) == (["i3", "i6"], [])
+    assert certify.resume_problems(first_run, [*second_run, unrowed], items=6,
+                                   first_interrupted=True) == []
     jobs = ("job-i1", "job-i2", "job-i4", "job-i5")
     usage, released = [Usage(job, "0.50000000") for job in jobs], [Hold(job) for job in jobs]
     before, after = Balance(Decimal("10000"), Decimal("0")), Balance(Decimal("9998"), Decimal("1"))
@@ -524,8 +567,17 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     assert ledger(usage=[*usage, Usage("job-i3", "0.50000000")],
                   after=Balance(Decimal("9997.5"), Decimal("1"))) == [
         "Σ charged 2.00000000 != ledger fall 2.5"]                # a cancel carries no usage
+    # the allowance is the cancelled replays' holds only: a quarantined item (refused 400 at
+    # the rechecks, with its Inference-Id) whose hold leaked is not the interruption's
+    quarantined = _row("q1", "rejected", status=400, job="job-q1")
+    assert certify.reconcile_problems(
+        [*first_run, *second_run, quarantined], usage,
+        (*released, Hold("job-i3", state="held"), Hold("job-q1", state="held")), before,
+        Balance(Decimal("9998"), Decimal("2"))) == [
+        "reserved 0 -> 2 (1.00000000 held for the interruption's cancels)"]
+    written = list(first_run)
     monkeypatch.setattr(certify, "interrupted_run", lambda argv, raw, **_: (
-        raw.write_text("".join(json.dumps(r) + "\n" for r in first_run)),
+        raw.write_text("".join(json.dumps(r) + "\n" for r in written)),
         {"exit": 130, "signalled": True})[1])
     monkeypatch.setattr(certify, "client", lambda argv, env=None: (
         Path(argv[argv.index("--raw") + 1]).write_text(
@@ -539,7 +591,14 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
     certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
     entry = report.stages[-1]
     assert (entry["status"], entry["detail"]) == (certify.PASS, f"reconciled; {proved}")
-    assert entry["measured"]["cancelled_by_interruption"] == ["i3"]
+    assert (entry["measured"]["cancelled_by_interruption"],
+            entry["measured"]["cancelled_by_the_platform"]) == (["i3"], [])
+    written[-1] = dict(torn, error_class="stream_error_event")      # the platform's cancel
+    views = iter([(before, [], [])])
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
+    entry = report.stages[-1]
+    assert (entry["status"], entry["measured"]["cancelled_by_interruption"],
+            entry["measured"]["cancelled_by_the_platform"]) == (certify.FAIL, [], ["i3"])
 
 
 def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_reconciled(
@@ -619,11 +678,11 @@ def test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap(tmp_
     assert kept["clips"] == [c for c in manifest["clips"] if c["derived"]["duration_s"] <= 72]
     assert max(clip["derived"]["duration_s"] for clip in kept["clips"]) == 72.0
     assert kept["cache_root_default"] == str(certify.corpus_cache())
-    corpora, second = [], list(SECOND)
+    corpora, first, second = [], list(FIRST), list(SECOND)
 
     def interrupted(argv, raw, *, after, env, timeout_s):
         corpora.append(argv[argv.index("--corpus") + 1])
-        raw.write_text("".join(json.dumps(r) + "\n" for r in FIRST))
+        raw.write_text("".join(json.dumps(r) + "\n" for r in first))
         return {"exit": 130, "signalled": True}
 
     def fake_client(argv, env=None):
@@ -648,6 +707,13 @@ def test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap(tmp_
     assert (report.stages[-1]["status"], report.stages[-1]["detail"]) == (certify.FAIL, [
         "items within the runner's cap (82 s) refused as over MAX_VIDEO_SECONDS - the "
         "gateway's cap is another: ['i6']"])
+    # a first-run refusal is terminal and never re-sent: the first run is where it sits
+    second[:] = SECOND
+    first[1] = dict(_row("i2", "rejected", status=400), error_code=certify.OVER_CAP["code"])
+    certify.dataset_check(report, local, tmp_path, CAP)
+    assert (report.stages[-1]["status"], report.stages[-1]["detail"]) == (certify.FAIL, [
+        "items within the runner's cap (82 s) refused as over MAX_VIDEO_SECONDS - the "
+        "gateway's cap is another: ['i2']"])
 
 
 def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
@@ -684,12 +750,22 @@ def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
 
 def test_e4b_the_protocol_file_states_the_numbers_the_runner_applies():
     """E4B-protocol.md §5 is the predeclared source; `CRITERIA` and `MATRIX` must say the
-    same, row by row, so neither can move without the other."""
+    same, row by row, so neither can move without the other - in both directions: a §5
+    row the runner does not apply is one an amendment superseded, and says so in place."""
     text = certify.PROTOCOL.read_text()
     table = dict(re.findall(r"^\| `(\w+)` \| ([^|]+?) \|", text, re.M))
     for name, value in certify.CRITERIA.items():
         assert name in table, name
         assert float(table[name]) == float(value), (name, table[name], value)
+    section = text[text.index("## 5."):text.index("| Scale |")]
+    rows = {row[0]: row for row in re.findall(r"^\| `(\w+)` \| ([^|]+?) \| ([^|]+?) \|$",
+                                               section, re.M)}
+    superseded = {"applied_cap_s"}              # amendment 5(c): the deployed cap replaced it
+    assert set(rows) == set(certify.CRITERIA) | {"engine_ceiling_s", "overload_codes"} | superseded
+    assert not superseded & set(certify.CRITERIA)
+    assert all("Superseded by 5(c)" in rows[name][2] for name in superseded)
+    envelope = next(line for line in text.splitlines() if line.startswith("| `e4b.b.envelope`"))
+    assert "Superseded by 5(c)" in envelope
     assert table["engine_ceiling_s"] == str(certify.engine_ceiling_s(certify.serving_record()))
     shapes = {row[0]: row[1:] for row in re.findall(
         r"^\| `(tiny|box)`[^|]*\| ([^|]+) \| ([^|]+) \| (\d+)[^|]* \| ([^|]+) \|", text, re.M)}
@@ -926,14 +1002,26 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert certify.envelope_summary([(0.5, rung(capped))]) == (certify.PASS, (), 0.5)
     untyped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
     assert rung(untyped)[0] == ("duration_cap", "fail", {
-        "over_cap_not_refused": ["over"], "within_cap_refused": [], "cap_s": CAP}, "BOX")
+        "over_cap_not_refused": ["over"], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")
+    # N15, from box run2 at r = 2.0: admission checks capacity before the media's length, so
+    # an over-cap clip refused 429 for capacity is not judged; one admitted (200) still fails
+    busy_over = _attempt("over", "rejected", status=429, code="capacity_exhausted", retry=2)
+    assert rung([*capped, busy_over])[0] == ("duration_cap", "pass", {
+        "over_cap_not_refused": [], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": ["over"], "cap_s": CAP}, "BOX")
+    assert _verdict(rung([*ok, busy_over]), "duration_cap") == "unknown"
+    assert rung([*ok, busy_over, _attempt("over")])[0][1:3] == ("fail", {
+        "over_cap_not_refused": ["over"], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": ["over"], "cap_s": CAP})
     engine_failed = [*ok, _attempt("over", "failed", error="stream_error_event")]
     assert _verdict(rung(engine_failed), "duration_cap") == "fail"
     assert _verdict(rung(engine_failed), "failure_rate") == "pass"
     for within in ("long", "at"):                  # "at" is exactly the cap: within it
         refused = rung([*capped, _attempt(within, "rejected", **typed)])
         assert refused[0] == ("duration_cap", "fail", {
-            "over_cap_not_refused": [], "within_cap_refused": [within], "cap_s": CAP}, "BOX")
+            "over_cap_not_refused": [], "within_cap_refused": [within],
+            "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")
     band = [*capped, _attempt("band", "rejected", status=400)]      # 78 s: within 82 now
     assert _verdict(rung(band), "rejections") == "fail"
     assert _verdict(rung(ok), "duration_cap") == "unknown"
@@ -951,9 +1039,33 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert _verdict(rung(slow), "ttft_p95_short") == "fail"
     dragging = [_attempt("short", latency=8.0) for _ in range(60)]
     assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
+    # box run2's e2e p95 is a measurement the release decision quotes with its p50 and count
+    assert [row for row in rung(dragging) if row[0] == "e2e_p95_per_clip_minute"] == [(
+        "e2e_p95_per_clip_minute", "fail",
+        "p95 48.0, p50 48.0 over 60 accepted samples (needs 60)", "BOX")]
     few = rung(ok[:10])
     assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
         "unknown"
+
+
+def test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95():
+    """N14, from box run2: 120 requests over the full corpus held only 54/52/40 short clips
+    (the TTFT class: at most 30 s at no more than 720p), so the TTFT p95 was unknown at every
+    rung. A box rung sends its declared requests, or the fewest more for which bench's own
+    schedule (its shuffled cycle, this runner's seed) holds 60 short clips."""
+    assert certify.short_clip({"duration_s": 30.0, "width": 1280, "height": 720})
+    assert not certify.short_clip({"duration_s": 31.0, "width": 640, "height": 360})
+    assert not certify.short_clip({"duration_s": 10.0, "width": 1920, "height": 1080})
+    clips = certify.bench.load_corpus(str(certify.MARLIN / "corpus" / "manifest.json"),
+                                      "full")[0]
+
+    def shorts(n):
+        return sum(certify.short_clip(item["clip"]) for item in certify.bench.build_schedule(
+            n, clips, ["video_b64"], seed=certify.SEED))
+    declared, needed = certify.MATRIX["box"]["envelope"]["requests"], 60
+    sized = certify.rung_requests(declared, "full")
+    assert shorts(declared) < needed <= shorts(sized) and shorts(sized - 1) < needed, sized
+    assert certify.rung_requests(1000, "full") == 1000        # never fewer than declared
 
 
 def test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause():
@@ -1029,6 +1141,21 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     assert certify.summarise(blind) == (certify.PENDING, ("BOX",))
     assert _verdict(certify.soak_verdicts(rows[:17], flat, clips, CAP),
                     "latency_drift") == "unknown"
+    # the soak judges its failures within the cap and, on a gateway, reports a cap breach:
+    # an over-cap clip admitted (then failed) is the cap's defect, not a soak failure
+    admitted = [*rows, dict(_attempt("over", "failed", error="stream_error_event"), send_s=99)]
+    engine = certify.soak_verdicts(admitted, flat, clips, CAP)
+    assert [row[0] for row in engine] == [row[0] for row in certify.soak_verdicts(
+        rows, flat, clips, CAP)] and _verdict(engine, "failure_rate") == "pass"
+    gateway = certify.soak_verdicts(admitted, flat, clips, CAP, gateway=True)
+    assert _verdict(gateway, "failure_rate") == "pass" and [
+        row for row in gateway if row[0] == "duration_cap"] == [(
+        "duration_cap", "fail", {"over_cap_not_refused": ["over"], "within_cap_refused": [],
+                                 "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")]
+    typed = [*rows, _attempt("over", "rejected", status=certify.OVER_CAP["http_status"],
+                             code=certify.OVER_CAP["code"])]
+    assert "duration_cap" not in [row[0] for row in certify.soak_verdicts(
+        typed, flat, clips, CAP, gateway=True)]            # the envelope judges; never a pass
 
 
 def test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx():
@@ -1080,6 +1207,8 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         seen.append((name, float(argv[argv.index("--rate") + 1]),
                      int(argv[argv.index("--requests") + 1])))
         rows = [dict(_attempt("c039-bbb1080p30-1080-square"), send_s=i) for i in range(20)]
+        if name.startswith("soak"):                     # a 112 s clip the gateway admitted
+            rows.append(dict(_attempt("c012-bbb1080p30-1024x768-4x3"), send_s=20))
         if name.startswith("overload"):
             rows = [_attempt("c039-bbb1080p30-1080-square")] + [
                 _attempt("c039-bbb1080p30-1080-square", "rejected", status=429,
@@ -1116,7 +1245,42 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         "overload-raw.jsonl"]
     assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
     assert seen[-1][2] == box["overload"]["burst"]
+    assert {requests for name, _, requests in seen if name.startswith("envelope")} == {
+        certify.rung_requests(box["envelope"]["requests"], "full")}
     assert report.stages[-1]["status"] == certify.PASS
+    soak = report.stages[-2]
+    assert (soak["stage"], soak["status"]) == ("e4b.b.soak", certify.FAIL)
+    assert ["duration_cap", "fail"] in [list(row[:2]) for row in soak["detail"]["verdicts"]]
+
+
+def test_e4b_each_client_run_is_bounded_by_its_own_schedule_never_a_flat_hour(tmp_path,
+                                                                             monkeypatch):
+    """N12, from box run2: a flat hour killed the 4 h soak (exit 124). Every bench run gets
+    its requests over its rate plus the margin for the last requests to finish - the soak
+    at least its seconds; parity.py, with no schedule, keeps the hour."""
+    import argparse
+    bounds = {}
+    monkeypatch.setattr(certify.run, "shell", lambda argv, *, cwd, env, timeout: (
+        bounds.__setitem__(Path(argv[argv.index("--raw") + 1]).name if "--raw" in argv
+                           else "parity", timeout), {"exit": 0, "tail": ""})[1])
+    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    box = certify.remote_target(argparse.Namespace(target="http://gw/v1", engine_url="http://e",
+                                                   scale=None, box=True))
+    soak = certify.MATRIX["box"]["soak"]
+    rate = 0.25                                            # half a supported 0.5/s
+    certify.client(certify.bench_argv(box, tmp_path, "soak", rate=rate,
+                                      requests=round(rate * soak["seconds"]),
+                                      dataset_version="v"))
+    certify.client(certify.bench_argv(box, tmp_path, "envelope-r0.5", rate=0.5, requests=120,
+                                      dataset_version="v"))
+    certify.client(certify.bench_argv(box, tmp_path, "overload", rate=1000.0, requests=32,
+                                      dataset_version="v", extra=("--burst", "32")))
+    certify.client([sys.executable, "parity.py", "--engine", "http://e"])
+    assert bounds == {"soak-raw.jsonl": soak["seconds"] + certify.CLIENT_MARGIN_S,
+                      "envelope-r0.5-raw.jsonl": 240 + certify.CLIENT_MARGIN_S,
+                      "overload-raw.jsonl": 0.032 + certify.CLIENT_MARGIN_S,
+                      "parity": certify.CLIENT_TIMEOUT_S}
+    assert bounds["soak-raw.jsonl"] >= soak["seconds"] + 600          # bench's own timeout
 
 
 def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(

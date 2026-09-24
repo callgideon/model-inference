@@ -371,7 +371,8 @@ def refused_over_cap(row: dict) -> bool:
 
 def admission_answer(target: dict, clip: dict, path: Path) -> dict:
     """One clip sent to the gateway as bench.py sends it (inline, the release's model, the
-    client's key): the status and the error's code and param - allowlisted, nothing else."""
+    client's key): the status and the error's code and param - allowlisted, nothing else.
+    A 429 (capacity, checked before the media) is asked once more after its Retry-After."""
     body = {"model": target["model"], "max_tokens": 16,
             "messages": bench.messages_for({"form": "video_b64", "prompt": clip["prompt"]},
                                            bench.data_url(str(path)))}
@@ -380,18 +381,23 @@ def admission_answer(target: dict, clip: dict, path: Path) -> dict:
                                      json.dumps(body).encode(),
                                      {"content-type": "application/json",
                                       "authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(request, timeout=600) as answer:
-            return {"http_status": answer.status, "code": None, "param": None}
-    except urllib.error.HTTPError as refused:
+    for attempt in (1, 2):
         try:
-            error = json.loads(refused.read()).get("error")
-        except (ValueError, AttributeError):
-            error = None
-        error = error if isinstance(error, dict) else {}
-        return {"http_status": refused.code,
-                "code": bench.allow(error.get("code"), bench.CODE_OK, key),
-                "param": bench.allow(error.get("param"), bench.CODE_OK, key)}
+            with urllib.request.urlopen(request, timeout=600) as answer:
+                return {"http_status": answer.status, "code": None, "param": None}
+        except urllib.error.HTTPError as refused:
+            if refused.code == 429 and attempt == 1:
+                wait = bench.as_float(refused.headers.get("retry-after"))
+                time.sleep(min(max(1.0 if wait is None else wait, 0.0), 60.0))
+                continue
+            try:
+                error = json.loads(refused.read()).get("error")
+            except (ValueError, AttributeError):
+                error = None
+            error = error if isinstance(error, dict) else {}
+            return {"http_status": refused.code,
+                    "code": bench.allow(error.get("code"), bench.CODE_OK, key),
+                    "param": bench.allow(error.get("param"), bench.CODE_OK, key)}
 
 
 def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Path | None,
@@ -429,8 +435,12 @@ def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Pa
     verdict, why = decide.parity_verdict(within(decide.jsonl(candidate)),
                                          within(decide.jsonl(base)))
     status = {decide.PASS: PASS, decide.FAIL: FAIL}.get(verdict, PENDING)
-    wrong = sorted(clip for clip, answer in answers.items() if answer != OVER_CAP)
-    if wrong:
+    # a clip refused for capacity twice was never judged by the cap: listed apart, and the
+    # cell still FAILs - parity must observe the typed refusal itself
+    busy = sorted(clip for clip, answer in answers.items() if answer["http_status"] == 429)
+    wrong = sorted(clip for clip, answer in answers.items()
+                   if answer != OVER_CAP and answer["http_status"] != 429)
+    if wrong or busy:
         status = FAIL
     elif over and not gateway and status == PASS:
         status = PENDING                  # an engine target has no admission to refuse them
@@ -439,7 +449,8 @@ def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Pa
                   "expected refusal (over MAX_VIDEO_SECONDS)": {
                       clip: answers.get(clip, "unasked: an engine target has no admission")
                       for clip in over},
-                  "not refused as over the cap": wrong, "baseline": rel(base),
+                  "not refused as over the cap": wrong, "capacity twice, unjudged": busy,
+                  "baseline": rel(base),
                   "candidate": rel(candidate), "candidate_sha256": sha256_file(candidate)},
                  owners=("BOX",) if status == PENDING else (), label=label)
 
@@ -452,16 +463,36 @@ def corpus_cache() -> Path:
 
 # --- dataset resume: the client half ---------------------------------------------------
 
-def cancelled_by_interruption(rows: list[dict]) -> list[str]:
-    """R106: the items whose replay answered that the interruption cancelled their job."""
-    return sorted({row["item_key"] for row in rows if row.get("outcome") == bench.CANCELLED_REPLAY})
+def torn_by_the_client(row: dict) -> bool:
+    """A first-run attempt the client itself ended: a transport error, which bench records
+    by its exception type - never a server's answer (`http_NNN`) or a platform failure
+    (`stream_error_event` and the other platform classes)."""
+    kind = row.get("error_class") or ""
+    return bool(kind) and not kind.startswith("http_") and kind not in bench.PLATFORM_ERROR_CLASSES
+
+
+def cancelled_replays(first: list[dict], second: list[dict]) -> tuple[list[str], list[str]]:
+    """R106: the items whose replay answered that their job was cancelled, split by what
+    ended the item's first-run attempt - the client's own tear (cancelled by the
+    interruption) or anything else (cancelled by the platform, which fails the drill)."""
+    firsts = {row["item_key"]: row for row in first}
+    cancelled = sorted({row["item_key"] for row in first + second
+                        if row.get("outcome") == bench.CANCELLED_REPLAY})
+    # an item in flight at the SIGINT has no first-run row at all (bench's attempt() never
+    # reaches its write when the task is cancelled): its key replayed, so it was sent, and
+    # the client's own exit cut it - the interruption's tear (verifier B1, box run2's 643711ed)
+    torn = [item for item in cancelled if item not in firsts or torn_by_the_client(firsts[item])]
+    return torn, [item for item in cancelled if item not in torn]
 
 
 def sop_property(first: list[dict], second: list[dict]) -> str:
-    """The MARLIN-SOP property a drill with no client problem has proved."""
+    """The MARLIN-SOP property a drill with no client problem has proved, with the actual
+    counts (a FAIL that lists a platform cancel says so here too)."""
+    torn, platform = cancelled_replays(first, second)
     return (f"MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, "
-            f"and {len(cancelled_by_interruption(first + second))} item(s) cancelled by the "
-            f"interruption, each terminal after exactly one replay of its key (R106)")
+            f"and {len(torn)} item(s) cancelled by the interruption (the client's own tear), "
+            f"each terminal after exactly one replay of its key; {len(platform)} cancelled by "
+            f"the platform (R106)")
 
 
 def resume_problems(first: list[dict], second: list[dict], *, items: int,
@@ -469,7 +500,8 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
     """The client's side of MARLIN-SOP's resume (E1B L6): an interruption that happened,
     one key per item, nothing terminal re-sent, no item accepted twice, every item
     terminal at the end - an item the interruption cancelled after exactly one replay of
-    its key (R106: a cancelled job's replay is terminal for that key)."""
+    its key (R106: a cancelled job's replay is terminal for that key), and no item the
+    platform cancelled (a replay cancelled whose first attempt was not the client's tear)."""
     problems = []
     accepted = {row["item_key"] for row in first if row.get("outcome") == "accepted"}
     if not first_interrupted or not 0 < len(accepted) < items:
@@ -497,7 +529,11 @@ def resume_problems(first: list[dict], second: list[dict], *, items: int,
     if twice:
         problems.append(f"items accepted more than once: {twice}")
     replays = collections.Counter(row["item_key"] for row in second)
-    unreplayed = [item for item in cancelled_by_interruption(first + second) if replays[item] != 1]
+    torn, platform = cancelled_replays(first, second)
+    if platform:
+        problems.append(f"items cancelled by the platform (their first attempt was not the "
+                        f"client's tear): {platform}")
+    unreplayed = [item for item in torn + platform if replays[item] != 1]
     if unreplayed:
         problems.append(f"cancelled items not terminal after exactly one replay: {unreplayed}")
     return problems
@@ -588,9 +624,24 @@ def bench_argv(target: dict, workdir: Path, name: str, *, rate: float, requests:
     return argv + list(extra)
 
 
+# N12 (box run2): a flat hour cut the 4 h soak (exit 124). A bench run gets its own
+# schedule plus this margin: bench's per-request timeout (600 s) and the tail after the
+# last arrival. A client with no schedule (parity.py) keeps the hour.
+CLIENT_MARGIN_S = 900.0
+CLIENT_TIMEOUT_S = 3600.0
+
+
+def client_timeout_s(argv: list[str]) -> float:
+    """A bench run's bound: its requests over its open-loop rate, plus CLIENT_MARGIN_S."""
+    if "--rate" not in argv:
+        return CLIENT_TIMEOUT_S
+    rate, requests = float(argv[argv.index("--rate") + 1]), int(argv[argv.index("--requests") + 1])
+    return requests / rate + CLIENT_MARGIN_S
+
+
 def client(argv: list[str], env: dict | None = None) -> dict:
     """One client process (bench.py, parity.py) from the repository root, run.py's way."""
-    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=3600.0)
+    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=client_timeout_s(argv))
 
 
 def bench_env(target: dict) -> dict:
@@ -674,7 +725,8 @@ def dataset_check(report: Report, target: dict, workdir: Path, cap_s: float, led
                            "replayed": sum(bool(r.get("idempotency_replayed"))
                                            for r in rows_second)},
                 "client_problems": problems or None,
-                "cancelled_by_interruption": cancelled_by_interruption(rows_first + rows_second),
+                "cancelled_by_interruption": cancelled_replays(rows_first, rows_second)[0],
+                "cancelled_by_the_platform": cancelled_replays(rows_first, rows_second)[1],
                 "sop": sop_property(rows_first, rows_second)}
     if problems:
         report.check("e4b.a.dataset-resume", FAIL, problems, measured=measured,
@@ -988,32 +1040,63 @@ def answered(rows: list[dict]) -> tuple:
     return ("answered", decide.PASS if accepted else decide.FAIL, f"{accepted} accepted", "BOX")
 
 
+def short_clip(clip: dict) -> bool:
+    """01 §2.3's TTFT class: a clip of at most 30 s at no more than 720p (the long edge)."""
+    return (clip.get("duration_s", 0.0) <= CRITERIA["short_clip_max_s"]
+            and max(clip.get("width", 0), clip.get("height", 0))
+            <= CRITERIA["short_clip_max_edge_px"])
+
+
+def rung_requests(declared: int, subset: str) -> int:
+    """N14 (box run2: 54/52/40 short-clip samples of 120): a rung sends its declared
+    requests, or more until bench's own schedule - its shuffled cycle through the subset,
+    this runner's seed - holds `p95_min_accepted` short clips, so its TTFT p95 can be judged
+    at all. A subset with no short clip keeps the declared count."""
+    clips = bench.load_corpus(str(MARLIN / "corpus" / "manifest.json"), subset)[0]
+    if not any(map(short_clip, clips)):
+        return declared
+    n = declared
+    while sum(short_clip(item["clip"]) for item in bench.build_schedule(
+            n, clips, ["video_b64"], seed=SEED)) < CRITERIA["p95_min_accepted"]:
+        n += 1
+    return n
+
+
+def overloaded(row: dict) -> bool:
+    """Refused for capacity - a 429 with an overload code. Admission checks capacity before
+    the media's length (the cheap refusal first), so such an answer says nothing of the cap."""
+    return row.get("http_status") == 429 and row.get("error_code") in OVERLOAD_CODES
+
+
+def cap_verdict(rows: list[dict], counted: list[dict], cap_s: float) -> tuple:
+    """The duration cap at admission (P-20): every attempt over the cap got the typed
+    refusal - one refused for capacity first is not judged (N15) - and none within it did;
+    nothing judged over the cap judges nothing."""
+    over = [r for r in rows if r not in counted]
+    judged_over = [r for r in over if not overloaded(r)]
+    admitted = sorted({r["clip_id"] for r in judged_over if not refused_over_cap(r)})
+    refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
+    verdict = decide.FAIL if admitted or refused else (decide.PASS if judged_over else UNKNOWN)
+    return ("duration_cap", verdict, {
+        "over_cap_not_refused": admitted, "within_cap_refused": refused,
+        "over_cap_refused_for_capacity": sorted({r["clip_id"] for r in over if overloaded(r)}),
+        "cap_s": cap_s}, "BOX")
+
+
 def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float) -> list[tuple]:
     """Protocol §4 envelope criteria for one rate. Attempts on clips over the deployed cap
     are the cap's: each must get the typed over-cap refusal at admission, and they are no
     one's failures; a clip within the cap is never refused as over it."""
     counted = judged(rows, clips, cap_s)
-    over = [r for r in rows if r not in counted]
-    out = []
-    if not gateway:
-        out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "BOX"))
-    else:
-        admitted = sorted({r["clip_id"] for r in over if not refused_over_cap(r)})
-        refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
-        verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
-        out.append(("duration_cap", verdict, {"over_cap_not_refused": admitted,
-                                              "within_cap_refused": refused,
-                                              "cap_s": cap_s}, "BOX"))
+    out = [cap_verdict(rows, counted, cap_s) if gateway else
+           ("duration_cap", UNKNOWN, "an engine target has no admission", "BOX")]
     out += [failures(counted), answered(counted)]
     refusals = [r for r in counted if r.get("outcome") == "rejected"]
     out.append(("rejections", decide.FAIL if refusals else decide.PASS,
                 f"{len(refusals)} refused within the cap", "BOX"))
     accepted = [r for r in counted if r.get("outcome") == "accepted"]
     short = [r["ttft_s"] for r in accepted if r.get("ttft_s") is not None
-             and _duration(r, clips) <= CRITERIA["short_clip_max_s"]
-             and max(clips.get(r.get("clip_id"), {}).get("width", 0),
-                     clips.get(r.get("clip_id"), {}).get("height", 0))
-             <= CRITERIA["short_clip_max_edge_px"]]
+             and short_clip(clips.get(r.get("clip_id"), {}))]
     per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
                   if r.get("latency_s") is not None and _duration(r, clips) > 0]
     for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
@@ -1022,7 +1105,8 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float)
         tail = decide.p95(values)
         out.append((name, UNKNOWN if tail is None else
                     decide.PASS if tail <= limit else decide.FAIL,
-                    f"p95 {tail} over {len(values)} samples (needs {decide.P95_MIN_ACCEPTED})",
+                    f"p95 {tail}, p50 {round(statistics.median(values), 3) if values else None} "
+                    f"over {len(values)} accepted samples (needs {decide.P95_MIN_ACCEPTED})",
                     "BOX"))
     return out
 
@@ -1045,11 +1129,16 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
 
 
 def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict,
-                  cap_s: float) -> list[tuple]:
+                  cap_s: float, gateway: bool = False) -> list[tuple]:
     """Protocol §4 soak criteria: failures, memory growth from /metrics, the reconciler's
-    drift at the end, and the latency of the last third against the first."""
+    drift at the end, and the latency of the last third against the first - over the clips
+    within the cap. The envelope judges the cap; on a gateway the soak reports its breach
+    (an over-cap clip admitted, or a within-cap clip refused as over it), never a pass."""
     counted = judged(rows, clips, cap_s)
     out = [failures(counted), answered(counted)]
+    cap = cap_verdict(rows, counted, cap_s)
+    if gateway and cap[1] == decide.FAIL:
+        out.append(cap)
     for name, key, limit in (("host_growth_mib", "rss_mib", CRITERIA["max_host_growth_mib"]),
                              ("gpu_growth_mib", "gpu_used_mib", CRITERIA["max_gpu_growth_mib"])):
         grew = decide.growth([sample.get(key) for sample in samples])
@@ -1137,10 +1226,12 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
     version = f"e4b-{(report.head.get('sha') or 'nosha')[:7]}-" \
               f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     rungs, runs = [], {}
+    # the box rungs carry the p95s; the tiny scale's latency rows are unknown by design (§5)
+    requests = rung_requests(shape["envelope"]["requests"], "full") if target["scale"] == "box" \
+        else shape["envelope"]["requests"]
     for rate in shape["envelope"]["rates"]:
         name = f"envelope-r{rate}"
-        runs[name] = client(bench_argv(target, workdir, name, rate=rate,
-                                       requests=shape["envelope"]["requests"],
+        runs[name] = client(bench_argv(target, workdir, name, rate=rate, requests=requests,
                                        dataset_version=f"{version}-{name}"), env)["exit"]
         rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
                                           gateway=gateway, cap_s=cap_s)
@@ -1161,8 +1252,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                        requests=max(1, round(rate * soak["seconds"])),
                        dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
         verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips,
-                                 cap_s) + [
-            client_exit(done["exit"])]
+                                 cap_s, gateway) + [client_exit(done["exit"])]
         status, owners = summarise(verdicts)
         report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
                                             "client_exit": done["exit"], "verdicts": verdicts,

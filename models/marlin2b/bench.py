@@ -73,10 +73,11 @@ REJECT_STATUS = {400, 401, 402, 403, 404, 409, 410, 413, 415, 422, 429}
 # them unchanged is pointless. 402 and 429 are explicitly resumable (fund, or back off).
 TERMINAL_REJECT_STATUS = {400, 401, 403, 404, 409, 410, 413, 415, 422}
 # R106, a cancelled job's replay is terminal for that key: a replay (the gateway's
-# Idempotency-Replayed) whose stream answers `state_conflict` is a job the interruption
-# cancelled - a client that left is a committed cancel (R21), and a replay answers the
-# committed result (R91). Re-issuing the item takes a new key. Only the allowlisted code is
-# read, never the text; a fresh request's `state_conflict` stays a failure.
+# Idempotency-Replayed) whose stream answered `state_conflict` is a job the client's
+# interruption cancelled - a client that left is a committed cancel (R21), and a replay
+# answers the committed result (R91). Re-issuing the item takes a new key. Only the
+# allowlisted code is read, never the text. A fresh request's `state_conflict`, and any
+# non-stream answer, stay what they were: the sync replay is a 409, terminal by its status.
 CANCELLED_REPLAY = "cancelled_by_interruption"
 MIN_TAIL = 3            # a reported quantile needs this many samples strictly beyond it
 PCTS = (50, 90, 95, 99)
@@ -889,8 +890,8 @@ async def attempt(client, cfg, item, t0, attempt_no):
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
         row["end_s"] = row["end_s"] or now()
-    if (row["outcome"], row["error_code"], row["idempotency_replayed"]) == (
-            "failed", "state_conflict", True):
+    if (row["outcome"], row["error_class"], row["error_code"], row["idempotency_replayed"]) == (
+            "failed", "stream_error_event", "state_conflict", True):
         row["outcome"] = CANCELLED_REPLAY
     ttft = None if row["first_token_s"] is None or row["send_s"] is None else \
         round(row["first_token_s"] - row["send_s"], 6)
@@ -1312,6 +1313,7 @@ def summarize(rows, wall, cfg):
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
         "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
                          "failed_excluded": len(failed), "cancelled_excluded": len(cancelled),
+                         "cancelled_replay_excluded": len(cancelled_replays),
                          "scheduled": len(finals),
                          "skipped_terminal_on_resume": cfg.get("skipped_terminal", 0),
                          "attempts": len(rows),

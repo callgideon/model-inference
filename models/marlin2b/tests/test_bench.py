@@ -377,7 +377,7 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
                                            "failed_excluded": 2, "cancelled_excluded": 0,
-                                           "scheduled": 8, "skipped_terminal_on_resume": 0,
+                                           "cancelled_replay_excluded": 0, "scheduled": 8, "skipped_terminal_on_resume": 0,
                                            "attempts": 8, "rejected_attempts": 2,
                                            "failed_attempts": 2, "cancelled_attempts": 0,
                                            # the 500 and the 503 are attributable; a
@@ -548,9 +548,10 @@ def test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interr
     """R106, a cancelled job's replay is terminal for that key (the E4B box rerun at
     4226315). The interruption tore item 1's answer: a client that left, so its job is a
     committed cancel (R21). The resume's replay of the same key answers that committed
-    result as a `state_conflict` stream event (R91). Only that shape - a replay, that code -
-    is CANCELLED_REPLAY, and it is terminal. A fresh request's `state_conflict`, or a
-    replay's other error, stays a failure that a resume re-sends."""
+    result as a `state_conflict` stream event (R91). Only that shape - a replay, a stream
+    event, that code - is CANCELLED_REPLAY, and it is terminal. A fresh request's
+    `state_conflict`, a replay's other error, or a non-stream answer carrying the code stays
+    a failure that a resume re-sends (the sync replay is a 409: terminal by its status)."""
     with tempfile.TemporaryDirectory() as tmp:
         clips = make_clips(3, tmp)
         with_clips(clips)
@@ -576,6 +577,11 @@ def test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interr
         assert bench.is_terminal(row) and not bench.is_terminal(torn)
         assert (resumed[bench.CANCELLED_REPLAY], resumed["failed"], resumed["accepted"]) == (
             1, 0, 0)
+        for run in (summary, resumed):                 # every scheduled item in one bucket
+            buckets = run["denominators"]
+            assert sum(buckets.get(name, 0) for name in (
+                "latency_samples", "rejected_excluded", "failed_excluded", "cancelled_excluded",
+                "cancelled_replay_excluded")) == buckets["scheduled"], buckets
         assert len(gw.accepted_keys) == 3, "the replay created no second accepted item"
         gw.stream_error = {**conflict, "code": "internal_error"}
         _, (other,), _, _ = resume(3)
@@ -585,6 +591,14 @@ def test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interr
                                   env={"MARLIN_API_KEY": KEY})
         assert [(r["outcome"], r["error_code"]) for r in rows] == [("failed", "state_conflict")] * 2
         assert not any(bench.is_terminal(r) for r in rows)
+        answer = httpx.Response(500, headers={"idempotency-replayed": "true"},
+                                json={"error": {"code": "state_conflict"}})
+        _, rows, _, _ = run_bench(base_argv(tmp, requests=1, concurrency=1),
+                                  FakeGateway(chat_override=lambda request: answer),
+                                  env={"MARLIN_API_KEY": KEY})
+        assert [(r["outcome"], r["error_class"], r["error_code"], r["idempotency_replayed"])
+                for r in rows] == [("failed", "http_500", "state_conflict", True)]
+        assert not bench.is_terminal(rows[0])
 
 
 def test_a_resumed_upload_item_reuses_its_handle_instead_of_conflicting():
