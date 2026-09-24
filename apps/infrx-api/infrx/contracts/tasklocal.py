@@ -36,6 +36,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     # E3B phase 3 IR3F-2(b): the gate's `make api-test` runs the D suites while the e3b2 stack
     # holds 56732, so they get a D task of their own outside the block (containers infrx-e3b2d-*)
     "e3b2d": {"postgres": 55438, "valkey": 55468},
+    # E4B certifies on the E2 stack as namespace `e4b` (56800-56899, E4B request 1)
+    "e4b": {"postgres": 56832},
 }
 
 # A task's own block of a track service, replacing the track's (host port, extra ports).
@@ -44,6 +46,7 @@ TASK_PORTS: dict[str, dict[str, int]] = {
 # inside the block (the port the harness derives), which `all_host_ports` allows.
 TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "e3b2": {"compose": (56700, tuple(range(56701, 56800)))},
+    "e4b": {"compose": (56800, tuple(range(56801, 56900)))},
 }
 
 # track -> {service: (host port, extra ports)}
