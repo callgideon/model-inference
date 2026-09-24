@@ -33,6 +33,10 @@ suite against the real service means integrated.
 | `fixtures/v1/` | Serialized fixtures, byte-stable through their models (`fixtures.names()` is the list, and `test_fixtures.py` fails on any file nobody claims); `money_cases.json` and `error_codes.json` are the cross-language parity tables |
 | `fakes/` | In-memory adapters with the real durable semantics, plus clock/ids/failure injection |
 | `conformance/` | Importable suites `run_<port>_conformance(factory)` |
+| `v2/lifecycle.py` | F2C: upload tickets, execution readiness, content lifecycle and the result read classification - records, the refusal vocabulary and the `UploadRepository`/`ReadinessStore`/`ContentLifecycle` ports (research/plan/02 §F2C) |
+| `fakes/lifecycle.py` | F2C: the reference adapter of those three ports (`reopen()` = another process over the same durable state) |
+| `conformance/lifecycle.py` | F2C: the exported cases (UPLOAD-RESTART, ADMISSION-READY, RETENTION-DURABLE, RESULT-EXPIRY), `V2_SUITES["lifecycle"]` |
+| `conformance/acceptance.py`, `fixtures/acceptance/` | F2C: the versioned transcript of what every process observed in those cases; `replay(factory) == []` accepts an adapter |
 
 ## Encoding decisions
 
