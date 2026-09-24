@@ -164,3 +164,25 @@ run closed, and the coordinator's decision recorded in
   (box: `http://127.0.0.1:8002/metrics`, the worker's `infrx_build_info{process="worker"}`
   since I2B-R4). `e4b.b.served-build` FAILs unless the gateway's and the worker's revisions
   are each the report's tree, each read from a page whose `process` label is that process's.
+  (c) The deployed duration cap, from the same box run: its sop-parity cell failed with
+  "refused by the candidate". W4's E0 baseline and the release engine both refuse the parity
+  set's 112 s and 120 s clips (16,384-token encoder budget), and the pilot's admission
+  refuses every clip over `MAX_VIDEO_SECONDS=82` (P-20 decision B).
+  - The runner reads the cap once, from the environment the box step passes (`--env-file`),
+    with the gateway's own parser; unset, the tree's default (120). It records the cap in the
+    report's `target.max_video_seconds` and the config pin's `deployed_max_video_seconds`.
+    The cap replaces §5's interim `applied_cap_s` (72) everywhere; §5's other numbers do not
+    move.
+  - The typed over-cap refusal is the M layer's (`MediaProfile.check`): HTTP 400,
+    `unsupported_media`, param `messages`. On bench.py's rows it is the status and the code,
+    because bench's allowlist does not keep the param.
+  - `e4b.a.sop-parity` pairs only the parity clips within the cap. It sends each clip over
+    the cap to the gateway, as bench.py would, and that clip must get the typed refusal. A
+    within-cap refusal or an over-cap acceptance FAILs. An engine target has no admission,
+    so its over-cap clips pend on `BOX`.
+  - The envelope's `duration_cap` counts a clip over the cap as passing only when it gets the
+    typed refusal, and it FAILs a within-cap clip refused as over the cap. A clip at the cap
+    is within it. Failures, soak and overload are judged over the clips within the cap.
+  - `e4b.a.dataset-resume` schedules only clips within the cap, from a copy of the licensed
+    manifest in the workdir that the first run and the resume both read. An item refused as
+    over the cap anyway FAILs the drill: the gateway's cap is then not the runner's.

@@ -49,6 +49,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -100,8 +101,12 @@ CRITERIA = {
     "max_host_growth_mib": decide.MAX_HOST_GROWTH_MIB,
     "max_gpu_growth_mib": decide.MAX_GPU_GROWTH_MIB,
     "soak_latency_drift": 1.5,
-    "applied_cap_s": 72,
 }
+# P-20: the deployed cap (`deployed_cap_s`) replaces §5's interim `applied_cap_s` (72;
+# amendment 5(c)). A clip over it must get the M layer's typed refusal - `MediaProfile.check` raises
+# `UnsupportedMedia(param="messages")`, a 400 (test_certify ties the two). bench.py records
+# the status and the code; its allowlist does not keep the param.
+OVER_CAP = {"http_status": 400, "code": "unsupported_media", "param": "messages"}
 # Refusals that are overload and carry retry guidance: `errors.RETRY_AFTER_CODES` minus the
 # one about a dependency (protocol §5).
 OVERLOAD_CODES = ("capacity_exhausted", "journal_capacity_exhausted", "rate_limited")
@@ -350,10 +355,52 @@ def suite_check(report: Report, check_id: str, cases: dict, gate: list[dict],
     report.check(check_id, status, counts, owners=cases["pending"] if status == PENDING else ())
 
 
+def deployed_cap_s() -> float:
+    """The deployed MAX_VIDEO_SECONDS: the gateway's environment (the box step's --env-file),
+    parsed by the gateway's own `pilot_from_env`; unset, the tree's default."""
+    from infrx.config import pilot_from_env
+    return pilot_from_env().max_video_seconds
+
+
+def refused_over_cap(row: dict) -> bool:
+    """A bench attempt answered with the typed over-cap refusal (status and code)."""
+    return (row.get("outcome"), row.get("http_status"), row.get("error_code")) == (
+        "rejected", OVER_CAP["http_status"], OVER_CAP["code"])
+
+
+def admission_answer(target: dict, clip: dict, path: Path) -> dict:
+    """One clip sent to the gateway as bench.py sends it (inline, the release's model, the
+    client's key): the status and the error's code and param - allowlisted, nothing else."""
+    body = {"model": target["model"], "max_tokens": 16,
+            "messages": bench.messages_for({"form": "video_b64", "prompt": clip["prompt"]},
+                                           bench.data_url(str(path)))}
+    key = bench.api_key()
+    request = urllib.request.Request(f"{target['base_url']}/chat/completions",
+                                     json.dumps(body).encode(),
+                                     {"content-type": "application/json",
+                                      "authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(request, timeout=600) as answer:
+            return {"http_status": answer.status, "code": None, "param": None}
+    except urllib.error.HTTPError as refused:
+        try:
+            error = json.loads(refused.read()).get("error")
+        except (ValueError, AttributeError):
+            error = None
+        error = error if isinstance(error, dict) else {}
+        return {"http_status": refused.code,
+                "code": bench.allow(error.get("code"), bench.CODE_OK, key),
+                "param": bench.allow(error.get("param"), bench.CODE_OK, key)}
+
+
 def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Path | None,
-                 label: str, local: bool) -> None:
-    """MARLIN-SOP: parity.py at c = 1 over W4's parity set, paired on the clips' bytes."""
-    cache = corpus_cache()
+                 label: str, local: bool, cap_s: float, gateway: dict | None = None) -> None:
+    """MARLIN-SOP: parity.py at c = 1 over W4's parity set, paired on the clips' bytes - the
+    clips within the deployed cap. A clip over it never reaches the engine through the
+    product: it is an expected refusal, asked of the gateway (`gateway`: the target, when it
+    has admission) and judged as the M layer's typed refusal; an engine target pends it."""
+    cache, clips = corpus_cache(), parity.clips()
+    over = sorted(clip for clip in parity.PARITY_SET if clips[clip]["duration_s"] > cap_s)
 
     def parity_run(name: str) -> Path:
         out = workdir / f"parity-{name}.jsonl"
@@ -372,13 +419,26 @@ def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Pa
     try:
         base = baseline or parity_run("baseline")
         candidate = parity_run("candidate")
+        answers = {clip: admission_answer(gateway, clips[clip], cache / clips[clip]["file"])
+                   for clip in over} if gateway else {}
     except (RuntimeError, OSError) as failed:
         report.check("e4b.a.sop-parity", FAIL, str(failed), label=label)
         return
-    verdict, why = decide.parity_verdict(decide.jsonl(candidate), decide.jsonl(base))
+    within = (lambda rows: [row for row in rows if row["clip_id"] not in over])
+    verdict, why = decide.parity_verdict(within(decide.jsonl(candidate)),
+                                         within(decide.jsonl(base)))
     status = {decide.PASS: PASS, decide.FAIL: FAIL}.get(verdict, PENDING)
+    wrong = sorted(clip for clip, answer in answers.items() if answer != OVER_CAP)
+    if wrong:
+        status = FAIL
+    elif over and not gateway and status == PASS:
+        status = PENDING                  # an engine target has no admission to refuse them
     report.check("e4b.a.sop-parity", status,
-                 {"verdict": verdict, "why": why, "baseline": rel(base),
+                 {"verdict": verdict, "why": why, "cap_s": cap_s,
+                  "expected refusal (over MAX_VIDEO_SECONDS)": {
+                      clip: answers.get(clip, "unasked: an engine target has no admission")
+                      for clip in over},
+                  "not refused as over the cap": wrong, "baseline": rel(base),
                   "candidate": rel(candidate), "candidate_sha256": sha256_file(candidate)},
                  owners=("BOX",) if status == PENDING else (), label=label)
 
@@ -479,11 +539,12 @@ def tenant_ledger():
 # --- the bench client ------------------------------------------------------------------
 
 def bench_argv(target: dict, workdir: Path, name: str, *, rate: float, requests: int,
-               dataset_version: str, extra: tuple[str, ...] = ()) -> list[str]:
+               dataset_version: str, extra: tuple[str, ...] = (),
+               corpus: Path = MARLIN / "corpus" / "manifest.json") -> list[str]:
     """E1B's client, as the protocol shapes it: licensed corpus, frozen seed, output mix,
     no retries (a retry may not hide a refusal), inline media. Outputs in `workdir` only."""
     argv = [sys.executable, str(MARLIN / "bench.py"),
-            "--corpus", str(MARLIN / "corpus" / "manifest.json"),
+            "--corpus", str(corpus),
             "--subset", "full" if target["scale"] == "box" else "fast",
             "--base-url", target["base_url"], "--target", target["bench_target"],
             "--rate", str(rate), "--requests", str(requests), "--seed", str(SEED),
@@ -532,33 +593,49 @@ def interrupted_run(argv: list[str], raw: Path, *, after: int, env: dict,
     return {"exit": process.returncode, "signalled": signalled}
 
 
+def within_cap_corpus(workdir: Path, cap_s: float) -> Path:
+    """The licensed corpus less the clips the deployed cap refuses, cached where the corpus
+    is: the dataset drill schedules only items the gateway may accept."""
+    data = json.loads((MARLIN / "corpus" / "manifest.json").read_text())
+    data["clips"] = [clip for clip in data["clips"] if clip["derived"]["duration_s"] <= cap_s]
+    data["cache_root_default"] = str(corpus_cache())
+    path = workdir / "corpus-within-cap.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
 SETTLE_WAIT_S = 300.0      # a debit may land after the answer: the ledger is re-read until then
 
 
-def dataset_check(report: Report, target: dict, workdir: Path, ledger=None,
+def dataset_check(report: Report, target: dict, workdir: Path, cap_s: float, ledger=None,
                   settle_wait_s: float = SETTLE_WAIT_S) -> None:
-    """E4B.a's large-dataset recipe: interruption, resume, and (on a metered target) the
-    tenant's ledger reconciled item by item."""
+    """E4B.a's large-dataset recipe over the clips within the deployed cap: interruption,
+    resume, and (on a metered target) the tenant's ledger reconciled item by item."""
     shape = MATRIX[target["scale"]]["dataset"]
-    env = bench_env(target)
+    env, corpus = bench_env(target), within_cap_corpus(workdir, cap_s)
     version = f"e4b-{(report.head.get('sha') or 'nosha')[:7]}-" \
               f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     ledger = ledger if ledger is not None else (tenant_ledger() if target["metered"] else None)
     before = ledger()[0] if ledger else None
     argv = bench_argv(target, workdir, "dataset", rate=shape["rate"],
-                      requests=shape["items"], dataset_version=version)
+                      requests=shape["items"], dataset_version=version, corpus=corpus)
     first = interrupted_run(argv, workdir / "dataset-raw.jsonl",
                             after=shape["interrupt_after"], env=env, timeout_s=1800.0)
     resumed = client(bench_argv(target, workdir, "dataset-resume", rate=shape["rate"],
                                 requests=shape["items"], dataset_version=version,
-                                extra=("--resume", str(workdir / "dataset-raw.jsonl"))), env)
+                                extra=("--resume", str(workdir / "dataset-raw.jsonl")),
+                                corpus=corpus), env)
     rows_first = raw_rows(workdir / "dataset-raw.jsonl")
     rows_second = raw_rows(workdir / "dataset-resume-raw.jsonl")
     problems = resume_problems(rows_first, rows_second, items=shape["items"],
                                first_interrupted=first["signalled"] and first["exit"] == 130)
     if resumed["exit"] != 0:
         problems.append(f"the resumed run exited {resumed['exit']}: {resumed['tail'][-200:]}")
-    measured = {"dataset_version": version, "items": shape["items"],
+    capped = sorted({row["item_key"] for row in rows_first + rows_second if refused_over_cap(row)})
+    if capped:
+        problems.append(f"items within the runner's cap ({cap_s:g} s) refused as over "
+                        f"MAX_VIDEO_SECONDS - the gateway's cap is another: {capped}")
+    measured = {"dataset_version": version, "items": shape["items"], "cap_s": cap_s,
                 "first_run": {**first, "attempts": len(rows_first),
                               "accepted": sum(r.get("outcome") == "accepted" for r in rows_first)},
                 "resume": {"exit": resumed["exit"], "attempts": len(rows_second),
@@ -617,7 +694,8 @@ def declared() -> dict:
         "profile_version": ("v1", "S2M profile v1; M4-8179144's MEDIA-PARITY oracle"),
         "preparation_concurrency": (2, "M4-8179144 'Measured, not taken': stays 2"),
         "max_preparing_jobs": (8, "contracts limits, untouched by M4"),
-        "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 applies 72 as config"),
+        "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 deploys a lower "
+                                     "cap as config (MAX_VIDEO_SECONDS, recorded apart)"),
         "published_engine_options_digest": (digest, "R76/R78: the serving revision every "
                                                     "admission pins is the measured one"),
         "published_runtime_image": (image, "R76/R78, as above"),
@@ -691,9 +769,9 @@ def inventory_problems(text: str, record: dict) -> list[str]:
     return problems
 
 
-def config_pin_check(report: Report, inventory: Path | None) -> None:
+def config_pin_check(report: Report, inventory: Path | None, cap_s: float) -> None:
     problems = config_problems(current_config())
-    measured = {"current": current_config()}
+    measured = {"current": current_config(), "deployed_max_video_seconds": cap_s}
     if inventory is not None:
         problems += [f"deployed: {p}" for p in inventory_problems(inventory.read_text(),
                                                                   serving_record())]
@@ -850,11 +928,10 @@ def _duration(row: dict, clips: dict) -> float:
     return clips.get(row.get("clip_id"), {}).get("duration_s", 0.0)
 
 
-def judged(rows: list[dict], clips: dict) -> list[dict]:
-    """The attempts a cell judges: clips the engine can hold at all (the rest are the
-    duration cap's, P-20)."""
-    ceiling = engine_ceiling_s(serving_record())
-    return [row for row in rows if _duration(row, clips) <= ceiling]
+def judged(rows: list[dict], clips: dict, cap_s: float) -> list[dict]:
+    """The attempts a cell judges: clips within the deployed cap (the rest are the cap's,
+    P-20; a clip at the cap is within it - the M layer refuses only a longer one)."""
+    return [row for row in rows if _duration(row, clips) <= cap_s]
 
 
 def failures(rows: list[dict]) -> tuple:
@@ -876,29 +953,24 @@ def answered(rows: list[dict]) -> tuple:
     return ("answered", decide.PASS if accepted else decide.FAIL, f"{accepted} accepted", "BOX")
 
 
-def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool) -> list[tuple]:
-    """Protocol §4 envelope criteria for one rate. Attempts on clips beyond the engine's
-    ceiling are the duration cap's: they must be refused at admission and are no one's
-    failures; a clip between the applied cap and the ceiling may be either."""
-    ceiling, cap = engine_ceiling_s(serving_record()), CRITERIA["applied_cap_s"]
-    counted = judged(rows, clips)
+def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float) -> list[tuple]:
+    """Protocol §4 envelope criteria for one rate. Attempts on clips over the deployed cap
+    are the cap's: each must get the typed over-cap refusal at admission, and they are no
+    one's failures; a clip within the cap is never refused as over it."""
+    counted = judged(rows, clips, cap_s)
     over = [r for r in rows if r not in counted]
     out = []
     if not gateway:
         out.append(("duration_cap", UNKNOWN, "an engine target has no admission", "BOX"))
     else:
-        admitted = sorted({r["clip_id"] for r in over if not (
-            r.get("outcome") == "rejected" and 400 <= (r.get("http_status") or 0) < 500)})
-        refused = sorted({r["clip_id"] for r in counted if _duration(r, clips) <= cap
-                          and r.get("outcome") == "rejected"
-                          and r.get("http_status") in (400, 413, 422)})
+        admitted = sorted({r["clip_id"] for r in over if not refused_over_cap(r)})
+        refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
         verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
-        out.append(("duration_cap", verdict, {"over_ceiling_not_refused": admitted,
+        out.append(("duration_cap", verdict, {"over_cap_not_refused": admitted,
                                               "within_cap_refused": refused,
-                                              "ceiling_s": ceiling, "cap_s": cap}, "BOX"))
+                                              "cap_s": cap_s}, "BOX"))
     out += [failures(counted), answered(counted)]
-    refusals = [r for r in counted if r.get("outcome") == "rejected"
-                and _duration(r, clips) <= cap]
+    refusals = [r for r in counted if r.get("outcome") == "rejected"]
     out.append(("rejections", decide.FAIL if refusals else decide.PASS,
                 f"{len(refusals)} refused within the cap", "BOX"))
     accepted = [r for r in counted if r.get("outcome") == "accepted"]
@@ -937,10 +1009,11 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
     return status, owners, supported
 
 
-def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict) -> list[tuple]:
+def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict,
+                  cap_s: float) -> list[tuple]:
     """Protocol §4 soak criteria: failures, memory growth from /metrics, the reconciler's
     drift at the end, and the latency of the last third against the first."""
-    counted = judged(rows, clips)
+    counted = judged(rows, clips, cap_s)
     out = [failures(counted), answered(counted)]
     for name, key, limit in (("host_growth_mib", "rss_mib", CRITERIA["max_host_growth_mib"]),
                              ("gpu_growth_mib", "gpu_used_mib", CRITERIA["max_gpu_growth_mib"])):
@@ -966,11 +1039,11 @@ def soak_verdicts(rows: list[dict], samples: list[dict], clips: dict) -> list[tu
     return out
 
 
-def overload_problems(rows: list[dict], clips: dict) -> list[str]:
+def overload_problems(rows: list[dict], clips: dict, cap_s: float) -> list[str]:
     """Protocol §4 overload: admission refuses honestly - 429, a Retry-After, an overload
-    code - and nothing is a 5xx or a broken stream. Clips over the applied cap are the
+    code - and nothing is a 5xx or a broken stream. Clips over the deployed cap are the
     duration cap's answer, not overload's."""
-    rows = [r for r in rows if _duration(r, clips) <= CRITERIA["applied_cap_s"]]
+    rows = judged(rows, clips, cap_s)
     accepted = [r for r in rows if r.get("outcome") == "accepted"]
     refused = [r for r in rows if r.get("outcome") == "rejected"]
     problems = []
@@ -1021,7 +1094,8 @@ def sampled_run(argv: list[str], env: dict, metrics_url: str | None,
     return done, samples
 
 
-def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | None) -> None:
+def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | None,
+               cap_s: float) -> None:
     """E4B.b's envelope, soak and overload cells (protocol §4, shapes §5)."""
     shape, clips, env = MATRIX[target["scale"]], parity.clips(), bench_env(target)
     gateway = target["bench_target"] == "gateway"
@@ -1034,7 +1108,8 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                                        requests=shape["envelope"]["requests"],
                                        dataset_version=f"{version}-{name}"), env)["exit"]
         rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
-                                          gateway=gateway) + [client_exit(runs[name])]))
+                                          gateway=gateway, cap_s=cap_s)
+                      + [client_exit(runs[name])]))
     status, owners, supported = envelope_summary(rungs)
     report.check("e4b.b.envelope", status,
                  {"supported_rate_per_s": supported, "client_exits": runs,
@@ -1050,7 +1125,8 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
             bench_argv(target, workdir, "soak", rate=rate,
                        requests=max(1, round(rate * soak["seconds"])),
                        dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
-        verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips) + [
+        verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips,
+                                 cap_s) + [
             client_exit(done["exit"])]
         status, owners = summarise(verdicts)
         report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
@@ -1066,7 +1142,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
     client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
                       dataset_version=f"{version}-overload", extra=("--burst", str(burst))), env)
     rows = raw_rows(workdir / "overload-raw.jsonl")
-    problems = overload_problems(rows, clips)
+    problems = overload_problems(rows, clips, cap_s)
     report.check("e4b.b.overload", FAIL if problems else PASS, problems or "honest refusals",
                  measured={"attempts": len(rows),
                            "accepted": sum(r.get("outcome") == "accepted" for r in rows),
@@ -1171,8 +1247,9 @@ def main(argv: list[str] | None = None) -> int:
     with run.signals_handled():
         try:
             report.hashes = release_hashes()
+            cap_s = report.target["max_video_seconds"] = deployed_cap_s()
             ready = preconditions_check(report, target, args.box)["status"]
-            config_pin_check(report, args.inventory)
+            config_pin_check(report, args.inventory, cap_s)
             if args.box:
                 # review V4: a box whose served build is not the release measures nothing
                 served = served_build_check(report, args.metrics_url,
@@ -1190,7 +1267,7 @@ def main(argv: list[str] | None = None) -> int:
                     report.check(check_id, SKIP, "--no-stack", owners=("STACK",))
             else:
                 stack_checks(report, args.keep)
-            engine_checks(report, target, workdir, args)
+            engine_checks(report, target, workdir, args, cap_s)
         except run.Interrupted as stop:
             report.add("interrupted", FAIL, f"signal {stop.signum}")
         except Exception as crashed:                  # noqa: BLE001 - recorded, and the
@@ -1204,7 +1281,7 @@ def main(argv: list[str] | None = None) -> int:
     return report.exit_code
 
 
-def engine_checks(report: Report, target: dict, workdir: Path, args) -> None:
+def engine_checks(report: Report, target: dict, workdir: Path, args, cap_s: float) -> None:
     """The checks that drive an engine or an endpoint: the runner's own fake vLLM for a
     local run (started here, stopped whatever happens), the given URLs otherwise."""
     server = None
@@ -1216,9 +1293,10 @@ def engine_checks(report: Report, target: dict, workdir: Path, args) -> None:
     try:
         parity_check(report, engine_url=target["engine_url"], workdir=workdir,
                      baseline=args.parity_baseline, label=target["label"],
-                     local=target["kind"] == "local")
-        dataset_check(report, target, workdir)
-        load_cells(report, target, workdir, args.metrics_url)
+                     local=target["kind"] == "local", cap_s=cap_s,
+                     gateway=target if target["bench_target"] == "gateway" else None)
+        dataset_check(report, target, workdir, cap_s)
+        load_cells(report, target, workdir, args.metrics_url, cap_s)
     finally:
         if server is not None:
             server.stop()

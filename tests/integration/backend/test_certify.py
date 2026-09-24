@@ -22,6 +22,8 @@ import certify                                          # noqa: E402
 
 TARGET = {"kind": "local", "scale": "tiny", "label": certify.FAKE}
 CLEAN = {"sha": "c" * 40, "dirty": False}
+CAP = 82.0                          # the pilot's MAX_VIDEO_SECONDS (P-20 decision B)
+TREE_CAP = 120.0                    # the tree's default: every parity clip is within it
 
 
 @pytest.fixture
@@ -221,26 +223,175 @@ def test_e4b_sop_parity_pairs_the_engine_with_its_baseline_and_fails_on_drift(tm
     report = certify.Report(TARGET)
     outputs[:] = [same, same]
     certify.parity_check(report, engine_url="http://e", workdir=tmp_path, baseline=None,
-                         label=certify.FAKE, local=True)
+                         label=certify.FAKE, local=True, cap_s=TREE_CAP)
     assert (report.stages[-1]["status"], report.stages[-1]["label"]) == (certify.PASS,
                                                                         certify.FAKE)
     outputs[:] = [same, [_parity_row("c039"), _parity_row("c024", content="0ff")]]
     certify.parity_check(report, engine_url="http://e", workdir=tmp_path, baseline=None,
-                         label=certify.FAKE, local=True)
+                         label=certify.FAKE, local=True, cap_s=TREE_CAP)
     assert report.stages[-1]["status"] == certify.FAIL
     assert "c024" in report.stages[-1]["detail"]["why"]
     outputs[:] = [[_parity_row("c039")]]
     base = tmp_path / "e0.jsonl"
     base.write_text("".join(json.dumps(r) + "\n" for r in same))
     certify.parity_check(report, engine_url="http://e", workdir=tmp_path, baseline=base,
-                         label=certify.MEAS, local=False)
+                         label=certify.MEAS, local=False, cap_s=TREE_CAP)
     assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
                                                                           ["BOX"])
     certify.parity_check(report, engine_url="http://e", workdir=tmp_path, baseline=None,
-                         label=certify.MEAS, local=False)
+                         label=certify.MEAS, local=False, cap_s=TREE_CAP)
     assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
                                                                           ["BOX"])
     assert outputs == [], "a remote engine with no baseline must not be run and passed"
+
+
+def test_e4b_the_deployed_cap_and_its_refusal_are_the_media_layers(monkeypatch):
+    """P-20 decision B: the pilot deploys MAX_VIDEO_SECONDS=82. The runner reads the cap
+    the gateway reads (its own parser; the tree's default when unset), and the refusal it
+    expects over it is the one the M layer raises - 400 `unsupported_media`, param
+    `messages` - while a clip at the cap is admitted."""
+    import dataclasses
+
+    from infrx import config
+    from infrx.contracts import errors
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.media import prepare, probe
+    monkeypatch.delenv("MAX_VIDEO_SECONDS", raising=False)
+    assert certify.deployed_cap_s() == DEFAULTS.max_video_seconds == TREE_CAP
+    monkeypatch.setenv("MAX_VIDEO_SECONDS", "82")
+    assert certify.deployed_cap_s() == CAP
+    profile = prepare.MediaProfile.pinned(config.pilot_from_env())
+    clip = probe.Probed(mime=probe.MP4_MIME, duration_s=112.0, width=640, height=360,
+                        codec="h264")
+    with pytest.raises(errors.DomainError) as refused:
+        profile.check(clip, 1)
+    assert {"http_status": errors.http_status(refused.value.code), "code": refused.value.code,
+            "param": refused.value.param} == certify.OVER_CAP
+    profile.check(dataclasses.replace(clip, duration_s=CAP), 1)     # at the cap: admitted
+
+
+def test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_rest(
+        tmp_path, monkeypatch):
+    """Amendment 5(c), from the first box run: W4's E0 baseline and the release engine both
+    refuse the parity set's 112 s and 120 s clips (encoder budget), which failed the cell as
+    "refused by the candidate". Only clips within the deployed cap are paired; each clip
+    over it is an expected refusal, asked of the gateway and judged as the typed refusal.
+    A within-cap refusal or an over-cap acceptance fails; an engine target pends them."""
+    clips = certify.parity.clips()
+    over = ["c012-bbb1080p30-1024x768-4x3", "c025-tos720p-2560x1080-ultrawide-rot180",
+            "c038-sintel1080p-480x854-portrait", "c051-tos720p-360p-16x9", "sop09-120s-640x360",
+            "sop10-120s-854x480-step_spans_segment_boundary", "sop11-120s-1280x720"]
+    within = [clip for clip in certify.parity.PARITY_SET if clip not in over]
+    assert within == ["c039-bbb1080p30-1080-square", "c024-bbb1080p30-512-square"]
+
+    def row(clip, **changed):
+        return {**_parity_row(clip), "duration_s": clips[clip]["duration_s"], **changed}
+    budget = {"outcome": "failed", "http_status": 400, "prompt_tokens": None,
+              "error_message": "video item with 21504 embedding tokens exceeds the "
+                               "pre-allocated encoder cache size 16384"}
+    e0 = [row(clip, **budget) if clip in over else row(clip) for clip in certify.parity.PARITY_SET]
+    base = tmp_path / "parity-e0.jsonl"
+    base.write_text("".join(json.dumps(r) + "\n" for r in e0))
+    candidate = [list(e0)]
+
+    def fake_client(argv, env=None):
+        Path(argv[argv.index("--out") + 1]).write_text(
+            "".join(json.dumps(r) + "\n" for r in candidate[0]))
+        return {"exit": 0, "tail": ""}
+    replies, asked = {}, []
+
+    def admission(target, clip, path):
+        asked.append(path.name)
+        return dict(replies.get(path.name, certify.OVER_CAP))
+    monkeypatch.setattr(certify, "client", fake_client)
+    monkeypatch.setattr(certify, "admission_answer", admission)
+    gateway = {"base_url": "http://gw/v1", "model": "m", "bench_target": "gateway"}
+
+    def cell(target=gateway, cap_s=CAP):
+        report = certify.Report(TARGET)
+        certify.parity_check(report, engine_url="http://e", workdir=tmp_path, baseline=base,
+                             label=certify.MEAS, local=False, cap_s=cap_s, gateway=target)
+        return report.stages[-1]
+    entry = cell(cap_s=72.0)                        # c024 is 72 s: at the cap, still paired
+    assert (entry["status"], entry["detail"]["why"]) == (certify.PASS, "2 clips")
+    asked.clear()
+    entry = cell()
+    assert entry["status"] == certify.PASS, entry["detail"]
+    assert (entry["detail"]["why"], entry["detail"]["not refused as over the cap"]) == (
+        "2 clips", [])
+    assert entry["detail"]["expected refusal (over MAX_VIDEO_SECONDS)"] == {
+        clip: certify.OVER_CAP for clip in sorted(over)}
+    assert sorted(asked) == sorted(Path(clips[clip]["file"]).name for clip in over)
+    c051 = Path(clips["c051-tos720p-360p-16x9"]["file"]).name
+    for answer in ({"http_status": 200, "code": None, "param": None},
+                   {"http_status": 400, "code": "invalid_request", "param": None}):
+        replies[c051] = answer
+        entry = cell()
+        assert (entry["status"], entry["detail"]["not refused as over the cap"]) == (
+            certify.FAIL, ["c051-tos720p-360p-16x9"]), answer
+    replies.clear()
+    candidate[0] = [row(clip, **budget) if clip == within[1] else r for clip, r in
+                    zip(certify.parity.PARITY_SET, e0)]
+    entry = cell()
+    assert entry["status"] == certify.FAIL
+    assert entry["detail"]["why"] == f"{within[1]}: refused by the candidate"
+    candidate[0], asked[:] = list(e0), []
+    entry = cell(target=None)
+    assert (entry["status"], entry["owners"], asked) == (certify.PENDING, ["BOX"], [])
+    assert set(entry["detail"]["expected refusal (over MAX_VIDEO_SECONDS)"].values()) == {
+        "unasked: an engine target has no admission"}
+
+
+def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_kept(
+        tmp_path, monkeypatch):
+    """The over-cap question is bench.py's own request (inline media, the release's model,
+    the client's key as a Bearer header); the answer kept is the status and the error's
+    code and param, each through bench's allowlist - never the server's text."""
+    import http.server
+    import threading
+    seen, replies = [], [
+        (400, {"error": {"code": "unsupported_media", "type": "invalid_request_error",
+                         "param": "messages", "message": "The media type is not supported."}}),
+        (200, {"choices": []}),
+        (400, {"error": {"code": "unsupported_media"}}),
+        (400, {"error": {"code": "certify_0123456789", "param": "messages"}}),
+        (400, {"error": "a sentence"})]
+
+    class Gateway(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):                                   # noqa: N802 - the stdlib's name
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            seen.append((self.path, self.headers["authorization"], body))
+            status, doc = replies.pop(0)
+            data = json.dumps(doc).encode()
+            self.send_response(status)
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+    server = http.server.HTTPServer(("127.0.0.1", 0), Gateway)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.delenv("MARLIN_API_KEY", raising=False)
+        monkeypatch.setenv("INFRX_API_KEY", "sk-certify-0123456789")
+        video = tmp_path / "c051.mp4"
+        video.write_bytes(b"\0\0\0\x18ftypmp42")
+        target = {"base_url": f"http://127.0.0.1:{server.server_port}/v1", "model": "m@1"}
+        answers = [certify.admission_answer(target, {"prompt": "Caption it."}, video)
+                   for _ in range(5)]
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert answers == [certify.OVER_CAP, {"http_status": 200, "code": None, "param": None},
+                       {"http_status": 400, "code": "unsupported_media", "param": None},
+                       {"http_status": 400, "code": certify.bench.UNKNOWN, "param": "messages"},
+                       {"http_status": 400, "code": None, "param": None}]
+    path, auth, body = seen[0]
+    assert (path, auth, body["model"]) == ("/v1/chat/completions",
+                                           "Bearer sk-certify-0123456789", "m@1")
+    assert body["messages"] == certify.bench.messages_for(
+        {"form": "video_b64", "prompt": "Caption it."}, certify.bench.data_url(str(video)))
 
 
 # ------------------------------------------------------------------------------ dataset
@@ -360,7 +511,7 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     local = {**TARGET, "metered": False, "base_url": "http://e/v1", "bench_target": "direct",
              "model": "marlin2b"}
     report = certify.Report(local)
-    certify.dataset_check(report, local, tmp_path)
+    certify.dataset_check(report, local, tmp_path, CAP)
     entry = report.stages[-1]
     assert (entry["status"], entry["owners"], entry["label"]) == (certify.PENDING, ["BOX"],
                                                                   certify.FAKE)
@@ -369,20 +520,20 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     assert "metered endpoint" in entry["detail"], entry["detail"]
     metered = {**local, "metered": True, "label": certify.MEAS, "bench_target": "gateway"}
     monkeypatch.setattr(certify, "tenant_ledger", lambda: None)
-    certify.dataset_check(report, metered, tmp_path)
+    certify.dataset_check(report, metered, tmp_path, CAP)
     assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
                                                                           ["BOX"])
     views = iter([(BEFORE, [], []), (AFTER, USAGE, HOLDS)])
-    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
     assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]["detail"]
     views = iter([(BEFORE, [], []), (AFTER, USAGE[1:], HOLDS)])
-    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views),
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views),
                           settle_wait_s=0)
     assert report.stages[-1]["status"] == certify.FAIL
     # a debit that lands after the answer is waited for (bounded), not failed on sight
     monkeypatch.setattr(certify.time, "sleep", lambda s: None)
     views = iter([(BEFORE, [], []), (BEFORE, [], HOLDS), (AFTER, USAGE, HOLDS)])
-    certify.dataset_check(report, metered, tmp_path, ledger=lambda: next(views))
+    certify.dataset_check(report, metered, tmp_path, CAP, ledger=lambda: next(views))
     assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]["detail"]
     # the client half fails on its own: a run the signal never interrupted, a resume that
     # did not finish - on any target, before a ledger is read
@@ -390,15 +541,89 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
                         lambda argv, raw, **_: interrupted(argv, raw, after=2, env=None,
                                                            timeout_s=1) and
                         {"exit": 0, "signalled": False})
-    certify.dataset_check(report, local, tmp_path)
+    certify.dataset_check(report, local, tmp_path, CAP)
     assert report.stages[-1]["status"] == certify.FAIL
     assert "not interrupted" in first(report.stages[-1]["detail"])
     monkeypatch.setattr(certify, "interrupted_run", interrupted)
     monkeypatch.setattr(certify, "client", lambda argv, env=None: {
         **fake_client(argv, env), "exit": 1, "tail": "bench failed"})
-    certify.dataset_check(report, local, tmp_path)
+    certify.dataset_check(report, local, tmp_path, CAP)
     assert report.stages[-1]["status"] == certify.FAIL
     assert report.stages[-1]["detail"] == ["the resumed run exited 1: bench failed"]
+
+
+def test_e4b_the_dataset_drill_schedules_only_clips_within_the_deployed_cap(tmp_path,
+                                                                          monkeypatch):
+    """Amendment 5(c): both runs of the drill read one corpus - the licensed one less the
+    clips over the deployed cap (a clip at the cap stays), cached where the corpus is - so
+    no item is refused for its length. An item refused as over the cap anyway means the
+    gateway's cap is not the runner's, and fails the drill."""
+    manifest = json.loads((certify.MARLIN / "corpus" / "manifest.json").read_text())
+    kept = json.loads(certify.within_cap_corpus(tmp_path, 72.0).read_text())
+    assert kept["clips"] == [c for c in manifest["clips"] if c["derived"]["duration_s"] <= 72]
+    assert max(clip["derived"]["duration_s"] for clip in kept["clips"]) == 72.0
+    assert kept["cache_root_default"] == str(certify.corpus_cache())
+    corpora, second = [], list(SECOND)
+
+    def interrupted(argv, raw, *, after, env, timeout_s):
+        corpora.append(argv[argv.index("--corpus") + 1])
+        raw.write_text("".join(json.dumps(r) + "\n" for r in FIRST))
+        return {"exit": 130, "signalled": True}
+
+    def fake_client(argv, env=None):
+        corpora.append(argv[argv.index("--corpus") + 1])
+        Path(argv[argv.index("--raw") + 1]).write_text(
+            "".join(json.dumps(r) + "\n" for r in second))
+        return {"exit": 0, "tail": ""}
+    monkeypatch.setattr(certify, "interrupted_run", interrupted)
+    monkeypatch.setattr(certify, "client", fake_client)
+    monkeypatch.setitem(certify.MATRIX["tiny"], "dataset",
+                        {"items": 6, "interrupt_after": 2, "rate": 4.0})
+    local = {**TARGET, "metered": False, "base_url": "http://e/v1", "bench_target": "direct",
+             "model": "marlin2b"}
+    report = certify.Report(local)
+    certify.dataset_check(report, local, tmp_path, CAP)
+    assert report.stages[-1]["status"] == certify.PENDING, report.stages[-1]["detail"]
+    assert corpora == [str(tmp_path / "corpus-within-cap.json")] * 2
+    assert {clip["id"] for clip in json.loads(Path(corpora[0]).read_text())["clips"]} == {
+        clip["id"] for clip in manifest["clips"] if clip["derived"]["duration_s"] <= CAP}
+    second[-1] = dict(second[-1], error_code=certify.OVER_CAP["code"])    # i6: 400, typed
+    certify.dataset_check(report, local, tmp_path, CAP)
+    assert (report.stages[-1]["status"], report.stages[-1]["detail"]) == (certify.FAIL, [
+        "items within the runner's cap (82 s) refused as over MAX_VIDEO_SECONDS - the "
+        "gateway's cap is another: ['i6']"])
+
+
+def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
+        tmp_path, monkeypatch, clean_tree):
+    """The cap is read once at the start from the environment the box step passes
+    (--env-file), recorded in the report's target and the config pin, and handed to the
+    parity, dataset and load cells; only a target with admission is asked for refusals."""
+    import argparse
+    monkeypatch.setenv("MAX_VIDEO_SECONDS", "82")
+    seen = {}
+    monkeypatch.setattr(certify, "release_hashes", lambda: {})
+    monkeypatch.setattr(certify, "preconditions_check", lambda report, target, box: report.check(
+        "e4b.b.preconditions", certify.PASS, "stub"))
+    monkeypatch.setattr(certify, "parity_check", lambda report, **kw: seen.update(
+        parity=(kw["cap_s"], kw["gateway"] and kw["gateway"]["bench_target"])))
+    monkeypatch.setattr(certify, "dataset_check",
+                        lambda report, target, workdir, cap_s: seen.update(dataset=cap_s))
+    monkeypatch.setattr(certify, "load_cells",
+                        lambda report, target, workdir, url, cap_s: seen.update(load=cap_s))
+    out = tmp_path / "report.json"
+    certify.main(["--no-stack", "--target", "http://gw/v1", "--engine-url", "http://engine",
+                  "--workdir", str(tmp_path), "--report", str(out)])
+    doc = json.loads(out.read_text())
+    pin = next(entry for entry in doc["stages"] if entry["stage"] == "e4b.b.config-pin")
+    assert (doc["target"].get("max_video_seconds"),
+            pin["measured"].get("deployed_max_video_seconds")) == (CAP, CAP)
+    assert seen == {"parity": (CAP, "gateway"), "dataset": CAP, "load": CAP}
+    engine = {"kind": "remote", "bench_target": "direct", "engine_url": "http://engine",
+              "label": certify.UNVERIFIED}
+    certify.engine_checks(certify.Report(engine), engine, tmp_path,
+                          argparse.Namespace(parity_baseline=None, metrics_url=None), CAP)
+    assert seen["parity"] == (CAP, None)
 
 
 def test_e4b_the_protocol_file_states_the_numbers_the_runner_applies():
@@ -461,11 +686,11 @@ def test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence(mon
     assert len(moved) == 1 and "encoder_budget_tokens: 32768" in moved[0] and "W4" in moved[0]
     report = certify.Report(TARGET)
     monkeypatch.setattr(certify, "current_config", lambda: dict(declared))
-    certify.config_pin_check(report, None)
+    certify.config_pin_check(report, None, CAP)
     assert (report.stages[-1]["status"], report.stages[-1]["owners"]) == (certify.PENDING,
                                                                           ["BOX"])
     monkeypatch.setattr(certify, "current_config", lambda: {**declared, "profile_version": "v2"})
-    certify.config_pin_check(report, None)
+    certify.config_pin_check(report, None, CAP)
     assert report.stages[-1]["status"] == certify.FAIL
 
 
@@ -539,9 +764,9 @@ def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monk
     inventory = tmp_path / "inventory.txt"
     inventory.write_text(good)
     report = certify.Report(TARGET)
-    certify.config_pin_check(report, inventory)
+    certify.config_pin_check(report, inventory, CAP)
     assert report.stages[-1]["status"] == certify.PASS
-    certify.config_pin_check(report, BOX_INVENTORY)
+    certify.config_pin_check(report, BOX_INVENTORY, CAP)
     assert report.stages[-1]["status"] == certify.FAIL
     assert report.stages[-1]["detail"][0].startswith("deployed: pinned flags")
 
@@ -609,6 +834,7 @@ def _clips():
             "short1080": {"duration_s": 10.0, "width": 1920, "height": 1080},
             "long": {"duration_s": 60.0, "width": 1280, "height": 720},
             "band": {"duration_s": 78.0, "width": 640, "height": 360},
+            "at": {"duration_s": CAP, "width": 640, "height": 360},
             "over": {"duration_s": 112.0, "width": 640, "height": 360}}
 
 
@@ -625,43 +851,48 @@ def _verdict(verdicts, name):
 
 
 def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
-    """Protocol §4: attempts beyond the engine ceiling are the cap's (refused at admission,
-    never admitted and failed); a clip within the applied cap is never refused; platform
-    failures are judged over the rest; each tail needs 60 samples and meets its limit."""
+    """Protocol §4 with the deployed cap (amendment 5(c)): an attempt on a clip over it gets
+    the M layer's typed refusal at admission - never admitted and failed, never an untyped
+    400; a clip within it (at the cap included) is never refused as over it, and any refusal
+    within it fails the rung; failures are judged over the rest; each tail needs 60 samples
+    and meets its limit."""
     clips = _clips()
+    rung = (lambda rows, gateway=True: certify.rung_verdicts(rows, clips, gateway=gateway,
+                                                              cap_s=CAP))
+    typed = {"status": certify.OVER_CAP["http_status"], "code": certify.OVER_CAP["code"]}
     ok = [_attempt("short") for _ in range(60)] + [_attempt("long", latency=20.0)] * 3
-    capped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
-    verdicts = certify.rung_verdicts(capped, clips, gateway=True)
-    assert {row[0]: row[1] for row in verdicts} == {
+    capped = [*ok, _attempt("over", "rejected", **typed)]
+    assert {row[0]: row[1] for row in rung(capped)} == {
         "duration_cap": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
         "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
+    untyped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
+    assert rung(untyped)[0] == ("duration_cap", "fail", {
+        "over_cap_not_refused": ["over"], "within_cap_refused": [], "cap_s": CAP}, "BOX")
     engine_failed = [*ok, _attempt("over", "failed", error="stream_error_event")]
-    assert _verdict(certify.rung_verdicts(engine_failed, clips, gateway=True),
-                    "duration_cap") == "fail"
-    assert _verdict(certify.rung_verdicts(engine_failed, clips, gateway=True),
-                    "failure_rate") == "pass"
-    refused = [*capped, _attempt("long", "rejected", status=400)]
-    assert _verdict(certify.rung_verdicts(refused, clips, gateway=True), "duration_cap") == "fail"
-    band = [*capped, _attempt("band", "rejected", status=400)]
-    assert {row[1] for row in certify.rung_verdicts(band, clips, gateway=True)} == {"pass"}
-    assert _verdict(certify.rung_verdicts(ok, clips, gateway=True), "duration_cap") == "unknown"
-    assert certify.rung_verdicts(capped, clips, gateway=False)[0] == (
+    assert _verdict(rung(engine_failed), "duration_cap") == "fail"
+    assert _verdict(rung(engine_failed), "failure_rate") == "pass"
+    for within in ("long", "at"):                  # "at" is exactly the cap: within it
+        refused = rung([*capped, _attempt(within, "rejected", **typed)])
+        assert refused[0] == ("duration_cap", "fail", {
+            "over_cap_not_refused": [], "within_cap_refused": [within], "cap_s": CAP}, "BOX")
+    band = [*capped, _attempt("band", "rejected", status=400)]      # 78 s: within 82 now
+    assert _verdict(rung(band), "rejections") == "fail"
+    assert _verdict(rung(ok), "duration_cap") == "unknown"
+    assert rung(capped, gateway=False)[0] == (
         "duration_cap", "unknown", "an engine target has no admission", "BOX")
     failing = [*ok[2:], *[_attempt("short", "failed", status=502, error="http_502")] * 2]
-    assert _verdict(certify.rung_verdicts(failing, clips, gateway=True), "failure_rate") == "fail"
+    assert _verdict(rung(failing), "failure_rate") == "fail"
     busy = [*ok, _attempt("short", "rejected", status=429, code="capacity_exhausted", retry=2)]
-    assert _verdict(certify.rung_verdicts(busy, clips, gateway=True), "rejections") == "fail"
+    assert _verdict(rung(busy), "rejections") == "fail"
     # the TTFT row's class is clips <= 30 s at <= 720p: long or 1080p clips are not in it
     for other in ("long", "short1080"):
         mixed = [*ok, *[_attempt(other, ttft=20.0)] * 5]
-        assert _verdict(certify.rung_verdicts(mixed, clips, gateway=True),
-                        "ttft_p95_short") == "pass", other
+        assert _verdict(rung(mixed), "ttft_p95_short") == "pass", other
     slow = [_attempt("short", ttft=7.0) for _ in range(60)]
-    assert _verdict(certify.rung_verdicts(slow, clips, gateway=True), "ttft_p95_short") == "fail"
+    assert _verdict(rung(slow), "ttft_p95_short") == "fail"
     dragging = [_attempt("short", latency=8.0) for _ in range(60)]
-    assert _verdict(certify.rung_verdicts(dragging, clips, gateway=True),
-                    "e2e_p95_per_clip_minute") == "fail"
-    few = certify.rung_verdicts(ok[:10], clips, gateway=True)
+    assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
+    few = rung(ok[:10])
     assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
         "unknown"
 
@@ -673,27 +904,28 @@ def test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause():
     clips = _clips()
     ok = [_attempt("short") for _ in range(84)]
     timeouts = [_attempt("short", "failed", status=None, error="ReadTimeout")] * 36
-    verdicts = certify.rung_verdicts([*ok, *timeouts], clips, gateway=True)
+    verdicts = certify.rung_verdicts([*ok, *timeouts], clips, gateway=True, cap_s=CAP)
     assert _verdict(verdicts, "failure_rate") == "fail"
     assert ("failure_rate", "fail", "36/120 (0 platform-caused)", "BOX") in verdicts
     dead = [_attempt("short", "failed", status=None, error="ConnectError")] * 120
-    nothing = certify.rung_verdicts(dead, clips, gateway=True)
+    nothing = certify.rung_verdicts(dead, clips, gateway=True, cap_s=CAP)
     assert _verdict(nothing, "answered") == _verdict(nothing, "failure_rate") == "fail"
     assert certify.envelope_summary([(0.5, nothing), (1.0, nothing)]) == (certify.FAIL, (), None)
     only_capped = [_attempt("over", "rejected", status=400)] * 5
-    unanswered = certify.rung_verdicts(only_capped, clips, gateway=True)
+    unanswered = certify.rung_verdicts(only_capped, clips, gateway=True, cap_s=CAP)
     assert _verdict(unanswered, "answered") == "fail"
     assert certify.envelope_summary([(0.5, unanswered)])[2] is None
-    gave_up = certify.rung_verdicts([_attempt("short", "cancelled")] * 20, clips, gateway=True)
+    gave_up = certify.rung_verdicts([_attempt("short", "cancelled")] * 20, clips, gateway=True,
+                                    cap_s=CAP)
     assert _verdict(gave_up, "failure_rate") == "pass" and _verdict(gave_up, "answered") == "fail"
     assert certify.envelope_summary([(0.5, gave_up)]) == (certify.FAIL, (), None)
     flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
     soak = [dict(row, send_s=i) for i, row in enumerate([*ok[:30], *timeouts[:36]])]
-    assert certify.summarise(certify.soak_verdicts(soak, flat, clips))[0] == certify.FAIL
+    assert certify.summarise(certify.soak_verdicts(soak, flat, clips, CAP))[0] == certify.FAIL
     reset = _attempt("short", "failed", status=None, error="RemoteProtocolError")
     honest = [_attempt("short")] * 8 + [_attempt("short", "rejected", status=429,
                                                  code="capacity_exhausted", retry=2.0)] * 8
-    assert "5xx or platform" in first(certify.overload_problems([*honest, reset], clips))
+    assert "5xx or platform" in first(certify.overload_problems([*honest, reset], clips, CAP))
 
 
 def test_e4b_the_supported_rate_is_the_highest_rung_climbing_from_the_lowest():
@@ -721,22 +953,23 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     clips = _clips()
     rows = [dict(_attempt("short", latency=2.0), send_s=i) for i in range(18)]
     flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
-    assert {row[0]: row[1] for row in certify.soak_verdicts(rows, flat, clips)} == {
+    assert {row[0]: row[1] for row in certify.soak_verdicts(rows, flat, clips, CAP)} == {
         "failure_rate": "pass", "answered": "pass", "host_growth_mib": "pass",
         "gpu_growth_mib": "pass", "reconciled_at_end": "pass", "latency_drift": "pass"}
     leak = flat[:4] + [{**flat[0], "rss_mib": 1500.0}] * 4
-    assert _verdict(certify.soak_verdicts(rows, leak, clips), "host_growth_mib") == "fail"
+    assert _verdict(certify.soak_verdicts(rows, leak, clips, CAP), "host_growth_mib") == "fail"
     vram = flat[:4] + [{**flat[0], "gpu_used_mib": 40300.0}] * 4
-    assert _verdict(certify.soak_verdicts(rows, vram, clips), "gpu_growth_mib") == "fail"
+    assert _verdict(certify.soak_verdicts(rows, vram, clips, CAP), "gpu_growth_mib") == "fail"
     drifted = [*flat[:-1], {**flat[0], "drift": 2}]
-    assert _verdict(certify.soak_verdicts(rows, drifted, clips), "reconciled_at_end") == "fail"
+    assert _verdict(certify.soak_verdicts(rows, drifted, clips, CAP), "reconciled_at_end") == "fail"
     slower = [dict(row, latency_s=2.0 if row["send_s"] < 12 else 3.5) for row in rows]
-    assert _verdict(certify.soak_verdicts(slower, flat, clips), "latency_drift") == "fail"
-    blind = certify.soak_verdicts(rows, [], clips)
+    assert _verdict(certify.soak_verdicts(slower, flat, clips, CAP), "latency_drift") == "fail"
+    blind = certify.soak_verdicts(rows, [], clips, CAP)
     assert [_verdict(blind, name) for name in ("host_growth_mib", "gpu_growth_mib",
                                                  "reconciled_at_end")] == ["unknown"] * 3
     assert certify.summarise(blind) == (certify.PENDING, ("BOX",))
-    assert _verdict(certify.soak_verdicts(rows[:17], flat, clips), "latency_drift") == "unknown"
+    assert _verdict(certify.soak_verdicts(rows[:17], flat, clips, CAP),
+                    "latency_drift") == "unknown"
 
 
 def test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx():
@@ -747,15 +980,16 @@ def test_e4b_overload_refusals_are_429_with_retry_guidance_and_never_5xx():
     honest = [_attempt("short")] * 8 + [_attempt("short", "rejected", status=429,
                                                  code="capacity_exhausted", retry=2.0)] * 24
     capped = [*honest, _attempt("over", "rejected", status=400, code="invalid_request")]
-    assert certify.overload_problems(capped, clips) == []
-    assert certify.overload_problems(honest[:8], clips) == [
+    assert certify.overload_problems(capped, clips, CAP) == []
+    assert certify.overload_problems(honest[:8], clips, CAP) == [
         "nothing was refused: admission never reached its limit"]
-    assert certify.overload_problems(honest[8:], clips) == ["nothing was accepted under the burst"]
+    assert certify.overload_problems(honest[8:], clips, CAP) == [
+        "nothing was accepted under the burst"]
     for bad in (dict(honest[-1], retry_after=None), dict(honest[-1], http_status=503),
                 dict(honest[-1], error_code="dependency_unavailable")):
-        assert "without 429" in first(certify.overload_problems([*honest, bad], clips))
+        assert "without 429" in first(certify.overload_problems([*honest, bad], clips, CAP))
     stream = _attempt("short", "failed", error="stream_error_event")
-    assert "5xx or platform" in first(certify.overload_problems([*honest, stream], clips))
+    assert "5xx or platform" in first(certify.overload_problems([*honest, stream], clips, CAP))
 
 
 def test_e4b_scrape_reads_the_series_the_soak_judges(tmp_path):
@@ -797,7 +1031,7 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     monkeypatch.setattr(certify, "client", fake_client)
     engine = {**TARGET, "bench_target": "direct", "base_url": "http://e/v1", "model": "m"}
     report = certify.Report(engine)
-    certify.load_cells(report, engine, tmp_path, None)
+    certify.load_cells(report, engine, tmp_path, None, CAP)
     tiny = certify.MATRIX["tiny"]
     assert seen == [(f"envelope-r{tiny['envelope']['rates'][0]}-raw.jsonl",
                      tiny["envelope"]["rates"][0], tiny["envelope"]["requests"]),
@@ -811,12 +1045,12 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
         **fake_client(argv, env), "exit": 2 if "soak-raw.jsonl" in argv[argv.index("--raw") + 1]
         else 0})
     report = certify.Report(engine)
-    certify.load_cells(report, engine, tmp_path, None)
+    certify.load_cells(report, engine, tmp_path, None, CAP)
     assert report.stages[1]["stage"] == "e4b.b.soak" and report.stages[1]["status"] == certify.FAIL
     monkeypatch.setattr(certify, "client", fake_client)
     gateway = {**engine, "bench_target": "gateway", "scale": "box", "label": certify.MEAS}
     seen.clear()
-    certify.load_cells(report, gateway, tmp_path, None)
+    certify.load_cells(report, gateway, tmp_path, None, CAP)
     box = certify.MATRIX["box"]
     assert [name for name, *_ in seen] == [
         *(f"envelope-r{rate}-raw.jsonl" for rate in box["envelope"]["rates"]), "soak-raw.jsonl",
@@ -992,7 +1226,7 @@ def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path
     monkeypatch.setattr(certify, "served_build_check", lambda report, *urls: report.check(
         "e4b.b.served-build", served_status["status"], "stub"))
     monkeypatch.setattr(certify, "engine_checks",
-                        lambda report, target, workdir, args: seen.update(
+                        lambda report, target, workdir, args, cap_s: seen.update(
                             label=target["label"], reported=report.target["label"]))
     box = ["--no-stack", "--box", "--release-sha", CLEAN["sha"], "--target", "http://gw/v1",
            "--engine-url", "http://engine", "--metrics-url", "http://gw/metrics",
@@ -1043,7 +1277,7 @@ def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypa
     monkeypatch.setitem(certify.MATRIX["tiny"], "dataset",
                         {"items": 6, "interrupt_after": 2, "rate": 4.0})
     report = certify.Report(TARGET)
-    certify.dataset_check(report, {**local, "base_url": "http://e/v1"}, tmp_path)
+    certify.dataset_check(report, {**local, "base_url": "http://e/v1"}, tmp_path, CAP)
     assert report.stages[-1]["status"] == certify.FAIL
     assert "not interrupted" in first(report.stages[-1]["detail"])
     monkeypatch.setenv("E4B_WINDOW_OK", "1")
