@@ -75,3 +75,10 @@ that residual risk and its bound).
   `45-s3-check.sh` (tests/m/test_s3.py on the real bucket with the instance role, before the
   install) and `93-restore-edge.sh` (put the saved edge back on an abort) added; the order that
   uses them is [infra/runbooks/rollout.md](../runbooks/rollout.md). Not run on the box.
+- 2026-09-24 (I8): steps 71 (pool budget), 72/73 (monitor install, status), 74 (alert
+  delivery test), 79 (evidence export), 80/81 (model mirror, restore), 85 (rollback target
+  on the box), 86 (bounded cleanup); `known-good.py`/`known-good.json` and
+  `verify-journey.sh`; the order is [infra/runbooks/rollout.md](../runbooks/rollout.md) §4 and
+  [rollback.md](../runbooks/rollback.md#known-good-rollback-drill). Tested against stubs
+  (`apps/infrx-api/tests/i/test_ops_steps.py`, `test_artifacts.py`, `test_rollback_drill.py`);
+  not run on the box.

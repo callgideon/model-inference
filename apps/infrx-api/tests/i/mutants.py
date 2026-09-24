@@ -1149,6 +1149,21 @@ MUTANTS += (
        "test_ops_recover__an_install_never_reports_readiness_as_a_cold_start"),
 )
 
+# --- I8 slice 7: evidence export, bounded cleanup -------------------------------------------
+MUTANTS += (
+    _m("evidence_exports_env_values", "the evidence export carries env NAMES only",
+       STEP + "79-evidence-export.sh", '"env_names": sorted(env),',
+       '"env_names": sorted(f"{k}={v}" for k, v in env.items()),',
+       "test_ops_continuous__the_evidence_export_is_one_names_only_document"),
+    _m("cleanup_removes_known_good_backups", "a backup holding a known-good release is kept",
+       STEP + "86-cleanup.sh",
+       """  case " $keep_releases " in *" ${held:-none} "*) echo "kept $dir (holds known-good $held)"; continue ;; esac\n""",
+       "", "test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good"),
+    _m("cleanup_deletes_by_default", "cleanup is a dry run unless DRY_RUN=0",
+       STEP + "86-cleanup.sh", "DRY_RUN=${DRY_RUN:-1}", "DRY_RUN=${DRY_RUN:-0}",
+       "test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good"),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in

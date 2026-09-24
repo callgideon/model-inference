@@ -190,3 +190,80 @@ def test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_print
     assert done.returncode == 4 and "test firing nonce=" in done.stdout
     assert support.MARKER not in done.stdout + done.stderr
     assert run_step(step, stub, env={**env, "RESOLVE": "not-a-nonce"}).returncode == 2
+
+
+def _backup(dirpath: Path, held: str | None, extra: str = "") -> None:
+    import io
+    import tarfile
+    dirpath.mkdir(parents=True)
+    env = ((f"INFRX_RELEASE_SHA={held}\n" if held else "") + extra).encode()
+    with tarfile.open(dirpath / "files.tar", "w") as tar:
+        info = tarfile.TarInfo("etc/marlin2b-gateway.env")
+        info.size = len(env)
+        tar.addfile(info, io.BytesIO(env))
+
+
+def test_ops_continuous__the_evidence_export_is_one_names_only_document(tmp_path):
+    """79-evidence-export.sh: release, image, env schema and NAMES, units, the metrics
+    textfiles, undelivered alerts, what each backup holds, the bundles - never a value."""
+    secret = f"{support.MARKER}-value"
+    env_file = tmp_path / "gateway.env"
+    env_file.write_text(f"# INFRX_ENV_SCHEMA 1:abc\nINFRX_MODE=pilot\nINFRX_RELEASE_SHA={'c' * 40}\n"
+                        f"INFRX_IMAGE=sha256:{'e' * 64}\nDATABASE_URL=postgresql://u:{secret}@h/d\n")
+    metrics = tmp_path / "metrics"
+    metrics.mkdir()
+    (metrics / "host.prom").write_text('infrx_gpu_up{process="host"} 1\n')
+    (metrics / "undelivered.jsonl").write_text('{"text":"a"}\n{"text":"b"}\n')
+    _backup(tmp_path / "backups" / f"20260924T200647.1Z-{'b' * 40}", "a" * 40, f"KEY={secret}\n")
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    (releases / f"{'b' * 40}.bundle").write_bytes(b"x")
+    stub = stubs(tmp_path, "systemctl", "df", outputs={"systemctl": "active\n"})
+    done = run_step((STEPS / "79-evidence-export.sh").read_text(), stub, env={
+        "ENV_FILE": str(env_file), "METRICS_DIR": str(metrics), "BACKUPS": str(tmp_path / "backups"),
+        "RELEASES_DIR": str(releases)})
+    assert done.returncode == 0, done.stderr
+    doc = json.loads(done.stdout)
+    assert secret not in done.stdout
+    assert doc["release"] == "c" * 40 and doc["env_schema"] == "1:abc" and doc["mode"] == "pilot"
+    assert "DATABASE_URL" in doc["env_names"] and doc["undelivered_alerts"] == 2
+    assert doc["backups"] == {f"20260924T200647.1Z-{'b' * 40}": "a" * 40}
+    assert doc["release_bundles"] == ["b" * 40]
+    assert doc["metrics"]["host"] == ['infrx_gpu_up{process="host"} 1']
+
+
+def test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good(tmp_path):
+    """86-cleanup.sh: dry run by default; keeps the newest KEEP backups and any backup that
+    holds a known-good release; removes a restore's leftovers only for the id given; touches
+    nothing outside its two patterns."""
+    import shutil
+    repo = tmp_path / "repo"
+    (repo / "infra" / "rollout").mkdir(parents=True)
+    shutil.copy2(support.REPO / "infra" / "rollout" / "known-good.json",
+                 repo / "infra" / "rollout" / "known-good.json")
+    backups = tmp_path / "backups"
+    good = "422631591845fbd66b590c73d5ff4150318d9d7a"
+    names = [f"2026092{d}T000000.1Z-{c * 40}" for d, c in zip("12345", "abcde")]
+    for name, held in zip(names, ("1" * 40, good, "2" * 40, "3" * 40, "4" * 40)):
+        _backup(backups / name, held)
+    (backups / "pre-something.head").write_text("x")                 # not a backup dir
+    (backups / "unrelated-dir").mkdir()
+    nvme = tmp_path / "nvme"
+    for path in ("restore-20260924T230000Z", "marlin2b.pre-restore-20260924T230000Z",
+                 "restore-20260101T000000Z", "marlin2b"):
+        (nvme / path).mkdir(parents=True)
+    step = (STEPS / "86-cleanup.sh").read_text()
+    env = {"REPO": str(repo), "BACKUPS": str(backups), "NVME": str(nvme)}
+    stub = stubs(tmp_path)
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 0, done.stderr
+    assert f"would remove {backups / names[0]}" in done.stdout
+    assert f"kept {backups / names[1]} (holds known-good {good})" in done.stdout
+    assert all((backups / n).exists() for n in names)                     # dry run
+    done = run_step(step, stub, env={**env, "DRY_RUN": "0", "RESTORE_ID": "20260924T230000Z"})
+    assert done.returncode == 0, done.stderr
+    assert sorted(p.name for p in backups.iterdir()) == sorted(
+        [names[1], names[2], names[3], names[4], "pre-something.head", "unrelated-dir"])
+    assert sorted(p.name for p in nvme.iterdir()) == ["marlin2b", "restore-20260101T000000Z"]
+    assert run_step(step, stub, env={**env, "KEEP": "1"}).returncode == 2
+    assert run_step(step, stub, env={**env, "RESTORE_ID": "*"}).returncode == 2
