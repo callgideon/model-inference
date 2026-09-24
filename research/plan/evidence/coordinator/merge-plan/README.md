@@ -195,7 +195,7 @@ This is a fast-forward, never a merge commit.
 - Heads moved since the analysis: D5 4bfdbf0 (code 8554b47), phase 3 ≥ 1fa825b (fix round running; contains M pilot 8b91648), cutover a1e88dc, M1-L2 ba26ca4 (contains cutover f7d9b03), M pilot 8b91648, E4B 4d9360c, rollout-prep f0a1a82. The scripts' SHA pins (Makefile line resolutions, 6a/6a2) are assert-guarded: re-run `git merge-tree` per step before replay and expect step 4's Makefile to already carry the s3 line.
 - The release carries D5's FINAL 0018 (only D5 changed it since the base); the rollout's plan digest is recomputed on the day (W6/W7).
 
-## Amendment 2026-09-24T01:05Z (coordinator): the cutover verdict and the unit
+## Amendment 2026-09-24T00:56Z (coordinator): the cutover verdict and the unit
 
 The cutover review at a1e88dc returned fix_required on three findings that are all TEST GAPS
 (shape pins not killable by weaker regexes; the edge directive scan too narrow; "every mode"

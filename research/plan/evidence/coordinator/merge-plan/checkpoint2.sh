@@ -31,6 +31,8 @@ stage layer0;    $PY -m pytest -q -p no:cacheprovider -rfE tests/integration > "
 stage mutant-lists; (cd $API && INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rfE $LISTS > "../../$LOG/mutants.log" 2>&1); echo "MUTANTS_EXIT=$?"; tail -1 "$LOG/mutants.log"
 stage e4b-mutants; INFRX_MUTANTS=all $PY -m pytest -q -p no:cacheprovider -rfE tests/integration/backend/test_e4b_mutants.py > "$LOG/e4b-mutants.log" 2>&1; echo "E4BM_EXIT=$?"; tail -1 "$LOG/e4b-mutants.log"
 stage w3-sigint; (cd $API && INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rfE tests/w/test_w3_mutants.py -k sigint_not_handled > "../../$LOG/w3-sigint.log" 2>&1); echo "W3_SIGINT_EXIT=$?"; tail -1 "$LOG/w3-sigint.log"
-stage layer3-e3b2; INFRX_E2_NAMESPACE=e3b2 $PY tests/integration/run.py --layer 3 --only-suites --canary > "$LOG/layer3.log" 2>&1; echo "L3_EXIT=$?"; tail -3 "$LOG/layer3.log"
+if [ -z "${SKIP_L3:-}" ]; then
+  stage layer3-e3b2; INFRX_E2_NAMESPACE=e3b2 $PY tests/integration/run.py --layer 3 --only-suites --canary > "$LOG/layer3.log" 2>&1; echo "L3_EXIT=$?"; tail -3 "$LOG/layer3.log"
+else echo "=== layer3 SKIPPED (SKIP_L3 set: e3b2 held by another lane)"; fi
 docker rm -f infrx-ckpt2-minio >/dev/null 2>&1 || true
 echo "EXIT=done $(date -u +%H:%M:%SZ)"

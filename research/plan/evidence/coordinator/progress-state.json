@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T00:55:09Z",
+  "updated": "2026-09-24T00:59:03Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "FINAL f142074; merge unit step 1 once the cutover review lands",
+      "phase": "MERGED 5b7fe69 in the merge unit (92ea6c0)",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
@@ -90,40 +90,40 @@
       "since": "2026-09-23T18:41:52Z"
     },
     "D5": {
-      "phase": "FINAL f142074 (verifier pass at 4bfdbf0 + the V-N2/3/4 test pins; battery green, the one Supabase red killed in isolation) → merge unit step 1; waits only on the cutover review",
-      "since": "2026-09-24T00:55:09Z"
+      "phase": "MERGED 5b7fe69 (f142074) in the merge unit at 92ea6c0",
+      "since": "2026-09-24T00:59:03Z"
     },
     "M1-L2": {
-      "phase": "verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json)",
-      "since": "2026-09-23T22:09:07Z"
+      "phase": "MERGED 21fe8fc (ba26ca4); R95",
+      "since": "2026-09-24T00:59:03Z"
     },
     "E4B": {
-      "phase": "verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json)",
-      "since": "2026-09-23T22:24:46Z"
+      "phase": "software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; R96/R97; box half + release decision after the rollout",
+      "since": "2026-09-24T00:59:03Z"
     },
     "W4-phaseB": {
       "phase": "MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md",
       "since": "2026-09-23T22:02:17Z"
     },
     "E3B-phase3": {
-      "phase": "verifier PASS at b9529d1 (wf_959f82dd-e03; JSON evidence/e/E3B3-verify-b9529d1.json) → CLEARED for merge unit step 2; N1–N3 nonblocking",
-      "since": "2026-09-24T00:39:51Z"
+      "phase": "MERGED b657a30 (b9529d1) with D5; IR3F-2(b) applied 7b100f2",
+      "since": "2026-09-24T00:59:03Z"
     },
     "merge-plan": {
       "phase": "MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main",
       "since": "2026-09-23T22:22:23Z"
     },
     "M-pilot-media": {
-      "phase": "verifier PASS at e5c02f7 (wf_475160a3-662; JSON evidence/m/MPILOT-verify-e5c02f7.json) → CLEARED for step 5; N1 qualifies R99's 'none' arm",
-      "since": "2026-09-24T00:54:20Z"
+      "phase": "MERGED 4fd4cdc (e5c02f7); R99",
+      "since": "2026-09-24T00:59:03Z"
     },
     "CUTOVER": {
-      "phase": "HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w)",
-      "since": "2026-09-24T00:20:08Z"
+      "phase": "code MERGED daeff13 (1bed457 = 60dd799 + evidence); review fix_required on 3 test gaps (JSON evidence/g/CUTOVER-review-a1e88dc.json) → fix round running → verifier → step 3b before checkpoint 2",
+      "since": "2026-09-24T00:59:03Z"
     },
     "ROLLOUT-PREP": {
-      "phase": "DONE f0a1a82: hosted 0001/0002 only → release applies 0003–0018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey → worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing → worker lane",
-      "since": "2026-09-23T23:43:44Z"
+      "phase": "MERGED 22761a4 (f0a1a82)",
+      "since": "2026-09-24T00:59:03Z"
     },
     "WORKER": {
       "phase": "lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback",
