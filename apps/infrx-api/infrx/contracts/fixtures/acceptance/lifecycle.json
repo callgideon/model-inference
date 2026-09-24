@@ -1,0 +1,5689 @@
+{
+  "cases": {
+    "admission_ready__a_job_with_no_marker_is_never_claimable": [
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:1>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:1>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "admit_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": null,
+        "op": "readiness",
+        "p": "p1"
+      },
+      {
+        "ok": null,
+        "op": "readiness",
+        "p": "p2"
+      },
+      {
+        "op": "claim_preparation",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "not_ready"
+        }
+      },
+      {
+        "ok": {
+          "admitted_at": "t+0",
+          "budgets": {
+            "first_token_s": 60.0,
+            "generation_s": 300.0,
+            "preparation_s": 120.0,
+            "queue_wait_s": 600.0,
+            "schema_version": 1,
+            "stall_s": 20.0
+          },
+          "deadline_at": "t+1020",
+          "idempotency_key": "previous-legacy_usd",
+          "job_handle": "<job:2>",
+          "key_id": "<id:8>",
+          "maximum_hold": "0.00737280",
+          "operation": "chat.completions",
+          "org_id": "<id:2>",
+          "outbox": [
+            {
+              "aggregate_id": "<id:7>",
+              "available_at": "t+0",
+              "event_id": "<id:9>",
+              "kind": "prepare_dispatch",
+              "payload": {
+                "job_handle": "<job:2>",
+                "request_id": "<id:7>"
+              },
+              "schema_version": 1,
+              "version": 1
+            }
+          ],
+          "payload_hash": "sha256:6bd93718eb9638eee87918e793ae00cb8c2f13e88af08458d0d918514c1d080b",
+          "preparation_deadline_at": "t+120",
+          "price_snapshot": {
+            "captured_at": "t-1.6848e+06",
+            "currency": "USD",
+            "input_rate_per_million": "0.20000000",
+            "model_revision": "nemostation/marlin-2b@2026-09-01",
+            "output_rate_per_million": "0.60000000",
+            "price_version": "pv_test",
+            "schema_version": 1,
+            "token_rules_version": "tr_v1"
+          },
+          "queue_wait_used_s": 0.0,
+          "replayed": false,
+          "request_id": "<id:7>",
+          "reservations": [
+            {
+              "active": true,
+              "amount": 1,
+              "key_id": "<id:8>",
+              "kind": "preparation",
+              "org_id": "<id:2>",
+              "request_id": "<id:7>",
+              "reserved_at": "t+0",
+              "schema_version": 1
+            },
+            {
+              "active": true,
+              "amount": 1,
+              "key_id": "<id:8>",
+              "kind": "inference",
+              "org_id": "<id:2>",
+              "request_id": "<id:7>",
+              "reserved_at": "t+0",
+              "schema_version": 1
+            },
+            {
+              "active": true,
+              "amount": 16777216,
+              "key_id": "<id:8>",
+              "kind": "journal_bytes",
+              "org_id": "<id:2>",
+              "request_id": "<id:7>",
+              "reserved_at": "t+0",
+              "schema_version": 1
+            }
+          ],
+          "schema_version": 1,
+          "state": "preparing"
+        },
+        "op": "admit",
+        "p": "jobs"
+      },
+      {
+        "ok": null,
+        "op": "readiness",
+        "p": "p1"
+      },
+      {
+        "ok": null,
+        "op": "readiness",
+        "p": "p3"
+      },
+      {
+        "op": "claim_preparation",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "not_ready"
+        }
+      }
+    ],
+    "admission_ready__a_refused_expectation_or_capability_admits_nothing": [
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "expectation_mismatch"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 11,
+            "digest": "sha256:acca74072ab3d1cce4e285a82c58b60d40cd9b5d163d5553cbbd7314340c1ada",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/acca74072ab3d1cc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "unsupported_media"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "unsupported_parameter"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      }
+    ],
+    "admission_ready__a_replay_answers_the_recorded_marker": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 8,
+            "digest": "sha256:ae94da4c1a6fabab4512e07bd7f597adec85b16c801a4b69251f9c4165010495",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/ae94da4c1a6fabab/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:6>",
+              "model_id": "<id:5>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:6>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:5>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:4>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:ae94da4c1a6fabab4512e07bd7f597adec85b16c801a4b69251f9c4165010495",
+                  "duration_s": 4.0,
+                  "handle": "med_ae94da4c1a6fabab4512e07bd7f597adec85b16c",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/ae94da4c1a6fabab/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:6>",
+              "model_id": "<id:5>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:6>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:5>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": true,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:4>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:ae94da4c1a6fabab4512e07bd7f597adec85b16c801a4b69251f9c4165010495",
+                  "duration_s": 4.0,
+                  "handle": "med_ae94da4c1a6fabab4512e07bd7f597adec85b16c",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/ae94da4c1a6fabab/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "admitted_at": "t+0",
+            "budgets": {
+              "first_token_s": 60.0,
+              "generation_s": 300.0,
+              "preparation_s": 120.0,
+              "queue_wait_s": 600.0,
+              "schema_version": 1,
+              "stall_s": 20.0
+            },
+            "deadline_at": "t+1020",
+            "idempotency_key": "replay-legacy_usd",
+            "job_handle": "<job:2>",
+            "key_id": "<id:9>",
+            "maximum_hold": "0.00737280",
+            "operation": "chat.completions",
+            "org_id": "<id:2>",
+            "outbox": [
+              {
+                "aggregate_id": "<id:8>",
+                "available_at": "t+0",
+                "event_id": "<id:10>",
+                "kind": "prepare_dispatch",
+                "payload": {
+                  "job_handle": "<job:2>",
+                  "request_id": "<id:8>"
+                },
+                "schema_version": 1,
+                "version": 1
+              }
+            ],
+            "payload_hash": "sha256:c5e5e3debb03730b38f836c4978f5d53dd7cb8b0c32383b4e8f9f09363ab4717",
+            "preparation_deadline_at": "t+120",
+            "price_snapshot": {
+              "captured_at": "t-1.6848e+06",
+              "currency": "USD",
+              "input_rate_per_million": "0.20000000",
+              "model_revision": "nemostation/marlin-2b@2026-09-01",
+              "output_rate_per_million": "0.60000000",
+              "price_version": "pv_test",
+              "schema_version": 1,
+              "token_rules_version": "tr_v1"
+            },
+            "queue_wait_used_s": 0.0,
+            "replayed": false,
+            "request_id": "<id:8>",
+            "reservations": [
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:9>",
+                "kind": "preparation",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:9>",
+                "kind": "inference",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 16777216,
+                "key_id": "<id:9>",
+                "kind": "journal_bytes",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              }
+            ],
+            "schema_version": 1,
+            "state": "preparing"
+          },
+          {
+            "job_id": "<id:8>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:ae94da4c1a6fabab4512e07bd7f597adec85b16c801a4b69251f9c4165010495",
+                  "duration_s": 4.0,
+                  "handle": "med_ae94da4c1a6fabab4512e07bd7f597adec85b16c",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/ae94da4c1a6fabab/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "admitted_at": "t+0",
+            "budgets": {
+              "first_token_s": 60.0,
+              "generation_s": 300.0,
+              "preparation_s": 120.0,
+              "queue_wait_s": 600.0,
+              "schema_version": 1,
+              "stall_s": 20.0
+            },
+            "deadline_at": "t+1020",
+            "idempotency_key": "replay-legacy_usd",
+            "job_handle": "<job:2>",
+            "key_id": "<id:9>",
+            "maximum_hold": "0.00737280",
+            "operation": "chat.completions",
+            "org_id": "<id:2>",
+            "outbox": [
+              {
+                "aggregate_id": "<id:8>",
+                "available_at": "t+0",
+                "event_id": "<id:10>",
+                "kind": "prepare_dispatch",
+                "payload": {
+                  "job_handle": "<job:2>",
+                  "request_id": "<id:8>"
+                },
+                "schema_version": 1,
+                "version": 1
+              }
+            ],
+            "payload_hash": "sha256:c5e5e3debb03730b38f836c4978f5d53dd7cb8b0c32383b4e8f9f09363ab4717",
+            "preparation_deadline_at": "t+120",
+            "price_snapshot": {
+              "captured_at": "t-1.6848e+06",
+              "currency": "USD",
+              "input_rate_per_million": "0.20000000",
+              "model_revision": "nemostation/marlin-2b@2026-09-01",
+              "output_rate_per_million": "0.60000000",
+              "price_version": "pv_test",
+              "schema_version": 1,
+              "token_rules_version": "tr_v1"
+            },
+            "queue_wait_used_s": 0.0,
+            "replayed": true,
+            "request_id": "<id:8>",
+            "reservations": [
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:9>",
+                "kind": "preparation",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:9>",
+                "kind": "inference",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 16777216,
+                "key_id": "<id:9>",
+                "kind": "journal_bytes",
+                "org_id": "<id:2>",
+                "request_id": "<id:8>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              }
+            ],
+            "schema_version": 1,
+            "state": "preparing"
+          },
+          {
+            "job_id": "<id:8>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:ae94da4c1a6fabab4512e07bd7f597adec85b16c801a4b69251f9c4165010495",
+                  "duration_s": 4.0,
+                  "handle": "med_ae94da4c1a6fabab4512e07bd7f597adec85b16c",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/ae94da4c1a6fabab/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      }
+    ],
+    "admission_ready__a_text_job_is_ready_with_an_empty_manifest": [
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:1>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "job_id": "<id:1>",
+          "org_id": "<id:2>",
+          "ready_at": "t+0",
+          "schema_version": 2,
+          "sources": []
+        },
+        "op": "readiness",
+        "p": "p2"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:1>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "admitted_at": "t+0",
+            "budgets": {
+              "first_token_s": 60.0,
+              "generation_s": 300.0,
+              "preparation_s": 120.0,
+              "queue_wait_s": 600.0,
+              "schema_version": 1,
+              "stall_s": 20.0
+            },
+            "deadline_at": "t+1020",
+            "idempotency_key": "text-legacy_usd",
+            "job_handle": "<job:2>",
+            "key_id": "<id:8>",
+            "maximum_hold": "0.00737280",
+            "operation": "chat.completions",
+            "org_id": "<id:2>",
+            "outbox": [
+              {
+                "aggregate_id": "<id:7>",
+                "available_at": "t+0",
+                "event_id": "<id:9>",
+                "kind": "prepare_dispatch",
+                "payload": {
+                  "job_handle": "<job:2>",
+                  "request_id": "<id:7>"
+                },
+                "schema_version": 1,
+                "version": 1
+              }
+            ],
+            "payload_hash": "sha256:6bd93718eb9638eee87918e793ae00cb8c2f13e88af08458d0d918514c1d080b",
+            "preparation_deadline_at": "t+120",
+            "price_snapshot": {
+              "captured_at": "t-1.6848e+06",
+              "currency": "USD",
+              "input_rate_per_million": "0.20000000",
+              "model_revision": "nemostation/marlin-2b@2026-09-01",
+              "output_rate_per_million": "0.60000000",
+              "price_version": "pv_test",
+              "schema_version": 1,
+              "token_rules_version": "tr_v1"
+            },
+            "queue_wait_used_s": 0.0,
+            "replayed": false,
+            "request_id": "<id:7>",
+            "reservations": [
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:8>",
+                "kind": "preparation",
+                "org_id": "<id:2>",
+                "request_id": "<id:7>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:8>",
+                "kind": "inference",
+                "org_id": "<id:2>",
+                "request_id": "<id:7>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 16777216,
+                "key_id": "<id:8>",
+                "kind": "journal_bytes",
+                "org_id": "<id:2>",
+                "request_id": "<id:7>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              }
+            ],
+            "schema_version": 1,
+            "state": "preparing"
+          },
+          {
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "job_id": "<id:7>",
+          "org_id": "<id:2>",
+          "ready_at": "t+0",
+          "schema_version": 2,
+          "sources": []
+        },
+        "op": "readiness",
+        "p": "p3"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:7>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      }
+    ],
+    "admission_ready__an_expired_upload_cannot_be_admitted": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 11,
+            "digest": "sha256:8bb7f1c9c795fe0fc98aa1c6a1ed55abc15ec338899bd5102e7fdb95953865ff",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 11,
+            "content_id": "<id:2>",
+            "digest": "sha256:8bb7f1c9c795fe0fc98aa1c6a1ed55abc15ec338899bd5102e7fdb95953865ff",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 11,
+            "digest": "sha256:8bb7f1c9c795fe0fc98aa1c6a1ed55abc15ec338899bd5102e7fdb95953865ff",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "clock": "t+3600"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      }
+    ],
+    "admission_ready__the_manifest_is_the_orgs_own_live_content": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 8,
+            "digest": "sha256:200aeff8cfb2e8cc0bee42347b22973b3d8d3568e0a9c5c6d7a63259d0aad810",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/200aeff8cfb2e8cc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:3>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 10,
+            "digest": "sha256:cdba89067e6f2b02564f60913297aab5c98d3d75099021832083c3d10ecc16a1",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:4>/v1/cdba89067e6f2b02/source",
+            "org_id": "<id:4>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:2>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:5>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 13,
+            "digest": "sha256:24abfe19f4e1eff5183a831ee5e4ddafa23e4aa170fa2b471e8cd62b2324b324",
+            "kind": "upload_destination",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/24abfe19f4e1eff5/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2,
+            "upload_handle": "<upl:1>"
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:2>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:2>",
+          "received": {
+            "bytes": 13,
+            "digest": "sha256:7ed097f051f91346a9dbf80d4326d19ab11ff97f288b02b0db24c62f356feb4b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 13,
+            "content_id": "<id:6>",
+            "digest": "sha256:7ed097f051f91346a9dbf80d4326d19ab11ff97f288b02b0db24c62f356feb4b",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:2>",
+          "received": {
+            "bytes": 13,
+            "digest": "sha256:7ed097f051f91346a9dbf80d4326d19ab11ff97f288b02b0db24c62f356feb4b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "invalid_manifest"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:10>",
+              "model_id": "<id:9>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:11>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:10>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:9>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:11>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:7>",
+            "schema_version": 2,
+            "wallet_id": "<id:8>"
+          },
+          {
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:200aeff8cfb2e8cc0bee42347b22973b3d8d3568e0a9c5c6d7a63259d0aad810",
+                  "duration_s": 4.0,
+                  "handle": "med_200aeff8cfb2e8cc0bee42347b22973b3d8d3568",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/200aeff8cfb2e8cc/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "content_id": "<id:1>",
+            "generation": 1,
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "referenced_at": "t+0",
+            "schema_version": 2
+          }
+        ],
+        "op": "references",
+        "p": "p1"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "invalid_manifest"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "admitted_at": "t+0",
+            "budgets": {
+              "first_token_s": 60.0,
+              "generation_s": 300.0,
+              "preparation_s": 120.0,
+              "queue_wait_s": 600.0,
+              "schema_version": 1,
+              "stall_s": 20.0
+            },
+            "deadline_at": "t+1020",
+            "idempotency_key": "valid-legacy_usd",
+            "job_handle": "<job:2>",
+            "key_id": "<id:13>",
+            "maximum_hold": "0.00737280",
+            "operation": "chat.completions",
+            "org_id": "<id:2>",
+            "outbox": [
+              {
+                "aggregate_id": "<id:12>",
+                "available_at": "t+0",
+                "event_id": "<id:14>",
+                "kind": "prepare_dispatch",
+                "payload": {
+                  "job_handle": "<job:2>",
+                  "request_id": "<id:12>"
+                },
+                "schema_version": 1,
+                "version": 1
+              }
+            ],
+            "payload_hash": "sha256:08fe601ed281043d1c50478be34ea0e1642827b449f7b66a5d65ebf749130ba3",
+            "preparation_deadline_at": "t+120",
+            "price_snapshot": {
+              "captured_at": "t-1.6848e+06",
+              "currency": "USD",
+              "input_rate_per_million": "0.20000000",
+              "model_revision": "nemostation/marlin-2b@2026-09-01",
+              "output_rate_per_million": "0.60000000",
+              "price_version": "pv_test",
+              "schema_version": 1,
+              "token_rules_version": "tr_v1"
+            },
+            "queue_wait_used_s": 0.0,
+            "replayed": false,
+            "request_id": "<id:12>",
+            "reservations": [
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:13>",
+                "kind": "preparation",
+                "org_id": "<id:2>",
+                "request_id": "<id:12>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 1,
+                "key_id": "<id:13>",
+                "kind": "inference",
+                "org_id": "<id:2>",
+                "request_id": "<id:12>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              },
+              {
+                "active": true,
+                "amount": 16777216,
+                "key_id": "<id:13>",
+                "kind": "journal_bytes",
+                "org_id": "<id:2>",
+                "request_id": "<id:12>",
+                "reserved_at": "t+0",
+                "schema_version": 1
+              }
+            ],
+            "schema_version": 1,
+            "state": "preparing"
+          },
+          {
+            "job_id": "<id:12>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 8,
+                  "digest": "sha256:200aeff8cfb2e8cc0bee42347b22973b3d8d3568e0a9c5c6d7a63259d0aad810",
+                  "duration_s": 4.0,
+                  "handle": "med_200aeff8cfb2e8cc0bee42347b22973b3d8d3568",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/200aeff8cfb2e8cc/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "content_id": "<id:1>",
+            "generation": 1,
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "referenced_at": "t+0",
+            "schema_version": 2
+          },
+          {
+            "content_id": "<id:1>",
+            "generation": 1,
+            "job_id": "<id:12>",
+            "org_id": "<id:2>",
+            "referenced_at": "t+0",
+            "schema_version": 2
+          }
+        ],
+        "op": "references",
+        "p": "p1"
+      }
+    ],
+    "result_expiry__a_committed_success_carries_its_persisted_expiry": [
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:1>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:1>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:1>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:1>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "prepared",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+120",
+          "first_token_deadline_at": "t+60",
+          "generation": 1,
+          "generation_deadline_at": "t+300",
+          "job_id": "<id:1>",
+          "kind": "inference",
+          "schema_version": 1,
+          "worker_id": "worker-a"
+        },
+        "op": "claim",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          },
+          {
+            "accounting_regime": "credit",
+            "charged": "0.88800000",
+            "deployment_revision_id": "<id:5>",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "settled_at": "t+0",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            },
+            "wallet_id": "<id:3>"
+          }
+        ],
+        "op": "complete_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "get_owned_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": true,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "clock": "t+86400"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "get_owned_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+86400",
+            "job_handle": "<job:2>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:7>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "ready_at": "t+86400",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "cause": "client_cancelled",
+          "debit": "0.00000000",
+          "job_id": "<id:7>",
+          "schema_version": 1,
+          "settled_at": "t+86400",
+          "settlement_state": "released_free",
+          "state": "cancelled"
+        },
+        "op": "cancel",
+        "p": "jobs"
+      }
+    ],
+    "result_expiry__a_configuration_change_never_moves_a_promised_expiry": [
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:1>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:1>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:1>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:1>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "prepared",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+120",
+          "first_token_deadline_at": "t+60",
+          "generation": 1,
+          "generation_deadline_at": "t+300",
+          "job_id": "<id:1>",
+          "kind": "inference",
+          "schema_version": 1,
+          "worker_id": "worker-a"
+        },
+        "op": "claim",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          },
+          {
+            "accounting_regime": "credit",
+            "charged": "0.88800000",
+            "deployment_revision_id": "<id:5>",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "settled_at": "t+0",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            },
+            "wallet_id": "<id:3>"
+          }
+        ],
+        "op": "complete_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "get_owned_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:2>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:7>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:7>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:7>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:2>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:7>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "prepared",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+120",
+          "first_token_deadline_at": "t+60",
+          "generation": 1,
+          "generation_deadline_at": "t+300",
+          "job_id": "<id:7>",
+          "kind": "inference",
+          "schema_version": 1,
+          "worker_id": "worker-a"
+        },
+        "op": "claim",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:7>",
+            "result_expires_at": "t+60",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          },
+          {
+            "accounting_regime": "credit",
+            "charged": "0.88800000",
+            "deployment_revision_id": "<id:5>",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "request_id": "<id:7>",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "settled_at": "t+0",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            },
+            "wallet_id": "<id:3>"
+          }
+        ],
+        "op": "complete_credit",
+        "p": "jobs"
+      }
+    ],
+    "result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgotten": [
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:1>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:1>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:1>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:1>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "prepared",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+120",
+          "first_token_deadline_at": "t+60",
+          "generation": 1,
+          "generation_deadline_at": "t+300",
+          "job_id": "<id:1>",
+          "kind": "inference",
+          "schema_version": 1,
+          "worker_id": "worker-a"
+        },
+        "op": "claim",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "content_id": "<id:7>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 4,
+            "digest": "sha256:982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+            "job_id": "<id:1>",
+            "kind": "result",
+            "location": "database",
+            "object_key": "job_results/<id:1>",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+3600",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          },
+          {
+            "accounting_regime": "credit",
+            "charged": "0.88800000",
+            "deployment_revision_id": "<id:5>",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "settled_at": "t+0",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            },
+            "wallet_id": "<id:3>"
+          }
+        ],
+        "op": "complete_credit",
+        "p": "jobs"
+      },
+      {
+        "clock": "t+3599"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "clock": "t+3600"
+      },
+      {
+        "ok": {
+          "items": [
+            {
+              "content_id": "<id:7>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 4,
+                "digest": "sha256:982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+                "job_id": "<id:1>",
+                "kind": "result",
+                "location": "database",
+                "object_key": "job_results/<id:1>",
+                "org_id": "<id:2>",
+                "origin": "written",
+                "schema_version": 2
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "live"
+            }
+          ],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "claimed_at": "t+3600",
+          "content_id": "<id:7>",
+          "expires_at": "t+3630",
+          "fence": 1,
+          "generation": 1,
+          "holder": "s",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:7>",
+          "fence": 1,
+          "generation": 1,
+          "location": "database",
+          "object_key": "job_results/<id:1>",
+          "schema_version": 2,
+          "tombstoned_at": "t+3600"
+        },
+        "op": "tombstone",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+3600",
+            "content_id": "<id:7>",
+            "expires_at": "t+3630",
+            "fence": 1,
+            "generation": 1,
+            "holder": "s",
+            "schema_version": 2
+          },
+          "content_id": "<id:7>",
+          "deleted_at": "t+3600",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 4,
+            "digest": "sha256:982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+            "job_id": "<id:1>",
+            "kind": "result",
+            "location": "database",
+            "object_key": "job_results/<id:1>",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "deleted",
+          "tombstoned_at": "t+3600"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+3600",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "get_owned_credit",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": true,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+3600",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          }
+        ],
+        "op": "lookup",
+        "p": "jobs"
+      }
+    ],
+    "result_expiry__the_proposal_never_selects_the_expiry": [
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:5>",
+              "model_id": "<id:4>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:5>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:4>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:6>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "wallet_id": "<id:3>"
+          },
+          {
+            "job_id": "<id:1>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+30",
+          "generation": 1,
+          "generation_deadline_at": "t+120",
+          "job_id": "<id:1>",
+          "kind": "preparation",
+          "schema_version": 1,
+          "worker_id": "prep-a"
+        },
+        "op": "claim_preparation",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "accounting_regime": "credit",
+          "admitted_at": "t+0",
+          "job_handle": "<job:1>",
+          "maximum_hold": "14.74560000",
+          "org_id": "<id:2>",
+          "pins": {
+            "accounting_regime": "credit",
+            "deployment_revision_id": "<id:5>",
+            "model_id": "<id:4>",
+            "policy_version": "dap_2026_09_01",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "requested_model": "nemostation/marlin-2b@2026-09-01",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>"
+          },
+          "rate_card": {
+            "approved_by": "provisional - P-01 pending",
+            "debit_rounding": "half_up_8",
+            "deployment_revision_id": "<id:5>",
+            "effective_at": "t-1.6848e+06",
+            "hold_rounding": "ceiling_8",
+            "input_rate_per_million": "400.00000000",
+            "meter": "tokens-v1",
+            "model_id": "<id:4>",
+            "output_rate_per_million": "1200.00000000",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "status": "approved",
+            "unit": "CREDIT"
+          },
+          "replayed": false,
+          "request_id": "<id:1>",
+          "schema_version": 2,
+          "wallet_id": "<id:3>"
+        },
+        "op": "prepared",
+        "p": "jobs"
+      },
+      {
+        "ok": {
+          "acquired_at": "t+0",
+          "expires_at": "t+120",
+          "first_token_deadline_at": "t+60",
+          "generation": 1,
+          "generation_deadline_at": "t+300",
+          "job_id": "<id:1>",
+          "kind": "inference",
+          "schema_version": 1,
+          "worker_id": "worker-a"
+        },
+        "op": "claim",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "cause": "completed",
+            "debit": "0.00000000",
+            "job_id": "<id:1>",
+            "result_expires_at": "t+86400",
+            "result_ref": "results/test/result.json",
+            "schema_version": 1,
+            "settled_at": "t+0",
+            "settlement_state": "settled",
+            "state": "succeeded",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            }
+          },
+          {
+            "accounting_regime": "credit",
+            "charged": "0.88800000",
+            "deployment_revision_id": "<id:5>",
+            "rate_card_version": "rc_marlin2b_2026_09_provisional",
+            "request_id": "<id:1>",
+            "schema_version": 2,
+            "serving_version_id": "<id:6>",
+            "settled_at": "t+0",
+            "usage": {
+              "certainty": "authoritative",
+              "completion_tokens": 340,
+              "prompt_tokens": 1200,
+              "schema_version": 1,
+              "total_tokens": 1540
+            },
+            "wallet_id": "<id:3>"
+          }
+        ],
+        "op": "complete_credit",
+        "p": "jobs"
+      }
+    ],
+    "retention_durable__a_payload_is_protected_by_its_job_once_admitted": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 64,
+            "digest": "sha256:d57d19d1bc9e3d9cccf2e9849fcae66c4279616846448bea9d8f0dc7b4fc0148",
+            "job_id": "<id:3>",
+            "kind": "payload",
+            "location": "object_store",
+            "object_key": "payloads/<id:2>/<id:3>.json",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:4>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 64,
+            "digest": "sha256:56c4db0df6b84c837d1c5a2d553d215af914414e3f1e3988b6006d30cdaf0845",
+            "job_id": "<id:5>",
+            "kind": "payload",
+            "location": "object_store",
+            "object_key": "payloads/<id:2>/<id:5>.json",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:8>",
+              "model_id": "<id:7>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:9>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:8>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:7>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:9>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:6>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": []
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "ok": {
+          "claimed_at": "t+60",
+          "content_id": "<id:4>",
+          "expires_at": "t+90",
+          "fence": 1,
+          "generation": 1,
+          "holder": "s",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__a_referenced_object_is_neither_a_candidate_nor_claimable": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:8d8924ddc727a5972d7129d0968d187e116bfcf26e23b8deee03713c28a6c6f0",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/8d8924ddc727a597/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+0",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:6>",
+              "model_id": "<id:5>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:6>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:5>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:4>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+0",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 6,
+                  "digest": "sha256:8d8924ddc727a5972d7129d0968d187e116bfcf26e23b8deee03713c28a6c6f0",
+                  "duration_s": 4.0,
+                  "handle": "med_8d8924ddc727a5972d7129d0968d187e116bfcf2",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/8d8924ddc727a597/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:8d8924ddc727a5972d7129d0968d187e116bfcf26e23b8deee03713c28a6c6f0",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/8d8924ddc727a597/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "ok": {
+          "items": [],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "ok": {
+          "cause": "client_cancelled",
+          "debit": "0.00000000",
+          "job_id": "<id:3>",
+          "schema_version": 1,
+          "settled_at": "t+60",
+          "settlement_state": "released_free",
+          "state": "cancelled"
+        },
+        "op": "cancel",
+        "p": "jobs"
+      },
+      {
+        "ok": [
+          {
+            "content_id": "<id:1>",
+            "generation": 1,
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "referenced_at": "t+0",
+            "retain_until": "t+660",
+            "schema_version": 2
+          }
+        ],
+        "op": "references",
+        "p": "p1"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "clock": "t+660"
+      },
+      {
+        "ok": {
+          "items": [
+            {
+              "content_id": "<id:1>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 6,
+                "digest": "sha256:8d8924ddc727a5972d7129d0968d187e116bfcf26e23b8deee03713c28a6c6f0",
+                "kind": "source",
+                "location": "object_store",
+                "object_key": "media/<id:2>/v1/8d8924ddc727a597/source",
+                "org_id": "<id:2>",
+                "origin": "written",
+                "schema_version": 2
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "live"
+            }
+          ],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__a_tombstone_refuses_new_use_until_the_delete_is_acked": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "ok": {
+          "claimed_at": "t+60",
+          "content_id": "<id:1>",
+          "expires_at": "t+90",
+          "fence": 1,
+          "generation": 1,
+          "holder": "s-a",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "fence": 1,
+          "generation": 1,
+          "location": "object_store",
+          "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+          "schema_version": 2,
+          "tombstoned_at": "t+60"
+        },
+        "op": "tombstone",
+        "p": "p1"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "dependency_unavailable",
+          "reason": "content_retiring"
+        }
+      },
+      {
+        "ok": null,
+        "op": "lookup",
+        "p": "jobs"
+      },
+      {
+        "op": "register",
+        "p": "p1",
+        "refused": {
+          "code": "dependency_unavailable",
+          "reason": "content_retiring"
+        }
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+60",
+            "content_id": "<id:1>",
+            "expires_at": "t+90",
+            "fence": 1,
+            "generation": 1,
+            "holder": "s-a",
+            "schema_version": 2
+          },
+          "content_id": "<id:1>",
+          "deleted_at": "t+60",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "deleted",
+          "tombstoned_at": "t+60"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+60",
+            "content_id": "<id:1>",
+            "expires_at": "t+90",
+            "fence": 1,
+            "generation": 1,
+            "holder": "s-a",
+            "schema_version": 2
+          },
+          "content_id": "<id:1>",
+          "deleted_at": "t+60",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "deleted",
+          "tombstoned_at": "t+60"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      },
+      {
+        "op": "admit_ready",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+120",
+          "generation": 2,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+60",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+120",
+          "generation": 2,
+          "identity": {
+            "bytes": 7,
+            "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/5b720147b6918dfc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+60",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+60",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:6>",
+              "model_id": "<id:5>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:6>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:5>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:4>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+60",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 2,
+                "ref": {
+                  "bytes": 7,
+                  "digest": "sha256:5b720147b6918dfc19baa0d7767cab75b76e17998837d04af43f2f3463c5350f",
+                  "duration_s": 4.0,
+                  "handle": "med_5b720147b6918dfc19baa0d7767cab75b76e1799",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/5b720147b6918dfc/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__admission_wins_over_a_claim_that_has_not_tombstoned": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 5,
+            "digest": "sha256:83aef6b917521cbc0dd8a641e902e53f6967b5bc24a996aaf4c6e66e406cf078",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/83aef6b917521cbc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 5,
+            "digest": "sha256:83aef6b917521cbc0dd8a641e902e53f6967b5bc24a996aaf4c6e66e406cf078",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/83aef6b917521cbc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "ok": {
+          "claimed_at": "t+60",
+          "content_id": "<id:1>",
+          "expires_at": "t+90",
+          "fence": 1,
+          "generation": 1,
+          "holder": "sweeper-a",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": [
+          {
+            "accounting_regime": "credit",
+            "admitted_at": "t+60",
+            "job_handle": "<job:1>",
+            "maximum_hold": "14.74560000",
+            "org_id": "<id:2>",
+            "pins": {
+              "accounting_regime": "credit",
+              "deployment_revision_id": "<id:6>",
+              "model_id": "<id:5>",
+              "policy_version": "dap_2026_09_01",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "requested_model": "nemostation/marlin-2b@2026-09-01",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>"
+            },
+            "rate_card": {
+              "approved_by": "provisional - P-01 pending",
+              "debit_rounding": "half_up_8",
+              "deployment_revision_id": "<id:6>",
+              "effective_at": "t-1.6848e+06",
+              "hold_rounding": "ceiling_8",
+              "input_rate_per_million": "400.00000000",
+              "meter": "tokens-v1",
+              "model_id": "<id:5>",
+              "output_rate_per_million": "1200.00000000",
+              "rate_card_version": "rc_marlin2b_2026_09_provisional",
+              "schema_version": 2,
+              "serving_version_id": "<id:7>",
+              "status": "approved",
+              "unit": "CREDIT"
+            },
+            "replayed": false,
+            "request_id": "<id:3>",
+            "schema_version": 2,
+            "wallet_id": "<id:4>"
+          },
+          {
+            "job_id": "<id:3>",
+            "org_id": "<id:2>",
+            "ready_at": "t+60",
+            "schema_version": 2,
+            "sources": [
+              {
+                "content_id": "<id:1>",
+                "generation": 1,
+                "ref": {
+                  "bytes": 5,
+                  "digest": "sha256:83aef6b917521cbc0dd8a641e902e53f6967b5bc24a996aaf4c6e66e406cf078",
+                  "duration_s": 4.0,
+                  "handle": "med_83aef6b917521cbc0dd8a641e902e53f6967b5bc",
+                  "kind": "url",
+                  "mime": "video/mp4",
+                  "org_id": "<id:2>",
+                  "profile_version": "v1",
+                  "schema_version": 1,
+                  "storage_ref": "media/<id:2>/v1/83aef6b917521cbc/source"
+                },
+                "schema_version": 2
+              }
+            ]
+          }
+        ],
+        "op": "admit_ready",
+        "p": "p1"
+      },
+      {
+        "op": "tombstone",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+60",
+            "content_id": "<id:1>",
+            "expires_at": "t+90",
+            "fence": 1,
+            "generation": 1,
+            "holder": "sweeper-a",
+            "schema_version": 2
+          },
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 5,
+            "digest": "sha256:83aef6b917521cbc0dd8a641e902e53f6967b5bc24a996aaf4c6e66e406cf078",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/83aef6b917521cbc/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__an_unfinished_delete_is_reconciled_by_a_higher_fence": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 15,
+            "digest": "sha256:bc9ecf25d2a3833e8fdb7f006f98040fe2cfe036f095884d3ca09ed942c1c7ea",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 15,
+            "digest": "sha256:bc9ecf25d2a3833e8fdb7f006f98040fe2cfe036f095884d3ca09ed942c1c7ea",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "ok": {
+          "claimed_at": "t+60",
+          "content_id": "<id:1>",
+          "expires_at": "t+90",
+          "fence": 1,
+          "generation": 1,
+          "holder": "s-dead",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "fence": 1,
+          "generation": 1,
+          "location": "object_store",
+          "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+          "schema_version": 2,
+          "tombstoned_at": "t+60"
+        },
+        "op": "tombstone",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "items": [],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "claim_held"
+        }
+      },
+      {
+        "clock": "t+90"
+      },
+      {
+        "ok": {
+          "items": [
+            {
+              "claim": {
+                "claimed_at": "t+60",
+                "content_id": "<id:1>",
+                "expires_at": "t+90",
+                "fence": 1,
+                "generation": 1,
+                "holder": "s-dead",
+                "schema_version": 2
+              },
+              "content_id": "<id:1>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 15,
+                "digest": "sha256:bc9ecf25d2a3833e8fdb7f006f98040fe2cfe036f095884d3ca09ed942c1c7ea",
+                "kind": "source",
+                "location": "object_store",
+                "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+                "org_id": "<id:2>",
+                "origin": "written",
+                "schema_version": 2
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "tombstoned",
+              "tombstoned_at": "t+60"
+            }
+          ],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "claimed_at": "t+90",
+          "content_id": "<id:1>",
+          "expires_at": "t+120",
+          "fence": 2,
+          "generation": 1,
+          "holder": "s-b",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "fence": 2,
+          "generation": 1,
+          "location": "object_store",
+          "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+          "schema_version": 2,
+          "tombstoned_at": "t+60"
+        },
+        "op": "tombstone",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+90",
+            "content_id": "<id:1>",
+            "expires_at": "t+120",
+            "fence": 2,
+            "generation": 1,
+            "holder": "s-b",
+            "schema_version": 2
+          },
+          "content_id": "<id:1>",
+          "deleted_at": "t+90",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 15,
+            "digest": "sha256:bc9ecf25d2a3833e8fdb7f006f98040fe2cfe036f095884d3ca09ed942c1c7ea",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "deleted",
+          "tombstoned_at": "t+60"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+150",
+          "generation": 2,
+          "identity": {
+            "bytes": 15,
+            "digest": "sha256:bc9ecf25d2a3833e8fdb7f006f98040fe2cfe036f095884d3ca09ed942c1c7ea",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/bc9ecf25d2a3833e/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+90",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__an_upload_protects_its_destination_and_source": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:2>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 1,
+            "digest": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+            "kind": "upload_destination",
+            "location": "object_store",
+            "object_key": "uploads/<id:1>/<upl:1>",
+            "org_id": "<id:1>",
+            "origin": "written",
+            "schema_version": 2,
+            "upload_handle": "<upl:1>"
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 17,
+            "digest": "sha256:69220146abf3631acbb72f92ed9504fa1c3818d01d18888ea7a8afac4460b921",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 17,
+            "content_id": "<id:3>",
+            "digest": "sha256:69220146abf3631acbb72f92ed9504fa1c3818d01d18888ea7a8afac4460b921",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 17,
+            "digest": "sha256:69220146abf3631acbb72f92ed9504fa1c3818d01d18888ea7a8afac4460b921",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "reference_live"
+        }
+      },
+      {
+        "clock": "t+3600"
+      },
+      {
+        "ok": {
+          "items": [
+            {
+              "content_id": "<id:2>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 1,
+                "digest": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+                "kind": "upload_destination",
+                "location": "object_store",
+                "object_key": "uploads/<id:1>/<upl:1>",
+                "org_id": "<id:1>",
+                "origin": "written",
+                "schema_version": 2,
+                "upload_handle": "<upl:1>"
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "live"
+            },
+            {
+              "content_id": "<id:3>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 17,
+                "digest": "sha256:69220146abf3631acbb72f92ed9504fa1c3818d01d18888ea7a8afac4460b921",
+                "kind": "source",
+                "location": "object_store",
+                "object_key": "media/<id:1>/v1/69220146abf3631a/source",
+                "org_id": "<id:1>",
+                "origin": "written",
+                "schema_version": 2
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "live"
+            }
+          ],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__claims_are_leased_and_fenced": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:d0ba5c8411f1fc8caf4edd4d7b81bcf49790669d4ded2de9e45eb82e61a429ce",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/d0ba5c8411f1fc8c/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:d0ba5c8411f1fc8caf4edd4d7b81bcf49790669d4ded2de9e45eb82e61a429ce",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/d0ba5c8411f1fc8c/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "not_eligible"
+        }
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:d0ba5c8411f1fc8caf4edd4d7b81bcf49790669d4ded2de9e45eb82e61a429ce",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/d0ba5c8411f1fc8c/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "stale_lease",
+          "reason": "claim_lost"
+        }
+      },
+      {
+        "ok": {
+          "claimed_at": "t+60",
+          "content_id": "<id:1>",
+          "expires_at": "t+90",
+          "fence": 1,
+          "generation": 1,
+          "holder": "s-a",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "items": [],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "op": "claim",
+        "p": "p1",
+        "refused": {
+          "code": "not_claimable",
+          "reason": "claim_held"
+        }
+      },
+      {
+        "clock": "t+90"
+      },
+      {
+        "op": "tombstone",
+        "p": "p1",
+        "refused": {
+          "code": "stale_lease",
+          "reason": "claim_lost"
+        }
+      },
+      {
+        "ok": {
+          "claimed_at": "t+90",
+          "content_id": "<id:1>",
+          "expires_at": "t+120",
+          "fence": 2,
+          "generation": 1,
+          "holder": "s-b",
+          "schema_version": 2
+        },
+        "op": "claim",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "fence": 2,
+          "generation": 1,
+          "location": "object_store",
+          "object_key": "media/<id:2>/v1/d0ba5c8411f1fc8c/source",
+          "schema_version": 2,
+          "tombstoned_at": "t+90"
+        },
+        "op": "tombstone",
+        "p": "p1"
+      },
+      {
+        "op": "acknowledge_delete",
+        "p": "p1",
+        "refused": {
+          "code": "stale_lease",
+          "reason": "claim_lost"
+        }
+      },
+      {
+        "ok": {
+          "claim": {
+            "claimed_at": "t+90",
+            "content_id": "<id:1>",
+            "expires_at": "t+120",
+            "fence": 2,
+            "generation": 1,
+            "holder": "s-b",
+            "schema_version": 2
+          },
+          "content_id": "<id:1>",
+          "deleted_at": "t+90",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 6,
+            "digest": "sha256:d0ba5c8411f1fc8caf4edd4d7b81bcf49790669d4ded2de9e45eb82e61a429ce",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/d0ba5c8411f1fc8c/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "deleted",
+          "tombstoned_at": "t+90"
+        },
+        "op": "acknowledge_delete",
+        "p": "p1"
+      }
+    ],
+    "retention_durable__eligibility_survives_restart_and_discovery": [
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 9,
+            "digest": "sha256:255703f871486907cb7a6c85388489e0e2f3ba54d8714960e2e3e1c8f333d664",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/255703f871486907/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 9,
+            "digest": "sha256:255703f871486907cb7a6c85388489e0e2f3ba54d8714960e2e3e1c8f333d664",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/255703f871486907/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "items": [],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p1"
+      },
+      {
+        "clock": "t+1"
+      },
+      {
+        "ok": {
+          "content_id": "<id:1>",
+          "eligible_at": "t+60",
+          "generation": 1,
+          "identity": {
+            "bytes": 9,
+            "digest": "sha256:255703f871486907cb7a6c85388489e0e2f3ba54d8714960e2e3e1c8f333d664",
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/255703f871486907/source",
+            "org_id": "<id:2>",
+            "origin": "written",
+            "schema_version": 2
+          },
+          "registered_at": "t+0",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p2"
+      },
+      {
+        "op": "register",
+        "p": "p2",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "register",
+        "p": "p2",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "ok": {
+          "content_id": "<id:3>",
+          "eligible_at": "t+61",
+          "generation": 1,
+          "identity": {
+            "kind": "source",
+            "location": "object_store",
+            "object_key": "media/<id:2>/v1/0123456789abcdef/source",
+            "org_id": "<id:2>",
+            "origin": "discovered",
+            "schema_version": 2
+          },
+          "registered_at": "t+1",
+          "schema_version": 2,
+          "state": "live"
+        },
+        "op": "register",
+        "p": "p2"
+      },
+      {
+        "clock": "t+60"
+      },
+      {
+        "ok": {
+          "items": [
+            {
+              "content_id": "<id:1>",
+              "eligible_at": "t+60",
+              "generation": 1,
+              "identity": {
+                "bytes": 9,
+                "digest": "sha256:255703f871486907cb7a6c85388489e0e2f3ba54d8714960e2e3e1c8f333d664",
+                "kind": "source",
+                "location": "object_store",
+                "object_key": "media/<id:2>/v1/255703f871486907/source",
+                "org_id": "<id:2>",
+                "origin": "written",
+                "schema_version": 2
+              },
+              "registered_at": "t+0",
+              "schema_version": 2,
+              "state": "live"
+            }
+          ],
+          "schema_version": 2
+        },
+        "op": "candidates",
+        "p": "p2"
+      }
+    ],
+    "upload_restart__a_failed_check_is_final": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "digest": "sha256:f41f3fa625ff120ddca7ef456bf66371ecea23c129f4e4c32367101edb516cf8",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "digest": "sha256:f41f3fa625ff120ddca7ef456bf66371ecea23c129f4e4c32367101edb516cf8",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 14,
+            "digest": "sha256:03b7dfd2ab629799c594edc4b82f22f060f921bd5f1c70108cb181052b7edd13",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "unsupported_media",
+          "reason": "digest_mismatch"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 15,
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 15,
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 14,
+            "digest": "sha256:03b7dfd2ab629799c594edc4b82f22f060f921bd5f1c70108cb181052b7edd13",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "size_mismatch"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 14,
+            "digest": "sha256:03b7dfd2ab629799c594edc4b82f22f060f921bd5f1c70108cb181052b7edd13",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "unsupported_media",
+          "reason": "mime_not_accepted"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:4>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:4>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "nothing_received"
+        }
+      }
+    ],
+    "upload_restart__every_step_survives_a_new_process": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p2"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 12,
+            "content_id": "<id:2>",
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "complete",
+        "p": "p3"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 12,
+            "content_id": "<id:2>",
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "resolve",
+        "p": "p4"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 12,
+            "content_id": "<id:2>",
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 12,
+            "digest": "sha256:61702c518a3e0ffa36fd95102545d26046738eef18c3c0dfe623fa8e25aa774b",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "complete",
+        "p": "p5"
+      }
+    ],
+    "upload_restart__one_handle_names_one_set_of_bytes": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 7,
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "clock": "t+1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 7,
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 7,
+            "content_id": "<id:2>",
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "duration_s": 4.0,
+            "finalized_at": "t+1",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 7,
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 7,
+            "content_id": "<id:2>",
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "duration_s": 4.0,
+            "finalized_at": "t+1",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 7,
+            "digest": "sha256:5ac2c3fff2a30286fd02f39de9f3d2920818c79bc555c3b563db8bd96dc880d2",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "bytes_changed"
+        }
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      }
+    ],
+    "upload_restart__oversize_puts_and_aborts_are_final_everywhere": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 16,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "request_too_large",
+          "reason": "too_large"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 16,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "refusal": "media_refused",
+          "schema_version": 2,
+          "state": "aborted",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "abort",
+        "p": "p1"
+      },
+      {
+        "op": "resolve",
+        "p": "p2",
+        "refused": {
+          "code": "invalid_request",
+          "reason": "upload_not_finalized"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 16,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "refusal": "media_refused",
+          "schema_version": 2,
+          "state": "aborted",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "abort",
+        "p": "p3"
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request"
+        }
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request"
+        }
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "invalid_request"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 22,
+            "digest": "sha256:9dbd32cf3d56a3271ea6fba76ec6c80fd5eecacfd4c5dc7049b0447d27517369",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 22,
+            "content_id": "<id:2>",
+            "digest": "sha256:9dbd32cf3d56a3271ea6fba76ec6c80fd5eecacfd4c5dc7049b0447d27517369",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 22,
+            "digest": "sha256:9dbd32cf3d56a3271ea6fba76ec6c80fd5eecacfd4c5dc7049b0447d27517369",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      }
+    ],
+    "upload_restart__the_tenant_handle_and_window_are_the_stores": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "not_found",
+          "reason": "not_found"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 7,
+            "digest": "sha256:656771905e1ef731f65cd0a0d9fb061238380a1a012e6abdf846ecc7d2ea36fd",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      }
+    ],
+    "upload_restart__the_window_bounds_completion_and_use": [
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:1>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:1>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:2>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:2>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "create",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 6,
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "created",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "acknowledge_put",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 6,
+            "content_id": "<id:2>",
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 6,
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "complete",
+        "p": "p1"
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 6,
+            "content_id": "<id:2>",
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 6,
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "resolve",
+        "p": "p1"
+      },
+      {
+        "clock": "t+3600"
+      },
+      {
+        "op": "acknowledge_put",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "op": "complete",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "clock": "t+3600"
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "ok": 1,
+        "op": "expire",
+        "p": "p1"
+      },
+      {
+        "ok": 1,
+        "op": "expire",
+        "p": "p1"
+      },
+      {
+        "ok": 0,
+        "op": "expire",
+        "p": "p1"
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "op": "resolve",
+        "p": "p1",
+        "refused": {
+          "code": "upload_expired",
+          "reason": "upload_expired"
+        }
+      },
+      {
+        "op": "abort",
+        "p": "p1",
+        "refused": {
+          "code": "state_conflict",
+          "reason": "upload_not_open"
+        }
+      },
+      {
+        "ok": {
+          "constraints": {
+            "accepted_mime": [
+              "video/mp4",
+              "video/webm"
+            ],
+            "max_bytes": 67108864,
+            "schema_version": 2
+          },
+          "created_at": "t+0",
+          "destination_ref": "infrx-upload:<upl:3>",
+          "expires_at": "t+3600",
+          "finalized": {
+            "bytes": 6,
+            "content_id": "<id:2>",
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "duration_s": 4.0,
+            "finalized_at": "t+0",
+            "generation": 1,
+            "mime": "video/mp4",
+            "profile_version": "v1",
+            "schema_version": 2
+          },
+          "org_id": "<id:1>",
+          "received": {
+            "bytes": 6,
+            "digest": "sha256:44ff7b02c80d38b26dd6aa31d9470aed81b32e10331a3c994fb1a9945fd847ba",
+            "received_at": "t+0",
+            "schema_version": 2
+          },
+          "schema_version": 2,
+          "state": "finalized",
+          "upload_handle": "<upl:3>"
+        },
+        "op": "complete",
+        "p": "p1"
+      }
+    ]
+  },
+  "config": {
+    "claim_ttl_s": 30.0,
+    "grace_s": 60.0,
+    "retention_s": 600.0,
+    "upload_ttl_s": 3600.0
+  },
+  "generated_by": "infrx.contracts.conformance.acceptance (the reference fakes)",
+  "unrecorded": [
+    "retention_durable__candidates_page_without_loss_or_repeat"
+  ],
+  "version": "f2c-lifecycle-acceptance.1"
+}
