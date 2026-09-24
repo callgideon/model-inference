@@ -984,6 +984,11 @@ async def _send(client, cfg, item, row, now):
             return
         usage, saw_done = None, False
         cancel_at = item.get("cancel_at_s")
+        # dataset.py's result export: the text of THIS attempt, kept out of every row. A
+        # measurement run passes no sink and records character counts only, as always.
+        sink = cfg.get("outputs")
+        if sink is not None:
+            sink[item["item_key"]] = parts = []
         async for line in resp.aiter_lines():
             # A client disconnect, not a timeout: leaving the `stream` block closes the
             # connection. R21 makes client_cancelled billable with authoritative usage, so
@@ -1021,6 +1026,8 @@ async def _send(client, cfg, item, row, now):
                     row["first_token_s"] = row["first_token_s"] or now()
                     row["last_token_s"] = now()
                     row["content_chars"] += len(text)
+                    if sink is not None:
+                        parts.append(text)
         row["end_s"] = now()
         row["usage_missing"] = usage is None
         if isinstance(usage, dict):   # authoritative usage only, never chunk counting; ints only
