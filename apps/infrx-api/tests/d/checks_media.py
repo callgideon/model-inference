@@ -21,9 +21,19 @@ def _upload(handle: str = HANDLE, org: str = b.ORG_A, **cols) -> str:
             f"values ({', '.join(base.values())})")
 
 
+# D10 (0019): a finalized ticket names exactly the bytes received and its source content row;
+# the update carries both facts (0019's `upload_complete` is the writer that does).
+SOURCE_KEY = f"media/{b.ORG_A}/v1/{'ab' * 8}/source"
+SOURCE_ROW = ("insert into infrx.content_objects (org_id, kind, location, object_key, digest, "
+              f"bytes, origin, registered_at, eligible_at) values ('{b.ORG_A}', 'source', "
+              f"'object_store', '{SOURCE_KEY}', '{DIGEST}', 1000, 'written', infrx.now(), "
+              "infrx.now())")
 FINALIZE = ("update infrx.media_uploads set state = 'finalized', finalized_at = infrx.now(), "
             f"digest = '{DIGEST}', bytes = 1000, mime = 'video/mp4', duration_s = 12.5, "
-            "storage_ref = 'media/x/v1/source', profile_version = 'v1' "
+            f"storage_ref = '{SOURCE_KEY}', profile_version = 'v1', "
+            f"received_bytes = 1000, received_digest = '{DIGEST}', received_at = infrx.now(), "
+            "source_generation = 1, source_content_id = (select content_id from "
+            f"infrx.content_objects where object_key = '{SOURCE_KEY}') "
             "where org_id = %s and handle = %s and state = 'created' "
             "and infrx.now() < expires_at returning handle")
 
@@ -51,6 +61,7 @@ def check_media_uploads(conn) -> str:
             why = cc.attempt(conn, sql)
             assert why is not None and why.startswith("23"), f"{label}: {why!r}"
         conn.execute(_upload())
+        conn.execute(SOURCE_ROW)
         # M3's finalize-once: the first UPDATE wins, the second finds nothing to update
         assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [(HANDLE,)], 'failed: conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [(HANDLE,)]'
         assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [], 'failed: conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == []'
