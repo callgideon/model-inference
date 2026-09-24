@@ -80,6 +80,13 @@ TERMINAL_REJECT_STATUS = {400, 401, 403, 404, 409, 410, 413, 415, 422}
 # non-stream answer, stay what they were: the sync replay is a 409, terminal by its status.
 CANCELLED_REPLAY = "cancelled_by_interruption"
 MIN_TAIL = 3            # a reported quantile needs this many samples strictly beyond it
+# E1C: every derived summary names the parser that classified its rows. Raw rows are never
+# rewritten; a later parser re-derives from them and says which version it is.
+PARSER_VERSION = "e1c.1"
+# Declared bound on open-loop driver lag (first attempts, send - scheduled). Above it the
+# client, not the target, shaped the offered load, and the cell is INVALID. The E1B box
+# cells measured 0.02-0.27 s (the 8-burst's base64 encoding); 1 s is the default bound.
+DEFAULT_MAX_DRIVER_LAG_S = 1.0
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
 # and nothing else. `upload://` (this client's previous spelling) is refused at ingress by
@@ -222,6 +229,7 @@ def refuse_key_in_args(a, key):
 CODE_OK = re.compile(r"[a-z0-9_]{1,64}")            # error.code / error.type / finish_reason
 ID_OK = re.compile(r"[A-Za-z0-9-]{1,64}")           # Inference-Id (a UUID passes)
 TIMING_NAME_OK = re.compile(r"[a-z0-9_-]{1,32}")    # Server-Timing metric names
+MODEL_OK = re.compile(r"[A-Za-z0-9._/@:-]{1,128}")  # the served model (the R62 pin) in chunks
 # An upload handle is server-controlled and it goes into the request body AND into the
 # resume state, so it is allowlisted like every other server string: contracts/ids.py
 # spells it `upl_` + 22..64 of [A-Za-z0-9_-] and nothing else may be sent back as a ref.
@@ -439,12 +447,24 @@ def parse_args(argv=None):
     ap.add_argument("--report", default=None,
                     help="read a summary JSONL (--out) and print the sweep report; runs nothing")
     ap.add_argument("--retries", type=int, default=0, help="retry 429/503 this many times, honouring Retry-After")
+    ap.add_argument("--max-driver-lag", type=float, default=DEFAULT_MAX_DRIVER_LAG_S,
+                    help="open loop: a first attempt sent later than this after its scheduled "
+                         "arrival makes the cell INVALID (the driver limited the offered load)")
+    ap.add_argument("--expect-model", default=None,
+                    help="the served model identity (the R62 pin the stream reports); a fresh "
+                         "answer from any other model makes the cell INVALID")
+    ap.add_argument("--validate-raw", default=None,
+                    help="re-derive the validity of an existing raw file (read-only; the raw "
+                         "rows are never rewritten) and print it; runs nothing")
+    ap.add_argument("--intentional-resume", action="store_true",
+                    help="with --validate-raw: the file is a --resume run, so its replays are "
+                         "the resume's own and labelled, not unexpected")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--no-warmup", action="store_true")
     ap.add_argument("--dry-run-transport", default=None,
                     help="import path 'module:callable' returning an httpx transport (tests/dry runs, no network)")
     a = ap.parse_args(argv)
-    if a.report:
+    if a.report or a.validate_raw:
         return a
     if not a.video and not a.corpus:
         ap.error("pass a video or --corpus")
@@ -743,6 +763,8 @@ def apply_resume(schedule, previous):
             continue
         if row is not None and row.get("upload_handle"):
             item["upload_handle"] = row["upload_handle"]
+        # A key the interrupted run already sent: its replay is the resume's own, labelled.
+        item["resumed"] = row is not None
         remaining.append(item)
     return remaining, skipped
 
@@ -763,7 +785,7 @@ def messages_for(item, media_ref=None):
                                          {"type": "text", "text": item["prompt"]}]}]
 
 
-async def media_ref_for(item, cfg, client, row):
+async def media_ref_for(item, cfg, client, row, now=None):
     """The media reference for this attempt, doing the upload handshake when asked."""
     form, clip = item["form"], item["clip"]
     path = clip["path"] if clip else cfg["video"]
@@ -788,8 +810,10 @@ async def media_ref_for(item, cfg, client, row):
         handle = item.get("upload_handle")
         if handle is None:
             t = CLOCK()
+            row["upload_start_s"] = now() if now else None
             handle = await upload(client, cfg, path, row, item["tenant"])
             row["upload_s"] = round(CLOCK() - t, 4)
+            row["upload_end_s"] = now() if now else None
         row["upload_handle"] = handle
         return UPLOAD_REF_SCHEME + handle
     raise ValueError(f"unknown form {form}")
@@ -905,6 +929,12 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "upload_expires_at": None, "media_sent": False,
            "finish_reason": None,
            "stream_complete": None, "schedule_lag_s": None,
+           # E1C: how this attempt came to be sent, and what the server did with it -
+           # resend: first | transport_retry (in-run 429/503 retry) | resume (a key the
+           # interrupted run already sent); served: fresh | replay | None (nothing served).
+           "resend": ("transport_retry" if attempt_no else
+                      "resume" if item.get("resumed") else "first"),
+           "served": None, "served_model": None, "upload_start_s": None, "upload_end_s": None,
            # request-level fields, filled by run_one() on the attempt that ends the request
            "request_send_s": None, "request_latency_s": None, "latency_from_scheduled_s": None}
     now = lambda: round(CLOCK() - t0, 6)
@@ -916,6 +946,7 @@ async def attempt(client, cfg, item, t0, attempt_no):
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
         row["end_s"] = row["end_s"] or now()
+    row["served"] = served_as(row)
     if (row["outcome"], row["error_class"], row["error_code"], row["idempotency_replayed"]) == (
             "failed", "stream_error_event", "state_conflict", True):
         row["outcome"] = CANCELLED_REPLAY
@@ -934,7 +965,7 @@ async def attempt(client, cfg, item, t0, attempt_no):
 
 async def _send(client, cfg, item, row, now):
     """Issue the request and fill `row`. Returning early is fine: attempt() finalises."""
-    ref = await media_ref_for(item, cfg, client, row)
+    ref = await media_ref_for(item, cfg, client, row, now)
     payload = {"model": cfg["model"], "messages": messages_for(item, ref),
                "max_tokens": item["max_tokens"], "temperature": 0, "stream": True}
     # vLLM streams usage only when asked. The infrx gateway always sends its usage frame, and
@@ -1010,6 +1041,8 @@ async def _send(client, cfg, item, row, now):
                 continue
             if chunk.get("usage"):
                 usage = chunk["usage"]
+            if chunk.get("model") and row["served_model"] is None:
+                row["served_model"] = allow(chunk["model"], MODEL_OK, cfg["key"])
             if chunk.get("error"):
                 row["outcome"] = "failed"
                 row["error_class"] = "stream_error_event"
@@ -1292,30 +1325,133 @@ def profile_block(cfg):
     }
 
 
-def summarize(rows, wall, cfg):
+def served_as(row):
+    """fresh | replay | None. A row written before E1C has no `served`; this derives the same
+    answer from the fields it does carry, so old raw files classify exactly as new ones."""
+    if row.get("idempotency_replayed"):
+        return "replay"
+    return "fresh" if row.get("outcome") == "accepted" else None
+
+
+OUTCOMES = ("accepted", "rejected", "failed", "cancelled", CANCELLED_REPLAY)
+
+
+def finals_of(rows):
     finals = {}
-    for r in rows:                                        # last attempt per request decides its outcome
+    for r in rows:                                        # last attempt per request decides
         finals[r["seq"]] = r
-    finals = list(finals.values())
+    return list(finals.values())
+
+
+def validity(rows, *, scheduled, open_loop, max_lag_s, intentional_resume=False,
+             expect_model=None, interrupted=False):
+    """BENCH-VALIDITY: may this cell's numbers be read as capacity at all?
+
+    INVALID, with every reason, when: a replay the run did not intend (any replay unless the
+    run is a resume, and then only on the keys the interrupted run sent); a scheduled item
+    with no attempt, or an interrupted run; open-loop driver lag above the declared bound;
+    a fresh answer from a model other than the declared one (or none reported when one was
+    declared); counters that do not add up. Zero replay is necessary, not sufficient."""
+    finals = finals_of(rows)
+    reasons = []
+    replays = [r for r in finals if served_as(r) == "replay"]
+    # A pre-E1C row carries no `resend`; in a declared resume its replays are the resume's.
+    unexpected = [r for r in replays
+                  if not (intentional_resume and r.get("resend", "resume") == "resume")]
+    if unexpected:
+        reasons.append(f"unexpected replay: {len(unexpected)} answer(s) served from the "
+                       f"idempotency store, not fresh inference")
+    missing = None if scheduled is None else scheduled - len(finals)
+    if missing:
+        reasons.append(f"missing attempts: {missing} of {scheduled} scheduled item(s) have no row")
+    if interrupted:
+        reasons.append("interrupted: the schedule did not run to its end")
+    lags = [r["schedule_lag_s"] for r in rows
+            if r.get("attempt") == 0 and r.get("schedule_lag_s") is not None]
+    lag_max = max(lags) if lags else None
+    if open_loop and max_lag_s is not None and lag_max is not None and lag_max > max_lag_s:
+        reasons.append(f"driver lag {lag_max:.3f} s exceeds the declared {max_lag_s} s: the "
+                       f"client limited the offered load")
+    fresh = [r for r in finals if served_as(r) == "fresh"]
+    observed = sorted({r.get("served_model") for r in fresh} - {None})
+    if expect_model is not None:
+        if any(m != expect_model for m in observed):
+            reasons.append(f"identity mismatch: served {observed}, declared {expect_model!r}")
+        elif fresh and not observed:
+            reasons.append("identity unverified: the target reported no served model")
+    buckets = {o: sum(1 for r in finals if r.get("outcome") == o) for o in OUTCOMES}
+    accepted = buckets["accepted"]
+    accepted_replayed = sum(1 for r in finals if r.get("outcome") == "accepted"
+                            and served_as(r) == "replay")
+    per_seq = {}
+    for r in rows:
+        per_seq[r["seq"]] = per_seq.get(r["seq"], 0) + 1
+    checks = {
+        "every final has a known outcome": sum(buckets.values()) == len(finals),
+        "fresh + replayed == accepted": len(fresh) + accepted_replayed == accepted,
+        "every attempt of a request is on file": all(
+            per_seq[r["seq"]] == (r.get("retries") or 0) + 1 for r in finals),
+    }
+    broken = [name for name, ok in checks.items() if not ok]
+    if broken:
+        reasons.append("counters do not reconcile: " + "; ".join(broken))
+    return {"parser_version": PARSER_VERSION,
+            "verdict": "INVALID" if reasons else "VALID", "reasons": reasons,
+            "intentional_resume": intentional_resume,
+            "scheduled": scheduled, "finals": len(finals), "missing_attempts": missing,
+            "fresh_accepted": len(fresh), "accepted_replayed": accepted_replayed,
+            "replayed": len(replays), "unexpected_replayed": len(unexpected),
+            "transport_retries": sum(1 for r in rows if r.get("attempt", 0) > 0),
+            "driver_lag_max_s": lag_max, "driver_lag_bound_s": max_lag_s,
+            "identity": {"declared": expect_model, "observed": observed},
+            "outcomes": buckets, "reconciliation": checks}
+
+
+def stage_blocks(fresh):
+    """Per-stage durations in seconds, from ONE process's monotonic clock (CLOCK), over fresh
+    answers only. Admission is the response head (the gateway's accept/refuse decision);
+    first_output is the first streamed content delta (TTFT) - a non-streamed first response
+    would not be comparable and is never produced by this client. Queue, preparation and
+    engine phases come only from the target's Server-Timing (`phases`); fetch and
+    reconciliation are not stages of a streamed answer and are reported as absent."""
+    spans = {"upload": ("upload_start_s", "upload_end_s"), "admission": ("send_s", "first_byte_s"),
+             "first_output": ("send_s", "first_token_s"), "terminal": ("send_s", "end_s")}
+    out = {}
+    for name, (a, b) in spans.items():
+        out[name], _ = percentile_block(
+            fresh, name, get=lambda r, a=a, b=b: (None if r.get(a) is None or r.get(b) is None
+                                                  else r[b] - r[a]))
+    out["clock"] = "one process, time.perf_counter; no cross-host comparison without a sync bound"
+    out["ttft_kind"] = "streamed first content delta"
+    out["not_measured"] = ["fetch", "reconciliation"]
+    return out
+
+
+def summarize(rows, wall, cfg):
+    finals = finals_of(rows)
     accepted = [r for r in finals if r["outcome"] == "accepted"]
+    # RV-08: capacity is FRESH inference only. A replayed answer is the idempotency store's,
+    # so every rate, percentile and work count below is over `fresh`; `accepted` stays the
+    # count of accepted answers of any kind, and the replays are counted apart.
+    fresh = [r for r in accepted if served_as(r) == "fresh"]
     rejected = [r for r in finals if r["outcome"] == "rejected"]
     failed = [r for r in finals if r["outcome"] == "failed"]
     cancelled = [r for r in finals if r["outcome"] == "cancelled"]
     cancelled_replays = [r for r in finals if r["outcome"] == CANCELLED_REPLAY]
-    out_tokens = sum(r["completion_tokens"] or 0 for r in accepted)
+    out_tokens = sum(r["completion_tokens"] or 0 for r in fresh)
     # The throughput unit P-18 requires: successful VIDEO-SECONDS per second, never clips
     # per second on its own (a clips/s number without the duration mix means nothing).
-    video_seconds = sum(r["duration_s"] or 0 for r in accepted if r["media_sent"])
+    video_seconds = sum(r["duration_s"] or 0 for r in fresh if r["media_sent"])
     suppressed = []
     pct = {}
     for field, src, scale in (("ttft_s", "ttft_s", 1.0), ("latency_s", "request_latency_s", 1.0),
                               ("tpot_ms", "tpot_s", 1000.0)):
-        block, sup = percentile_block(accepted, src, scale)
+        block, sup = percentile_block(fresh, src, scale)
         pct[field] = block
         suppressed += sup
     # Coordinated omission: when the driver cannot keep up, latency from the SEND time
     # hides the wait it caused. Reported from the scheduled arrival as well (open loop).
-    pct["latency_from_scheduled_s"], _ = percentile_block(accepted, "latency_from_scheduled_s")
+    pct["latency_from_scheduled_s"], _ = percentile_block(fresh, "latency_from_scheduled_s")
     # First attempts only: a retried attempt's send - scheduled includes the previous
     # attempt and the Retry-After wait, which is not driver lag and must not invalidate
     # an open-loop cell. Per-attempt lag stays in the raw rows.
@@ -1323,11 +1459,18 @@ def summarize(rows, wall, cfg):
     lag_block, _ = percentile_block(firsts, "schedule_lag_s")
     lags = [r["schedule_lag_s"] for r in firsts if r.get("schedule_lag_s") is not None]
     lag_block["max"] = round(max(lags), 6) if lags else None
-    cold = [r for r in accepted if r["cold"] is True]
-    warm = [r for r in accepted if r["cold"] is False]
+    cold = [r for r in fresh if r["cold"] is True]
+    warm = [r for r in fresh if r["cold"] is False]
     cold_ttft, _ = percentile_block(cold, "ttft_s")
     warm_ttft, _ = percentile_block(warm, "ttft_s")
-    prompt_tokens = [r["prompt_tokens"] for r in accepted if r["prompt_tokens"] is not None]
+    prompt_tokens = [r["prompt_tokens"] for r in fresh if r["prompt_tokens"] is not None]
+    scheduled = len(cfg.get("run_schedule") or []) if cfg.get("run_schedule") is not None \
+        else len(finals)
+    valid = validity(rows, scheduled=scheduled, open_loop=bool(cfg["args"].rate),
+                     max_lag_s=getattr(cfg["args"], "max_driver_lag", DEFAULT_MAX_DRIVER_LAG_S),
+                     intentional_resume=bool(cfg.get("resumed_from")),
+                     expect_model=getattr(cfg["args"], "expect_model", None),
+                     interrupted=bool(cfg.get("interrupted")))
     res = {
         # our own label, slugged into LABEL_OK (it also names the raw file)
         "label": slug(cfg["args"].label), "target": cfg["args"].target, "model": cfg["model"],
@@ -1339,12 +1482,20 @@ def summarize(rows, wall, cfg):
         "requests": len(finals), "attempts": len(rows),
         "max_tokens": cfg["max_tokens"],
         "profile": profile_block(cfg),
-        "accepted": len(accepted), "rejected": len(rejected), "failed": len(failed),
+        "parser_version": PARSER_VERSION,
+        "accepted": len(accepted), "accepted_fresh": len(fresh),
+        "accepted_replayed": len(accepted) - len(fresh),
+        "capacity_basis": "fresh accepted answers only; replays excluded (RV-08)",
+        "validity": valid,
+        "retry_policy": {"client_retries_429_503": cfg["retries"], "http_library_retries": 0,
+                         "observed_transport_retries": valid["transport_retries"]},
+        "rejected": len(rejected), "failed": len(failed),
         "cancelled": len(cancelled), CANCELLED_REPLAY: len(cancelled_replays),
         "accepted_without_usage": sum(1 for r in accepted if r["usage_missing"]),
         # Retries collapse a request to its final attempt, so every rejected or failed
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
-        "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
+        "denominators": {"latency_samples": len(fresh), "rejected_excluded": len(rejected),
+                         "replayed_excluded": len(accepted) - len(fresh),
                          "failed_excluded": len(failed), "cancelled_excluded": len(cancelled),
                          "cancelled_replay_excluded": len(cancelled_replays),
                          "scheduled": len(finals),
@@ -1380,12 +1531,17 @@ def summarize(rows, wall, cfg):
         "prompt_tokens_median": round(statistics.median(prompt_tokens), 1) if prompt_tokens else None,
         "interrupted": False,        # _run() sets this true for a partial, Ctrl-C run
         "wall_s": round(wall, 2),
-        "req_per_s": round(len(accepted) / wall, 3) if wall else None,
+        "req_per_s": round(len(fresh) / wall, 3) if wall else None,
         "out_tok_per_s": round(out_tokens / wall, 1) if wall else None,
         # Successful work, in the unit P-18 asks for, always beside its profile block.
         "video_seconds_accepted": round(video_seconds, 3),
         "video_s_per_s": round(video_seconds / wall, 3) if wall else None,
-        "phases": phase_blocks(accepted),
+        "phases": phase_blocks(fresh),
+        "stages_s": stage_blocks(fresh),
+        # Output length beside every speed number: a shorter answer is not a faster server.
+        "output_lengths": {"completion_tokens": percentile_block(fresh, "completion_tokens")[0],
+                           "content_chars": percentile_block(fresh, "content_chars")[0],
+                           "completion_tokens_total": out_tokens},
         "resources": resource_summary(cfg.get("samples") or []),
         "percentiles": pct, "schedule_lag_s": lag_block,
         "suppressed_percentiles": sorted(set(suppressed)),
@@ -1501,6 +1657,7 @@ async def execute(a, state):
         schedule, cfg["skipped_terminal"] = apply_resume(schedule, read_attempts(a.resume))
         forget_cold(schedule)
         cfg["resumed_from"] = os.path.basename(a.resume)
+    cfg["run_schedule"] = schedule          # what THIS run set out to send: the missing-attempt base
     write_row(cfg, run_fingerprint(cfg))     # the raw file's first line, before any attempt
     rows = state["rows"]
     # asyncio's default handler prints the exception MESSAGE of an unretrieved task.
@@ -1555,6 +1712,12 @@ def cell_warnings(s):
                    f"dismissed")
     if s.get("interrupted"):
         out.append("run was interrupted: partial")
+    v = s.get("validity")
+    if v is None:
+        out.append("validity not derived: this cell predates parser e1c.1 (re-derive it "
+                   "with --validate-raw; its accepted count includes any replays)")
+    elif v.get("verdict") != "VALID":
+        out.append(f"{v.get('verdict')}: " + "; ".join(v.get("reasons") or []))
     profile = s.get("profile") or {}
     if s.get("cold_requests") and profile.get("engine_state") != "restarted":
         out.append(f"cold/warm split reported with engine_state="
@@ -1566,6 +1729,25 @@ def cell_warnings(s):
     if not s.get("accepted"):
         out.append("no accepted request: nothing in this row is a measurement")
     return out
+
+
+def validate_raw(path, *, intentional_resume=False, max_lag_s=DEFAULT_MAX_DRIVER_LAG_S,
+                 expect_model=None, stream=sys.stdout):
+    """Re-derive a raw file's validity with this parser. Read-only: the raw rows and any
+    summary already written from them are never rewritten or reclassified; the answer names
+    its parser version and the digest of the exact file it read."""
+    with open(path, "rb") as f:
+        digest = sha256(f.read()).hexdigest()
+    profile = read_fingerprint(path) or {}
+    rows = read_attempts(path)
+    res = validity(rows, scheduled=None if intentional_resume else profile.get("requests"),
+                   open_loop=any(r.get("schedule_lag_s") is not None for r in rows),
+                   max_lag_s=max_lag_s, intentional_resume=intentional_resume,
+                   expect_model=expect_model)
+    res.update(source=os.path.basename(path), source_sha256=digest, derived=True,
+               note="derived from raw rows; the rows and any stored summary are unchanged")
+    print(json.dumps(res, sort_keys=True), file=stream)
+    return 0 if res["verdict"] == "VALID" else 1
 
 
 def is_legacy(cell):
@@ -1658,6 +1840,9 @@ def _run(argv=None):
     a = parse_args(argv)
     if a.report:
         return report(a.report)
+    if a.validate_raw:
+        return validate_raw(a.validate_raw, intentional_resume=a.intentional_resume,
+                            max_lag_s=a.max_driver_lag, expect_model=a.expect_model)
     refuse_key_in_args(a, tuple(dict.fromkeys([api_key(), *tenant_keys(a)])))
     raw = raw_path(a)                        # exit 2 before anything is opened or printed
     for path in (raw, a.out):
@@ -1684,6 +1869,7 @@ def _run(argv=None):
             return 130
         wall = state["wall"] if state["wall"] is not None else \
             (CLOCK() - state["t0"] if state["t0"] else 0.0)
+        cfg["interrupted"] = state["interrupted"]
         res = summarize(state["rows"], wall, cfg)
         res["interrupted"] = state["interrupted"]   # a partial run must never read as complete
         res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")

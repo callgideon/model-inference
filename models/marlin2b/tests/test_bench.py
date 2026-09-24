@@ -376,6 +376,9 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["rejected"] == 2 and summary["failed"] == 2      # 429/402 rejected, 500/503 failed
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
+                                           # E1C: a replayed answer has its own bucket, so
+                                           # latency_samples + the *_excluded sum to scheduled
+                                           "replayed_excluded": 0,
                                            "failed_excluded": 2, "cancelled_excluded": 0,
                                            "cancelled_replay_excluded": 0, "scheduled": 8, "skipped_terminal_on_resume": 0,
                                            "attempts": 8, "rejected_attempts": 2,
