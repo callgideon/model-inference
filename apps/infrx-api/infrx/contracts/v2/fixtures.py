@@ -523,7 +523,7 @@ LIFECYCLE_MODELS: dict[str, type[BaseModel]] = {
 }
 BUILDERS.update(LIFECYCLE_BUILDERS)
 MODELS.update(LIFECYCLE_MODELS)
-TABLES = (*TABLES, "lifecycle_refusals.json")
+TABLES = (*TABLES, "lifecycle_refusals.json", "result_read_cases.json")
 
 
 # --- the v1 -> v2 field map (F2P item 1) -------------------------------------
@@ -660,6 +660,7 @@ def build() -> dict[str, bytes]:
     built["map.json"] = codec.canonical_bytes(field_map())
     built["money_unit_cases.json"] = codec.canonical_bytes(list(mu.PARITY_CASES))
     built["lifecycle_refusals.json"] = codec.canonical_bytes(lc.refusal_table())
+    built["result_read_cases.json"] = codec.canonical_bytes(lc.result_case_table())
     return built
 
 

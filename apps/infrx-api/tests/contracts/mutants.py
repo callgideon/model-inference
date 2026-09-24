@@ -2365,6 +2365,51 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("lc_finalized_not_the_received_bytes", "a finalized source is exactly the received bytes",
        LC, "            if received is None or (done.digest, done.bytes) != (received.digest, received.bytes):",
        "            if received is None:", "test_an_upload_ticket_is_one_fact"),
+    # --- F2C.b: persisted result expiry and the one read classification ------------------
+    _m("lcb_success_carries_no_expiry", "a committed success carries its persisted expiry (RV-11)",
+       S, "                   if state is JobState.succeeded and result_ref else None)",
+       "                   if False else None)",
+       "result_expiry__a_committed_success_carries_its_persisted_expiry"),
+    _m("lcb_store_honours_the_proposed_expiry", "the store, not the worker, decides the expiry",
+       S, "            job.proposal = (outcome.cause, outcome.usage, outcome.result_ref)",
+       "            job.proposal = (outcome.cause, outcome.usage, outcome.result_ref)\n"
+       "            if outcome.result_expires_at is not None:\n"
+       "                job.outcome = settled = settled.model_copy(\n"
+       "                    update={\"result_expires_at\": outcome.result_expires_at})",
+       "result_expiry__the_proposal_never_selects_the_expiry"),
+    _m("lcb_read_recomputes_from_configuration", "a retune never moves a promised expiry",
+       S, "        return job.credit, job.outcome",
+       "        return job.credit, (job.outcome if job.outcome is None\n"
+       "                            or job.outcome.result_expires_at is None\n"
+       "                            else job.outcome.model_copy(update={\"result_expires_at\":\n"
+       "                                job.outcome.settled_at + timedelta(\n"
+       "                                    seconds=self.limits.result_ttl_s)}))",
+       "result_expiry__a_configuration_change_never_moves_a_promised_expiry"),
+    _m("lcb_result_retention_from_configuration", "a result is kept exactly to its persisted expiry",
+       LCF, "            outcome.result_expires_at or outcome.settled_at if kind is ContentKind.result",
+       "            outcome.settled_at + timedelta(seconds=self.retention_s)\n"
+       "            if kind is ContentKind.result",
+       "result_expiry__a_result_is_kept_to_its_expiry_then_scrubbed_not_forgotten"),
+    _m("lcb_read_available_at_expiry", "at the expiry instant the result has expired",
+       LC, "    return ReadOutcome.available if now < outcome.result_expires_at else ReadOutcome.expired",
+       "    return ReadOutcome.available if now <= outcome.result_expires_at else ReadOutcome.expired",
+       "result_expiry__a_committed_success_carries_its_persisted_expiry",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
+    _m("lcb_read_invents_an_expiry", "an old record's expiry is never recomputed",
+       LC, "    if outcome.result_expires_at is None:\n        return ReadOutcome.unavailable",
+       "    if outcome.result_expires_at is None:\n"
+       "        return (ReadOutcome.available if now < outcome.settled_at + timedelta(days=1)\n"
+       "                else ReadOutcome.expired)",
+       "test_an_old_terminal_record_is_never_given_an_invented_expiry",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
+    _m("lcb_held_read_as_a_failure", "a held reservation reads held_unknown",
+       LC, "    if outcome.settlement_state is SettlementState.held_unknown:\n        return ReadOutcome.held_unknown",
+       "    if False:\n        return ReadOutcome.held_unknown",
+       "test_every_read_outcome_is_the_committed_cross_language_table"),
+    _m("lcb_expiry_on_any_outcome", "only a success with a result carries an expiry, after settlement",
+       R, "        if self.result_expires_at is not None and (",
+       "        if False and (",
+       "test_only_a_success_with_a_result_carries_an_expiry_after_settlement"),
     _m("lc_not_ready_rendered_public", "an internal refusal never has an HTTP status",
        LC, "    LifecycleRefusal.not_ready: errors.NotClaimable,",
        "    LifecycleRefusal.not_ready: errors.NotFound,",
