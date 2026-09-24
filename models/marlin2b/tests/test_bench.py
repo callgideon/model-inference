@@ -377,7 +377,7 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
                                            "failed_excluded": 2, "cancelled_excluded": 0,
-                                           "scheduled": 8, "skipped_terminal_on_resume": 0,
+                                           "cancelled_replay_excluded": 0, "scheduled": 8, "skipped_terminal_on_resume": 0,
                                            "attempts": 8, "rejected_attempts": 2,
                                            "failed_attempts": 2, "cancelled_attempts": 0,
                                            # the 500 and the 503 are attributable; a
@@ -577,6 +577,11 @@ def test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interr
         assert bench.is_terminal(row) and not bench.is_terminal(torn)
         assert (resumed[bench.CANCELLED_REPLAY], resumed["failed"], resumed["accepted"]) == (
             1, 0, 0)
+        for run in (summary, resumed):                 # every scheduled item in one bucket
+            buckets = run["denominators"]
+            assert sum(buckets.get(name, 0) for name in (
+                "latency_samples", "rejected_excluded", "failed_excluded", "cancelled_excluded",
+                "cancelled_replay_excluded")) == buckets["scheduled"], buckets
         assert len(gw.accepted_keys) == 3, "the replay created no second accepted item"
         gw.stream_error = {**conflict, "code": "internal_error"}
         _, (other,), _, _ = resume(3)

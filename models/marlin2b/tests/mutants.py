@@ -282,6 +282,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '"cancelled": len(cancelled), CANCELLED_REPLAY: 0,',
            "cancelled_by_the_interruption",
            cases=("test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption",)),
+    # ---------------- CERTIFY-POLISH N9: the denominators sum to the schedule
+    Mutant("e1bm31", "a cancelled replay has its own denominator: the buckets sum to scheduled",
+           "bench.py", '                         "cancelled_replay_excluded": len(cancelled_replays),',
+           '                         "cancelled_replay_excluded": 0,',
+           "cancelled_by_the_interruption",
+           cases=("test_a_replay_answered_state_conflict_is_terminal_as_cancelled_by_the_interruption",)),
     # ---------------- CERTIFY-POLISH N7: only a stream event is the cancelled replay
     Mutant("e1bm30", "only a replay whose STREAM answered state_conflict is the cancelled replay",
            "bench.py", '            "failed", "stream_error_event", "state_conflict", True):',

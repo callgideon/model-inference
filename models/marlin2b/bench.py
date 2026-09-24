@@ -1313,6 +1313,7 @@ def summarize(rows, wall, cfg):
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
         "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
                          "failed_excluded": len(failed), "cancelled_excluded": len(cancelled),
+                         "cancelled_replay_excluded": len(cancelled_replays),
                          "scheduled": len(finals),
                          "skipped_terminal_on_resume": cfg.get("skipped_terminal", 0),
                          "attempts": len(rows),
