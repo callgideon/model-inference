@@ -1,0 +1,103 @@
+{
+  "head": "5b3c997 (code 559584f over 88adae2; 5b3c997 adds only the lane's evidence)",
+  "base": "88adae2 (the polish round verified fix_required); original round base 4db74b6",
+  "verdict": "pass",
+  "python": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/infrx-impl/apps/infrx-api/.venv/bin/python (imports resolved to the clone: certify from /tmp/claude-1000/polish-chk/tests/integration/backend/certify.py, bench from /tmp/claude-1000/polish-chk/models/marlin2b/bench.py; printed by probes/sizing.log)",
+  "blocking": [],
+  "closed": [
+    {
+      "id": "B1",
+      "status": "closed",
+      "evidence": "certify.py cancelled_replays: `torn = [item for item in cancelled if item not in firsts or torn_by_the_client(firsts[item])]`. Box run2's own rows re-judged at 559584f (fix/run2_resume.log, rows re-classified as bench records them): cancelled_by_interruption ['643711ed', 'c3e9c044'] (643711ed has no first-run row, c3e9c044's first row is ReadError), cancelled_by_the_platform [], resume_problems [], sop '... 2 item(s) cancelled by the interruption (the client's own tear) ...; 0 cancelled by the platform (R106)'. The CANCELLED case now carries the unrowed shape (i6: replayed state_conflict, no first-run row -> (['i3','i6'], []) and resume_problems []); mutant v_unrowed_item_called_the_platforms (restores firsts.get(item, {})) dies at test_certify.py:554 AssertionError: assert (['i3'], ['i6']) == (['i3', 'i6'], []). Protocol 5(d) states the no-row rule. A real platform cancel still FAILs: v_platform_cancel_counted_as_the_interruption dies at :542 (the stream_error_event / http_502 first rows)."
+    },
+    {
+      "id": "P2",
+      "status": "closed",
+      "evidence": "The ADMISSION case records certify.time.sleep and asserts waits == [60.0, 0.0] for Retry-After '3600' and '0'. retry_after_ignored dies at test_certify.py:411 'assert [1.0, 1.0] == [60.0, 0.0]'; retry_uncapped at :411 'assert [3600.0, 0.0] == [60.0, 0.0]'; retry_any_refusal now dies by assertion at :405 (the 418 no_reply_left sentinel replaces the pop crash: the extra retry returns an answer, and the answers comparison fails). The verifier's own vv_retry_after_ignored, vv_retry_uncapped, vv_retry_any_refusal and vv_retry_every_429 are all KILLED through the shared runner (fix/verifier-mutants.log)."
+    },
+    {
+      "id": "P3",
+      "status": "closed",
+      "evidence": "parity_check lists a clip refused 429 even when asked again under 'capacity twice, unjudged', apart from 'not refused as over the cap', and the cell still FAILs (`if wrong or busy`). The case asserts (FAIL, [], ['c051-tos720p-360p-16x9']). capacity_twice_passes and capacity_listed_as_not_refused die at :337; the re-anchored over_cap_acceptance_accepted, over_cap_refusal_untyped and v_parity_param_ignored die at :333. All are assertions."
+    },
+    {
+      "id": "P6",
+      "status": "closed",
+      "evidence": "sop_property states len(torn) and len(platform). The CANCELLED case asserts '... 1 cancelled by the platform (R106)' for a platform first row. sop_hides_the_platform_count dies at test_certify.py:547 by AssertionError (the 'stream_error_event' kind message)."
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "P1",
+      "title": "N15 does not change run2's r=2.0 cap failure: c051's row was a ReadError with no status, not a 429",
+      "evidence": "run2 envelope-r2.0-raw.jsonl: c051-tos720p-360p-16x9 seq 76 failed, http_status None, error_class ReadError, 83 ms after send (the coordinator's diagnosis: the gateway's CLOSE_CODES 429 answered mid-upload never reaches the client - INTAKE-DRAIN). Re-judged at 88adae2 (probes/run2_rungs.log): r=2.0 duration_cap FAIL {over_cap_not_refused: [c051], over_cap_refused_for_capacity: []}; envelope_summary (:1104-1118) folds every rung's cap row, so the envelope cell FAILs on it. N15's code is right (a status-less transport error cannot be excused), but it only takes effect once INTAKE-DRAIN (merge-plan step 14) lets the typed 429 reach a mid-upload client.",
+      "fix": "Coordinator: sequence the next box run after INTAKE-DRAIN, or note the dependency in 5(e)."
+    },
+    {
+      "id": "P4",
+      "title": "N14 sizes the rung to exactly 60 scheduled short clips: zero headroom",
+      "evidence": "rung_requests(120, 'full') = 135 -> 60 short clips (134 -> 59). One short-clip failure (1/135 is within max_failure_rate 0.01) or rejection leaves 59 accepted samples, and ttft_p95_short is unknown -> the rung PENDING. Fails closed.",
+      "fix": "Optional: size for 60 plus the failures the rate allows."
+    },
+    {
+      "id": "P5",
+      "title": "The report does not carry each client run's bound",
+      "evidence": "Local report at 88adae2: no timeout field anywhere; load_cells/dataset_check keep only client(...)['exit'], so a future exit 124 does not name the bound it hit (run.shell's 'timed out after N s' is in the dropped tail).",
+      "fix": "Optional: record client_timeout_s(argv) beside client_exits and the soak's client_exit."
+    },
+    {
+      "id": "P7",
+      "title": "`busy` in parity is any 429 after the retry, not only an overload code",
+      "evidence": "certify.py parity_check: busy = answer['http_status'] == 429. A 429 with a non-overload code is also listed as 'capacity twice, unjudged'. It still FAILs the cell, so this is wording only.",
+      "fix": "None needed."
+    }
+  ],
+  "scope": "git diff 88adae2..5b3c997 --stat: models/marlin2b/results/E4B-protocol.md (3, the 5(d) no-row sentence), research/plan/evidence/e/CERTIFY-TREE-c7e2139.md (57), tests/integration/backend/certify.py (26), e4b_mutants.py (32), test_certify.py (26). Nothing else. bench.py is untouched, so the W/G suites' 612 at 88adae2 still apply.",
+  "runs": [
+    {
+      "what": "E4B mutant list, whole: INFRX_MUTANTS=all python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py",
+      "env": "clone /tmp/claude-1000/polish-chk at 5b3c997, worktree venv, no stack",
+      "result_counts": "226 passed in 494.35s (0:08:14), exit 0 (224 mutants over 48 cases + 2 list tests)",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/e4b-mutants-all.log"
+    },
+    {
+      "what": "tests/integration/backend/test_certify.py + test_endpoint_doc.py",
+      "env": "clone at 5b3c997",
+      "result_counts": "48 passed in 2.68s",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/certify-tests.log"
+    },
+    {
+      "what": "models/marlin2b/tests (bench-test)",
+      "env": "clone at 5b3c997",
+      "result_counts": "68 passed in 6.35s",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/marlin-tests.log"
+    },
+    {
+      "what": "Death lines, --tb=line on the lane's _layout copies: v_unrowed_item_called_the_platforms, sop_hides_the_platform_count, retry_after_ignored, retry_uncapped, retry_any_refusal, capacity_twice_passes, capacity_listed_as_not_refused, over_cap_acceptance_accepted, over_cap_refusal_untyped, v_parity_param_ignored, v_platform_cancel_counted_as_the_interruption",
+      "env": "clone at 5b3c997",
+      "result_counts": "11/11 assertion deaths in the named case: :554, :547, :411, :411, :405, :337, :337, :333, :333, :333, :542",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/lane-deaths.log"
+    },
+    {
+      "what": "Verifier's retry mutants through the shared R83 runner",
+      "env": "clone at 5b3c997",
+      "result_counts": "4/4 killed (vv_retry_every_429, vv_retry_any_refusal, vv_retry_after_ignored, vv_retry_uncapped)",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/verifier-mutants.log"
+    },
+    {
+      "what": "Box run2 dataset rows re-judged at 559584f",
+      "env": "run2 artefacts, read only",
+      "result_counts": "resume_problems []; interruption ['643711ed', 'c3e9c044']; platform []",
+      "log": "/tmp/claude-1000/polish-chk-logs/fix/run2_resume.log"
+    },
+    {
+      "what": "Carried from 88adae2 (unchanged code paths): E1B list 43/40/3, W/G suites 612 passed, local certify run",
+      "env": "clone at 88adae2",
+      "result_counts": "see CERTIFY-POLISH-verify-88adae2.json",
+      "log": "/tmp/claude-1000/polish-chk-logs/CERTIFY-POLISH-verify-88adae2.json"
+    }
+  ],
+  "not_run": "Not rerun at 5b3c997: the E1B list, the W/G suites and the local certify run. models/marlin2b and bench.py are unchanged since 88adae2, and the local run exercises no cancelled replay. No box, AWS, hosted service, stack, e4b/e3b2 namespace, push, rebase, reset, amend or stash.",
+  "containers_removed": [],
+  "containers_note": "No container was created. The container list is unchanged (infrx-gate-minio, infrx-d2-postgres and gideon-migration-order-test-caae059890 belong to other sessions and were not touched). The clone is clean at 5b3c997 apart from this file."
+}
