@@ -130,10 +130,12 @@ class WorkerService:
     async def stop(self) -> DrainReport:
         """Drain, then tear down. Returns (and logs) what the drain did to each job."""
         bound = self.loop.limits.generation_timeout_s if self.drain_s is None else self.drain_s
-        drains = [self.loop.drain(bound)]
-        if self.preparation is not None:
-            drains.append(self.preparation.drain(self.loop.limits.preparation_lease_ttl_s))
-        report, *reports = await asyncio.gather(*drains)
+        # The preparation drain runs beside the inference drain; the inference drain still
+        # starts synchronously here (it stops claiming before the pool's next step).
+        preparing = None if self.preparation is None else asyncio.ensure_future(
+            self.preparation.drain(self.loop.limits.preparation_lease_ttl_s))
+        report = await self.loop.drain(bound)
+        reports = [] if preparing is None else [await preparing]
         for pool in (self._pool, self._preparing):
             if pool is not None:
                 await asyncio.gather(pool, return_exceptions=True)

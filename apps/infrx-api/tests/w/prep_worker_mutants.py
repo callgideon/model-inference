@@ -181,7 +181,8 @@ MUTANTS = (
        V, "        if self.preparation is not None:\n            self._preparing =",
        "        if False:\n            self._preparing =", SERVICE),
     _m("service_preparation_not_drained", "stop() drains the preparation pool",
-       V, f"            drains.append({_PREP_DRAIN})", "            pass", SERVICE),
+       V, "        preparing = None if self.preparation is None else asyncio.ensure_future(",
+       "        preparing = None if True else asyncio.ensure_future(", SERVICE),
     _m("service_preparation_drain_unbounded", "the preparation drain is bounded by "
        "PREPARATION_LEASE_TTL_S, not the generation budget",
        V, _PREP_DRAIN, "self.preparation.drain(bound)", SERVICE),

@@ -276,8 +276,8 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        "            await asyncio.sleep(self.reap_interval_s)", TIMER),
     # --- (3) drain ---------------------------------------------------------------------
     _m("stop_ignores_its_bound", "an attempt that fits the bound is waited for",
-       V, "        drains = [self.loop.drain(bound)]",
-       "        drains = [self.loop.drain(0.0)]", ENDED, SIGTERM),
+       V, "        report = await self.loop.drain(bound)",
+       "        report = await self.loop.drain(0.0)", ENDED, SIGTERM),
     _m("stop_does_not_await_the_pool", "stop() returns once the pool it stopped has stopped",
        V, "        for pool in (self._pool, self._preparing):",
        "        for pool in (self._preparing,):", ENDED),
