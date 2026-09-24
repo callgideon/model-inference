@@ -1077,6 +1077,36 @@ MUTANTS += (
        "", "test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_prints_the_url"),
 )
 
+# --- I8 slice 5: the durable model mirror, its restore, the backup/PITR read -------------
+ART, POLICY = "../../infra/runbooks/artifacts.py", "../../infra/runbooks/supabase_policy.py"
+PINS = "test_ops_recover__the_manifest_pins_the_served_bytes_and_records_names_only"
+ROUND = "test_ops_recover__mirror_then_restore_round_trips_and_detects_a_changed_object"
+POLICY_CASE = "test_ops_recover__the_policy_read_reports_pitr_backups_and_the_pooler_without_secrets"
+MUTANTS += (
+    _m("manifest_accepts_other_shards", "a directory serving other bytes is never mirrored",
+       ART, '    if shards != sorted(model["weight_shard_digests"]):', "    if False:", PINS),
+    _m("manifest_records_env_values", "the manifest carries env NAMES only",
+       ART, "                env_names.append(name)", "                env_names.append(line)", PINS),
+    _m("manifest_checks_a_renamed_pin", "the pins checked are the fields W3 records",
+       ART, '"config_digest": "config.json"', '"config_sha256": "config.json"',
+       "test_ops_recover__the_real_serving_record_has_the_fields_the_manifest_checks",
+       dies_by=("KeyError",)),
+    _m("restore_verify_ignores_changes", "a restored byte that differs is DIFFERENT",
+       ART, "    changed = sorted(p for p in set(want) & set(have) if want[p] != have[p])",
+       "    changed = []", ROUND),
+    _m("mirror_uploads_the_download_cache", "only served files are mirrored",
+       STEP + "80-mirror-artifacts.sh", "--exclude '.cache/*' ", "", ROUND),
+    _m("restore_skips_verification", "a restore is verified against the manifest",
+       STEP + "81-restore-artifacts.sh",
+       '  python3 "$repo/infra/runbooks/artifacts.py" verify --weights', "  true --weights", ROUND),
+    _m("policy_prints_connection_strings", "the pooler read never prints a connection string",
+       POLICY, '("database_type", "pool_mode", "db_port", "default_pool_size",',
+       '("database_type", "pool_mode", "db_port", "default_pool_size", "connection_string",',
+       POLICY_CASE),
+    _m("policy_passes_without_token", "no token is BLOCKED, never a pass",
+       POLICY, "        code = BLOCKED\n", "        code = 0\n", POLICY_CASE),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
