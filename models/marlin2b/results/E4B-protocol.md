@@ -208,3 +208,20 @@ run closed, and the coordinator's decision recorded in
     (`held_unknown`, R21) is accounted in the reserved total, not failed.
   - The envelope's over-cap refusals appear in every rung (the rerun: 8 × `unsupported_media`
     at r = 0.5). They are the cap's by design and never lower the supported rate.
+  (e) The post-merge polish round, from the CERTIFY-TREE verifier's findings and box run2 at
+  `4226315` (out `20260924T172244Z`). None of the §5 numbers moved.
+  - Rewording in place: 5(d) was reworded on the same day, before main, to match R106's
+    corrected text (`9b3b851`). In (c), §4's envelope row and §5's `applied_cap_s` row are
+    marked superseded in place.
+  - Each bench run's timeout is its own schedule, requests over rate, plus 900 s. The soak
+    gets its seconds plus 900; a flat hour cut run2's 4 h soak at exit 124.
+  - A box rung sends its declared 120 requests, or the fewest more for which bench's
+    schedule holds 60 short clips (135 on today's corpus). The TTFT p95 was unknown at every
+    run2 rung, with 54, 52 and 40 samples.
+  - Capacity is checked before duration. An over-cap attempt refused 429 with an overload
+    code is not judged by the duration cap. Parity asks such a 429 once more after its
+    Retry-After.
+  - On a gateway, the soak reports a breach of the cap.
+  - Each latency row prints its p50 and accepted count beside the p95. run2's e2e p95 of
+    about 91 s per clip-minute against the provisional 45 s is a measurement, and the
+    criterion stands.

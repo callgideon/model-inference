@@ -1095,7 +1095,8 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float)
         tail = decide.p95(values)
         out.append((name, UNKNOWN if tail is None else
                     decide.PASS if tail <= limit else decide.FAIL,
-                    f"p95 {tail} over {len(values)} samples (needs {decide.P95_MIN_ACCEPTED})",
+                    f"p95 {tail}, p50 {round(statistics.median(values), 3) if values else None} "
+                    f"over {len(values)} accepted samples (needs {decide.P95_MIN_ACCEPTED})",
                     "BOX"))
     return out
 

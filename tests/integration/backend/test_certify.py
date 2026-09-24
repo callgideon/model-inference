@@ -1019,6 +1019,10 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert _verdict(rung(slow), "ttft_p95_short") == "fail"
     dragging = [_attempt("short", latency=8.0) for _ in range(60)]
     assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
+    # box run2's e2e p95 is a measurement the release decision quotes with its p50 and count
+    assert [row for row in rung(dragging) if row[0] == "e2e_p95_per_clip_minute"] == [(
+        "e2e_p95_per_clip_minute", "fail",
+        "p95 48.0, p50 48.0 over 60 accepted samples (needs 60)", "BOX")]
     few = rung(ok[:10])
     assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
         "unknown"
