@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Merge 2: codex/e3b-phase3-bodies (analysed at a4facba), in the SAME step as merge 1.
+# Merge 2: codex/e3b-phase3-bodies (analysed at a4facba; replayed clean on a scratch clone at the
+# final head b9529d1 on 2026-09-24 with D5 4bfdbf0, cutover 1bed457, M1-L2 ba26ca4), in the SAME step as merge 1.
 # No conflict. The branch already carries, as its own commits, D5 integration requests
 # 1 (Makefile d5 list, eb08901; harness list 0018, 54d3955), 2 (contracts retirement, 8c00bb4,
 # +/- lines identical to D5's contracts-retire-0016-refusal.diff, sha256 a8e75c3f...) and 8
@@ -11,6 +12,9 @@
 #   c. validate_plan: fenced code is not a link (D5 evidence's q3rig diff has `](org, ...)`);
 #      research/plan/handoffs: links to files the cutover retired become plain text
 #   d. tasks.json: D5 -> implemented, E3B disposition += phase 3; ledger regenerated
+#   e. phase-3 IR3F-2(b): the gate's `make api-test` gets a D task of its own (contracts.tasklocal
+#      "e3b2d" 55438/55468, outside the e3b2 block; run.make_env passes it with the lock/queue
+#      Valkeys while the stack is up); the runner's make_env case pins the four keys
 # Needs: D5_VERIFY (the D5 verifier reference, e.g. "pass at <sha> (evidence/d/D5-verify-<sha>.json)").
 set -euo pipefail
 : "${D5_VERIFY:?set D5_VERIFY to the D5 verifier verdict/reference}"
@@ -81,10 +85,50 @@ t["D5"]["disposition"] = (
     "(q3rig) applied at the merge; 3, 5, 7 and the ruling candidates open "
     "(research/plan/evidence/d/D5-4bcac3b.md)")
 t["E3B"]["disposition"] += (
-    f"; phase 3 merged with D5 at {os.environ['E3M']} ({os.environ['DAY']}): every body real, "
-    "G2-R1 retired, the 3 video_upload journeys pend on M3-U1 until codex/m-pilot-media (IR3-3)")
+    f"; phase 3 merged with D5 at {os.environ['E3M']} ({os.environ['DAY']}): every body real on the "
+    "worker as its own process, G2-R1 and M3-U1/M3-U2 retired (M pilot-media 8b91648 on the branch), "
+    "the video_upload journeys run; PENDING only I2B-R4 (fix_required at 4ac1419 -> one fix round "
+    "-> verifier at b9529d1)")
 p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
 python3 research/plan/scripts/validate_plan.py --write-ledger
 git add research/plan/tasks.json research/plan/17-task-ledger.md
 git commit -q -m "plan: manifest D5 implemented (merged with E3B phase 3); E3B phase 3 recorded; ledger regenerated"
+
+# e: phase-3 IR3F-2(b). The canonical gate (make integration --layer 3) runs `make api-test` while the
+# e3b2 stack holds 56732 (E2's PostgreSQL moved by +1200), so the D suites need a task of their own:
+# "e3b2d" outside the block (P-21: the host's ephemeral range), passed only while the stack is up.
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("apps/infrx-api/infrx/contracts/tasklocal.py")
+s = p.read_text()
+old = '    "e3b2": {"postgres": 56732},\n}\n'
+new = ('    "e3b2": {"postgres": 56732},\n'
+       '    # E3B phase 3 IR3F-2(b): the gate\'s `make api-test` runs the D suites while the e3b2 stack\n'
+       '    # holds 56732, so they get a D task of their own outside the block (containers infrx-e3b2d-*)\n'
+       '    "e3b2d": {"postgres": 55438, "valkey": 55468},\n}\n')
+assert s.count(old) == 1 and "e3b2d" not in s
+p.write_text(s.replace(old, new))
+p = pathlib.Path("tests/integration/run.py")
+s = p.read_text()
+old = ('        env.update(INFRX_M_S3_ENDPOINT=harness.s3_endpoint(), INFRX_M_S3_LOCAL_CREDS="1")\n')
+new = old + ('        # IR3F-2(b): the D suites inside `make api-test` get the gate\'s own D task (tasklocal\n'
+             '        # "e3b2d") and lock/queue Valkeys, never the stack\'s PostgreSQL or another lane\'s\n'
+             '        env.update(INFRX_D_TASK="e3b2d", INFRX_D2_VALKEY_PORT="55468",\n'
+             '                   INFRX_D2_VALKEY_CONTAINER="infrx-e3b2d-valkey", INFRX_Q_VALKEY_PORT="55469")\n')
+assert s.count(old) == 1 and "e3b2d" not in s
+p.write_text(s.replace(old, new))
+p = pathlib.Path("tests/integration/test_run.py")
+s = p.read_text()
+old = ('                                "INFRX_M_S3_ENDPOINT": harness.s3_endpoint(),\n'
+       '                                "INFRX_M_S3_LOCAL_CREDS": "1"}, seen\n')
+new = ('                                "INFRX_M_S3_ENDPOINT": harness.s3_endpoint(),\n'
+       '                                "INFRX_M_S3_LOCAL_CREDS": "1",\n'
+       '                                "INFRX_D_TASK": "e3b2d", "INFRX_D2_VALKEY_PORT": "55468",\n'
+       '                                "INFRX_D2_VALKEY_CONTAINER": "infrx-e3b2d-valkey",\n'
+       '                                "INFRX_Q_VALKEY_PORT": "55469"}, seen\n')
+assert s.count(old) == 1
+p.write_text(s.replace(old, new))
+PY
+git add apps/infrx-api/infrx/contracts/tasklocal.py tests/integration/run.py tests/integration/test_run.py
+git commit -q -m "E3B phase 3 IR3F-2(b): the gate's make api-test runs the D suites on a task of its own (tasklocal e3b2d 55438/55468, outside the e3b2 block) with lock/queue Valkeys while the stack is up; the make_env case pins the keys"
