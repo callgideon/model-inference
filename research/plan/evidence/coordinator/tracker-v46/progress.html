@@ -1,0 +1,168 @@
+
+<title>Marlin Backend Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--ground:#F2F4F7;--panel:#FFFFFF;--ink:#1B2230;--muted:#5B6472;--line:#D6DBE3;--accent:#2F6DB5;--done:#2E7D4F;--prog:#B7791F;--rem:#8A93A0;--blk:#B33A3A;--tile:#E9EDF3}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ground:#0F141B;--panel:#161D26;--ink:#E6EAF0;--muted:#9AA5B4;--line:#2A3441;--accent:#7FB0EA;--done:#5CBF85;--prog:#E0A94A;--rem:#6E7887;--blk:#E06B6B;--tile:#1D2733}}
+:root[data-theme="dark"]{--ground:#0F141B;--panel:#161D26;--ink:#E6EAF0;--muted:#9AA5B4;--line:#2A3441;--accent:#7FB0EA;--done:#5CBF85;--prog:#E0A94A;--rem:#6E7887;--blk:#E06B6B;--tile:#1D2733}
+body{background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;padding-inline:16px;padding-block:24px 48px;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;display:grid;gap:28px}
+h1{font-size:1.6rem;font-weight:600;margin:0;text-wrap:balance}h2{font-size:1.05rem;font-weight:600;margin:0 0 10px;letter-spacing:.01em}
+.meta{color:var(--muted);font-size:.9rem;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--tile);border-radius:8px;padding:14px 16px}.tile b{display:block;font-size:1.9rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}.tile span{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.06em}
+.tile.done b{color:var(--done)}.tile.prog b{color:var(--prog)}.tile.rem b{color:var(--rem)}.tile.blk b{color:var(--blk)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--tile)}.bar i{display:block;height:100%}.bar .d{background:var(--done)}.bar .p{background:var(--prog)}.bar .r{background:var(--rem)}
+.band{display:grid;grid-template-columns:150px 1fr auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.band:first-of-type{border-top:0}
+.band .n{font-weight:500}.band .c{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85rem;color:var(--muted);white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:.9rem}th{text-align:left;color:var(--muted);font-weight:500;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;padding:8px 8px;border-bottom:1px solid var(--line)}td{padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;font-weight:500;letter-spacing:.02em;white-space:nowrap}
+.pill.done{background:color-mix(in srgb,var(--done) 18%,transparent);color:var(--done)}.pill.prog{background:color-mix(in srgb,var(--prog) 20%,transparent);color:var(--prog)}.pill.rem{background:color-mix(in srgb,var(--rem) 18%,transparent);color:var(--muted)}.pill.gpu{background:color-mix(in srgb,var(--blk) 14%,transparent);color:var(--blk)}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em}
+ul{margin:0;padding-left:18px}li{margin:4px 0}
+.eta p{margin:6px 0}.eta .big{font-size:1.15rem;font-weight:500}
+.note{color:var(--muted);font-size:.85rem}
+@media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
+</style>
+<div class="wrap">
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T21:15:00Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<section class="tiles">
+<div class="tile done"><b>28</b><span>done</span></div>
+<div class="tile prog"><b>2</b><span>in progress</span></div>
+<div class="tile rem"><b>0</b><span>remaining</span></div>
+<div class="tile blk"><b>2</b><span>GPU-gated</span></div>
+<div class="tile"><b>93%</b><span>of 30 backend packages</span></div>
+</section>
+<section class="panel"><h2>Bands (E4B dependency closure)</h2>
+<div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">6 done · 0 in progress · 0 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">17 done · 0 in progress · 0 left</div></div>
+<div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:75.0%"></i><i class="p" style="width:25.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">3 done · 1 in progress · 0 left</div></div>
+<div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:100.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">2 done · 0 in progress · 0 left</div></div>
+<div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:100.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">0 done · 1 in progress · 0 left</div></div>
+<p class="note">Foundations and wave-2 modules already merged and reused by the closure: E1, F1, F2, I1, M1, Q1, W1.</p></section>
+<section class="panel"><h2>Packages</h2><div class="scroll"><table><thead><tr><th>Band</th><th>Task</th><th>Title</th><th>Status</th><th>Note</th></tr></thead><tbody>
+<tr><td>B0</td><td><code>S1</code></td><td>Reconcile pulled wave-2 baseline and publish product revision audit</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>D1R</code></td><td>Add product-v2 schema without rewriting USD pilot migrations</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>D2</code></td><td>Atomic admission, durable preparation and dispatch outbox</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>D3</code></td><td>Fenced leases, recovery and cancellation</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>D4</code></td><td>Persistent stream journal and replay</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>D5</code></td><td>Terminal transaction, grants and reconciliation</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G3</code></td><td>Explicit jobs, status, cancellation and replay</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G4U</code></td><td>Owned upload HTTP adapter</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>G6B</code></td><td>Headless endpoint provisioning and operations</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B2</td><td><code>E3B</code></td><td>Backend-only durability, security and protocol integration gate</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B2</td><td><code>I2B</code></td><td>Reproducible Marlin endpoint deployment independent of frontends</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B2</td><td><code>I3B</code></td><td>Backend recovery, observability, restore and rollback proof</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B2</td><td><code>E1B</code></td><td>Measure the end-to-end Marlin baseline and operating envelope</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</td></tr>
+<tr><td>B3</td><td><code>M4</code></td><td>Optimize bounded video retrieval, decoding and preparation</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B3</td><td><code>W4</code></td><td>Tune Marlin GPU serving and scheduler admission from measured evidence</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
+<tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">namespace e2, d2/55466, Q 55493</td></tr>
+</tbody></table></div></section>
+<section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
+<p class="big">Local software (through E3B and the software half of the rest, 0 packages): ~0 h at the observed cadence, ~0 h at half of it.</p>
+<p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
+<p><b>GPU-gated packages (E1B, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
+<p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
+</section>
+<section class="panel"><h2>Gates and blocking inputs</h2><ul>
+<li><b>BACKEND-LOCAL</b> (requires E3B): passed 2026-09-24 (E3B phase 3 merged b657a30; layer 3 backend green in checkpoint 2 and the focused gates)</li>
+<li><b>BACKEND-READY</b> (requires E4B): pending the release decision (box certification run3 with the corrected runner; drills 1-3 done) — blocked by: P-18 workload targets (provisional criteria allowed); INTAKE-DRAIN (typed 429 loss)</li>
+</ul><div class="scroll"><table><thead><tr><th>Input</th><th>What</th><th>Blocks</th><th>Owner</th></tr></thead><tbody>
+<tr><td><code>P-04</code></td><td>GPU target RESOLVED: pilot box i-0e8449a4ffca29bab (L40S), snapshot taken; I2B redeploys the refactored app onto it</td><td>nothing</td><td>coordinator</td></tr>
+<tr><td><code>P-06</code></td><td>Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image</td><td>publishing externally until the three fail-stops (D2/D3/D12) close</td><td>M2/W/G2 (fixes); W3 (digests)</td></tr>
+<tr><td><code>P-07</code></td><td>SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists)</td><td>SOP accuracy claims only</td><td>user/product</td></tr>
+<tr><td><code>P-18</code></td><td>Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent</td><td>E4B certification; provisional criteria allowed</td><td>workload owner</td></tr>
+<tr><td><code>P-01</code></td><td>Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)</td><td>public metered publication only; a provisional fixture rate is used meanwhile</td><td>user/operator</td></tr>
+<tr><td><code>P-19 (new)</code></td><td>Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md</td><td>publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol)</td><td>pricing owner / user</td></tr>
+<tr><td><code>P-04-sweep</code></td><td>W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine&#x27;s 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside</td><td>ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 ⚠️ / cutover keeps 32 explicitly); W4&#x27;s first input</td><td>W4 (tuning) / W3 (record)</td></tr>
+<tr><td><code>P-20</code></td><td>The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) — until then the pilot admits what the engine cannot serve</td><td>E4B certification; G2&#x27;s validation ceiling</td><td>W4 decides; G2 applies</td></tr>
+<tr><td><code>P-21</code></td><td>Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) — a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes</td><td>nothing (lanes retry); reduces HarnessBusy/bind noise</td><td>user (root approval); coordinator applies</td></tr>
+</tbody></table></div></section>
+<section class="panel"><h2>In flight now</h2><ul>
+<li><code>E1B</code> — codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
+<li><code>E4B</code> — codex-e4b / codex/e4b-certify — THIRD RELEASE bda1586 DEPLOYED (main b9ad1d8; rollback drill 5 s; W12 15/15; LARGE_BODY_LIMIT=8); run2 measured; drills 1-3 + rollback measured; E1B cells measured; certification run3 (corrected runner, certify image) next -&gt; release decision since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
+<li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
+<li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
+<li>review <code>G2</code> — MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z</li>
+<li>review <code>E3B2</code> — MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B&#x27;s two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2 since 2026-09-23T18:16:49Z</li>
+<li>review <code>D4</code> — MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z</li>
+<li>review <code>G3</code> — MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z</li>
+<li>review <code>I3B-followup</code> — MERGED 90b81c7 (+ 08725c0 IR2-2); merged-tree checks green: layer 0 exit 0, recovery 62/9, I3B list 109/107, tests/i 143 since 2026-09-23T18:25:08Z</li>
+<li>review <code>F-fakes-followup</code> — MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z</li>
+<li>review <code>checkpoint-2-interim</code> — whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z</li>
+<li>review <code>D5</code> — MERGED 5b7fe69 (f142074) in the merge unit at 92ea6c0 since 2026-09-24T00:59:03Z</li>
+<li>review <code>M1-L2</code> — MERGED 21fe8fc (ba26ca4); R95 since 2026-09-24T00:59:03Z</li>
+<li>review <code>E4B</code> — software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; R96/R97; box half + release decision after the rollout since 2026-09-24T00:59:03Z</li>
+<li>review <code>W4-phaseB</code> — MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z</li>
+<li>review <code>E3B-phase3</code> — MERGED b657a30 (b9529d1) with D5; IR3F-2(b) applied 7b100f2 since 2026-09-24T00:59:03Z</li>
+<li>review <code>merge-plan</code> — MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z</li>
+<li>review <code>M-pilot-media</code> — MERGED 4fd4cdc (e5c02f7); R99 since 2026-09-24T00:59:03Z</li>
+<li>review <code>CUTOVER</code> — MERGED: code daeff13 + fix round 865d352 (verifier pass at 141e169; JSON evidence/g/CUTOVER-verify-141e169.json) since 2026-09-24T01:29:18Z</li>
+<li>review <code>ROLLOUT-PREP</code> — MERGED 22761a4 (f0a1a82) since 2026-09-24T00:59:03Z</li>
+<li>review <code>WORKER</code> — lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z</li>
+<li>review <code>I2B-R4-worker</code> — MERGED 405f633 (verifier pass at e540963; JSON evidence/i/I2B-R4-verify-e540963.json) since 2026-09-24T02:51:40Z</li>
+<li>review <code>PREP-WORKER</code> — MERGED 28f3153 (verifier pass at 01b11ca; JSON evidence/w/PREP-WORKER-verify-01b11ca.json); focused gate on 933dda3 → main → second install since 2026-09-24T08:44:25Z</li>
+<li>review <code>TOKCOST</code> — fix round 293ddcb (B1/N1 pinned); targeted verifier running -&gt; step 12 (R107 numbered) since 2026-09-24T19:40:00Z</li>
+<li>review <code>CERTIFY-TREE</code> — MERGED 4db74b6 (verifier pass at 9b467f8; JSON evidence/e/CERTIFY-TREE-verify-9b467f8.json); polish round on codex/certify-polish (N1-N5, N7, N9-N11) since 2026-09-24T18:58:00Z</li>
+<li>review <code>LONGCLIP</code> — SHELVED at 0665bdb (user: keep 82 s); WIP note on codex/longclip since 2026-09-24T19:10:00Z</li>
+<li>review <code>INTAKE-DRAIN</code> — MERGED a163953 (verifier pass at d502c90; R108; LARGE_BODY_LIMIT=8 at the next install); follow-ups N1 (finished-guard case), N5 (Expect: 100-continue) since 2026-09-24T20:05:00Z</li>
+<li>review <code>FLEET</code> — TO BE IMPLEMENTED notes only (research/plan/19-fleet-scale-TO-BE-IMPLEMENTED.md); no provisioning, no cost since 2026-09-24T19:25:00Z</li>
+<li>review <code>CERTIFY-POLISH</code> — MERGED bda1586 (re-verify pass at 5b3c997; JSON evidence/e/CERTIFY-POLISH-verify-5b3c997.json) since 2026-09-24T20:12:00Z</li>
+<li>review <code>E1B-gateway</code> — first pass done (L2 ladder, L3, L5, L6; cells after the first replayed - protocol defect); rerun with per-cell dataset identity running; L4/L7 not run since 2026-09-24T19:27:00Z</li>
+<li>review <code>gate-3</code> — gate-3 (95fbb90) + delta (bda1586) green; main -&gt; b9ad1d8; third install done 20:06Z since 2026-09-24T20:45:00Z</li>
+</ul></section><section class="panel"><h2>Checkpoints</h2><ul>
+<li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
+<li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
+<li><span class="meta">2026-09-22T15:55:30Z</span> — Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)</li>
+<li><span class="meta">2026-09-22T16:00:21Z</span> — Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.</li>
+<li><span class="meta">2026-09-22T16:07:02Z</span> — Live-state inventory: P-02 resolved ($0 legacy USD), P-04 resolved (pilot box), hosted auth.uid() reads both claim forms; EBS snapshot snap-08732d3ac6376e850 taken and DeleteOnTermination disabled</li>
+<li><span class="meta">2026-09-22T16:12:51Z</span> — E2R item 1 (D harness ownership + port lock) merged as c23d804; tests/d 76 passed on merged tree; interim tests/d exclusion lifted</li>
+<li><span class="meta">2026-09-22T16:30:52Z</span> — S2M merged after independent review + fix round; R62 recorded; served-bytes digests measured on pilot box</li>
+<li><span class="meta">2026-09-22T16:36:52Z</span> — S1 independent review: API/contract side pass; console B1/B2 fix lane dispatched; integration layer 2 recorded RED (E2R owns)</li>
+<li><span class="meta">2026-09-22T17:29:34Z</span> — S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree</li>
+<li><span class="meta">2026-09-22T17:45:34Z</span> — Restart on rey account; M2 (8156f78) and F2R-B (2bfb0c4) merged; six implementer lanes resumed from WIP; F2P review resumed</li>
+<li><span class="meta">2026-09-22T17:51:45Z</span> — E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol</li>
+<li><span class="meta">2026-09-22T17:57:28Z</span> — I0 merged (0ac073e): fail-closed installer; Makefile mutant list extended</li>
+<li><span class="meta">2026-09-22T18:05:08Z</span> — F2P additive phase merged (9faaa57); rulings R64–R78; D1R dispatched</li>
+<li><span class="meta">2026-09-22T18:06:47Z</span> — Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test</li>
+<li><span class="meta">2026-09-22T18:13:15Z</span> — Checkpoint 2: main ff to 2bfb0c4 after a full green check (api-mutants 1103, api 1729+76, console 266)</li>
+<li><span class="meta">2026-09-22T18:45:43Z</span> — E2R merged (9cc3be1): role matrix on real services, shared clock, layer-2 green with canary</li>
+<li><span class="meta">2026-09-22T18:49:10Z</span> — W2 merged (32cc0cb): worker attempt loop + vLLM adapter with pilot media form</li>
+<li><span class="meta">2026-09-22T19:04:25Z</span> — Checkpoint 3: main ff to the integration head (E2R, W2 merged); composed evidence recorded</li>
+<li><span class="meta">2026-09-22T19:16:15Z</span> — M3 merged (e2188f3): owned uploads, collector, consented reuse; M→W seam tests wired to the resolver</li>
+<li><span class="meta">2026-09-22T19:36:54Z</span> — G6B merged (ed6da07): operator adapter/CLI, protected publication, headless client</li>
+<li><span class="meta">2026-09-22T20:55:35Z</span> — D1R merged: migrations 0006–0009 (CREDIT, registry, read surface, operator seams); D2 dispatched</li>
+<li><span class="meta">2026-09-22T21:18:49Z</span> — E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009</li>
+<li><span class="meta">2026-09-22T22:14:13Z</span> — F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark</li>
+<li><span class="meta">2026-09-23T00:46:03Z</span> — Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)</li>
+<li><span class="meta">2026-09-23T10:43:20Z</span> — Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 → main fast-forwarded f9ba5d2 → 01a7dfc</li>
+<li><span class="meta">2026-09-23T14:10:54Z</span> — SESSION LIMIT (Opus 429 until 14:00 UTC): all lanes/workflows died; coordinator saved everything (E3B2 WIP c587ddc; all lane branches pushed; partial review JSONs saved); main stays at 01a7dfc; handoff HANDOFF-20260923T1330Z.md</li>
+<li><span class="meta">2026-09-24T05:33:05Z</span> — checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67</li>
+<li><span class="meta">2026-09-24T09:59:55Z</span> — focused gate on 4226315 (preparation loop): suites 2289, D 89, lists 891 + 2 re-anchored (2d4a88b), layer 0 202, E4B 140, layer 3 backend 188/0/0 + mutants 248/252 (one P-21 fake_vllm flake, 17/17 on rerun) → main 2d4a88b</li>
+<li><span class="meta">2026-09-24T18:03:00Z</span> — Box certification rerun at 4226315 admits (labelled-alias price version seeded): envelope 0.5/s supported (112/120 at r=0.5; 3x429 at 1.0; 33x429 at 2.0), soak running to ~21:31Z; dataset-resume FAIL root-caused to the client classing a cancelled replay (state_conflict, R21/R91) as non-terminal -&gt; CERTIFY-TREE item 5 + R106; run1 evidence committed 0127395; handoff 1745Z</li>
+<li><span class="meta">2026-09-24T18:58:00Z</span> — CERTIFY-TREE merged 4db74b6 after verifier pass; R106 corrected; user decision: video cap 82 s -&gt; 1200 s (LONGCLIP lane: engine candidate + --set values + P-23); TOKCOST in its fix round</li>
+<li><span class="meta">2026-09-24T19:30:00Z</span> — Box certification run2 done (measurements in run2-20260924T172244Z); overload finding -&gt; INTAKE-DRAIN lane; user: keep 82 s (LONGCLIP shelved), fleet -&gt; notes; step-6 drills started</li>
+<li><span class="meta">2026-09-24T20:15:00Z</span> — All 2026-09-24 fix lanes merged on claude/backend-impl (CERTIFY-TREE 4db74b6, TOKCOST 95fbb90, INTAKE-DRAIN a163953, CERTIFY-POLISH bda1586); rulings R106-R108; platform handoff 20-platform-handoff-2026-09-24.md; drills 1-3 + E1B cells measured; gates running before main moves</li>
+<li><span class="meta">2026-09-24T21:00:00Z</span> — main fast-forwarded to b9ad1d8 (gate-3 + delta green); THIRD RELEASE bda1586 deployed on the box (rollback drill 5 s to 27af05a and ready; install image cc2a80c9; W11/W12 15/15; LARGE_BODY_LIMIT=8); certify image built; run3 prepared</li>
+</ul></section><section class="panel"><h2>Authorizations</h2><ul>
+<li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
+<li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
+<li>authorized: 2026-09-23: finish in-flight lanes only; no new task dispatch (user instruction, session limits)</li>
+<li>not authorized: nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover</li>
+</ul></section></div>
