@@ -43,10 +43,15 @@ HEADROOM = 2                  # a dead client's slot until Supavisor notices, pl
 
 
 def _runtime_config():
+    """The runtime's own settings module: the image's (/app, its WORKDIR - step 71 runs this
+    inside the installed image) or, on a host, this checkout's."""
     try:
         from infrx import config
     except ImportError:
-        sys.path.insert(0, str(REPO / "apps" / "infrx-api"))
+        for home in (Path("/app"), REPO / "apps" / "infrx-api"):
+            if (home / "infrx" / "config.py").is_file():
+                sys.path.insert(0, str(home))
+                break
         from infrx import config
     return config
 
