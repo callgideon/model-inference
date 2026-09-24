@@ -143,9 +143,12 @@ class Prep:
         return self.store.jobs[request.request_id].state
 
     async def work_after(self, request):
-        """What the inference lease holder reads once the job is queued."""
-        lease = await self.store.claim(request.request_id, "worker-a")
-        return await self.jobs.load_work(lease)
+        """What the inference lease holder reads once the job is queued (or the class of the
+        refusal when it is not: the case's assertion on the attempt comes first)."""
+        async def read():
+            lease = await self.store.claim(request.request_id, "worker-a")
+            return await self.jobs.load_work(lease)
+        return await outcome(read())
 
 
 # ------------------------------------------------------------------ the contract
@@ -316,7 +319,8 @@ def test_prep_worker__a_video_count_inside_the_pinned_budget_is_the_count(pads):
                                           base_url="http://engine"),
                         served_model="marlin2b", clock=box.clock, local_uri=m2_local_uri(root),
                         local_media_root=root)
-    assert run(engine_prompt_tokens(engine, prepared_request(video_work(box), 0))) == 3000
+    got = run(outcome(engine_prompt_tokens(engine, prepared_request(video_work(box), 0))))
+    assert got == 3000, (pads, got)
 
 
 @pytest.mark.parametrize("fault,video", [("down", False), ("unexpanded", True)])
@@ -330,13 +334,14 @@ def test_prep_worker__a_tokenizer_that_cannot_count_prepares_nothing(tmp_path, f
     async def case():
         request = await prep.admit(video=video)
         prep.attached[request.request_id] = request.media
-        result = await prep.runner.run(request.request_id)
+        result = await outcome(prep.runner.run(request.request_id))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=prep.app),
                                      base_url="http://engine") as client:
             chat = (await client.post("/v1/chat/completions", json={"messages": []})).json()
         return result, await prep.state(request), chat
 
     result, state, chat = run(case())
+    assert isinstance(result, PreparationResult), result          # answered, not raised
     assert result.refusal == "dependency_unavailable", result
     assert state is JobState.preparing and len(prep.app.tokenized) == 1
     assert chat["usage"]["prompt_tokens"] == COUNT

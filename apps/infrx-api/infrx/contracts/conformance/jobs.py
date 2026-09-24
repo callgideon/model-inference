@@ -1054,7 +1054,11 @@ async def dur_fence__prepared_stores_the_exact_prompt_count_once(factory):
             raise AssertionError(f"prompt_tokens={bad!r} was stored")
         left, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
         assert left.state is JobState.preparing, (bad, left.state)
-    await harness.port.prepared(lease, (), prompt_tokens=request.max_input_tokens)
+    try:
+        await harness.port.prepared(lease, (), prompt_tokens=request.max_input_tokens)
+    except errors.DomainError as refused:
+        raise AssertionError(f"the inclusive bound {request.max_input_tokens} was refused: "
+                             f"{refused.code}") from None
     work = await harness.port.load_work(await harness.port.claim(request.request_id, "worker-a"))
     assert work.prompt_tokens == request.max_input_tokens, work.prompt_tokens
     other, _ = await _admit(harness, key="idem-2")
