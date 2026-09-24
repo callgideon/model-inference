@@ -1,0 +1,34 @@
+{
+  "task": "M6",
+  "lane": "M6",
+  "slice": "phase-1 (points 1, 2, 4; point 3 designed)",
+  "activity": "review",
+  "at": "2026-09-24T23:25:00Z",
+  "head": "73760244",
+  "base": "f764e396",
+  "merged": ["2d5e4743 (F2C.a)", "1b9c7411 (F2C final: slices a, b, d)"],
+  "worktree": ".claude/worktrees/codex-m6-retention",
+  "branch": "codex/m6-retention",
+  "owned_paths": ["apps/infrx-api/infrx/media/retention.py", "apps/infrx-api/infrx/media/gc.py (docstring only)", "apps/infrx-api/tests/m/test_retention.py", "apps/infrx-api/tests/m/test_lifecycle_standin.py", "apps/infrx-api/tests/m/test_retention_mutants.py", "research/plan/evidence/m/M6-7376024.md"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py tests/m/test_lifecycle_standin.py", "exit": 0, "summary": "84 passed (f2c, fake and real-PG worlds)"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py", "exit": 0, "summary": "21 passed: 20/20 mutants killed + list well-formed"},
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m", "exit": 0, "summary": "516 passed, 18 skipped (S3 cases without an endpoint)"},
+    {"cmd": "uv run --frozen pytest -q tests/m/test_mutants.py", "exit": 0, "summary": "23 passed (existing M subset; gc.py docstring edit moves no anchor)"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py", "exit": 0, "summary": "48 passed"},
+    {"cmd": "replay(lifecycle_factory)  # F2C.d acceptance transcripts", "exit": 0, "summary": "[] (also asserted for retention_durable__* in tests/m)"},
+    {"cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py  # pre-M6 collector", "exit": 1, "summary": "59 failed, 3 passed (the 3 = oracle cases asserting the old collector deletes a live job's source)"}
+  ],
+  "measured": {"max_batch": 8, "max_in_flight": 4, "max_pending_delete_s": "60-90 (store clock; claim TTL 60 s, pass every 30 s)", "drain_passes_after_recovery": "5-7", "old_attaches_won_vs_refused": "9-10 / 30-31", "live_content_deleted": 0},
+  "estimate": {"optimistic_h": 10, "likely_h": 16, "pessimistic_h": 26, "confidence": "medium", "basis": "phase 2 (point 3 + writers on generation_key + gc.py reduction) 8/12/20 h over M5's rewritten files; d10 world once 0020 commits 2/3/5 h; review 0/1/1 h", "at": "2026-09-24T23:25:00Z"},
+  "blockers": ["phase 2 waits for M5 to merge (store/uploads/prepare ownership)", "integration waits for D10's 0020 (PgLifecycle content functions)", "P-25 approved retention/grace/claim TTL/interval unresolved (parameterized)"],
+  "wiring_requests": [
+    "composition: one RetentionCollector.run task in the single root I8 picks, over PgLifecycle (claim_ttl_s >= 300) + the media S3ObjectStore; gated on D10.b conformance + phase-2 writers",
+    "D10: 0020 content functions; scrub inside acknowledge_delete for location=database (F2C.b) + the 0014 guard; confirm scrub-in-ack vs scrub-in-tombstone",
+    "Makefile api-mutants: add tests/m/test_retention_mutants.py",
+    "I8: bucket AbortIncompleteMultipartUpload rule; Report metrics + pending-delete-age / aborted-pass alerts",
+    "host: reserve the task ports from the ephemeral range (net.ipv4.ip_local_reserved_ports)",
+    "RV-03 probe: re-run reproduce.py after phase 2 reduces gc.py"
+  ],
+  "evidence": ["research/plan/evidence/m/M6-7376024.md"]
+}
