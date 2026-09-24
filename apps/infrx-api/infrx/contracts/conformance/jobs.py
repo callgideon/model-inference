@@ -1029,6 +1029,40 @@ async def dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise(factory
         raise AssertionError("an expired lease still loaded its work")
 
 
+async def dur_fence__prepared_stores_the_exact_prompt_count_once(factory):
+    """PREP-WORKER (W2 request 3; a ruling candidate): `prepared(lease, media, *,
+    prompt_tokens=)` stores preparation's exact count with the refs, and the lease holder
+    reads it as `Work.prompt_tokens`. The preparation lease itself reads the request - and
+    no count yet - through `load_work` (R46: the preparation read path). A bool or a
+    non-integer count is `invalid_request`; one below 0 or above the job's
+    `max_input_tokens` (inclusive bound) is `context_length_exceeded`; a refused call changes
+    nothing - the job stays `preparing` and the same lease still prepares it. No count
+    stores none."""
+    harness = factory()
+    request, admission = await _admit(harness)
+    lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+    before = await harness.port.load_work(lease)
+    assert before.request == request and before.prompt_tokens is None, before.prompt_tokens
+    for bad, error in ((True, errors.InvalidRequest), ("12", errors.InvalidRequest),
+                       (1.5, errors.InvalidRequest), (-1, errors.ContextLengthExceeded),
+                       (request.max_input_tokens + 1, errors.ContextLengthExceeded)):
+        try:
+            await harness.port.prepared(lease, (), prompt_tokens=bad)
+        except error as refused:
+            assert refused.code == error.code, (bad, refused.code)
+        else:
+            raise AssertionError(f"prompt_tokens={bad!r} was stored")
+        left, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert left.state is JobState.preparing, (bad, left.state)
+    await harness.port.prepared(lease, (), prompt_tokens=request.max_input_tokens)
+    work = await harness.port.load_work(await harness.port.claim(request.request_id, "worker-a"))
+    assert work.prompt_tokens == request.max_input_tokens, work.prompt_tokens
+    other, _ = await _admit(harness, key="idem-2")
+    await _prepare(harness.port, other.request_id)
+    uncounted = await harness.port.load_work(await harness.port.claim(other.request_id,
+                                                                      "worker-a"))
+    assert uncounted.prompt_tokens is None, uncounted.prompt_tokens
+
 async def dur_output__a_lost_preparation_worker_is_reaped_within_bounds(factory):
     """DUR-OUTPUT / r1 R46 + R29: a preparation host that dies is reaped, and the job
     stays preparable - but not for ever.
@@ -2780,6 +2814,7 @@ def jobstore_cases():
         dur_fence__claim_increments_the_generation_from_the_database_clock,
         dur_fence__preparation_is_claimed_and_fenced_like_execution,
         dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise,
+        dur_fence__prepared_stores_the_exact_prompt_count_once,
         dur_output__a_lost_preparation_worker_is_reaped_within_bounds,
         dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time,
         dur_fence__another_worker_at_the_same_generation_is_still_fenced,

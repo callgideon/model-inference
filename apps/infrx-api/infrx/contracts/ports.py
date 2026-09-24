@@ -108,14 +108,21 @@ class JobStore(Protocol):
         `MAX_PREPUBLICATION_RETRIES` further attempts (so three claims in total) and by
         `preparation_deadline_at`, past which the job is `preparation_failed` (R29)."""
 
-    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...]) -> Admission:
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = (), *,
+                       prompt_tokens: int | None = None) -> Admission:
         """Store immutable prepared refs, then atomically `preparing -> queued`
         with the inference dispatch outbox; releases preparation capacity.
 
         r1 R46: fenced on the **preparation lease** (`02` §3), like every other
         execution mutation: generation, owner, state, expiry and the R29 phase
         deadlines. A superseded preparation worker returning late mutates nothing;
-        it used to be addressed by job handle and therefore needed no token at all."""
+        it used to be addressed by job handle and therefore needed no token at all.
+
+        `prompt_tokens` (PREP-WORKER, W2 request 3): preparation's exact prompt count, as
+        the engine counts it, stored once with the refs and handed to the lease holder as
+        `Work.prompt_tokens`. A bool or a non-integer is `invalid_request`; a count below 0
+        or above the job's `max_input_tokens` (the ceiling the hold was sized for) is
+        `context_length_exceeded`; either way nothing changes. None stores no count."""
 
     async def load_work(self, lease: Lease) -> Work:
         """r1 R46: the only way a lease holder reads what it must execute.
@@ -130,12 +137,12 @@ class JobStore(Protocol):
         Returns `Lease(kind=inference)`."""
 
     async def heartbeat(self, lease: Lease) -> Lease:
-        """Renew an **inference** lease fenced on generation, owner, state and expiry.
+        """Renew a lease fenced on generation, owner, state and expiry.
 
-        A preparation lease is refused (`invalid_request`): the preparation budget and
-        the lease TTL are both bounded and equal by default, so there is no renewal to
-        make, and a silent no-op would let a preparation worker believe it still held a
-        fence it had lost."""
+        r1 R52: a **preparation** lease renews like an inference one (`PREPARATION_LEASE_TTL_S`
+        from now), but never past `preparation_deadline_at`, so a renewal buys no preparation
+        time the job was never granted (PREP-WORKER: this text used to say a preparation
+        lease is refused; R52, the fake and PostgreSQL all renew it)."""
 
     async def cancel(self, org_id: str, job_handle: str, *,
                      cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:
