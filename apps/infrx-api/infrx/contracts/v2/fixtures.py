@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from . import SURFACE_VERSION
 from .. import codec, records as v1
 from . import records as v2
+from . import lifecycle as lc
 from . import money_units as mu
 from .money_units import CREDIT, PROVIDER_USD, USD
 
@@ -396,6 +397,135 @@ MODELS: dict[str, type[BaseModel]] = {
 TABLES = ("map.json", "money_unit_cases.json")
 
 
+# --- F2C.a lifecycle (`lifecycle.py`) ----------------------------------------------------
+# `7...` ids are lifecycle content rows. The upload window below is today's MediaUploads
+# window (PROCESSING_CACHE_TTL_S, 7 days) as an example only; the store configures its own.
+class LIFECYCLE_IDS:
+    upload_handle = "upl_fixture0lifecycle0upload0000000001"
+    source_content = "70000001-0000-4000-8000-000000000001"
+    payload_content = "70000002-0000-4000-8000-000000000002"
+
+
+UPLOAD_DIGEST = "sha256:" + "a1" * 32
+UPLOAD_BYTES = 4_194_304
+T_UPLOAD_PUT = datetime(2026, 9, 22, 12, 0, 5, tzinfo=timezone.utc)
+T_UPLOAD_DONE = datetime(2026, 9, 22, 12, 0, 7, tzinfo=timezone.utc)
+T_UPLOAD_END = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _upload_created() -> lc.UploadTicket:
+    handle = LIFECYCLE_IDS.upload_handle
+    return lc.UploadTicket(
+        upload_handle=handle, org_id=IDS.consumer_org, destination_ref=lc.DESTINATION_SCHEME + handle,
+        constraints=lc.UploadConstraints(max_bytes=67_108_864, bytes=UPLOAD_BYTES,
+                                         accepted_mime=("video/mp4", "video/webm"),
+                                         digest=UPLOAD_DIGEST),
+        state=v1.UploadState.created, created_at=T1, expires_at=T_UPLOAD_END)
+
+
+def _upload_finalized() -> lc.UploadTicket:
+    return lc.UploadTicket.model_validate({
+        **_upload_created().model_dump(), "state": v1.UploadState.finalized,
+        "received": lc.UploadReceipt(bytes=UPLOAD_BYTES, digest=UPLOAD_DIGEST,
+                                     received_at=T_UPLOAD_PUT),
+        "finalized": lc.FinalizedSource(
+            content_id=LIFECYCLE_IDS.source_content, generation=1, digest=UPLOAD_DIGEST,
+            bytes=UPLOAD_BYTES, mime="video/mp4", profile_version="v1", duration_s=12.5,
+            finalized_at=T_UPLOAD_DONE)})
+
+
+def _upload_source_ref() -> v1.MediaRef:
+    return v1.MediaRef(org_id=IDS.consumer_org, handle=LIFECYCLE_IDS.upload_handle,
+                       kind=v1.MediaKind.upload, digest=UPLOAD_DIGEST, bytes=UPLOAD_BYTES,
+                       mime="video/mp4", duration_s=12.5,
+                       storage_ref=f"media/{IDS.consumer_org}/v1/{'a1' * 8}/source")
+
+
+def _readiness_text_only() -> lc.ExecutionReadiness:
+    """RV-05: the COMPLETED empty manifest - `sources: []` present, never omitted."""
+    return lc.ExecutionReadiness(job_id=IDS.request, org_id=IDS.consumer_org, sources=(),
+                                 ready_at=T1)
+
+
+def _readiness_media() -> lc.ExecutionReadiness:
+    return lc.ExecutionReadiness(job_id=IDS.request, org_id=IDS.consumer_org, ready_at=T1,
+                                 sources=(lc.ManifestSource(
+                                     content_id=LIFECYCLE_IDS.source_content, generation=1,
+                                     ref=_upload_source_ref()),))
+
+
+def _source_identity() -> lc.ContentIdentity:
+    ref = _upload_source_ref()
+    return lc.ContentIdentity(org_id=ref.org_id, kind=lc.ContentKind.source,
+                              location=lc.ContentLocation.object_store,
+                              object_key=ref.storage_ref, digest=ref.digest, bytes=ref.bytes,
+                              origin=lc.ContentOrigin.written)
+
+
+def _deletion_claim() -> lc.DeletionClaim:
+    return lc.DeletionClaim(content_id=LIFECYCLE_IDS.source_content, generation=1, fence=2,
+                            holder="collector-a", claimed_at=T_UPLOAD_END,
+                            expires_at=datetime(2026, 9, 29, 12, 1, tzinfo=timezone.utc))
+
+
+def _content_live() -> lc.ContentObject:
+    return lc.ContentObject(content_id=LIFECYCLE_IDS.source_content, generation=1,
+                            identity=_source_identity(), state=lc.LifecycleState.live,
+                            registered_at=T_UPLOAD_PUT,
+                            eligible_at=datetime(2026, 9, 29, 12, 0, 5, tzinfo=timezone.utc))
+
+
+def _content_tombstoned() -> lc.ContentObject:
+    return lc.ContentObject.model_validate({
+        **_content_live().model_dump(), "state": lc.LifecycleState.tombstoned,
+        "claim": _deletion_claim(), "tombstoned_at": T_UPLOAD_END})
+
+
+def _tombstone() -> lc.Tombstone:
+    identity = _source_identity()
+    return lc.Tombstone(content_id=LIFECYCLE_IDS.source_content, generation=1, fence=2,
+                        location=identity.location, object_key=identity.object_key,
+                        tombstoned_at=T_UPLOAD_END)
+
+
+def _content_reference() -> lc.ContentReference:
+    return lc.ContentReference(content_id=LIFECYCLE_IDS.source_content, generation=1,
+                               job_id=IDS.request, org_id=IDS.consumer_org, referenced_at=T1,
+                               retain_until=datetime(2026, 9, 29, 12, 0, 30, tzinfo=timezone.utc))
+
+
+LIFECYCLE_BUILDERS: dict[str, Any] = {
+    "lifecycle_content_live.json": _content_live,
+    "lifecycle_content_reference.json": _content_reference,
+    "lifecycle_content_tombstoned.json": _content_tombstoned,
+    "lifecycle_deletion_claim.json": _deletion_claim,
+    "lifecycle_readiness_media.json": _readiness_media,
+    "lifecycle_readiness_text_only.json": _readiness_text_only,
+    "lifecycle_readiness_view_not_ready.json":
+        lambda: lc.readiness_view(IDS.legacy_request, None),
+    "lifecycle_readiness_view_ready_empty.json": lambda: _readiness_text_only().view(),
+    "lifecycle_tombstone.json": _tombstone,
+    "lifecycle_upload_created.json": _upload_created,
+    "lifecycle_upload_finalized.json": _upload_finalized,
+}
+LIFECYCLE_MODELS: dict[str, type[BaseModel]] = {
+    "lifecycle_content_live.json": lc.ContentObject,
+    "lifecycle_content_reference.json": lc.ContentReference,
+    "lifecycle_content_tombstoned.json": lc.ContentObject,
+    "lifecycle_deletion_claim.json": lc.DeletionClaim,
+    "lifecycle_readiness_media.json": lc.ExecutionReadiness,
+    "lifecycle_readiness_text_only.json": lc.ExecutionReadiness,
+    "lifecycle_readiness_view_not_ready.json": lc.ReadinessView,
+    "lifecycle_readiness_view_ready_empty.json": lc.ReadinessView,
+    "lifecycle_tombstone.json": lc.Tombstone,
+    "lifecycle_upload_created.json": lc.UploadTicket,
+    "lifecycle_upload_finalized.json": lc.UploadTicket,
+}
+BUILDERS.update(LIFECYCLE_BUILDERS)
+MODELS.update(LIFECYCLE_MODELS)
+TABLES = (*TABLES, "lifecycle_refusals.json")
+
+
 # --- the v1 -> v2 field map (F2P item 1) -------------------------------------
 # `v1` names the v1 record this one revises (null for a record v2 introduces).
 # `same_name` are field NAMES v2 keeps from v1 (a kept name may carry a revised
@@ -529,6 +659,7 @@ def build() -> dict[str, bytes]:
     built = {name: codec.canonical_bytes(builder()) for name, builder in BUILDERS.items()}
     built["map.json"] = codec.canonical_bytes(field_map())
     built["money_unit_cases.json"] = codec.canonical_bytes(list(mu.PARITY_CASES))
+    built["lifecycle_refusals.json"] = codec.canonical_bytes(lc.refusal_table())
     return built
 
 

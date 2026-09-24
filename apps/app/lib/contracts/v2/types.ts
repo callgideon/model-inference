@@ -32,6 +32,8 @@ import type { UsageRow } from "../types.ts";
 // The v2 namespace is the whole revision: `lib/contracts/types.ts` re-exports this module
 // as `v2` (F2P wire-in, item 9), so the unit vocabulary travels with the DTOs.
 export * from "./money-units.ts";
+// F2C.a: the browser-safe lifecycle half (vocabularies, upload ticket, readiness view).
+export * from "./lifecycle.ts";
 
 // ---------------------------------------------------------------------------
 // Vocabulary — mirrors of the v2 StrEnums, string values frozen.

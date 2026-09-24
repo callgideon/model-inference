@@ -24,6 +24,7 @@ from .services import (engine_cases, feedback_cases, judge_cases, mediastore_cas
                        scheduler_cases, tracesink_cases)
 from .v2_contracts import (V2Harness, cases as v2_cases, credit_jobstore_cases,
                            run_credit_jobstore_conformance, run_v2_conformance)
+from .lifecycle import cases as lifecycle_cases, run_lifecycle_conformance
 
 
 def run_cases(cases, factory: Callable[..., Harness], *,
@@ -99,9 +100,12 @@ V2_SUITES: dict[str, tuple[Callable[[], list], Callable[..., int]]] = {
     "v2": (v2_cases, run_v2_conformance),
     # `ports.CreditJobStore`: a port `Harness` factory, like v1's JobStore suite.
     "credit_jobstore": (credit_jobstore_cases, run_credit_jobstore_conformance),
+    # F2C.a: upload tickets, execution readiness and content cleanup, one port `Harness`.
+    "lifecycle": (lifecycle_cases, run_lifecycle_conformance),
 }
 
 __all__ = ["Harness", "MissingHook", "OPTIONAL_HOOKS", "SUITES", "V2Harness", "V2_SUITES",
-           "hook", "run_cases", "run_credit_jobstore_conformance", "run_v2_conformance",
+           "hook", "run_cases", "run_credit_jobstore_conformance", "run_lifecycle_conformance",
+           "run_v2_conformance",
            "run_tracesink_sequence_properties", "tracesink_sequence_properties",
            *(f"run_{name}_conformance" for name in SUITES)]

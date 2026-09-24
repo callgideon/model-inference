@@ -1,0 +1,19 @@
+{
+  "constraints": {
+    "accepted_mime": [
+      "video/mp4",
+      "video/webm"
+    ],
+    "bytes": 4194304,
+    "digest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "max_bytes": 67108864,
+    "schema_version": 2
+  },
+  "created_at": "2026-09-22T12:00:00Z",
+  "destination_ref": "infrx-upload:upl_fixture0lifecycle0upload0000000001",
+  "expires_at": "2026-09-29T12:00:00Z",
+  "org_id": "a0000002-0000-4000-8000-000000000002",
+  "schema_version": 2,
+  "state": "created",
+  "upload_handle": "upl_fixture0lifecycle0upload0000000001"
+}
