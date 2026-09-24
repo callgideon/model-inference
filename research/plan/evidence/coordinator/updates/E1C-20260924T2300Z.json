@@ -1,0 +1,43 @@
+{
+ "task": "E1C",
+ "slice": "E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4)",
+ "activity": "review",
+ "head": "f928103a",
+ "worktree": ".claude/worktrees/codex-e1c-client",
+ "branch": "codex/e1c-client",
+ "owned_paths": [
+  "models/marlin2b/bench.py",
+  "models/marlin2b/dataset.py",
+  "models/marlin2b/runprofile.py",
+  "models/marlin2b/tests/",
+  "research/plan/evidence/e/E1C-2531dc4.md"
+ ],
+ "commands": [
+  {"cmd": "make bench-test", "exit": 0, "summary": "106 passed (96 + 10 fix-round cases)"},
+  {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py", "exit": 0, "summary": "38 passed"},
+  {"cmd": "apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py (detached)", "exit": 0, "summary": "106 mutants: 103 killed, 3 controls survived, 0 problems (26 new e1cf01-26)"},
+  {"cmd": "bench.py --validate-raw results/E1B-box-{bda1586,4226315}/raw/*", "exit": 0, "summary": "unchanged: bda1586 VALID; 4226315 L2-r0.5/L2-r1.0/L3/L5 INVALID 57/111/105/57; results/ clean"},
+  {"cmd": "old evidence smoke command, network blocked", "exit": 2, "summary": "refused before any file or request (0-B2 fixed)"},
+  {"cmd": "amended smoke command + --validate-only, network blocked", "exit": 0, "summary": "runnable, warning unprofiled, no request"}
+ ],
+ "estimate": {
+  "optimistic_h": 2,
+  "likely_h": 4,
+  "pessimistic_h": 7,
+  "confidence": "med",
+  "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; one more review round",
+  "at": "2026-09-24T23:00Z"
+ },
+ "blockers": [
+  "UPLOAD-RESTART needs M5 durable uploads",
+  "hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence)"
+ ],
+ "wiring_requests": [
+  "REQUIRED NOW: certify.py bench_argv adds --unprofiled certify for remote targets (else its remote bench cells exit 2) until E2C passes profiles",
+  "E2C/E4C: certify.py bench_argv passes --profile/--key-inventory per cell (dropping --unprofiled certify); rung_verdicts FAIL on validity != VALID",
+  "coordinator: E1B-protocol.md section 5 items 9-11, and section 3 notes hosted cells need --profile/--key-inventory"
+ ],
+ "evidence": [
+  "research/plan/evidence/e/E1C-2531dc4.md"
+ ]
+}
