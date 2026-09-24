@@ -38,6 +38,20 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e3b2d": {"postgres": 55438, "valkey": 55468},
     # E4B certifies on the E2 stack as namespace `e4b` (56800-56899, E4B request 1)
     "e4b": {"postgres": 56832},
+    # Wave 4 (consumer v1, program 22, 2026-09-24): one PostgreSQL (+ Valkey / S3 where the lane
+    # drives them) per lane so the twelve worktrees run their real-service suites concurrently.
+    # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block.
+    "d10": {"postgres": 55442, "valkey": 55469},
+    "m5": {"postgres": 55443, "s3": 55470},
+    "m6": {"postgres": 55444, "s3": 55471},
+    "w5": {"postgres": 55445, "valkey": 55472},
+    "g7": {"postgres": 55446},
+    "g8": {"postgres": 55447, "valkey": 55473},
+    "e2c": {"postgres": 55448, "valkey": 55474, "s3": 55475},
+    "e1c": {"postgres": 55449},
+    "i8": {"postgres": 55450, "valkey": 55476},
+    # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
+    "e3c": {"postgres": 56932},
 }
 
 # A task's own block of a track service, replacing the track's (host port, extra ports).
@@ -47,6 +61,7 @@ TASK_PORTS: dict[str, dict[str, int]] = {
 TASK_BLOCKS: dict[str, dict[str, tuple[int, tuple[int, ...]]]] = {
     "e3b2": {"compose": (56700, tuple(range(56701, 56800)))},
     "e4b": {"compose": (56800, tuple(range(56801, 56900)))},
+    "e3c": {"compose": (56900, tuple(range(56901, 57000)))},
 }
 
 # track -> {service: (host port, extra ports)}
