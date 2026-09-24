@@ -83,6 +83,18 @@ A sync or stream replay of an `expired`/`unavailable` success answers `result_ex
 
 **Optional -> required rollout (explicit).** (1) This revision: optional on the record; required of every committed success by conformance (`result_expiry__`), ignored on proposals. (2) D10: return it from `job_admission`'s outcome document and `_OUTCOME_FIELDS`; add `check (state <> 'succeeded' or result_ref is null or result_expires_at is not null)` `NOT VALID`, count violations, `VALIDATE` only at zero - never backfill by recomputation; a violating row stays and reads `unavailable`. (3) G7: delete `Jobs.result_expiry`; every read path uses `read_outcome(outcome, db_now)`. (4) Once the previous runtime is no longer a rollback target, readers may decode whole documents.
 
+## F2C migration rollout contract (2026-09-24, slice d)
+
+One ordered procedure for D10's migration and the runtime that uses it. The coordinator allocates the migration number from the latest applied main; 0001-0018 stay untouched.
+
+1. **Expand (migration, previous runtime still serving).** Only additive objects: content rows, references and claims; readiness markers; nullable receipt and finalized-content columns on `media_uploads`; `job_results.scrubbed_at` and the scrub-only guard replacing `job_results_immutable`; `jobs` check `state <> 'succeeded' or result_ref is null or result_expires_at is not null` added `NOT VALID`. No `NOT NULL` without a default, no drop, no rename, no rewrite of an existing row. No readiness backfill. Pre-existing objects get content rows only by discovery (`origin = discovered`, a fresh grace). Evidence: the previous runtime's adapter suites pass on the expanded schema (D10.d item 2).
+2. **Verify.** Count successes without a persisted expiry; `VALIDATE` the check only at zero, else leave it `NOT VALID`, list the rows and let them read `unavailable` (never backfilled by recomputation).
+3. **Drain.** Maintenance mode (existing 503 with `Retry-After`) pauses admission until no `preparing` job lacks a marker - at most the preparation budget. A job that still lacks one ends at `preparation_deadline_at` as `preparation_failed`, released free. Queued and running jobs continue.
+4. **Switch in one window.** The worker (requires the marker) and the gateway (`admit_ready`, dual-writing `job_media`) of the same release. The collector (M6) stays off until the E3C multi-process and restart drills pass (RV-03).
+5. **Resume admission.**
+
+**Rollback to the previous runtime** is possible at any point after step 1, because nothing was removed: its jobs read `job_media` (dual-written); it writes no markers, so step 3 is repeated at every roll-forward; it recomputes result expiry from configuration, so during a rollback window the configured result TTL must not be raised (it would reach bodies already scrubbed at their persisted expiry); upload handles issued by the durable repository are unknown to its in-process store (clients re-upload). No step ever converts, relabels or deletes USD or CREDIT history.
+
 ## Verification log
 
 - 2026-09-20: Review fixes codified for durable acceptance, first-output fencing, terminal settlement, trace loss and external submission ambiguity. No live fault tests performed in this documentation change.
@@ -92,3 +104,4 @@ A sync or stream replay of an `expired`/`unavailable` success answers `result_ex
 - 2026-09-24: F2C.a lifecycle amendment appended (decisions D1-D5 validated against `dff31efc`; ports, refusals and time authority). Fake-backed conformance only; no PostgreSQL adapter exists yet (D10).
 - 2026-09-24: F2C.b terminal/read consistency appended (persisted result expiry, the six read outcomes, scrub mechanics, compatibility, optional->required rollout). Fake-backed conformance only.
 - 2026-09-24: slice-a verifier findings F1-F10 folded (both regimes, abort/too_large, delete reconciliation, deletion/admission/register/retry guards, public-only ticket refusals, strict duration).
+- 2026-09-24: F2C migration rollout contract appended (slice d).
