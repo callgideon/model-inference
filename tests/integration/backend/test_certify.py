@@ -358,15 +358,22 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         (200, {"choices": []}),
         (400, {"error": {"code": "unsupported_media"}}),
         (400, {"error": {"code": "certify_0123456789", "param": "messages"}}),
-        (400, {"error": "a sentence"})]
+        (400, {"error": "a sentence"}),
+        # N15: capacity first - asked once more after its Retry-After, then judged
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"}),
+        (400, {"error": {"code": "unsupported_media", "param": "messages"}}),
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"}),
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"})]
 
     class Gateway(http.server.BaseHTTPRequestHandler):
         def do_POST(self):                                   # noqa: N802 - the stdlib's name
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             seen.append((self.path, self.headers["authorization"], body))
-            status, doc = replies.pop(0)
+            status, doc, *headers = replies.pop(0)
             data = json.dumps(doc).encode()
             self.send_response(status)
+            for name, value in (headers[0] if headers else {}).items():
+                self.send_header(name, value)
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -382,14 +389,16 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         video.write_bytes(b"\0\0\0\x18ftypmp42")
         target = {"base_url": f"http://127.0.0.1:{server.server_port}/v1", "model": "m@1"}
         answers = [certify.admission_answer(target, {"prompt": "Caption it."}, video)
-                   for _ in range(5)]
+                   for _ in range(7)]
     finally:
         server.shutdown()
         server.server_close()
     assert answers == [certify.OVER_CAP, {"http_status": 200, "code": None, "param": None},
                        {"http_status": 400, "code": "unsupported_media", "param": None},
                        {"http_status": 400, "code": certify.bench.UNKNOWN, "param": "messages"},
-                       {"http_status": 400, "code": None, "param": None}]
+                       {"http_status": 400, "code": None, "param": None}, certify.OVER_CAP,
+                       {"http_status": 429, "code": "capacity_exhausted", "param": None}]
+    assert len(seen) == 9 and not replies                     # each 429 asked once more
     path, auth, body = seen[0]
     assert (path, auth, body["model"]) == ("/v1/chat/completions",
                                            "Bearer sk-certify-0123456789", "m@1")
@@ -973,14 +982,26 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     assert certify.envelope_summary([(0.5, rung(capped))]) == (certify.PASS, (), 0.5)
     untyped = [*ok, _attempt("over", "rejected", status=400, code="invalid_request")]
     assert rung(untyped)[0] == ("duration_cap", "fail", {
-        "over_cap_not_refused": ["over"], "within_cap_refused": [], "cap_s": CAP}, "BOX")
+        "over_cap_not_refused": ["over"], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")
+    # N15, from box run2 at r = 2.0: admission checks capacity before the media's length, so
+    # an over-cap clip refused 429 for capacity is not judged; one admitted (200) still fails
+    busy_over = _attempt("over", "rejected", status=429, code="capacity_exhausted", retry=2)
+    assert rung([*capped, busy_over])[0] == ("duration_cap", "pass", {
+        "over_cap_not_refused": [], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": ["over"], "cap_s": CAP}, "BOX")
+    assert _verdict(rung([*ok, busy_over]), "duration_cap") == "unknown"
+    assert rung([*ok, busy_over, _attempt("over")])[0][1:3] == ("fail", {
+        "over_cap_not_refused": ["over"], "within_cap_refused": [],
+        "over_cap_refused_for_capacity": ["over"], "cap_s": CAP})
     engine_failed = [*ok, _attempt("over", "failed", error="stream_error_event")]
     assert _verdict(rung(engine_failed), "duration_cap") == "fail"
     assert _verdict(rung(engine_failed), "failure_rate") == "pass"
     for within in ("long", "at"):                  # "at" is exactly the cap: within it
         refused = rung([*capped, _attempt(within, "rejected", **typed)])
         assert refused[0] == ("duration_cap", "fail", {
-            "over_cap_not_refused": [], "within_cap_refused": [within], "cap_s": CAP}, "BOX")
+            "over_cap_not_refused": [], "within_cap_refused": [within],
+            "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")
     band = [*capped, _attempt("band", "rejected", status=400)]      # 78 s: within 82 now
     assert _verdict(rung(band), "rejections") == "fail"
     assert _verdict(rung(ok), "duration_cap") == "unknown"
@@ -1106,7 +1127,7 @@ def test_e4b_the_soak_judges_memory_the_reconciler_and_latency_from_its_samples(
     assert _verdict(gateway, "failure_rate") == "pass" and [
         row for row in gateway if row[0] == "duration_cap"] == [(
         "duration_cap", "fail", {"over_cap_not_refused": ["over"], "within_cap_refused": [],
-                                 "cap_s": CAP}, "BOX")]
+                                 "over_cap_refused_for_capacity": [], "cap_s": CAP}, "BOX")]
     typed = [*rows, _attempt("over", "rejected", status=certify.OVER_CAP["http_status"],
                              code=certify.OVER_CAP["code"])]
     assert "duration_cap" not in [row[0] for row in certify.soak_verdicts(

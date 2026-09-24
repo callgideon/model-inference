@@ -371,7 +371,8 @@ def refused_over_cap(row: dict) -> bool:
 
 def admission_answer(target: dict, clip: dict, path: Path) -> dict:
     """One clip sent to the gateway as bench.py sends it (inline, the release's model, the
-    client's key): the status and the error's code and param - allowlisted, nothing else."""
+    client's key): the status and the error's code and param - allowlisted, nothing else.
+    A 429 (capacity, checked before the media) is asked once more after its Retry-After."""
     body = {"model": target["model"], "max_tokens": 16,
             "messages": bench.messages_for({"form": "video_b64", "prompt": clip["prompt"]},
                                            bench.data_url(str(path)))}
@@ -380,18 +381,23 @@ def admission_answer(target: dict, clip: dict, path: Path) -> dict:
                                      json.dumps(body).encode(),
                                      {"content-type": "application/json",
                                       "authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(request, timeout=600) as answer:
-            return {"http_status": answer.status, "code": None, "param": None}
-    except urllib.error.HTTPError as refused:
+    for attempt in (1, 2):
         try:
-            error = json.loads(refused.read()).get("error")
-        except (ValueError, AttributeError):
-            error = None
-        error = error if isinstance(error, dict) else {}
-        return {"http_status": refused.code,
-                "code": bench.allow(error.get("code"), bench.CODE_OK, key),
-                "param": bench.allow(error.get("param"), bench.CODE_OK, key)}
+            with urllib.request.urlopen(request, timeout=600) as answer:
+                return {"http_status": answer.status, "code": None, "param": None}
+        except urllib.error.HTTPError as refused:
+            if refused.code == 429 and attempt == 1:
+                wait = bench.as_float(refused.headers.get("retry-after"))
+                time.sleep(min(max(1.0 if wait is None else wait, 0.0), 60.0))
+                continue
+            try:
+                error = json.loads(refused.read()).get("error")
+            except (ValueError, AttributeError):
+                error = None
+            error = error if isinstance(error, dict) else {}
+            return {"http_status": refused.code,
+                    "code": bench.allow(error.get("code"), bench.CODE_OK, key),
+                    "param": bench.allow(error.get("param"), bench.CODE_OK, key)}
 
 
 def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Path | None,
@@ -1046,15 +1052,25 @@ def rung_requests(declared: int, subset: str) -> int:
     return n
 
 
+def overloaded(row: dict) -> bool:
+    """Refused for capacity - a 429 with an overload code. Admission checks capacity before
+    the media's length (the cheap refusal first), so such an answer says nothing of the cap."""
+    return row.get("http_status") == 429 and row.get("error_code") in OVERLOAD_CODES
+
+
 def cap_verdict(rows: list[dict], counted: list[dict], cap_s: float) -> tuple:
     """The duration cap at admission (P-20): every attempt over the cap got the typed
-    refusal, and none within it did; nothing sent over the cap judges nothing."""
+    refusal - one refused for capacity first is not judged (N15) - and none within it did;
+    nothing judged over the cap judges nothing."""
     over = [r for r in rows if r not in counted]
-    admitted = sorted({r["clip_id"] for r in over if not refused_over_cap(r)})
+    judged_over = [r for r in over if not overloaded(r)]
+    admitted = sorted({r["clip_id"] for r in judged_over if not refused_over_cap(r)})
     refused = sorted({r["clip_id"] for r in counted if refused_over_cap(r)})
-    verdict = decide.FAIL if admitted or refused else (decide.PASS if over else UNKNOWN)
-    return ("duration_cap", verdict, {"over_cap_not_refused": admitted,
-                                      "within_cap_refused": refused, "cap_s": cap_s}, "BOX")
+    verdict = decide.FAIL if admitted or refused else (decide.PASS if judged_over else UNKNOWN)
+    return ("duration_cap", verdict, {
+        "over_cap_not_refused": admitted, "within_cap_refused": refused,
+        "over_cap_refused_for_capacity": sorted({r["clip_id"] for r in over if overloaded(r)}),
+        "cap_s": cap_s}, "BOX")
 
 
 def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float) -> list[tuple]:
