@@ -339,7 +339,7 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
         tmp_path, monkeypatch):
     """The drill's orchestration: interrupted run, resume, then the ledger. The engine
     target stops at the client half (PENDING on the held cutover), a metered target with no
-    ledger adapter is PENDING on D5, and only a reconciled ledger passes."""
+    ledger adapter is PENDING on BOX, and only a reconciled ledger passes."""
     runs = []
 
     def interrupted(argv, raw, *, after, env, timeout_s):
@@ -365,6 +365,8 @@ def test_e4b_the_dataset_drill_pends_on_the_owner_it_needs_and_passes_only_recon
     assert (entry["status"], entry["owners"], entry["label"]) == (certify.PENDING, ["BOX"],
                                                                   certify.FAKE)
     assert entry["measured"]["first_run"]["accepted"] == 2 and runs == [("first", 2), ("resume",)]
+    # both halves pend on BOX, so the reason is the witness: the engine has no ledger at all
+    assert "metered endpoint" in entry["detail"], entry["detail"]
     metered = {**local, "metered": True, "label": certify.MEAS, "bench_target": "gateway"}
     monkeypatch.setattr(certify, "tenant_ledger", lambda: None)
     certify.dataset_check(report, metered, tmp_path)
@@ -445,6 +447,12 @@ def test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence(mon
     assert current["published_engine_options_digest"] == \
         certify.published_release()["engine_options_digest"]
     assert current["published_runtime_image"] == certify.published_release()["runtime_image_ref"]
+    # G6B publishes the record's digest today, so only a publisher that moved tells the
+    # release apart from the record: it fails the pin by name
+    moved_release = {**certify.published_release(), "engine_options_digest": "sha256:" + "44" * 32}
+    monkeypatch.setattr(certify, "published_release", lambda: moved_release)
+    assert [p.split(":")[0] for p in certify.config_problems(certify.current_config())] == [
+        "published_engine_options_digest"]
     assert (current["preparation_concurrency"], current["max_video_seconds"]) == (
         DEFAULTS.preparation_concurrency, DEFAULTS.max_video_seconds)
     declared = {name: value for name, (value, _) in certify.declared().items()}
