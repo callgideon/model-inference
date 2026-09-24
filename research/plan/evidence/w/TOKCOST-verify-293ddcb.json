@@ -1,0 +1,50 @@
+{
+ "head": "293ddcb",
+ "reviewed_head": "ad50b9d",
+ "verdict": "pass",
+ "blocking": [],
+ "closed": {
+  "B1": "Closed. `git diff ad50b9d..293ddcb -- apps/infrx-api/infrx/worker/preparation.py` is a pure 7-line insertion (+7/-0): `return checked_count(found, budget)` plus the `checked_count` def and docstring. Every check line and refusal message is byte-identical at the same indentation. The new case `test_prep_worker__a_refused_video_count_is_never_memoized` is the first verifier's proposed case verbatim (docstring added). My own B1 mutant `own_memo_refused_raw_on_raise` keeps the timeout, raise_for_status and every check. The refusal carries the raw /tokenize count out, `_prepare` memoizes it on the refusal path, and there is one engine call. Over the whole service-free file it dies ONLY at `tests/w/test_prep_worker.py:416: AssertionError: (PreparationResult(job_id='00000004-0000-4000-8000-000000000004', cause='prepared', refusal=None, prompt_tokens=1000, detail=''), 1000)` (1 failed, 45 passed, 4 deselected). That is the stored-count assertion, not the call count at :417. A second own shape, `own_put_before_checks` (raw answer put, then checked), also dies at :416. It also takes collateral in the direct engine_prompt_tokens cases (:487/:499), because that shape changes that function's return. The lane's `prep_memo_holds_a_refused_count` through the module runner: `[killed] 1 failed, 49 deselected`. Over the whole file it also dies at :416 with the identical line.",
+  "N1": "Closed. `assert Prep(tmp_path).runner.memo.entries == MEMO_ENTRIES == 1024` (test_prep_worker.py:430) replaces the tautology. `prep_memo_bound_not_1024` dies at `:430: assert 1000000000 == 1024`. `prep_runner_memo_unbounded` dies at `:430: AssertionError: assert 1000000000 == 1024`. Module runner: 3/3 killed. My variants `own_bound_1025` (MEMO_ENTRIES = 1025) and `own_runner_entries_1025` (the runner builds CountMemo(..., entries=1025)) die at `:430: assert 1025 == 1024` and `:430: AssertionError: assert 1025 == 1024`. In each case that is the only failure (1 failed, 45 passed, 4 deselected)."
+ },
+ "scope_check": "`git diff --name-status ad50b9d..293ddcb`: M apps/infrx-api/infrx/worker/preparation.py (+7/-0), M apps/infrx-api/tests/w/prep_worker_mutants.py (+16: NOT_MEMOIZED and 3 mutants), M apps/infrx-api/tests/w/test_prep_worker.py (+24/-4: the new case; the bounded case takes tmp_path and replaces its last assert), M research/plan/evidence/w/TOKCOST-40440d4.md. Nothing else changed. Anchors: all 44 pre-existing mutants from 26 importable tests/**/*mutants*.py modules that anchor on worker/preparation.py appear the same number of times at ad50b9d and 293ddcb, with none moved. E3B `e3bm79`'s anchor appears 1 -> 1 (declared 1). The `every_anchor_is_in_the_source` structure case also passed within the 81.",
+ "nonblocking": [
+  {
+   "id": "N1",
+   "title": "R107 has the same words as the verifier's text but is not byte-verbatim",
+   "evidence": "Compared programmatically with `ruling_text` in TOKCOST-verify-ad50b9d.json. The evidence file drops ' (TOKCOST proposal)' from the title and strips the backticks from five spans: `{model, messages, add_generation_prompt, mm_processor_kwargs}`, `PartOf=`, `Restart=always`, `PROCESSING_CACHE_TTL_S` and `prepared(...)`. With those undone the two texts are identical, so no word or clause changed. The evidence nevertheless calls it 'verbatim'.",
+   "fix": "At the step-12 numbering, write R107 into 08 §10 from the verifier JSON's `ruling_text`, keeping the backticks and dropping the '(TOKCOST proposal)' tag, or from the evidence file as it is. No lane change is needed."
+  },
+  {
+   "id": "N2",
+   "title": "The lane's B1 mutant is wider than the property it names (information only)",
+   "evidence": "`prep_memo_holds_a_refused_count` replaces `_ask` with a bare post. That also drops the preparation timeout and raise_for_status, so over the whole service-free file it also fails `a_tokenizer_that_never_answers_is_bounded_by_the_budget` (`:570: AssertionError: timed out`). Its declared case still dies on the stored count at :416. My own mutant keeps the timeout and checks, and it dies only at :416, so the case pins the property on its own.",
+   "fix": "None required."
+  }
+ ],
+ "evidence_check": {
+  "R107": "The words are identical to the verifier's text. It is not byte-verbatim (nonblocking N1).",
+  "limit_2": "Closed. The ⚠️ TO BE VERIFIED marker is removed and Limit 2 now carries the verifier's N2 measurement: systemd 255.4-1ubuntu8.17; stand-in units with PartOf=/After= and no BindsTo; engine Restart=always, RestartSec=5; serve.sh `exec docker run --rm` in the foreground; restart, SIGKILL plus auto-restart, and an external SIGTERM exit each restart the worker; stop stops it; a 5 s residual; the log is systemd-partof.log sha256 prefix 310f5c61, and the prefix matches the file. Re-checked at 293ddcb: infrx-worker.service:4 After=... marlin2b-vllm.service and :7 PartOf=marlin2b-vllm.service, with no BindsTo; marlin2b-vllm.service:23-24 Restart=always and RestartSec=5; serve.sh:90 `exec docker run --rm ...`; tests/i/test_packaging.py:166 asserts PartOf; tests/i/mutants.py:447 is the `worker_not_part_of_engine` anchor.",
+  "death_lines": "Every death line matches my re-derivation: :416 for B1 (the stored-count assertion, identical text), :430 for both N1 mutants (identical text), and :429 for prep_memo_unbounded and prep_memo_evicts_the_recently_used (line 429 is the LRU assert; both killed again, 2/2)."
+ },
+ "runs": [
+  {"what": "make api-env in the clone /tmp/claude-1000/tokcost-chk2 at 293ddcb (TMPDIR /tmp/claude-1000/tokcost-chk2-tmp; no 'verify' in either path)", "result_counts": "exit 0", "log": "/tmp/claude-1000/tokcost-chk2-logs/api-env.log"},
+  {"what": "pytest -q -rfEs tests/w/test_prep_worker.py -k 'not _pg__' (service-free)", "result_counts": "46 passed, 4 deselected in 5.51s", "log": "/tmp/claude-1000/tokcost-chk2-logs/R-prep-worker-servicefree.log (979c17a0)"},
+  {"what": "INFRX_MUTANTS=all pytest -q -rfEs tests/w/test_prep_worker_mutants.py (env: INFRX_D_TASK=d6 INFRX_D2_VALKEY_PORT=55471 INFRX_D2_VALKEY_CONTAINER=infrx-tokverify2-valkey INFRX_Q_VALKEY_PORT=55472 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 INFRX_M_S3_LOCAL_CREDS=1; MinIO infrx-tokverify2-minio, quay.io/minio/minio@sha256:14cea493..., E2 literals; AWS_* unset; detached with nohup)", "result_counts": "81 passed in 626.47s, with no skips (the PG mutants ran)", "log": "/tmp/claude-1000/tokcost-chk2-logs/R-prep-mutants-all.log (6ab5253c)"},
+  {"what": "INFRX_MUTANTS=all pytest -q -rfEs tests/w/test_worker_main_mutants.py (same env, run after the list to keep d6 serial)", "result_counts": "22 passed in 112.63s", "log": "/tmp/claude-1000/tokcost-chk2-logs/R-main-mutants-all.log (efae2293)"},
+  {"what": "python -m tests.w.prep_worker_mutants prep_memo_holds_a_refused_count prep_memo_bound_not_1024 prep_runner_memo_unbounded", "result_counts": "3/3 killed", "log": "/tmp/claude-1000/tokcost-chk2-logs/R-module-runner-3.log (5ee9a6fd)"},
+  {"what": "verifier's own mutants over the whole service-free test_prep_worker.py, in copies built by prep_worker_mutants._layout (script mut/own_mutants.py, bebd5c34)", "result_counts": "pristine 46 passed/4 deselected; own_memo_refused_raw_on_raise killed only at :416 (1 failed); own_put_before_checks killed at :416 plus :487/:499 collateral (16 failed); own_bound_1025 killed at :430 (1 failed); own_runner_entries_1025 killed at :430 (1 failed)", "log": "/tmp/claude-1000/tokcost-chk2-logs/mut/own-run1.log (e5f90291)"},
+  {"what": "the lane's 3 fix-round mutants over the whole service-free file (to re-derive death lines)", "result_counts": "holds_a_refused_count: :416 plus :570 collateral (2 failed); bound_not_1024: :430 (1 failed); runner_memo_unbounded: :430 (1 failed)", "log": "/tmp/claude-1000/tokcost-chk2-logs/mut/lane-3-wholesuite.log (f0652c29)"},
+  {"what": "python -m tests.w.prep_worker_mutants prep_memo_unbounded prep_memo_evicts_the_recently_used (the :429 note)", "result_counts": "2/2 killed", "log": "inline"},
+  {"what": "E3B e3bm79", "result_counts": "NOT RUN: it is a layer-2 mutant on tests/integration/backend/test_journey.py and needs the E2 stack (e4b namespace), which is out of bounds here. Its anchor is byte-identical (1 -> 1 occurrences). The only preparation.py change is an insertion inside engine_prompt_tokens and does not touch `_ask`.", "log": "-"}
+ ],
+ "containers_removed": {
+  "removed": true,
+  "names": [
+   "infrx-tokverify2-minio (docker rm -f) and its anonymous volume f437816fe953... (docker volume rm)",
+   "infrx-d6-postgres and infrx-tokverify2-valkey: created and removed by the D harness, none left",
+   "ports 55471/55472/55724 free afterwards; no process of the clone left; own-mutant temp copies self-removed"
+  ]
+ },
+ "contact": "No pilot box, AWS, hosted Supabase or e4b/e3b2 namespace was used. Nothing was pushed, rebased, reset, amended or stashed. The clone is clean at 293ddcb80a8e0a3004229fd9608f07e9460accac."
+}
