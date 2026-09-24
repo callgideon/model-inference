@@ -313,6 +313,10 @@ def test_ops_recover__a_drain_records_what_finished_inside_its_bound():
 
 CHILD = r"""
 import asyncio, json, sys
+# The child must start with SIGINT deliverable: a detached launcher (nohup/setsid, make
+# api-mutants in the background) inherits SIGINT ignored, and the unmutated service installs
+# its own handler anyway - only the sigint_not_handled mutant then differs (checkpoint 2).
+import signal; signal.signal(signal.SIGINT, signal.default_int_handler)
 from infrx.contracts.records import Usage
 from infrx.worker import WorkerLoop, WorkerService
 from tests.w.test_loop import PROGRESS, ScriptEngine, World, candidate, delta, queued, usage_event
