@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T01:14:54Z",
+  "updated": "2026-09-24T01:18:27Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -9,45 +9,21 @@
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     },
-    "D5": {
-      "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "MERGED 5b7fe69 in the merge unit (92ea6c0)",
-      "since": "2026-09-23T12:56:22Z",
-      "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
-    },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout",
+      "phase": "software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; box half + release decision after the rollout (BACKEND-READY not claimed)",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },
     "CUTOVER": {
       "lane": "codex-cutover / codex/cutover-mount",
-      "phase": "HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3",
+      "phase": "code MERGED daeff13 (1bed457); tests-only fix round 141e169 under single verification → step 3b before checkpoint 2",
       "since": "2026-09-23T19:29:02Z",
       "note": "d3 ports, Q 55492; merges together with E3B phase 3"
     },
-    "E3B-phase3": {
-      "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
-      "phase": "fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier",
-      "since": "2026-09-23T19:29:02Z",
-      "note": "namespace e3b2 / 56732"
-    },
-    "M1-L2": {
-      "lane": "codex-objstore / codex/m1l2-object-store",
-      "phase": "FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit",
-      "since": "2026-09-23T19:57:28Z",
-      "note": "compose S3 in namespace e2 if free; else stub"
-    },
-    "M-pilot-media": {
-      "lane": "codex-mpilot / codex/m-pilot-media",
-      "phase": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head)",
-      "since": "2026-09-23T20:11:55Z",
-      "note": "d4 ports, Q 55494; merges on top of the cutover head"
-    },
     "I2B-R4-worker": {
       "lane": "codex-worker / codex/i2b-r4-worker",
-      "phase": "dispatched (Opus) from 08ed293 (phase-3 1fa825b + cutover a1e88dc): python -m infrx.worker composition root, unit/installer alignment, rehearse.sh sandbox deps, pilotbox real entry point",
+      "phase": "running on e3b2 + d4 (items 1–3 in; merged phase 3 b9529d1); handback → verifier → step 8b (conflict resolutions scripted)",
       "since": "2026-09-23T23:43:44Z",
       "note": "d4 ports, Q 55494, MinIO 55781"
     }
@@ -438,6 +414,26 @@
       "merged": "0117d48",
       "when": "2026-09-23T22:02:17Z",
       "note": "W4 phase B decision B at 82 s (P-20 decided); E1B L0/L1/L8; window 19:47–21:54Z closed"
+    },
+    "D5": {
+      "merged": "D5 @ f142074 merged --no-ff (5b7fe69) in the merge unit 92ea6c0",
+      "at": "2026-09-24T01:18:27Z",
+      "note": "MERGED 5b7fe69 in the merge unit (92ea6c0)"
+    },
+    "E3B-phase3": {
+      "merged": "E3B phase 3 @ b9529d1 merged --no-ff (b657a30) with D5; IR3F-2(b) 7b100f2",
+      "at": "2026-09-24T01:18:27Z",
+      "note": "fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier"
+    },
+    "M1-L2": {
+      "merged": "M1-L2 @ ba26ca4 merged --no-ff (21fe8fc); R95",
+      "at": "2026-09-24T01:18:27Z",
+      "note": "FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit"
+    },
+    "M-pilot-media": {
+      "merged": "M pilot-media @ e5c02f7 merged --no-ff (4fd4cdc); R99",
+      "at": "2026-09-24T01:18:27Z",
+      "note": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head)"
     }
   },
   "tracker_url": "https://claude.ai/artifact/Rk84qe3Yuzr2d357GoeRvZ (sofia); rey: 3a3VjYKb2Vfh5X89BYMDPZ; dhruv: LqEn7ZiMjYgRXZdCUtnL6o"

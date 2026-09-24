@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T01:14:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T01:18:27Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
+**Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -16,7 +16,7 @@ Generated 2026-09-24T01:14:54Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **done** | implemented |  |
 | B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **done** | implemented |  |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **done** | implemented |  |
-| B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **in-progress** | implemented | ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items |
+| B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **done** | implemented |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **done** | implemented |  |
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **done** | implemented |  |
@@ -59,20 +59,16 @@ Generated 2026-09-24T01:14:54Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (1 packages): ~1 h at observed cadence, ~3 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (0 packages): ~0 h at observed cadence, ~0 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (E1B, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- D5: codex-d5 / codex/d5-terminal-transaction — MERGED 5b7fe69 in the merge unit (92ea6c0) since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- E4B: codex-e4b / codex/e4b-certify — software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
-- CUTOVER: codex-cutover / codex/cutover-mount — HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3 since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
-- E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
-- M1-L2: codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
-- M-pilot-media: codex-mpilot / codex/m-pilot-media — review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
-- I2B-R4-worker: codex-worker / codex/i2b-r4-worker — dispatched (Opus) from 08ed293 (phase-3 1fa825b + cutover a1e88dc): python -m infrx.worker composition root, unit/installer alignment, rehearse.sh sandbox deps, pilotbox real entry point since 2026-09-23T23:43:44Z — d4 ports, Q 55494, MinIO 55781
+- E4B: codex-e4b / codex/e4b-certify — software half MERGED 66eed31 (4d9360c) + 4 coordinator edits; box half + release decision after the rollout (BACKEND-READY not claimed) since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- CUTOVER: codex-cutover / codex/cutover-mount — code MERGED daeff13 (1bed457); tests-only fix round 141e169 under single verification → step 3b before checkpoint 2 since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
+- I2B-R4-worker: codex-worker / codex/i2b-r4-worker — running on e3b2 + d4 (items 1–3 in; merged phase 3 b9529d1); handback → verifier → step 8b (conflict resolutions scripted) since 2026-09-23T23:43:44Z — d4 ports, Q 55494, MinIO 55781
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
 - review G2: MERGED 2391d4d; merged-tree checks green on d4: contracts 1053, D conformance (after the RAISES fix f52308a) 47/26xf/1xp, tests/g+m 859, G list 306 since 2026-09-23T15:38:21Z
