@@ -1026,15 +1026,11 @@ MUTANTS: tuple[Mutant, ...] = (
     # ---------------- E3B phase 3, the review fix round (E3B3-review-4ac1419.json)
     # e3bm69 (the M3-U2 pending) retired: M's pilot-media merge fixed M3-U2, and every
     # journey cell now runs on a separate worker process (e3bm74 proves the crossing).
-    Mutant("e3bm74", "E3B3 review J2: the video cells cross two processes - the worker finds "
-                     "the file the gateway's preparation wrote by content hash (M's disk "
-                     "lookup), not through the gateway's in-memory index",
-           "apps/infrx-api/infrx/media/prepare.py",
-           "        entry = self.entries.get(key) or (self._load(key, mime) if mime else None)\n",
-           "        entry = self.entries.get(key)\n",
-           "tests/integration/backend/test_journey.py",
-           "backend_journey and video_url and sync", layer=2,
-           cases=("test_backend_journey[video_url-sync]",)),
+    # e3bm74 retired by PREP-WORKER: the worker process now PREPARES every job (the pilot
+    # box's gateway-side emulation is gone), so the journey's video cells no longer cross
+    # processes through the cache - the process that ran `prepare` indexed the file itself.
+    # The cross-process disk lookup stays proved by M's `local_uri_misses_the_disk`
+    # (test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process).
     Mutant("e3bm70", "E3B3 review J1 (the reviewer's mutant A): a keyed replay is answered by "
                      "the R91 lookup, preparing and staging nothing",
            "apps/infrx-api/infrx/gateway/routes/relay.py",
