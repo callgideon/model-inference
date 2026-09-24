@@ -145,3 +145,6 @@ See [load protocol](consumer-v1/05-client-and-load-testing.md) for machine-check
 > returns the listing's card), G7 (discovery from the projection), G8 (publication moves the
 > listing to the published card atomically). Evidence:
 > `research/plan/evidence/f/F2C-catalog-d414607.md`.
+
+### P-21 — RESOLVED on the coordinator host (2026-09-24T23:27:20Z)
+`net.ipv4.ip_local_reserved_ports = 55432-55499,56379,56700-56999,58123,59000,59100,59110` applied with `sysctl -p` and persisted in `/etc/sysctl.d/60-infrx-task-ports.conf` (the user authorized the root change; the M6 lane had seen a client take 127.0.0.1:55444 as an ephemeral source port). The ephemeral range stays 32768–60999; the task-local service ports from `infrx/contracts/tasklocal.py` are no longer handed out as source ports.
