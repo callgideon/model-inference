@@ -154,10 +154,10 @@ MUTANTS = (
           "crash-only\n", "                pass\n", UNTYPED),
     _m("prep_lost_claim_kills_the_runner", "a lost claim is answered, never a dead runner "
        "(review L1)",
-       P, "        try:\n            lease = await self.jobs.claim_preparation(job_id, "
-          "self.worker_id)\n        except errors.DomainError as refused:\n",
-       "        lease = await self.jobs.claim_preparation(job_id, self.worker_id)\n"
-       "        if False:\n            refused = None\n", TWICE),
+       P, "        try:\n            lease = await (self.readiness or self.jobs).claim_preparation("
+          "job_id, self.worker_id)\n        except errors.DomainError as refused:\n",
+       "        lease = await (self.readiness or self.jobs).claim_preparation(job_id, "
+       "self.worker_id)\n        if False:\n            refused = None\n", TWICE),
     _m("prep_preparation_unlogged", "each preparation is logged at INFO with its count "
        "(review J-F2)",
        P, '        log.info("prepared %s: %d prompt tokens', '        log.debug("prepared %s: %d prompt tokens',

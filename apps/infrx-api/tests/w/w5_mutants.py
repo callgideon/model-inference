@@ -28,6 +28,7 @@ CANARY = "test_w5_ready__a_text_job_is_never_prepared_before_its_durable_manifes
 POSTCHECK = "test_w5_ready__a_late_postcheck_decides_before_anything_is_prepared"
 D1 = "test_w5_ready__the_d1_marker_is_what_the_worker_reads"
 UNREADY = "test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once"
+NO_LEGACY = "test_w5_ready__no_marker_is_never_legacy_ready"
 # 2. crash boundaries
 NEVER_READY = "test_w5_crash__accepted_but_never_ready_is_bounded_and_released_once"
 WAKEUP = "test_w5_crash__a_lost_queue_wakeup_loses_no_job_and_a_redelivery_runs_it_once"
@@ -46,9 +47,19 @@ MUTANTS = (
     _m("w5_empty_manifest_read_as_missing", "an EMPTY manifest is completed work, not "
        "missing work", P, "        while (manifest := await self._manifest(job_id)) is None:",
        "        while not (manifest := await self._manifest(job_id)):", POSTCHECK, D1),
-    _m("w5_d1_marker_ignored", "on a store with D1's port the committed marker is what the "
-       "worker reads", P, '        readiness = getattr(self.jobs, "readiness", None)',
-       "        readiness = None", D1),
+    _m("w5_d1_marker_ignored", "with the ReadinessStore wired the committed marker is what "
+       "the worker reads", P, "        if self.readiness is None:\n            return await "
+       "self.media.attached(job_id)", "        if True:\n            return await "
+       "self.media.attached(job_id)", D1, NO_LEGACY),
+    _m("w5_no_marker_read_as_legacy_ready", "no marker is NOT READY - never read as ready from "
+       "the previous gateway's attach record (the cutover rule, no backfill)",
+       P, "        return None if ready is None else tuple(",
+       "        return (await self.media.attached(job_id)) if ready is None else tuple(",
+       NO_LEGACY),
+    _m("w5_claim_bypasses_the_marker_gate", "the preparation claim goes through the "
+       "ReadinessStore's marker-gated door", P,
+       "lease = await (self.readiness or self.jobs).claim_preparation(",
+       "lease = await self.jobs.claim_preparation(", D1),
     _m("w5_readiness_wait_unbounded", "the wait for a manifest is bounded (not_claimable)",
        P, "            if time.monotonic() >= end:", "            if False:", CANARY),
     _m("w5_unready_job_never_reaped", "a job that never became ready ends at its "

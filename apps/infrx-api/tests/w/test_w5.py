@@ -6,27 +6,29 @@
 Service-free, on PREP-WORKER's rig (`test_prep_worker.Prep`: F's fake store and index on one
 clock, E2's fake engine in process, M's real `MediaPreparation`) and W2's world
 (`test_loop.World`). The durable attach record a pre-D10 store keeps is `Prep.attached`;
-`DraftD1Store` is the coordinator's draft decision D1 (the admission records the normalized
-source manifest, possibly EMPTY, and the execution-ready marker in one step; a preparation
-claim requires the marker; `fail_preparation` is R104's pending third candidate) - a test
-double for F2C's `ReadinessStore` and D10's adapter until they are committed, never a
-product path.
+the execution-ready marker is F2C.a's reference adapter `FakeLifecycle` (the D1 decision:
+the admission records the normalized source manifest, possibly EMPTY, and the marker in one
+transaction; a preparation claim requires the marker) wired as the runner's `readiness=`,
+where the product wires D10's PostgreSQL adapter.
 """
 from __future__ import annotations
 
 import asyncio
 import time
 import uuid
-from dataclasses import dataclass
 
 import pytest
 
 from infrx.contracts import errors
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.fakes.lifecycle import FakeLifecycle
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import (HoldState, IndexEvent, JobState, MediaRef, OutboxKind,
+from infrx.contracts.records import (HoldState, IndexEvent, JobState, OutboxKind,
                                      SettlementState, TerminalCause, Usage, UsageCertainty)
+from infrx.contracts.v2 import fixtures as v2fix
+from infrx.contracts.v2.lifecycle import AdmissionExpectation
+from infrx.contracts.v2.records import AccountingRegime
 from infrx.worker import WorkerLoop
-from infrx.worker import __main__ as worker_main
 from infrx.worker.preparation import PreparationResult, PreparationRunner
 from tests.w.test_loop import ScriptEngine, World, candidate, delta, queued, usage_event
 from tests.w.test_prep_worker import COUNT, Prep, outcome, within
@@ -36,51 +38,44 @@ def run(coro):
     return asyncio.run(coro)
 
 
-# --------------------------------------------------------------------------- the D1 double
-@dataclass(frozen=True)
-class Source:
-    """F2C's draft `ManifestSource`, the one field the worker reads."""
-
-    ref: MediaRef
-
-
-@dataclass(frozen=True)
-class Readiness:
-    """F2C's draft `ExecutionReadiness`: `sources == ()` is a completed EMPTY manifest."""
-
-    sources: tuple[Source, ...]
+# --------------------------------------------------------------------------- the D1 port
+def lifecycle(prep: Prep, *, gated: bool = True) -> FakeLifecycle:
+    """F2C's reference `ReadinessStore` over `prep`'s store, wired as the runner's
+    `readiness=` (D10's adapter in the product). `gated=False` is the transition door
+    D10's 0019 keeps behind its feature flag: a claim that does not check the marker - the
+    worker's own check is then the only barrier."""
+    store = FakeLifecycle(prep.store, prep.clock, prep.harness.ids)
+    prep.runner.readiness = store if gated else Ungated(store)
+    return store
 
 
-class DraftD1Store:
-    """Coordinator draft D1 over F's fake store (see the module docstring). `admitted` is the
-    second half of the one admission transaction: a case calls it with no `await` between it
-    and the admission, so no worker can run in between."""
+class Ungated:
+    """`readiness` from the marker table, `claim_preparation` through the JobStore's
+    previous-runtime door (no marker check)."""
 
-    def __init__(self, store) -> None:
+    def __init__(self, store: FakeLifecycle) -> None:
         self.store = store
-        self.ready: dict[str, Readiness] = {}
-        self.failed: list[tuple[str, TerminalCause]] = []
 
-    def __getattr__(self, name):
-        return getattr(self.store, name)
-
-    def admitted(self, request) -> None:
-        self.ready[request.request_id] = Readiness(tuple(Source(ref) for ref in request.media))
-
-    async def readiness(self, job_id: str) -> Readiness | None:
-        return self.ready.get(job_id)
+    async def readiness(self, job_id: str):
+        return await self.store.readiness(job_id)
 
     async def claim_preparation(self, job_id: str, worker_id: str):
-        if job_id not in self.ready:
-            raise errors.NotClaimable(f"job {job_id} is not execution-ready")
-        return await self.store.claim_preparation(job_id, worker_id)
+        return await self.store.jobs.claim_preparation(job_id, worker_id)
 
 
-def d1(prep: Prep) -> DraftD1Store:
-    """Put the D1 double under `prep`'s runner (behind `CreditWork` in the CREDIT regime)."""
-    store = DraftD1Store(prep.store)
-    prep.runner.jobs = worker_main.CreditWork(store) if prep.credit else store
-    return store
+async def admit_ready(prep: Prep, store: FakeLifecycle):
+    """G7's one-phase admission (D1): the job, its EMPTY manifest and the marker at once."""
+    if prep.credit:
+        request = b.request(prep.harness, org_id=v2fix.IDS.consumer_org,
+                            key_id=v2fix.IDS.consumer_key, model_revision=v2fix.REQUESTED_MODEL)
+        expectation = AdmissionExpectation(accounting_regime=AccountingRegime.credit,
+                                           rate_card_version=v2fix.RATE_CARD_VERSION)
+    else:
+        prep.harness.extra["grant"](b.ORG_A, "25.00")
+        request = b.request(prep.harness, org_id=b.ORG_A)
+        expectation = AdmissionExpectation(accounting_regime=AccountingRegime.legacy_usd)
+    await store.admit_ready(request, b.idem(request, request.request_id), expectation)
+    return request
 
 
 def job(prep: Prep, request):
@@ -150,17 +145,17 @@ def test_w5_ready__a_late_postcheck_decides_before_anything_is_prepared(tmp_path
 
 @pytest.mark.parametrize("credit", [False, True], ids=["legacy", "credit"])
 def test_w5_ready__the_d1_marker_is_what_the_worker_reads(tmp_path, credit):
-    """On a store with D1's port the committed marker is the barrier, read through the same
-    work doors (`CreditWork` in the CREDIT regime): a text job admitted with its EMPTY
-    manifest is prepared at once - no attach record exists for it (a pre-D10 store cannot
-    write one) and no wait is spent. A job the previous runtime admitted has no marker: its
-    claim is refused, nothing is prepared or claimed (`preparation_attempts` stays 0)."""
+    """With F2C's `ReadinessStore` wired the committed marker is the barrier, the work read
+    through the same doors (`CreditWork` in the CREDIT regime): a text job `admit_ready`
+    admitted with its EMPTY manifest is prepared at once - no attach record exists for it
+    (a pre-D10 store cannot write one) and no wait is spent. A job the previous runtime
+    admitted has no marker: its claim is refused `not_ready`, nothing is prepared or claimed
+    (`preparation_attempts` stays 0)."""
     prep = Prep(tmp_path, credit=credit)                  # the product wait (10 s)
-    store = d1(prep)
+    store = lifecycle(prep)
 
     async def case():
-        request = await prep.admit(ready=False)
-        store.admitted(request)
+        request = await admit_ready(prep, store)
         began = time.monotonic()
         result = await prep.runner.run(request.request_id)
         took = time.monotonic() - began
@@ -175,20 +170,40 @@ def test_w5_ready__the_d1_marker_is_what_the_worker_reads(tmp_path, credit):
     assert job(prep, legacy).preparation_attempts == 0 and len(prep.app.tokenized) == 1
 
 
+@pytest.mark.parametrize("video", [False, True], ids=["text", "video"])
+def test_w5_ready__no_marker_is_never_legacy_ready(tmp_path, video):
+    """The cutover rule (no backfill): with the `ReadinessStore` wired, a job the previous
+    runtime admitted is NOT READY even when the claim door does not check the marker (D10's
+    transition door) and the previous gateway's durable attach record exists for it - the
+    worker never falls back to that record. Nothing is prepared or counted; the attempt ends
+    typed at the bounded wait."""
+    prep = Prep(tmp_path, attach_wait_s=0.2)
+    lifecycle(prep, gated=False)
+
+    async def case():
+        request = await prep.admit(video=video)             # its attach record, no marker
+        return request, await within(prep.runner.run(request.request_id), 5.0)
+
+    request, result = run(case())
+    assert (result.cause, result.refusal) == (None, "not_claimable"), result
+    assert prep.app.tokenized == [] and job(prep, request).prompt_tokens is None
+    assert prep.attached[request.request_id] == request.media   # the record was there
+
+
 def test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once(tmp_path):
     """ADMISSION-READY's bound: a job that never became ready - a crash between the admission
     and its manifest on a two-phase store, or the previous runtime's job under D1 - is not
     an orphan. The reaper settles it at `preparation_deadline_at` (`preparation_failed`),
     its hold released exactly once, and a second sweep changes nothing."""
     prep = Prep(tmp_path)
-    store = d1(prep)
+    lifecycle(prep)
 
     async def case():
         request = await prep.admit()                       # no marker: never claimable
         assert (await prep.runner.run(request.request_id)).refusal == "not_claimable"
         prep.clock.advance(job(prep, request).budgets.preparation_s + 1)
-        first = await store.recover()
-        second = await store.recover()
+        first = await prep.store.recover()
+        second = await prep.store.recover()
         return request, first, second
 
     request, first, second = run(case())
