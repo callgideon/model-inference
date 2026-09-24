@@ -68,6 +68,11 @@ a URL, an error message, an unknown code) or a bad number into a metric; it was 
 `other` or dropped, so nothing leaked. It is a code defect, not an operating condition: the
 `family` label names the metric; file it against the track that emits it.
 
+
+## From the coordinator host
+
+`apps/infrx-api/.venv/bin/python infra/runbooks/drift.py [--hours N]` runs the three drift queries above as one `SET TRANSACTION READ ONLY` transaction on the pooler's transaction port (6543) and prints counts only; the password comes from SSM into the process. Use 6543, not 5432: the pilot runtime's pools hold every one of the session pooler's 15 slots (`EMAXCONNSESSION`), so a session-mode operator connection is refused while the pilot runs (2026-09-24).
+
 ## Verification log
 
 - 2026-09-22 (I3B.c): Written from the drills' `reconcile()` and the detector views of
@@ -76,3 +81,4 @@ a URL, an error message, an unknown code) or a bad number into a metric; it was 
 - 2026-09-23 (I3B fix round, D1/D5): the invariant names the debit amount (drilled by
   `reconcile()`); the `settled_at` rule for telling a released hold from a new terminal job
   is written down until D3/D5 return a distinct record.
+- 2026-09-24 (coordinator): `drift.py` added (host-side read-only aggregates; transaction pooler); the session pooler is full while the pilot runs.
