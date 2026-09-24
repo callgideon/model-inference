@@ -257,6 +257,48 @@ MUTANTS: tuple[Mutant, ...] = (
            "    if False:",
            "missing_prerequisite",
            cases=("test_a_missing_prerequisite_names_the_exact_tool_and_never_reaches_the_network",)),
+    # ---------------- E1C.1: the upload client speaks the MOUNTED contract (RV-07)
+    Mutant("e1cm01", "create sends the route's constraint fields, not the legacy shape",
+           "bench.py",
+           '                          json={"max_bytes": len(body), "bytes": len(body),\n'
+           '                                "accepted_mime": [mime], "digest": digest})',
+           '                          json={"purpose": "video", "bytes": len(body),\n'
+           '                                "sha256": hexdigest, "content_type": mime})',
+           "real_router",
+           cases=("test_upload_speaks_the_mounted_contract_through_the_real_router",)),
+    Mutant("e1cm02", "no origin an answer names ever receives the bytes or the bearer",
+           "bench.py",
+           '    put = await client.put(f"{cfg[\'base\']}/uploads/{handle}", content=body,',
+           '    put = await client.put(ticket.get("url") or f"{cfg[\'base\']}/uploads/{handle}", '
+           'content=body,',
+           "returned_origin",
+           cases=("test_no_returned_origin_ever_receives_the_bytes_or_the_bearer",)),
+    Mutant("e1cm03", "a ticket whose destination_ref is not infrx-upload:<handle> is refused",
+           "bench.py",
+           '    if handle is None or ticket.get("destination_ref") != UPLOAD_REF_SCHEME + handle:',
+           '    if handle is None:',
+           "outside_the_contract",
+           cases=("test_an_answer_outside_the_contract_is_refused_before_any_byte_moves",)),
+    Mutant("e1cm04", "the completion must name our handle, bytes and digest",
+           "bench.py",
+           '    if (completed.get("upload_handle"), media.get("digest"), media.get("bytes")) != (\n'
+           '            handle, digest, len(body)):',
+           '    if completed.get("upload_handle") is None:',
+           "outside_the_contract",
+           cases=("test_an_answer_outside_the_contract_is_refused_before_any_byte_moves",)),
+    Mutant("e1cm05", "the fake refuses what the real router refuses (no drift)",
+           "tests/fake_gateway.py",
+           "        if not isinstance(body, dict) or set(body) - UPLOAD_CONSTRAINTS:",
+           "        if not isinstance(body, dict):",
+           "fake_gateway_answers",
+           cases=("test_the_fake_gateway_answers_the_upload_probes_like_the_real_router",)),
+    Mutant("e1cm06", "completion takes no fields, at the fake as at the router",
+           "tests/fake_gateway.py",
+           "        if request.content and json.loads(request.content) != {}:",
+           "        if False:",
+           "fake_gateway_answers",
+           cases=("test_the_fake_gateway_answers_the_upload_probes_like_the_real_router",)),
+
     # ---------------- CERTIFY-TREE item 5: the cancelled-replay rule (R106)
     Mutant("e1bm25", "a replay answered state_conflict is terminal: its key is spent",
            "bench.py", '    if row.get("outcome") in ("accepted", CANCELLED_REPLAY):',
@@ -309,6 +351,9 @@ def run_one(mutant: Mutant) -> dict:
         # rather than by the edit. Control e1bc03 guards exactly that.
         root = Path(tmp) / "models" / "marlin2b"
         shutil.copytree(TREE, root, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        # E1C: the upload conformance cases mount the REAL router from apps/infrx-api,
+        # which is read, never mutated; link it where the copy expects the checkout.
+        (Path(tmp) / "apps").symlink_to(TREE.parents[1] / "apps")
         target = root / mutant.path
         source = target.read_text()
         found = source.count(mutant.before)

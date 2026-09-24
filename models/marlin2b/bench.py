@@ -227,6 +227,7 @@ TIMING_NAME_OK = re.compile(r"[a-z0-9_-]{1,32}")    # Server-Timing metric names
 # spells it `upl_` + 22..64 of [A-Za-z0-9_-] and nothing else may be sent back as a ref.
 HANDLE_OK = re.compile(r"upl_[A-Za-z0-9_-]{22,64}")
 LABEL_OK = re.compile(r"[a-z0-9-]{1,64}")           # our own slugged --label
+TIMESTAMP_OK = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})")
 # A URL label is a digest, never text from the URL: a capability URL can carry its secret
 # in the FILE NAME (cdn.invalid/v/<token>.mp4) or in the HOST (a tunnel subdomain), so
 # neither may be recorded. Only a container extension from this fixed list survives.
@@ -801,40 +802,64 @@ def read_and_digest(path):
 
 
 class UploadFailed(RuntimeError):
-    """Carries no text: the status lands in row["upload_status"], the class in error_class.
-    httpx's raise_for_status() message would quote the signed destination URL."""
+    """Carries no text: the status lands in row["upload_status"], the stage it stopped at
+    in row["upload_stage"], the class in error_class."""
+
+
+def answer_of(response):
+    """A JSON object answer, or {}: a non-JSON or non-object body contributes nothing."""
+    try:
+        data = response.json()
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 async def upload(client, cfg, path, row, tenant=0):
-    """POST /v1/uploads -> PUT to the returned constrained destination ->
-    POST /v1/uploads/{handle}/complete. Contracts v1 shape; unverified until M3/G4."""
-    body, digest = await asyncio.to_thread(read_and_digest, path)   # 35 MB read + sha off the loop
-    mime = mimetypes.guess_type(path)[0] or "video/mp4"
-    cfg = {**cfg, "headers": cfg["headers_for"](tenant)}   # the staging tenant owns the object
-    r = await client.post(cfg["base"] + "/uploads", headers=cfg["headers"],
-                          json={"purpose": "video", "filename": os.path.basename(path),
-                                "bytes": len(body), "sha256": digest, "content_type": mime})
+    """The MOUNTED upload contract (apps/infrx-api/infrx/gateway/routes/uploads.py), three
+    calls, all on the gateway's own origin with the staging tenant's bearer:
+
+        POST {base}/uploads  {max_bytes, bytes, accepted_mime, digest}  -> 201 UploadCreated
+        PUT  {base}/uploads/{handle}  Content-Type = the media type      -> 204
+        POST {base}/uploads/{handle}/complete  (no body)                 -> 200 UploadCompleted
+
+    The destination is built from --base-url and the allowlisted handle, never from the
+    answer: UploadCreated carries no URL, and a URL or header an answer adds anyway is
+    ignored, so no server-named origin ever receives the bytes or the key (RV-07). The
+    ticket must name `infrx-upload:<handle>` and the completion must name the same handle,
+    bytes and digest, or the upload is refused before chat ever sees the reference."""
+    body, hexdigest = await asyncio.to_thread(read_and_digest, path)  # 35 MB read + sha off the loop
+    digest, mime = "sha256:" + hexdigest, mimetypes.guess_type(path)[0] or "video/mp4"
+    headers = cfg["headers_for"](tenant)            # the staging tenant owns the object
+    row["upload_stage"] = "create"
+    r = await client.post(cfg["base"] + "/uploads", headers=headers,
+                          json={"max_bytes": len(body), "bytes": len(body),
+                                "accepted_mime": [mime], "digest": digest})
     row["upload_status"] = r.status_code
-    if r.status_code >= 400:
+    ticket = answer_of(r) if r.status_code < 400 else {}
+    # The handle goes into a path, the request body AND the resume state, so it is
+    # allowlisted like any other server string: `upl_` + 22..64 (contracts/ids.py).
+    handle = allow(ticket.get("upload_handle"), HANDLE_OK, cfg["key"], fallback=None)
+    if handle is None or ticket.get("destination_ref") != UPLOAD_REF_SCHEME + handle:
         raise UploadFailed()
-    created = r.json()
-    dest = created.get("upload") or created
-    put = await client.request(dest.get("method", "PUT"), dest["url"], content=body,
-                              headers={"content-type": mime, **(dest.get("headers") or {})})
+    row["upload_expires_at"] = allow(ticket.get("expires_at"), TIMESTAMP_OK, cfg["key"],
+                                     fallback=None)
+    row["upload_stage"] = "put"
+    put = await client.put(f"{cfg['base']}/uploads/{handle}", content=body,
+                           headers={**headers, "content-type": mime})
     row["upload_status"] = put.status_code
     if put.status_code >= 400:
         raise UploadFailed()
-    done = await client.post(f"{cfg['base']}/uploads/{created['handle']}/complete", headers=cfg["headers"],
-                             json={"sha256": digest, "bytes": len(body)})
+    row["upload_stage"] = "complete"
+    done = await client.post(f"{cfg['base']}/uploads/{handle}/complete",
+                             headers={k: v for k, v in headers.items() if k != "content-type"})
     row["upload_status"] = done.status_code
-    if done.status_code >= 400:
+    completed = answer_of(done) if done.status_code < 400 else {}
+    media = completed.get("media") if isinstance(completed.get("media"), dict) else {}
+    if (completed.get("upload_handle"), media.get("digest"), media.get("bytes")) != (
+            handle, digest, len(body)):
         raise UploadFailed()
-    # The handle goes back out in the request body and into the resume state, so it is
-    # allowlisted like any other server string: `upl_` + 22..64 (contracts/ids.py).
-    handle = allow((done.json() or {}).get("handle", created["handle"]), HANDLE_OK, cfg["key"],
-                   fallback=None)
-    if handle is None:
-        raise UploadFailed()
+    row["upload_stage"] = "finalized"
     return handle
 
 
@@ -876,7 +901,8 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "error_code": None, "error_type": None, "body_sha256": None, "body_bytes": None,
            "inference_id": None, "retry_after": None,
            "server_timing": None, "prompt_tokens": None, "completion_tokens": None, "usage_missing": None,
-           "content_chars": 0, "upload_s": None, "upload_status": None, "media_sent": False,
+           "content_chars": 0, "upload_s": None, "upload_status": None, "upload_stage": None,
+           "upload_expires_at": None, "media_sent": False,
            "finish_reason": None,
            "stream_complete": None, "schedule_lag_s": None,
            # request-level fields, filled by run_one() on the attempt that ends the request
