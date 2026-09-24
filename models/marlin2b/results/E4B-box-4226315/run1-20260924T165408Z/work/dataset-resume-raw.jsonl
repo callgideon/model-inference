@@ -1,0 +1,1 @@
+{"kind": "run_profile", "dataset_version": "e4b-nosha-20260924T165443Z", "profile_version": "v1", "seed": 20260922, "forms": ["video_b64"], "max_tokens_mix": [128, 512, 1024], "tenants": 1, "requests": 24}

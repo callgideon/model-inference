@@ -1,0 +1,598 @@
+{
+  "runner": "e4b-certify",
+  "protocol": "models/marlin2b/results/E4B-protocol.md",
+  "target": {
+    "kind": "remote",
+    "base_url": "http://127.0.0.1:8001/v1",
+    "engine_url": "http://127.0.0.1:8000",
+    "metered": true,
+    "bench_target": "gateway",
+    "model": "nemostation/marlin-2b@2026-09-01",
+    "scale": "box",
+    "label": "unverified target, not a measurement",
+    "namespace": null,
+    "workdir": "/out/work",
+    "box": true,
+    "release_sha": "422631591845fbd66b590c73d5ff4150318d9d7a",
+    "inventory": "/e4b/inventory.txt",
+    "parity_baseline": "/e4b/parity-e0.jsonl"
+  },
+  "hashes": {
+    "git": {
+      "sha": null,
+      "dirty": null
+    },
+    "serving_version_json": "6b1024b662ee8e880842c2c14b2180ca9000aa90c695434426ae8e8557ddd318",
+    "serve_sh": "9e1f473bd7d8d7ac593468e2e4c4049b0bbff1c78f93cdbf72577b894fb6dd11",
+    "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+    "engine_options_digest_recomputed": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+    "runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+    "model_digests": {
+      "weight_shards": [
+        "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+        "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+      ],
+      "tokenizer": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "chat_template": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+    },
+    "contract_limits": "525eb083ecaa75879a4f0d6fdc0da643ef827d8373d6a5b7bd829c04db205ce9",
+    "migrations": "eeb1645c13546c3d2cf47fb743d4a171445841f2f04e1ec336413ddacbc9b57f",
+    "deploy_tree": "95a1d1a8a916303dff7f9c65f8b0a9a2f1ad6c7f9b01187c14e0e430704653b1",
+    "rollout_tree": "57f929f014a8145629b0a4cf247f19a5412fcc722287f512858347b2324742af",
+    "alert_rules": "8eec8014fdc120bd54a7779b69a7226d470198a5569c4f7cb6d131a37d5c1243",
+    "uv_lock": "cc572b804a41a86caeeff8e612da3a54730ea4cf84737662a8325ac9c93ec24d",
+    "infrx_package": "00a7266fa0efe1dfa9529d2f7fe40d83ed049fc63cdd2d46d2cac621e8d5d88a",
+    "published_release": {
+      "requested_model": "nemostation/marlin-2b@2026-09-01",
+      "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+      "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+      "rate_card_version": "rc_marlin2b_20260901T000000Z_provisional_p01"
+    },
+    "gateway_image": "sha256:491697bce56a9b0b0359b38adaaeed6cb534f73ad6a45f35f43f9be46790589f",
+    "release_image": "infrx-runtime:422631591845fbd66b590c73d5ff4150318d9d7a"
+  },
+  "backend_ready": "not decided by this runner: BACKEND-READY needs the box half and the coordinator's recorded decision (E4B-release-decision.md)",
+  "git_head": {
+    "sha": null,
+    "dirty": null
+  },
+  "git_head_end": {
+    "sha": null,
+    "dirty": null
+  },
+  "namespace": "e2",
+  "started": "2026-09-24T16:54:09+00:00",
+  "seconds": 498.0,
+  "exit_code": 1,
+  "stages": [
+    {
+      "stage": "e4b.b.preconditions",
+      "status": "PASS",
+      "detail": "App and Lab stopped, window open, engine idle, clips present",
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.3,
+      "owners": null,
+      "measured": {
+        "next_servers": []
+      },
+      "label": null
+    },
+    {
+      "stage": "e4b.b.config-pin",
+      "status": "PASS",
+      "detail": "tree and deployed engine match",
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": {
+        "current": {
+          "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+          "runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+          "engine_max_num_seqs": "8",
+          "contract_engine_max_num_seqs": 8,
+          "encoder_budget_tokens": 16384,
+          "profile_version": "v1",
+          "preparation_concurrency": 2,
+          "max_preparing_jobs": 8,
+          "max_video_seconds": 120.0,
+          "published_engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+          "published_runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
+        },
+        "inventory_sha256": "e991158879080721833f1349369828a851ee632ee25c1fbc58aad6007fe370d4"
+      },
+      "label": null
+    },
+    {
+      "stage": "e4b.b.served-build",
+      "status": "FAIL",
+      "detail": [
+        "the gateway serves 422631591845fbd66b590c73d5ff4150318d9d7a, the report's tree is None",
+        "the gateway runs sha256:491697bce56a9b0b0359b38adaaeed6cb534f73ad6a45f35f43f9be46790589f, not the release image infrx-runtime:422631591845fbd66b590c73d5ff4150318d9d7a"
+      ],
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.b.recovery-box",
+      "status": "PENDING",
+      "detail": "I3B's runbook drills on the box (infra/runbooks: restart, restore, rollback, index-loss, disk, reconcile) are the coordinator's, recorded in E4B-release-decision.md",
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "BOX"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.a.protocol",
+      "status": "SKIP",
+      "detail": "--no-stack",
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "STACK"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.b.recovery",
+      "status": "SKIP",
+      "detail": "--no-stack",
+      "at": "2026-09-24T16:54:09+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "STACK"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.a.sop-parity",
+      "status": "FAIL",
+      "detail": {
+        "verdict": "fail",
+        "why": "c012-bbb1080p30-1024x768-4x3: refused by the candidate; c025-tos720p-2560x1080-ultrawide-rot180: refused by the candidate; c038-sintel1080p-480x854-portrait: refused by the candidate; c051-tos720p-360p-16x9: refused by the candidate; sop09-120s-640x360: refused by the candidate; sop10-120s-854x480-step_spans_segment_boundary: refused by the candidate; sop11-120s-1280x720: refused by the candidate",
+        "baseline": "/e4b/parity-e0.jsonl",
+        "candidate": "/out/work/parity-candidate.jsonl",
+        "candidate_sha256": "3abbe7aac890a8912c2f2775fcee4643f0d827756c3e8e9fa9da2963336f0fb1"
+      },
+      "at": "2026-09-24T16:54:43+00:00",
+      "seconds": 33.9,
+      "owners": null,
+      "measured": null,
+      "label": "unverified target, not a measurement"
+    },
+    {
+      "stage": "e4b.a.dataset-resume",
+      "status": "FAIL",
+      "detail": [
+        "not interrupted mid-run (interrupted=False, 0 of 24 items accepted): the drill proved nothing"
+      ],
+      "at": "2026-09-24T16:55:18+00:00",
+      "seconds": 34.7,
+      "owners": null,
+      "measured": {
+        "dataset_version": "e4b-nosha-20260924T165443Z",
+        "items": 24,
+        "first_run": {
+          "exit": 1,
+          "signalled": false,
+          "attempts": 24,
+          "accepted": 0
+        },
+        "resume": {
+          "exit": 0,
+          "attempts": 0,
+          "replayed": 0
+        },
+        "client_problems": [
+          "not interrupted mid-run (interrupted=False, 0 of 24 items accepted): the drill proved nothing"
+        ]
+      },
+      "label": "unverified target, not a measurement"
+    },
+    {
+      "stage": "e4b.b.envelope",
+      "status": "FAIL",
+      "detail": {
+        "supported_rate_per_s": null,
+        "client_exits": {
+          "envelope-r0.5": 1,
+          "envelope-r1.0": 1,
+          "envelope-r2.0": 1
+        },
+        "rungs": {
+          "0.5": [
+            [
+              "duration_cap",
+              "fail",
+              {
+                "over_ceiling_not_refused": [
+                  "c051-tos720p-360p-16x9"
+                ],
+                "within_cap_refused": [
+                  "c000-bbb1080p30-1080p-16x9",
+                  "c001-tos720p-720p-16x9",
+                  "c002-sintel1080p-480p-16x9",
+                  "c003-nasasteve-360p-16x9",
+                  "c004-bbb1080p30-1080x1920-portrait",
+                  "c005-tos720p-720x1280-portrait",
+                  "c006-sintel1080p-480x854-portrait",
+                  "c007-nasasteve-1080-square",
+                  "c008-bbb1080p30-512-square",
+                  "c009-tos720p-2560x1080-ultrawide",
+                  "c010-sintel1080p-1920x800-scope",
+                  "c011-nasasteve-640x480-4x3",
+                  "c013-tos720p-1920x480-extreme-wide",
+                  "c014-sintel1080p-480x1920-extreme-tall",
+                  "c015-nasasteve-240p-tiny",
+                  "c016-bbb1080p30-1080p-16x9",
+                  "c017-tos720p-720p-16x9",
+                  "c018-sintel1080p-480p-16x9",
+                  "c019-nasasteve-360p-16x9",
+                  "c020-bbb1080p30-1080x1920-portrait-rot90cw",
+                  "c021-tos720p-720x1280-portrait",
+                  "c022-sintel1080p-480x854-portrait",
+                  "c023-bbb1080p30-1080-square",
+                  "c024-bbb1080p30-512-square",
+                  "c026-sintel1080p-1920x800-scope",
+                  "c027-nasasteve-640x480-4x3",
+                  "c028-bbb1080p30-1024x768-4x3",
+                  "c029-tos720p-1920x480-extreme-wide",
+                  "c030-sintel1080p-480x1920-extreme-tall-rot90ccw",
+                  "c031-bbb1080p30-240p-tiny",
+                  "c032-bbb1080p30-1080p-16x9",
+                  "c033-tos720p-720p-16x9",
+                  "c034-sintel1080p-480p-16x9",
+                  "c035-bbb1080p30-360p-16x9",
+                  "c036-bbb1080p30-1080x1920-portrait",
+                  "c037-tos720p-720x1280-portrait",
+                  "c039-bbb1080p30-1080-square",
+                  "c040-bbb1080p30-512-square",
+                  "c041-tos720p-2560x1080-ultrawide",
+                  "c042-sintel1080p-1920x800-scope",
+                  "c043-bbb1080p30-640x480-4x3",
+                  "c044-bbb1080p30-1024x768-4x3",
+                  "c045-tos720p-1920x480-extreme-wide",
+                  "c046-sintel1080p-480x1920-extreme-tall",
+                  "c047-bbb1080p30-240p-tiny",
+                  "c048-bbb1080p30-1080p-16x9",
+                  "c049-tos720p-720p-16x9",
+                  "c050-sintel1080p-480p-16x9",
+                  "c052-bbb1080p30-1080x1920-portrait",
+                  "c053-tos720p-720x1280-portrait",
+                  "c054-sintel1080p-480x854-portrait",
+                  "c055-bbb1080p30-1080-square",
+                  "c056-bbb1080p30-512-square",
+                  "c057-tos720p-2560x1080-ultrawide",
+                  "c058-sintel1080p-1920x800-scope",
+                  "c059-bbb1080p30-640x480-4x3",
+                  "c060-bbb1080p30-1024x768-4x3",
+                  "c061-tos720p-1920x480-extreme-wide",
+                  "c062-sintel1080p-480x1920-extreme-tall",
+                  "c063-tos720p-240p-tiny"
+                ],
+                "ceiling_s": 82,
+                "cap_s": 72
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/112 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "fail",
+              "0 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "fail",
+              "112 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "fail",
+              "exit 1",
+              "BOX"
+            ]
+          ],
+          "1.0": [
+            [
+              "duration_cap",
+              "fail",
+              {
+                "over_ceiling_not_refused": [],
+                "within_cap_refused": [
+                  "c000-bbb1080p30-1080p-16x9",
+                  "c001-tos720p-720p-16x9",
+                  "c002-sintel1080p-480p-16x9",
+                  "c003-nasasteve-360p-16x9",
+                  "c004-bbb1080p30-1080x1920-portrait",
+                  "c005-tos720p-720x1280-portrait",
+                  "c006-sintel1080p-480x854-portrait",
+                  "c007-nasasteve-1080-square",
+                  "c008-bbb1080p30-512-square",
+                  "c009-tos720p-2560x1080-ultrawide",
+                  "c010-sintel1080p-1920x800-scope",
+                  "c011-nasasteve-640x480-4x3",
+                  "c013-tos720p-1920x480-extreme-wide",
+                  "c014-sintel1080p-480x1920-extreme-tall",
+                  "c015-nasasteve-240p-tiny",
+                  "c016-bbb1080p30-1080p-16x9",
+                  "c017-tos720p-720p-16x9",
+                  "c018-sintel1080p-480p-16x9",
+                  "c019-nasasteve-360p-16x9",
+                  "c020-bbb1080p30-1080x1920-portrait-rot90cw",
+                  "c021-tos720p-720x1280-portrait",
+                  "c022-sintel1080p-480x854-portrait",
+                  "c023-bbb1080p30-1080-square",
+                  "c024-bbb1080p30-512-square",
+                  "c026-sintel1080p-1920x800-scope",
+                  "c027-nasasteve-640x480-4x3",
+                  "c028-bbb1080p30-1024x768-4x3",
+                  "c029-tos720p-1920x480-extreme-wide",
+                  "c030-sintel1080p-480x1920-extreme-tall-rot90ccw",
+                  "c031-bbb1080p30-240p-tiny",
+                  "c032-bbb1080p30-1080p-16x9",
+                  "c033-tos720p-720p-16x9",
+                  "c034-sintel1080p-480p-16x9",
+                  "c035-bbb1080p30-360p-16x9",
+                  "c036-bbb1080p30-1080x1920-portrait",
+                  "c037-tos720p-720x1280-portrait",
+                  "c039-bbb1080p30-1080-square",
+                  "c040-bbb1080p30-512-square",
+                  "c041-tos720p-2560x1080-ultrawide",
+                  "c042-sintel1080p-1920x800-scope",
+                  "c043-bbb1080p30-640x480-4x3",
+                  "c044-bbb1080p30-1024x768-4x3",
+                  "c045-tos720p-1920x480-extreme-wide",
+                  "c046-sintel1080p-480x1920-extreme-tall",
+                  "c047-bbb1080p30-240p-tiny",
+                  "c048-bbb1080p30-1080p-16x9",
+                  "c049-tos720p-720p-16x9",
+                  "c050-sintel1080p-480p-16x9",
+                  "c052-bbb1080p30-1080x1920-portrait",
+                  "c053-tos720p-720x1280-portrait",
+                  "c054-sintel1080p-480x854-portrait",
+                  "c055-bbb1080p30-1080-square",
+                  "c056-bbb1080p30-512-square",
+                  "c057-tos720p-2560x1080-ultrawide",
+                  "c058-sintel1080p-1920x800-scope",
+                  "c059-bbb1080p30-640x480-4x3",
+                  "c060-bbb1080p30-1024x768-4x3",
+                  "c061-tos720p-1920x480-extreme-wide",
+                  "c062-sintel1080p-480x1920-extreme-tall",
+                  "c063-tos720p-240p-tiny"
+                ],
+                "ceiling_s": 82,
+                "cap_s": 72
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/112 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "fail",
+              "0 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "fail",
+              "112 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "fail",
+              "exit 1",
+              "BOX"
+            ]
+          ],
+          "2.0": [
+            [
+              "duration_cap",
+              "fail",
+              {
+                "over_ceiling_not_refused": [
+                  "c051-tos720p-360p-16x9"
+                ],
+                "within_cap_refused": [
+                  "c000-bbb1080p30-1080p-16x9",
+                  "c001-tos720p-720p-16x9",
+                  "c002-sintel1080p-480p-16x9",
+                  "c003-nasasteve-360p-16x9",
+                  "c004-bbb1080p30-1080x1920-portrait",
+                  "c005-tos720p-720x1280-portrait",
+                  "c006-sintel1080p-480x854-portrait",
+                  "c007-nasasteve-1080-square",
+                  "c008-bbb1080p30-512-square",
+                  "c009-tos720p-2560x1080-ultrawide",
+                  "c010-sintel1080p-1920x800-scope",
+                  "c011-nasasteve-640x480-4x3",
+                  "c013-tos720p-1920x480-extreme-wide",
+                  "c014-sintel1080p-480x1920-extreme-tall",
+                  "c015-nasasteve-240p-tiny",
+                  "c016-bbb1080p30-1080p-16x9",
+                  "c017-tos720p-720p-16x9",
+                  "c018-sintel1080p-480p-16x9",
+                  "c019-nasasteve-360p-16x9",
+                  "c020-bbb1080p30-1080x1920-portrait-rot90cw",
+                  "c021-tos720p-720x1280-portrait",
+                  "c022-sintel1080p-480x854-portrait",
+                  "c023-bbb1080p30-1080-square",
+                  "c024-bbb1080p30-512-square",
+                  "c026-sintel1080p-1920x800-scope",
+                  "c027-nasasteve-640x480-4x3",
+                  "c028-bbb1080p30-1024x768-4x3",
+                  "c029-tos720p-1920x480-extreme-wide",
+                  "c030-sintel1080p-480x1920-extreme-tall-rot90ccw",
+                  "c031-bbb1080p30-240p-tiny",
+                  "c032-bbb1080p30-1080p-16x9",
+                  "c033-tos720p-720p-16x9",
+                  "c034-sintel1080p-480p-16x9",
+                  "c035-bbb1080p30-360p-16x9",
+                  "c036-bbb1080p30-1080x1920-portrait",
+                  "c037-tos720p-720x1280-portrait",
+                  "c039-bbb1080p30-1080-square",
+                  "c040-bbb1080p30-512-square",
+                  "c041-tos720p-2560x1080-ultrawide",
+                  "c042-sintel1080p-1920x800-scope",
+                  "c043-bbb1080p30-640x480-4x3",
+                  "c044-bbb1080p30-1024x768-4x3",
+                  "c045-tos720p-1920x480-extreme-wide",
+                  "c046-sintel1080p-480x1920-extreme-tall",
+                  "c047-bbb1080p30-240p-tiny",
+                  "c048-bbb1080p30-1080p-16x9",
+                  "c049-tos720p-720p-16x9",
+                  "c050-sintel1080p-480p-16x9",
+                  "c052-bbb1080p30-1080x1920-portrait",
+                  "c053-tos720p-720x1280-portrait",
+                  "c054-sintel1080p-480x854-portrait",
+                  "c055-bbb1080p30-1080-square",
+                  "c056-bbb1080p30-512-square",
+                  "c057-tos720p-2560x1080-ultrawide",
+                  "c058-sintel1080p-1920x800-scope",
+                  "c059-bbb1080p30-640x480-4x3",
+                  "c060-bbb1080p30-1024x768-4x3",
+                  "c061-tos720p-1920x480-extreme-wide",
+                  "c062-sintel1080p-480x1920-extreme-tall",
+                  "c063-tos720p-240p-tiny"
+                ],
+                "ceiling_s": 82,
+                "cap_s": 72
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/112 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "fail",
+              "0 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "fail",
+              "112 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "unknown",
+              "p95 None over 0 samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "fail",
+              "exit 1",
+              "BOX"
+            ]
+          ]
+        }
+      },
+      "at": "2026-09-24T17:02:25+00:00",
+      "seconds": 426.6,
+      "owners": null,
+      "measured": null,
+      "label": "unverified target, not a measurement"
+    },
+    {
+      "stage": "e4b.b.soak",
+      "status": "FAIL",
+      "detail": "no supported envelope rate to soak at",
+      "at": "2026-09-24T17:02:25+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": null,
+      "label": "unverified target, not a measurement"
+    },
+    {
+      "stage": "e4b.b.overload",
+      "status": "FAIL",
+      "detail": [
+        "nothing was accepted under the burst",
+        "refusals without 429 + Retry-After + an overload code: [(400, None, 'invalid_request'), (400, None, 'invalid_request'), (400, None, 'invalid_request'), (400, None, 'invalid_request'), (400, None, 'invalid_request')]",
+        "5xx or platform-caused failures under overload: [(None, 'ReadError'), (None, 'ReadError'), (None, 'ReadError'), (None, 'ReadError'), (None, 'ReadError')]"
+      ],
+      "at": "2026-09-24T17:02:27+00:00",
+      "seconds": 2.4,
+      "owners": null,
+      "measured": {
+        "attempts": 32,
+        "accepted": 0,
+        "refused": 18
+      },
+      "label": "unverified target, not a measurement"
+    },
+    {
+      "stage": "release-identity",
+      "status": "FAIL",
+      "detail": [
+        "no git SHA at the start of the run",
+        "the tree at the start is of unknown state",
+        "no git SHA at the end of the run",
+        "the tree at the end is of unknown state",
+        "the tree is None, not the release 422631591845fbd66b590c73d5ff4150318d9d7a"
+      ],
+      "at": "2026-09-24T17:02:27+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": null,
+      "label": null
+    }
+  ]
+}
