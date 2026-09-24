@@ -255,9 +255,15 @@ class PreparationRunner:
         # One per process: the pool's runners share this runner (TOKCOST).
         self.memo = CountMemo(ttl_s=limits.processing_cache_ttl_s) if memo is None else memo
 
+    @property
+    def claims(self):
+        """The door a preparation is claimed through: the ReadinessStore's marker-gated
+        `claim_preparation` when one is wired, else the JobStore's (pre-D10)."""
+        return self.readiness or self.jobs
+
     async def run(self, job_id: str) -> PreparationResult:
         try:
-            lease = await (self.readiness or self.jobs).claim_preparation(job_id, self.worker_id)
+            lease = await self.claims.claim_preparation(job_id, self.worker_id)
         except errors.DomainError as refused:
             # The index is a hint (02 §4): a candidate offered twice, or a job that moved
             # on, is a lost claim - answered, never a dead runner.

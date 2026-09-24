@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 
 import pytest
@@ -82,6 +83,9 @@ def test_pg_mutant_is_killed(mutant):
     reason = pgharness.unavailable()
     if reason:
         pytest.skip(f"PostgreSQL harness unavailable: {reason}")
+    if mutant.name in mutation_list.NEEDS_D10 and \
+            importlib.util.find_spec("infrx.state.lifecycle") is None:
+        pytest.skip("D10's PgLifecycle is not on this tree")
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "

@@ -24,7 +24,8 @@ import pytest
 
 from infrx.config import Settings
 from infrx.contracts import errors
-from infrx.contracts.conformance import builders as b
+from infrx.contracts.conformance import Harness, acceptance, builders as b
+from infrx.contracts.fakes.factories import lifecycle_factory
 from infrx.contracts.fakes.lifecycle import FakeLifecycle
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (HoldState, IndexEvent, JobState, OutboxKind,
@@ -37,6 +38,7 @@ from infrx.media.video import Media
 from infrx.observe import alerts
 from infrx.observe.metrics import Registry
 from infrx.worker import WorkerLoop, WorkerService
+from infrx.worker import __main__ as worker_main
 from infrx.worker.preparation import (ENCODER_CACHE_TOKENS, PreparationResult, PreparationRunner,
                                       most_video_tokens)
 from infrx.worker.service import PgReconciliation
@@ -706,3 +708,76 @@ def test_w5_refuse__a_permanent_refusal_racing_a_cancel_settles_once(tmp_path):
     assert len(ends.calls) == 1 and job(prep, request).outcome.cause is \
         TerminalCause.client_cancelled
     assert released_once(prep, request)
+
+
+class Doors:
+    """The lifecycle port as a composed preparation runner sees it: `claim_preparation` is the
+    door the runner claims through and `readiness` the one it reads the manifest from; every
+    other operation is the adapter's own."""
+
+    def __init__(self, runner: PreparationRunner, port) -> None:
+        self.runner, self.port = runner, port
+        self.claim_preparation = runner.claims.claim_preparation
+        self.readiness = runner.readiness.readiness
+
+    def __getattr__(self, name):
+        return getattr(self.port, name)
+
+
+def test_w5_ready__the_acceptance_transcripts_replay_through_the_runners_doors():
+    """F2C.d's acceptance oracle: every committed lifecycle transcript - the ADMISSION-READY
+    cases in both regimes among them (an EMPTY manifest ready and claimable, no marker never
+    claimable, a replay answering the recorded marker) - replays unchanged through the doors
+    a preparation runner composed with the reference adapter claims and reads through."""
+    def factory(**windows) -> Harness:
+        harness = lifecycle_factory(**windows)
+        runner = PreparationRunner(jobs=harness.extra["jobs"], media=None, engine=None,
+                                   worker_id="prep-w", readiness=harness.port)
+        return Harness(port=Doors(runner, harness.port), clock=harness.clock,
+                       ids=harness.ids, failures=harness.failures, extra=harness.extra)
+
+    assert acceptance.replay(factory) == []
+
+
+def test_w5_ready_pg__the_worker_prepares_only_what_admit_ready_marked(tmp_path):
+    """Integrated (D10's `PgLifecycle` on this lane's PostgreSQL; a visible skip where the
+    adapter is not on the tree): the worker, claiming and reading through D10's adapter,
+    prepares the text job `admit_ready` marked with its EMPTY manifest - the count stored in
+    `infrx.jobs` - and refuses the job the previous runtime admitted (no marker) at the claim,
+    in both regimes, without asking the engine."""
+    lifecycle_module = pytest.importorskip(
+        "infrx.state.lifecycle", reason="D10's PgLifecycle is not on this tree")
+    from tests.d import pgharness, pgstore
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"W5: the D harness is unavailable: {reason}")
+    from infrx.state import migrations, pgtesting
+    from infrx.state.jobstore import connector
+    harness = pgtesting.make_credit_jobstore_factory(
+        pgstore.fresh_database, pgharness.dsn, migrations.SEED_MARLIN.read_text())()
+    conn = harness.extra["conn"]
+    store = lifecycle_module.PgLifecycle(connector(pgharness.dsn(harness.extra["database"])))
+    prep = Prep(tmp_path, credit=True)
+    prep.runner.jobs, prep.runner.readiness = worker_main.CreditWork(harness.port), store
+    card = AdmissionExpectation(accounting_regime=AccountingRegime.credit,
+                                rate_card_version=v2fix.RATE_CARD_VERSION)
+
+    def request():
+        return b.request(harness, org_id=v2fix.IDS.consumer_org, key_id=v2fix.IDS.consumer_key,
+                         model_revision=v2fix.REQUESTED_MODEL)
+
+    async def case():
+        marked, previous = request(), request()
+        await store.admit_ready(marked, b.idem(marked, "w5-marked"), card)
+        await harness.port.admit_credit(previous, b.idem(previous, "w5-previous"))
+        return (marked, await prep.runner.run(marked.request_id),
+                previous, await prep.runner.run(previous.request_id))
+
+    marked, prepared, previous, refused = run(case())
+    rows = {row[0]: row[1:] for row in conn.execute(
+        "select request_id::text, prepared_prompt_tokens, preparation_attempts from infrx.jobs "
+        "where request_id in (%s, %s)", (marked.request_id, previous.request_id)).fetchall()}
+    assert (prepared.cause, prepared.prompt_tokens) == ("prepared", COUNT), prepared
+    assert refused.refusal == "not_claimable" and len(prep.app.tokenized) == 1, refused
+    # the previous runtime's job was never even claimed: the claim went through the marker
+    assert rows == {marked.request_id: (COUNT, 1), previous.request_id: (None, 0)}, rows

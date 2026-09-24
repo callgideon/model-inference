@@ -33,6 +33,7 @@ POSTCHECK = "test_w5_ready__a_late_postcheck_decides_before_anything_is_prepared
 D1 = "test_w5_ready__the_d1_marker_is_what_the_worker_reads"
 UNREADY = "test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once"
 NO_LEGACY = "test_w5_ready__no_marker_is_never_legacy_ready"
+REPLAY = "test_w5_ready__the_acceptance_transcripts_replay_through_the_runners_doors"
 # 2. crash boundaries
 NEVER_READY = "test_w5_crash__accepted_but_never_ready_is_bounded_and_released_once"
 WAKEUP = "test_w5_crash__a_lost_queue_wakeup_loses_no_job_and_a_redelivery_runs_it_once"
@@ -44,6 +45,7 @@ V = "worker/service.py"
 # S3 F4: the reconciliation gauges
 GAUGES = "test_w5_reconcile__each_reaper_tick_publishes_the_reconciliation_gauges"
 PG_VIEWS = "test_w5_reconcile_pg__the_detector_views_count_drift_and_unknown_holds"
+PG_READY = "test_w5_ready_pg__the_worker_prepares_only_what_admit_ready_marked"
 # 3. refusals
 PERMANENT = "test_w5_refuse__a_permanent_refusal_ends_the_job_once"
 TEMPORARY = "test_w5_refuse__a_temporary_failure_is_retried_within_its_bound_never_ended_early"
@@ -73,8 +75,8 @@ MUTANTS = (
        NO_LEGACY),
     _m("w5_claim_bypasses_the_marker_gate", "the preparation claim goes through the "
        "ReadinessStore's marker-gated door", P,
-       "lease = await (self.readiness or self.jobs).claim_preparation(",
-       "lease = await self.jobs.claim_preparation(", D1),
+       "        return self.readiness or self.jobs\n", "        return self.jobs\n",
+       D1, REPLAY),
     _m("w5_readiness_wait_unbounded", "the wait for a manifest is bounded (not_claimable)",
        P, "            if time.monotonic() >= end:", "            if False:", CANARY),
     _m("w5_unready_job_never_reaped", "a job that never became ready ends at its "
@@ -170,7 +172,14 @@ PG_MUTANTS = (
        V, '    "select (select count(*) from infrx.wallet_reconciliation"\n'
           '    " where ledger_drift <> 0 or reserved_drift <> 0)"\n    " + (',
        '    "select (', PG_VIEWS),
+    # needs D10's `infrx.state.lifecycle` on the tree (skipped visibly without it)
+    _m("w5_claim_bypasses_the_marker_gate_on_postgresql", "on PostgreSQL the worker claims "
+       "through D10's marker-gated door: a job the previous runtime admitted is never prepared",
+       P, "        return self.readiness or self.jobs\n", "        return self.jobs\n",
+       PG_READY),
 )
+#: The PG mutants that also need D10's adapter on the tree.
+NEEDS_D10 = frozenset({"w5_claim_bypasses_the_marker_gate_on_postgresql"})
 
 
 def case_names() -> set[str]:
