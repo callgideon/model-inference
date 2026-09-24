@@ -298,10 +298,14 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
                 input_rate: str | None = None, output_rate: str | None = None,
                 idempotency_key: str, reason: str, drain_timeout_s: float = 0.0,
                 poll_s: float = 2.0, sleep: Callable = asyncio.sleep,
-                monotonic: Callable[[], float] = time.monotonic) -> dict:
+                monotonic: Callable[[], float] = time.monotonic,
+                freeze_only: bool = False) -> dict:
     """Freeze, drain (bounded), enable. `op` is an `OperatorSession`: the write is audited
     once under `idempotency_key`; a blocked run audits nothing and raises
-    `TransitionBlocked` with the report (its freeze, if any, stays - rerun to continue)."""
+    `TransitionBlocked` with the report (its freeze, if any, stays - rerun to continue).
+    `freeze_only` stops after the drain with both regimes paused: the window in which a
+    runtime is replaced (D10's `readiness_cutover_check` wants admission paused in both);
+    a later run without it enables the target."""
     rates = {"card": card, "input_rate": input_rate, "output_rate": output_rate}
     source = LEGACY if target == CREDIT else CREDIT
 
@@ -318,7 +322,7 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
                 raise TransitionBlocked({**plan(inv, target=target, **rates),
                                          "applied": applied})
             await sleep(poll_s)
-        for flag in ENABLE[target]:
+        for flag in () if freeze_only else ENABLE[target]:
             if await store.set_flag(flag, True, op.principal, reason):
                 applied.append({"flag": flag, "enabled": True})
         final = plan(await store.inventory(), target=target, **rates)
@@ -332,7 +336,7 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
                  "flags": {f: v["enabled"] for f, v in final["inventory"]["flags"].items()}})
 
     result, _ = await op._once("transition", idempotency_key, reason, None,
-                               {"target": target, **rates}, write)
+                               {"target": target, **rates, "freeze_only": freeze_only}, write)
     return result
 
 

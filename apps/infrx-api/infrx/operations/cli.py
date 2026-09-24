@@ -93,6 +93,7 @@ def parser() -> argparse.ArgumentParser:
     for flag in ("--card", "--input-rate", "--output-rate", "--idempotency-key", "--reason"):
         t.add_argument(flag)
     t.add_argument("--dry-run", action="store_true")
+    t.add_argument("--freeze-only", action="store_true")   # pause both regimes, drain, stop
     t.add_argument("--drain-timeout-s", type=float, default=0.0)
     t.add_argument("--poll-s", type=float, default=2.0)
     # G8 reads: no idempotency key and no reason, since nothing is written.
@@ -175,7 +176,8 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
                                      effective_at=_moment(a.effective_at), **k)
     if a.cmd == "credit-transition":
         return await transition.apply(op, ops.transitions, target=a.to, **rates, **k,
-                                      drain_timeout_s=a.drain_timeout_s, poll_s=a.poll_s)
+                                      drain_timeout_s=a.drain_timeout_s, poll_s=a.poll_s,
+                                      freeze_only=a.freeze_only)
     if a.cmd == "cancel":
         return await op.cancel_job(a.org, a.job, **k)
     if a.cmd == "reconcile":

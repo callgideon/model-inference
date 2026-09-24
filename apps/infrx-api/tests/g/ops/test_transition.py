@@ -183,6 +183,14 @@ def test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last():
         apply(audited, late)
     assert [b["code"] for b in raced.value.report["blockers"]] == ["in_flight"]
     assert audited.audit.entries == []
+    # `freeze_only`: both regimes paused and drained, the target left off (a runtime is
+    # replaced in this window); the later run under a new key enables it.
+    paused, window = ScriptedStore(flying=[1, 0]), fakes.world()
+    held = apply(window, paused, key="pause", freeze_only=True)
+    assert held["applied"] == [{"flag": "legacy_usd_admission", "enabled": False}]
+    assert not any(paused.flags.values()), paused.flags
+    assert apply(window, paused, key="resume")["applied"] == [
+        {"flag": "credit_admission", "enabled": True}, {"flag": "signup_grant", "enabled": True}]
     # A refused card changes nothing at all.
     refused = ScriptedStore(flying=[0])
     with pytest.raises(transition.TransitionBlocked):
