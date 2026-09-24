@@ -13,9 +13,15 @@
    preparation lease as well as an inference one (0016/0018 `fence_lease(...,
    ['preparation', 'inference'])`, the fake's `_fence_for_work`); in the CREDIT regime the
    worker's `jobs` is `CreditWork`, so this is `load_work_credit`.
-3. Media, only when the request carries any: wait (bounded) for the admitting gateway's
-   durable attach, which lands just after the admission commits (R99 (c)), then M's
-   `prepare(job_id, profile)` over the object store and the shared processing cache.
+3. **W5 (RV-05): the durable execution-ready manifest, for EVERY job** - text-only as well
+   as video. Nothing is prepared, counted or stored for a job until its manifest is
+   committed where this process reads it: the store's D1 marker (`readiness(job_id)`, F2C's
+   `ReadinessStore`) when the store has one, else the durable attach the admitting gateway
+   writes after its late card/capability rechecks (R99 (c)). The wait is bounded
+   (`ATTACH_WAIT_S`; `not_claimable`, F2C's `not_ready`, after it). An EMPTY manifest is a
+   completed one (a text job), never missing work; `None` is "not ready". Then, only when
+   the request carries media, M's `prepare(job_id, profile)` over the object store and the
+   shared processing cache.
 4. **The count, exactly as the engine counts it**: vLLM's `POST /tokenize` on the chat body
    `VllmEngine.upstream_body` would send (the chat template; for a video, the local file and
    the pinned `mm_processor_kwargs`). The answer is checked, never replaced or estimated: an
@@ -233,6 +239,8 @@ class PreparationRunner:
 
     async def _prepare(self, lease) -> int:
         work = await self.jobs.load_work(lease)
+        # W5 (RV-05): the barrier, for text as for media - before anything is counted.
+        await self._ready(lease.job_id)
         refs: tuple[MediaRef, ...] = ()
         if work.media_refs:
             refs = await self._media(lease.job_id)
@@ -260,12 +268,27 @@ class PreparationRunner:
                                            timeout_s=self.limits.preparation_timeout_s)
         return count
 
-    async def _media(self, job_id: str) -> tuple[MediaRef, ...]:
+    async def _ready(self, job_id: str) -> tuple[MediaRef, ...]:
+        """The job's committed source manifest - `()` for a text job - waited for within
+        `attach_wait_s`, or `not_claimable` (F2C's `not_ready`): nothing is prepared."""
         end = time.monotonic() + self.attach_wait_s
-        while await self.media.attached(job_id) is None:
+        while (manifest := await self._manifest(job_id)) is None:
             if time.monotonic() >= end:
-                raise errors.NotFound(f"job {job_id} has no durable attach")
+                raise errors.NotClaimable(f"job {job_id} is not execution-ready")
             await asyncio.sleep(ATTACH_POLL_S)
+        return manifest
+
+    async def _manifest(self, job_id: str) -> tuple[MediaRef, ...] | None:
+        """D1's committed marker when the store has one (D10), else the durable attach record
+        (R99 (c): a pre-D10 PostgreSQL store records no attach of NO media, so a text job
+        there is never ready - fail closed until D10's marker lands)."""
+        readiness = getattr(self.jobs, "readiness", None)
+        if readiness is None:
+            return await self.media.attached(job_id)
+        ready = await readiness(job_id)
+        return None if ready is None else tuple(source.ref for source in ready.sources)
+
+    async def _media(self, job_id: str) -> tuple[MediaRef, ...]:
         refs = await self.media.prepare(job_id, self.media.profile_version)
         # Verifier F3: MediaPreparation keeps a per-job entry for the gateway's relay; nothing in
         # this long-lived process reads it, so it must not grow by one video job forever.

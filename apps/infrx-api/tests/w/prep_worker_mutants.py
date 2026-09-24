@@ -130,9 +130,9 @@ MUTANTS = (
     _m("prep_media_skipped", "a job with media is prepared through M's prepare",
        P, "        if work.media_refs:\n            refs = await self._media(lease.job_id)",
        "        if False:\n            refs = await self._media(lease.job_id)", VIDEO),
-    _m("prep_attach_not_awaited", "the runner waits for the gateway's late durable attach",
-       P, "        while await self.media.attached(job_id) is None:", "        while False:",
-       VIDEO),
+    _m("prep_attach_not_awaited", "the runner waits for the gateway's late durable attach "
+       "(W5: the readiness barrier, for every job)",
+       P, "        await self._ready(lease.job_id)\n", "", VIDEO),
     _m("prep_attach_wait_default_zero", "the product waits for a late attach (ATTACH_WAIT_S; "
        "review L6)", P, "ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05",
        "ATTACH_WAIT_S, ATTACH_POLL_S = 0.0, 0.05", VIDEO),

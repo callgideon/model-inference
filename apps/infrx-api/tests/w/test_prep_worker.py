@@ -123,8 +123,11 @@ class Prep:
         return self.attached.get(job_id)
 
     async def admit(self, *, video: bool = False, org_id: str = b.ORG_A, clip: bytes = CLIP,
-                    text: str | None = None, model_revision: str = b.MODEL):
-        """`text` replaces the builders' prompt; another `model_revision` is priced first."""
+                    text: str | None = None, model_revision: str = b.MODEL, ready: bool = True):
+        """`text` replaces the builders' prompt; another `model_revision` is priced first.
+        `ready` (W5, D1): the admission also records its source manifest - possibly empty -
+        where the worker reads it, as the atomic admission does; `ready=False` is an
+        acceptance whose manifest has not landed (the two-phase attach still to come)."""
         url = "data:video/mp4;base64," + base64.b64encode(clip).decode()
         org_id = v2fix.IDS.consumer_org if self.credit else org_id
         refs = ((await self.media.materialize(org_id, url)),) if video else ()
@@ -147,6 +150,8 @@ class Prep:
             await self.store.admit_credit(request, b.idem(request, request.request_id))
         else:
             await self.store.admit(request, b.idem(request, request.request_id), ())
+        if ready:
+            self.attached[request.request_id] = request.media
         return request
 
     async def prepare(self, **admitted):
@@ -228,7 +233,7 @@ def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
     prep = Prep(tmp_path)
 
     async def case():
-        request = await prep.admit(video=True)
+        request = await prep.admit(video=True, ready=False)
 
         async def gateway_attaches():
             await asyncio.sleep(0.2)
@@ -256,17 +261,18 @@ def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
 
 
 def test_prep_worker__a_job_whose_attach_never_lands_prepares_nothing(tmp_path):
-    """No durable attach within the bound: `not_found`, nothing prepared or counted, the
-    job still `preparing` (its lease left to lapse for `recover`)."""
+    """No durable attach within the bound: `not_claimable` (W5: F2C's `not_ready`; it was
+    `not_found`), nothing prepared or counted, the job still `preparing` (its lease left to
+    lapse for `recover`)."""
     prep = Prep(tmp_path, attach_wait_s=0.2)
 
     async def case():
-        request = await prep.admit(video=True)
+        request = await prep.admit(video=True, ready=False)
         return request, await within(prep.runner.run(request.request_id), 5.0), \
             await prep.state(request)
 
     request, result, state = run(case())
-    assert isinstance(result, PreparationResult) and result.refusal == "not_found", result
+    assert isinstance(result, PreparationResult) and result.refusal == "not_claimable", result
     assert state is JobState.preparing and prep.app.tokenized == []
 
 
