@@ -68,6 +68,8 @@ Sample sufficiency is enforced by the client, not by the reader: a reported pN n
 ≥3 accepted samples beyond it (p50 ≥6, p95 ≥60, p99 ≥300), so L2's cells are sized
 from the tail they intend to quote, and an unsupported tail prints `—`.
 
+Amendment (E1C, 2026-09-24): a hosted cell runs with `--profile <infrx.run-profile/1> --key-inventory <sanitized inventory>`; `bench.py` refuses a non-local target without a runnable profile (the only opt-out is the explicit, logged `--unprofiled smoke` ≤ 4 requests / ≤ 512 output tokens, or `--unprofiled certify` until the E2C wiring passes profiles; an opted-out summary is INVALID).
+
 ## 4. Provisional acceptance criteria (P-18) — quoted with their labels
 
 From `research/workloads/marlin-sop.md` §5.2, which states: "No workload owner has
@@ -117,6 +119,10 @@ A cell that shows any of these is reported as invalid rather than published:
 8. a cost-per-video-hour figure quoted without the ⚠️ above, i.e. as though ≈ $2.24/h were a
    priced row from `cloud-pricing.md`.
 
+9. any replay outside a declared resume of the same keys (the bench parser `e1c.1` reports the cell INVALID; E1C, 2026-09-24);
+10. a cell without its own `--dataset-version` (cells that share a dataset identity replay each other: the 4226315 L2/L3/L5 cells were INVALID for exactly this — 57/111/105/57 unexpected replays);
+11. a P4 overload cell that saw no 429/503, or that did not enter through the public edge (S3 finding F5; `target.path` must be `public-edge`).
+
 ## 6. Pending inputs
 
 | Id | What is missing | Blocks |
@@ -136,3 +142,4 @@ A cell that shows any of these is reported as invalid rather than published:
   committed L40S rows of 2026-09-19 (two clips, p50-grade) and the coordinator's
   read-only inventory of the current box, both labelled as such. Nothing here has
   been measured on the target.
+- 2026-09-24: §5 items 9–11 and the §3 profile amendment appended at the E1C merge (evidence `research/plan/evidence/e/E1C-2531dc4.md`).
