@@ -8,9 +8,12 @@ The same answers as `InMemoryObjectStore`, one S3 call each:
 * `put_if_absent` is PutObject with `If-None-Match: *`: write-once is the server's atomic
   answer (412 = something is there), never a HEAD and then a PUT;
 * `head` is the digest **S3 measured**: the PutObject carries `x-amz-checksum-sha256`,
-  which the server checks against the bytes it received and HeadObject returns;
-* absent is None, and only a 404 is absent. A denied, throttled or unreachable store
-  raises `DependencyUnavailable`: a store that cannot answer never says "not there".
+  which the server checks against the bytes it received and HeadObject returns - and only
+  a whole-object SHA-256 is a digest (`whole_object_digest`);
+* absent is None, and only a 404 on a one-object read (`head`, `get`, `describe`) or on
+  `delete` is absent; `put_if_absent` and `keys` have no "absent" answer, so a 404 there is
+  an error. A denied, throttled or unreachable store raises `DependencyUnavailable`: a
+  store that cannot answer never says "not there".
 
 Credentials and region come from botocore's own chain (the environment, the instance
 role) and never from settings text. botocore blocks, so each call runs in a worker
@@ -20,14 +23,34 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import hashlib
 
+from ..config import S3_PREFIX_RE
 from ..contracts import errors
 
-#: The only answers that mean "no such object": HeadObject's bodiless 404, GetObject's code.
+#: "No such object": HeadObject's bodiless 404 and GetObject's code - absent only where the
+#: call asks for one object (`absent_ok`); from a write or a listing they are errors.
 MISSING = ("404", "NoSuchKey")
-#: `head` of an object stored without our checksum: present, and no digest's match.
+#: Attempts per S3 call, the first one included.
+ATTEMPTS = 2
+#: `head` of an object that carries no whole-object SHA-256 to compare (none, a multipart
+#: upload's composite checksum, anything malformed): present - never None - and equal to
+#: no digest, so it is neither overwritten nor taken for any content.
 NO_DIGEST = "sha256:"
+
+
+def whole_object_digest(head: dict) -> str:
+    """`sha256:<hex>` of the whole object as S3 verified it on write, or NO_DIGEST. A
+    composite checksum (`ChecksumType: COMPOSITE`, or the `...=-N` form) is a checksum of
+    part checksums: it decodes, but it is no object's SHA-256."""
+    if head.get("ChecksumType", "FULL_OBJECT") != "FULL_OBJECT":
+        return NO_DIGEST
+    try:
+        raw = base64.b64decode(head.get("ChecksumSHA256") or "", validate=True)
+    except binascii.Error:
+        return NO_DIGEST
+    return "sha256:" + raw.hex() if len(raw) == 32 else NO_DIGEST
 
 
 def reason(failure: BaseException) -> str:
@@ -39,17 +62,23 @@ def reason(failure: BaseException) -> str:
 
 
 class S3ObjectStore:
-    def __init__(self, client, bucket: str, prefix: str = "") -> None:
+    def __init__(self, client, bucket: str, prefix: str) -> None:
+        if not S3_PREFIX_RE.fullmatch(prefix):
+            # the settings path refuses this at startup; a store built in code does too
+            raise ValueError("S3_MEDIA_PREFIX must be path segments, each ending in /")
         self.client, self.bucket, self.prefix = client, bucket, prefix
 
     @classmethod
-    def connect(cls, bucket: str, prefix: str = "", endpoint_url: str = "") -> S3ObjectStore:
+    def connect(cls, bucket: str, prefix: str, endpoint_url: str = "") -> S3ObjectStore:
         """A client from the environment's credentials. `endpoint_url` is for an
         S3-compatible store (MinIO in tests), addressed path-style; unset is AWS S3."""
         import botocore.session
         from botocore.config import Config
+        # Two attempts in all (`max_attempts` would count retries: 3 was 4 attempts, ~2 min
+        # against an endpoint that accepts and never answers - review A4). Worst case per
+        # call, startup's HeadBucket included: 2 x 30 s read + backoff, about a minute.
         config = Config(connect_timeout=5, read_timeout=30,
-                        retries={"mode": "standard", "max_attempts": 3},
+                        retries={"mode": "standard", "total_max_attempts": ATTEMPTS},
                         s3={"addressing_style": "path"} if endpoint_url else None)
         client = botocore.session.get_session().create_client(
             "s3", endpoint_url=endpoint_url or None, config=config)
@@ -59,15 +88,16 @@ class S3ObjectStore:
         """HeadBucket: the bucket exists and answers these credentials, or it raises."""
         self.client.head_bucket(Bucket=self.bucket)
 
-    async def _s3(self, call, *args):
-        """One blocking S3 call in a worker thread: its answer, None for a missing object,
-        False for a failed precondition, `DependencyUnavailable` for anything else."""
+    async def _s3(self, call, *args, absent_ok: bool = False):
+        """One blocking S3 call in a worker thread: its answer, None for a missing object
+        (`absent_ok` calls only), False for a failed precondition, `DependencyUnavailable`
+        for anything else."""
         from botocore.exceptions import BotoCoreError, ClientError
         try:
             return await asyncio.to_thread(call, *args)
         except ClientError as failure:
             code = reason(failure)
-            if code in MISSING:
+            if absent_ok and code in MISSING:
                 return None
             if code == "PreconditionFailed":        # only put_if_absent sends one
                 return False
@@ -84,17 +114,14 @@ class S3ObjectStore:
                                        ChecksumMode="ENABLED")
 
     async def head(self, key: str) -> str | None:
-        head = await self._s3(self._head_object, key)
-        if head is None:
-            return None
-        checksum = head.get("ChecksumSHA256")
-        return "sha256:" + base64.b64decode(checksum).hex() if checksum else NO_DIGEST
+        head = await self._s3(self._head_object, key, absent_ok=True)
+        return None if head is None else whole_object_digest(head)
 
     def _get(self, key: str) -> bytes:
         return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()
 
     async def get(self, key: str) -> bytes | None:
-        return await self._s3(self._get, key)
+        return await self._s3(self._get, key, absent_ok=True)
 
     def _put(self, key: str, data: bytes, content_type: str) -> bool:
         self.client.put_object(
@@ -107,7 +134,7 @@ class S3ObjectStore:
         return await self._s3(self._put, key, bytes(data), content_type)
 
     async def describe(self, key: str) -> tuple[int, str] | None:
-        head = await self._s3(self._head_object, key)
+        head = await self._s3(self._head_object, key, absent_ok=True)
         return (head["ContentLength"], head.get("ContentType", "")) if head else None
 
     def _keys(self, prefix: str) -> list[str]:
@@ -123,4 +150,4 @@ class S3ObjectStore:
         self.client.delete_object(Bucket=self.bucket, Key=self.prefix + key)
 
     async def delete(self, key: str) -> None:
-        await self._s3(self._delete, key)
+        await self._s3(self._delete, key, absent_ok=True)

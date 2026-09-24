@@ -24,6 +24,7 @@ S3 = "infrx/media/s3.py"
 C = "infrx/config.py"
 P = "infrx/gateway/pilot.py"
 D = "deploy/preflight.py"
+H = "tests/m/test_s3.py"        # review A1: the harness's own credential and cleanup rules
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1, s3=False):
@@ -52,6 +53,18 @@ REFUSES = "test_create_app_refuses_to_start_when_the_bucket_does_not_answer"
 INSTALL_ASKS = "test_a_pilot_install_asks_the_bucket_before_replacing_the_file"
 INSTALL_REFUSES = "test_a_pilot_install_without_a_bucket_is_refused"
 NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
+CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
+CLEANUP = "test_what_a_case_writes_is_removed_after_it"
+CLEANUP_GUARD = "test_the_cleanup_empties_only_one_cases_own_prefix"
+NO_CREATE = "test_no_bucket_is_created_without_local_credentials"
+STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
+NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
+WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
+TWO_ATTEMPTS = "test_a_failing_call_is_tried_twice_and_no_more"
+INSTALL_WAIT = "test_a_pilot_install_waits_for_the_bucket_a_bounded_time"
+BUILT_IN_CODE = "test_a_store_built_in_code_refuses_the_prefixes_the_settings_refuse"
+PAGES = "test_a_listing_past_one_page_names_every_key"
+WHOLE_DIGEST = "test_only_a_whole_object_sha256_is_a_digest"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -78,8 +91,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("s3_put_not_conditional", "put_if_absent is write-once (If-None-Match: *)",
        S3, '            IfNoneMatch="*",\n', "", WRITE_ONCE, NO_CHECKSUM, s3=True),
     _m("s3_any_error_is_absence", "only a 404 is absent; a refused call is an error",
-       S3, "            if code in MISSING:", "            if True:",
-       DENIED, WRITE_ONCE, NO_CHECKSUM, s3=True),
+       S3, "            if absent_ok and code in MISSING:", "            if True:",
+       DENIED, WRITE_ONCE, NO_CHECKSUM, STUBBED, WRITE_404, NO_BUCKET, s3=True),
     _m("s3_absence_is_an_error", "a missing object is None, not a failure",
        S3, 'MISSING = ("404", "NoSuchKey")', "MISSING = ()", MISSING_KEY, ISOLATION, s3=True),
     _m("s3_precondition_is_an_error", "an occupied key is False, not a failure",
@@ -92,7 +105,8 @@ MUTANTS: tuple[Mutant, ...] = (
        S3, 'IfNoneMatch="*",\n            ChecksumSHA256=base64.b64encode(hashlib.sha256(data).digest()).decode())',
        'IfNoneMatch="*")', ROUND_TRIP, WRITE_ONCE, COLLECTOR, s3=True),
     _m("s3_unchecksummed_object_is_absent", "an object without our checksum is present",
-       S3, "if checksum else NO_DIGEST", "if checksum else None", NO_CHECKSUM, s3=True),
+       S3, "if len(raw) == 32 else NO_DIGEST", "if len(raw) == 32 else None",
+       NO_CHECKSUM, WHOLE_DIGEST, s3=True),
     _m("s3_size_over_by_one", "describe reports the stored size, not one more",
        S3, '(head["ContentLength"], ', '(head["ContentLength"] + 1, ',
        ROUND_TRIP, WRITE_ONCE, SIZE_BOUND, s3=True),
@@ -130,6 +144,70 @@ MUTANTS: tuple[Mutant, ...] = (
        D, "code.group(1) if code else f'exit {done.returncode}'", "bucket", INSTALL_ASKS),
     _m("s3_image_without_botocore", "the pilot probe refuses an image without botocore",
        D, '        if not _importable("botocore"):', "        if False:", NO_BOTOCORE),
+    # === review A1: the harness can run on the box ========================================
+    _m("s3_local_flag_ignored", "without INFRX_M_S3_LOCAL_CREDS the environment's (the "
+       "instance role's) credentials are used", H,
+       '    if secret is None and not local and os.environ.get(LOCAL_FLAG) != "1":\n        return\n',
+       "", CREDENTIALS),
+    _m("s3_cleanup_skipped", "what a case writes under its test prefix is deleted after it",
+       H, "            objects.client.delete_objects(", "            (lambda **kw: None)(",
+       CLEANUP, s3=True),
+    _m("own_v_cleanup_unregistered", "every store a case makes is registered for the teardown",
+       H, "    if secret is None:\n        _WRITTEN.append(objects)\n", "", CLEANUP, s3=True),
+    _m("own_v_cleanup_guard_dropped", "a cleanup empties only one case's test/m1l2/<uuid>/",
+       H, "    if not CASE_PREFIX_RE.fullmatch(objects.prefix):\n        raise ValueError(",
+       "    if False:\n        raise ValueError(", CLEANUP_GUARD),
+    _m("own_v_bucket_created_without_flag", "no CreateBucket without INFRX_M_S3_LOCAL_CREDS",
+       H, '    if BUCKET not in _READY and secret is None and os.environ.get(LOCAL_FLAG) == "1":',
+       "    if BUCKET not in _READY and secret is None:", NO_CREATE),
+    _m("own_v_timeout_refusal_names_bucket", "an install's timeout refusal never names the bucket",
+       D, '        return [f"S3_MEDIA_BUCKET: HeadBucket did not answer within "',
+       '        return [f"S3_MEDIA_BUCKET: HeadBucket {bucket} did not answer within "', INSTALL_WAIT),
+    # === review A2: every arm of the error-vs-absent rule ================================
+    _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
+       S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',
+       NO_BUCKET, s3=True),
+    _m("own_body_failure_is_absent", "a body that breaks mid-read is an error, not absence",
+       S3, '        return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()',
+       '        try:\n'
+       '            return self.client.get_object(Bucket=self.bucket, Key=self.prefix + key)["Body"].read()\n'
+       '        except Exception:\n            return None', STUBBED),
+    _m("own_conflict_is_not_written", "a 409 conditional-write conflict is a retryable error, "
+       "never 'occupied'", S3, '            if code == "PreconditionFailed":',
+       '            if code in ("PreconditionFailed", "ConditionalRequestConflict"):', STUBBED),
+    # === review A3: absent is a read's answer only ========================================
+    _m("own_404_absent_everywhere", "a 404 from a write or a listing is an error, not absence",
+       S3, "            if absent_ok and code in MISSING:", "            if code in MISSING:",
+       WRITE_404),
+    # === review A4: bounded time per call and per install =================================
+    _m("own_retries_count_retries", "an S3 call is attempted twice in all",
+       S3, '"total_max_attempts": ATTEMPTS}', '"max_attempts": 3}', TWO_ATTEMPTS),
+    _m("own_install_waits_unbounded", "an install waits for HeadBucket a bounded time",
+       D, "capture_output=True, text=True, timeout=BUCKET_PROBE_TIMEOUT_S)",
+       "capture_output=True, text=True)", INSTALL_WAIT),
+    # === review A5: never the bucket root, never a dot segment ============================
+    _m("own_prefix_may_be_root", "the prefix is at least one segment (never the bucket root)",
+       C, r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)+")',
+       r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)*")', SETTINGS),
+    _m("own_prefix_dot_segments", "a . or .. segment is refused",
+       C, r'S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)+")',
+       r'S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")', SETTINGS),
+    _m("own_store_takes_any_prefix", "a store built in code refuses what the settings refuse",
+       S3, "        if not S3_PREFIX_RE.fullmatch(prefix):", "        if False:", BUILT_IN_CODE),
+    # === review A6: a listing is every page =================================================
+    _m("own_listing_first_page_only", "a listing reads every page, not the first 1000 keys",
+       S3, '        pages = self.client.get_paginator("list_objects_v2").paginate(\n'
+           '            Bucket=self.bucket, Prefix=self.prefix + prefix)',
+       "        pages = [self.client.list_objects_v2(\n"
+       "            Bucket=self.bucket, Prefix=self.prefix + prefix)]", PAGES, s3=True),
+    # === review A7: only a whole-object SHA-256 is a digest ===============================
+    _m("own_composite_checksum_is_a_digest", "a COMPOSITE checksum is no object's digest",
+       S3, '    if head.get("ChecksumType", "FULL_OBJECT") != "FULL_OBJECT":', "    if False:",
+       WHOLE_DIGEST),
+    _m("own_checksum_decoded_leniently", "a checksum is strict base64 (`...=-N` is not one)",
+       S3, '"", validate=True)', '"")', WHOLE_DIGEST),
+    _m("own_checksum_length_unchecked", "a digest is 32 bytes, nothing shorter",
+       S3, "if len(raw) == 32 else NO_DIGEST", "if True else NO_DIGEST", WHOLE_DIGEST),
 )
 
 
@@ -145,7 +223,7 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
 
 
 RUNNER = Runner(name="m1l2", package="", layout=_layout, targets=("tests/m/test_s3.py",),
-                env=("INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET"))
+                env=("INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET", "INFRX_M_S3_LOCAL_CREDS"))
 
 
 def run_mutant(mutant: Mutant):

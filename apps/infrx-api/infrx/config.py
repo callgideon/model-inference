@@ -365,8 +365,10 @@ MIN_CONSOLE_CURSOR_SECRET_CHARS = 16
 # A full git commit id, and an image id as `docker image inspect` prints it.
 RELEASE_SHA_RE = re.compile(r"[0-9a-f]{40}")
 IMAGE_ID_RE = re.compile(r"sha256:[0-9a-f]{64}")
-# One or more path segments, each ending in `/`: never the bucket root, never `//`.
-S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")
+# One or more path segments, each ending in `/`: never the bucket root, never `//`, never
+# a `.` or `..` segment (MinIO refuses such keys after HeadBucket passed; AWS keeps them
+# literally - review A5). `S3ObjectStore` refuses the same, for a store built in code.
+S3_PREFIX_RE = re.compile(r"(?:(?!\.\.?/)[A-Za-z0-9._-]+/)+")
 # A scheme and an authority only: no path, no query, no `user:password@`.
 S3_ENDPOINT_RE = re.compile(r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?/?")
 
