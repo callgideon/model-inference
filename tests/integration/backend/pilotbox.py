@@ -67,6 +67,10 @@ PORT_ENV, INDEX_ENV, CALLS_ENV = (
 PILOT_NAMESPACE = "infrx:sched:{pilot}"
 MEDIA_HOST = "media.e3b3.example"
 PUBLIC_ADDRESS = "93.184.216.34"          # what MEDIA_HOST resolves to (G2's own choice)
+# What E2's fake engine counts every prompt as on the box (its /tokenize and its usage): not
+# its default 1200, the retired emulation's constant, so a stored count can only have come
+# from the worker's /tokenize (PREP-WORKER review J-F1).
+ENGINE_PROMPT_TOKENS = 1337
 log = logging.getLogger("e3b3.pilotbox")
 
 
@@ -346,6 +350,15 @@ class Journey:
         else leaves the second as it was and moves the first by one (G3's MODES_409 shape)."""
         return self.calls("lookup"), self.footprint()
 
+    def preparation_of(self, request_id: str) -> tuple:
+        """(the worker that prepared the job, the worker that ran it, the prompt count
+        preparation stored): who prepared it and where its count came from."""
+        workers = dict(self.db("select distinct on (kind) kind, worker_id from infrx.attempts "
+                               "where job_id = %s order by kind, acquired_at desc", request_id))
+        stored, = self.one("select prepared_prompt_tokens from infrx.jobs where request_id = %s",
+                           request_id)
+        return workers.get("preparation"), workers.get("inference"), stored
+
     def handle_of(self, request_id: str) -> str:
         return self.one("select job_handle from infrx.jobs where request_id = %s",
                         request_id)[0]
@@ -443,6 +456,7 @@ def journey(workdir: Path):
     world = stack.provision_two_tenants()
     engine = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
     with stack.journey_postgrest(world.database) as rest, engine:
+        engine.control(prompt_tokens=ENGINE_PROMPT_TOKENS)
         with pilot_box(world.database, workdir, rest, engine.base_url) as box:
             yield Journey(world, box, engine)
 

@@ -1083,6 +1083,15 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
            cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
                   "its_identity",)),
+    Mutant("e3bm79", "PREP-WORKER review J-F1: a journey's prompt count is the one the "
+                     "worker's preparation asked the engine for, never a constant",
+           "apps/infrx-api/infrx/worker/preparation.py",
+           "        count = await engine_prompt_tokens(self.engine, prepared,\n"
+           "                                           timeout_s=self.limits.preparation_timeout_s)\n",
+           "        count = 1200\n",
+           "tests/integration/backend/test_journey.py",
+           "backend_journey and text and sync and not resume", layer=2,
+           cases=("test_backend_journey[text-sync]",)),
     Mutant("e3bm78", "E3B3 review H-N5: the execution mode ALONE is part of a key's identity "
                      "(R94) - sync and async send the identical body, so only the mode tells "
                      "them apart",
