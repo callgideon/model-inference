@@ -567,8 +567,10 @@ MUTANTS += (
        INSTALL, '[ -z "${RELEASE:-}" ] || [ "$sha" = "$RELEASE" ] || die', ": || die",
        "test_deploy_failclosed__only_a_committed_checkout_is_deployed"),
     _m("preflight_refusal_ignored", "a refused preflight stops the deploy",
-       INSTALL, '--region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}"',
-       '--region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}" || true',
+       INSTALL, '--region "$REGION" --image "$image" --release "$sha" --serve-script "$SERVE_SCRIPT" '
+                '"${sets[@]}"',
+       '--region "$REGION" --image "$image" --release "$sha" --serve-script "$SERVE_SCRIPT" '
+       '"${sets[@]}" || true',
        "test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host"),
     _m("units_before_preflight", "no unit file changes before the env file is validated",
        INSTALL, "# 4. the env file (the only step that reads secrets)",
