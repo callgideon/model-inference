@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T05:45:02Z",
+  "updated": "2026-09-24T07:43:50Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "PREP-WORKER": {
       "lane": "codex-prepw / codex/prep-worker",
-      "phase": "early review PASS at c035ee4 (wf_6bad9e38-f8b; all nine journeys on the real worker, backend 188/0/0; 10 nonblocking/downgraded items sent to the lane to fold in) → handback → targeted verifier → merge + focused gate",
+      "phase": "HANDED BACK 01b11ca (impl 4f7e32a; review folds + 3 self-found fixes; lists 58/58 + W3 85/85; journeys on the real worker with engine-exact counts) → targeted verifier wf_c74fcd96-71b → merge step 10 → focused gate → main → second install",
       "since": "2026-09-24T02:13:25Z",
       "note": "BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b"
     }
@@ -104,8 +104,8 @@
       "since": "2026-09-24T02:51:40Z"
     },
     "PREP-WORKER": {
-      "phase": "early review pass at c035ee4 (JSON evidence/w/PREP-WORKER-review-c035ee4.json); lane folding L1-L8, J-F2-J-F4",
-      "since": "2026-09-24T04:28:30Z"
+      "phase": "handed back 01b11ca → verifier wf_c74fcd96-71b",
+      "since": "2026-09-24T07:43:50Z"
     }
   },
   "gates": {
