@@ -554,8 +554,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if False:\n"
        "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
        "media_sec__a_partial_request_stages_nothing"),
+    # CKPT2: the edit binds the caller's copy, as `attach` did before F2R item 4. A bare
+    # `if False:` left `None` in `owned`, which the write-once duplicate check (MPILOT)
+    # now reads - an AttributeError instead of the forged ref the case says is attached.
     _m("attach_takes_a_ref_it_never_made", "only a ref the store produced is attached (F2R 4)",
-       M, "            if indexed is None or indexed.digest != ref.digest:", "            if False:",
+       M, "            if indexed is None or indexed.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not staged for org {org_id}\")\n"
+          "            owned.append(indexed)",
+       "            owned.append(ref)",
        "media_sec__a_partial_request_stages_nothing"),
     _m("staging_validates_nothing_up_front", "staging is all or nothing",
        M, "        for ref in request.media:\n            # No separate `ref.org_id` check",
