@@ -192,8 +192,10 @@ run closed, and the coordinator's decision recorded in
   - Why: a torn stream is a client that left, so each job is a committed cancel (R21). The
     resume's replay of the same key answered that committed result, `state_conflict` (R91),
     and bench.py re-sent it as a failure every time.
-  - bench.py now records a replay whose stream answers `state_conflict` as
-    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code.
+  - bench.py now records a replay whose stream answered `state_conflict` as
+    `cancelled_by_interruption`, which is terminal. It reads only the allowlisted code, and
+    only a stream error event (`stream_error_event`) counts: the sync replay is a 409, which
+    is already terminal by its status.
   - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
     exactly once. A cancelled replay counts as cancelled by the interruption only when its
     item's first attempt was the client's own tear (a transport error). Any other - a
