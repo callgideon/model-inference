@@ -1,8 +1,10 @@
 # Implementation handoffs — consumer App and provider Lab
 
+**Current start:** [Consumer v1 implementation program 22](22-consumer-v1-implementation.md) → [fresh-session handoff/prompt 24](24-consumer-v1-session-handoff.md) → [manifest](tasks.json). Fourteen corrective packages close audit findings; existing App tasks have detailed amended briefs. E3C/E4C gate the repaired backend, then E3A/E4 gate the App. [GPU hosting and Modal roadmap 23](23-inference-hosting-roadmap.md) is for the next discussion, not this dispatch. The dated sequence below preserves the original program history.
+
 **Current review (2026-09-24):** [Consumer v1 readiness audit and proposed priorities](21-v1-consumer-readiness-review-2026-09-24.md), code reviewed at `d7dc3690` and refreshed with main `726d004d` acceptance evidence. The durable backend is implemented and a metered pilot is reported deployed; final certification and consumer App completion remain open. Backend acceptance still precedes App release, then Lab.
 
-**Current start:** [As-built handoff 20, §14](20-platform-handoff-2026-09-24.md), [operational tail](../../HANDOFF-20260924T2115Z.md), then [review 21](21-v1-consumer-readiness-review-2026-09-24.md). The [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md) and [pending inputs](15-pending-inputs.md) retain the full App/Lab scope. The older [session prompt](16-fresh-session-handoff.md) is historical dispatch context; do not restart completed runtime tasks from it.
+**As-built context:** [As-built handoff 20, §14](20-platform-handoff-2026-09-24.md), [operational tail](../../HANDOFF-20260924T2115Z.md), then [review 21](21-v1-consumer-readiness-review-2026-09-24.md). The [complete build plan](12-complete-build-plan.md), [task ledger](17-task-ledger.md) and [pending inputs](15-pending-inputs.md) retain the full App/Lab scope. The older [session prompt](16-fresh-session-handoff.md) is historical dispatch context; do not restart completed runtime tasks from it.
 
 Status: **wave-3 backend work and later runtime repairs are on main; E1B/E4B final release evidence remains open.** CREDIT/public onboarding and real consumer console integration are pending. The [wave-2 audit](10-wave2-platform-audit.md) and its [verification](evidence/wave2-platform-audit.md) remain historical evidence, not the current implementation boundary.
 

@@ -1,0 +1,56 @@
+{
+  "recorded_at_utc": "2026-09-24T21:15:22.634372+00:00",
+  "scope": "planning-only; no runtime implementation, cloud operations, paid inference or GPU certification",
+  "baseline_commit": "6db71ee3f25f4afbdf29ab8601a39a100d995a6c",
+  "branch": "codex/consumer-v1-implementation-plan",
+  "status": "PASS",
+  "checks": [
+    {
+      "command": "python3 research/plan/scripts/validate_plan.py",
+      "exit_code": 0,
+      "output": "PASS: 133 tasks, acyclic combined dependencies, preserved audit statuses, defined oracles and valid release gates.\nPASS: backend closure 50 tasks excludes frontend/Lab and is reused by App; fleet independent of UI.\nPASS: App closure 64 tasks excludes Lab; E6L independent of E5L; E8L independent of training.\nPASS: 10 backend + 13 App + 16 Lab requirements mapped; 863 local Markdown links checked across 175 documents; ledger current."
+    },
+    {
+      "command": "python3 -m unittest discover -s research/plan/scripts -p test_validate_plan.py",
+      "exit_code": 0,
+      "output": ".......\n----------------------------------------------------------------------\nRan 7 tests in 0.005s\n\nOK"
+    },
+    {
+      "command": "python3 /Users/rey/.agents/skills/session-handoff/scripts/validate_handoff.py research/plan/24-consumer-v1-session-handoff.md",
+      "exit_code": 0,
+      "output": "============================================================\nHandoff Validation Report\n============================================================\nFile: research/plan/24-consumer-v1-session-handoff.md\n\nQuality Score: 100/100 - Excellent - Ready for handoff\n============================================================\n\n[PASS] No TODO placeholders remaining\n\n[PASS] All required sections complete\n\n[PASS] No potential secrets detected\n\n[INFO] 0 file reference(s) verified\n\n============================================================\nVerdict: READY for handoff"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "manifest": {
+    "tasks": 133,
+    "new_corrective_tasks": 14,
+    "previous_statuses_preserved": 119,
+    "all_review_findings_mapped": [
+      "RV-01",
+      "RV-02",
+      "RV-03",
+      "RV-04",
+      "RV-05",
+      "RV-06",
+      "RV-07",
+      "RV-08",
+      "RV-09",
+      "RV-10",
+      "RV-11",
+      "RV-12"
+    ],
+    "backend_gate": "E4C",
+    "local_backend_gate": "E3C"
+  },
+  "limitations": [
+    "Planning validation does not certify runtime behavior or release readiness.",
+    "Existing runtime/App test evidence is in audit 21; no new full runtime test run in this planning session.",
+    "Handoff skill scanner reported zero path references; local Markdown destinations are independently covered by the repository validator.",
+    "Operational tracker v46 retained; S3 must read later main and certification evidence."
+  ]
+}

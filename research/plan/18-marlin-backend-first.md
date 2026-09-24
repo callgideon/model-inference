@@ -1,5 +1,7 @@
 # Marlin2B backend first — endpoint completion and optimization
 
+**2026-09-24 superseding dispatch:** [Program 22](22-consumer-v1-implementation.md), [handoff/prompt 24](24-consumer-v1-session-handoff.md) and the current [manifest](tasks.json) replace older next-task lists in this document. Existing implementation is preserved; S3 reconciles it, F2C freezes corrections, E3C/E4C close backend readiness, then App. Use this document for unchanged baseline contracts/ownership and historical context, not to restart completed waves.
+
 **Current execution authority, 2026-09-22.** The user wants the backend for robust, optimized Marlin2B endpoint inference completed before the App. This supersedes the App-first dispatch instructions from 2026-09-21, while preserving the product architecture, individual-credit policy, prior implementation and later App/Lab plans.
 
 ## Deliverable

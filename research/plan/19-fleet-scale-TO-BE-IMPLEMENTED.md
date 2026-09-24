@@ -1,5 +1,7 @@
 # 19 — Multi-GPU fleet for the Marlin endpoint: TO BE IMPLEMENTED
 
+**2026-09-24 follow-on proposal:** use [roadmap 23](23-inference-hosting-roadmap.md) for the current discussion framework. This note preserves historical hypotheses/measurements, not a fleet provisioning instruction. I4 exists as a conditional task; no detailed fleet implementation was accepted here. The later bda1586 E1B cells supersede generalizations from run2, and final certification remains distinct. Durable uploads/cleanup and local prepared-file affinity must be resolved before stateless-fleet claims; filesystem snapshots are not loaded GPU-memory snapshots. Two warm/four extra GPUs are not a selected policy.
+
 Status: **TO BE IMPLEMENTED — notes only.** Nothing here is built, provisioned or scheduled.
 Written 2026-09-24 from the user's request ("provision 4 more GPUs, and create a middleware or
 a distribution handling system that manages the availability and load balancing between GPUs,

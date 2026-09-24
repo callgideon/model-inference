@@ -1,5 +1,7 @@
 # Handoff — product amendment 2026-09-21; historical operations below
 
+**Current implementation dispatch (2026-09-24):** use [program 22](research/plan/22-consumer-v1-implementation.md) and [handoff/prompt 24](research/plan/24-consumer-v1-session-handoff.md). They turn review 21 into corrective task briefs and make E3C/E4C the backend gate roots, followed by real consumer App completion. Reconcile newer operational evidence first; the older entries below remain historical context.
+
 **Current entry (2026-09-24):** [As-built handoff 20, §14](research/plan/20-platform-handoff-2026-09-24.md), [operational tail](HANDOFF-20260924T2115Z.md), and [consumer v1 readiness review 21](research/plan/21-v1-consumer-readiness-review-2026-09-24.md). Backend implementation and a metered pilot have landed; final certification and consumer self-service remain open. The dated instructions below preserve the earlier plan and must not be read as current task status.
 
 **2026-09-22 priority:** complete the robust, measured Marlin2B inference backend first, then the consumer App, then Lab. [Backend execution plan](research/plan/18-marlin-backend-first.md) and [fresh-session prompt](research/plan/16-fresh-session-handoff.md) supersede the earlier App-first dispatch order.

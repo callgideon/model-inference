@@ -1,5 +1,7 @@
 # Pending work, decisions and environment inputs
 
+**Current closure (2026-09-24):** [Program 22](22-consumer-v1-implementation.md) / E3C–E4C supersede the older release task references below. S3 revalidates dated resolutions against the current environment; historical authorization remains valid within its scope. This Mac planning host lacks Docker, which does not revoke the implementation host’s recorded availability. Current rates/limits/retention and test bounds must be pinned before live runs.
+
 Updated 2026-09-22. Current priority is the **Marlin inference backend**; App launch follows. This register complements [all task statuses](17-task-ledger.md); it is not permission to skip unresolved acceptance criteria. Owners record resolved values/evidence and date here without secrets. Missing inputs block only the stated boundary; continue independent work inside the active scope.
 
 ## Release and product inputs
@@ -89,3 +91,17 @@ Record task/slice, command/evidence, exact missing input, affected gate and next
 
 ### P-23 — Clips over 120 s sample below the trained 2 fps (added 2026-09-24; the cap stays 82 s for now)
 The user asked for a 1200 s cap and then kept 82 s (2026-09-24). What a longer cap needs is recorded on branch `codex/longclip` (`research/plan/evidence/w/LONGCLIP-4db74b6.md`, shelved WIP): the only engine flag is W4's E1 candidate `--max-num-batched-tokens 32768` (a new serving version, measured before adoption); `/tokenize` does not apply the encoder-cache check, so a raised gateway cap alone admits clips the chat then refuses; vLLM samples up to 768 frames at 2 fps for sources above 2 fps, so clips to 384 s keep 2 fps and a 1200 s clip gets 768 frames (0.64 fps); the edge's 96 MiB body limit also caps uploads; `TRANSCODE_*` settings are read nowhere; a long silent prefill must keep its 120 s lease (raise TTFT/lease or renew). Decision for the user: the target duration, the acceptable sampling rate for SOP quality, and the transport for long clips (URL/upload only).
+
+## Consumer v1 closure input routing (2026-09-24)
+
+- **P-01/P-02:** G8/D10/I8 inventory current USD test funds and in-flight jobs, then publish approved CREDIT rates and a no-conversion transition. The earlier empty-ledger resolution is historical; do not apply it blindly to the later metered pilot. Blocks public CREDIT activation/E4C, not contract/local fixture tests.
+- **P-03/P-04:** E2C pins the supported Linux services; I8/E4C reuse the already authorized target/window. Record actual concurrency and pool limits. No new instance purchase is implied.
+- **P-05:** A2/I2A need real target email/callback/recovery and abuse controls. These gate public onboarding, not headless backend development.
+- **P-06/P-20/P-23:** Current qualified duration cap stays 82 seconds, plus actual frame/geometry/byte constraints. G7/A3 must eliminate stale 120-second public claims. Longer clips need their own versioned quality/resource qualification; they are not a launch repair.
+- **P-17/P-18:** E4C requires a final operator decision and predeclared workload/SLO/error/recovery limits. S3 first reads any newly committed run3 decision; no completed measurements are discarded. Provisional benchmark data is not an agreed public promise.
+- **P-19:** E1C uses current sourced infrastructure pricing or an actual bill and states the cost attribution/date. CREDIT consumption is not USD inference cost.
+- **P-22:** F2C/D10/G7 settle canonical alias/legacy price identity with compatibility evidence before examples/publication. Do not destructively rewrite historical requests.
+- **P-24 — bounded test allocation:** S3/E1C/E4C record target allowlist, permitted faults, maximum time/requests/bytes/output/spend, stop/drain/reconcile and cleanup owner in the versioned test profile. Reuse existing authorizations; ask only for a missing concrete resource/budget input. Blocks resource-consuming tests without bounds, not dry-run/profile validation/local development.
+- **P-25 — operations and retention ownership:** I8/D10/M6 record approved serving-content TTLs/cleanup bound, alert destination/authorization, backup/PITR policy and known-good rollback bundle. Existing policy is the starting point, not authority to extend retention. Blocks truthful public retention/operated-release acceptance where unresolved; local lifecycle tests can continue.
+
+See [load protocol](consumer-v1/05-client-and-load-testing.md) for machine-checkable run inputs and [operations brief](consumer-v1/03-operations-and-verification.md) for proof. None of these entries changes the one-time individual 10,000 CREDIT grant policy.

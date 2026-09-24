@@ -1,5 +1,7 @@
 # Handoff — complete the Marlin2B inference backend first
 
+**2026-09-24 superseding dispatch:** [Program 22](22-consumer-v1-implementation.md), [handoff/prompt 24](24-consumer-v1-session-handoff.md) and the current [manifest](tasks.json) replace older next-task lists in this document. Existing implementation is preserved; S3 reconciles it, F2C freezes corrections, E3C/E4C close backend readiness, then App. Use this document for unchanged baseline contracts/ownership and historical context, not to restart completed waves.
+
 > **Historical dispatch prompt, superseded for current state (2026-09-24).** The backend wave described below has largely landed. Start with [handoff 20, §14](20-platform-handoff-2026-09-24.md), [the operational tail](../../HANDOFF-20260924T2115Z.md) and [consumer v1 review 21](21-v1-consumer-readiness-review-2026-09-24.md). Do not rerun the completed F/D/M/Q/W/G waves from this prompt. Its product constraints remain applicable; its next-task list does not represent current dispatch.
 
 ## Session Metadata

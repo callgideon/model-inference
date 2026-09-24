@@ -205,3 +205,7 @@ See [audit probes](evidence/v1-review-20260924/reproduce.py) and [their recorded
 
 - 2026-09-24: Reviewed main `d7dc3690`, entry handoff/operational tail/tracker, relevant gateway/worker/media/database/App/client/release code and results. Reproduced upload protocol and restart gaps; examined collector restart semantics; checked public health/discovery/login without inference. Added this review and entry-point corrections, retaining historical evidence and task statuses. Recommendations await priority discussion; no hosted settings or release decision changed.
 - 2026-09-24: Fetched `726d004d` before publishing; incorporated new E1B acceptance evidence and checked the three raw files against their summaries. Rebasing the audit retained the implementation session's changes to handoff 20 and its append-only coordinator record. No runtime code changed in that upstream delta; earlier local test results remain labelled with their tested base.
+
+## Consumer v1 implementation follow-through (2026-09-24)
+
+[Program 22](22-consumer-v1-implementation.md), [the five module briefs](consumer-v1/01-contracts-and-data.md), [manifest](tasks.json) and [handoff/prompt 24](24-consumer-v1-session-handoff.md) turn the reviewed gaps into corrective work. S3 reconciles any newer evidence before dispatch; E3C/E4C now gate repaired backend readiness. This addition does not alter the historical observations or claim a new runtime pass. [Roadmap 23](23-inference-hosting-roadmap.md) preserves the later hosting/scaling/Modal discussion.

@@ -1,5 +1,7 @@
 # Requirement coverage and source reconciliation
 
+**2026-09-24 closure:** [Program 22](22-consumer-v1-implementation.md) adds RV-01…RV-12 repair coverage and consumer result U4. Original requirements below remain preserved; E3C/E4C now supply repaired backend evidence for App. The validator checks every finding owner reaches the consumer release closure.
+
 Read the source sections for background/detail; contracts and durable protocols override conflicts. This map ensures the combined serving/trace program is assigned rather than silently dropped. Named tasks are in [the manifest](tasks.json); required test oracles are in [verification](04-verification.md).
 
 **2026-09-21 amendment:** the table below preserves the original requirement mapping. Mixed IDs resolve through [the complete 45-task mapping](08-platform-split.md). Product scope and current release gates are in [App requirements](../platforms/03-app-spec.md), [Lab requirements](../platforms/05-lab-spec.md) and manifest v4. App uses E3A/I2A/E4; Lab operations use E3L/I2L and observation uses E5L.
@@ -101,3 +103,22 @@ These requirements define current completion independently of the App/Lab presen
 | BACKEND-10 combined final endpoint certification | E3B/E4B | Actual-service faults, final GPU soak/load/quality/accounting with App/Lab absent |
 
 E3A adds browser/onboarding evidence on top of E3B; I2A reuses I2B, I3 reuses I3B, E4 reuses E4B and verifies the consumer release delta. I4 can be activated from backend evidence without waiting for UI. These dependencies prevent both premature UI gating and duplicate runtime implementations.
+
+## Post-wave consumer launch corrections
+
+| Review finding | Implement / integrate | Product outcome / oracle |
+|---|---|---|
+| RV-01 | F2C/G7/A3 | Truthful model, limits, rates, retention: CATALOG-TRUTH |
+| RV-02 | D10/M5/E1C/E3C | Usable uploads across process replacement: UPLOAD-RESTART |
+| RV-03 | D10/M6/I8/E3C | Safe durable content lifecycle: RETENTION-DURABLE |
+| RV-04 | S3/E4C | Accepted final backend certificate: LOAD-CLOSEDLOOP |
+| RV-05 | F2C/D10/W5/G7/E3C | Durable readiness including text: ADMISSION-READY |
+| RV-06 | C0/C3A/A2/A3/U1R/U2/U3/U4/E3A | Actual verified signup-to-result consumer journey: APP-JOURNEY/USER-RESULTS |
+| RV-07 | E1C/M5/G7 | Actual upload wire protocol: UPLOAD-RESTART |
+| RV-08 | E1C/E4C | Fresh-generation capacity evidence: BENCH-VALIDITY |
+| RV-09 | D10/I8/E4C | Operated recoverable service: OPS-CONTINUOUS |
+| RV-10 | I8/E4C | Rollback serves and settles a real request: OPS-RECOVER |
+| RV-11 | F2C/D10/G7/U4/E3C | Persisted result lifetime across all paths: RESULT-EXPIRY |
+| RV-12 | E2C/E3C | Reproducible supported environment: VERIFY-REPRO |
+
+The reviewed code also needs moderate dependency-alert triage in E2C. Fleet/custom model/Modal comparison stays in [proposal 23](23-inference-hosting-roadmap.md), conditional I4 and later specialization gates; no new consumer launch dependency is introduced.

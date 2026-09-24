@@ -1,11 +1,12 @@
 {
   "schema_version": 4,
   "baseline_commit": "1db98e9",
-  "status": "Marlin backend wave implemented with a reported deployed metered pilot; E1B/E4B final acceptance remains open; consumer App and Lab completion remain planned; see handoff 20 and readiness review 21",
+  "status": "Consumer v1 corrective implementation planned from main 6db71ee3; original completed wave statuses preserved. S3 reconciles newer live evidence; E3C/E4C now gate backend readiness, then App, then Lab.",
   "dependency_semantics": {
     "start_dependencies": "Code-ready dependencies: committed and reviewed interfaces/fixtures must exist before coding; implemented baseline modules may supply code without live integration. New shared revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. A dirty coordinator tree is never a worktree base.",
     "integration_dependencies": "Must have real adapter evidence before dependent task is integrated. Code-ready fake implementations satisfy only start dependencies. Baseline integrated status never certifies a later product revision.",
-    "superseded_tasks": "Never schedule; use replaced_by tasks. Dependencies must name active tasks."
+    "superseded_tasks": "Never schedule; use replaced_by tasks. Dependencies must name active tasks.",
+    "dispatch_after_gate": "A named release gate requires an explicit accepted evidence/decision record before task dispatch; an implemented gate task alone is insufficient. Reconcile current evidence in S3."
   },
   "tracks": [
     {
@@ -1145,7 +1146,8 @@
       "title": "Keys and privacy/settings controls",
       "start_dependencies": [
         "U1R",
-        "F2P"
+        "F2P",
+        "F2C"
       ],
       "integration_dependencies": [
         "C3A"
@@ -1155,7 +1157,7 @@
         "DUR-RLS"
       ],
       "track": "U",
-      "handoff": "handoffs/U-administration-ui.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "modify",
       "product": "app",
@@ -1163,14 +1165,22 @@
       "amendment": "Consumer keys/privacy remain in App; no Lab settings.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/(console)/keys/",
+        "apps/app/app/(console)/settings/",
+        "apps/app/tests/u/ (keys/settings tests)"
+      ]
     },
     {
       "id": "U3",
       "title": "Operator grants, suspension and pilot operations",
       "start_dependencies": [
         "U1R",
-        "F2P"
+        "F2P",
+        "F2C"
       ],
       "integration_dependencies": [
         "C3A"
@@ -1181,7 +1191,7 @@
         "DUR-RLS"
       ],
       "track": "U",
-      "handoff": "handoffs/U-administration-ui.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "modify",
       "product": "app",
@@ -1189,7 +1199,13 @@
       "amendment": "Protected platform operator controls remain temporarily in App; provider role never mints credits.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/(console)/admin/",
+        "apps/app/tests/u/ (operator tests)"
+      ]
     },
     {
       "id": "V1",
@@ -1342,14 +1358,15 @@
       ],
       "integration_dependencies": [
         "E3A",
-        "I3B"
+        "I3B",
+        "I8"
       ],
       "test_ids": [
         "OPS-RECOVER",
         "DUR-OUTBOX"
       ],
       "track": "I",
-      "handoff": "handoffs/I-infrastructure.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "modify",
       "product": "shared",
@@ -1357,7 +1374,13 @@
       "amendment": "Reuse backend recovery from I3B; add App/auth/consumer-flow recovery and changed integration checks.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "infra/ (combined App runbook/monitoring)",
+        "tests/integration/ (operator release scenarios)"
+      ]
     },
     {
       "id": "I4",
@@ -1365,7 +1388,8 @@
       "start_dependencies": [
         "I3B",
         "E4B",
-        "F2P"
+        "F2P",
+        "E4C"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -1382,7 +1406,7 @@
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "conditional",
-      "activation": "Measured E4B endpoint capacity/recovery or an explicit availability target demonstrates fleet need, with allocated topology/resources; independent of App UI. No automatic purchases."
+      "activation": "Accepted E4C and measured capacity/recovery or explicit availability target justify a fleet, with approved topology/resources/budget. Use roadmap 23 to scope it; no automatic purchases or dependency on App UI."
     },
     {
       "id": "E1",
@@ -1501,7 +1525,9 @@
       "integration_dependencies": [
         "I3",
         "S2M",
-        "E4B"
+        "E4B",
+        "E4C",
+        "U4"
       ],
       "test_ids": [
         "PERF-PILOT",
@@ -1511,7 +1537,7 @@
         "CREDIT-SPEND"
       ],
       "track": "E",
-      "handoff": "handoffs/E-verification.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "modify",
       "product": "app",
@@ -1519,7 +1545,13 @@
       "amendment": "Reuse certified E4B backend and add consumer signup/key/catalog/usage release evidence; rerun backend for changed deployment/config only.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "tests/integration/ (final App certification)",
+        "research/plan/evidence/e/ (new App release evidence)"
+      ]
     },
     {
       "id": "S1",
@@ -1570,21 +1602,30 @@
       "product": "app",
       "milestone": "APP-M1",
       "start_dependencies": [
-        "F2P"
+        "F2P",
+        "F2C"
       ],
       "integration_dependencies": [
         "A1",
-        "C3A"
+        "C3A",
+        "G8"
       ],
       "test_ids": [
         "APP-JOURNEY",
         "CREDIT-GRANT"
       ],
-      "handoff": "09-amendment-workstreams.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/(auth)/",
+        "apps/app/app/auth/ (callback route if required)",
+        "apps/app/tests/a/ (auth/onboarding tests)"
+      ]
     },
     {
       "id": "A3",
@@ -1593,24 +1634,33 @@
       "product": "app",
       "milestone": "APP-M1",
       "start_dependencies": [
-        "F2P"
+        "F2P",
+        "F2C"
       ],
       "integration_dependencies": [
         "D1R",
         "G1R",
         "C0",
-        "S2M"
+        "S2M",
+        "G7"
       ],
       "test_ids": [
         "CREDIT-RATE",
         "SPLIT-CONTRACT",
         "APP-JOURNEY"
       ],
-      "handoff": "09-amendment-workstreams.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/(console)/models/",
+        "apps/app/app/(console)/docs/",
+        "apps/app/tests/a/ (catalog/docs tests)"
+      ]
     },
     {
       "id": "D6F",
@@ -1784,22 +1834,32 @@
       "milestone": "APP-M1",
       "start_dependencies": [
         "F2P",
-        "C0"
+        "C0",
+        "F2C"
       ],
       "integration_dependencies": [
-        "D5"
+        "D5",
+        "D10",
+        "G8"
       ],
       "test_ids": [
         "DUR-RLS",
         "CONSOLE-FLOWS",
         "CREDIT-SPEND"
       ],
-      "handoff": "09-amendment-workstreams.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/actions.ts",
+        "apps/app/lib/services/ (new action adapter; coordinate C0)",
+        "apps/app/tests/c/ (action tests)"
+      ]
     },
     {
       "id": "C3F",
@@ -1968,20 +2028,29 @@
         "C0",
         "I0",
         "D1R",
-        "I2B"
+        "I2B",
+        "E4C",
+        "U4",
+        "I8"
       ],
       "test_ids": [
         "OPS-RECOVER",
         "PERF-PILOT",
         "APP-JOURNEY"
       ],
-      "handoff": "09-amendment-workstreams.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "I2",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "amendment": "Reuse the independently deployed I2B endpoint; this task adds App hosting, auth callbacks/signup and browser journey. Do not duplicate runtime infrastructure."
+      "amendment": "Reuse the independently deployed I2B endpoint; this task adds App hosting, auth callbacks/signup and browser journey. Do not duplicate runtime infrastructure.",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/ (deployment config only)",
+        "infra/ (App deploy only)"
+      ]
     },
     {
       "id": "I2L",
@@ -2020,7 +2089,10 @@
       "start_dependencies": [
         "E2",
         "F2P",
-        "E3B"
+        "E3B",
+        "E3C",
+        "E2C",
+        "F2C"
       ],
       "integration_dependencies": [
         "D5",
@@ -2039,7 +2111,10 @@
         "C0",
         "E2R",
         "I0",
-        "D1R"
+        "D1R",
+        "G8",
+        "U4",
+        "E4C"
       ],
       "test_ids": [
         "DUR-ADMIT",
@@ -2060,13 +2135,19 @@
         "CREDIT-SPEND",
         "APP-JOURNEY"
       ],
-      "handoff": "09-amendment-workstreams.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "amendment": "Reuse E3B backend failure/security evidence, add full signup/console journey; rerun impacted backend cases on merged tree."
+      "amendment": "Reuse E3B backend failure/security evidence, add full signup/console journey; rerun impacted backend cases on merged tree.",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "tests/integration/ (App journey)",
+        "apps/app/tests/ (browser e2e harness; coordinator owns setup)"
+      ]
     },
     {
       "id": "E3L",
@@ -2213,13 +2294,16 @@
       "id": "C0",
       "title": "Wire the consumer database query port and real account context",
       "track": "C",
-      "handoff": "11-wave3-revision-handoffs.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "start_dependencies": [
-        "F2P"
+        "F2P",
+        "F2C"
       ],
       "integration_dependencies": [
-        "D1R"
+        "D1R",
+        "D10",
+        "G8"
       ],
       "test_ids": [
         "CONSOLE-TENANT",
@@ -2230,7 +2314,17 @@
       "milestone": "APP-M1",
       "disposition": "new-revision",
       "amendment": "Supabase/PostgREST adapter, legacy projection, real user context; independent of Lab traces and judge.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/lib/services/query.ts",
+        "apps/app/lib/services/server.ts",
+        "apps/app/lib/services/console.ts",
+        "apps/app/lib/services/credits.ts",
+        "apps/app/lib/session.ts (coordinate A2)",
+        "apps/app/tests/c/ (read adapter)"
+      ]
     },
     {
       "id": "I0",
@@ -2331,15 +2425,17 @@
       "id": "U1R",
       "title": "Adapt consumer usage and balance views to CREDIT and explicit legacy USD",
       "track": "U",
-      "handoff": "11-wave3-revision-handoffs.md",
+      "handoff": "consumer-v1/04-app.md",
       "status": "planned",
       "start_dependencies": [
         "F2P",
-        "U1"
+        "U1",
+        "F2C"
       ],
       "integration_dependencies": [
         "C0",
-        "D5"
+        "D5",
+        "D10"
       ],
       "test_ids": [
         "CREDIT-UNITS",
@@ -2350,7 +2446,15 @@
       "milestone": "APP-M1",
       "disposition": "new-revision",
       "amendment": "Preserve U1 view logic; revise units/labels/formatters and real context without erasing USD history.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "owned_paths": [
+        "apps/app/app/(console)/usage/",
+        "apps/app/app/(console)/billing/",
+        "apps/app/lib/format.ts",
+        "apps/app/tests/u/ (usage/credit tests)"
+      ]
     },
     {
       "id": "F3",
@@ -3884,11 +3988,546 @@
       "acceptance": "BACKEND-READY means a provisioned external client can use the real metered Marlin endpoint reliably within a measured envelope and operators can detect/recover failures. It requires allocated GPU/staging proof; software-only tests cannot close this gate. Public cutover is a separately recorded authorized action. App work consumes this certified backend next.",
       "failure_oracle": "Any missing real-service/model evidence, unresolved security/accounting defect, untested restore, uncontrolled resource growth or unsupported quality claim leaves the appropriate gate pending with a named owner; do not declare a vaguely super-robust endpoint.",
       "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "S3",
+      "title": "Reconcile post-wave implementation, release evidence and RV findings",
+      "track": "S",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "S1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "VERIFY-REPRO"
+      ],
+      "handoff": "consumer-v1/03-operations-and-verification.md",
+      "owned_paths": [
+        "research/plan/evidence/coordinator/ (new dated record)"
+      ],
+      "implementation_slices": [
+        "Inventory latest source/deployed identity and final E4B/E1B evidence.",
+        "Map RV-01–12 to open/fixed/superseded with proof; inventory owned resources and missing inputs."
+      ],
+      "acceptance": "Committed actual-state matrix prevents repeating fixed work and preserves implementation versus release distinction.",
+      "failure_oracle": "A newer commit or implemented runner without a final decision cannot be recorded as accepted.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "F2C",
+      "title": "Freeze durable lifecycle, expiry and public capability corrections",
+      "track": "F",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "S3",
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "SPLIT-CONTRACT",
+        "ADMISSION-READY",
+        "RESULT-EXPIRY",
+        "CATALOG-TRUTH"
+      ],
+      "handoff": "consumer-v1/01-contracts-and-data.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/contracts/",
+        "apps/app/lib/contracts/",
+        "research/plan/01-contracts.md",
+        "research/plan/02-durable-protocols.md"
+      ],
+      "implementation_slices": [
+        "Define upload/readiness/deletion ports, including empty attachment completion.",
+        "Carry persisted result expiry through wire DTOs and fixtures.",
+        "Define public capability/rate identity and legacy alias compatibility.",
+        "Publish consumer-change matrix, fixtures and additive rollout design."
+      ],
+      "acceptance": "Python/TS agree on exact units/lifecycle and every affected consumer has a committed contract.",
+      "failure_oracle": "Empty versus missing readiness, expired availability and mismatched public limits must fail semantic conformance.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "E2C",
+      "title": "Make corrective verification reproducible on supported Linux",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "S3",
+        "E2R"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "VERIFY-REPRO"
+      ],
+      "handoff": "consumer-v1/03-operations-and-verification.md",
+      "owned_paths": [
+        "tests/integration/",
+        "apps/infrx-api/tests/ (portability fixes only)",
+        "CI/Makefile (coordinator merge)"
+      ],
+      "implementation_slices": [
+        "Pin Linux/services/tools and owned namespace preflight.",
+        "Repair Git-default/metrics/script assumptions; confirm real defects separately.",
+        "Run green-baseline failure oracles and dependency triage.",
+        "Wrap existing runners with local/certify/App entrypoints and explicit verdicts."
+      ],
+      "acceptance": "A clean supported checkout reproduces checks; unavailable prerequisites never count as passed.",
+      "failure_oracle": "Missing service and intentionally broken seam produce explicit non-pass; surviving mutation cannot be hidden.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "D10",
+      "title": "Persist uploads, execution eligibility, safe cleanup and result read authority",
+      "track": "D",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "D5"
+      ],
+      "integration_dependencies": [
+        "E2C"
+      ],
+      "test_ids": [
+        "UPLOAD-RESTART",
+        "RETENTION-DURABLE",
+        "ADMISSION-READY",
+        "RESULT-EXPIRY",
+        "CREDIT-CUTOVER",
+        "DUR-RLS"
+      ],
+      "handoff": "consumer-v1/01-contracts-and-data.md",
+      "owned_paths": [
+        "apps/app/supabase/migrations/ (new additive only)",
+        "apps/infrx-api/infrx/state/",
+        "apps/infrx-api/tests/d/"
+      ],
+      "implementation_slices": [
+        "Atomic readiness and durable upload metadata with crash recovery.",
+        "Paginated deletion claims/tombstones and content scrubbing authority.",
+        "Persisted expiry, narrow consumer reads, alias and reconciliation consistency.",
+        "Least-privilege roles plus migration/real PG concurrency and rollback-compatibility evidence."
+      ],
+      "acceptance": "Cross-process lifecycle and exact accounting remain correct under races; immutable applied migrations preserved.",
+      "failure_oracle": "Real DB races detect premature execution, deletion of live content, forged ownership or changed historical expiry.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "M5",
+      "title": "Persist upload lifecycle across gateway replacement",
+      "track": "M",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "M3"
+      ],
+      "integration_dependencies": [
+        "D10"
+      ],
+      "test_ids": [
+        "UPLOAD-RESTART",
+        "MEDIA-SEC"
+      ],
+      "handoff": "consumer-v1/02-runtime.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/media/",
+        "apps/infrx-api/tests/m/"
+      ],
+      "implementation_slices": [
+        "Replace process metadata authority with durable upload port.",
+        "Bound immutable/idempotent PUT/finalize behavior.",
+        "Wire resolution/expiry/ownership via coordinator.",
+        "Cross-process actual router/object-store regression."
+      ],
+      "acceptance": "Create/PUT/finalize/resolve works across different gateway processes with bounded ownership and expiry.",
+      "failure_oracle": "Former in-memory adapter fails restart test; changed bytes/foreign handle never become accepted media.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "M6",
+      "title": "Implement restart-safe content cleanup and bounded caches",
+      "track": "M",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "M5"
+      ],
+      "integration_dependencies": [
+        "D10"
+      ],
+      "test_ids": [
+        "RETENTION-DURABLE",
+        "RESULT-EXPIRY"
+      ],
+      "handoff": "consumer-v1/02-runtime.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/media/",
+        "apps/infrx-api/tests/m/"
+      ],
+      "implementation_slices": [
+        "Use durable paginated candidates and fenced claims with reference races.",
+        "Cover serving objects/database content while retaining financial metadata.",
+        "Bound/recover local caches and maps.",
+        "Test dual collectors, restarts, outages, delayed deletes and concurrent load."
+      ],
+      "acceptance": "Live media is protected; eligible content removed within declared bound; expiry independent of physical deletion.",
+      "failure_oracle": "Local-only liveness or missing reference lock is caught by race tests; expired content cannot resurrect.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "W5",
+      "title": "Enforce execution readiness and bounded worker recovery",
+      "track": "W",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "W3"
+      ],
+      "integration_dependencies": [
+        "D10",
+        "M5"
+      ],
+      "test_ids": [
+        "ADMISSION-READY",
+        "DUR-FENCE",
+        "OPS-RECOVER"
+      ],
+      "handoff": "consumer-v1/02-runtime.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/worker/",
+        "apps/infrx-api/tests/w/"
+      ],
+      "implementation_slices": [
+        "Require durable eligibility for empty and nonempty media.",
+        "Exercise crash/fence/output/settlement boundaries.",
+        "Bound permanent refusal and retry paths.",
+        "Prove warmup/readiness and cold-cache behavior on pinned engine."
+      ],
+      "acceptance": "No preparation before eligibility; accepted work terminates or recovers within bounds without double settlement.",
+      "failure_oracle": "Remove readiness barrier and text-only canary fails; unsupported media cannot loop indefinitely.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "G7",
+      "title": "Align public capability discovery, alias pricing and persisted result expiry",
+      "track": "G",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "G3"
+      ],
+      "integration_dependencies": [
+        "D10",
+        "M5"
+      ],
+      "test_ids": [
+        "CATALOG-TRUTH",
+        "RESULT-EXPIRY",
+        "API-MODES",
+        "API-STREAM"
+      ],
+      "handoff": "consumer-v1/02-runtime.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/gateway/routes/",
+        "apps/infrx-api/openrouter/provider-models.json (shared projection replacement)",
+        "apps/infrx-api/tests/g/"
+      ],
+      "implementation_slices": [
+        "Publish release-derived supported model/limits/retention.",
+        "Resolve canonical/legacy alias price identity with D10.",
+        "Use persisted expiry on all read/replay paths.",
+        "Verify bounded overload/body drain and upload route conformance."
+      ],
+      "acceptance": "Discovery/docs examples match admission; result access honors original persisted lifetime and tenancy.",
+      "failure_oracle": "Stale capability, alias mismatch, unauthorized/expired result or unbounded body handling fails route checks.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "G8",
+      "title": "Prove headless consumer CREDIT operations and safe activation",
+      "track": "G",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "G6B",
+        "A1"
+      ],
+      "integration_dependencies": [
+        "D10",
+        "G7"
+      ],
+      "test_ids": [
+        "CREDIT-CUTOVER",
+        "CREDIT-GRANT",
+        "CREDIT-SPEND"
+      ],
+      "handoff": "consumer-v1/02-runtime.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/operations/",
+        "apps/infrx-api/tests/g/ops/",
+        "apps/infrx-api/client_example.py"
+      ],
+      "implementation_slices": [
+        "Trusted individual account/key/grant/admin operations.",
+        "Inventory/drain/reconcile USD-to-CREDIT enablement without conversion.",
+        "Require approved public card and dry-run transition report.",
+        "Race/retry/revoke/unknown-usage reconciliation proof."
+      ],
+      "acceptance": "Verified individual gets one entitlement and can spend/reconcile/revoke through shared trusted ports.",
+      "failure_oracle": "Repeated callback/grant, historical replay or client-selected unit cannot multiply funds or change settlement.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "E1C",
+      "title": "Repair upload client and deliver valid resumable dataset/load measurement",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "E1"
+      ],
+      "integration_dependencies": [
+        "E2C",
+        "G7",
+        "M5"
+      ],
+      "test_ids": [
+        "BENCH-VALIDITY",
+        "LOAD-CLOSEDLOOP",
+        "UPLOAD-RESTART"
+      ],
+      "handoff": "consumer-v1/05-client-and-load-testing.md",
+      "owned_paths": [
+        "models/marlin2b/bench.py",
+        "models/marlin2b/tests/",
+        "models/marlin2b/ (dataset client/profile additions)",
+        "models/marlin2b/results/ (new evidence only)"
+      ],
+      "implementation_slices": [
+        "Conform upload client to real router and same-origin auth.",
+        "Bound and persist dataset resume with stable request identity.",
+        "Reject replay/omission/driver-limited capacity runs.",
+        "Implement validated bounded profiles and raw metric/reconciliation export."
+      ],
+      "acceptance": "Interrupted datasets reconcile one logical item; load validity is machine-readable and no paid run starts unbounded.",
+      "failure_oracle": "Unexpected replay, omitted attempts, driver lag or missing budget/target invalidates/refuses a run.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "I8",
+      "title": "Operate continuously with bounded DB pools, durable artifacts and real rollback",
+      "track": "I",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "I3B"
+      ],
+      "integration_dependencies": [
+        "D10",
+        "W5"
+      ],
+      "test_ids": [
+        "OPS-CONTINUOUS",
+        "OPS-RECOVER",
+        "VERIFY-REPRO"
+      ],
+      "handoff": "consumer-v1/03-operations-and-verification.md",
+      "owned_paths": [
+        "infra/",
+        "apps/infrx-api/deploy/",
+        "apps/infrx-api/tests/i/",
+        "tests/integration/backend/ (operational scenarios via E coordinator)"
+      ],
+      "implementation_slices": [
+        "Budget pools and prove transaction-pooler semantics.",
+        "Use runtime least privilege and validated config.",
+        "Deploy continuous scrape/alerts and prove authorized delivery.",
+        "Mirror/restore pinned model artifacts and confirm backup policy.",
+        "Prove known-good rollback by real request/result/settlement.",
+        "Integrate runbook and scoped deployment evidence."
+      ],
+      "acceptance": "Load holds connection bounds; alerts delivered; replacement and rollback serve real requests with correct state.",
+      "failure_oracle": "Dashboard-only, readiness-only, local-NVMe-only or privileged-runtime configurations cannot pass.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "E3C",
+      "title": "Integrate corrective backend with real services and process faults",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E2C",
+        "F2C",
+        "E3B"
+      ],
+      "integration_dependencies": [
+        "D10",
+        "M5",
+        "M6",
+        "W5",
+        "G7",
+        "G8",
+        "I8",
+        "E1C"
+      ],
+      "test_ids": [
+        "BACKEND-JOURNEY",
+        "UPLOAD-RESTART",
+        "RETENTION-DURABLE",
+        "ADMISSION-READY",
+        "RESULT-EXPIRY",
+        "CREDIT-CUTOVER",
+        "VERIFY-REPRO"
+      ],
+      "handoff": "consumer-v1/03-operations-and-verification.md",
+      "owned_paths": [
+        "tests/integration/backend/",
+        "research/plan/evidence/e/ (new evidence)"
+      ],
+      "implementation_slices": [
+        "Compose real PG/PostgREST/auth/queue/object adapters with controlled engine.",
+        "Run cross-process lifecycle/security/accounting fault matrix.",
+        "Prove failure sensitivity and emit complete local gate verdict."
+      ],
+      "acceptance": "BACKEND-LOCAL passes on combined SHA; every required skipped/failing case keeps gate open.",
+      "failure_oracle": "Fake-only substitution, missing service or inconsistent durable/API/object/accounting state is a non-pass.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "E4C",
+      "title": "Certify repaired CREDIT backend on final Marlin deployment",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-CLOSURE",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E3C",
+        "E4B"
+      ],
+      "integration_dependencies": [
+        "I8",
+        "E1C",
+        "G8"
+      ],
+      "test_ids": [
+        "BACKEND-JOURNEY",
+        "LOAD-CLOSEDLOOP",
+        "PERF-ENVELOPE",
+        "OPS-CONTINUOUS",
+        "CREDIT-CUTOVER",
+        "MARLIN-SOP"
+      ],
+      "handoff": "consumer-v1/03-operations-and-verification.md",
+      "owned_paths": [
+        "tests/integration/backend/",
+        "models/marlin2b/results/ (new evidence)",
+        "research/plan/evidence/e/ (release decision)"
+      ],
+      "implementation_slices": [
+        "Freeze final candidate/workload/rate/config and external CREDIT smoke.",
+        "Run valid load/burst/soak/fault/restore/rollback cells.",
+        "Reconcile durable state/cost and rerun impacted cells after fixes.",
+        "Publish explicit final verdict, limitations and operator decision."
+      ],
+      "acceptance": "Accepted BACKEND-READY on pinned real target with approved inputs and no launch-path P1 defects.",
+      "failure_oracle": "Implemented runner, incomplete soak, unexpected replay, missing SLO approval or unresolved failure cannot certify release.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+    },
+    {
+      "id": "U4",
+      "title": "Expose owned consumer request detail and result lifecycle",
+      "track": "U",
+      "product": "app",
+      "milestone": "APP-M1",
+      "status": "planned",
+      "disposition": "consumer-v1-closure",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2C",
+        "U1R"
+      ],
+      "integration_dependencies": [
+        "C0",
+        "C3A",
+        "G7"
+      ],
+      "test_ids": [
+        "USER-RESULTS",
+        "RESULT-EXPIRY",
+        "CONSOLE-TENANT"
+      ],
+      "handoff": "consumer-v1/04-app.md",
+      "owned_paths": [
+        "apps/app/app/(console)/usage/ (new request detail route after U1R)",
+        "apps/app/tests/u/ (request/result lifecycle tests)"
+      ],
+      "implementation_slices": [
+        "Show actual safe request/result/usage states through trusted ports.",
+        "Bound polling and handle expiry/outage/retry without duplicate paid submission.",
+        "Prove cross-tenant denial, persisted expiry and no client-cache resurrection."
+      ],
+      "acceptance": "Customer can inspect own real request/result/charge; expired and foreign content stays unavailable.",
+      "failure_oracle": "Foreign IDs, changed policy TTL or cached expired output fail; retry cannot silently create another inference.",
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "dispatch_after_gate": "BACKEND-READY",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
   "implementation_baseline_commit": "271add946771ddc4efc3cbc2044758443080759b",
   "authority": [
+    "22-consumer-v1-implementation.md",
+    "24-consumer-v1-session-handoff.md",
+    "21-v1-consumer-readiness-review-2026-09-24.md",
     "../platforms/README.md",
     "18-marlin-backend-first.md",
     "12-complete-build-plan.md",
@@ -3905,15 +4544,15 @@
   "release_gates": {
     "BACKEND-LOCAL": {
       "requires": [
-        "E3B"
+        "E3C"
       ],
-      "conditional": "Actual local DB/object/queue/auth adapters with controlled engine, headless client, no Next.js App/Lab dependency; not real model/hosted/performance proof."
+      "conditional": "Corrective real-service/process fault evidence, including durable uploads/readiness/GC/expiry and CREDIT; no App required. Controlled engine does not prove GPU/model performance."
     },
     "BACKEND-READY": {
       "requires": [
-        "E4B"
+        "E4C"
       ],
-      "conditional": "Allocated real GPU/staging target, exact pinned model/runtime/config, measured operating envelope and quality parity, final combined faults/soak/restore evidence, approved rates and account transition where applicable. Public cutover remains explicit."
+      "conditional": "Accepted final SHA/image/profile in CREDIT mode; valid load/soak/recovery/restore/rollback and continuous operations; approved rates/workload/limits; explicit decision. Runner implementation is not acceptance. Public cutover separately recorded."
     },
     "APP-LOCAL": {
       "requires": [
@@ -3967,7 +4606,8 @@
         "E5L",
         "E6L",
         "E7L",
-        "E8L"
+        "E8L",
+        "E3C"
       ],
       "conditional": "All current core features built and integrated; allocated staging/live release evidence remains separate. Conditional/deferred expansions cannot be represented as complete."
     },
@@ -3999,17 +4639,93 @@
   ],
   "audit_commit": "07dfb64",
   "delivery_scopes": {
-    "core": "Current priority: E4B backend closure including durable runtime, headless identity/keys/registry/rates/accounting, operated deployment/recovery and measured M4/W4 optimization. Existing App and Lab core plans remain sequenced follow-ons. Conditional/deferred expansion rules are unchanged.",
+    "core": "Current corrective scope: E4C closure from program 22, then existing App tasks refined in consumer-v1/04-app.md. Lab and conditional hosting follow their explicit gates.",
     "conditional": "G5 optional callbacks, I4 fleet, X1-X6 specialized workloads/hardware. Activation conditions must be satisfied before implementation/enablement; missing inputs cannot be silently defaulted.",
     "deferred": "Consumer payments/pooling, payouts, arbitrary provider code execution, fully managed training/RL infrastructure, response caching, OpenRouter, speech. No task is implicitly authorized by the words complete platform."
   },
   "current_execution_scope": {
     "id": "BACKEND-FIRST-MARLIN",
     "objective": "Complete robust, measured and optimized Marlin2B inference through a headless authenticated endpoint for SOP verification over large robotics datasets; then launch the consumer App, then provider Lab.",
-    "dispatch_now": "Review S1/current HEAD; F2R, I0, E2R, S2M in independent lanes; F2P then the E4B dependency closure. Include only backend identity/grant/key/rate/accounting operations needed by real clients; no frontend feature work.",
-    "dispatch_later": "After accepted E4B backend candidate, activate App onboarding/catalog/credits/usage UI and its E3A/I2A/I3/E4 delta gates; Lab follows the App. Missing GPU/staging inputs permit further backend hardening/release preparation, not automatic UI scope expansion.",
+    "dispatch_now": "S3 evidence reconciliation and E2C environment inventory; F2C contract freeze, then E4C corrective dependency closure. Seven disjoint runtime lanes; M5 then M6 and shared runner edits serial. No App feature dispatch before accepted BACKEND-READY.",
+    "dispatch_later": "After accepted E4C, C0/C3A/A2/A3/U1R/U2/U3/U4 and E3A/I2A/I3/E4 deliver real consumer journey; Lab follows App. Missing external inputs do not auto-enable UI/fleet work.",
     "robustness": "Durable accepted work, exact accounting, isolated tenants, bounded overload, tested restart/restore/rollback and observable recovery inside a measured serving envelope. Single-GPU recovery does not establish high availability.",
     "optimization": "Baseline and profile first; controlled media/engine experiments and final combined load/soak/parity proof. No invented latency/throughput target or quality-preserving quantization claim.",
     "terminology": "SOP verification over robotics data is the application; verify the actual Marlin protocol. Native live-video transport and robot actuation are not inferred."
+  },
+  "consumer_v1_closure": {
+    "program": "22-consumer-v1-implementation.md",
+    "handoff": "24-consumer-v1-session-handoff.md",
+    "baseline_commit": "6db71ee3",
+    "backend_gate_task": "E4C",
+    "finding_tasks": {
+      "RV-01": [
+        "F2C",
+        "G7",
+        "A3"
+      ],
+      "RV-02": [
+        "D10",
+        "M5",
+        "E1C",
+        "E3C"
+      ],
+      "RV-03": [
+        "D10",
+        "M6",
+        "I8",
+        "E3C"
+      ],
+      "RV-04": [
+        "S3",
+        "E4C"
+      ],
+      "RV-05": [
+        "F2C",
+        "D10",
+        "W5",
+        "G7",
+        "E3C"
+      ],
+      "RV-06": [
+        "C0",
+        "C3A",
+        "A2",
+        "A3",
+        "U1R",
+        "U2",
+        "U3",
+        "U4",
+        "E3A"
+      ],
+      "RV-07": [
+        "E1C",
+        "M5",
+        "G7"
+      ],
+      "RV-08": [
+        "E1C",
+        "E4C"
+      ],
+      "RV-09": [
+        "D10",
+        "I8",
+        "E4C"
+      ],
+      "RV-10": [
+        "I8",
+        "E4C"
+      ],
+      "RV-11": [
+        "F2C",
+        "D10",
+        "G7",
+        "U4",
+        "E3C"
+      ],
+      "RV-12": [
+        "E2C",
+        "E3C"
+      ]
+    }
   }
 }

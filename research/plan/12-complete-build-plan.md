@@ -1,5 +1,7 @@
 # Complete implementation plan — Marlin backend, then App, then Lab
 
+**2026-09-24 superseding dispatch:** [Program 22](22-consumer-v1-implementation.md), [handoff/prompt 24](24-consumer-v1-session-handoff.md) and the current [manifest](tasks.json) replace older next-task lists in this document. Existing implementation is preserved; S3 reconciles it, F2C freezes corrections, E3C/E4C close backend readiness, then App. Use this document for unchanged baseline contracts/ownership and historical context, not to restart completed waves.
+
 Updated 2026-09-22: **complete the robust, measured and optimized Marlin2B inference backend first; launch the consumer App next, then provider Lab.** SOP verification over large robotics datasets remains the lead application. [Backend-first handoffs](18-marlin-backend-first.md) define the current execution gate. This package covers the complete agreed two-platform roadmap without making the whole roadmap a launch dependency.
 
 ## Current objective and what “complete” means

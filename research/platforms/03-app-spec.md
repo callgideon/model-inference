@@ -1,5 +1,7 @@
 # Platform 1 — Inference App requirements
 
+**2026-09-24 implementation detail:** [consumer program 22](../plan/22-consumer-v1-implementation.md) and [App briefs](../plan/consumer-v1/04-app.md) refine the existing requirements. E4C backend acceptance precedes App dispatch. U4 adds owned request-detail/result lifecycle under Usage, with persisted expiry and safe charge/error states; this is consumer access, not provider trace analytics.
+
 **Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
 
 Location: `apps/app`. The product lets an individual developer obtain a usable model API, manage keys and understand the credits consumed. It is the consumer surface for the shared inference business.

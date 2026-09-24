@@ -1,5 +1,7 @@
 # Closed-loop verification and release gates
 
+**Current corrective gates (2026-09-24):** E3C is BACKEND-LOCAL and E4C is BACKEND-READY; E3B/E4B remain predecessor software/evidence. See [program 22](22-consumer-v1-implementation.md) and [the client/load/fault protocol](consumer-v1/05-client-and-load-testing.md). Existing oracles remain required. A task status does not itself accept a release; missing live inputs remain explicit.
+
 Every test ID below names a required **future** test; none is claimed implemented by this package. Module briefs map tasks to these IDs. Retain existing research test cases, but namespace them as `SERV-*`, `TRACE-*`, `JUDGE-*` or `CONSOLE-*` so repeated A1/Q1/I1 labels cannot collide. E2 publishes the explicit legacy-to-new mapping in its evidence.
 
 **2026-09-21 amendment:** use [platform split](08-platform-split.md) and [manifest v4](tasks.json). Consumer, Lab operations and Lab observation are independently released. Implement new tests against actual services; this documentation has not executed them.
@@ -138,3 +140,21 @@ The current release target is [the headless Marlin endpoint](18-marlin-backend-f
 | ENGINE-OPT | Controlled batching/token/KV/concurrency/admission experiments, OOM/cancel/lease/drain and mixed tenant load | Chosen pinned settings satisfy correctness/parity, fairness, latency/error/memory constraints and measured cost/throughput; no upgrade based solely on cached token/s | W4/Q/E4B |
 
 Predeclare benchmark profile, proposed targets or explicitly provisional criteria, sample policy and soak duration before tuning. Do not omit preparation, journal RTT, rejected arrivals or recovery time from claims. Repeat affected checks on the final combined config; independent component speedups may not compose. Dataset SOP accuracy requires its actual labeled rubric/episode split; it is distinct from API robustness and processor/output parity. I4 provides a conditional fleet path when measured capacity or availability needs justify it; a single-GPU recovery drill is not high availability.
+
+## Consumer v1 corrective oracles (2026-09-24)
+
+These supplement, not replace, the original suites. Implementation briefs specify real adapters, process boundaries, negative controls and final evidence. The current gate roots are in tasks.json.
+
+| ID | Trigger / negative control | Required observation | Owners |
+|---|---|---|---|
+| UPLOAD-RESTART | Create/PUT/finalize/resolve in separate gateway processes; wrong owner/digest and lost acknowledgement | Durable immutable handle, bounded retries/expiry and no unauthorized reuse | D10/M5/E1C/E3C |
+| RETENTION-DURABLE | Restart, two collectors, live attach/delete race, delayed delete, DB outage and content-bearing rows | Durable liveness/tombstones protect live work; eligible content cleaned; metadata retained without expired content | D10/M6/I8/E3C |
+| ADMISSION-READY | Text-only empty manifest and nonempty media; terminate between admission and completion | No execution before durable eligibility; bounded recovery, no permanent orphan hold | F2C/D10/W5/G7/E3C |
+| RESULT-EXPIRY | Policy change, restart, replay, late output, open browser at original expiry | Persisted expiry controls every API/UI read and cleanup; no content resurrection | F2C/D10/G7/U4/E3C |
+| CATALOG-TRUTH | Compare discovery/docs/examples to mounted admission and qualified profile | Canonical aliases/rates/limits/retention agree; no unsupported tools/live input/ZDR claims | F2C/G7/A3 |
+| BENCH-VALIDITY | Inject unexpected replay, omitted attempts, client lag, wrong candidate or unbounded profile | Capacity verdict INVALID/refused with reason, never inflated fresh throughput | E1C/E4C |
+| LOAD-CLOSEDLOOP | Declared open-loop, burst, soak, fairness, fault and post-fix combined cells | Bounded resource/cost/queue behavior; all attempts and durable states reconciled; failed cells retained | E1C/E3C/E4C |
+| OPS-CONTINUOUS | Pool saturation, least-privilege probes, scheduled scrape/alert, replacement and rollback | Actual delivery, scoped roles/pool semantics, restored artifacts and public serving/settlement proof | D10/I8/E4C |
+| VERIFY-REPRO | Clean supported Linux, missing dependency, changed Git default and deliberately broken seam | Reproducible baseline; explicit BLOCKED/FAIL/INVALID/NOT RUN; required skips never pass | S3/E2C/E3C |
+| CREDIT-CUTOVER | Grant/callback races, USD in-flight replay, rate publication, reconcile and feature transition | One individual entitlement, exact isolated units, pinned historical settlement and approved active card | D10/G8/E3C/E4C |
+| USER-RESULTS | Two users, guessed ID, expiry on open page, reconnect/retry | Only owned valid output; safe status/charge, bounded polling, no automatic second paid request | U4/C0/C3A/E3A/E4 |

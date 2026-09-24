@@ -1,5 +1,7 @@
 # model-inference
 
+**Current implementation package (2026-09-24):** [Consumer v1 program](research/plan/22-consumer-v1-implementation.md), [fresh-session handoff/prompt](research/plan/24-consumer-v1-session-handoff.md) and [task ledger](research/plan/17-task-ledger.md). Close the audited backend gaps through E3C/E4C, then complete App. [Hosting/scaling/Modal roadmap](research/plan/23-inference-hosting-roadmap.md) is a separate proposal. Earlier dated wave instructions below are historical.
+
 **2026-09-22 priority:** complete the robust, measured Marlin2B inference backend first, then the consumer App, then Lab. [Backend execution plan](research/plan/18-marlin-backend-first.md) and [fresh-session prompt](research/plan/16-fresh-session-handoff.md) supersede the earlier App-first dispatch order.
 
 **Product direction:** Marlin2B inference for SOP verification over large robotics datasets; backend endpoint first, App next. [Complete implementation plan](research/plan/12-complete-build-plan.md) · [Fresh-session prompt/context](research/plan/16-fresh-session-handoff.md) · [Task ledger](research/plan/17-task-ledger.md).

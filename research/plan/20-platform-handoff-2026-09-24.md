@@ -1038,3 +1038,7 @@ This section holds what only the running session knew; everything above was comp
 See the last entries of `research/plan/evidence/coordinator/2026-09-22-session-02.md` and `HANDOFF-<latest>.md` (named by `.claude/RESUME-NOW.md`): the TOKCOST and CERTIFY-POLISH verifiers, the INTAKE-DRAIN lane, gate-3, the `main` fast-forward, the third install and certification run3.
 
 - 2026-09-24 (coordinator): §14 appended (live state, delta since compile).
+
+## Consumer v1 implementation follow-through (2026-09-24)
+
+[Program 22](22-consumer-v1-implementation.md), [the five module briefs](consumer-v1/01-contracts-and-data.md), [manifest](tasks.json) and [handoff/prompt 24](24-consumer-v1-session-handoff.md) turn the reviewed gaps into corrective work. S3 reconciles any newer evidence before dispatch; E3C/E4C now gate repaired backend readiness. This addition does not alter the historical observations or claim a new runtime pass. [Roadmap 23](23-inference-hosting-roadmap.md) preserves the later hosting/scaling/Modal discussion.
