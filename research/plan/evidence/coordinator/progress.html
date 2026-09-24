@@ -81,8 +81,8 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
 </section>
 <section class="panel"><h2>Gates and blocking inputs</h2><ul>
-<li><b>BACKEND-LOCAL</b> (requires E3B): not started</li>
-<li><b>BACKEND-READY</b> (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)</li>
+<li><b>BACKEND-LOCAL</b> (requires E3B): passed 2026-09-24 (E3B phase 3 merged b657a30; layer 3 backend green in checkpoint 2 and the focused gates)</li>
+<li><b>BACKEND-READY</b> (requires E4B): pending the release decision (box certification run3 with the corrected runner; drills 1-3 done) — blocked by: P-18 workload targets (provisional criteria allowed); INTAKE-DRAIN (typed 429 loss)</li>
 </ul><div class="scroll"><table><thead><tr><th>Input</th><th>What</th><th>Blocks</th><th>Owner</th></tr></thead><tbody>
 <tr><td><code>P-04</code></td><td>GPU target RESOLVED: pilot box i-0e8449a4ffca29bab (L40S), snapshot taken; I2B redeploys the refactored app onto it</td><td>nothing</td><td>coordinator</td></tr>
 <tr><td><code>P-06</code></td><td>Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image</td><td>publishing externally until the three fail-stops (D2/D3/D12) close</td><td>M2/W/G2 (fixes); W3 (digests)</td></tr>

@@ -39,8 +39,8 @@ Generated 2026-09-24T19:08:00Z from `tasks.json` (manifest v4) and `progress-sta
 
 ## Gates
 
-- **BACKEND-LOCAL** (requires E3B): not started
-- **BACKEND-READY** (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)
+- **BACKEND-LOCAL** (requires E3B): passed 2026-09-24 (E3B phase 3 merged b657a30; layer 3 backend green in checkpoint 2 and the focused gates)
+- **BACKEND-READY** (requires E4B): pending the release decision (box certification run3 with the corrected runner; drills 1-3 done) — blocked by: P-18 workload targets (provisional criteria allowed); INTAKE-DRAIN (typed 429 loss)
 
 ## Inputs that block specific gates (not the coding)
 
