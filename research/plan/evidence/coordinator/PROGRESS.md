@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T00:20:08Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T00:39:07Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -88,7 +88,7 @@ Generated 2026-09-24T00:20:08Z from `tasks.json` (manifest v4) and `progress-sta
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
 - review E3B-phase3: fix round HANDED BACK b9529d1 (J2 fixed: worker always its own process after the M merge; M3-U1 retired, video_upload cells run; J1 footprint; H-B1; 14 mutants killed; gate at a7a2388 exit 3 PENDING only I2B-R4) → single verifier wf_959f82dd-e03 on namespace e2 since 2026-09-24T00:20:08Z
 - review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
-- review M-pilot-media: fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) → fix round since 2026-09-24T00:11:02Z
+- review M-pilot-media: fix round HANDED BACK e5c02f7 (write-once attach on every adapter, O4/O5/O6, disk-lookup hardening; pilot list 40 killed) → single verifier wf_475160a3-662 on d6 + MinIO 55724 since 2026-09-24T00:39:07Z
 - review CUTOVER: HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w) since 2026-09-24T00:20:08Z
 - review ROLLOUT-PREP: DONE f0a1a82: hosted 0001/0002 only → release applies 0003–0018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey → worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing → worker lane since 2026-09-23T23:43:44Z
 - review WORKER: lane running (I2B-R4 composition root; item 3 real_worker 41a7480); told to merge phase-3 b9529d1 before handback since 2026-09-24T00:20:08Z

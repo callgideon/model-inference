@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T00:20:08Z",
+  "updated": "2026-09-24T00:39:07Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -114,8 +114,8 @@
       "since": "2026-09-23T22:22:23Z"
     },
     "M-pilot-media": {
-      "phase": "fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) → fix round",
-      "since": "2026-09-24T00:11:02Z"
+      "phase": "fix round HANDED BACK e5c02f7 (write-once attach on every adapter, O4/O5/O6, disk-lookup hardening; pilot list 40 killed) → single verifier wf_475160a3-662 on d6 + MinIO 55724",
+      "since": "2026-09-24T00:39:07Z"
     },
     "CUTOVER": {
       "phase": "HANDED BACK FINAL 1bed457 (evidence-only on a1e88dc; every final-code run quoted: api-test 3497 green + the 23 pre-existing test_cancel_cause reds, 5 lists all killed); review at a1e88dc still running (wx849k20w)",
