@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from types import SimpleNamespace
 
@@ -498,3 +499,171 @@ def test_an_interrupted_upload_is_kept_for_its_window_then_collected(make_draft_
     assert run(world.read(partial)) == b"half a cl"
     world.clock.advance(GRACE_S)
     assert deleted(run(collector(world).sweep())) == [upload_key(world)]
+
+
+# --- point 4: two collectors, a restarted runtime, a real outage, load with cleanup ------
+def test_two_collectors_at_once_delete_each_object_exactly_once(make_world):
+    """Two processes sweep the same store concurrently: the claims divide the work, the
+    loser of each claim keeps its hands off (`claim_held`), and every object is deleted
+    once - by exactly one of them."""
+    world = make_world()
+    for n in range(6):
+        run(world.write("source", key(n)))
+    live_job, live_row = live_source(world, 99)
+    world.clock.advance(GRACE_S)
+
+    async def both():
+        return await asyncio.gather(collector(world, holder="a", page_size=4).sweep(),
+                                    collector(world.restart(), holder="b", page_size=4).sweep())
+    first, second = run(both())
+    assert set(deleted(first)).isdisjoint(deleted(second))
+    assert sorted(deleted(first) + deleted(second)) == sorted(key(n) for n in range(6))
+    assert set(world.objects.deletes.values()) == {1}
+    assert set(first.retained) | set(second.retained) <= {"claim_held", "claim_lost"}
+    assert run(world.read(live_row)) == b"content"
+
+
+class LostResponse:
+    """The delete reaches the store and the answer does not come back."""
+
+    def __init__(self, inner) -> None:
+        self.inner, self.lost = inner, 1
+
+    async def delete(self, object_key: str) -> None:
+        await self.inner.delete(object_key)
+        if self.lost:
+            self.lost -= 1
+            raise errors.DependencyUnavailable("the media object store did not answer")
+
+
+def test_a_delete_whose_answer_was_lost_is_repeated_harmlessly(make_world):
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    report = run(collector(world, objects=LostResponse(world.objects)).sweep())
+    assert (report.delete_failed, report.aborted) == (1, "object_store_unavailable")
+    assert key(1) not in world.objects.objects
+    assert run(world.port.row(row.content_id)).state == "tombstoned"
+    world.clock.advance(CLAIM_TTL_S)
+    assert deleted(run(collector(world).sweep())) == [key(1)]
+    assert run(world.port.row(row.content_id)).state == "deleted"
+
+
+def test_a_runtime_restarted_mid_delete_finishes_it_and_keeps_live_work(make_world):
+    """The whole runtime dies between the tombstone and the delete (a crash, a deploy):
+    every in-process object is gone. The replacement - new port, new collector - finishes
+    the tombstoned delete once the old claim lapses, and never touches a live job's input
+    or an object inside its grace."""
+    world = make_world()
+    doomed = run(world.write("source", key(1)))
+    live_job, live_row = live_source(world, 2)
+    world.clock.advance(GRACE_S)
+    fresh = run(world.write("source", key(3)))
+
+    class Crash(Exception):
+        pass
+
+    class DiesBeforeDeleting:
+        async def delete(self, object_key):
+            raise Crash
+    with pytest.raises(Crash):
+        run(collector(world, objects=DiesBeforeDeleting()).sweep())
+    assert run(world.port.row(doomed.content_id)).state == "tombstoned"
+    world = world.restart()
+    assert deleted(run(collector(world, holder="replacement").sweep())) == []  # claim held
+    world.clock.advance(CLAIM_TTL_S)
+    report = run(collector(world, holder="replacement").sweep())
+    assert deleted(report) == [key(1)] and report.max_pending_delete_s == CLAIM_TTL_S
+    assert run(world.read(live_row)) == b"content" and run(world.read(fresh)) == b"content"
+
+
+def test_pg_an_unreachable_database_fails_the_pass_and_deletes_nothing(caplog):
+    """A real driver against a port nothing listens on (the lane's own, idle S3 port):
+    the pass fails, the schedule logs it and goes on, and nothing is deleted."""
+    import logging
+    world = pg_world()
+    run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    down = world.port.reopen()
+    down.dsn = re.sub(r":\d+/", ":55471/", world.port.dsn, count=1)
+    passes = []
+
+    async def sleep(seconds):
+        passes.append(seconds)
+        if len(passes) == 2:
+            raise asyncio.CancelledError
+    with caplog.at_level(logging.INFO, logger="infrx.media.retention"):
+        with pytest.raises(asyncio.CancelledError):
+            run(collector(world, port=down).run(1.0, sleep=sleep))
+    assert passes == [1.0, 1.0] and caplog.text.count("retention sweep failed") == 2
+    assert key(1) in world.objects.objects
+
+
+def test_pg_load_and_cleanup_together_never_delete_live_content():
+    """Admissions keep arriving - new sources, and attaches to OLD eligible objects the
+    collectors are deleting at that moment - while two collectors sweep with small pages
+    and every tenth acknowledgement is lost. Invariant: whatever an admission managed to
+    attach is live and readable; whatever it could not was refused, never half-bound.
+    Then everything ends and ages out, and the collectors remove all of it. The report's
+    bounds (batch <= page, in flight <= concurrency) and the pending-delete age are
+    measured and printed for the evidence."""
+    world = pg_world()
+    orphans = [run(world.write("source", key(n), b"old")) for n in range(60)]
+    world.clock.advance(GRACE_S)
+    attached, refused, reports, lost = [], [], [], {"n": 0}
+
+    async def flaky_ack(tombstone):
+        lost["n"] += 1
+        if lost["n"] % 10 == 0:
+            raise errors.DependencyUnavailable("the acknowledgement was lost")
+    port = Interpose(world.port, acknowledge_delete=flaky_ack)
+
+    async def admissions():
+        for i in range(40):
+            job = new_id()
+            await world.port.admit(job)
+            row = await world.write("source", key(1000 + i), b"new")
+            await world.port.attach(job, row.content_id)
+            attached.append((job, row))
+            old = orphans[-1 - i]            # the collectors walk them from the front
+            try:
+                await world.port.attach(job, old.content_id)
+                attached.append((job, old))
+            except errors.DependencyUnavailable as retiring:
+                refused.append(retiring.refusal)
+            await asyncio.sleep(0)
+
+    async def sweeping(holder):
+        for _ in range(6):
+            reports.append(await collector(world, port=port, holder=holder, page_size=8,
+                                           concurrency=4).sweep())
+            world.clock.advance(CLAIM_TTL_S / 2)
+
+    async def together():
+        await asyncio.gather(admissions(), sweeping("a"), sweeping("b"))
+    started = time.monotonic()
+    run(asyncio.wait_for(together(), 120))
+    loaded_s = time.monotonic() - started
+    for job, row in attached:
+        assert run(world.read(row)) is not None, f"live job {job} lost {row.identity.object_key}"
+    assert set(refused) <= {"content_retiring"}
+    for job in {job for job, _ in attached}:
+        run(world.port.finish(job, "failed"))
+    world.clock.advance(RETENTION_S + CLAIM_TTL_S)
+    drain = 0                  # passes after recovery: a lost ack ends a pass (retain, report)
+    while world.objects.objects and drain < 20:
+        drain += 1
+        reports.append(run(collector(world, port=port, page_size=8, concurrency=4).sweep()))
+        world.clock.advance(CLAIM_TTL_S)
+    assert world.objects.objects == {}
+    assert max(r.max_batch for r in reports) <= 8 and max(r.max_in_flight for r in reports) <= 4
+    pending = max(r.max_pending_delete_s for r in reports)
+    assert 0 < pending <= RETENTION_S + 3 * CLAIM_TTL_S
+    print("M6-LOAD", {"objects": 100, "attached_old": len(attached) - 40,
+                      "refused_old": len(refused),
+                      "passes": len(reports), "drain_passes": drain,
+                      "deleted": sum(len(r.deleted) for r in reports),
+                      "lost_acks": sum(r.ack_lost for r in reports),
+                      "max_batch": max(r.max_batch for r in reports),
+                      "max_in_flight": max(r.max_in_flight for r in reports),
+                      "max_pending_delete_s": pending, "load_phase_wall_s": round(loaded_s, 2)})
