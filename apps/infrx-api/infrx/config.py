@@ -352,6 +352,10 @@ class DeploymentSettings:
     # them (`pilot.build_info`). Never read from git or docker at runtime.
     infrx_release_sha: str = ""
     infrx_image: str = ""
+    # W3 request 6 / I2B-R4: the worker's loopback readiness and metrics port
+    # (`python -m infrx.worker`: /readyz, /livez, /metrics), the one install.sh's
+    # `wait_ready` and 60-verify-local.sh probe. Never public: WorkerService binds loopback.
+    worker_health_port: int = 8002
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)

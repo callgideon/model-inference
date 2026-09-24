@@ -215,6 +215,9 @@ NOT_SETTABLE = {
     "CLICKHOUSE_URL": "T's DSN, which carries a credential; SSM when T2 deploys",
     "JUDGE_MODE": "live judging is a separately authorized paid budget",
     "JUDGE_LIVE_BUDGET_USD": "live judging is a separately authorized paid budget",
+    "WORKER_HEALTH_PORT": "the worker's loopback port is the unit's and lib.sh's (8002, "
+                          "wait_ready and 60-verify-local.sh): moving it is a deploy change, "
+                          "not a --set",
 }
 
 

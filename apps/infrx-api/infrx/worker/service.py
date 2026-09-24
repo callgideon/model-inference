@@ -36,12 +36,14 @@ import signal
 from dataclasses import asdict, dataclass, field
 
 from ..contracts.records import IndexEvent
+from ..observe.metrics import CONTENT_TYPE
 from .loop import DrainReport, WorkerLoop
 
 log = logging.getLogger("infrx.worker")
 
 READY_PATH = "/readyz"
 LIVE_PATH = "/livez"
+METRICS_PATH = "/metrics"       # I2B-R4: the process's Registry (build info), when given one
 # ponytail: a fixed cadence. A lost preparation lease (30 s TTL) is requeued within 40 s;
 # a notification from the store replaces the timer if that ever matters.
 REAP_INTERVAL_S = 10.0
@@ -59,6 +61,7 @@ class WorkerService:
     reap_interval_s: float = REAP_INTERVAL_S
     health_host: str = "127.0.0.1"
     health_port: int | None = None               # None: no listener (embedded use)
+    metrics: object | None = None                # observe.metrics.Registry, on GET /metrics
     reaped: int = 0
     reap_errors: int = 0
     last_drain: DrainReport | None = None
@@ -199,21 +202,25 @@ class WorkerService:
                  if key in ("finished", "released", "claimed")}}
 
     async def _probe(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        """A minimal HTTP/1.1 answer: `GET /readyz` or `GET /livez`, then close."""
+        """A minimal HTTP/1.1 answer: `GET /readyz`, `/livez` or `/metrics`, then close."""
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_S):
                 request = (await reader.readline()).decode("latin-1").split()
                 while (await reader.readline()).strip():
                     pass
             method, path = (request + ["", ""])[:2]
-            if method != "GET" or path not in (READY_PATH, LIVE_PATH):
-                status, body = 404, {"error": "not_found"}
+            kind = "application/json"
+            if method == "GET" and path == METRICS_PATH and self.metrics is not None:
+                status, raw, kind = 200, self.metrics.render().encode(), CONTENT_TYPE
             else:
-                body = await self.readiness()
-                status = 200 if body["ready" if path == READY_PATH else "live"] else 503
-            raw = json.dumps(body).encode()
+                if method != "GET" or path not in (READY_PATH, LIVE_PATH):
+                    status, body = 404, {"error": "not_found"}
+                else:
+                    body = await self.readiness()
+                    status = 200 if body["ready" if path == READY_PATH else "live"] else 503
+                raw = json.dumps(body).encode()
             reason = {200: "OK", 404: "Not Found", 503: "Service Unavailable"}[status]
-            writer.write(f"HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\n"
+            writer.write(f"HTTP/1.1 {status} {reason}\r\ncontent-type: {kind}\r\n"
                          f"content-length: {len(raw)}\r\nconnection: close\r\n\r\n".encode()
                          + raw)
             await writer.drain()
