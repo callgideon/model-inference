@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T05:32:24Z",
+  "updated": "2026-09-24T05:33:05Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -284,9 +284,8 @@
       "what": "SESSION LIMIT (Opus 429 until 14:00 UTC): all lanes/workflows died; coordinator saved everything (E3B2 WIP c587ddc; all lane branches pushed; partial review JSONs saved); main stays at 01a7dfc; handoff HANDOFF-20260923T1330Z.md"
     },
     {
-      "at": "2026-09-24T05:32:24Z",
-      "main": "01a7dfc",
-      "note": "checkpoint 2 on 27af05a: api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + the 3 fixed items (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67"
+      "at": "2026-09-24T05:33:05Z",
+      "what": "checkpoint 2: main 8cabe20 (from 01a7dfc) - api-test 3639 (+2 P-21 drills green on d6), layer 0 202 no pending, lists 2185/2186 + 3 fixed (7a22064, 2b86ae5), E4B 140, layer 3 exit 0, bench 67"
     }
   ],
   "cadence_windows": [
