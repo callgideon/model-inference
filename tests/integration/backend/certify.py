@@ -435,8 +435,12 @@ def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Pa
     verdict, why = decide.parity_verdict(within(decide.jsonl(candidate)),
                                          within(decide.jsonl(base)))
     status = {decide.PASS: PASS, decide.FAIL: FAIL}.get(verdict, PENDING)
-    wrong = sorted(clip for clip, answer in answers.items() if answer != OVER_CAP)
-    if wrong:
+    # a clip refused for capacity twice was never judged by the cap: listed apart, and the
+    # cell still FAILs - parity must observe the typed refusal itself
+    busy = sorted(clip for clip, answer in answers.items() if answer["http_status"] == 429)
+    wrong = sorted(clip for clip, answer in answers.items()
+                   if answer != OVER_CAP and answer["http_status"] != 429)
+    if wrong or busy:
         status = FAIL
     elif over and not gateway and status == PASS:
         status = PENDING                  # an engine target has no admission to refuse them
@@ -445,7 +449,8 @@ def parity_check(report: Report, *, engine_url: str, workdir: Path, baseline: Pa
                   "expected refusal (over MAX_VIDEO_SECONDS)": {
                       clip: answers.get(clip, "unasked: an engine target has no admission")
                       for clip in over},
-                  "not refused as over the cap": wrong, "baseline": rel(base),
+                  "not refused as over the cap": wrong, "capacity twice, unjudged": busy,
+                  "baseline": rel(base),
                   "candidate": rel(candidate), "candidate_sha256": sha256_file(candidate)},
                  owners=("BOX",) if status == PENDING else (), label=label)
 
@@ -473,16 +478,21 @@ def cancelled_replays(first: list[dict], second: list[dict]) -> tuple[list[str],
     firsts = {row["item_key"]: row for row in first}
     cancelled = sorted({row["item_key"] for row in first + second
                         if row.get("outcome") == bench.CANCELLED_REPLAY})
-    torn = [item for item in cancelled if torn_by_the_client(firsts.get(item, {}))]
+    # an item in flight at the SIGINT has no first-run row at all (bench's attempt() never
+    # reaches its write when the task is cancelled): its key replayed, so it was sent, and
+    # the client's own exit cut it - the interruption's tear (verifier B1, box run2's 643711ed)
+    torn = [item for item in cancelled if item not in firsts or torn_by_the_client(firsts[item])]
     return torn, [item for item in cancelled if item not in torn]
 
 
 def sop_property(first: list[dict], second: list[dict]) -> str:
-    """The MARLIN-SOP property a drill with no client problem has proved."""
+    """The MARLIN-SOP property a drill with no client problem has proved, with the actual
+    counts (a FAIL that lists a platform cancel says so here too)."""
+    torn, platform = cancelled_replays(first, second)
     return (f"MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, "
-            f"and {len(cancelled_replays(first, second)[0])} item(s) cancelled by the "
-            f"interruption (the client's own tear), each terminal after exactly one replay of "
-            f"its key; none cancelled by the platform (R106)")
+            f"and {len(torn)} item(s) cancelled by the interruption (the client's own tear), "
+            f"each terminal after exactly one replay of its key; {len(platform)} cancelled by "
+            f"the platform (R106)")
 
 
 def resume_problems(first: list[dict], second: list[dict], *, items: int,

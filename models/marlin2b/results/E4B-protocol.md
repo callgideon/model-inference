@@ -198,7 +198,8 @@ run closed, and the coordinator's decision recorded in
     is already terminal by its status.
   - The drill FAILs an item accepted twice, and a cancelled item that was not replayed
     exactly once. A cancelled replay counts as cancelled by the interruption only when its
-    item's first attempt was the client's own tear (a transport error). Any other - a
+    item's first attempt was the client's own tear (a transport error), or when the item has
+    no first-run row at all (in flight at the SIGINT, cut before bench wrote one). Any other - a
     platform-side failure the relay cancelled - is listed as cancelled by the platform and
     FAILs the drill (R106's corrected text). A passing drill states the property it proved:
     no second accepted item, nothing re-sent after it was terminal, each item the

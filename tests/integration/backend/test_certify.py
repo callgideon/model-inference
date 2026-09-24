@@ -332,6 +332,11 @@ def test_e4b_parity_pairs_the_clips_within_the_cap_and_asks_admission_for_the_re
         entry = cell()
         assert (entry["status"], entry["detail"]["not refused as over the cap"]) == (
             certify.FAIL, ["c051-tos720p-360p-16x9"]), answer
+    replies[c051] = {"http_status": 429, "code": "capacity_exhausted", "param": None}
+    entry = cell()                 # refused for capacity even when asked again: never judged
+    assert (entry["status"], entry["detail"]["not refused as over the cap"],
+            entry["detail"]["capacity twice, unjudged"]) == (
+        certify.FAIL, [], ["c051-tos720p-360p-16x9"])
     replies.clear()
     candidate[0] = [row(clip, **budget) if clip == within[1] else r for clip, r in
                     zip(certify.parity.PARITY_SET, e0)]
@@ -360,7 +365,7 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         (400, {"error": {"code": "certify_0123456789", "param": "messages"}}),
         (400, {"error": "a sentence"}),
         # N15: capacity first - asked once more after its Retry-After, then judged
-        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"}),
+        (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "3600"}),
         (400, {"error": {"code": "unsupported_media", "param": "messages"}}),
         (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"}),
         (429, {"error": {"code": "capacity_exhausted"}}, {"retry-after": "0"})]
@@ -369,7 +374,8 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         def do_POST(self):                                   # noqa: N802 - the stdlib's name
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             seen.append((self.path, self.headers["authorization"], body))
-            status, doc, *headers = replies.pop(0)
+            status, doc, *headers = replies.pop(0) if replies else (   # a guard, not a crash
+                418, {"error": {"code": "no_reply_left"}})
             data = json.dumps(doc).encode()
             self.send_response(status)
             for name, value in (headers[0] if headers else {}).items():
@@ -388,8 +394,11 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
         video = tmp_path / "c051.mp4"
         video.write_bytes(b"\0\0\0\x18ftypmp42")
         target = {"base_url": f"http://127.0.0.1:{server.server_port}/v1", "model": "m@1"}
+        waits = []
+        monkeypatch.setattr(certify.time, "sleep", waits.append)
         answers = [certify.admission_answer(target, {"prompt": "Caption it."}, video)
                    for _ in range(7)]
+        monkeypatch.undo()
     finally:
         server.shutdown()
         server.server_close()
@@ -399,6 +408,7 @@ def test_e4b_admission_is_asked_as_bench_asks_and_only_its_code_and_param_are_ke
                        {"http_status": 400, "code": None, "param": None}, certify.OVER_CAP,
                        {"http_status": 429, "code": "capacity_exhausted", "param": None}]
     assert len(seen) == 9 and not replies                     # each 429 asked once more
+    assert waits == [60.0, 0.0]            # the header's wait, capped at 60 s ("3600", "0")
     path, auth, body = seen[0]
     assert (path, auth, body["model"]) == ("/v1/chat/completions",
                                            "Bearer sk-certify-0123456789", "m@1")
@@ -519,7 +529,7 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
         ["i3"], [])
     proved = ("MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, and "
               "1 item(s) cancelled by the interruption (the client's own tear), each terminal "
-              "after exactly one replay of its key; none cancelled by the platform (R106)")
+              "after exactly one replay of its key; 0 cancelled by the platform (R106)")
     assert certify.sop_property(first_run, second_run) == proved
     assert drill([*second_run, replay]) == [
         "cancelled items not terminal after exactly one replay: ['i3']"]
@@ -534,6 +544,16 @@ def test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay(tmp
                                        first_interrupted=True) == [
             "items cancelled by the platform (their first attempt was not the client's tear): "
             "['i3']"], kind
+        assert certify.sop_property(platform, second_run).endswith(
+            "0 item(s) cancelled by the interruption (the client's own tear), each terminal "
+            "after exactly one replay of its key; 1 cancelled by the platform (R106)"), kind
+    # verifier B1, box run2's 643711ed: an item in flight at the SIGINT has NO first-run
+    # row (bench's task is cancelled before it writes one); its key replayed, so it was
+    # sent, and the client's own exit cut it - the interruption's, and the drill passes
+    unrowed = dict(_row("i6", certify.bench.CANCELLED_REPLAY), error_code="state_conflict")
+    assert certify.cancelled_replays(first_run, [*second_run, unrowed]) == (["i3", "i6"], [])
+    assert certify.resume_problems(first_run, [*second_run, unrowed], items=6,
+                                   first_interrupted=True) == []
     jobs = ("job-i1", "job-i2", "job-i4", "job-i5")
     usage, released = [Usage(job, "0.50000000") for job in jobs], [Hold(job) for job in jobs]
     before, after = Balance(Decimal("10000"), Decimal("0")), Balance(Decimal("9998"), Decimal("1"))
