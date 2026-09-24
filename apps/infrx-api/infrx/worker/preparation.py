@@ -19,13 +19,16 @@
 4. **The count, exactly as the engine counts it**: vLLM's `POST /tokenize` on the chat body
    `VllmEngine.upstream_body` would send (the chat template; for a video, the local file and
    the pinned `mm_processor_kwargs`). The answer is checked, never replaced or estimated: an
-   integer `count` agreeing with its `tokens`, and for a video between one and 196
+   integer `count` and exactly that many `tokens` (vLLM always answers both), and for a
+   video between one and 196
    `video_token_id`s per two-frame patch of the pinned budget (`models/marlin2b/tokens.py`,
    marlin-sop.md §1.5) - one placeholder is a tokenizer that skipped the multimodal
    processor, and more than the budget is an engine not running the pinned profile. No
    answer within `PREPARATION_TIMEOUT_S`, or one that fails a check, is
    `dependency_unavailable`.
-5. `prepared(lease, refs, prompt_tokens=count)`.
+5. `prepared(lease, refs, prompt_tokens=count)`, logged at INFO with the count and the
+   tokenizer's latency (`prepared <job>: <n> prompt tokens (engine /tokenize, <ms> ms)`); a
+   lost claim is logged at INFO too, a refused attempt at WARNING.
 
 **A typed refusal anywhere prepares nothing** (a fetch or stage `not_found`, an
 `unsupported_media`, the tokenizer's `dependency_unavailable`, a count past the job's
@@ -33,12 +36,15 @@ ceiling): the lease is left to lapse, `recover` requeues the job with a fresh
 `prepare_dispatch` (R93), and the retries are bounded by `MAX_PREPUBLICATION_RETRIES` and
 `preparation_deadline_at`, past which the store settles it `preparation_failed`, released
 free (R29) - there is no port operation that fails a preparation, so the store's own
-deadline and retry bound are what end it. Anything untyped propagates: W3's crash-only
+deadline and retry bound are what end it. Anything untyped propagates - from the attempt
+or from its lease renewal (the store unreachable on `heartbeat`) - and W3's crash-only
 service drains and exits for a restart, as the inference pool does.
 
 The lease is renewed every third of `PREPARATION_LEASE_TTL_S` while the attempt runs (R52;
-the store never renews it past the phase deadline). A drain cancels an attempt still
-running at its bound: released, never prepared - the lease lapses and `recover` requeues.
+the store never renews it past the phase deadline). A typed refusal of a renewal
+(`stale_lease`, `already_terminal`) only stops renewing: the fence refuses `prepared` the
+same way. A drain cancels an attempt still running at its bound: released, never prepared -
+the lease lapses and `recover` requeues.
 """
 from __future__ import annotations
 
@@ -88,11 +94,11 @@ async def engine_prompt_tokens(engine, prepared, *,
     tokens = found.get("tokens") if isinstance(found, dict) else None
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
         raise errors.DependencyUnavailable("the engine's tokenizer answered no count")
-    if tokens is not None and (not isinstance(tokens, list) or len(tokens) != count):
+    if not isinstance(tokens, list) or len(tokens) != count:
         raise errors.DependencyUnavailable("the engine's count disagrees with its tokens")
     if budget:
         most = budget["size"]["longest_edge"] // PIXELS_PER_TOKEN
-        video = tokens.count(VIDEO_TOKEN_ID) if tokens is not None else -1
+        video = tokens.count(VIDEO_TOKEN_ID)
         if not most // TOKENS_PER_PATCH <= video <= most:
             raise errors.DependencyUnavailable(
                 f"the engine counted {video} video tokens; the pinned profile makes "
@@ -129,6 +135,9 @@ class PreparationRunner:
         try:
             lease = await self.jobs.claim_preparation(job_id, self.worker_id)
         except errors.DomainError as refused:
+            # The index is a hint (02 §4): a candidate offered twice, or a job that moved
+            # on, is a lost claim - answered, never a dead runner.
+            log.info("preparation of %s not claimed: %s", job_id, refused.code)
             return PreparationResult(job_id, refusal=refused.code, detail=str(refused))
         renewing = asyncio.create_task(self._renew(lease))
         try:
@@ -139,6 +148,9 @@ class PreparationRunner:
         finally:
             renewing.cancel()
             await asyncio.gather(renewing, return_exceptions=True)
+            died = None if renewing.cancelled() else renewing.exception()
+            if died is not None and not isinstance(died, errors.DomainError):
+                raise died                        # the store under the renewal: crash-only
         return PreparationResult(job_id, cause="prepared", prompt_tokens=count)
 
     async def _prepare(self, lease) -> int:
@@ -150,9 +162,13 @@ class PreparationRunner:
         # another organization (`not_found`), before anything is counted or stored.
         prepared = prepared_request(work.model_copy(update={"prepared_refs": refs}), 0,
                                     limits=self.limits)
+        asked = time.monotonic()
         count = await engine_prompt_tokens(self.engine, prepared,
                                            timeout_s=self.limits.preparation_timeout_s)
+        took_ms = (time.monotonic() - asked) * 1000
         await self.jobs.prepared(lease, refs, prompt_tokens=count)
+        log.info("prepared %s: %d prompt tokens (engine /tokenize, %.0f ms)", lease.job_id,
+                 count, took_ms)
         return count
 
     async def _media(self, job_id: str) -> tuple[MediaRef, ...]:
@@ -164,8 +180,9 @@ class PreparationRunner:
         return await self.media.prepare(job_id, self.media.profile_version)
 
     async def _renew(self, lease) -> None:
-        """R52: renew until cancelled. A refused renewal ends it; the fence then refuses
-        `prepared` the same way, so nothing is written for a lost lease."""
+        """R52: renew until cancelled. A typed refusal ends it (the fence then refuses
+        `prepared` the same way, so nothing is written for a lost lease); an untyped failure
+        ends it too and `run` re-raises it."""
         while True:
             await asyncio.sleep(self.renew_every_s)
             lease = await self.jobs.heartbeat(lease)

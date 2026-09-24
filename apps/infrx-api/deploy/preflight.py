@@ -207,7 +207,8 @@ TUNABLE = (
 # Tunables with a shape of their own. The runtime reads 0 here as a valid count (it refuses
 # only negatives), and serve.sh hands it to vLLM, which does not start on it: refused
 # before anything changes rather than found after the engine restart.
-TUNABLE_SHAPES = {"ENGINE_MAX_NUM_SEQS": "positive_int", "WORKER_CONCURRENCY": "positive_int"}
+TUNABLE_SHAPES = {"ENGINE_MAX_NUM_SEQS": "positive_int", "WORKER_CONCURRENCY": "positive_int",
+                  "PREPARATION_CONCURRENCY": "positive_int"}
 # Read by the runtime, never written by this installer.
 NOT_SETTABLE = {
     "CONSOLE_CURSOR_SECRET": "a signing key, and the console's rather than this gateway's "

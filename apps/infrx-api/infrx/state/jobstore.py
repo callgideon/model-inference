@@ -34,6 +34,8 @@ _ADMISSION_FIELDS = tuple(name for name in Admission.model_fields if name != "sc
 #: ponytail: a constant (7 days, the processing-cache horizon); a `PilotSettings` field when
 #: an operator needs to tune it.
 OUTBOX_RETENTION_S = 7 * 86_400.0
+#: PostgreSQL `int` (`jobs.prepared_prompt_tokens`): a larger count is refused typed here.
+INT4_MAX = 2**31 - 1
 _OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", "settlement_state",
                    "debit", "settled_at", "reconcile_after")
 
@@ -270,6 +272,11 @@ class PgJobStore:
         if prompt_tokens is not None and (isinstance(prompt_tokens, bool)
                                           or not isinstance(prompt_tokens, int)):
             raise errors.InvalidRequest("prompt_tokens must be an integer")
+        if prompt_tokens is not None and prompt_tokens > INT4_MAX:
+            # PREP-WORKER: past `int`, 0012 would raise an untyped 22003 before its own
+            # ceiling check; such a count exceeds every max_input_tokens, as the fake says.
+            raise errors.ContextLengthExceeded(
+                f"the prepared prompt ({prompt_tokens} tokens) exceeds max_input_tokens")
         doc = self._answer(await self._call("prepare", {
             "lease": lease.model_dump(mode="json"),
             "media": [ref.model_dump(mode="json") for ref in media],

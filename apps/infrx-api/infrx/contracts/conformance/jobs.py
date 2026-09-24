@@ -1035,9 +1035,9 @@ async def dur_fence__prepared_stores_the_exact_prompt_count_once(factory):
     reads it as `Work.prompt_tokens`. The preparation lease itself reads the request - and
     no count yet - through `load_work` (R46: the preparation read path). A bool or a
     non-integer count is `invalid_request`; one below 0 or above the job's
-    `max_input_tokens` (inclusive bound) is `context_length_exceeded`; a refused call changes
-    nothing - the job stays `preparing` and the same lease still prepares it. No count
-    stores none."""
+    `max_input_tokens` (inclusive bound; 2**31, past PostgreSQL's `int`, included) is
+    `context_length_exceeded` - typed, never a driver error; a refused call changes nothing -
+    the job stays `preparing` and the same lease still prepares it. No count stores none."""
     harness = factory()
     request, admission = await _admit(harness)
     lease = await harness.port.claim_preparation(request.request_id, "prep-a")
@@ -1045,13 +1045,16 @@ async def dur_fence__prepared_stores_the_exact_prompt_count_once(factory):
     assert before.request == request and before.prompt_tokens is None, before.prompt_tokens
     for bad, error in ((True, errors.InvalidRequest), ("12", errors.InvalidRequest),
                        (1.5, errors.InvalidRequest), (-1, errors.ContextLengthExceeded),
-                       (request.max_input_tokens + 1, errors.ContextLengthExceeded)):
+                       (request.max_input_tokens + 1, errors.ContextLengthExceeded),
+                       (2**31, errors.ContextLengthExceeded)):          # past PostgreSQL int
+        refused = None
         try:
             await harness.port.prepared(lease, (), prompt_tokens=bad)
-        except error as refused:
-            assert refused.code == error.code, (bad, refused.code)
-        else:
-            raise AssertionError(f"prompt_tokens={bad!r} was stored")
+        except Exception as answered:           # an untyped answer is a finding, not a crash
+            refused = answered
+        assert refused is not None, f"prompt_tokens={bad!r} was stored"
+        assert isinstance(refused, error) and refused.code == error.code, \
+            (bad, type(refused).__name__, getattr(refused, "code", None))
         left, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
         assert left.state is JobState.preparing, (bad, left.state)
     try:

@@ -52,7 +52,7 @@ from tests.m.support import mp4
 from tests.w.test_engine import Box as ClockBox
 from tests.w.test_engine import video_work
 from tests.w.test_worker_main import (Box, answer, composed, environment, fake_vllm_module,
-                                      stop_worker)
+                                      start_worker, stop_worker)
 
 COUNT = 1337              # the fake engine's count here: not its default 1200, nobody's constant
 CLIP = mp4(seconds=10.0)
@@ -96,7 +96,7 @@ class Prep:
     over an in-memory object store and a processing cache of the case's own."""
 
     def __init__(self, tmp_path, *, limits=DEFAULTS, credit: bool = False,
-                 transport=None, attach_wait_s: float = 2.0, **runner) -> None:
+                 transport=None, **runner) -> None:
         self.harness = (credit_jobstore_factory if credit else jobstore_factory)(limits)
         self.store, self.clock, self.credit = self.harness.port, self.harness.clock, credit
         self.jobs = worker_main.CreditWork(self.store) if credit else self.store
@@ -112,9 +112,10 @@ class Prep:
         self.engine = VllmEngine(client, served_model=worker_main.SERVED_MODEL,
                                  clock=self.clock, limits=limits, local_uri=self.media.local_uri,
                                  local_media_root=self.root)
+        # The product's attach wait (ATTACH_WAIT_S) and renewal cadence unless a case names
+        # its own (review L2/L6: the defaults are what the pilot runs).
         self.runner = PreparationRunner(jobs=self.jobs, media=self.media, engine=self.engine,
-                                        worker_id="prep-w", limits=limits,
-                                        attach_wait_s=attach_wait_s, **runner)
+                                        worker_id="prep-w", limits=limits, **runner)
 
     async def get(self, job_id):                   # `attachments.get`
         return self.attached.get(job_id)
@@ -168,11 +169,13 @@ def test_prep_worker__prepared_takes_a_keyword_count_on_every_adapter():
 # ------------------------------------------------------------------ the runner
 
 @pytest.mark.parametrize("credit", [False, True], ids=["legacy", "credit"])
-def test_prep_worker__a_text_job_is_queued_with_the_engines_own_count(tmp_path, credit):
+def test_prep_worker__a_text_job_is_queued_with_the_engines_own_count(tmp_path, credit, caplog):
     """A text job: the preparation lease, the request read through it (the CREDIT door in the
     CREDIT regime), the engine's `/tokenize` asked for exactly the chat body the engine will
     be sent - the served model, the rebuilt messages, the generation prompt, nothing else -
-    and its count stored by `prepared`: the inference lease holder reads it back."""
+    and its count stored by `prepared`: the inference lease holder reads it back. The worker
+    logs the preparation at INFO with the count (review J-F2)."""
+    caplog.set_level(logging.INFO, logger="infrx.worker")
     prep = Prep(tmp_path, credit=credit)
 
     async def case():
@@ -187,6 +190,10 @@ def test_prep_worker__a_text_job_is_queued_with_the_engines_own_count(tmp_path, 
     assert prep.app.tokenized == [{"model": "marlin2b", "add_generation_prompt": True,
                                    "messages": [{"role": "user",
                                                  "content": "Describe this clip."}]}]
+    logged = [record.getMessage() for record in caplog.records
+              if record.levelno == logging.INFO and record.name == "infrx.worker"]
+    assert any(line.startswith(f"prepared {request.request_id}: {COUNT} prompt tokens "
+                               "(engine /tokenize, ") for line in logged), logged
 
 
 def test_prep_worker__a_video_job_is_prepared_from_its_durable_attach(tmp_path):
@@ -286,6 +293,7 @@ TEXT_ANSWERS = {
     "negative": {"count": -1, "tokens": []},
     "text-count": {"count": "12"},
     "disagreeing": {"count": 3, "tokens": [1, 2]},
+    "no-tokens": {"count": 5},                    # review L4: vLLM always answers both
 }
 # a 12.5 s clip (the builders' ref): 26 frames, 13 two-frame patches, at most 13 x 196
 VIDEO_ANSWERS = {"unexpanded": counted(40, 1), "below-one-per-patch": counted(40, 12),
@@ -294,11 +302,11 @@ VIDEO_ANSWERS = {"unexpanded": counted(40, 1), "below-one-per-patch": counted(40
 
 @pytest.mark.parametrize("name", sorted(TEXT_ANSWERS) + sorted(VIDEO_ANSWERS))
 def test_prep_worker__the_engines_answer_is_checked_and_never_guessed(name):
-    """`/tokenize`'s answer is the count only when it is one: an integer, agreeing with its
+    """`/tokenize`'s answer is the count only when it is one: an integer and exactly that many
     tokens, and for a video between one `video_token_id` per two-frame patch and the pinned
     budget (196 per patch). Every other answer - the engine down, not JSON, no count, a bool,
-    a negative, text, a disagreement, one unexpanded placeholder, fewer than the patches,
-    more than the budget, no tokens to check - is `dependency_unavailable`, never a number."""
+    a negative, text, a disagreement, no tokens, one unexpanded placeholder, fewer than the
+    patches, more than the budget - is `dependency_unavailable`, never a number."""
     box, root = ClockBox(), "/srv/infrx-cache"
     video = name in VIDEO_ANSWERS
     work = video_work(box) if video else video_work(box, refs=(), messages=(
@@ -422,6 +430,64 @@ def test_prep_worker__the_lease_is_renewed_while_preparation_runs(tmp_path):
     assert (result.cause, result.refusal) == ("prepared", None), result
 
 
+def test_prep_worker__the_default_renewal_keeps_a_long_preparation_alive(tmp_path):
+    """Review L2: the PRODUCT cadence (every third of `PREPARATION_LEASE_TTL_S`, no injected
+    interval) keeps a preparation alive through several TTLs: 0.3 s leases, the store's
+    clock moved 1.6 s in 0.2 s steps while the engine counts, and the job is still queued."""
+    gate = {}
+
+    async def slow():
+        gate["asked"].set()
+        await gate["release"].wait()
+        return httpx.Response(200, json=counted(COUNT))
+    prep = Prep(tmp_path, limits=DEFAULTS.replace(preparation_lease_ttl_s=0.3),
+                transport=tokenizer(slow))
+
+    async def case():
+        gate.update(asked=asyncio.Event(), release=asyncio.Event())
+        request = await prep.admit()
+        attempt = asyncio.create_task(prep.runner.run(request.request_id))
+        await gate["asked"].wait()
+        for _ in range(8):
+            await asyncio.sleep(0.15)             # at least one renewal (every 0.1 s)
+            prep.clock.advance(0.2)
+        gate["release"].set()
+        return await attempt, await prep.state(request)
+
+    result, state = run(case())
+    assert (result.cause, result.refusal, state) == ("prepared", None, JobState.queued), result
+
+
+class Unreachable:
+    """The store with its `heartbeat` failing untyped (the database gone mid-attempt)."""
+
+    def __init__(self, store) -> None:
+        self.store = store
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+    async def heartbeat(self, lease):
+        raise RuntimeError("the store did not answer")
+
+
+def test_prep_worker__an_untyped_renewal_failure_is_not_swallowed(tmp_path):
+    """Review L7: an untyped failure of the lease renewal propagates out of the runner (the
+    crash-only service then drains and exits) - it is never swallowed while the attempt
+    carries on unrenewed; a typed refusal only stops the renewals."""
+    async def slow():
+        await asyncio.sleep(0.1)                  # several renewals' worth
+        return httpx.Response(200, json=counted(COUNT))
+    prep = Prep(tmp_path, transport=tokenizer(slow), renew_every_s=0.01)
+    prep.runner.jobs = Unreachable(prep.store)
+
+    async def case():
+        request = await prep.admit()
+        return await outcome(prep.runner.run(request.request_id))
+
+    assert run(case()) is RuntimeError
+
+
 # ------------------------------------------------------------------ the service
 
 class Dead(PreparationRunner):
@@ -456,20 +522,21 @@ def test_prep_worker__the_service_prepares_and_drains_its_preparation_pool(tmp_p
     and the inference pool's line is unchanged."""
     caplog.set_level(logging.WARNING, logger="infrx.worker")
     limits = DEFAULTS.replace(preparation_lease_ttl_s=0.5)
-    hang = asyncio.Event
 
-    async def answer_or_hang():
-        if flags["hang"].is_set():
-            await asyncio.Event().wait()
+    async def answer():
         return httpx.Response(200, json=counted(COUNT))
-    flags = {}
-    prep = Prep(tmp_path, limits=limits,
-                transport=tokenizer(answer_or_hang, answer_or_hang))
+
+    async def hang():
+        await asyncio.Event().wait()
+
+    async def after_the_signal():                 # answers inside the drain bound (0.5 s)
+        await asyncio.sleep(0.3)
+        return httpx.Response(200, json=counted(COUNT))
+    prep = Prep(tmp_path, limits=limits, transport=tokenizer(answer, hang, after_the_signal))
     worker = service(prep, limits)
 
     async def case():
-        flags["hang"] = hang()
-        first, second = await prep.admit(), await prep.admit()
+        first, second, third = await prep.admit(), await prep.admit(), await prep.admit()
         await worker.start()
         await prep.scheduler.enqueue(prep.candidate(first))
 
@@ -477,27 +544,57 @@ def test_prep_worker__the_service_prepares_and_drains_its_preparation_pool(tmp_p
             return await prep.state(first) is JobState.queued
         queued = await within(until(is_queued, 5.0), 6.0)
         body = await worker.readiness()
-        flags["hang"].set()
         await prep.scheduler.enqueue(prep.candidate(second))
-        busy = await within(until(_in_flight(worker), 5.0), 6.0)
+        await within(until(_in_flight(worker, 1), 5.0), 6.0)
+        await prep.scheduler.enqueue(prep.candidate(third))
+        busy = await within(until(_in_flight(worker, 2), 5.0), 6.0)
         began = time.monotonic()
         stopped = await within(worker.stop(), 5.0)
-        return first, second, queued, body, busy, time.monotonic() - began, stopped, \
-            await prep.state(second)
+        return first, second, third, queued, body, busy, time.monotonic() - began, stopped, \
+            await prep.state(second), await prep.state(third)
 
-    first, second, queued, body, busy, took, stopped, left = run(case())
+    first, second, third, queued, body, busy, took, stopped, left, done = run(case())
     assert queued is True and body["prepare_claimed"] == 1, (queued, body)
     assert busy and stopped != "timed out" and took < 3.0, (busy, stopped, took)
-    assert left is JobState.preparing
+    assert (left, done) == (JobState.preparing, JobState.queued), (left, done)
     lines = [record.getMessage() for record in caplog.records]
-    assert f"drained preparation: 1 finished, 1 released ['{second.request_id}'], ended []" \
-        in lines, lines
+    assert (f"drained preparation: 1 finished, 1 released ['{second.request_id}'], "
+            f"ended [('{third.request_id}', 'prepared')]") in lines, lines
     assert "drained: 1 finished, 0 released [], ended []" in lines, lines
 
 
-def _in_flight(worker):
+def test_prep_worker__a_candidate_offered_twice_is_a_lost_claim_not_a_dead_runner(tmp_path):
+    """Review L1: the index is a hint (02 §4) - a relay redelivery or a reconciler repair can
+    offer one job's `prepare_dispatch` twice. The second claim is refused `not_claimable` and
+    answered: no runner dies, the service stays live, the job is prepared once."""
+    prep = Prep(tmp_path)
+    worker = service(prep)
+
+    async def case():
+        request = await prep.admit()
+        await worker.start()
+        for _ in range(2):
+            await prep.scheduler.enqueue(prep.candidate(request))
+
+        async def both_answered():
+            return len(worker.preparation.results) == 2
+        answered = await within(until(both_answered, 5.0), 6.0)
+        body = await worker.readiness()
+        died = list(worker._died())
+        await worker.stop()
+        return request, answered, body, died
+
+    request, answered, body, died = run(case())
+    outcomes = sorted((result.cause or "", result.refusal or "")
+                      for result in worker.preparation.results)
+    assert answered is True and outcomes == [("", "not_claimable"), ("prepared", "")], outcomes
+    assert died == [] and body["live"] is True, (died, body)
+    assert prep.store.jobs[request.request_id].preparation_attempts == 1
+
+
+def _in_flight(worker, count: int = 1):
     async def check():
-        return (await worker.readiness())["preparing"] == 1
+        return (await worker.readiness())["preparing"] == count
     return check
 
 
@@ -559,6 +656,22 @@ def test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup(tmp_p
     assert refused is RuntimeMisconfigured
 
 
+def test_prep_worker__a_zero_preparation_pool_refuses_startup_by_name(tmp_path):
+    """Review L3: `PREPARATION_CONCURRENCY=0` cannot start a preparation pool, so the worker
+    process refuses it before anything binds - exit 2, the setting named, no traceback, as
+    `WORKER_CONCURRENCY` - and the installer refuses the value first (`positive_int`)."""
+    from tests.i.support import preflight
+    log = tmp_path / "zero.log"
+    process = start_worker(environment(tmp_path, INFRX_MODE="dev",
+                                       PREPARATION_CONCURRENCY="0"), log)
+    code, text = process.wait(timeout=60), log.read_text()
+    assert code == worker_main.REFUSED and "PREPARATION_CONCURRENCY" in text \
+        and "Traceback" not in text, (code, text)
+    refused = preflight.tunables(("PREPARATION_CONCURRENCY=0",), {})
+    assert [problem for problem in refused if "positive_int" in problem], refused
+    assert preflight.tunables(("PREPARATION_CONCURRENCY=2",), {}) == []
+
+
 # --- on PostgreSQL: the D harness, a Valkey and a MinIO of the lane's own ------------
 
 @pytest.fixture
@@ -618,6 +731,8 @@ def test_prep_worker_pg__the_worker_process_prepares_and_runs_an_admitted_job(bo
     usage = box.conn.execute("select prompt_tokens, accounting_regime from "
                              "public.usage_events where id = %s", (request_id,)).fetchone()
     assert usage == (COUNT, "credit") and status["usage"]["prompt_tokens"] == COUNT
+    assert f"INFO infrx.worker prepared {request_id}: {COUNT} prompt tokens (engine /tokenize, " \
+        in log, log                                          # review J-F2: the log proves it
     assert stop_worker(box.worker) == 0, box.log.read_text()
     assert "drained preparation: 2 finished, 0 released [], ended []" in box.log.read_text()
 
@@ -659,3 +774,53 @@ def test_prep_worker_pg__sigterm_releases_a_preparation_and_the_next_worker_prep
     assert left[:3] == ("preparing", None, None), left
     assert status and status["state"] == "succeeded", (status, box.log.read_text())
     assert job_row(box, request_id) == ("succeeded", "completed", COUNT, 2, 0)
+
+
+def test_prep_worker_pg__a_tokenize_count_that_disagrees_with_the_usage_settles_at_the_usage(
+        box):
+    """Review L8: the stored count and the settled usage are one number only while the engine
+    tokenizes as it generates. With E2's fake answering `/tokenize` 1000 while its chat route
+    reports 1337 prompt tokens, the job is prepared with 1000 (`prepared_prompt_tokens`: the
+    context check's number) and SETTLED at the engine's usage, 1337 (D5 charges usage, never
+    the prepared count) - so a tokenizer that disagrees mis-states the context check, not the
+    charge."""
+    box.start_engine()
+    box.engine.control(prompt_tokens=COUNT, tokenize_count=1000)
+    box.start_worker()
+
+    async def case():
+        await answer(box.port, "/readyz", 200, within_s=60)
+        async with box.relay(), httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=box.gateway()), base_url="http://gw") as client:
+            handle, request_id = await box.admit(client)
+            return request_id, await terminal(client, handle)
+
+    request_id, status = run(case())
+    assert status and status["state"] == "succeeded", (status, box.log.read_text())
+    assert job_row(box, request_id) == ("succeeded", "completed", 1000, 1, 0)
+    usage = box.conn.execute("select prompt_tokens from public.usage_events where id = %s",
+                             (request_id,)).fetchone()
+    assert usage == (COUNT,) and status["usage"]["prompt_tokens"] == COUNT, (usage, status)
+
+
+def test_prep_worker_pg__a_count_past_postgresql_int_is_context_length_exceeded():
+    """Review L4: a count PostgreSQL's `int` cannot hold is refused typed
+    (`context_length_exceeded`, as the fake answers), never an untyped driver error that
+    would kill the worker; the job stays `preparing`."""
+    from tests.d import pgharness, pgstore
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"PREP-WORKER: the D harness is unavailable: {reason}")
+
+    async def case():
+        harness = pgstore.factory()
+        harness.extra["grant"](b.ORG_A, "25.00")
+        request = b.request(harness)
+        admission = await harness.port.admit(request, b.idem(request), ())
+        lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+        refused = await outcome(harness.port.prepared(lease, (), prompt_tokens=2**31))
+        left, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+        return refused, left.state
+
+    refused, state = run(case())
+    assert (refused, state) == (errors.ContextLengthExceeded, JobState.preparing), refused
