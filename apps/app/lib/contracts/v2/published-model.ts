@@ -36,6 +36,8 @@ export const STORED_CONTENT = [
 ] as const;
 export type StoredContent = (typeof STORED_CONTENT)[number];
 
+// v1's `EXECUTION_MODES` (`../types.ts`), restated: importing it would make an import cycle once
+// `v2/types.ts` re-exports this module. The test holds the two equal.
 export const EXECUTION_MODES = ["sync", "stream", "async"] as const;
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 

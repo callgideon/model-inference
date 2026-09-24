@@ -5,8 +5,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { EXECUTION_MODES as V1_EXECUTION_MODES } from "../../../lib/contracts/types.ts";
 import {
   ContractRefusal,
+  EXECUTION_MODES,
   canonicalJson,
   parsePublishedModel,
   parseServingProfile,
@@ -129,4 +131,9 @@ test("the unlabelled id takes the highest listing; a pin keeps its revision", ()
   };
   assert.equal(resolveModel("nemostation/marlin-2b", [old, newer]), newer);
   assert.equal(resolveModel("nemostation/marlin-2b@2026-09-01", [old, newer]), old);
+});
+
+test("the execution-mode vocabulary is v1's, restated only to avoid an import cycle", () => {
+  // Oracle: a mode added to one list and not the other (v2/types.ts is re-exported by types.ts).
+  assert.deepEqual([...EXECUTION_MODES], [...V1_EXECUTION_MODES]);
 });
