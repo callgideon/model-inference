@@ -76,6 +76,8 @@ class World:
     limits: Any = DEFAULTS
     failures: FailurePlan = dataclasses.field(default_factory=FailurePlan)
     grant: str = "100"
+    # The app's `Settings` (G7: `/v1/models` projects them); None is `support.settings()`.
+    config: Any = None
 
     def __post_init__(self) -> None:
         if self.regime == CREDIT:
@@ -117,7 +119,7 @@ class World:
                                   probe=probe, job_org=self.relay.job_org)
         self.relay.media = self.media
         self.app, _ = support.cutover_app(
-            clock=self.now_s, sb=support.supabase(rows=(self.row,)),
+            self.config, clock=self.now_s, sb=support.supabase(rows=(self.row,)),
             ingress_deps=support.deps(accept=self.relay.accept, catalog=self.catalog))
 
     @staticmethod
