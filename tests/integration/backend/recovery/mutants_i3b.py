@@ -201,12 +201,13 @@ MUTANTS += (
     # D3: the PENDING probes are structural - an adapter or entry point of any name flips them
     # i3bm39 (rc05b's adapter probe) is retired: M1-L2's S3ObjectStore merged, so rc05b runs
     # (E3B phase 3; e3bm68 kills its body).
-    # Anchored on the future import, not on loop.py's last line: W3's merge (65e2c99) changed
-    # that line and made this mutant stale; a module-level guard anywhere is the shape.
-    Mutant("i3bm57", "D3: rc08b fails once any worker module runs as a script",
-           "apps/infrx-api/infrx/worker/loop.py", "from __future__ import annotations\n",
-           "from __future__ import annotations\n\nif __name__ == \"__main__\":\n"
-           "    pass\n", DRILLS, "rc08b"),
+    # i3bm57 (rc08b's structural probe: any worker module run as a script) is retired with
+    # the pending it pinned: I2B-R4's entry point exists and rc08b drives it. Its body:
+    Mutant("i3bm117", "OPS-RECOVER: SIGTERM drains the worker process's in-flight attempt "
+                      "and it exits 0", "apps/infrx-api/infrx/worker/__main__.py",
+           "        await service.serve()\n",
+           "        await service.start()\n        await asyncio.Event().wait()\n",
+           DRILLS, "rc08b"),
     # DR-4: the pending ids are honest - refused when unknown, pinned per drill
     Mutant("i3bm99", "DR-4: kit.pending refuses an id outside the vocabulary", KIT,
            "    unknown = [task for task in ids if task not in PENDING]\n",

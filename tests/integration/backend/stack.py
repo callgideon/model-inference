@@ -53,7 +53,7 @@ if importlib.util.find_spec("infrx") is None:
 # (tasks.json implemented/integrated) is a blocker of an E3B case; the ones still listed are
 # `RESIDUAL`, kept only for I3B's recovery cases, which are read-only here and extend this
 # vocabulary (`recovery/recoverykit.PENDING`), with owner references that are no task
-# (`recoverykit.OWNERS`, e.g. `I2B-R4`: never an E3B blocker, never stale).
+# (`recoverykit.OWNERS`, none left since I2B-R4: never an E3B blocker, never stale).
 # `test_stage.py` holds all of them to tasks.json.
 #
 # E3B's own owner references (R3-1): work no task schedules, named by what it is and who

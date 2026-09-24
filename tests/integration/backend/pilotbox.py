@@ -3,7 +3,7 @@ worker - each its own OS process, so a journey calls the gateway over real HTTP 
 restart is a real restart (rc03).
 
     python tests/integration/backend/pilotbox.py gateway     # the environment: stack.pilot_env
-    python tests/integration/backend/pilotbox.py worker      #   + INFRX_E3B_* below
+    python -m infrx.worker                                   #   + INFRX_E3B_* below
 
 **gateway** - `infrx.gateway.app.create_app()` from the environment, served by uvicorn: the
 five mounted routers and the stores built from settings (`pilot.adapters_from_env`: D5's
@@ -29,13 +29,15 @@ preparation lease in the product yet. A `WorkerLoop` on the preparation kind cla
 and the fake engine's prompt count.
 
 **worker** - ALWAYS a process of its own (review J2; M's pilot-media merge made it
-possible for video): W3's `WorkerService` over W2's `WorkerLoop`/`AttemptRunner` and W's
-`VllmEngine` against E2's fake vLLM (`INFRX_E3B_ENGINE_URL`), on the same clone, journal
-and index, with `local_uri` from a `MediaPreparation` of its own over the object store
-built from settings and the shared `PROCESSING_CACHE_DIR` (M: the cache is found on disk by
-content hash): what I2B-R4's `python -m infrx.worker` would compose, which does not exist
-yet. Its one emulated seam is W request 5 (D5): W's runner speaks the v1 port, and a CREDIT
-job's doors are `load_work_credit`/`complete_credit` - `CreditWork` routes the two calls.
+possible for video), and since I2B-R4 the product's: `python -m infrx.worker`, composed from
+the same environment by the pilot's own composition root - W3's `WorkerService` over W2's
+loop and runner, W's `VllmEngine` on `UPSTREAM` (E2's fake vLLM), D's stores on one pool,
+`local_uri` from a `MediaPreparation` over the object store built from settings and the
+shared `PROCESSING_CACHE_DIR` (M: found on disk by content hash), W request 5's
+`CreditWork`, and its loopback `/readyz` on `WORKER_HEALTH_PORT`, which `start` waits for.
+Nothing of it is emulated here any more. The one thing the box chooses for it is the index
+namespace: the worker reads the pilot's (`infrx:sched:{pilot}`, Q2's default), so the
+gateway's index is put there too, and `close` removes it like every E2 key.
 """
 from __future__ import annotations
 
@@ -59,15 +61,15 @@ import harness                                          # noqa: E402
 if importlib.util.find_spec("infrx") is None:
     harness.api_on_path()
 
-PORT_ENV, INDEX_ENV, ENGINE_ENV, CALLS_ENV = (
-    "INFRX_E3B_GATEWAY_PORT", "INFRX_E3B_INDEX_NAMESPACE", "INFRX_E3B_ENGINE_URL",
-    "INFRX_E3B_CALLS")
+PORT_ENV, INDEX_ENV, CALLS_ENV = (
+    "INFRX_E3B_GATEWAY_PORT", "INFRX_E3B_INDEX_NAMESPACE", "INFRX_E3B_CALLS")
+# Where `python -m infrx.worker` looks for candidates: Q2's ValkeyScheduler default.
+PILOT_NAMESPACE = "infrx:sched:{pilot}"
 MEDIA_HOST = "media.e3b3.example"
 PUBLIC_ADDRESS = "93.184.216.34"          # what MEDIA_HOST resolves to (G2's own choice)
 # The fake engine counts every prompt as this many tokens; the emulated preparation reports
 # the same, so the worker's context check and the settled usage agree (no tokenizer here).
 PROMPT_TOKENS = 1200
-SERVED_MODEL = "infrx-e2/fake-vllm"
 log = logging.getLogger("e3b3.pilotbox")
 
 
@@ -75,12 +77,13 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class Wall:
-    """The worker's clock: the wall (the store fences on the database clock regardless)."""
+def free_port() -> int:
+    """A loopback port nobody holds now, for the worker's readiness listener."""
+    import socket
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
-    @staticmethod
-    def now() -> datetime:
-        return utc_now()
 
 
 def clip() -> bytes:
@@ -203,72 +206,6 @@ async def gateway() -> None:
         await asyncio.gather(preparing, return_exceptions=True)
 
 
-# ------------------------------------------------------------------ the worker process
-
-class CreditWork:
-    """W request 5 (D5), emulated: W's runner calls `load_work`/`complete`; a CREDIT job's
-    doors are `load_work_credit`/`complete_credit`. Every other call is the store's own."""
-
-    def __init__(self, store) -> None:
-        self.store = store
-
-    def __getattr__(self, name):
-        return getattr(self.store, name)
-
-    async def load_work(self, lease):
-        from infrx.state.jobstore import PreparedWork
-        work = await self.store.load_work_credit(lease)
-        # A CREDIT job has no USD price snapshot, and W's runner reads none: the v1 record
-        # is built without it rather than with an invented one.
-        return PreparedWork.model_construct(
-            request=work.request.request, media_refs=work.media_refs,
-            prepared_refs=work.prepared_refs, budgets=work.budgets,
-            prompt_tokens=work.prompt_tokens)
-
-    async def complete(self, lease, outcome):
-        settled, _settlement = await self.store.complete_credit(lease, outcome)
-        return settled
-
-
-def worker_service(pilot, store, stream, queue, local_uri):
-    """W3's service over W2's loop and runner and W's engine, on the given store."""
-    import httpx
-
-    from infrx.worker import AttemptRunner, VllmEngine, WorkerLoop, WorkerService
-    jobs = CreditWork(store)
-    engine = VllmEngine(httpx.AsyncClient(base_url=os.environ[ENGINE_ENV],
-                                          timeout=httpx.Timeout(600, connect=10)),
-                        served_model=SERVED_MODEL, clock=Wall, limits=pilot,
-                        local_uri=local_uri)
-    runner = AttemptRunner(jobs=jobs, stream=stream, engine=engine, clock=Wall,
-                           worker_id="e3b3-worker",
-                           count_prompt_tokens=lambda work: work.prompt_tokens,
-                           put_result=store.put_result, limits=pilot)
-    return WorkerService(loop=WorkerLoop(scheduler=queue, runner=runner,
-                                         worker_id="e3b3-worker", limits=pilot),
-                         jobs=jobs, engine=engine, concurrency=4, health_port=None)
-
-
-async def worker() -> None:
-    from infrx.config import from_env
-    from infrx.gateway import pilot as composition
-    from infrx.media.prepare import MediaPreparation, ProcessingCache
-    from infrx.state.jobstore import PgJobStore, connector
-    from infrx.state.journal import PgStreamStore
-    settings = from_env()
-    pilot = settings.pilot
-    connect = connector(pilot.database_url)
-    # M's pilot-media lane: its cache index starts empty, and `local_uri` finds a file the
-    # gateway's preparation wrote by the ref's content hash on the shared directory.
-    media = MediaPreparation(composition.object_store(settings), limits=pilot,
-                             cache=ProcessingCache(pilot.processing_cache_dir,
-                                                   ttl_s=pilot.processing_cache_ttl_s))
-    service = worker_service(pilot, PgJobStore(connect, limits=pilot),
-                             PgStreamStore(connect, limits=pilot), index(pilot),
-                             media.local_uri)
-    await service.serve()
-
-
 # ------------------------------------------------------------------ the test's side
 
 class PilotBox:
@@ -276,12 +213,19 @@ class PilotBox:
     stop takes everything it spawned; a crashed run leaves nothing on a task-local port."""
 
     def __init__(self, env: dict[str, str], engine_url: str, workdir: Path,
-                 port: int, namespace: str) -> None:
+                 port: int, namespace: str = PILOT_NAMESPACE) -> None:
         import stack
         inherited = {name: value for name, value in os.environ.items()
                      if name not in stack.AWS_UNSET}
+        self.worker_port = free_port()
+        # Both processes resolve `infrx` as the gateway always did (`api_on_path` only when
+        # nothing else provides it): E's mutation runner's copy on PYTHONPATH first, the
+        # checkout's package after it - never this process's module, which fake_vllm.py
+        # may have imported from the real checkout, and never a package beside their cwd.
+        path = os.pathsep.join(filter(None, (inherited.get("PYTHONPATH"), str(harness.API_ROOT))))
         self.env = {**inherited, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
-                    ENGINE_ENV: engine_url, CALLS_ENV: str(workdir / "calls.log"),
+                    CALLS_ENV: str(workdir / "calls.log"), "UPSTREAM": engine_url,
+                    "WORKER_HEALTH_PORT": str(self.worker_port), "PYTHONPATH": path,
                     "PYTHONUNBUFFERED": "1"}
         self.workdir, self.port, self.namespace = workdir, port, namespace
         self.processes: dict[str, subprocess.Popen] = {}
@@ -291,34 +235,41 @@ class PilotBox:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
 
+    def command(self, role: str) -> tuple[list[str], str]:
+        """What runs `role` (from the repository root, `infrx` on PYTHONPATH) and the
+        readiness it answers on: the worker is I2B-R4's entry point."""
+        if role == "worker":
+            return ([sys.executable, "-m", "infrx.worker"],
+                    f"http://127.0.0.1:{self.worker_port}/readyz")
+        return [sys.executable, str(Path(__file__).resolve()), role], self.url + "/readyz"
+
     def start(self, role: str, timeout: float = 60.0) -> None:
         self.starts[role] += 1
+        argv, ready = self.command(role)
         logfile = open(self.workdir / f"{role}-{self.starts[role]}.log", "wb")
         self.processes[role] = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), role], env=self.env,
-            stdout=logfile, stderr=subprocess.STDOUT, start_new_session=True,
-            cwd=str(harness.REPO_ROOT))
+            argv, env=self.env, stdout=logfile, stderr=subprocess.STDOUT,
+            start_new_session=True, cwd=str(harness.REPO_ROOT))
         logfile.close()
-        if role == "gateway":
-            self._wait_ready(timeout)
+        self._wait_ready(role, ready, timeout)
 
-    def _wait_ready(self, timeout: float) -> None:
+    def _wait_ready(self, role: str, url: str, timeout: float) -> None:
         import httpx
         end, last = time.monotonic() + timeout, ""
         while time.monotonic() < end:
-            if self.processes["gateway"].poll() is not None:
-                raise RuntimeError(f"the gateway exited {self.processes['gateway'].returncode}: "
-                                   f"{self.tail('gateway')}")
+            if self.processes[role].poll() is not None:
+                raise RuntimeError(f"the {role} exited {self.processes[role].returncode}: "
+                                   f"{self.tail(role)}")
             try:
-                answer = httpx.get(self.url + "/readyz", timeout=2.0)
+                answer = httpx.get(url, timeout=2.0)
                 if answer.status_code == 200:
                     return
                 last = f"{answer.status_code} {answer.text[:200]}"
             except httpx.HTTPError as exc:
                 last = type(exc).__name__
             time.sleep(0.1)
-        raise RuntimeError(f"the gateway was not ready within {timeout}s: {last} "
-                           f"{self.tail('gateway')}")
+        raise RuntimeError(f"the {role} was not ready within {timeout}s: {last} "
+                           f"{self.tail(role)}")
 
     def tail(self, role: str, lines: int = 12) -> str:
         path = self.workdir / f"{role}-{self.starts[role]}.log"
@@ -358,16 +309,13 @@ def pilot_box(database: str, workdir: Path, rest_url: str, engine_url: str):
     """The gateway and the worker over `database`, until the block ends. The clone's test
     clock (frozen by the conformance rig) is handed back to the wall first: two processes
     and a database agree on "now" only as they do on the pilot box."""
-    import uuid
-
     import psycopg
 
     import stack
     with psycopg.connect(harness.pg_dsn(database), autocommit=True) as conn:
         conn.execute("select infrx_test.unfreeze(), infrx_test.set_offset(0)")
     env = stack.pilot_env(database, workdir, rest_url)
-    box = PilotBox(env, engine_url, workdir, stack.GATEWAY_PORT,
-                   f"{harness.VALKEY_PREFIX}{{e3b3-{uuid.uuid4().hex}}}")
+    box = PilotBox(env, engine_url, workdir, stack.GATEWAY_PORT)
     try:
         box.start("worker")
         box.start("gateway")
@@ -542,10 +490,9 @@ def journey(workdir: Path):
 
 def main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    role = argv[1] if len(argv) > 1 else ""
-    if role not in ("gateway", "worker"):
-        raise SystemExit("usage: pilotbox.py gateway|worker")
-    asyncio.run(gateway() if role == "gateway" else worker())
+    if argv[1:] != ["gateway"]:
+        raise SystemExit("usage: pilotbox.py gateway (the worker is python -m infrx.worker)")
+    asyncio.run(gateway())
     return 0
 
 

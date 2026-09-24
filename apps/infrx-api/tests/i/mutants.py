@@ -779,6 +779,20 @@ MUTANTS += (
        MIG + "refuses_a_history_it_cannot_explain"),
 )
 
+# --- I2B-R4: the worker's readiness port, one value for the runtime and both probes -------
+WORKER_PORT = "test_backend_deploy__the_worker_readiness_port_is_one_value_the_installer_never_writes"
+MUTANTS += (
+    _m("worker_port_settable", "the installer never writes the worker's readiness port",
+       P, '    "WORKER_HEALTH_PORT": "the worker', '    "WORKER_HEALTH_PORT_": "the worker',
+       WORKER_PORT),
+    _m("worker_ready_port_drift", "wait_ready probes the port the worker binds",
+       "deploy/lib.sh", "WORKER_READY=http://127.0.0.1:${WORKER_HEALTH_PORT:-8002}/readyz",
+       "WORKER_READY=http://127.0.0.1:${WORKER_HEALTH_PORT:-8003}/readyz", WORKER_PORT),
+    _m("worker_port_default_drift", "the runtime's default is the probes' 8002",
+       "infrx/config.py", "    worker_health_port: int = 8002\n",
+       "    worker_health_port: int = 8003\n", WORKER_PORT),
+)
+
 # --- I2B.c: the rollout scripts (paths relative to apps/infrx-api in the copy) ---------
 SSM, STEP = "../../infra/rollout/ssm.sh", "../../infra/rollout/steps/"
 MUTANTS += (

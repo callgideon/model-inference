@@ -46,8 +46,9 @@ caddy_reload() {
 }
 
 # Readiness per mode. pilot: the gateway's /readyz (G2) and the worker's loopback /readyz
-# (W3's WorkerService: engine up, pool running, not draining) on WORKER_HEALTH_PORT, whose
-# name and default 8002 are W3's request to the coordinator. dev: the generic /health.
+# (W3's WorkerService: engine up, pool running, not draining) on WORKER_HEALTH_PORT
+# (`python -m infrx.worker`, I2B-R4; 08 §5.1, default 8002, never --set). dev: the generic
+# /health.
 WORKER_READY=http://127.0.0.1:${WORKER_HEALTH_PORT:-8002}/readyz
 wait_ready() {
   if [ "$1" = pilot ]; then
