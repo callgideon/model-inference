@@ -10,6 +10,8 @@ import os
 
 import pytest
 
+from tests.i import support
+
 from . import loop_mutants, mutants as w1_list, w3_mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
@@ -48,6 +50,7 @@ def test_every_w3_case_is_covered_by_a_mutant_and_every_named_case_exists():
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
     result = mutation_list.run(mutant)
+    support.blocked_off_linux(result)              # E2C (RV-12)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
                            f"{result.detail}. The cases {list(mutant.cases)} do not prove "
                            f"what they claim.")

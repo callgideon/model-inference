@@ -180,6 +180,7 @@ if "-w" in args:
 """
 
 
+@support.LINUX_USERLAND
 def test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line(tmp_path):
     """Every key the external check uses reaches curl in a header file, so none is ever an
     argument (visible in `ps` and /proc on the coordinator host) or printed; the key is

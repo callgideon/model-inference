@@ -118,6 +118,7 @@ def test_backend_deploy__the_image_runs_nothing_as_root():
 
 
 # --- the units -------------------------------------------------------------------------
+@support.LINUX_USERLAND
 def test_backend_deploy__the_units_are_valid_systemd():
     """`systemd-analyze verify` over every shipped unit. The only tolerated complaint is
     the engine script's absolute path, which exists on the box and not on this host."""

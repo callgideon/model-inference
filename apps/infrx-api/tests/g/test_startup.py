@@ -9,6 +9,8 @@ composition root, and this router refusing to register - and the last group pins
 that the composition root serves chat through the metered ingress alone.
 """
 import asyncio
+import functools
+import pathlib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +19,7 @@ from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import chat, health, ingress, jobs, models, uploads
+from infrx.observe import host
 from infrx.observe import route as metrics
 from infrx.scheduling.memory import MemoryScheduler
 
@@ -162,7 +165,18 @@ def test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_on
     ingress.assert_route_table(app)
 
 
-def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as():
+def fixture_host(monkeypatch, root: pathlib.Path) -> None:
+    """E2C (RV-12): the scrape reads a fixture procfs, not this machine's `/proc`, so a case
+    about the build gauge runs on any developer host. `collect_host(proc=...)` is the seam
+    host.py already exposes; the Linux reading itself is the next case's, not this one's."""
+    (root / "self").mkdir(parents=True)
+    (root / "meminfo").write_text("MemTotal:  4096 kB\nMemAvailable:  1024 kB\n")
+    (root / "self" / "status").write_text("VmRSS:  512 kB\n")
+    monkeypatch.setattr(metrics, "collect_host",
+                        functools.partial(host.collect_host, proc=str(root), gpu=False))
+
+
+def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as(monkeypatch, tmp_path):
     """E4B's served-build check: /metrics (loopback only) carries
     `infrx_build_info{revision, image} 1` from the settings the installer wrote
     (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`), set at startup and never read from git at runtime.
@@ -174,6 +188,7 @@ def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as():
 
     from infrx.contracts.limits import MODES
 
+    fixture_host(monkeypatch, tmp_path / "proc")
     body = local(pilot_app()).get("/metrics").text
     build = (f'infrx_build_info{{process="gateway",revision="{support.RELEASE}",'
              f'image="{support.IMAGE}"}} 1.0')
@@ -196,6 +211,21 @@ def test_ops_recover__the_gateway_exposes_the_build_it_was_installed_as():
     dev = support.settings("dev", deployment=support.BUILD.replace(infrx_release_sha="",
                                                                    infrx_image=""))
     assert "infrx_build_info{" not in local(pilot_app(dev)).get("/metrics").text
+
+
+@pytest.mark.skipif(not pathlib.Path("/proc/meminfo").exists(),
+                    reason="BLOCKED platform prerequisite: Linux procfs (/proc/meminfo); the "
+                           "deployed gateway runs on Linux - tests/integration/ENVIRONMENT.md")
+def test_ops_recover__metrics_read_the_linux_host_the_gateway_runs_on():
+    """E2C (RV-12): production keeps the real reading. On Linux the unpatched scrape reports
+    this host's memory from `/proc/meminfo` and the process's resident set from
+    `/proc/self/status` - the values the HostMemoryLow alert is evaluated on."""
+    samples = dict(line.rsplit(" ", 1) for line in local(pilot_app()).get("/metrics").text
+                   .splitlines() if line and not line.startswith("#"))
+    total = float(samples['infrx_host_memory_bytes{process="gateway",state="total"}'])
+    available = float(samples['infrx_host_memory_bytes{process="gateway",state="available"}'])
+    resident = float(samples['infrx_process_resident_bytes{process="gateway"}'])
+    assert 0 < available <= total and 0 < resident < total, (total, available, resident)
 
 
 def test_f_base__the_route_table_is_asserted_after_every_router_mounted():

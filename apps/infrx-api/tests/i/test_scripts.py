@@ -161,6 +161,7 @@ def backups(host) -> list[pathlib.Path]:
 
 
 # --- install.sh: refusals ------------------------------------------------------------
+@support.LINUX_USERLAND
 def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_path,
                                                                           monkeypatch):
     """DEPLOY-FAILCLOSED end to end through the deploy script: a denied secret read, and
@@ -211,6 +212,7 @@ def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monk
 
 
 # --- install.sh: success -------------------------------------------------------------
+@support.LINUX_USERLAND
 def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkeypatch):
     """BACKEND-DEPLOY, fresh target: the image built from the commit is the one the probe
     ran in and the one written for the units; the units are the repository's bytes; the
@@ -243,6 +245,7 @@ def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkey
     assert "etc/systemd/system/infrx-worker.service" in (backup / "absent").read_text()
 
 
+@support.LINUX_USERLAND
 def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
         tmp_path, monkeypatch):
     """Pilot order (infra/README.md §7): the index and the engine, then the runtime, then
@@ -283,6 +286,7 @@ def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
     assert not [e for e in bad.of("docker") if "caddy reload" in e or "run -d" in e]
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone(tmp_path,
                                                                         monkeypatch):
     """A runtime that never answers /readyz is exit 4 naming the backup to roll back
@@ -312,6 +316,7 @@ def _pilot_host(tmp_path, monkeypatch) -> Host:
     return host
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
                                                                        monkeypatch):
     """pause: the active site becomes maintenance (so a Caddy restart keeps it) and is
@@ -350,6 +355,7 @@ def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
 
 
 # --- rollback.sh -------------------------------------------------------------------------
+@support.LINUX_USERLAND
 def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatch):
     """After a dev install over the monolith, rollback.sh puts the previous env file and
     gateway unit back byte for byte, removes (and disables) the units that did not exist,
@@ -374,6 +380,7 @@ def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatc
     assert not [e for e in host.events if e.startswith("systemctl restart marlin2b-vllm")]
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__an_install_never_writes_into_an_existing_backup(tmp_path, monkeypatch):
     """Two installs stamped with the same time must not share a backup directory: the
     second would overwrite the first's copy of the replaced files, and a refused one would
@@ -390,6 +397,7 @@ def test_ops_recover__an_install_never_writes_into_an_existing_backup(tmp_path, 
     assert backups(host) == [backup] and (backup / "files.tar").read_bytes() == first
 
 
+@support.LINUX_USERLAND
 def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime(
         tmp_path, monkeypatch):
     """infra/README.md §8: a host that served pilot is not rolled back to a runtime that
@@ -441,6 +449,7 @@ def _in_order(events, *expected):
     assert positions == sorted(positions), (expected, events)
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp_path,
                                                                               monkeypatch):
     """Runbook R2, in runbook order, with the steps' own lines: 30-pause makes maintenance
@@ -470,6 +479,7 @@ def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp
     assert "systemctl restart marlin2b-vllm" in events[:-2], events
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp_path,
                                                                              monkeypatch):
     """Step 8 can fail on the engine itself ("the engine is not healthy"), and the restored
