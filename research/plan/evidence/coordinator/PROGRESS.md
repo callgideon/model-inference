@@ -1,10 +1,10 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-24 23:02Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 11, updated 2026-09-24 23:02Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-24 23:04Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 13, updated 2026-09-24 23:04Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `179a1a0b`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `bba27b02`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V0 current evidence; bands with active work: V0, V1, V2, V3, V4.
 - Agent slots: 16 total, 11 active lanes, 2 reserved.
@@ -130,7 +130,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | E2C | E2C all | running | codex/e2c-verify | dff31efc → — | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-24 21:40Z | Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | F2C-L | F2C d | review | codex/f2c-lifecycle | dff31efc → 76d966cc | none | 2026-09-24 23:00Z | slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table | 0.5–3 h remaining (likely 1 h), confidence medium, estimated 2026-09-24 23:00Z; basis: a, b, d delivered and green; only review fixes remain |
 | F2C-C | F2C c | complete | codex/f2c-catalog | dff31efc → b8de6171 | none | 2026-09-24 22:36Z | merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:36Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171) |
-| E1C | E1C E1C.1-E1C.4 + coordinator update 1 (S3 F5, F8/P-24) | review | codex/e1c-client | dff31efc → 2531dc49 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 22:15Z | UPLOAD-RESTART needs M5 durable uploads (codex/m5-uploads empty at 22:05Z); hosted smoke is the coordinator's (command in the evidence) | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-09-24 22:15Z; basis: UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds |
+| E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | review | codex/e1c-client | dff31efc → f928103a | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 23:00Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 2–7 h remaining (likely 4 h), confidence medium, estimated 2026-09-24 23:00Z; basis: UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; one more review round |
 | I8 | I8 1-7 (code/config half) | review | codex/i8-operate | dff31efc → 103d20a8 | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-24 22:58Z | P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-24 22:58Z; basis: code half done and tested; left: coordinator ops O1-O14 (two ~1 h maintenance windows), I8 follow-ups after WR-I8-1..5 land (~1-2 h), inputs P-25/D10 outside the lane |
 | D10 | D10 all (SQL writer) | running | codex/d10-durable | dff31efc → — | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-24 21:58Z | Wire 0010 media_uploads and jobs.result_expires_at (S3 F9); role-bound login or SET LOCAL (F6); P-02 USD inventory with G8. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | M5 | M5 all | running | codex/m5-uploads | dff31efc → — | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-24 21:58Z | Durable upload lifecycle across gateway replacement; wire media_uploads (S3 F9). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
@@ -143,7 +143,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: E1C, I8, F2C-L.
+- Review queue: I8, F2C-L, E1C.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -192,6 +192,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 ## Rejected updates
 
 - `S3-20260924T2150Z.json`: stale: at 2026-09-24T21:50:00Z is not newer than lane S3 state 2026-09-24T21:58:00Z
+- `E1C-20260924T230439Z.json`: impossible transition: E1C cannot be complete before start dependencies F2C
 
 ## All manifest tasks
 
@@ -333,6 +334,8 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-24 23:04Z UTC, tracker: rejected update: impossible transition: E1C cannot be complete before start dependencies F2C
+- 2026-09-24 23:00Z UTC, E1C: review → review; head f928103a
 - 2026-09-24 23:00Z UTC, F2C-L: running → review; head 76d966cc; estimate likely 8 → 1 h (a, b, d delivered and green; only review fixes remain)
 - 2026-09-24 23:00Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, M5, M6, U1R, U2, U3, U4, W5)
 - 2026-09-24 23:00Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, M5, M6, U1R, U2, U3, U4, W5)

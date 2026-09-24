@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "179a1a0b",
+  "integration_head": "bba27b02",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 11,
-  "updated": "2026-09-24T23:02:48Z",
+  "revision": 13,
+  "updated": "2026-09-24T23:04:39Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -477,12 +477,12 @@
     {
       "id": "E1C",
       "task": "E1C",
-      "slice": "E1C.1-E1C.4 + coordinator update 1 (S3 F5, F8/P-24)",
+      "slice": "E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4)",
       "agent": "opus",
       "branch": "codex/e1c-client",
       "worktree": ".claude/worktrees/codex-e1c-client",
       "base": "dff31efc",
-      "head": "2531dc49",
+      "head": "f928103a",
       "isolation": {
         "ports": "postgres 55449 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e1c-",
@@ -490,30 +490,25 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T22:15:00Z",
-      "blocker": "UPLOAD-RESTART needs M5 durable uploads (codex/m5-uploads empty at 22:05Z); hosted smoke is the coordinator's (command in the evidence)",
+      "updated": "2026-09-24T23:00:00Z",
+      "blocker": "UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence)",
       "next_action": "RV-07/08; profile schema + validate-only; resume recipe; re-check F2C fixtures when they land.",
       "estimate": {
         "optimistic_h": 2,
         "likely_h": 4,
-        "pessimistic_h": 8,
+        "pessimistic_h": 7,
         "confidence": "medium",
-        "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; review rounds",
-        "at": "2026-09-24T22:15Z"
+        "basis": "UPLOAD-RESTART over M5 store once it lands; hosted smoke analysis; one more review round",
+        "at": "2026-09-24T23:00Z"
       },
       "evidence": [
         "research/plan/evidence/e/E1C-2531dc4.md"
       ],
       "commands": [
         {
-          "cmd": "make bench-test (base dff31efc)",
+          "cmd": "make bench-test",
           "exit": 0,
-          "summary": "68 passed"
-        },
-        {
-          "cmd": "make bench-test (2531dc49)",
-          "exit": 0,
-          "summary": "96 passed (+28: conformance 4, dataset 6, validity 8, profile 10)"
+          "summary": "106 passed (96 + 10 fix-round cases)"
         },
         {
           "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py",
@@ -523,27 +518,36 @@
         {
           "cmd": "apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py (detached)",
           "exit": 0,
-          "summary": "80 mutants: 77 killed, 3 controls survived, 0 problems (37 new E1C)"
+          "summary": "106 mutants: 103 killed, 3 controls survived, 0 problems (26 new e1cf01-26)"
         },
         {
-          "cmd": "bench.py --validate-raw <committed E1B raw>",
+          "cmd": "bench.py --validate-raw results/E1B-box-{bda1586,4226315}/raw/*",
           "exit": 0,
-          "summary": "bda1586 L2/L3 VALID; 4226315 L2-r0.5/L2-r1.0/L3/L5 INVALID (unexpected replay); counts equal stored summaries"
+          "summary": "unchanged: bda1586 VALID; 4226315 L2-r0.5/L2-r1.0/L3/L5 INVALID 57/111/105/57; results/ clean"
+        },
+        {
+          "cmd": "old evidence smoke command, network blocked",
+          "exit": 2,
+          "summary": "refused before any file or request (0-B2 fixed)"
+        },
+        {
+          "cmd": "amended smoke command + --validate-only, network blocked",
+          "exit": 0,
+          "summary": "runnable, warning unprofiled, no request"
         }
       ],
       "owned_paths": [
         "models/marlin2b/bench.py",
-        "models/marlin2b/tests/",
         "models/marlin2b/dataset.py",
         "models/marlin2b/runprofile.py",
-        "models/marlin2b/profiles/",
+        "models/marlin2b/tests/",
         "research/plan/evidence/e/E1C-2531dc4.md"
       ],
       "deviation": "Session-03 recorded deviation: first slices do not consume F2C ports; re-check F2C fixtures when they land.",
       "wiring_requests": [
-        "certify.py bench_argv: pass --profile/--key-inventory per cell; rung_verdicts FAIL on validity != VALID",
-        "after that: make --profile mandatory for non-local gateway targets in bench._run (E1C one-line flip)",
-        "coordinator: append E1B-protocol.md section 5 items 9-11 (replay INVALID, per-cell dataset version, P4 through the edge with observed 429/503)"
+        "REQUIRED NOW: certify.py bench_argv adds --unprofiled certify for remote targets (else its remote bench cells exit 2) until E2C passes profiles",
+        "E2C/E4C: certify.py bench_argv passes --profile/--key-inventory per cell (dropping --unprofiled certify); rung_verdicts FAIL on validity != VALID",
+        "coordinator: E1B-protocol.md section 5 items 9-11, and section 3 notes hosted cells need --profile/--key-inventory"
       ]
     },
     {
@@ -879,12 +883,6 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-24T22:15:00Z",
-      "lane": "E1C",
-      "task": "E1C",
-      "head": "2531dc49"
-    },
-    {
       "since": "2026-09-24T22:58:00Z",
       "lane": "I8",
       "task": "I8",
@@ -895,6 +893,12 @@
       "lane": "F2C-L",
       "task": "F2C",
       "head": "76d966cc"
+    },
+    {
+      "since": "2026-09-24T22:15:00Z",
+      "lane": "E1C",
+      "task": "E1C",
+      "head": "f928103a"
     }
   ],
   "integration_queue": [],
@@ -1759,6 +1763,18 @@
       "by": "F2C-L",
       "what": "running → review; head 76d966cc; estimate likely 8 → 1 h (a, b, d delivered and green; only review fixes remain)",
       "source": "updates/F2C-L-20260924T2300Z.json"
+    },
+    {
+      "at": "2026-09-24T23:00:00Z",
+      "by": "E1C",
+      "what": "review → review; head f928103a",
+      "source": "updates/E1C-20260924T2300Z.json"
+    },
+    {
+      "at": "2026-09-24T23:04:39Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition: E1C cannot be complete before start dependencies F2C",
+      "source": "updates/E1C-20260924T230439Z.json"
     }
   ],
   "history": {
@@ -1833,10 +1849,19 @@
     "F2C-L-20260924T2300Z.json": {
       "status": "applied",
       "at": "2026-09-24T23:00:20Z"
+    },
+    "E1C-20260924T2300Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T23:00:00Z"
+    },
+    "E1C-20260924T230439Z.json": {
+      "status": "rejected",
+      "at": "2026-09-24T23:04:39Z",
+      "reason": "impossible transition: E1C cannot be complete before start dependencies F2C"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T23:02:48Z",
+    "computed_at": "2026-09-24T23:04:39Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
