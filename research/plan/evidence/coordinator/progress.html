@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T05:33:05Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-24T05:45:02Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>28</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -96,7 +96,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>E1B</code> — codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
-<li><code>E4B</code> — codex-e4b / codex/e4b-certify — software half MERGED 66eed31; the pilot cannot serve until PREP-WORKER lands (tasks.json 27af05a); box half + release decision after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
+<li><code>E4B</code> — codex-e4b / codex/e4b-certify — software half MERGED; PILOT RELEASE 27af05a DEPLOYED on the box 05:43Z (metered gateway live behind the edge; hosted 0003-0018 applied; operator seed applied); box half (smoke, E1B L2-L7, certify --box) waits for the preparation loop since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493</li>
 <li><code>PREP-WORKER</code> — codex-prepw / codex/prep-worker — early review PASS at c035ee4 (wf_6bad9e38-f8b; all nine journeys on the real worker, backend 188/0/0; 10 nonblocking/downgraded items sent to the lane to fold in) → handback → targeted verifier → merge + focused gate since 2026-09-24T02:13:25Z — BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>

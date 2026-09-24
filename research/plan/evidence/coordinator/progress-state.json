@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T05:33:05Z",
+  "updated": "2026-09-24T05:45:02Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E4B": {
       "lane": "codex-e4b / codex/e4b-certify",
-      "phase": "software half MERGED 66eed31; the pilot cannot serve until PREP-WORKER lands (tasks.json 27af05a); box half + release decision after the rollout",
+      "phase": "software half MERGED; PILOT RELEASE 27af05a DEPLOYED on the box 05:43Z (metered gateway live behind the edge; hosted 0003-0018 applied; operator seed applied); box half (smoke, E1B L2-L7, certify --box) waits for the preparation loop",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e2, d2/55466, Q 55493"
     },

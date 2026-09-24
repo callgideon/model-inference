@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T05:33:05Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T05:45:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 28 done · 2 in progress · 0 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-24T05:33:05Z from `tasks.json` (manifest v4) and `progress-sta
 ## In flight
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E4B: codex-e4b / codex/e4b-certify — software half MERGED 66eed31; the pilot cannot serve until PREP-WORKER lands (tasks.json 27af05a); box half + release decision after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — software half MERGED; PILOT RELEASE 27af05a DEPLOYED on the box 05:43Z (metered gateway live behind the edge; hosted 0003-0018 applied; operator seed applied); box half (smoke, E1B L2-L7, certify --box) waits for the preparation loop since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - PREP-WORKER: codex-prepw / codex/prep-worker — early review PASS at c035ee4 (wf_6bad9e38-f8b; all nine journeys on the real worker, backend 188/0/0; 10 nonblocking/downgraded items sent to the lane to fold in) → handback → targeted verifier → merge + focused gate since 2026-09-24T02:13:25Z — BLOCKS THE PILOT: no product process prepares a job today; ports d5/55498, MinIO 55781, namespace e4b
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
