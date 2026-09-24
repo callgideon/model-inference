@@ -126,6 +126,7 @@ DATASET_CAP = "test_e4b_the_dataset_drill_schedules_only_clips_within_the_deploy
 CANCELLED = "test_e4b_an_item_the_interruption_cancelled_is_terminal_after_one_replay"
 CAP_WIRING = "test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it"
 RUN = "tests/integration/run.py"
+TIMEOUTS = "test_e4b_each_client_run_is_bounded_by_its_own_schedule_never_a_flat_hour"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
 ROUTES = "test_e4b_every_mounted_route_has_one_description_and_every_description_a_route"
@@ -601,6 +602,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("soak_gateway_unwired", "the load cells tell the soak it runs against a gateway",
        '                                 cap_s, gateway) + [client_exit(done["exit"])]',
        '                                 cap_s) + [client_exit(done["exit"])]', CELLS),
+    _m("v_soak_cut_at_an_hour", "a bench run is bounded by its own schedule, never a flat hour",
+       "    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=client_timeout_s(argv))",
+       "    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=3600.0)", TIMEOUTS),
+    _m("schedule_ignores_the_rate", "a run's schedule is its requests over its rate",
+       "    return requests / rate + CLIENT_MARGIN_S\n", "    return requests + CLIENT_MARGIN_S\n",
+       TIMEOUTS),
+    _m("no_margin_after_the_schedule", "the last requests get bench's own timeout to finish",
+       "    return requests / rate + CLIENT_MARGIN_S\n", "    return requests / rate\n", TIMEOUTS),
     _m("overload_counts_capped_clips", "the cap's refusals are not overload's",
        "    rows = judged(rows, clips, cap_s)\n", "", OVERLOAD),
     _m("dataset_corpus_unfiltered", "the drill schedules only clips within the cap",

@@ -1186,6 +1186,36 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     assert ["duration_cap", "fail"] in [list(row[:2]) for row in soak["detail"]["verdicts"]]
 
 
+def test_e4b_each_client_run_is_bounded_by_its_own_schedule_never_a_flat_hour(tmp_path,
+                                                                             monkeypatch):
+    """N12, from box run2: a flat hour killed the 4 h soak (exit 124). Every bench run gets
+    its requests over its rate plus the margin for the last requests to finish - the soak
+    at least its seconds; parity.py, with no schedule, keeps the hour."""
+    import argparse
+    bounds = {}
+    monkeypatch.setattr(certify.run, "shell", lambda argv, *, cwd, env, timeout: (
+        bounds.__setitem__(Path(argv[argv.index("--raw") + 1]).name if "--raw" in argv
+                           else "parity", timeout), {"exit": 0, "tail": ""})[1])
+    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    box = certify.remote_target(argparse.Namespace(target="http://gw/v1", engine_url="http://e",
+                                                   scale=None, box=True))
+    soak = certify.MATRIX["box"]["soak"]
+    rate = 0.25                                            # half a supported 0.5/s
+    certify.client(certify.bench_argv(box, tmp_path, "soak", rate=rate,
+                                      requests=round(rate * soak["seconds"]),
+                                      dataset_version="v"))
+    certify.client(certify.bench_argv(box, tmp_path, "envelope-r0.5", rate=0.5, requests=120,
+                                      dataset_version="v"))
+    certify.client(certify.bench_argv(box, tmp_path, "overload", rate=1000.0, requests=32,
+                                      dataset_version="v", extra=("--burst", "32")))
+    certify.client([sys.executable, "parity.py", "--engine", "http://e"])
+    assert bounds == {"soak-raw.jsonl": soak["seconds"] + certify.CLIENT_MARGIN_S,
+                      "envelope-r0.5-raw.jsonl": 240 + certify.CLIENT_MARGIN_S,
+                      "overload-raw.jsonl": 0.032 + certify.CLIENT_MARGIN_S,
+                      "parity": certify.CLIENT_TIMEOUT_S}
+    assert bounds["soak-raw.jsonl"] >= soak["seconds"] + 600          # bench's own timeout
+
+
 def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written(
         tmp_path, monkeypatch, clean_tree):
     """A run that dies before writing its JSON is no evidence (E3B phase 2's lost report):

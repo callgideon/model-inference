@@ -608,9 +608,24 @@ def bench_argv(target: dict, workdir: Path, name: str, *, rate: float, requests:
     return argv + list(extra)
 
 
+# N12 (box run2): a flat hour cut the 4 h soak (exit 124). A bench run gets its own
+# schedule plus this margin: bench's per-request timeout (600 s) and the tail after the
+# last arrival. A client with no schedule (parity.py) keeps the hour.
+CLIENT_MARGIN_S = 900.0
+CLIENT_TIMEOUT_S = 3600.0
+
+
+def client_timeout_s(argv: list[str]) -> float:
+    """A bench run's bound: its requests over its open-loop rate, plus CLIENT_MARGIN_S."""
+    if "--rate" not in argv:
+        return CLIENT_TIMEOUT_S
+    rate, requests = float(argv[argv.index("--rate") + 1]), int(argv[argv.index("--requests") + 1])
+    return requests / rate + CLIENT_MARGIN_S
+
+
 def client(argv: list[str], env: dict | None = None) -> dict:
     """One client process (bench.py, parity.py) from the repository root, run.py's way."""
-    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=3600.0)
+    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=client_timeout_s(argv))
 
 
 def bench_env(target: dict) -> dict:
