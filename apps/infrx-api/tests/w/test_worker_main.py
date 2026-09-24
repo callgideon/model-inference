@@ -19,6 +19,7 @@ then its SIGTERM drain with a job in flight.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib.util
 import json
 import os
@@ -35,7 +36,7 @@ import httpx
 import pytest
 
 from infrx.config import RuntimeMisconfigured, from_env
-from infrx.contracts.records import MediaKind, MediaRef, OutboxKind
+from infrx.contracts.records import MediaKind, MediaRef
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.media.fetch import digest_of
 from infrx.media.prepare import ProcessingCache
@@ -52,7 +53,7 @@ CARD = v2fix.BUILDERS["rate_card_marlin.json"]().rate_card_version
 DSN = "postgresql://infrx:do-not-print@127.0.0.1:9/infrx"      # nothing listens on 9
 # E2's MinIO literals (tests/integration/harness.py): local test strings, no secret.
 S3_KEY, S3_SECRET, BUCKET = "infrxe2minio", "infrx-e2-local-secret", "infrx-worker-main"
-PROMPT_TOKENS = 1200               # what the fake vLLM counts every prompt as
+PROMPT_TOKENS = 1200               # what the fake vLLM counts (and tokenizes) every prompt as
 
 
 def utc_now() -> datetime:
@@ -432,26 +433,30 @@ class Box:
         assert accepted.status_code == 202, accepted.text
         return accepted.json()["job_handle"], accepted.json()["request_id"]
 
-    async def prepare(self, request_id: str) -> None:
-        """M's preparation worker, emulated as the E3B pilot box does (no product process
-        claims a preparation lease yet): the text job is prepared with the count the fake
-        engine reports, and its inference dispatch is relayed into the pilot index."""
+    @contextlib.asynccontextmanager
+    async def relay(self):
+        """The gateway's relay for the block: Q3's `Reconciler`, which the gateway's lifespan
+        runs and httpx's ASGI transport does not, over this box's database and the pilot
+        index. It indexes the admission's `prepare_dispatch` for the worker PROCESS's
+        preparation pool and the `inference_dispatch` preparation writes (PREP-WORKER:
+        nothing emulates preparation here any more)."""
         from valkey.asyncio import Valkey
 
+        from infrx.scheduling.reconcile import Reconciler
         from infrx.scheduling.valkey import ValkeyScheduler
         from infrx.state.jobstore import connector
         pilot = from_env(self.settings).pilot
-        store = PgJobStore(connector(pilot.database_url), limits=pilot)
-        lease = await store.claim_preparation(request_id, "i2b-prep")
-        await store.prepared(lease, (), prompt_tokens=PROMPT_TOKENS)
-        index = ValkeyScheduler(Valkey.from_url(self.valkey_url), utc_now, limits=pilot)
-        events = await store.dispatch_pending(worker_id="i2b-relay")
-        for event in events:
-            if event.kind is OutboxKind.inference_dispatch and event.job_id == request_id:
-                assert await index.enqueue(event)
-        await store.acknowledge_dispatch([event.event_id for event in events],
-                                         worker_id="i2b-relay")
-        await index.client.aclose()
+        index = ValkeyScheduler(Valkey.from_url(pilot.valkey_url), utc_now, limits=pilot)
+        stop = asyncio.Event()
+        task = asyncio.create_task(Reconciler(
+            store=PgJobStore(connector(pilot.database_url), limits=pilot), index=index,
+            now=utc_now).run(stop, drain_every_s=0.05))
+        try:
+            yield
+        finally:
+            stop.set()
+            await asyncio.gather(task, return_exceptions=True)
+            await index.client.aclose()
 
     def row(self, request_id: str) -> tuple:
         return self.conn.execute(
@@ -476,10 +481,11 @@ def box(tmp_path, monkeypatch):
 
 
 def test_worker_main_pg__a_job_the_gateway_admitted_runs_in_the_worker_process(box):
-    """The round trip across two processes: the gateway admits a CREDIT job on PostgreSQL;
-    preparation (emulated) queues it; the worker PROCESS claims it from the Valkey index,
-    runs it on the fake vLLM, journals and settles it at the admitted card; the gateway
-    reads it back succeeded with its result. Before that, the worker's `/readyz` is 503
+    """The round trip across two processes: the gateway admits a CREDIT job on PostgreSQL and
+    its relay indexes the dispatch; the worker PROCESS prepares it (PREP-WORKER: its
+    preparation pool, the fake vLLM's `/tokenize`), claims it from the Valkey index, runs it
+    on the fake vLLM, journals and settles it at the admitted card; the gateway reads it
+    back succeeded with its result. Before that, the worker's `/readyz` is 503
     while the engine is down and 200 once it answers, and `/metrics` carries the build."""
     box.start_worker()
 
@@ -490,9 +496,9 @@ def test_worker_main_pg__a_job_the_gateway_admitted_runs_in_the_worker_process(b
         metrics = await http_get(box.port, "/metrics")
         app = box.gateway()
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://gw") as client:
+        async with box.relay(), httpx.AsyncClient(transport=transport,
+                                                  base_url="http://gw") as client:
             handle, request_id = await box.admit(client)
-            await box.prepare(request_id)
             auth = {"authorization": "Bearer sk-i2b"}
 
             async def terminal():
@@ -534,15 +540,14 @@ def test_worker_main_pg__sigterm_drains_the_in_flight_job_and_exits_0(box):
 
     async def case():
         ready = await answer(box.port, "/readyz", 200, within_s=60)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=box.gateway()),
-                                     base_url="http://gw") as client:
+        async with box.relay(), httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=box.gateway()), base_url="http://gw") as client:
             _, request_id = await box.admit(client)
-            await box.prepare(request_id)
 
-        async def busy():
-            status, body = await http_get(box.port, "/readyz")
-            return json.loads(body)["loop"] == "busy"
-        streaming = await until(busy, within_s=30)
+            async def busy():
+                status, body = await http_get(box.port, "/readyz")
+                return json.loads(body)["loop"] == "busy"
+            streaming = await until(busy, within_s=30)
         box.worker.send_signal(signal.SIGTERM)
         return ready, request_id, streaming
 

@@ -25,6 +25,11 @@ What it adds to the loop, each for a stated reason:
 * **Crash-only.** A runner or the reaper ends only when drained or by dying, so `serve()`
   returns on the first one that ends: it drains what still runs, and the service manager
   restarts the process at full strength instead of it running short, live, for ever.
+* **Preparation** (PREP-WORKER): an optional second `WorkerLoop` on `prepare_dispatch`
+  (`preparation.PreparationRunner`), `preparation_concurrency` runners, started, watched and
+  drained with the inference pool. Its drain bound is `PREPARATION_LEASE_TTL_S`: an attempt
+  still running then is released (its lease lapses and `recover` requeues the job, R93),
+  so no job is left `preparing` behind a dead lease; it is logged on its own line.
 """
 from __future__ import annotations
 
@@ -62,11 +67,14 @@ class WorkerService:
     health_host: str = "127.0.0.1"
     health_port: int | None = None               # None: no listener (embedded use)
     metrics: object | None = None                # observe.metrics.Registry, on GET /metrics
+    preparation: WorkerLoop | None = None        # PREP-WORKER: the prepare_dispatch pool
+    preparation_concurrency: int = 1
     reaped: int = 0
     reap_errors: int = 0
     last_drain: DrainReport | None = None
     _pool: asyncio.Task | None = field(default=None, repr=False)
     _reaper: asyncio.Task | None = field(default=None, repr=False)
+    _preparing: asyncio.Task | None = field(default=None, repr=False)
     _server: asyncio.AbstractServer | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -114,13 +122,21 @@ class WorkerService:
         self._pool = asyncio.create_task(
             self.loop.run(concurrency=self.concurrency, stop_when_idle=False), name="pool")
         self._reaper = asyncio.create_task(self._reap_forever(), name="reaper")
+        if self.preparation is not None:
+            self._preparing = asyncio.create_task(
+                self.preparation.run(concurrency=self.preparation_concurrency,
+                                     stop_when_idle=False), name="preparation")
 
     async def stop(self) -> DrainReport:
         """Drain, then tear down. Returns (and logs) what the drain did to each job."""
         bound = self.loop.limits.generation_timeout_s if self.drain_s is None else self.drain_s
-        report = await self.loop.drain(bound)
-        if self._pool is not None:
-            await asyncio.gather(self._pool, return_exceptions=True)
+        drains = [self.loop.drain(bound)]
+        if self.preparation is not None:
+            drains.append(self.preparation.drain(self.loop.limits.preparation_lease_ttl_s))
+        report, *prepared = await asyncio.gather(*drains)
+        for pool in (self._pool, self._preparing):
+            if pool is not None:
+                await asyncio.gather(pool, return_exceptions=True)
         if self._reaper is not None:
             self._reaper.cancel()
             await asyncio.gather(self._reaper, return_exceptions=True)
@@ -130,6 +146,10 @@ class WorkerService:
         self.last_drain = report
         log.warning("drained: %d finished, %d released %s, ended %s", report.finished,
                     report.released, list(report.released_jobs), list(report.ended))
+        for held in prepared:
+            log.warning("drained preparation: %d finished, %d released %s, ended %s",
+                        held.finished, held.released, list(held.released_jobs),
+                        list(held.ended))
         return report
 
     async def serve(self, stop: asyncio.Event | None = None) -> DrainReport:
@@ -146,16 +166,20 @@ class WorkerService:
             waiting = asyncio.create_task(stop.wait())
             while not self.loop._tasks and not self._pool.done():
                 await asyncio.sleep(0)            # the pool's first step creates its runners
+            while self._preparing is not None and not self.preparation._tasks \
+                    and not self._preparing.done():
+                await asyncio.sleep(0)
             # ponytail: crash-only - a transient store error costs a drain and a restart; a
             # runner that retries in place (backoff plus its own liveness signal) is the
             # upgrade if measured blips make that matter.
-            await asyncio.wait({waiting, self._pool, self._reaper, *self.loop._tasks},
+            await asyncio.wait({waiting, self._pool, self._reaper, *self.loop._tasks,
+                                *self._preparation_tasks()},
                                return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
             # Each death with its cause: `_died()` retrieves the exception and `gather` in
             # stop() swallows it, so nothing else would ever print it. The pool itself only
             # raises before it has runners (a bad `concurrency`).
-            for task in (*self._died(), self._pool):
+            for task in (*self._died(), self._pool, *self._preparation_tasks()[:1]):
                 if task.done() and not task.cancelled() and task.exception() is not None:
                     log.error("%s died; draining for a restart", task.get_name(),
                               exc_info=task.exception())
@@ -172,9 +196,15 @@ class WorkerService:
             return "draining"
         return "busy" if self.loop.in_flight else "idle"
 
+    def _preparation_tasks(self) -> tuple[asyncio.Task, ...]:
+        """The preparation pool and its runners, when there is one."""
+        if self._preparing is None:
+            return ()
+        return (self._preparing, *self.preparation._tasks)
+
     def _died(self) -> list[asyncio.Task]:
         """Tasks that ended by raising: a runner (the pool is one short) or the reaper."""
-        return [task for task in (*self.loop._tasks, self._reaper)
+        return [task for task in (*self.loop._tasks, *self._preparation_tasks(), self._reaper)
                 if task is not None and task.done() and not task.cancelled()
                 and task.exception() is not None]
 
@@ -196,6 +226,8 @@ class WorkerService:
                           else "stopped",
                 "in_flight": len(self.loop.in_flight), "claimed": self.loop.claimed,
                 "failures": len(self.loop.failures), "reaped": self.reaped,
+                "preparing": 0 if self.preparation is None else len(self.preparation.in_flight),
+                "prepare_claimed": 0 if self.preparation is None else self.preparation.claimed,
                 "reap_errors": self.reap_errors,
                 "last_drain": None if self.last_drain is None else
                 {key: value for key, value in asdict(self.last_drain).items()
