@@ -1586,6 +1586,30 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if found is None:\n            # A fresh admission",
        "        if found is None or admission.replayed:\n            # A fresh admission",
        "test_alias_pricing__a_job_on_the_earlier_card_keeps_answering"),
+    # === G7 item 4: overload, outage, same-host uploads, SSRF and the documented examples
+    _m("capacity_refusal_keeps_the_socket", "a 429 before the body is read closes the socket",
+       I, '"request_too_large", "capacity_exhausted",', '"request_too_large",',
+       "test_api_stream__a_full_key_is_a_typed_429_with_retry_guidance_in_every_mode"),
+    _m("admission_outage_is_a_500", "a store that cannot admit is a retryable 503, every mode",
+       R, '        raise errors.DependencyUnavailable("a durable dependency failed at acceptance")'
+          " from None", "        raise",
+       "test_api_stream__a_store_outage_at_admission_is_a_typed_503_in_every_mode"),
+    _m("upload_created_is_200", "an upload is created 201, as E1C's client checks",
+       "gateway/routes/uploads.py", "        return JSONResponse(ticket, status_code=201,",
+       "        return JSONResponse(ticket, status_code=200,",
+       "test_media_sec__e1c_s_upload_sequence_is_what_the_mounted_routes_serve",
+       "test_dur_rls__another_tenant_cannot_touch_or_name_an_upload"),
+    _m("foreign_upload_owned", "another org's upload is the unknown handle's 404",
+       "media/uploads.py", ".org_id != org_id:", ".org_id != org_id and False:",
+       "test_dur_rls__another_tenant_cannot_touch_or_name_an_upload"),
+    _m("private_address_fetched", "a media URL resolving to a private address is refused",
+       "media/fetch.py", "        if not all(address_allowed(address) for address in addresses):",
+       "        if False:",
+       "test_media_sec__a_media_url_resolving_to_a_private_address_is_refused"),
+    _m("documented_parameter_refused", "every documented example names only what is served",
+       V, '"messages", "stream", "max_tokens", "max_completion_tokens",',
+       '"messages", "stream", "max_completion_tokens",',
+       "test_api_modes__every_documented_example_answers_what_the_document_says"),
 )
 
 
