@@ -425,3 +425,4 @@ the same way. Integration request 7.
   each superseded by a later one at a later SHA: two gates on a dirty or pre-fix tree, the
   gate at `fe2a82a` in its mutants stage (R14), an API-suite run whose tree changed under it.
   Plus the d1 slip (Limit 8). No AWS, hosted Supabase or pilot-box contact; nothing pushed.
+- 2026-09-24: After the last run: `infrx-prepw-minio` removed; no `infrx-d5-*`, `infrx-e4b-*` or `infrx-prepw-*` container and no process of this worktree left running.
