@@ -470,6 +470,60 @@ round: N6 is the coordinator's corrected ruling, and N8 was left optional. The W
 that load bench.py last ran at `7ac77c7` (612 passed). They were not rerun in this
 time-boxed round; bench.py changed only in N7 and N9.
 
+## Polish fix round (`559584f`)
+
+The verifier returned fix_required at `88adae2`
+(`CERTIFY-POLISH-verify-88adae2.json`). This round is one commit on top.
+
+**What changed:**
+- **B1 (blocking).** N5 called an item with no first-run row "cancelled by the platform".
+  But an item in flight at the SIGINT gets no row: bench's `attempt()` catches `Exception`,
+  not `asyncio.CancelledError`, so the cancelled task never writes one. That made the
+  interruption's own cancel FAIL the drill (box run2's `643711ed`). Such an item now counts
+  as the client's tear, and 5(d) says so. The CANCELLED case adds run2's shape: an item with
+  no first-run row, replayed as `state_conflict`, gives `(["i3", "i6"], [])` and a clean
+  drill.
+- **P6.** The SOP line states the actual counts ("N cancelled by the platform").
+- **P2.** The retry's wait is pinned: the header's value, capped at 60 s (`"3600"` → 60.0,
+  `"0"` → 0.0). The fake gateway answers a sentinel when it runs out of replies, so an extra
+  retry dies by assertion, not by exception.
+- **P3.** A parity clip refused for capacity twice is listed apart ("capacity twice,
+  unjudged"), and the cell still FAILs.
+
+**Follow-up, not done:** bench could record the attempt the SIGINT cancelled as a row
+(catch `asyncio.CancelledError` in `attempt()`, set `error_class` to `"interrupted"`, write
+the row, re-raise). It was left out because the missing-row rule covers the drill.
+
+**New and re-anchored mutants** (death lines at `559584f`, every one an assertion in
+`test_certify.py`):
+
+| Mutant | Death line |
+|---|---|
+| `v_unrowed_item_called_the_platforms` | `test_certify.py:554: AssertionError: assert (['i3'], ['i6']) == (['i3', 'i6'], [])` |
+| `sop_hides_the_platform_count` | `test_certify.py:547: AssertionError: stream_error_event` |
+| `retry_after_ignored` | `test_certify.py:411: assert [1.0, 1.0] == [60.0, 0.0]` |
+| `retry_uncapped` | `test_certify.py:411: assert [3600.0, 0.0] == [60.0, 0.0]` |
+| `retry_any_refusal` | `test_certify.py:405: AssertionError: assert [{'code': Non...': None}, ...] == [{'code': 'un...ssages'}, ...]` |
+| `capacity_twice_passes` | `test_certify.py:337: AssertionError: assert ('PASS', [], ...p-360p-16x9']) == ('FAIL', [], ...p-360p-16x9'])` |
+| `capacity_listed_as_not_refused` | `test_certify.py:337: AssertionError: assert ('FAIL', ['c0...p-360p-16x9']) == ('FAIL', [], ...p-360p-16x9'])` |
+| `over_cap_acceptance_accepted` | `test_certify.py:333: AssertionError: {'code': None, 'http_status': 200, 'param': None}` |
+| `over_cap_refusal_untyped` | `test_certify.py:333: AssertionError: {'code': 'invalid_request', 'http_status': 400, 'param': None}` |
+| `v_parity_param_ignored` | `test_certify.py:333: AssertionError: {'code': 'unsupported_media', 'http_status': 400, 'param': None}` |
+| `v_platform_cancel_counted_as_the_interruption` | `test_certify.py:542: AssertionError: stream_error_event` |
+
+**Tails at `559584f`.** The whole E4B list: 224 mutants over 48 named cases, plus the two
+list-shape tests.
+
+```
+........................................................................ [ 95%]
+..........                                                               [100%]
+226 passed in 498.11s (0:08:18)
+exit 0
+```
+
+- `test_certify.py` + `test_endpoint_doc.py`: `48 passed in 1.52s`.
+- `models/marlin2b/tests` (`make bench-test`): `68 passed in 6.30s`.
+
 ## Verification log
 
 - 2026-09-24 (CERTIFY-TREE): Authored at `c7e2139`. The tails above come from the commands
@@ -485,3 +539,6 @@ time-boxed round; bench.py changed only in N7 and N9.
   `codex/certify-polish` (from `4db74b6`). Its death lines and tails come from the commands
   named, run at that head with `TMPDIR` outside the checkout. No box, AWS, hosted service,
   secret or stack was used, and neither the e4b nor the e3b2 namespace.
+- 2026-09-24 (CERTIFY-POLISH fix round): B1, P2, P3 and P6 were fixed at `559584f`. The
+  death lines and tails come from the commands named, run at that head with `TMPDIR`
+  outside the checkout.
