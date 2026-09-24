@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 9,
-  "updated": "2026-09-24T22:36:33Z",
+  "revision": 10,
+  "updated": "2026-09-24T23:00:48Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -549,38 +549,85 @@
     {
       "id": "I8",
       "task": "I8",
-      "slice": "code/config slices only",
+      "slice": "1-7 (code/config half)",
       "agent": "opus",
       "branch": "codex/i8-operate",
-      "worktree": ".claude/worktrees/codex-i8-operate",
+      "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-i8-operate",
       "base": "dff31efc",
-      "head": null,
+      "head": "103d20a8",
       "isolation": {
         "ports": "postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-i8-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
-      "blocker": null,
+      "updated": "2026-09-24T22:58:00Z",
+      "blocker": "P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
       "next_action": "Code/config slices; every live box step is a coordinator op serialized after run3.",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 4,
+        "likely_h": 8,
+        "pessimistic_h": 16,
+        "confidence": "medium",
+        "basis": "code half done and tested; left: coordinator ops O1-O14 (two ~1 h maintenance windows), I8 follow-ups after WR-I8-1..5 land (~1-2 h), inputs P-25/D10 outside the lane",
+        "at": "2026-09-24T22:58Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/i/I8-103d20a.md"
+      ],
+      "commands": [
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -rxXs tests/i",
+          "exit": 0,
+          "summary": "206 passed, 1 xfailed (strict, F4) in 296 s; base 159 passed"
+        },
+        {
+          "cmd": "python tests/i/mutants.py <59 I8 mutants> (git archive 103d20a8)",
+          "exit": 0,
+          "summary": "59/59 killed, 359 s"
+        },
+        {
+          "cmd": "python -m pytest -q tests/integration/backend/recovery/test_runbooks.py",
+          "exit": 0,
+          "summary": "8 passed (runbook links, anchors, bash blocks)"
+        },
+        {
+          "cmd": "python -m pytest -q tests/integration/backend/recovery/test_observe.py -k 'ob10 or ob1'",
+          "exit": 0,
+          "summary": "7 passed (alerts.json unchanged)"
+        },
+        {
+          "cmd": "docker run <runtime image cdce81dc> python /app/deploy/preflight.py envcheck --mode pilot",
+          "exit": 0,
+          "summary": "ok true; with DATABASE_POOL_MAX=4 exit 2 naming it"
+        },
+        {
+          "cmd": "docker run <runtime image> python /repo/infra/runbooks/pool_budget.py --env-file /dev/stdin",
+          "exit": 1,
+          "summary": "import defect found and fixed (af9e1a29); defaults FAIL 21>15, 6/6 PASS in the image"
+        },
+        {
+          "cmd": "REHEARSAL_NS=infrx-i8-rehearsal apps/infrx-api/deploy/rehearse.sh",
+          "exit": null,
+          "summary": "NOT RUN: quay.io minio pinned image pull 401 on this host"
+        }
+      ],
       "owned_paths": [
         "infra/",
         "apps/infrx-api/deploy/",
-        "apps/infrx-api/tests/i/"
+        "apps/infrx-api/tests/i/",
+        "research/plan/evidence/i/I8-103d20a.md"
       ],
-      "deviation": "Session-03 recorded deviation: first slices do not consume F2C; live steps wait for the GPU box."
+      "deviation": "Session-03 recorded deviation: first slices do not consume F2C; live steps wait for the GPU box.",
+      "wiring_requests": [
+        "WR-I8-1 pilot.py/jobstore.py: prepare_threshold=None; session SETs only off 6543",
+        "WR-I8-2 metrics: infrx_db_pool_* families + record_pool at scrape (gateway, worker)",
+        "WR-I8-3 G: infrx_large_body_in_use / _limit gauges",
+        "WR-I8-4 observe/route.py: collect_host(..., gpu=False) in the gateway",
+        "WR-I8-5 W: serving-version.json processor/preprocessor digests",
+        "WR-I8-6 D10: runtime login (no service_role membership, role statement_timeout) + read-only monitor login or infrx.ops_snapshot()"
+      ]
     },
     {
       "id": "D10",
@@ -836,6 +883,12 @@
       "lane": "E1C",
       "task": "E1C",
       "head": "2531dc49"
+    },
+    {
+      "since": "2026-09-24T22:58:00Z",
+      "lane": "I8",
+      "task": "I8",
+      "head": "103d20a8"
     }
   ],
   "integration_queue": [],
@@ -1668,6 +1721,32 @@
       "by": "F2C-C",
       "what": "review → complete; head b8de6171; estimate likely 1 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171))",
       "source": "updates/F2C-C-20260924T223632Z.json"
+    },
+    {
+      "at": "2026-09-24T22:58:00Z",
+      "by": "I8",
+      "what": "running → review; head 103d20a8; estimate likely unknown → 8 h (code half done and tested; left: coordinator ops O1-O14 (two ~1 h maintenance windows), I8 follow-ups after WR-I8-1..5 land (~1-2 h), inputs P-25/D10 outside the lane)",
+      "source": "updates/I8-20260924T2258Z.json"
+    },
+    {
+      "at": "2026-09-24T23:00:48Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5 → unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5 (because: no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T23:00:48Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, M5, M6, W5)"
+    },
+    {
+      "at": "2026-09-24T23:00:48Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, M5, M6, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-24T23:00:48Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, M5, M6, U1R, U2, U3, U4, W5)"
     }
   ],
   "history": {
@@ -1734,10 +1813,14 @@
     "F2C-C-20260924T223632Z.json": {
       "status": "applied",
       "at": "2026-09-24T22:36:32Z"
+    },
+    "I8-20260924T2258Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T22:58:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T22:36:33Z",
+    "computed_at": "2026-09-24T23:00:48Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -1747,8 +1830,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5",
-        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, G8, I8, M5, M6, W5",
+        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5",
+        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, G8, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1761,7 +1844,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, I8, M5, M6, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, G8, M5, M6, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1774,7 +1857,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, I8, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, G8, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -1787,7 +1870,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, I8, M5, M6, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, G8, I2A, I3, M5, M6, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
