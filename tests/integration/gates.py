@@ -268,10 +268,11 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or Path(tempfile.mkdtemp(prefix=f"infrx-e2c-{args.gate}-"))
     out.mkdir(parents=True, exist_ok=True)
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    source = head()                                # the tree the stages start from
     stages = GATES[args.gate](args, out)
     verdict = worst(stage["verdict"] for stage in stages)
     result = {"schema": "infrx.e2c.verdict/1", "gate": args.gate, "verdict": verdict,
-              "exit": EXIT[verdict], "head": head(), "started": started,
+              "exit": EXIT[verdict], "head": source, "started": started,
               "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
               "host": {"platform": platform.platform(), "python": platform.python_version()},
               "argv": argv, "stages": stages}
