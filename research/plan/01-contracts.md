@@ -112,3 +112,21 @@ F3 publishes the concrete Python/TypeScript encoding and shared fixtures for the
 Evaluation states must distinguish queued/running/succeeded/partial/failed/cancelled/restricted; per-case outcomes include explicit missing/unsupported states. External pipeline states must additionally distinguish submission intent, submitted, unknown submission and reconciling. F3/D7/D8 define exact legal transitions and cancellation/late-artifact semantics in executable fixtures. Monetary states use the existing exact budgets/settlement protocol; a new UI must not invent a parallel spend counter.
 
 Requests used for Lab benchmark execution use a funded provider_dev wallet and bounded concurrency; consumer signup grants are not training/evaluation credits. External teacher/training USD costs are never summed with CREDIT. Full object payloads live in authorized object storage; relational rows store bounded references and lineage. Current inference contracts remain backward compatible while the later workers/apps adopt F3.
+
+## F2C.a lifecycle ports (2026-09-24)
+
+Additive to the ports table above; semantics and decisions in [02 §F2C lifecycle amendment](02-durable-protocols.md). Python is the signature authority (`apps/infrx-api/infrx/contracts/v2/lifecycle.py`); the console half (`apps/app/lib/contracts/v2/lifecycle.ts`) carries only browser-safe types - vocabularies, the upload ticket and the readiness view - and exact decoders.
+
+| Port / owner | Operations | Contract |
+|---|---|---|
+| UploadRepository / D10, adapted by M5 | create(org, constraints); acknowledge_put(org, handle, bytes, digest); complete(org, handle, source); abort(org, handle, refusal); resolve(org, handle); expire(limit) | Durable ticket (constraints, owner, window, receipt, immutable finalized source) reloaded by any process; the caller names no tenant, handle or expiry; one handle names one set of bytes; a failed check is final; another tenant's handle is `not_found`. |
+| ReadinessStore / D10, consumed by W5/G7 | admit_ready(request, idem, expectation); readiness(job); claim_preparation(job, worker) | Manifest and marker in the admission transaction; empty manifest is ready-with-zero, missing marker is not_ready; preparation refuses not_ready. |
+| ContentLifecycle / D10, driven by M6 | register(identity); references(content); candidates(after, limit); claim(content, generation, holder); tombstone(claim); acknowledge_delete(tombstone) | Persisted eligibility and references decide deletion; fenced leased claims; recheck inside tombstone; tombstoned keys refuse new use until acknowledged; an older generation's acknowledgement is a no-op. |
+
+- 2026-09-24: F2C.a ports section appended. Fake-backed conformance only.
+
+## F2C.b terminal/read consistency (2026-09-24)
+
+`TerminalOutcome` gains the optional `result_expires_at` (persisted at settlement; a proposal's value is ignored; absent on non-successes and on pre-F2C.b records). Every read path classifies with `v2.lifecycle.read_outcome(outcome, db_now)` into `pending`, `available`, `no_result`, `held_unknown`, `expired`, `unavailable`; the table and the rollout are in [02 §F2C terminal/read consistency](02-durable-protocols.md). Public wire bodies are unchanged. The TypeScript twin is `decodeTerminalOutcome`/`readOutcome` in `lib/contracts/v2/lifecycle.ts`.
+
+- 2026-09-24: F2C.b section appended. Fake-backed conformance only.

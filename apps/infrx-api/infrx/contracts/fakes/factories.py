@@ -214,7 +214,31 @@ FACTORIES = {
 
 # contracts v2 (F2P wire-in, item 3): beside the v1 factories, not in `FACTORIES`, because
 # `v2` returns a `V2Harness` of trusted directories rather than a port `Harness`.
+def lifecycle_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    """F2C.a: the three lifecycle ports over the CREDIT fake store. Test-sized windows
+    (claim 30 s, grace 60 s, retention 10 min, upload window 1 h); the cases read every instant off
+    a returned record, so a real adapter's configured windows work unchanged."""
+    from .lifecycle import FakeLifecycle
+    credit = credit_jobstore_factory(limits)
+    jobs = credit.port
+    store = FakeLifecycle(jobs, credit.clock, credit.ids, upload_ttl_s=3600.0, grace_s=60.0,
+                          claim_ttl_s=30.0, retention_s=600.0)
+
+    def set_capability(serving_version_id: str, input_modalities: tuple[str, ...]) -> None:
+        serving = jobs.catalog.servings[serving_version_id]
+        capability = serving.capability.model_dump(mode="json")
+        jobs.catalog.servings[serving_version_id] = type(serving).model_validate({
+            **serving.model_dump(mode="json"),
+            "capability": {**capability, "input_modalities": list(input_modalities)}})
+
+    hooks = {"reopen": store.reopen, "jobs": jobs, "set_capability": set_capability,
+             "credit_balance": credit.extra["credit_balance"], "retune": credit.extra["retune"]}
+    return Harness(port=store, clock=credit.clock, ids=credit.ids, failures=credit.failures,
+                   extra=hooks)
+
+
 V2_FACTORIES = {
     "v2": fake_v2_harness,
     "credit_jobstore": credit_jobstore_factory,
+    "lifecycle": lifecycle_factory,
 }

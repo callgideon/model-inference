@@ -152,6 +152,7 @@
         "debit",
         "job_id",
         "reconcile_after",
+        "result_expires_at",
         "result_ref",
         "settlement_state",
         "state"

@@ -34,6 +34,8 @@ import type { UsageRow } from "../types.ts";
 export * from "./money-units.ts";
 // F2C.c: the published-model projection travels with the revision (`v2.parsePublishedModel`).
 export * from "./published-model.ts";
+// F2C.a: the browser-safe lifecycle half (vocabularies, upload ticket, readiness view).
+export * from "./lifecycle.ts";
 
 // ---------------------------------------------------------------------------
 // Vocabulary — mirrors of the v2 StrEnums, string values frozen.
