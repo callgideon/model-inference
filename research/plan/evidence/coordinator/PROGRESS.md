@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-24T00:04:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-24T00:11:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -71,7 +71,7 @@ Generated 2026-09-24T00:04:02Z from `tasks.json` (manifest v4) and `progress-sta
 - CUTOVER: codex-cutover / codex/cutover-mount — HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3 since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - M1-L2: codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
-- M-pilot-media: codex-mpilot / codex/m-pilot-media — review workflow died (429, incomplete); rerun dispatched 23:1xZ since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
+- M-pilot-media: codex-mpilot / codex/m-pilot-media — review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) → ONE fix round running → single verifier → merge at step 5 (phase 3 re-merges the fixed head) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
 - I2B-R4-worker: codex-worker / codex/i2b-r4-worker — dispatched (Opus) from 08ed293 (phase-3 1fa825b + cutover a1e88dc): python -m infrx.worker composition root, unit/installer alignment, rehearse.sh sandbox deps, pilotbox real entry point since 2026-09-23T23:43:44Z — d4 ports, Q 55494, MinIO 55781
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
 - review G4U: MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z
@@ -88,7 +88,7 @@ Generated 2026-09-24T00:04:02Z from `tasks.json` (manifest v4) and `progress-sta
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
 - review E3B-phase3: fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) → fix round since 2026-09-23T22:44:29Z
 - review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
-- review M-pilot-media: review at 8b91648 RERUN after the 429 (wf_633c3f83-924 resumed) since 2026-09-23T23:12:12Z
+- review M-pilot-media: fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) → fix round since 2026-09-24T00:11:02Z
 - review CUTOVER: review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters) since 2026-09-23T23:21:08Z
 - review ROLLOUT-PREP: DONE f0a1a82: hosted 0001/0002 only → release applies 0003–0018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey → worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing → worker lane since 2026-09-23T23:43:44Z
 

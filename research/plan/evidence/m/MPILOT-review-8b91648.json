@@ -1,0 +1,610 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "head": "8b91648",
+ "reviews": [
+  {
+   "lens": "parity",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count, exit code, tail and probe output above comes from commands I ran in a private scratch copy of 8b91648 (git archive): a patched tests/d/pgharness.py (container infrx-review-mpilot-parity-postgres on 127.0.0.1:55721), TMPDIR under the scratch, Valkey env 55722/55723, and a private MinIO infrx-review-mpilot-parity-minio on 55724 using the E2 image and literals. INFRX_M_S3_LOCAL_CREDS does not exist in this tree; test_s3's own s3_env literals were used instead. The second process in P1-P5 is a real OS subprocess with fresh memory over the same PG database, MinIO prefix and cache dir. The first O4/O5/O6 attempt errored at collection (the copy had no models/ dir, so there was no 'bench' module); I re-ran them with models/ copied, and the table reports the re-run. One P6 attempt with 20 jobs on one key failed with capacity_exhausted (key active job limit); I re-ran it as 3+3 jobs over two keys. P3's put race produced only 2 interleaved reads, so it is weak evidence of race safety. I did not run make api-test, make api-mutants as a whole, the M1-M4 or G all-mutant lists, anything on the pilot box, or anything against AWS. The codex-mpilot worktree was only read (git archive/diff/log); its HEAD is still 8b91648 with a clean status.",
+   "cleanup": "Removed the MinIO container infrx-review-mpilot-parity-minio (docker rm -f -v). The harness had already removed the PG containers (plain and -supabase), and 'docker ps -a | grep review-mpilot-parity' now shows none. Deleted the scratch tree /tmp/claude-1000/review-mpilot-parity-x, which held the probe file, the hand-mutant copy, the logs and the private TMPDIR. I did not touch 55432, any other lane's containers, or the codex-mpilot worktree.",
+   "mutants": [
+    {
+     "name": "D upload_ref_not_resolved",
+     "edit": "uploads.materialize: `if not source.startswith(UPLOAD_REF_SCHEME)` -> `if True`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_chat_naming_a_finalized_upload_is_prepared_from_the_store (typed InvalidRequest: a media source must be an http(s) or data: URL)"
+    },
+    {
+     "name": "D admission_ignores_the_owner",
+     "edit": "store.resolve_owned: refs.get((org,ref)) -> first ref with that handle from any org",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__another_orgs_upload_is_not_found_at_admission (DID NOT RAISE NotFound)"
+    },
+    {
+     "name": "D admission_accepts_an_unfinalized_upload",
+     "edit": "uploads.resolve_owned: `and upload.state is not finalized` -> `and False`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__an_unfinalized_upload_is_refused_at_admission (typed NotFound 'object ... is gone' where InvalidRequest is expected; the evidence declares this honestly)"
+    },
+    {
+     "name": "D admission_accepts_an_expired_upload",
+     "edit": "uploads.resolve_owned expiry guard -> `if False`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__an_upload_past_its_window_is_upload_expired_at_admission (DID NOT RAISE UploadExpired)"
+    },
+    {
+     "name": "D admission_skips_the_size_bound",
+     "edit": "prepare._materialize_one: budget.spend(ref.bytes) -> spend(0)",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__an_upload_over_the_media_bound_is_refused_at_admission (DID NOT RAISE RequestTooLarge)"
+    },
+    {
+     "name": "D admission_resolves_a_changed_object",
+     "edit": "uploads.resolve_owned head!=digest -> False",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__an_upload_whose_object_changed_is_refused_at_admission[replaced] (DID NOT RAISE NotFound)"
+    },
+    {
+     "name": "D attach_not_persisted",
+     "edit": "store.attach: attachments.put -> pass",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_second_process_resolves_the_attach_and_the_local_file (assert None == (MediaRef...))"
+    },
+    {
+     "name": "D attach_not_read_back",
+     "edit": "store.attached: refs = attachments.get -> None",
+     "result": "KILLED",
+     "killed_by": "same case (assert None == (MediaRef...))"
+    },
+    {
+     "name": "D local_uri_misses_the_disk",
+     "edit": "local_uri: cache.get without ref.mime",
+     "result": "KILLED",
+     "killed_by": "second-process case (typed NotFound: not in the processing cache)"
+    },
+    {
+     "name": "D index_rebuilt_without_the_hash",
+     "edit": "_load: drop the digest check",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served (DID NOT RAISE NotFound)"
+    },
+    {
+     "name": "D put_leaves_the_file_time",
+     "edit": "put: os.utime -> pass",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process (DID NOT RAISE NotFound)"
+    },
+    {
+     "name": "D disk_entry_trusted_for_its_facts",
+     "edit": "prepare: drop `or entry.probed is None`",
+     "result": "KILLED (declared death)",
+     "killed_by": "second-process case: AttributeError 'NoneType' has no attribute 'mime'. The declaration is justified: the crash in the second process's prepare is the defect's direct symptom"
+    },
+    {
+     "name": "D attach_record_not_composed",
+     "edit": "build_ingress_deps: drop attachments=attachments",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__the_pilot_composition_records_the_attach_on_its_pool (assert False on isinstance)"
+    },
+    {
+     "name": "D rebind_to_other_refs_accepted (PG)",
+     "edit": "attachments.put bound-compare -> if False",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound (DID NOT RAISE Conflict)"
+    },
+    {
+     "name": "D recorded_content_unchecked (PG)",
+     "edit": "attachments.put `if recorded != ref.digest` -> if False",
+     "result": "KILLED",
+     "killed_by": "same PG case (DID NOT RAISE Conflict)"
+    },
+    {
+     "name": "D foreign_job_not_translated (PG)",
+     "edit": "except pg.ForeignKeyViolation -> except pg.UniqueViolation",
+     "result": "KILLED (declared death)",
+     "killed_by": "same PG case: raw psycopg ForeignKeyViolation on job_media_job_id_org_id_fkey. The declaration is justified: the untranslated driver error is the defect"
+    },
+    {
+     "name": "D attach_order_lost (PG)",
+     "edit": "_BOUND order by position desc",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order (typed Conflict: already attached to other media)"
+    },
+    {
+     "name": "O1 expiry_boundary_gt",
+     "edit": "uploads.resolve_owned `now >= expires_at` -> `>`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__an_upload_past_its_window_is_upload_expired_at_admission (DID NOT RAISE UploadExpired at exactly expires_at)"
+    },
+    {
+     "name": "O2 rebind_reorder_via_upsert",
+     "edit": "_BIND `on conflict do nothing` -> `on conflict (job_id,role,handle) do update set position=excluded.position`",
+     "result": "SURVIVED",
+     "killed_by": "none (all of test_pilot_media.py passed, including _pg): PAR-1"
+    },
+    {
+     "name": "O3 disk_entry_not_indexed",
+     "edit": "_load: do not store the loaded entry in self.entries",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process (assert [] == [(org, digest, 'v1')])"
+    },
+    {
+     "name": "O4 in_process_before_durable",
+     "edit": "store.attach: set by_job before attachments.put",
+     "result": "SURVIVED",
+     "killed_by": "none (tests/m + g relay_recovery + g jobs: 483 passed, 21 skipped): PAR-3"
+    },
+    {
+     "name": "O5 durable_preferred_over_process",
+     "edit": "attached(): read attachments.get first and use by_job only when attachments is None",
+     "result": "SURVIVED",
+     "killed_by": "none (tests/m + g relay/jobs/composition: 526 passed): PAR-3"
+    },
+    {
+     "name": "O6 resume_dependency_unwrapped",
+     "edit": "relay._resume: drop _dependency() around media.attached",
+     "result": "SURVIVED",
+     "killed_by": "none (526 passed): PAR-3 (078eefe's only change has no killing test)"
+    },
+    {
+     "name": "O7 stage_row_no_conflict_clause",
+     "edit": "_STAGE: drop `on conflict (org_id, handle) do nothing`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order (raw UniqueViolation staged_media_pkey: a death, not an assertion)"
+    },
+    {
+     "name": "O8 get_without_id_guard",
+     "edit": "PgAttachments.get: drop ids.is_request_id guard",
+     "result": "KILLED",
+     "killed_by": "same PG case (raw InvalidTextRepresentation for 'not-a-job-id')"
+    },
+    {
+     "name": "O9 fake_expiry_boundary_gt",
+     "edit": "FakeMediaStore.resolve_owned `>=` -> `>`",
+     "result": "KILLED",
+     "killed_by": "tests/contracts/test_conformance.py::test_fake_passes_conformance_case[mediastore-media_sec__an_upload_is_usable_only_within_its_window] (AssertionError: used past its window)"
+    },
+    {
+     "name": "O10 superset_check_by_set",
+     "edit": "bound-compare -> refs handles subset of bound handles",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound (DID NOT RAISE Conflict)"
+    },
+    {
+     "name": "O11 load_trusts_size_not_hash",
+     "edit": "_load: replace digest check with len(data)==0",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served (DID NOT RAISE NotFound)"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "UV_OFFLINE=1 make api-env (scratch archive of 8b91648)",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "pytest -q tests/m/test_pilot_media.py (plain PG, private container infrx-review-mpilot-parity-postgres:55721, INFRX_D_TASK=d4 db)",
+     "exit": 0,
+     "tail": "17 passed in 5.42s"
+    },
+    {
+     "cmd": "pytest -q tests/m (plain PG)",
+     "exit": 0,
+     "tail": "410 passed, 16 skipped in 119.43s (skips = S3 cases, no endpoint)"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all pytest -q tests/m/test_pilot_mutants.py (plain PG)",
+     "exit": 0,
+     "tail": "26 passed in 101.79s (0:01:41)"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 pytest -q -s tests/m/test_review_probes.py (P1-P5, plain PG + private MinIO, second process = subprocess)",
+     "exit": 0,
+     "tail": "5 passed in 12.26s; P4 superset 'ok', race ['ok','ok'] both at position 0; P5 resume_pg_down ('dependency_unavailable',503), calls []"
+    },
+    {
+     "cmd": "INFRX_D1_IMAGE=supabase INFRX_M_S3_ENDPOINT=... pytest -q -s tests/m/test_pilot_media.py tests/m/test_review_probes.py -k '_pg or p1..p5'",
+     "exit": 0,
+     "tail": "9 passed, 13 deselected in 15.54s (P4 superset 'ok'; race resolved ['ok','Conflict'] this run)"
+    },
+    {
+     "cmd": "pytest -q tests/contracts/test_conformance.py test_fixtures.py test_config_and_imports.py (fake conformance incl. both new cases)",
+     "exit": 0,
+     "tail": "639 passed in 8.03s"
+    },
+    {
+     "cmd": "pytest -q tests/g quick (uploads, relay_sync/sse/recovery/matrix, jobs, composition)",
+     "exit": 0,
+     "tail": "176 passed, 2 warnings in 31.68s"
+    },
+    {
+     "cmd": "pytest -q tests/w -k 'not mutant_is_killed'",
+     "exit": 0,
+     "tail": "152 passed, 28 deselected in 181.55s"
+    },
+    {
+     "cmd": "INFRX_M_S3_ENDPOINT=http://127.0.0.1:55724 pytest -q tests/m/test_s3.py test_uploads.py test_prepare.py test_store.py (S3 arm + MediaUploads 11/11 + M1/M2 partitions)",
+     "exit": 0,
+     "tail": "183 passed in 14.39s"
+    },
+    {
+     "cmd": "python3 handmut.py (17 declared + 11 own, one at a time in a copy, PYTHONPATH=copy)",
+     "exit": 0,
+     "tail": "all 17 declared KILLED; own: O2 O4 O5 O6 SURVIVED, O1 O3 O7 O8 O9 O10 O11 KILLED"
+    },
+    {
+     "cmd": "pytest -q -s tests/m/test_review_probes.py -k p6 (concurrent attach race, plain PG)",
+     "exit": 0,
+     "tail": "P6 both-committed 4 of 6"
+    },
+    {
+     "cmd": "pytest -q -s tests/m/test_review_probes.py -k p7 (PgAttachments over pilot.connection_pool, pool size 1)",
+     "exit": 0,
+     "tail": "P7 ['state_conflict', 'not_found', [True], 0]: refusals roll back and the single pooled conn stays usable"
+    },
+    {
+     "cmd": "pytest -q tests/d/test_composition_pg.py tests/d/test_operations_pg.py tests/g/ops/test_cli.py tests/g/test_startup.py (merged head 8418832 content, plain PG)",
+     "exit": 0,
+     "tail": "42 passed, 2 warnings in 12.38s"
+    }
+   ]
+  },
+  {
+   "lens": "honesty",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count above comes from a command I ran in this session, in scratch copies under /tmp/claude-1000/review-mpilot-honesty-3680050 (head 8b91648, base 6cb8ebe, a merge clone, an e3b-tip copy, per-mutant copies). All of it is now deleted. Reproduced: pilot list 26, tests/m, G list 329 on the merged head (the lane's row 15), G3 list 85 on 8b91648 (the lane ran it only at 078eefe; this is the first merged-head run), contracts quick, and the 23 pre-existing api-test failures, identical id-for-id to 6cb8ebe. My api-test count differs from the lane's (3474 passed at 078eefe) because the head also carries the cutover and M1-L2 merge, plus one red from my own harness patch. The lane's 078eefe-only rows 2-12 were not rerun at 078eefe. The re-anchored mutants inflight_replay_rechecked_after_attach and inflight_async_replay_rechecked die within the G 329 and G3 85 lists. cache_hit_stands_in_for_the_durable_artifact was NOT individually rerun: the M1-M4 list (242) was not run, and its reason is unverified by me. For the 20:41Z incident, docker keeps no event history, so I could not check the container timeline. The coordinator session record shows D5's review on ports 55631-55639 (result logged at 20:43:27Z), the cutover lane on the d3 ports and the api-mutants gate on d4 (its 21:45Z result: 2784 passed / 1 W3 sigint, no PG fallout). I found no evidence of another run on 55432 at 20:41Z, and the harness's ownership label would have refused a foreign container. The pgharness lock sits under TMPDIR, so it is not host-wide across private TMPDIRs. Layer 3 / the E2 stack (the M3-U2 journey tripwire) was not run.",
+   "cleanup": "I created one container, infrx-review-mpilot-honesty-minio, and removed it. The D harness containers (infrx-review-mpilot-honesty-postgres, -supabase, and the decoy) were created and removed by the harness at interpreter exit; docker ps -a shows no review-mpilot-honesty or 55727 container left. No Q valkey container was started. Scratch /tmp/claude-1000/review-mpilot-honesty-3680050 is deleted. /tmp/claude-1000/review-mpilot-honesty-3359775 and /tmp/claude-1000/review-mpilot-honesty.root existed but were not created by this run, so I left them alone. The worktree codex-mpilot was not modified (HEAD 8b91648, clean). Nothing was pushed. 55432, other lanes' containers, AWS, the box and secrets were not touched.",
+   "mutants": [
+    {
+     "name": "H1_attached_zero_refs_fall_to_durable",
+     "edit": "store.py attached(): `if refs is None and self.attachments is not None:` -> `if not refs and ...`",
+     "result": "SURVIVED (542 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "H2_attach_memory_before_durable",
+     "edit": "store.py attach(): set by_job before attachments.put",
+     "result": "SURVIVED (542 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "H3_get_ignores_role",
+     "edit": "attachments._BOUND drops `and m.role = 'source'`",
+     "result": "SURVIVED (_pg 4 passed); equivalent today because nothing writes role='prepared'",
+     "killed_by": ""
+    },
+    {
+     "name": "H4_get_empty_tuple_not_none",
+     "edit": "PgAttachments.get drops `or None`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order (assert () is None)"
+    },
+    {
+     "name": "H5_resume_reads_memory_only",
+     "edit": "relay _resume gate -> `self.media.by_job.get(job.request_id) is not None`",
+     "result": "SURVIVED (542 passed); equivalent in reachable cases, which is consistent with Limit 2",
+     "killed_by": ""
+    },
+    {
+     "name": "H6_resume_attached_unguarded",
+     "edit": "relay _resume: drop _dependency(...) around media.attached()",
+     "result": "SURVIVED (542 passed); 078eefe's 503 claim is untested",
+     "killed_by": ""
+    },
+    {
+     "name": "H8_get_skips_id_check",
+     "edit": "PgAttachments.get drops the is_request_id guard",
+     "result": "KILLED",
+     "killed_by": "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order (psycopg InvalidTextRepresentation)"
+    },
+    {
+     "name": "D1_load_prefix_hash",
+     "edit": "_load: `digest_of(data)[:23] != digest[:23]` (trust the path's 16-hex prefix)",
+     "result": "SURVIVED (542 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "D2_load_life_from_ctime",
+     "edit": "_load: stored_at from st_ctime instead of st_mtime",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process (DID NOT RAISE NotFound)"
+    },
+    {
+     "name": "D3_load_ignores_enabled",
+     "edit": "_load: drop `if not self.enabled: return None`",
+     "result": "SURVIVED (542 passed)",
+     "killed_by": ""
+    },
+    {
+     "name": "D9_life_boundary_inclusive",
+     "edit": "get(): expiry `>=` -> `>`",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process"
+    },
+    {
+     "name": "D10_load_not_indexed",
+     "edit": "_load does not index the entry it found",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process (entries == [])"
+    },
+    {
+     "name": "D11_load_size_only",
+     "edit": "_load: `if len(data) == 0` replaces the hash check",
+     "result": "KILLED",
+     "killed_by": "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "base 6cb8ebe scratch: pytest -q tests/contracts/test_mutants.py tests/contracts/test_cancel_cause.py",
+     "exit": 1,
+     "tail": "23 failed, 18 passed in 18.17s (22 contracts runner baseline refusals + test_dur_settle__before_0018...)"
+    },
+    {
+     "cmd": "head 8b91648: make api-test (detached; private PG infrx-review-mpilot-honesty-postgres:55725, D2 valkey 55726, Q 55727)",
+     "exit": 2,
+     "tail": "24 failed, 3521 passed, 16 skipped, 5 xfailed in 2456.64s. comm vs base: the 23 base FAILED ids are all present. The one extra, tests/d/test_pgharness.py::test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged, is my harness patch (decoy renamed); base-only is empty"
+    },
+    {
+     "cmd": "head: INFRX_MUTANTS=all pytest tests/m/test_pilot_mutants.py",
+     "exit": 0,
+     "tail": "26 passed in 90.71s (21 mutants + 5 meta)"
+    },
+    {
+     "cmd": "head: pytest tests/m",
+     "exit": 0,
+     "tail": "410 passed, 16 skipped in 125.81s (skips = M1-L2 S3 cases without an endpoint)"
+    },
+    {
+     "cmd": "head: INFRX_MUTANTS=all pytest tests/g/test_mutants.py (detached)",
+     "exit": 0,
+     "tail": "329 passed in 1303.08s"
+    },
+    {
+     "cmd": "head: INFRX_MUTANTS=all pytest tests/g/jobs/test_jobs_mutants.py (on the merged head 8b91648)",
+     "exit": 0,
+     "tail": "85 passed in 253.28s"
+    },
+    {
+     "cmd": "head: contracts quick (test_conformance, test_fixtures, test_config_and_imports)",
+     "exit": 0,
+     "tail": "639 passed in 8.31s"
+    },
+    {
+     "cmd": "head: INFRX_D1_IMAGE=supabase pytest tests/m/test_pilot_media.py -k _pg",
+     "exit": 0,
+     "tail": "4 passed, 13 deselected in 6.20s"
+    },
+    {
+     "cmd": "S3 arm, private MinIO 55728: INFRX_M_S3_ENDPOINT=... pytest tests/m/test_s3.py + own scratch cases (gap 1 upload ref and gap 2 second process on S3ObjectStore)",
+     "exit": 0,
+     "tail": "30 passed in 13.89s"
+    },
+    {
+     "cmd": "scratch PG probe of PgAttachments write-once edges + fake re-attach",
+     "exit": 0,
+     "tail": "superset_after_attach accepted; zero_then_refs (accepted, accepted); duplicate_ref Conflict; relabelled kind url read back inline; fake re-attach accepted"
+    },
+    {
+     "cmd": "merge sim clone: 1df9ac0 + 8554b47 + 1fa825b + 92269a6 + ba26ca4 + 8b91648",
+     "exit": 0,
+     "tail": "all clean, no conflicts; 8b91648 'Already up to date'"
+    },
+    {
+     "cmd": "merged: pytest tests/m -k 'not _pg'",
+     "exit": 0,
+     "tail": "415 passed, 18 skipped, 5 deselected in 107.57s"
+    },
+    {
+     "cmd": "merged: pytest tests/m/test_pilot_media.py -k _pg",
+     "exit": 0,
+     "tail": "4 passed, 13 deselected in 3.86s"
+    },
+    {
+     "cmd": "merged: tests/g quick (uploads, relay_sync/sse/recovery/matrix, jobs, composition)",
+     "exit": 0,
+     "tail": "176 passed, 2 warnings in 8.67s"
+    },
+    {
+     "cmd": "merged: contracts quick",
+     "exit": 0,
+     "tail": "639 passed in 8.60s"
+    },
+    {
+     "cmd": "merged: layer 0 = .venv/bin/python -m pytest -q -rfEs tests/integration (repo root)",
+     "exit": 1,
+     "tail": "2 failed, 152 passed, 103 skipped: test_stage M3-U1 tripwire; test_run stale anchor e3bm62 (owner E3B phase 3)"
+    },
+    {
+     "cmd": "e3b tip 1fa825b alone: layer 0",
+     "exit": 1,
+     "tail": "3 failed, 151 passed, 103 skipped (the same two + a git-less-archive report test)"
+    },
+    {
+     "cmd": "own mutants: mem suite (13 files, -k 'not _pg') pristine + 10 mutants; pg suite pristine + 3",
+     "exit": 0,
+     "tail": "mem pristine 542 passed; pg pristine 4 passed; results in the mutant table"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "PAR-1",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/media/attachments.py",
+   "line": "61",
+   "claim_broken": "The docstring and evidence say the attach is write-once: a job that is already bound to other refs gets a conflict and nothing is written. The mutant rebind_to_other_refs_accepted exists to guard that rule.",
+   "evidence": "Probe P4 ran on plain PostgreSQL and on Supabase. put(j,(A,)) followed by put(j,(A,B)) returned 'ok', and get(j) then returned both A and B, so the job was rebound to more media. Two cases were refused with Conflict: reordering [A,B] to [B,A], and the subset [A]. The reason: the check compares the bound rows only after inserting the new ones with ON CONFLICT DO NOTHING, so an extension at the end passes. Own mutant O2 changes the bind to an upsert on position, which lets a reorder rebind the job. O2 SURVIVED the whole of test_pilot_media.py, including the _pg cases, because the write-once case only tries a disjoint list. Concurrency (P4/P6): two concurrent put(j,(A,)) and put(j,(B,)) calls, each on its own connection, both committed in 4 of 6 trials on plain PG, plus 1 of 1 in P4. The job was left with rows (A,0) and (B,0): two refs at position 0, so the order is ambiguous. Nothing locks the job row, and no constraint covers (job_id, role, position). The one Supabase P4 run happened to interleave into a Conflict. Neither path is reachable through today's relay, which attaches the same refs, but the claimed invariant is false.",
+   "minimal_fix": "In put, first run 'select 1 from infrx.jobs where request_id=%s and org_id=%s for update' to serialize attaches per job. Then read the existing binding. If it is non-empty, commit as a no-op when it equals refs exactly (handles and digests in order), and raise Conflict otherwise. Insert only when there is no existing binding. Add _pg cases for the superset [A] then [A,B], for a reorder, and for two concurrent puts of different refs.",
+   "lens": "parity",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed from the code and by experiment. In apps/infrx-api/infrx/media/attachments.py:59-62, _BIND is 'insert ... on conflict do nothing', and 0003's job_media primary key is (job_id, role, handle). It does not cover position. On put(j,(A,B)) when A is already bound, the insert for A is skipped, B goes in at position 1, and the _BOUND check sees [A,B] == [A,B], so the call passes. The job is rebound to more media, which breaks the write-once rule in the docstring (line 13-14). The concurrency part follows from the same design. Nothing locks the job row and no unique constraint covers (job_id, role, position). Under READ COMMITTED, two transactions that have not committed each see only their own row in the post-insert check, so both can commit (A,0) and (B,0). I checked that part by reading the code, not by running it. The test test_mpilot_pg__an_attach_is_write_once_and_tenant_bound only tries a disjoint list (other,), so the rebind_to_other_refs_accepted mutant does not cover extension or reordering. Experiment: I made a scratch copy with git archive 8b91648 and added a private task d97 on port 55731 (plain PostgreSQL). I appended a probe that attaches refs, then runs put(job, (*refs, other)). Command: `INFRX_D_TASK=d97 timeout 600 .../codex-mpilot/apps/infrx-api/.venv/bin/python -m pytest -q -s -p no:cacheprovider tests/m/test_pilot_media.py::test_probe_superset_rebind tests/m/test_pilot_media.py::test_mpilot_pg__an_attach_is_write_once_and_tenant_bound`. Tail: `PROBE before 1 put ok after 2 extended: True` / `2 passed in 9.61s` / `no container left on 55731`. The scratch copy has been removed. The path cannot be reached through today's relay, which re-attaches the same refs, but it is blocking: the documented durability/immutability invariant is false and no killable test enforces it. The fix is the one proposed: lock the job row with 'select ... for update' on infrx.jobs, compare an existing binding exactly (a no-op if equal, Conflict otherwise), insert only when no binding exists, and add _pg cases for a superset, a reorder and concurrent puts.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed from the code and by a small experiment.\n\n**Code.** `infrx.job_media` has primary key `(job_id, role, handle)` (0003_pilot_durable_schema.sql:466). Nothing covers `(job_id, role, position)`, and `put` takes no lock on the job. `_BIND` is `insert ... on conflict do nothing`, and the write-once check at attachments.py:61 runs only after the inserts. It compares the bound rows with the new refs. Two cases follow:\n- **Superset.** For `[A]` then `[A,B]`, the insert of A is skipped as a conflict and B is inserted at position 1. The read-back is `[A,B]`, which equals the new refs, so the call commits.\n- **Concurrency.** Under READ COMMITTED, two concurrent `put` calls with different single refs each insert a row with a distinct primary key. Each read-back sees only its own uncommitted row, so both calls commit.\n\nThe only case the test covers is a disjoint list: `test_mpilot_pg__an_attach_is_write_once_and_tenant_bound` tries `[other]` after `refs`. So the `rebind_to_other_refs_accepted` guard is never tested against a superset or a race. The module docstring (lines 13-14) still claims that \"a job already bound to other refs, is a conflict and nothing is written\", and that claim is false.\n\n**Experiment.** I extracted the real `PgAttachments` from 8b91648 with git archive into scratch. I ran it against a throwaway postgres:16-alpine container named `infrx-verify-mpilot-p4` on port 55732. The schema was minimal but used the same keys and foreign keys as 0003 for jobs, staged_media and job_media. The command was `.venv/bin/python $S/p4.py $S/apps/infrx-api`, and its tail was:\n```\nsuperset [A]->[A,B]: ok, get = ['upl_a', 'upl_b']\ndisjoint [A]->[B]: Conflict\nconcurrent trial 0 ['NoneType', 'NoneType'] [('upl_a', 0), ('upl_b', 0)]\nconcurrent trial 1 ['NoneType', 'Conflict'] [('upl_a', 0)]\n...\nconcurrent trial 4 ['NoneType', 'NoneType'] [('upl_a', 0), ('upl_b', 0)]\nboth committed in 2 of 6\nremoved\n```\nThe container was removed afterwards. I touched no other lane's containers and used no AWS.\n\n**Why blocking.** The docstring and the evidence both claim write-once, and a named mutant is said to guard it. In fact:\n- A superset rebinds the job to more media.\n- Concurrent attaches leave two sources at position 0, so their order is ambiguous.\n- No test would catch either case.\n\nToday's relay does not reach this, because it attaches the same refs each time. But the durable record is meant to be read by a second process, and the rule it claims does not hold. That is an invariant with no test that could kill a violation.\n\n**Fix.** The reviewer's minimal fix is right:\n1. Lock the job row with `select ... from infrx.jobs where request_id=%s and org_id=%s for update`.\n2. Read the existing binding.\n3. If a binding exists, commit as a no-op when it matches the refs exactly (handles and digests, in order), and raise Conflict otherwise.\n4. Insert only when there is no binding.\n5. Add _pg tests for the superset, a reorder, and concurrent attaches of different refs.\n\nA `unique (job_id, role, position)` constraint would be a cheap backstop, but it needs a migration.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "PAR-3",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+   "line": "230",
+   "claim_broken": "Commit 078eefe claims that _resume reads the durable attach through _dependency, so a database failure is the retryable 503 and not a 500. Limit 2 claims 'behaviour unchanged in every reachable case'. store.attach says 'durable first'. None of these has a test that fails when it breaks.",
+   "evidence": "I ran three own mutants against tests/m (whole) plus tests/g test_relay_recovery, test_relay_sync, jobs/test_jobs and test_composition, including the PG cases. All three SURVIVED. O6 drops the _dependency wrapper in _resume, which is 078eefe's only code change (526 passed). O5 makes attached() prefer the durable record over the in-process copy (526 passed). With PgAttachments, that makes an in-process text job read as unbound (Limits 1 and 2), so _resume would re-run the recheck and could cancel it. O4 writes by_job before the durable put (483 passed). A failed or 503 put would then leave the in-process copy claiming 'bound', and a retry would skip the attach that was never made durable. They survive because no relay or G world composes an attachments record: injected stores give attachments=None, and support.Durable never fails. My probe P5 (a stub Relay over PgAttachments) shows the current code behaves correctly. With PostgreSQL down, _resume gives ('dependency_unavailable', 503) with no cancel and no _admitted. A restarted gateway answering a zero-ref job does nothing. The invariants hold, but nothing can kill a regression.",
+   "minimal_fix": "Add G/M cases on a Relay whose MediaUploads has an attachments record. (a) get raises psycopg.OperationalError: the replay is 503, with no cancel and no attach. (b) A text job attached in process: _resume returns without a recheck, which kills O5. (c) put raises Conflict or OperationalError: by_job has no entry for the job, which kills O4. Declare O4, O5 and O6 in tests/m/pilot_mutants.py.",
+   "lens": "parity",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "Confirmed. I tested a git-archive copy of 8b91648 (apps/infrx-api plus models/marlin2b, which client_example.py needs). I applied O6 and O4 together. O6 is 078eefe's only code change reverted: relay.py:230 `if await self.media.attached(job.request_id) is not None:`, without _dependency. O4 moves `self.by_job[job_id] = tuple(owned)` in store.py:attach ahead of `await self.attachments.put(...)`. I ran `.venv/bin/python -m pytest -q tests/m tests/g/test_relay_recovery.py tests/g/test_relay_sync.py tests/g/jobs/test_jobs.py tests/g/test_composition.py --deselect <mutant runners>`. Tail: `4 failed, 487 passed, 13 skipped, 38 deselected`. All 4 failures are test_mpilot_pg__* cases. They fail from the environment (`psycopg.errors.UndefinedTable: relation \"public.organizations\" does not exist`, no private harness), not from the mutants. Reading the code, they could not kill O4 or O6 anyway. They call `durable.put` directly, or attach through a store whose put succeeds, and no Relay runs over PgAttachments. There is no failure injection anywhere: support.Durable.put/get never raise, and the only grep hits for `raise`/`OperationalError` are in admission tests and the composition test's connect stub. No tests/g file calls `_resume` over a store whose `attached()` can fail. The G/jobs mutant lists replace that whole line with `if False:`, which says nothing about the wrapper. So the retryable-503 behaviour 078eefe claims, and store.attach's 'durable first' ordering, have no test that can kill them. The O4 consequence is real: when put fails, the in-process by_job says bound, and the retry's `_resume` returns early for a job whose attach was never made durable. The worker process then reads None. I did not run O5, and I read the code only enough to confirm the paths above. The current code is correct, as the reviewer's P5 says. This is still an invariant that is claimed but has no killable test, and the rubric counts that as blocking. Scratch copy removed. I started no containers and used no AWS.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "Confirmed, at least for O6. I could not refute it.\n\nCode: 078eefe changes one line, relay.py:230, to `if await _dependency(self.media.attached(job.request_id)) is not None:`. `attached()` (media/store.py:331-340) reads `by_job`, then `self.attachments.get(job_id)` when `attachments` is set. The pilot composition sets it to PgAttachments(connect) (gateway/pilot.py:212). So a keyed replay of a job in flight can hit PostgreSQL when this process has no `by_job` entry, for example after a gateway restart. Without the `_dependency` wrapper, an OperationalError would fall to ingress.py's `unhandled` handler and answer InternalError (500). With the wrapper it is DependencyUnavailable (503). The current code is correct.\n\nCoverage: `grep -rn attachments tests/g` finds nothing. In tests/m, only store, uploads, prepare and pilot_media tests set `attachments` (support.Durable, which never fails, or PgAttachments on the harness), and none of them drives Relay._resume. No fake overrides `attached`. The two G anchors 078eefe edited replace the whole condition with `if False:`. They test the bound-gate, not the 503 wrapping.\n\nExperiment: I extracted 8b91648 with git archive into a scratch dir and applied O6 with sed, which changed line 230 back to `if await self.media.attached(job.request_id) is not None:`. I ran the suites with the codex-mpilot venv's Python:\n`python -m pytest -q -p no:cacheprovider tests/m tests/g/test_relay_recovery.py tests/g/test_relay_sync.py tests/g/jobs/test_jobs.py tests/g/test_composition.py`\nTail: `526 passed, 16 skipped, 2 warnings in 141.02s`. The mutant survives. On an earlier run, a later full-tree extract had overwritten the patch, so it tested unmutated code, and 4 mpilot_pg cases failed transiently. Those cases passed when I re-ran them alone. I used the PG harness's own defaults, patched no private port and touched no other lane's containers. The scratch dir is removed.\n\nI did not run O4 or O5. The O4 reasoning holds from the code: `put` comes before the `by_job` write in store.py:327-329, and support.Durable never fails, so no test would notice the order being swapped.\n\nSeverity: the code is correct today. The defect is that a claimed invariant (503, not 500, on a durable attach read during a replay; 'durable first') has no test that fails if it breaks. By this review's rules that is blocking. The fix is small: G/M cases on a Relay whose MediaUploads has a failing or preloaded attachments record, with O4, O5 and O6 declared in pilot_mutants.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "H-B1",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/media/attachments.py",
+   "line": "55-63",
+   "claim_broken": "Evidence (GAP 2 fix, and the ruling's (c)): the attach is 'write-once (a handle recorded with other content, or a job bound to other refs, is conflict)'. The test and the mutant rebind_to_other_refs_accepted only cover a DIFFERENT ref at position 0.",
+   "evidence": "PgAttachments.put runs its read-back check after its own `on conflict do nothing` inserts. It only compares the handles it reads back with the handles it was given. On the D harness at 8b91648, my scratch probe got these results: put(job,(A,)) then put(job,(A,B)) was 'accepted', and the read-back is now [A,B]. put(job,()) then put(job,(A,)) was also 'accepted'. So a job that is already bound can be rebound to a superset of refs, or from no media to media. The three stores behave three different ways. The contract fake's attach replaces silently ('fake re-attach accepted'). MediaStaging.attach overwrites by_job. PgAttachments refuses a different ref but accepts a superset. No exported conformance case pins what a re-attach does. Today no product path reaches this: MAX_VIDEO_PARTS=1, and _resume re-attaches the same refs.",
+   "minimal_fix": "In put, read the job's bound rows first. If any exist, or the job is known as attached, require an exact match and raise Conflict on anything else; insert only when no rows exist. Add an exported mediastore case that re-attaching other refs is a conflict, or have the coordinator rule on last-writer-wins, and make the fake and MediaStaging follow the same rule. Add a PG case for the superset rebind.",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute this. The code and a run on PostgreSQL both confirm it. In migration 0003, infrx.job_media has primary key (job_id, role, handle), not (job_id, role, position). PgAttachments.put (apps/infrx-api/infrx/media/attachments.py:55-63) inserts with `on conflict do nothing`, then compares the rows it reads back against the refs it was given. Take a job bound to (A,) and call put again with (A,B). The A row is skipped as a duplicate, B goes in at position 1, and the read-back [A,B] equals the input, so the put is accepted and the job is rebound. The existing test (test_mpilot_pg__an_attach_is_write_once_and_tenant_bound) and the mutant rebind_to_other_refs_accepted only swap in a different single ref, which the read-back does catch. A related case follows from the same logic but I did not run it: after (A,), a put of (B,A) also inserts B at position 0, so ordering by position is a tie and the outcome is not deterministic.\n\nExperiment: I made a scratch copy with git archive of 8b91648 and added \"d97\": {\"postgres\": 55737} to TASK_PORTS. The probe ran `cd apps/infrx-api && INFRX_D_TASK=d97 <codex-mpilot venv>/python -m pytest -q -s tests/m/test_zz_probe.py`, which attaches refs, then calls put(job, (*refs, other)), then tries put(job2, ()) followed by put(job2, (other,)). Tail of the output:\n```\nSUPERSET accepted\nreadback ['med_69e1...', 'med_b9a8...'] orig ['med_69e1...'] other med_b9a8...\nEMPTY->media accepted ['med_b9a8...']\n1 passed in 3.80s\n```\nThe harness removed its own container: `docker rm -f infrx-d97-postgres` then answered \"No such container\". I deleted the scratch copy.\n\nWhat this contradicts: the module docstring and evidence MPILOT-078eefe.md:56 both say a job bound to other refs is a conflict. The three stores also disagree on a re-attach: the contract fake and MediaStaging.by_job overwrite, while PG refuses a different ref but accepts a superset. No exported conformance case pins what a re-attach should do. The empty-then-media case is weaker on its own, because store.attached already documents (as a ponytail note) that 0003 cannot record a zero-ref attach. The superset case is still a real hole, and no test kills it.\n\nIt is not reachable in the product today (MAX_VIDEO_PARTS=1, and _resume re-attaches the same refs). I rate it blocking anyway under the stated rubric: the lane claims an invariant it does not hold, no test can catch the gap, and the fake and the adapter behave differently. The fix is small. In put, read the job's bound rows first; if any exist, require an exact ordered match or raise Conflict. Then add a PG test for the superset case, and an exported case (or a coordinator ruling) so the fake and MediaStaging follow the same rule.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I confirmed the finding from the code and with a probe. I could not refute it.\n\nCode (apps/infrx-api/infrx/media/attachments.py at 8b91648):\n- The primary key of infrx.job_media is (job_id, role, handle) (0003_pilot_durable_schema.sql:466).\n- _BIND is `on conflict do nothing`.\n- put inserts first and only then checks: `if [row[1] for row in bound] != [ref.handle for ref in refs]`.\n- So put(job,(A,)) followed by put(job,(A,B)) skips A as a duplicate and inserts B at position 1. The read-back is then [A,B], which equals the refs passed in, so the call commits.\n- put(job,()) returns before any write. A later put(job,(A,)) is therefore always accepted.\n\nProbe: I extracted 8b91648 with git archive into the scratchpad and added TASK_PORTS \"dv\": {\"postgres\": 55738} to the scratch copy. The test attaches a clip, then calls put(job,(refs[0],other)), then does empty-then-media on a second job. Command:\n`INFRX_D_TASK=dv timeout 600 .../codex-mpilot/apps/infrx-api/.venv/bin/python -m pytest tests/m/test_zz_probe.py -s -q -p no:cacheprovider 2>&1 | tail -15`\nTail:\n```\nSUPERSET: accepted\nREADBACK ['med_69e1...', 'med_b9a8...'] orig ['med_69e1...'] other med_b9a8...\nEMPTY->MEDIA: accepted\n18 passed in 5.30s\n```\ninfrx was imported from the scratch tree. The harness removed its container on exit, and no dv container is left.\n\nWhat is wrong:\n- The module docstring says \"write-once ... a job already bound to other refs is a conflict and nothing is written\". The mutant rebind_to_other_refs_accepted says \"a job bound to its refs is never re-bound to others\".\n- Neither holds for a superset. test_mpilot_pg__an_attach_is_write_once_and_tenant_bound only tries a single different ref (`(other,)`). No test would catch the superset rebind.\n- The stores also disagree: the fake (contracts/fakes/media.py) replaces, MediaStaging.attach overwrites by_job, and PG accepts a superset but refuses a different ref. No exported conformance case pins what a re-attach does.\n\nThe empty-then-media half is weaker. The docstring and the ponytail comment in MediaStaging.attached both admit that 0003 cannot record \"attached with no media\". That part is a known, recorded limit, not a new defect.\n\nThe superset part is real. Today it is latent: MAX_VIDEO_PARTS=1, and _resume re-attaches the same refs.\n\nWhy blocking: under the stated criteria, this is a stated durability invariant with no test that fails when it breaks, plus a divergence between the fake and the adapter.\n\nFix: in put, read the bound rows first. If any exist, require an exact match and otherwise raise Conflict. Add a PG case for the superset rebind. Either add an exported conformance case for re-attach, or get a coordinator ruling that the fake, MediaStaging and PG must follow.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  },
+  {
+   "id": "H-B2",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/media/store.py",
+   "line": "327-340; relay.py 230",
+   "claim_broken": "Three claims on the new durable-attach read/write path, none of which a test can kill: (1) 'durable first' (store.py comment; evidence: 'writes it first, then its in-process copy'); (2) 078eefe's subject, 'a database failure is the retryable 503, not a 500' in _resume; (3) attached() tells 'attached with no media' (() in this process) apart from 'never attached' (None) when a durable record is composed.",
+   "evidence": "I ran my own mutants over tests/m (pilot_media, prepare, store, uploads, gc), the tests/g relay suites (sync/sse/recovery/matrix/composition), tests/g/jobs, tests/g/uploads and contracts conformance, excluding _pg (pristine: 542 passed). All three survived with 542 passed. H2 sets by_job before attachments.put: if the put fails, this process still counts the job as bound, so the same-key retry's _resume returns 'as it stands' and nothing durable is ever written. H6 drops the _dependency(...) around attached() in _resume, turning a DB error into a 500. H1 changes `refs is None` to `not refs`: with PgAttachments composed (production), a text job attached in this process reads as unbound, so a replay would re-run the rechecks and could cancel a running text job (the money-B2 hazard). Every G replay world runs with attachments=None, so the composed case is never exercised.",
+   "minimal_fix": "Three small tests, each using a support.Durable-like record with a failing or recording put/get: (1) the put raises, and by_job stays empty so the retry re-attaches; (2) get raises OperationalError during a same-key replay, and the answer is 503 dependency_unavailable; (3) with attachments composed, a text job attached in-process is answered as bound on replay (no recheck, no cancel).",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "I could not refute the finding. The code at 8b91648 behaves as its comments claim, but no test fails when any of the three claimed behaviours is broken. It is a real test gap on invariants, and one of them hides a fake-versus-adapter divergence.\n\nHow I checked: I extracted 8b91648 with git archive (apps/infrx-api, models, tests, infra) into a private scratch directory and ran it with the codex-mpilot worktree's .venv. I did not use PostgreSQL, Docker or AWS, and I deleted the scratch directory afterwards. I applied each mutant by exact single-occurrence string replace, ran the suite below, then restored the file:\n- H1 (store.py `attached`): `if refs is None and self.attachments is not None:` changed to `if not refs and ...`\n- H2 (store.py `attach`): `self.by_job[job_id] = ...` moved before `await self.attachments.put(...)`\n- H6 (routes/relay.py:230, `_resume`): the `_dependency(...)` wrapper around `self.media.attached(...)` removed, which undoes 078eefe\n\nCommand: `$PY -m pytest -q -p no:cacheprovider tests/m tests/g tests/contracts --ignore=tests/contracts/v2/test_parity_v2.py -k \"not _pg and not mutants\" -p no:randomly`\n\nTail of each run:\n- pristine: `28 failed, 1861 passed, 13 skipped, 147 deselected`\n- H1: `28 failed, 1861 passed, 13 skipped, 147 deselected`\n- H2: `28 failed, 1861 passed, 13 skipped, 147 deselected`\n- H6: `28 failed, 1861 passed, 13 skipped, 147 deselected`\n\nThe 28 failures are the same in every run, including pristine. They are parity tests (e.g. tests/contracts/test_parity_console.py) that need apps/app, which I did not extract, so all three mutants survive. The mutant lists add nothing: tests/m/pilot_mutants.py, tests/m/mutants.py, tests/g/mutants.py and tests/g/jobs/jobs_mutants.py contain none of these three. G's `inflight_replay_rechecked_after_attach` only swaps the gate to `if False:`, in worlds where attachments is None. The `_pg` cases (second process resolves, order, write-once) never inject a failing put or get, and never replay a text job with attachments composed.\n\nThe divergence behind H1: `PgAttachments.put` returns early for empty refs (attachments.py:46), and `get` returns `tuple(...) or None` (attachments.py:84). So on PostgreSQL, a text job reads back as None, the same as \"never attached\". tests/m/support.py's `Durable.put` instead stores `()`, and its `get` returns `()`. So even a test using the fake could not kill H1. Only this process's `()` in `by_job` keeps the money-B2 gate closed in production.\n\nSeverity: blocking under the task's criteria, because these are invariants with no killable test and include a fake/adapter divergence. The current code is correct. Three things are claimed but unpinned: the durable-first ordering (comment at store.py:327), 078eefe's \"503 not 500\" subject, and the no-recheck, no-cancel rule for a text job replayed with PgAttachments composed.\n\nThe reviewer's three minimal tests would fix it. One adjustment: for test (3), make `support.Durable` match PgAttachments (store nothing for empty refs, and have `get` return None when there are no rows), or run it as a `_pg` case.",
+     "severity_if_real": "blocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute the claim. All three mutants survive, and each guards a behavior the code claims. I tested a git-archive scratch copy of 8b91648 (since deleted), using codex-mpilot's own .venv. The runner applied one mutant at a time and ran `python -m pytest -q -x -p no:cacheprovider tests/m tests/g tests/contracts -k \"not _pg\" --ignore-glob=*test_*mutants*.py`. This is a wider set than the reviewer's 542 tests. The tail of the output was:\npristine rc 0 1910 passed, 13 skipped, 8 deselected\nH1_not_refs rc 0 1910 passed, 13 skipped, 8 deselected\nH2_local_first rc 0 1910 passed, 13 skipped, 8 deselected\nH6_no_guard rc 0 1910 passed, 13 skipped, 8 deselected\n\nThe 8 deselected tests are the _pg cases. I did not start PostgreSQL, because reading those cases (test_pilot_media.py:406-490) settles it. None of them makes put or get fail, and none replays through the relay, so H2 and H6 cannot die there. The only unbound-job check is `worker.attached(uuid) is None` on a process with empty by_job, and H1 does not change that result.\n\ntests/m/pilot_mutants.py has no mutant on the order in attach(), on `refs is None`, or on the _dependency wrapper around attached() in _resume. 078eefe only moved G's anchor strings (jobs_mutants.py:162, g/mutants.py:1070) to the new line, and those mutants replace the whole condition with `if False`. Nothing kills the removal of the guard itself.\n\nEach mutant would cause a real failure:\n- H6: without _dependency, a psycopg error escapes to ingress.py:212's `unhandled` handler and returns InternalError (500), not the retryable 503 the commit subject promises.\n- H2: if put raises, by_job is already set, so the same-key retry's _resume sees the job as bound and returns. No durable row is ever written, and a worker in another process never finds the refs.\n- H1: PgAttachments.put returns early when refs is empty, so a text job has no row. With `not refs`, the () in by_job falls through to get(), which returns None. _resume then re-runs the rechecks and can cancel a text job that is already running.\n\nThe fake hides H1. support.Durable stores () and returns () for a text job, while the real PgAttachments returns None. Even a relay test using Durable would not kill H1, so that test needs a fake that matches PgAttachments (no row for an empty attach). Every G replay world also runs with attachments=None.\n\nSeverity is blocking under the rubric: these are claimed invariants with no test that can kill them, and one is a durability claim another process relies on. The code at 8b91648 behaves correctly today. The fix is the three small tests the reviewer proposed, with the Durable fake changed to return None for an empty attach.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "downgraded_to_nonblocking": [
+  {
+   "id": "PAR-2",
+   "severity": "blocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/media.py",
+   "line": "119",
+   "claim_broken": "Proposed ruling (c) says the fake and the real adapter agree on attach, and the lane says the conformance cases guard that. They do not.",
+   "evidence": "A second attach of other refs behaves differently by adapter. FakeMediaStore.attach overwrites by_job silently, so the second attach wins. In-memory MediaStaging.attach does the same, as does tests/m/support.Durable, the stand-in used by every in-process 'second process' case. PgAttachments raises Conflict, which makes the relay cancel the job, except for the superset case in PAR-1, which it accepts. For an attach that names the same ref twice, the fake and in-memory adapter accept it, while PgAttachments answers state_conflict (probe P2: pg_attach_same_ref_twice='state_conflict'). No exported mediastore case attaches twice or attaches a duplicate. media_parity__an_attach_outlives_the_process_that_made_it only attaches once per job. Today the route cannot reach either path: the profile's max_parts=1 answers 415 unsupported_media to 'the same upload twice' and to 'upload + URL of the same bytes' (P2, on plain PG and Supabase).",
+   "minimal_fix": "Add an exported case, media_parity__an_attach_is_write_once: re-attaching the same refs is a no-op, and other refs (disjoint, superset or reordered) are Conflict with the first binding kept. Make FakeMediaStore.attach, MediaStaging.attach (in process) and support.Durable follow it. Alternatively, declare dedupe or refusal of duplicate refs in the ruling and pin it on every adapter.",
+   "lens": "parity",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The divergence is real, but it cannot be reached today, and the reviewer overstates the \"claim broken\".\n\n**What the code shows at 8b91648**\n- `FakeMediaStore.attach` (fakes/media.py:119) and in-memory `MediaStaging.attach` (media/store.py:~328) both assign `by_job[job_id] = tuple(owned)`, so a second attach silently overwrites the first.\n- `tests/m/support.Durable.put` is a plain dict assignment.\n- `PgAttachments.put` (media/attachments.py) is write-once:\n  - Its read-back check `[handles bound] != [handles given]` raises `Conflict` for other refs.\n  - With `on conflict do nothing` on `job_media`, a duplicated ref in one call makes the read-back fail too, which is the reviewer's P2.\n- The lane pins that behaviour only on the PG adapter, in `test_mpilot_pg__an_attach_is_write_once_and_tenant_bound` (test_pilot_media.py:445, `pytest.raises(errors.Conflict)` on rebinding to other refs).\n- No exported `mediastore` conformance case attaches twice. `media_parity__an_attach_outlives_the_process_that_made_it` attaches once per job.\n\n**Smallest experiment**\nI ran it on a scratch `git archive 8b91648`. The probe imported the scratch `infrx`, and the scratch copy was removed afterwards. No PG was needed, because the lane's own PG test already asserts `Conflict`.\n\nCommand:\n`PYTHONPATH=$S/apps/infrx-api .venv/bin/python p.py`\n\nTail:\n```\ninfrx from .../scratchpad/mpv/apps/infrx-api/infrx/__init__.py\nfake rebind other refs: no error; bound = ['med_c']\nfake dup refs: accepted; bound = ['med_a', 'med_a']\n```\nSo on the same input the fake accepts and PgAttachments raises `Conflict`.\n\n**Why it is nonblocking**\n1. The only production caller is `Relay._admitted` (gateway/routes/relay.py:266).\n   - A fresh admission attaches once.\n   - `_resume` re-attaches only when `media.attached(job)` is None, and then only with the staged payload's own refs.\n   - Re-attaching the same refs is a no-op on every adapter: the fake overwrites with an identical tuple, and PG's `on conflict do nothing` plus a matching read-back does nothing. So the adapters agree on the one re-attach path that can actually happen.\n2. The route cannot produce duplicate refs in one attach. `media/prepare.py:78` sets `max_parts = 1`, and line 367 refuses more with `UnsupportedMedia`. This matches the reviewer's own P2 result (415 on plain PG and on Supabase).\n3. Proposed ruling (c), as written in MPILOT-078eefe.md, says only that attach is durable and read by `prepare` and `reopened()`. It does not claim write-once parity between fake and adapter, so \"the claim broken\" is an overstatement.\n\n**Remaining gap**\nThe defect that remains is an unpinned port semantic, with a fake and adapter that disagree on inputs nobody can reach today. The reviewer's fix is a cheap hardening step and should be taken as a follow-up, not as a merge gate:\n- add an exported `media_parity__an_attach_is_write_once` case;\n- make the fake, `MediaStaging` and `Durable` refuse other refs and treat the same refs as a no-op.\n\n**Files**\n- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-mpilot/apps/infrx-api/infrx/contracts/fakes/media.py\n- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-mpilot/apps/infrx-api/infrx/media/attachments.py\n- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-mpilot/apps/infrx-api/infrx/media/store.py\n- /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-mpilot/apps/infrx-api/infrx/gateway/routes/relay.py",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "severity_if_real": "nonblocking",
+     "reason": "The divergence is real, but nothing in production can reach it, and ruling (c) does not claim what the reviewer says it claims.\n\n**Confirmed from the code at 8b91648**\n- `FakeMediaStore.attach` (fakes/media.py:119) and `MediaStaging.attach` (media/store.py:310-329) both set `by_job[job_id] = tuple(owned)`. `tests/m/support.Durable.put` sets `rows[job_id] = refs`. So in all three, the last attach wins silently.\n- `PgAttachments.put` (media/attachments.py:44-62) behaves differently. It inserts with `on conflict do nothing` against 0003's `primary key (job_id, role, handle)`, then compares the bound handles, ordered by position, with the refs:\n  - Disjoint, reordered or duplicate refs raise `Conflict`.\n  - A superset (first [A], then [A,B]) passes and extends the binding. That also contradicts the module's own docstring (\"a job already bound to other refs is a conflict\").\n- In-process probe on a `git archive` scratch copy (no PG). Command: `PYTHONPATH=$A .venv/bin/python probe_attach.py | tail -4`. Tail:\n  `fake {'disjoint': 'accepted', 'dup': 'accepted'} ...`\n  `staging+Durable {'disjoint': 'accepted', 'dup': 'accepted'} bound= [..] durable= [..]`\n  The PG side is from reading the code plus the reviewer's P2 probe (`state_conflict`). I did not re-run it on port 55734. The scratch copy has been removed.\n- No mediastore conformance case attaches twice. `media_parity__an_attach_outlives_the_process_that_made_it` attaches once per job.\n\n**Why it is not blocking**\n1. `relay.py:266` (`_admitted`) is the only production caller.\n   - It runs once on a fresh admission.\n   - On a replay, `_resume` (relay.py:230) returns early when `media.attached(job)` is not None. Otherwise it re-attaches the first acceptance's own staged refs, which is the idempotent same-refs path, and every adapter accepts that.\n   - So no path re-attaches different refs.\n2. Duplicate refs in one request are refused earlier: the profile's `max_parts=1` answers 415 (the reviewer's own P2, on plain PG and on Supabase).\n3. Proposed ruling (c) (MPILOT-078eefe.md:170-173) says only that attach is durable, that `prepare` reads the record, and that `reopened()` is another process's view. It says nothing about the semantics of a second attach. The port docstring (ports.py:282-294) does not specify it either.\n4. The fake's overwrite predates this lane. The lane's only change to fakes/media.py is the upload-expiry guard.\n\n**What remains**\n- The port's re-attach semantics are unspecified, and the PG adapter's superset case contradicts its own write-once docstring. That becomes latent only if a profile ever allows `max_parts>1`, or if a caller re-attaches other refs.\n- The reviewer's proposed `media_parity__an_attach_is_write_once` case is a reasonable follow-up. It is not a merge blocker."
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "PAR-4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/media/prepare.py",
+   "line": "216",
+   "claim_broken": "The disk fallback is described as 'the disk says what the index said' and as a 7-day retention obligation that holds across processes.",
+   "evidence": "P3 ran with a real second process (subprocess) over the same PG, MinIO and cache dir, on plain and Supabase. Other bytes at the path: NotFound, and the file is left in place. A partial file: NotFound, left in place. Past mtime: NotFound, and the file is removed. Symlink to other bytes: NotFound. A file with the right bytes and an mtime 10xTTL in the future is SERVED, because the life comes from st_mtime alone, so a touch, a copy or restore without -p, or a skewed writer extends retention. A symlink inside the cache dir pointing to a same-bytes file outside the root is served, and the returned path is the symlink. A corrupt file stays in the gateway's own index without a re-hash, so the gateway's prepare keeps getting a hit and never re-puts, and the worker refuses every job on that clip until the TTL runs out. Two processes racing 40 puts each of the same digest: both exited 0, reads never missed, and the final bytes hash to the digest.",
+   "minimal_fix": "In _load, refuse st_mtime > clock() + small skew. Open with O_NOFOLLOW, or check os.path.islink or realpath under root. Optionally re-hash in the gateway's get when the file's mtime or size differs from the index entry. Or record the limit in the evidence.",
+   "lens": "parity"
+  },
+  {
+   "id": "PAR-5",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/media/gc.py",
+   "line": "69",
+   "claim_broken": "Limit 7 says 'the gateway's sweep/collector removes it'. Limit 5 treats the collector as the place live jobs are protected.",
+   "evidence": "ProcessingCache.sweep iterates only self.entries, and _stray_files belongs to MediaCollector, which nothing composes. So a restarted gateway never sweeps cache files put by its previous incarnation. MediaCollector protects only this process's by_job and prepared_by_job. If it were composed in a restarted gateway, step 3 would delete the source objects of live jobs attached durably by another process once the grace period passes. Nothing deletes staged_media rows (no migration touches them after 0004), so the sweep deletes no row another process needs. The rows accumulate, as declared. On a writable mount, a worker whose index entry for a file has expired calls _remove and deletes the file the gateway just re-put for the same digest.",
+   "minimal_fix": "Correct Limit 7's wording. Before MediaCollector is composed, have it protect PgAttachments and jobs.prepared_refs (Limit 5). Keep the worker's cache read-only, or make _remove skip entries loaded from disk.",
+   "lens": "parity"
+  },
+  {
+   "id": "H-N1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/m/test_pilot_media.py",
+   "line": "301-312",
+   "claim_broken": "The docstring of test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served says the full-hash check guards against 'a 64-bit prefix collision'.",
+   "evidence": "My mutant D1, which compares only the first 23 characters of the digest ('sha256:' plus the 16 hex that name the path), SURVIVED (542 passed). The case writes bytes whose digest has a different prefix, so it cannot tell a full-digest check from a prefix check. It cannot distinguish the collision it names.",
+   "minimal_fix": "Ask local_uri for a ref whose digest matches the stored file's first 16 hex but differs after them, e.g. ref.model_copy(digest=ref.digest[:23]+'0'*41), and assert NotFound.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N2",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/m/MPILOT-078eefe.md",
+   "line": "Limits 1-2, ruling (c)",
+   "claim_broken": "Ruling (c) says 'attach is durable ... prepare(job_id) reads that record' with no exception. Limit 2 says behaviour is 'unchanged in every reachable case'.",
+   "evidence": "Limit 1 admits that a zero-ref attach is not durable. On PG, reopened.prepare(text job) is NotFound, while the fake's reopened (itself) gives (). That is a fake/real divergence, disclosed but not pinned, and absent from the proposed ruling text. For Limit 2, here is what a gateway restart now does to an in-flight sync request's same-key retry: _resume -> attached() reads PG. If the first attempt's attach committed, the job is bound and is answered as it stands. If the attach never committed (a 503 at the recheck or, new with MPILOT, a DB error inside PgAttachments.put), then attached() is None and staged_payload is NotFound after the restart. The retry is answered 'as it stands': no recheck, no attach, never prepared (E3B's Prepare waits on by_job). It waits until the stored deadline (deadline_exceeded). MPILOT adds a new trigger for that window (the attach is now a DB write) but does not change its outcome. Also, the durable record returns the kind it recorded first: my probe put kind=url and read back 'inline' for the same handle.",
+   "minimal_fix": "Add 'except an attach of no media (Limit 1)' to ruling (c). Say in Limit 2 that the attach itself is now a 503 source feeding the B2 window. Note in attachments.py that staged_media keeps the first description of a handle.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N3",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_stage.py, tests/integration/mutants.py",
+   "line": "e3bm62; stack.OWNERS['M3-U1']",
+   "claim_broken": "Merge readiness: layer 0 green on the merged result.",
+   "evidence": "Merge sim: origin/claude/backend-impl 1df9ac0, then D5 8554b47, e3b 1fa825b, cutover 92269a6 (WIP save), m1l2 ba26ca4, then 8b91648 (already contained). All merges were clean, with no conflicts in the Makefile, pilot.py, relay.py or fakes/media.py. The Makefile lists test_pilot_mutants.py after test_s3_mutants.py, not after test_mutants.py as planned; this has no effect. On the result: tests/m (not _pg) 415 passed / 18 skipped; tests/m _pg 4 passed; tests/g quick 176; contracts quick 639; layer 0 '2 failed, 152 passed, 103 skipped'. Failure 1 is test_e3b_cases_pend_only_on_an_owner_reference ('M3-U1 is fixed ... delete stack.OWNERS['M3-U1']'), the designed tripwire behind MPILOT's own integration request. Failure 2 is test_every_mutant_anchor_occurs_as_declared: e3bm62's anchor 'ROUTERS = (health, models, ingress, uploads, jobs)' is stale because cutover item 7 added `metrics`. Both reds are already on the e3b tip 1fa825b alone (3 failed there, the third being git-less-archive noise). Owners: E3B phase 3 (drop M3-U1, re-anchor e3bm62), caused by the cutover. Neither is an MPILOT code defect.",
+   "minimal_fix": "E3B phase 3: delete stack.OWNERS['M3-U1'] and the video_upload pendings, and re-anchor e3bm62 to 'ROUTERS = (health, models, ingress, uploads, jobs, metrics)'.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N4",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/media/prepare.py",
+   "line": "_load",
+   "claim_broken": "_load is a no-op when the cache is disabled.",
+   "evidence": "Mutant D3 (drop `if not self.enabled: return None`) survived. With no cache root, local_uri would raise DependencyUnavailable instead of NotFound, and no case pins which.",
+   "minimal_fix": "One assertion: with a disabled cache, local_uri(ref) raises NotFound.",
+   "lens": "honesty"
+  }
+ ]
+}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T00:04:02Z",
+  "updated": "2026-09-24T00:11:02Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "M-pilot-media": {
       "lane": "codex-mpilot / codex/m-pilot-media",
-      "phase": "review workflow died (429, incomplete); rerun dispatched 23:1xZ",
+      "phase": "review fix_required at 8b91648 (attach not write-once for superset/reorder; durable-path claims untested) \u2192 ONE fix round running \u2192 single verifier \u2192 merge at step 5 (phase 3 re-merges the fixed head)",
       "since": "2026-09-23T20:11:55Z",
       "note": "d4 ports, Q 55494; merges on top of the cutover head"
     },
@@ -114,8 +114,8 @@
       "since": "2026-09-23T22:22:23Z"
     },
     "M-pilot-media": {
-      "phase": "review at 8b91648 RERUN after the 429 (wf_633c3f83-924 resumed)",
-      "since": "2026-09-23T23:12:12Z"
+      "phase": "fix_required at 8b91648 (wf_44570caf-07a; JSON evidence/m/MPILOT-review-8b91648.json) \u2192 fix round",
+      "since": "2026-09-24T00:11:02Z"
     },
     "CUTOVER": {
       "phase": "review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters)",
