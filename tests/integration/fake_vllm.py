@@ -126,6 +126,9 @@ class FakeVllmApp:
         self.limits, self.stall_real_s = limits, stall_real_s
         self.delta_gap_s = delta_gap_s
         self.tokenize_fault, self.tokenize_delay_s = "none", 0.0
+        # PREP-WORKER review L8: a /tokenize count that disagrees with the usage the chat
+        # route reports (None: the same number, as a real engine's should be).
+        self.tokenize_count: int | None = None
         self.tokenized: list[dict] = []           # every /tokenize body, as received
         self.rng = Random(seed) if seed is not None else None
         self.emitted = 0
@@ -278,7 +281,7 @@ class FakeVllmApp:
                 "text": self.text, "prompt_tokens": self.prompt_tokens,
                 "delta_gap_s": self.delta_gap_s, "disconnected": self.disconnected,
                 "tokenize_fault": self.tokenize_fault, "tokenize_delay_s": self.tokenize_delay_s,
-                "tokenized": len(self.tokenized)}
+                "tokenize_count": self.tokenize_count, "tokenized": len(self.tokenized)}
 
     def control(self, payload: dict) -> dict:
         """Set the process-wide default. Used when the client under test cannot be made to
@@ -300,6 +303,9 @@ class FakeVllmApp:
             self.tokenize_fault = payload["tokenize_fault"]
         if "tokenize_delay_s" in payload:     # PREP-WORKER: a preparation slow enough to drain
             self.tokenize_delay_s = max(0.0, float(payload["tokenize_delay_s"]))
+        if "tokenize_count" in payload:
+            self.tokenize_count = None if payload["tokenize_count"] is None \
+                else int(payload["tokenize_count"])
         if payload.get("reset"):
             self.cancelled.clear()
             self.seen.clear()
@@ -321,7 +327,7 @@ class FakeVllmApp:
         size = ((request.get("mm_processor_kwargs") or {}).get("size") or {})
         expanded = int(size.get("longest_edge", 0)) // PIXELS_PER_TOKEN
         pads = videos * (1 if self.tokenize_fault == "unexpanded" else expanded)
-        count = self.prompt_tokens
+        count = self.prompt_tokens if self.tokenize_count is None else self.tokenize_count
         tokens = [VIDEO_TOKEN_ID] * min(pads, count) + [1] * max(0, count - pads)
         return await self._json(send, 200, {"count": count, "max_model_len":
                                             self.limits.max_context_tokens, "tokens": tokens})
