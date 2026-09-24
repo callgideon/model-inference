@@ -135,7 +135,9 @@ FILLED_BOUNDARIES = frozenset({("function", "infrx", "infrx.admit(jsonb)"),
                                ("function", "infrx", "infrx.cancel(jsonb)"),
                                ("function", "infrx", "infrx.terminalize(jsonb)"),
                                # D4 (0017): the journal append.
-                               ("function", "infrx", "infrx.append(jsonb)")})
+                               ("function", "infrx", "infrx.append(jsonb)"),
+                               # D5 (0018): the operator grant's body.
+                               ("function", "infrx", "infrx.grant_credit(jsonb)")})
 
 
 def _same_boundary(old: str, new: str | None) -> bool:
@@ -216,7 +218,10 @@ def check_legacy_schema_unchanged(conn, before: dict) -> str:
     for key in (("trigger", "public.credit_ledger", "credit_ledger_moves_wallet"),
                 ("function", "infrx", "infrx.grant_credit(jsonb)"),
                 ("function", "public", "public.org_wallet_summary(uuid)")):
-        assert key in before and after.get(key) == before[key], f"{key} changed or vanished"
+        # D5 fills grant_credit's body (0018): its md5 may move, its security and ACL not.
+        assert key in before and (after.get(key) == before[key] or (
+            key in FILLED_BOUNDARIES and _same_boundary(before[key], after.get(key)))), \
+            f"{key} changed or vanished"
     for key in FILLED_BOUNDARIES:
         assert key in before and _same_boundary(before[key], after.get(key)), \
             f"{key}: its grants or SECURITY DEFINER changed ({before[key]!r} -> {after.get(key)!r})"

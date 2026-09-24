@@ -21,7 +21,6 @@ RUNNER = Runner(name="d3", targets=("tests/d/test_lease_units.py",))
 LIMITS = "test_lease_calls__send_the_stores_own_lease_limits"
 FENCED = "test_fenced_calls__a_committed_refusal_is_raised_as_its_type"
 WORK = "test_load_work__the_admitted_work_with_the_prompt_count"
-COMPLETE = "test_complete__fails_closed_after_the_fence_and_raises_the_fences_refusals"
 RECOVER = "test_recover__outcomes_events_and_the_unsettleable_backlog"
 
 
@@ -43,9 +42,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return dict(await self._call(function, {", FENCED),
     _m("d3_credit_work_invented", "a CREDIT job's work is not a v1 Work",
        '        if admission["accounting_regime"] != "legacy_usd":\n'
-       '            raise errors.InvalidRequest(f"job {lease.job_id} is a CREDIT job',
+       '            raise errors.NotFound(f"job {lease.job_id} is a CREDIT job',
        '        if False:\n'
-       '            raise errors.InvalidRequest(f"job {lease.job_id} is a CREDIT job',
+       '            raise errors.NotFound(f"job {lease.job_id} is a CREDIT job',
        "test_load_work__a_credit_job_is_refused_not_invented"),
     _m("d3_prompt_count_dropped", "load_work carries preparation's exact prompt count",
        '                            prompt_tokens=admission["prepared_prompt_tokens"])',
@@ -54,13 +53,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '                                                for r in doc["prepared_refs"]),',
        '                                                for r in doc["request"]["media"]),',
        WORK),
-    _m("d3_fence_refusal_swallowed", "complete never turns a fence refusal into the D5 stub",
-       "        except FeatureNotSupported:\n            pass",
-       "        except Exception:\n            pass", COMPLETE),
-    _m("d3_complete_succeeds_silently", "complete fails closed after the fence",
-       '        raise NotImplementedError("JobStore.complete: the fence held; the settlement '
-       "is D5's\")",
-       "        return None", COMPLETE),
+    # D5 replaced `complete`'s fail-closed stub with the settlement: its two D3 mutants
+    # (`d3_fence_refusal_swallowed`, `d3_complete_succeeds_silently`) lost their anchors
+    # and are retired; `complete` is code_mutants_d5.py's.
     _m("d3_backlog_never_cleared", "each sweep reports its own backlog",
        "        self.unsettleable = {}\n        for item in",
        "        for item in", RECOVER),

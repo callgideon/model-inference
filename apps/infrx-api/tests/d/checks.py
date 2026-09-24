@@ -77,7 +77,11 @@ FILLED_RPCS = ("admit", "prepare",
                # D3 (0016); `terminalize` has D3's fenced prefix, its settlement is D5's.
                "claim", "heartbeat", "cancel", "terminalize",
                # D4 (0017): the fenced journal append.
-               "append")
+               "append",
+               # D5 (0018): terminalize's settlement (above) and the operator grant. D5's
+               # other operations (reconcile, load_work_credit) are not 0004 boundaries:
+               # credit_schema.SEAMS records them.
+               "grant_credit")
 
 _JOB_COLUMNS = """
   request_id, job_handle, org_id, key_id, model_revision, execution_mode, state,

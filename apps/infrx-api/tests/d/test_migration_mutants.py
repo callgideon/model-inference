@@ -104,7 +104,25 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d4_stored_counted_beside_the_reservation", "d4_terminal_payload_from_the_old_row",
           "d4_no_terminal_event_on_cancel", "d4_terminal_event_legacy_regime_only",
           "d4_read_any_tenant", "d4_gap_is_an_empty_page", "d4_expire_on_the_callers_clock",
-          "d4_prune_frees_twice", "d4_append_granted_to_authenticated")
+          "d4_prune_frees_twice", "d4_append_granted_to_authenticated",
+          # D5: the settlement's money path, fencing, tenant isolation, the clock and grants.
+          "d5_replay_after_the_fence", "d5_settle_before_the_fence", "d5_result_ref_unchecked",
+          "d5_disconnected_not_billable", "d5_sync_deadline_billed", "d5_debit_rounds_down",
+          "d5_debit_rounded_twice", "d5_debit_above_hold", "d5_wallet_total_written_directly",
+          "d5_usage_debit_without_ledger_row", "d5_hold_not_moved_on_settle",
+          "d5_unknown_usage_released", "d5_credit_debit_before_hold",
+          "d5_credit_settles_at_the_active_card", "d5_credit_debits_the_usd_wallet",
+          "d5_regimes_cross", "d5_cancel_accepts_any_cause", "d5_adjust_replay_appends",
+          "d5_adjust_below_reserved", "d5_reconcile_on_callers_clock", "d5_reconcile_debits",
+          "d5_reconcile_any_tenant", "d5_settle_without_the_row_lock",
+          "d5_takes_the_scope_lock", "d5_grant_credit_granted_to_authenticated",
+          "d5_lookup_any_org_scope", "d5_lookup_any_payload",
+          # D5 review round: the operator money path and exact arithmetic
+          "d5_grant_replay_ignores_wallet", "d5_grant_without_wallet_lock",
+          "d5_grant_concurrent_reuse_untyped", "d5_reconcile_replay_any_request",
+          "d5_credit_debit_in_float", "d5_legacy_debit_in_float",
+          # the D5 verifier's pins: the replay rule's actor half, the drift detector's holds
+          "d5_grant_actor_is_part_of_the_movement", "d5_credit_reserved_drift_blind")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -116,6 +134,10 @@ pytestmark = pytest.mark.skipif(_reason is not None,
 def test_the_mutant_list_is_well_formed() -> None:
     """Distinct names, a known scenario and a known check for each."""
     assert len({m.name for m in ALL}) == len(ALL), "two mutants share a name"
+    # review H-N5: a typo in ALWAYS would silently drop a money-path mutant from the
+    # default subset (`make api-test`)
+    missing = sorted(set(ALWAYS) - {m.name for m in ALL})
+    assert not missing, f"ALWAYS names mutants the list does not declare: {missing}"
     for mutant in ALL:
         assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike", "credit",
                                    "upgrade05", "credit_volume", "admission"), mutant.name
@@ -130,6 +152,27 @@ def test_the_mutant_list_is_well_formed() -> None:
     assert not uncovered, f"checks no mutant can break: {uncovered}"
     print(f"{len(ALL)} mutants over {len(covered)} checks; "
           f"{len(SELECTED)} selected ({'all' if FULL_RUN else 'subset'})")
+
+
+def test_no_mutant_anchors_in_a_superseded_function_body() -> None:
+    """D5 item 10b: no mutant edits a function body a later migration redefines (0018
+    redefines 0016's `cancel`, `claim` and `release_aged_unknown` and 0011's
+    `job_admission`; their mutants moved with them). Checked statically, like the anchors."""
+    found = mutation_list.superseded(ALL)
+    assert not found, "mutants on superseded bodies:\n  " + "\n  ".join(found)
+    print(f"{len(ALL)} mutants: none anchored in a superseded function body")
+
+
+def test_the_supersession_guard_catches_a_mutant_left_behind() -> None:
+    """The guard's own kill: one of the three cancel mutants left on 0016's (superseded)
+    `infrx.cancel` is reported."""
+    import dataclasses
+    left = dataclasses.replace(next(m for m in ALL if m.name == "d3_cancel_any_tenant"),
+                               file=mutation_list.LEASES)
+    assert mutation_list.anchor_count(left) == 1, "the fixture must still find its anchor"
+    found = mutation_list.superseded([left])
+    assert len(found) == 1 and "infrx.cancel" in found[0] and "0018" in found[0], found
+    print(f"guard self-test: {found[0]}")
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=lambda m: m.name)

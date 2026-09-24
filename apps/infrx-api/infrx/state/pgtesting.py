@@ -119,6 +119,21 @@ class FailingJobStore:
         return call
 
 
+class WorkerResults(PgJobStore):
+    """TEST RIG (R30): the conformance builders name a result as an opaque text
+    (`results/test/result.json`); the real worker stores its result first (`put_result`) and
+    completes with the `infrx-result:<job_id>` reference it gets back, which is all the store
+    accepts. This does the same with the builder's text, for the lease's job, so a case's
+    proposal reaches the settlement the way a worker's does. Replays stay identical (the same
+    text is the same stored result); a proposal without a reference is sent unchanged."""
+
+    async def _terminalize(self, lease, outcome, regime: str) -> dict:
+        if outcome.result_ref is not None and not outcome.result_ref.startswith("infrx-result:"):
+            ref = await self.put_result(lease.job_id, outcome.result_ref)
+            outcome = outcome.model_copy(update={"result_ref": ref})
+        return await super()._terminalize(lease, outcome, regime)
+
+
 def assert_test_database(conn) -> None:
     """The same gate as the movable clock (0003): only a task-local `infrx_<task>`
     database may have a production guard stepped around (review SEC-1)."""
@@ -277,16 +292,219 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
         while len(opened) > keep:
             opened.popleft().close()
         clock = PgClock(conn)
-        store = PgJobStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
+        store = WorkerResults(connector(dsn_for(name)), limits=limits or DEFAULTS)
         stream = PgStreamStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
         plan = FailurePlan()
         extra = hooks(conn, store, stream)
         extra["store"] = store
+        extra["database"] = name
+        extra["conn"] = conn                                 # the owner's rows (test reads)
         extra["stream"] = FailingJobStore(stream, plan)
         return Harness(port=FailingJobStore(store, plan), clock=clock, ids=SequentialIds(),
                        failures=plan, extra=extra)
 
     return factory
+
+
+def seed_credit_world(conn, seed_sql: str) -> None:
+    """The v2 fixture world as rows, on top of `seed` (the CREDIT conformance suite's
+    trusted rows, `contracts/fakes/factories.credit_jobstore_factory`): the operator's Marlin
+    seed (`seed_sql`, the v2 fixtures verbatim), CREDIT admission and the signup grant ON,
+    the consumer individual with the fixture's personal organization and wallet (+10000
+    through A1's grant), the provider's workspace organization and its zero dev wallet, and
+    the two fixture key rows (consumer; provider_dev scoped to the dev endpoint)."""
+    from ..contracts.v2 import fixtures as v2fix
+    ids = v2fix.IDS
+    assert_test_database(conn)
+    conn.execute(seed_sql)
+    for flag in ("credit_admission", "signup_grant"):
+        conn.execute("update infrx.feature_flags set enabled = true, updated_by = 'rig', "
+                     "reason = 'conformance' where name = %s", (flag,))
+    # The fixture's personal organization id. 0001's `handle_new_user` mints a personal
+    # organization only for a user with no membership yet, so the user, profile, fixture
+    # organization and owner membership are ONE statement: the AFTER trigger runs at its end
+    # and finds the membership. No trigger is disabled (`postgres` does not own `auth.users`
+    # on the Supabase image).
+    conn.execute(
+        "with u as (insert into auth.users (id, email) values (%(user)s, 'consumer@example.com') "
+        "returning id), p as (insert into public.profiles (id, email) select id, "
+        "'consumer@example.com' from u returning id), o as (insert into public.organizations "
+        "(id, name, slug, created_by) select %(org)s, 'consumer', 'consumer-fixture', id from p "
+        "returning id) insert into public.org_members (org_id, user_id, role) "
+        "select o.id, %(user)s, 'owner' from o",
+        {"user": ids.consumer_user, "org": ids.consumer_org})
+    assert conn.execute("select array_agg(org_id::text) from public.org_members "
+                        "where user_id = %s", (ids.consumer_user,)).fetchone()[0] == \
+        [ids.consumer_org], "the signup trigger minted a second personal organization"
+    conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_user_id, "
+                 "personal_org_id) values (%s, 'consumer', %s, %s)",
+                 (ids.consumer_wallet, ids.consumer_user, ids.consumer_org))
+    conn.execute("select * from infrx.grant_signup_credit(%s, 'conformance/verified')",
+                 (ids.consumer_user,))
+    conn.execute("insert into public.organizations (id, name, slug) values (%s, 'provider', "
+                 "'provider-fixture')", (ids.provider_org,))
+    conn.execute("insert into infrx.credit_wallets (wallet_id, kind, owner_provider_org_id) "
+                 "values (%s, 'provider_dev', %s) on conflict do nothing",
+                 (ids.provider_dev_wallet, ids.provider_org))
+    for name in ("auth_context_consumer.json", "auth_context_provider_dev.json"):
+        register_credential(conn, v2fix.BUILDERS[name]())
+
+
+def register_credential(conn, auth) -> None:
+    """The key row a CREDIT admission reads its audience and identities from (0009): a
+    provider_dev row carries its provider and endpoint and no individual."""
+    provider = auth.audience.value == "provider_dev"
+    conn.execute("insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash, "
+                 "audience, user_id, provider_org_id, endpoint_id) values (%s, %s, %s, 'k', "
+                 "'sk-infrx-conform', %s, %s, %s, %s, %s)",
+                 (auth.key_id, auth.org_id, None if provider else auth.user_id,
+                  f"hash-{auth.key_id}", auth.audience.value, None if provider else auth.user_id,
+                  auth.provider_org_id, auth.endpoint_id))
+
+
+def credit_hooks(conn) -> dict[str, Callable]:
+    """The CREDIT suite's required hooks (`credit_jobstore_cases`), over rows."""
+    def credit_balance(wallet_id: str) -> dict:
+        row = conn.execute("select ledger_total, reserved_total, available from "
+                           "infrx.credit_wallets where wallet_id = %s", (wallet_id,)).fetchone()
+        return {"ledger": row[0], "reserved": row[1], "available": row[2]}
+
+    def credit_grant(wallet_id: str, amount) -> Decimal:
+        """An audited operator movement through D5's `grant_credit` (an allocation to a
+        provider_dev wallet, an adjustment to a consumer one)."""
+        import uuid
+        from psycopg.types.json import Jsonb
+        kind, = conn.execute("select kind from infrx.credit_wallets where wallet_id = %s",
+                             (wallet_id,)).fetchone()
+        conn.execute("select infrx.grant_credit(%s)", (Jsonb({
+            "wallet_id": wallet_id, "amount": money.format_money(money.parse(amount)),
+            "kind": "operator_allocation" if kind == "provider_dev" else "operator_adjustment",
+            "operation_id": str(uuid.uuid4()), "actor": "conformance", "reason": "funding",
+            "at": None}),))
+        return credit_balance(wallet_id)["ledger"]
+
+    def publish_rate_card(card) -> None:
+        """An operator publishing an approved card; a card for a public deployment also gets
+        the catalog listing that points new admissions at it (0007: a new version)."""
+        conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                     "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                     "output_rate_per_million, effective_at, approved_by, provisional) values "
+                     "(%s, %s, %s, %s, %s, %s, %s, %s, false)",
+                     (card.rate_card_version, card.model_id, card.deployment_revision_id,
+                      card.serving_version_id, card.input_rate_per_million.raw("CREDIT"),
+                      card.output_rate_per_million.raw("CREDIT"), card.effective_at,
+                      card.approved_by))
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) select l.public_model_id, l.version + 1, "
+                     "l.model_id, l.deployment_revision_id, l.serving_version_id, %s, "
+                     "infrx.now(), 'conformance' from infrx.catalog_listings l where "
+                     "l.deployment_revision_id = %s order by l.version desc limit 1",
+                     (card.rate_card_version, card.deployment_revision_id))
+
+    return {"credit_balance": credit_balance, "credit_grant": credit_grant,
+            "register_credential": lambda auth: register_credential(conn, auth),
+            "publish_rate_card": publish_rate_card}
+
+
+def make_credit_jobstore_factory(fresh_database: Callable[[], str],
+                                 dsn_for: Callable[[str], str], seed_sql: str,
+                                 **kw: Any) -> Callable[..., Harness]:
+    """The v1 rig in the CREDIT regime: the same `PgJobStore` (and its hooks) on a database
+    that also carries `seed_credit_world`, plus `credit_hooks`."""
+    import psycopg
+    jobs_factory = make_jobstore_factory(fresh_database, dsn_for, **kw)
+
+    def factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+        harness = jobs_factory(limits)
+        conn = psycopg.connect(dsn_for(harness.extra["database"]), autocommit=True)
+        seed_credit_world(conn, seed_sql)
+        harness.extra.update(credit_hooks(conn))
+        harness.extra["credit_conn"] = conn
+        return harness
+
+    return factory
+
+
+class JobsView:
+    """TEST RIG (Q3 PostgreSQL mode, D3 request 5): the store-side read of a job the Q3 cases
+    make of the fake's `jobs[job_id]` - `state`, `terminal`, `attempts` (prepublication
+    requeues), the live inference `lease` (its `expires_at`) and `admission.job_handle` -
+    over the rows."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def __getitem__(self, job_id: str) -> SimpleNamespace:
+        from ..contracts.records import JobState
+        row = self._conn.execute(
+            "select j.state, j.job_handle, j.settled_at is not null, (select a.expires_at from "
+            "infrx.attempts a where a.job_id = j.request_id and a.kind = 'inference' and "
+            "a.released_at is null), j.attempts from infrx.jobs j where j.request_id = %s",
+            (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        state, handle, terminal, expires, attempts = row
+        return SimpleNamespace(state=JobState(state), terminal=terminal, attempts=attempts,
+                               admission=SimpleNamespace(job_handle=handle),
+                               lease=None if expires is None
+                               else SimpleNamespace(expires_at=expires))
+
+
+class PgDispatchOutbox:
+    """TEST RIG (Q3 PostgreSQL mode): D2's dispatch outbox as the real `PgJobStore` serves it,
+    plus the store-side reads and faults Q3's cases use on `outboxfake.FakeDispatchOutbox` -
+    `unacknowledged()`, `last_error`, `deliveries`, `snapshots` and `ack_faults` ("before":
+    the acknowledgment never commits; "after": it commits and the reply is lost, raised as
+    `lost`, the caller's `OutboxLost`)."""
+
+    def __init__(self, store: PgJobStore, conn, *, lost: type[Exception] = ConnectionError):
+        self.store, self._conn, self._lost = store, conn, lost
+        self.ack_faults: list[str] = []
+        self.deliveries: dict[str, int] = {}
+        self.snapshots = 0
+
+    async def dispatch_pending(self, **kw):
+        events = await self.store.dispatch_pending(**kw)
+        for event in events:
+            self.deliveries[str(event.event_id)] = self.deliveries.get(str(event.event_id), 0) + 1
+        return events
+
+    async def acknowledge_dispatch(self, event_ids, *, worker_id: str) -> int:
+        fault = self.ack_faults.pop(0) if self.ack_faults else None
+        if fault == "before":
+            raise self._lost("acknowledgment lost before commit")
+        done = await self.store.acknowledge_dispatch(event_ids, worker_id=worker_id)
+        if fault == "after":
+            raise self._lost("acknowledgment committed, reply lost")
+        return done
+
+    async def dispatch_snapshot(self):
+        self.snapshots += 1
+        return await self.store.dispatch_snapshot()
+
+    async def release_dispatch(self, event_ids) -> int:
+        return await self.store.release_dispatch(event_ids)
+
+    async def record_dispatch_error(self, event_id, error: str) -> int:
+        return await self.store.record_dispatch_error(event_id, error)
+
+    async def db_now(self):
+        return await self.store.db_now()
+
+    async def reopen_dispatch(self, since) -> int:
+        return await self.store.reopen_dispatch(since)
+
+    def unacknowledged(self) -> list[str]:
+        return [e for e, in self._conn.execute(
+            "select event_id::text from infrx.outbox where kind in ('prepare_dispatch', "
+            "'inference_dispatch') and acknowledged_at is null "
+            "order by available_at, event_id").fetchall()]
+
+    @property
+    def last_error(self) -> dict[str, str]:
+        return dict(self._conn.execute("select event_id::text, last_error from infrx.outbox "
+                                       "where last_error is not null").fetchall())
 
 
 def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],
@@ -303,5 +521,7 @@ def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callabl
     return factory
 
 
-__all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "hooks", "make_jobstore_factory",
-           "make_streamstore_factory", "seed"]
+__all__ = ["CrashAfterCommit", "FailingJobStore", "JobsView", "PgClock", "PgDispatchOutbox",
+           "WorkerResults", "credit_hooks",
+           "hooks", "make_credit_jobstore_factory", "make_jobstore_factory",
+           "make_streamstore_factory", "register_credential", "seed", "seed_credit_world"]
