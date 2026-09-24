@@ -219,11 +219,11 @@ MUTANTS: tuple[Mutant, ...] = (
           "                               or job.admission.price_snapshot).debit(usage.prompt_tokens,",
        "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("load_work_reports_the_current_price", "load_work carries the admitted snapshot (R53)",
-       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets,",
        "                        price_snapshot=(self.price_for(job.request.model_revision,\n"
           "                                                     self.clock.now())\n"
           "                                        or job.admission.price_snapshot),\n"
-          "                        budgets=job.budgets)",
+          "                        budgets=job.budgets,",
        "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("admit_ignores_the_balance", "a hold cannot exceed the available balance",
        S, 'raise errors.InsufficientCredit(\n                f"maximum hold exceeds available balance for org {org_id}")', "pass",
@@ -726,9 +726,9 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "                and self.clock.now() >= upload.expires_at:", "                and False:",
        "media_sec__an_upload_is_usable_only_within_its_window"),
     _m("load_work_reports_current_budgets", "load_work carries the R4 budgets (q16)",
-       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets,",
        "                        price_snapshot=job.admission.price_snapshot,\n"
-          "                        budgets=Budgets.of(self.limits, job.request.execution_mode))",
+          "                        budgets=Budgets.of(self.limits, job.request.execution_mode),",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     # Three mutants were **removed** in the R52/R54 pass rather than forced, because the
     # defects they described stopped being representable:
