@@ -17,7 +17,9 @@ from pathlib import Path
 
 import pydantic
 import pytest
-from infrx.contracts import errors
+from datetime import datetime, timedelta
+
+from infrx.contracts import errors, fixtures as v1fix, records as v1
 from infrx.contracts.conformance import lifecycle as suite
 from infrx.contracts.fakes.factories import lifecycle_factory
 from infrx.contracts.v2 import fixtures as v2fix, lifecycle as lc
@@ -25,7 +27,7 @@ from infrx.contracts.v2 import fixtures as v2fix, lifecycle as lc
 from ..test_parity_console import ts_string_array
 
 CASES = suite.cases()
-ORACLES = ("upload_restart", "admission_ready", "retention_durable")
+ORACLES = ("upload_restart", "admission_ready", "retention_durable", "result_expiry")
 LIFECYCLE_TS = (Path(__file__).resolve().parents[3].parent / "app" / "lib" / "contracts" / "v2"
                 / "lifecycle.ts")
 
@@ -128,6 +130,14 @@ def test_an_upload_ticket_is_one_fact():
     assert lc.UploadTicket.model_validate(
         {**created, "state": "aborted", "refusal": "mime_not_accepted"}).refusal is \
         lc.LifecycleRefusal.mime_not_accepted
+    for internal in ("claim_lost", "not_ready", "reference_live", "not_found"):
+        with pytest.raises(pydantic.ValidationError):
+            lc.UploadTicket.model_validate({**created, "state": "aborted", "refusal": internal})
+    # F10: a measured duration is a finite number, not a bool or a numeric string.
+    for duration in (True, "2", float("inf"), -1.0):
+        with pytest.raises(pydantic.ValidationError):
+            lc.UploadTicket.model_validate(
+                {**body, "finalized": {**done, "duration_s": duration}})
 
 
 def test_constraints_default_to_the_deployment_and_refuse_everything_else():
@@ -135,6 +145,7 @@ def test_constraints_default_to_the_deployment_and_refuse_everything_else():
                                         allowed_mime=frozenset({"video/webm", "video/mp4"}))
     assert (parsed.max_bytes, parsed.accepted_mime) == (4096, ("video/mp4", "video/webm"))
     for body in (None, [], {"bytes": 4097}, {"bytes": 0}, {"digest": "md5:0"},
+                 {"schema_version": 2},
                  {"accepted_mime": []}, {"accepted_mime": ["video/mp4", "video/mp4"]},
                  {"accepted_mime": ["Video/MP4"]}, {"storage_ref": "media/x"}):
         with pytest.raises(errors.InvalidRequest) as refused:
@@ -187,6 +198,47 @@ def test_every_refusal_is_an_existing_code_and_internal_ones_never_render():
             assert body.get("infrx", {}).keys() <= {"retry_after_s"}, body
 
 
+# --- F2C.b: terminal/read consistency ------------------------------------------------------
+def test_an_old_terminal_record_is_never_given_an_invented_expiry():
+    """Oracle: decoding a record written before F2C.b and then re-deriving its expiry from
+    configuration (settled_at + TTL - `Jobs.result_expiry` today) passes this test."""
+    old = v1fix.model("terminal_success.json")
+    assert old.result_expires_at is None and "result_expires_at" not in v1fix.load(
+        "terminal_success.json")
+    for later in (timedelta(0), timedelta(hours=1), timedelta(days=1), timedelta(days=400)):
+        assert lc.read_outcome(old, old.settled_at + later) is lc.ReadOutcome.unavailable
+    new = v1fix.model("terminal_success_expiring.json")
+    assert new.result_expires_at - new.settled_at == timedelta(days=1)
+    assert new.model_dump(exclude={"result_expires_at"}) == old.model_dump(
+        exclude={"result_expires_at"}), "the two fixtures are the same success"
+
+
+def test_only_a_success_with_a_result_carries_an_expiry_after_settlement():
+    body = v1fix.load("terminal_success_expiring.json")
+    for name in ("terminal_cancelled.json", "terminal_platform_error.json",
+                 "terminal_unknown_usage.json"):
+        with pytest.raises(pydantic.ValidationError):
+            v1.TerminalOutcome.model_validate({**v1fix.load(name),
+                                               "result_expires_at": body["result_expires_at"]})
+    for expires in (body["settled_at"], "2026-09-20T12:00:08Z"):
+        with pytest.raises(pydantic.ValidationError):
+            v1.TerminalOutcome.model_validate({**body, "result_expires_at": expires})
+
+
+def _at(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def test_every_read_outcome_is_the_committed_cross_language_table():
+    """Oracle: an expired result rendered available (the equality instant), an invented
+    expiry, or a held/failed outcome served as a result all disagree with a row."""
+    table = v2fix.load("result_read_cases.json")
+    for row in table:
+        outcome = v1.TerminalOutcome.model_validate(row["outcome"]) if "outcome" in row else None
+        assert lc.read_outcome(outcome, _at(row["now"])).value == row["expected"], row["name"]
+    assert {row["expected"] for row in table} == {r.value for r in lc.ReadOutcome}
+
+
 # --- TypeScript parity ---------------------------------------------------------------------
 # Read when a parity test runs, not at import: the mutation runner copies only this package,
 # and its lifecycle cases must still collect there.
@@ -197,7 +249,7 @@ def _ts() -> str:
 SHARED = {"UPLOAD_STATES": lc.UploadState, "READINESS_STATES": lc.ReadinessState,
           "CONTENT_KINDS": lc.ContentKind, "CONTENT_LOCATIONS": lc.ContentLocation,
           "CONTENT_ORIGINS": lc.ContentOrigin, "LIFECYCLE_STATES": lc.LifecycleState,
-          "LIFECYCLE_REFUSALS": lc.LifecycleRefusal}
+          "LIFECYCLE_REFUSALS": lc.LifecycleRefusal, "READ_OUTCOMES": lc.ReadOutcome}
 
 
 @pytest.mark.parametrize("name", sorted(SHARED))

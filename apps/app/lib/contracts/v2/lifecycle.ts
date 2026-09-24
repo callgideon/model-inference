@@ -2,7 +2,8 @@
  * F2C.a — the console half of `infrx/contracts/v2/lifecycle.py`.
  *
  * Browser-safe only: the vocabularies, the refusal -> code map, the upload ticket (it
- * carries no object key) and the readiness VIEW. The content rows, claims, tombstones and
+ * carries no object key), the readiness VIEW and (F2C.b) the terminal outcome with its
+ * persisted result expiry plus `readOutcome`, the one read classification. The content rows, claims, tombstones and
  * manifests carry server object keys and stay in Python; no browser receives them.
  *
  * The decoders are exact: a missing required field, an unexpected field, a wrong schema
@@ -14,6 +15,8 @@
  */
 
 import { instantKey } from "./types.ts";
+import { isMoney } from "../money.ts";
+import { SETTLEMENT_STATES, TERMINAL_CAUSES, TERMINAL_JOB_STATES } from "../types.ts";
 
 export const UPLOAD_STATES = ["created", "finalized", "aborted", "expired"] as const;
 export type UploadState = (typeof UPLOAD_STATES)[number];
@@ -48,6 +51,7 @@ export const LIFECYCLE_REFUSALS = [
   "size_mismatch",
   "digest_mismatch",
   "mime_not_accepted",
+  "media_refused",
   "invalid_manifest",
   "expectation_mismatch",
   "not_ready",
@@ -72,6 +76,7 @@ export const LIFECYCLE_REFUSAL_CODES: Readonly<Record<LifecycleRefusal, string>>
   size_mismatch: "invalid_request",
   digest_mismatch: "unsupported_media",
   mime_not_accepted: "unsupported_media",
+  media_refused: "unsupported_media",
   invalid_manifest: "invalid_request",
   expectation_mismatch: "invalid_request",
   not_ready: "not_claimable",
@@ -81,6 +86,15 @@ export const LIFECYCLE_REFUSAL_CODES: Readonly<Record<LifecycleRefusal, string>>
   claim_held: "not_claimable",
   claim_lost: "stale_lease",
 });
+
+/** The only reasons a ticket records as aborted: public, about the caller's own bytes. */
+export const UPLOAD_ABORT_REASONS = [
+  "too_large",
+  "size_mismatch",
+  "digest_mismatch",
+  "mime_not_accepted",
+  "media_refused",
+] as const;
 
 export const DESTINATION_SCHEME = "infrx-upload:";
 const V2 = 2;
@@ -118,7 +132,7 @@ export type UploadTicket = {
   expires_at: string;
   received?: UploadReceipt;
   finalized?: FinalizedSource;
-  refusal?: LifecycleRefusal;
+  refusal?: (typeof UPLOAD_ABORT_REASONS)[number];
 };
 export type ReadinessView = {
   schema_version: 2;
@@ -137,6 +151,11 @@ function fail(what: string): never {
 
 /** The object with exactly `required` (all present) plus any of `optional`, and v2. */
 function exact(value: unknown, what: string, required: string[], optional: string[] = []): Obj {
+  return exactVersion(value, what, V2, required, optional);
+}
+
+function exactVersion(value: unknown, what: string, version: number, required: string[],
+                      optional: string[] = []): Obj {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(`${what} is not an object`);
   const obj = value as Obj;
   for (const key of ["schema_version", ...required]) {
@@ -144,7 +163,7 @@ function exact(value: unknown, what: string, required: string[], optional: strin
   }
   const allowed = new Set(["schema_version", ...required, ...optional]);
   for (const key of Object.keys(obj)) if (!allowed.has(key)) fail(`${what}.${key} is unexpected`);
-  if (obj.schema_version !== V2) fail(`${what}.schema_version is not 2`);
+  if (obj.schema_version !== version) fail(`${what}.schema_version is not ${version}`);
   for (const key of optional) if (key in obj && obj[key] === null) fail(`${what}.${key} is null`);
   return obj;
 }
@@ -206,7 +225,7 @@ export function decodeUploadTicket(value: unknown): UploadTicket {
   const expires = instant(obj, "expires_at");
   if (!before(created, expires)) fail("expires_at must follow created_at");
   if ((state === "aborted") !== ("refusal" in obj)) fail("aborted exactly when a refusal is recorded");
-  if ("refusal" in obj) member(obj, "refusal", LIFECYCLE_REFUSALS);
+  if ("refusal" in obj) member(obj, "refusal", UPLOAD_ABORT_REASONS);
   let received: Obj | undefined;
   if ("received" in obj) {
     received = exact(obj.received, "received", ["bytes", "digest", "received_at"]);
@@ -253,4 +272,82 @@ export function decodeReadinessView(value: unknown): ReadinessView {
 /** A finalized upload is usable while `now < expires_at`; at equality it has expired. */
 export function uploadUsable(ticket: UploadTicket, now: string): boolean {
   return ticket.state === "finalized" && before(now, ticket.expires_at);
+}
+
+// --- F2C.b: terminal/read consistency -------------------------------------------------------
+/** Every answer a committed job gives a reader; `unavailable` = a success with no persisted
+ *  expiry (a record from before F2C.b): never served, never recomputed. */
+export const READ_OUTCOMES = [
+  "pending",
+  "available",
+  "no_result",
+  "held_unknown",
+  "expired",
+  "unavailable",
+] as const;
+export type ReadOutcome = (typeof READ_OUTCOMES)[number];
+
+export type TerminalUsage = {
+  schema_version: 1;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  certainty: "authoritative";
+};
+/** `records.TerminalOutcome` (schema 1). `result_expires_at` is the persisted instant;
+ *  absent on every other outcome and on a record written before it was carried. */
+export type TerminalOutcome = {
+  schema_version: 1;
+  job_id: string;
+  state: (typeof TERMINAL_JOB_STATES)[number];
+  cause: (typeof TERMINAL_CAUSES)[number];
+  usage?: TerminalUsage;
+  result_ref?: string;
+  settlement_state: (typeof SETTLEMENT_STATES)[number];
+  debit: string;
+  settled_at: string;
+  reconcile_after?: string;
+  result_expires_at?: string;
+};
+
+/** Exact: a missing required or an unexpected field throws; nothing is defaulted. */
+export function decodeTerminalOutcome(value: unknown): TerminalOutcome {
+  const obj = exactVersion(value, "outcome", 1,
+    ["job_id", "state", "cause", "settlement_state", "debit", "settled_at"],
+    ["usage", "result_ref", "reconcile_after", "result_expires_at"]);
+  text(obj, "job_id", UUID);
+  const state = member(obj, "state", TERMINAL_JOB_STATES);
+  member(obj, "cause", TERMINAL_CAUSES);
+  const settlement = member(obj, "settlement_state", SETTLEMENT_STATES);
+  if (!isMoney(obj.debit)) fail("debit is a canonical money string");
+  const settled = instant(obj, "settled_at");
+  if ("usage" in obj) {
+    const usage = exactVersion(obj.usage, "usage", 1,
+      ["prompt_tokens", "completion_tokens", "total_tokens", "certainty"]);
+    const total = count(usage, "prompt_tokens", 0) + count(usage, "completion_tokens", 0);
+    if (count(usage, "total_tokens", 0) !== total || usage.certainty !== "authoritative") {
+      fail("a present usage is authoritative and adds up");
+    }
+  }
+  if ("result_ref" in obj) text(obj, "result_ref");
+  if ((settlement === "held_unknown") !== ("reconcile_after" in obj)) {
+    fail("held_unknown requires reconcile_after, and nothing else may set it");
+  }
+  if ("reconcile_after" in obj) instant(obj, "reconcile_after");
+  if ("result_expires_at" in obj) {
+    const expires = instant(obj, "result_expires_at");
+    if (state !== "succeeded" || !("result_ref" in obj) || !before(settled, expires)) {
+      fail("only a success with a result carries result_expires_at, after settled_at");
+    }
+  }
+  return obj as TerminalOutcome;
+}
+
+/** The one classification every read applies; `now` is the STORE clock. */
+export function readOutcome(outcome: TerminalOutcome | null, now: string): ReadOutcome {
+  if (outcome === null) return "pending";
+  if (outcome.settlement_state === "held_unknown") return "held_unknown";
+  if (outcome.state !== "succeeded" || !outcome.result_ref || !outcome.usage) return "no_result";
+  if (outcome.result_expires_at === undefined) return "unavailable";
+  return before(now, outcome.result_expires_at) ? "available" : "expired";
 }

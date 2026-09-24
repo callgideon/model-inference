@@ -124,3 +124,9 @@ Additive to the ports table above; semantics and decisions in [02 §F2C lifecycl
 | ContentLifecycle / D10, driven by M6 | register(identity); references(content); candidates(after, limit); claim(content, generation, holder); tombstone(claim); acknowledge_delete(tombstone) | Persisted eligibility and references decide deletion; fenced leased claims; recheck inside tombstone; tombstoned keys refuse new use until acknowledged; an older generation's acknowledgement is a no-op. |
 
 - 2026-09-24: F2C.a ports section appended. Fake-backed conformance only.
+
+## F2C.b terminal/read consistency (2026-09-24)
+
+`TerminalOutcome` gains the optional `result_expires_at` (persisted at settlement; a proposal's value is ignored; absent on non-successes and on pre-F2C.b records). Every read path classifies with `v2.lifecycle.read_outcome(outcome, db_now)` into `pending`, `available`, `no_result`, `held_unknown`, `expired`, `unavailable`; the table and the rollout are in [02 §F2C terminal/read consistency](02-durable-protocols.md). Public wire bodies are unchanged. The TypeScript twin is `decodeTerminalOutcome`/`readOutcome` in `lib/contracts/v2/lifecycle.ts`.
+
+- 2026-09-24: F2C.b section appended. Fake-backed conformance only.

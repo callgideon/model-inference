@@ -1163,10 +1163,14 @@ class FakeJobStore:
 
         job.state = state
         job.lease = None                            # terminalization fences execution
+        # F2C.b: the result's lifetime is persisted HERE, once, on the store clock and the
+        # store's current TTL; a later retune never moves it and no read recomputes it.
+        expires = (now + timedelta(seconds=self.limits.result_ttl_s)
+                   if state is JobState.succeeded and result_ref else None)
         job.outcome = TerminalOutcome(
             job_id=job.id, state=state, cause=cause, usage=usage, result_ref=result_ref,
             settlement_state=settlement, debit=debit, settled_at=now,
-            reconcile_after=reconcile_after)
+            reconcile_after=reconcile_after, result_expires_at=expires)
         if self.stream is not None:
             # Same transaction as the outcome, the usage, the ledger settlement and
             # the capacity releases: after this commit a settled job always has its
