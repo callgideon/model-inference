@@ -105,14 +105,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_api_ops__the_secret_is_revealed_once"),
     # --- idempotency and audit -------------------------------------------------
     _m("replay_ignores_the_request", "one idempotency key names one request",
-       S, "            if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
-       "            if prior.after.get(\"operation\") != operation:",
+       S, "    if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
+       "    if prior.after.get(\"operation\") != operation:",
        "test_api_ops__a_replayed_adjustment_is_deduplicated"),
-    _m("replay_is_not_looked_up", "a replay returns the recorded result",
-       S, "        if prior is not None:", "        if False:",
-       "test_api_ops__a_replayed_adjustment_is_deduplicated",
-       "test_api_ops__the_secret_is_revealed_once",
-       "test_credit_identity__a_replayed_grant_is_deduplicated"),
+    # G8: the recorded-row fallback of a same-key race also answers a replay whose lookup
+    # was skipped, so the dedupe cases no longer see this defect; what does is a write the
+    # ports do not dedupe on the operation id - a suspension re-applied after its lift.
+    _m("replay_is_not_looked_up", "a replay returns the recorded result, re-executing nothing",
+       S, "        if prior is not None:\n            return _recorded(", "        if False:\n            return _recorded(",
+       "test_api_ops__a_replayed_key_never_reapplies_a_write_that_was_since_undone"),
     _m("operation_id_not_deterministic", "the port dedupes a crash replay by operation id",
        S, "        operation_id = stable_id(operation, idempotency_key)",
        "        operation_id = stable_id(operation, idempotency_key, str(uuid.uuid4()))",
@@ -141,9 +142,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("wallet_binding_unchecked", "a wallet bound to another org is refused, not used",
        S, "        return v2ports.resolve_wallet(probe, wallet)", "        return wallet",
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("replayed_grant_reported_as_new", "a replayed grant says it is a replay (one entitlement)",
+       S, "\"ledger_operation_id\": grant.ledger_operation_id, \"replayed\": replayed}",
+       "\"ledger_operation_id\": grant.ledger_operation_id, \"replayed\": False}",
+       "test_credit_identity__a_replayed_grant_is_deduplicated"),
     _m("grant_skips_an_existing_binding", "a grant never lands in a wallet bound elsewhere",
-       S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:",
-       "        if False:",
+       S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:\n"
+          "            await self.ops.bound_wallet(identity)   # an existing",
+       "        if False:\n            await self.ops.bound_wallet(identity)   # an existing",
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
     _m("fake_ledger_overdraws",
        "an adjustment below zero is refused by the ledger port (mutates the fake: this pins "
@@ -407,8 +413,8 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "            \"replayed\": issued.replayed,", "            \"replayed\": issued.secret,",
        "test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it"),
     _m("cli_error_echoes_the_credential", "a refusal names the error, never the credential",
-       C, "        print(json.dumps({\"error\": e.code, \"message\": str(e)}), file=sys.stderr)",
-       "        print(json.dumps({\"error\": e.code, \"message\": str(e) + secret}), file=sys.stderr)",
+       C, "    except errors.DomainError as e:\n        print(json.dumps({\"error\": e.code, \"message\": str(e)}), file=sys.stderr)",
+       "    except errors.DomainError as e:\n        print(json.dumps({\"error\": e.code, \"message\": str(e) + secret}), file=sys.stderr)",
        "test_api_auth__the_cli_reports_a_refusal_without_the_secret"),
 )
 

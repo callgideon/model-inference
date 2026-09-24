@@ -47,3 +47,21 @@ def test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing
     assert twin == first
     assert len(w.ledger.entries) == 2                       # the grant and one adjustment
     assert [e.idempotency_key for e in w.audit.entries] == ["g", "adj"]
+
+
+def test_api_ops__a_replayed_key_never_reapplies_a_write_that_was_since_undone():
+    """A replay is answered from the recorded row BEFORE anything is written: replaying the
+    key of a suspension after it was lifted leaves the organization unsuspended. Oracle: a
+    replay that re-ran the write (a suspension is not deduped by operation id at the
+    port) would suspend the organization again."""
+    w = fakes.world()
+
+    async def go():
+        op = await w.ops.operator(w.operator_secret)
+        first = await op.set_suspension(fakes.ORG_A, "abuse", idempotency_key="s1", reason=R)
+        await op.set_suspension(fakes.ORG_A, None, idempotency_key="s2", reason=R)
+        return first, await op.set_suspension(fakes.ORG_A, "abuse", idempotency_key="s1",
+                                              reason=R)
+    first, replay = asyncio.run(go())
+    assert replay == first and w.tenants.suspended == {}
+    assert [e.idempotency_key for e in w.audit.entries] == ["s1", "s2"]
