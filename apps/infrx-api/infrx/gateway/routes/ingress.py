@@ -265,7 +265,7 @@ def register(app, rt, deps: IngressDeps | None = None):
     """
     ingress = Ingress(rt, deps if deps is not None else getattr(rt, "ingress", None))
     deps = ingress.deps
-    guarded = intake.guard(deps.new_request_id)
+    guarded = intake.guard(deps.new_request_id, rt.settings.pilot)
     install_error_handlers(app, deps.new_request_id)
 
     @app.get(HEALTH_PATH)

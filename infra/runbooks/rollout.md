@@ -47,10 +47,11 @@ it into `INFRX_SET` itself (default 32, the old box value), and a name given twi
 | `ENGINE_MAX_NUM_SEQS` | `8` (the box unit runs 32 until the release's serve.sh replaces it) | W3/W4 pin |
 | `WORKER_CONCURRENCY` | `8` (08 §5 default 10) | W3/W4 pin |
 | `ACCOUNTING_REGIME` | default `legacy_usd`, not set: no `credit` deployment before the worker change (D5 IR 5) | D5 |
+| `LARGE_BODY_LIMIT` | `8` (code default 2; `LARGE_BODY_THRESHOLD_BYTES` stays 1 MiB). Memory model: a body over the threshold is held three times through the parse (raw bytes, decoded text, parsed string: meas. 3.00x at 3 MiB and 95 MiB, local tracemalloc, INTAKE-DRAIN evidence), so the worst case is 8 slots x 96 MiB x 3 = 2,304 MiB of the gateway container's 8 GiB (`--memory 8g`), and 8 x 0.45 s (meas. local, one 95 MiB parse) = ~3.6 s of worst-case loop stall; the pilot's clips (0.3-3 MB) cost 8 x 3 MB x 3 = 72 MiB. 8 matches `ENGINE_MAX_NUM_SEQS`/`WORKER_CONCURRENCY`, so a burst is refused by job capacity rather than by the intake gate. ⚠️ TO BE MEASURED: validated by the next certification's overload cell (every refusal a read 429 with Retry-After, no ReadError, gateway RSS under the bound) | INTAKE-DRAIN, 2026-09-24 box overload cell |
 
 ```bash
 INSTALL_ARGS=(RELEASE="$RELEASE" ENGINE_MAX_NUM_SEQS=8
-  INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8")
+  INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8")
 ```
 
 ## 2. The window

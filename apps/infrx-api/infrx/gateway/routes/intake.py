@@ -49,8 +49,14 @@ LAST_RESORT = {"error": {"message": errors.MESSAGES["internal_error"], "type": "
                          "code": "internal_error"}}
 # Refusals that happen while a body may still be arriving. Keeping the socket open
 # invites the caller to go on sending an endless chunked body until a proxy gives up.
+# Closing with body bytes unread makes the kernel answer the caller's next write with an
+# RST, which destroys the refusal before it is read (E4B overload cell, 2026-09-24): so
+# `guard` first drains a declared body within bounds (`drain`), then closes.
 CLOSE_CODES = frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",
                          "deadline_exceeded"})
+# What an unauthenticated caller can make us read and discard before its 401: a small
+# JSON body, never a video. Larger, it is refused without a drain (and may not read it).
+UNAUTHENTICATED_DRAIN_BYTES = 1_048_576
 # The minted id is ours, but it reaches a response header, so it is checked like
 # anything else that does: a CRLF in a header value splits the response.
 REQUEST_ID_RE = re.compile(r"[0-9a-fA-F-]{36}")
@@ -62,6 +68,17 @@ def check_content_type(request) -> None:
     if declared != JSON_MEDIA_TYPE:
         raise errors.InvalidRequest("the request body must be application/json",
                                     param="Content-Type")
+
+
+def declared_length(headers) -> int | None:
+    """`Content-Length` when it is a plain number, else None (chunked, absent, junk)."""
+    declared = headers.get("content-length") or ""
+    # `isdigit()` is true for "²" and for a 5,000-digit number; the first raises out
+    # of `int()` on some inputs and the second is a pointless big-int conversion.
+    # Anything else is simply not used - the running total is the real bound.
+    if declared.isascii() and declared.isdigit() and len(declared) <= 19:
+        return int(declared)
+    return None
 
 
 async def read_body(request, *, max_bytes: int, timeout_s: float, clock, large=None) -> bytes:
@@ -85,12 +102,9 @@ async def read_body(request, *, max_bytes: int, timeout_s: float, clock, large=N
     total = 0
     deadline = clock() + timeout_s
     if large is not None:
-        declared = request.headers.get("content-length") or ""
-        # `isdigit()` is true for "²" and for a 5,000-digit number; the first raises out
-        # of `int()` on some inputs and the second is a pointless big-int conversion.
-        # Anything else is simply not used - the running total is the real bound.
-        if declared.isascii() and declared.isdigit() and len(declared) <= 19:
-            large.account(int(declared))
+        declared = declared_length(request.headers)
+        if declared is not None:
+            large.account(declared)
     try:
         async with asyncio.timeout(timeout_s):
             async for chunk in request.stream():
@@ -269,6 +283,46 @@ class LargeBody:
             self.held = False
 
 
+def watched(receive):
+    """`receive`, and a probe: has the body been read to its end through it?"""
+    done = False
+
+    async def watching():
+        nonlocal done
+        message = await receive()
+        done = done or message["type"] != "http.request" or not message.get("more_body", False)
+        return message
+
+    return watching, lambda: done
+
+
+async def drain(receive, headers, code: str, max_bytes: int, deadline: float) -> None:
+    """Read and discard what is left of a refused body, so the caller reads the refusal.
+
+    Only a declared `Content-Length` within the bound is drained: a chunked body has no
+    end we can promise to reach (an endless one is the attack `CLOSE_CODES` exists for),
+    and a declared length over the cap would be read only to be refused. Those are
+    answered and closed at once, as before. Chunks are counted, never kept; the loop
+    stops at the declared length, at the first exception, and at `deadline` - the end of
+    the intake window the request started in, so a drain never makes a refusal later
+    than `INTAKE_TIMEOUT_S`. A 401 drains at most `UNAUTHENTICATED_DRAIN_BYTES`.
+    """
+    bound = min(UNAUTHENTICATED_DRAIN_BYTES, max_bytes) if code == "invalid_api_key" else max_bytes
+    declared = declared_length(headers)
+    if declared is None or declared > bound:
+        return
+    total = 0
+    try:
+        async with asyncio.timeout_at(deadline):
+            while total <= declared:
+                message = await receive()
+                total += len(message.get("body", b""))
+                if message["type"] != "http.request" or not message.get("more_body", False):
+                    return
+    except Exception:
+        return
+
+
 def safe_param(param: object) -> str | None:
     return param if isinstance(param, str) and SAFE_PARAM.fullmatch(param) else None
 
@@ -336,7 +390,7 @@ def mint(mint_request_id) -> str:
     return ids.new_request_id()
 
 
-def guard(mint_request_id):
+def guard(mint_request_id, limits=None):
     """Decorator factory: wrap a handler so nothing but the envelope ever leaves.
 
     `mint_request_id` is the injected id source, so the ingress mints the id (01:
@@ -348,6 +402,10 @@ def guard(mint_request_id):
 
     The log line names the code and the request id only. `error.detail` is ours, but
     a caller-supplied string reaching it once is all a log-forging attack needs.
+
+    With `limits` (the pilot settings), a `CLOSE_CODES` refusal raised before the body
+    was read to its end drains it first (`drain`: `max_request_bytes`, within the
+    `intake_timeout_s` window that began here).
     """
 
     def decorate(handler):
@@ -356,10 +414,15 @@ def guard(mint_request_id):
         # query parameter on every route.
         async def wrapped(request: Request):
             request_id = mint(mint_request_id)
+            started = asyncio.get_running_loop().time()
+            receive, finished = watched(request.receive)
             try:
-                return await handler(request, request_id)
+                return await handler(Request(request.scope, receive), request_id)
             except errors.DomainError as error:
                 log.info("%s: %s on request %s", request.url.path, error.code, request_id)
+                if limits is not None and error.code in CLOSE_CODES and not finished():
+                    await drain(receive, request.headers, error.code, limits.max_request_bytes,
+                                started + limits.intake_timeout_s)
                 return response(error, request_id)
             except Exception:
                 log.exception("%s: unhandled error on request %s", request.url.path, request_id)

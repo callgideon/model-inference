@@ -61,7 +61,7 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
     # Built at mount, like the ingress's: in `pilot` a shared legacy key refuses here (R51).
     auth = AuthResolver(rt)
     limits = rt.settings.pilot
-    guard = intake.guard(new_request_id)
+    guard = intake.guard(new_request_id, limits)
 
     def guarded(handler):
         """`intake.guard`, and every refusal closes the connection. A refusal raised before

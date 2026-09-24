@@ -254,7 +254,7 @@ def register(app, rt):
     if relay is None:
         return None
     jobs = Jobs(rt, relay, getattr(rt, "ingress", None))
-    guarded = intake.guard(jobs.ingress.deps.new_request_id)
+    guarded = intake.guard(jobs.ingress.deps.new_request_id, rt.settings.pilot)
 
     @app.post(JOBS_PATH)
     @guarded

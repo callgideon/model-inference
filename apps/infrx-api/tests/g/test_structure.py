@@ -481,7 +481,9 @@ def test_media_sec__the_url_cap_is_exact():
 def test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read():
     """The declared length is not trusted as a bound - the running total is - but it is
     used to claim a slot early, so a request that will be refused never gets buffered
-    at all. Removing that costs one wasted 96 MiB read per refusal."""
+    at all. Removing that costs one wasted 96 MiB read per refusal. What is read after the
+    refusal is INTAKE-DRAIN's drain - counted and discarded up to the declared length, so
+    the caller can read its 429 - never the intake's buffer."""
     from infrx.gateway.routes import intake
 
     slots = intake.LargeBodies(limit=1, threshold=1024)
@@ -491,7 +493,7 @@ def test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read():
     read, sent = [], []
 
     async def receive():
-        read.append(1)
+        read.append(slots.refused)            # 0: a read before the slot was refused
         return {"type": "http.request", "body": b"x" * 8_000, "more_body": True}
 
     async def send(message):
@@ -506,7 +508,8 @@ def test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read():
                                  (b"content-length", b"9000")]},
                     receive, send))
     assert sent[0]["status"] == 429, sent[0]
-    assert read == [], "the body was read for a request that had no slot"
+    assert 0 not in read, "the body was read for a request that had no slot"
+    assert len(read) <= 2, "the drain read past the 9,000 declared bytes"
     assert calls == []
 
 
