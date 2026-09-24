@@ -71,3 +71,7 @@ that residual risk and its bound).
 - 2026-09-22: Written by I2B at the commit that carries it; steps are `bash -n`-clean and
   `ssm.sh`'s base64 round trip is tested (`apps/infrx-api/tests/i/test_rollout.py`). The
   box, AWS and hosted Supabase were not touched; nothing here has run against them.
+- 2026-09-23 (ROLLOUT-PREP): steps `25-save-edge.sh` (keep the live Caddyfile + sha256),
+  `45-s3-check.sh` (tests/m/test_s3.py on the real bucket with the instance role, before the
+  install) and `93-restore-edge.sh` (put the saved edge back on an abort) added; the order that
+  uses them is [infra/runbooks/rollout.md](../runbooks/rollout.md). Not run on the box.
