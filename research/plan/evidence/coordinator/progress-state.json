@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24T00:59:03Z",
+  "updated": "2026-09-24T01:14:54Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -118,8 +118,8 @@
       "since": "2026-09-24T00:59:03Z"
     },
     "CUTOVER": {
-      "phase": "code MERGED daeff13 (1bed457 = 60dd799 + evidence); review fix_required on 3 test gaps (JSON evidence/g/CUTOVER-review-a1e88dc.json) → fix round running → verifier → step 3b before checkpoint 2",
-      "since": "2026-09-24T00:59:03Z"
+      "phase": "code MERGED daeff13; fix round HANDED BACK 141e169 (tests/docs only: shape pins in every mode, site-wide edge scan, one gauge line, one worker/drain pins) → single verifier → step 3b",
+      "since": "2026-09-24T01:14:54Z"
     },
     "ROLLOUT-PREP": {
       "phase": "MERGED 22761a4 (f0a1a82)",
