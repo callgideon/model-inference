@@ -164,7 +164,7 @@ def test_junit_counts_keep_xfails_apart_from_skips(tmp_path):
 
 
 @pytest.mark.parametrize("body,verdict", [
-    ("def test_ok():\n    pass\n", "PASS"),
+    ("def test_ok(tmp_path):\n    (tmp_path / 'f').write_text('x')\n", "PASS"),  # basetemp works
     ("import pytest\ndef test_ok():\n    pass\ndef test_s():\n    pytest.skip('no db')\n",
      "BLOCKED"),
     ("def test_bad():\n    assert False\n", "FAIL"),

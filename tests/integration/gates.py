@@ -20,6 +20,7 @@ import collections
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -95,11 +96,16 @@ def run(name: str, argv: list[str], cwd: Path, out: Path, env: dict | None = Non
 def pytest_stage(name: str, argv: list[str], cwd: Path, out: Path,
                  env: dict | None = None) -> dict:
     junit = out / f"{name}.xml"
-    # --basetemp: a private per-run directory instead of the shared /tmp/pytest-of-<user>
-    # (GHSA-6w46-j5rx-g56g mitigation while pytest stays < 9.0.3; TMPDIR is left alone
-    # because the D/Q harnesses take their host-wide flocks under it).
-    argv = [*argv, f"--junitxml={junit}", f"--basetemp={out / 'basetemp' / name}"]
-    code, seconds, log = run(name, argv, cwd, out, env)
+    # --basetemp: a private (0700, mkdtemp) directory instead of the shared
+    # /tmp/pytest-of-<user> (GHSA-6w46-j5rx-g56g mitigation while pytest stays < 9.0.3).
+    # Short, because some cases bind unix sockets under tmp_path. TMPDIR is left alone: the
+    # D/Q harnesses take their host-wide flocks under it.
+    basetemp = tempfile.mkdtemp(prefix=f"infrx-e2c-{name}-")
+    argv = [*argv, f"--junitxml={junit}", f"--basetemp={basetemp}"]
+    try:
+        code, seconds, log = run(name, argv, cwd, out, env)
+    finally:
+        shutil.rmtree(basetemp, ignore_errors=True)
     row = {"stage": name, "command": " ".join(argv), "cwd": str(cwd), "exit": code,
            "duration_s": seconds, "log": str(log), **({"env": env} if env else {})}
     if not junit.exists():
