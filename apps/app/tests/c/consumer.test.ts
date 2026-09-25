@@ -16,7 +16,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PostgrestClient, QueryPlan, QueryPort, Row } from "../../lib/services/query.ts";
-import { postgrestPort, QueryPortError } from "../../lib/services/query.ts";
+import { buildPlan, postgrestPort, QueryPortError } from "../../lib/services/query.ts";
 import {
   authUserOutcome,
   createConsumerReads,
@@ -31,7 +31,7 @@ import { createMemoryPort, type Dataset } from "./harness.ts";
 
 /** Success, or a failure that prints the code that came back (the mutant runner reads it). */
 function valueOf<T>(result: Result<T>, what: string): T {
-  if (!result.ok) assert.fail(`${what}: ${result.error.code} (${result.error.message})`);
+  if (!result.ok) assert.fail(`${what}: expected success, got ${result.error.code} (${result.error.message})`);
   return result.value;
 }
 
@@ -127,7 +127,10 @@ test("a verified individual without a wallet is onboarding, whatever other walle
 });
 
 test("a port that drops the owner predicate cannot hand over another individual's wallet", async () => {
-  const context = await resolveConsumerContext(predicateBlindPort(world()), verified);
+  // Exactly one row comes back - someone else's - so only the per-row owner check can refuse it.
+  const data = world();
+  data.credit_wallets = data.credit_wallets.filter((row) => row.owner_user_id === OTHER);
+  const context = await resolveConsumerContext(predicateBlindPort(data), verified);
   assert.deepEqual(context, { state: "unavailable" });
 });
 
@@ -482,7 +485,7 @@ type Call = [string, ...unknown[]];
 function recordingClient(answer: Answer) {
   const calls: Call[] = [];
   const builder: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "neq", "gte", "lte", "gt", "not", "or", "order", "limit"]) {
+  for (const method of ["select", "eq", "neq", "gte", "lte", "gt", "lt", "not", "or", "order", "limit"]) {
     builder[method] = (...args: unknown[]) => {
       calls.push([method, ...args]);
       return builder;
@@ -527,13 +530,8 @@ test("the PostgREST executor sends the plan: relation, named columns, filters, k
   ]);
 
   const second = recordingClient({ data: [], error: null });
-  await postgrestPort(second.client).run({
-    name: "consumer_wallet",
-    predicates: [{ field: "kind", column: "w.kind", op: "eq", value: "consumer" }],
-    keyset: null,
-    limit: 2,
-    tenant: { column: "w.owner_user_id", value: ME },
-  });
+  // Built by the registry, so the query's own `kind = consumer` constant is part of what is sent.
+  await postgrestPort(second.client).run(buildPlan("consumer_wallet", { orgId: ME, limit: 2 }));
   assert.deepEqual(second.calls, [
     ["from", "console_credit_wallets"],
     ["select", "owner_user_id,wallet_id,org_id"],

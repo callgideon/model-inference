@@ -96,7 +96,7 @@ function readsAs(sub: string | null, account: ConsumerAccount): { reads: Consume
 }
 
 function valueOf<T>(result: Result<T>, what: string): T {
-  if (!result.ok) assert.fail(`${what}: ${result.error.code} (${result.error.message})`);
+  if (!result.ok) assert.fail(`${what}: expected success, got ${result.error.code} (${result.error.message})`);
   return result.value;
 }
 
