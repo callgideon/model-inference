@@ -58,6 +58,14 @@ receive no grant until verified (A1). In pilot mode the shared key
 it gets 401 after step 8; scoped keys come from G6B. The parameter itself is left in place
 for the revert paths.
 
+The operator CLI (`python -m infrx.operations.cli`: grant, adjust, issue-key, revoke-key,
+credit-transition, ...) runs with its **own** DSN: `read -rs OPERATIONS_DATABASE_URL; export
+OPERATIONS_DATABASE_URL` (the owner or broad login, never typed on a command line), which it
+prefers over `DATABASE_URL`. It does not use the runtime env file's `DATABASE_URL` once that
+names the dedicated `infrx_runtime` login (R127): a dedicated login (`infrx_runtime`,
+`infrx_monitor`) is refused before anything is dialled, with a message naming the variable,
+never the DSN - the runtime login must never rewrite money, and it cannot `set role`.
+
 ## 4. Not in this window
 
 The role/boundary/KMS/IMDS/SSH hardening of [infra/README.md §5](../README.md) (rows
@@ -82,3 +90,4 @@ that residual risk and its bound).
   [rollback.md](../runbooks/rollback.md#known-good-rollback-drill). Tested against stubs
   (`apps/infrx-api/tests/i/test_ops_steps.py`, `test_artifacts.py`, `test_rollback_drill.py`);
   not run on the box.
+- 2026-09-25: OPS-CLI-DSN (RL-V5): §3 records the operator CLI's own DSN (`OPERATIONS_DATABASE_URL`) and its refusal of the dedicated runtime/monitor logins; steps unchanged.
