@@ -135,6 +135,21 @@ def test_s12_every_bypass_installs_on_this_tree(name):
     assert done.returncode == 0, done.stderr[-800:]
 
 
+def test_s12_a_revert_control_tree_claims_this_checkouts_stack(tmp_path):
+    """A revert-type control runs the scratch tree's harness copy against the stack THIS
+    checkout provisioned. Without the checkout identity and the state file the copy reads
+    every container as foreign (B1) and its scenario is skipped: the control never judged."""
+    import world
+    tree = tmp_path / "tree"
+    env = runner.run_env(tmp_path, tree)
+    assert env["INFRX_E2_CHECKOUT"] == world.harness.working_dir()
+    assert env["INFRX_E2_STATE_FILE"] == str(world.harness.STATE_FILE)
+    assert env["INFRX_E2_REPO_ROOT"] == str(tree)
+    assert env["PYTHONPATH"] == str(tree / "apps/infrx-api")
+    assert "INFRX_E2_REPO_ROOT" not in runner.run_env(tmp_path) or \
+        runner.run_env(tmp_path)["INFRX_E2_REPO_ROOT"] != str(tree)
+
+
 def test_s12_the_namespace_is_the_reserved_block():
     """WR-1's row, however it is provided: the e3c layout is tasklocal's 56900-56999."""
     import world

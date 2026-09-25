@@ -188,6 +188,7 @@ REQUIRED = {
             "test_s12_a_barrier_holds_on_whichever_candidate_the_process_calls",
             "test_s12_a_collector_that_cannot_run_is_blocked_not_passed",
             "test_s12_the_dedicated_runtime_login_is_a_real_box_database",
+            "test_s12_a_revert_control_tree_claims_this_checkouts_stack",
             *(f"test_s12_every_bypass_installs_on_this_tree[{n}]" for n in (
                 "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind"))),
 }
@@ -326,17 +327,29 @@ def scenario_files(tree: Path | None = None) -> list[str]:
         [str(root / "test_e3c_runner.py")]
 
 
+def run_env(out: Path, tree: Path | None = None) -> dict:
+    """The scenarios' environment. A scratch tree (a revert-type control) brings its package,
+    its migrations and its harness copy, but must claim THIS checkout's stack: the copy's
+    compose directory is another checkout's identity (B1's ownership label), so without
+    `INFRX_E2_CHECKOUT` and the state file every owned container reads foreign and the
+    control's scenario is skipped, not judged (the same seam `mutants.py` uses)."""
+    import world
+    env = {**os.environ, "INFRX_E2_NAMESPACE": NAMESPACE, "INFRX_E3C_OUT": str(out),
+           "COLUMNS": "400"}
+    if tree is not None:
+        env.update(PYTHONPATH=str(tree / "apps/infrx-api"), INFRX_E2_REPO_ROOT=str(tree),
+                   INFRX_E2_CHECKOUT=world.harness.working_dir(),
+                   INFRX_E2_STATE_FILE=str(world.harness.STATE_FILE))
+    return env
+
+
 def pytest_run(out: Path, name: str, files: list[str], keyword: str | None,
                tree: Path | None = None) -> tuple[dict, str]:
     """pytest in its own session, the whole output to `<out>/<name>.log`, JUnit beside it."""
     import subprocess
     junit, log = out / f"{name}.xml", out / f"{name}.log"
     import world
-    env = {**os.environ, "INFRX_E2_NAMESPACE": NAMESPACE, "INFRX_E3C_OUT": str(out),
-           "COLUMNS": "400"}
-    if tree is not None:
-        # A scratch tree (a negative control's revert): its package and its migrations.
-        env.update(PYTHONPATH=str(tree / "apps/infrx-api"), INFRX_E2_REPO_ROOT=str(tree))
+    env = run_env(out, tree)
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
             "-o", "junit_family=xunit1", f"--junitxml={junit}", *files,
             *(["-k", keyword] if keyword else [])]
