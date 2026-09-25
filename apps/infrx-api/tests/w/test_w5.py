@@ -203,16 +203,39 @@ def test_w5_ready__no_marker_is_never_legacy_ready(tmp_path, video):
     assert prep.attached[request.request_id] == request.media   # the record was there
 
 
-def test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once(tmp_path):
+@pytest.mark.parametrize("credit", [False, True], ids=["legacy", "credit"])
+def test_w5_ready__a_video_job_is_never_claimed_before_its_marker(tmp_path, credit):
+    """E3C s04 (measured on the base tree: a video job's preparation lease was claimed BEFORE
+    its attach landed, the worker then waiting on it). With the `ReadinessStore` wired that is
+    impossible: until the admission's marker commits the claim itself is refused `not_ready` -
+    no lease, no attempt counted, no media read, the engine never asked."""
+    prep = Prep(tmp_path, credit=credit)
+    lifecycle(prep)
+
+    async def case():
+        request = await prep.admit(video=True, ready=False)   # attach and marker not landed
+        return request, await prep.runner.run(request.request_id)
+
+    request, result = run(case())
+    assert (result.cause, result.refusal) == (None, "not_claimable"), result
+    held = job(prep, request)
+    assert (held.preparation_attempts, held.preparation_lease) == (0, None), held
+    assert prep.app.tokenized == [] and prep.media.prepared_by_job == {}
+
+
+@pytest.mark.parametrize("video", [False, True], ids=["text", "video"])
+def test_w5_ready__an_unready_job_ends_at_its_preparation_deadline_released_once(tmp_path,
+                                                                                 video):
     """ADMISSION-READY's bound: a job that never became ready - a crash between the admission
-    and its manifest on a two-phase store, or the previous runtime's job under D1 - is not
-    an orphan. The reaper settles it at `preparation_deadline_at` (`preparation_failed`),
-    its hold released exactly once, and a second sweep changes nothing."""
+    and its manifest on a two-phase store, or the previous runtime's job under D1 (E3C s05: a
+    video whose attach was lost) - is not an orphan. The reaper settles it at
+    `preparation_deadline_at` (`preparation_failed`), its hold released exactly once, and a
+    second sweep changes nothing."""
     prep = Prep(tmp_path)
     lifecycle(prep)
 
     async def case():
-        request = await prep.admit()                       # no marker: never claimable
+        request = await prep.admit(video=video)            # no marker: never claimable
         assert (await prep.runner.run(request.request_id)).refusal == "not_claimable"
         prep.clock.advance(job(prep, request).budgets.preparation_s + 1)
         first = await prep.store.recover()
@@ -256,15 +279,17 @@ async def lapse(prep: Prep) -> tuple:
     return await prep.store.recover()
 
 
-def test_w5_crash__accepted_but_never_ready_is_bounded_and_released_once(tmp_path):
-    """Crash after admit (RV-05): the gateway died between the admission commit and its
-    manifest, on a store that lets the claim through. Every attempt is refused before the
-    engine is asked; each lapsed lease is requeued within MAX_PREPUBLICATION_RETRIES, and the
-    job then ends `preparation_failed` with its hold released once - no orphan, no count."""
+@pytest.mark.parametrize("video", [False, True], ids=["text", "video"])
+def test_w5_crash__accepted_but_never_ready_is_bounded_and_released_once(tmp_path, video):
+    """Crash after admit (RV-05; E3C s05: a video that lost its attach): the gateway died
+    between the admission commit and its manifest, on a store that lets the claim through.
+    Every attempt is refused before the engine is asked; each lapsed lease is requeued within
+    MAX_PREPUBLICATION_RETRIES, and the job then ends `preparation_failed` with its hold
+    released once - no orphan, no count."""
     prep = Prep(tmp_path, attach_wait_s=0.05)
 
     async def case():
-        request = await prep.admit(ready=False)
+        request = await prep.admit(video=video, ready=False)
         refusals = []
         while job(prep, request).outcome is None and len(refusals) < 10:
             refusals.append((await prep.runner.run(request.request_id)).refusal)
