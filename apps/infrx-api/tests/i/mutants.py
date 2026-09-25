@@ -1276,6 +1276,21 @@ MUTANTS += (
        BUCKET),
 )
 
+# --- intake panels: WR-I8-3's large-body gate and refusal drain (OB-10 follow-up) ---------
+INTAKE_ROW = "test_ops_intake__the_intake_row_shows_every_intake_family_on_closed_labels"
+INTAKE_RULE = "test_ops_intake__the_slots_rule_fires_at_the_limit_only"
+MUTANTS += (
+    _m("intake_panel_missing", "every intake family has a panel in the intake row", DASH,
+       '        {"title": "Large bodies refused (every slot held)", "metric": '
+       '"infrx_large_body_refused_total", "rate": true, "unit": "1/s"},\n', "", INTAKE_ROW),
+    _m("intake_vocabulary_widened", "intake panels split on declared closed labels only", DASH,
+       '"metric": "infrx_intake_drained_total", "by": ["code"]',
+       '"metric": "infrx_intake_drained_total", "by": ["code", "tenant"]', INTAKE_ROW),
+    _m("intake_rule_stale_family", "the slots rule reads the families the gateway records",
+       OPS_RULES, '"metric": "infrx_large_body_slots_in_use"', '"metric": "infrx_large_body_in_use"',
+       INTAKE_RULE),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in

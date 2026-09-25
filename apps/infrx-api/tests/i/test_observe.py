@@ -76,6 +76,11 @@ def runtime_producers() -> set[str]:
             continue
         text = path.read_text()
         found |= set(re.findall(r'\.(?:set|inc|observe)\(\s*"(infrx_[a-z_]+)"', text))
+        # WR-I8-3: `routes/intake.py` records through `record(registry, "set", NAME, ...)`
+        # with module constants naming the family
+        constants = dict(re.findall(r'^([A-Z_]+) = "(infrx_[a-z_]+)"', text, re.M))
+        found |= {constants[name] for name in re.findall(
+            r'\brecord\(.*?"(?:set|inc|observe)",\s*([A-Z_]+)\b', text) if name in constants}
         for helper, families in HELPERS.items():
             if re.search(rf"\b{helper}\b", text) and not re.search(rf"def {helper}\(", text):
                 found |= set(families)
@@ -639,3 +644,57 @@ def test_ops_retention__the_bucket_rule_aborts_stale_multipart_uploads_only():
         section.index("put-bucket-lifecycle-configuration")          # merge, never replace
     for body in (text, section):
         assert not re.search(r"\b\d{12}\b", body) and "arn:" not in body
+
+
+# --- intake panels: the large-body gate and the refusal drain (WR-I8-3, OB-10 follow-up) ---
+# Failure oracles:
+# * an intake family `routes/intake.py` records has no panel in the intake row (OB-10's
+#   "families with no panel", held here per row);
+# * an intake panel splits on a label its family does not declare, or on an open one;
+# * the row's runbook anchor does not resolve;
+# * GatewayBodySlotsFull names a family nothing records (the pre-WR-I8-3 names), stays quiet
+#   with every slot held, or fires below the limit.
+INTAKE_ROW = "Is the intake saturated? (gateway large-body slots, refusal drain)"
+
+
+def _anchors(path: Path) -> set[str]:
+    return {re.sub(r"[^a-z0-9 -]", "", line.lstrip("#").strip().lower()).replace(" ", "-")
+            for line in path.read_text().splitlines() if re.match(r"#{1,6} ", line)}
+
+
+def test_ops_intake__the_intake_row_shows_every_intake_family_on_closed_labels():
+    from infrx.gateway.routes import intake
+    from infrx.observe.metrics import FAMILIES
+    recorded = {intake.SLOTS_IN_USE, intake.SLOTS_LIMIT, intake.SLOTS_REFUSED, intake.DRAINED}
+    assert recorded <= set(FAMILIES) and recorded <= runtime_producers()
+    (row,) = [r for r in DASHBOARD["rows"] if r["title"] == INTAKE_ROW]
+    shown = set()
+    for panel in row["panels"]:
+        for field in ("metric", "compare"):
+            if field in panel:
+                assert panel[field] in recorded, panel["title"]
+                shown.add(panel[field])
+        declared = dict(FAMILIES[panel["metric"]].labels)
+        for label in panel.get("by", ()):
+            assert label == "process" or declared.get(label) is not None, (panel["title"], label)
+        assert panel.get("rate", False) == (FAMILIES[panel["metric"]].kind == "counter")
+    assert shown == recorded, f"no panel: {recorded - shown}"
+    document, _, anchor = row["runbook"].partition("#")
+    assert anchor in _anchors(support.REPO / document)
+
+
+def test_ops_intake__the_slots_rule_fires_at_the_limit_only():
+    from infrx.gateway.routes import intake
+    (rule,) = [r for r in RULES["rules"] if r["name"] == "GatewayBodySlotsFull"]
+    assert (rule["metric"], rule["divide_by"]["metric"]) == (intake.SLOTS_IN_USE,
+                                                               intake.SLOTS_LIMIT)
+    assert rule["runbook"].partition("#")[2] in _anchors(LIFECYCLE_RUNBOOK)
+
+    def scrape(in_use: int) -> dict:
+        return evaluator.parse(f'{intake.SLOTS_IN_USE}{{process="gateway"}} {in_use}\n'
+                               f'{intake.SLOTS_LIMIT}{{process="gateway"}} 8\n')
+
+    def fired(in_use: int) -> set:
+        return {a["alert"] for a in evaluator.evaluate([rule], scrape(in_use), scrape(0))}
+
+    assert fired(7) == set() and fired(8) == {"GatewayBodySlotsFull"}

@@ -10,8 +10,6 @@
     }
   },
   "pending_producers": {
-    "infrx_large_body_in_use": "WR-I8-3 (the gateway's LargeBodies occupancy on /metrics)",
-    "infrx_large_body_limit": "WR-I8-3",
     "infrx_retention_pending_delete_seconds": "WR-I8-M6-1 (M6 phase 2 reports it in RetentionCollector's Report / ProcessingCache but records no metric; FAMILIES declares none)",
     "infrx_retention_consecutive_aborted_passes": "WR-I8-M6-1",
     "infrx_retention_last_success_timestamp_seconds": "WR-I8-M6-1",
@@ -285,16 +283,16 @@
       "name": "GatewayBodySlotsFull",
       "severity": "ticket",
       "summary": "Every large-body intake slot of the gateway is in use: further large bodies are refused (buffering bound reached).",
-      "metric": "infrx_large_body_in_use",
+      "metric": "infrx_large_body_slots_in_use",
       "agg": "max",
       "divide_by": {
-        "metric": "infrx_large_body_limit",
+        "metric": "infrx_large_body_slots_limit",
         "agg": "max"
       },
       "op": ">=",
       "threshold": 1.0,
       "threshold_status": "exact: at the configured LARGE_BODY_LIMIT",
-      "runbook": "infra/runbooks/observe.md#edge"
+      "runbook": "infra/runbooks/observe.md#intake"
     },
     {
       "name": "RetentionPendingDeleteOld",
