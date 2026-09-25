@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-25 03:04Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 32, updated 2026-09-25 03:04Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-25 03:05Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 33, updated 2026-09-25 03:05Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -8,7 +8,7 @@ Generated 2026-09-25 03:04Z UTC by `python3 research/plan/scripts/progress.py` f
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3.
 - Agent slots: 16 total, 7 active lanes, 2 reserved.
-- Validation: 0 error(s), 5 warning(s).
+- Validation: 0 error(s), 0 warning(s).
 
 ### Actionable blockers
 
@@ -61,7 +61,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z) | dependency path D10 → M5 → M6 → E3C | 27.1 / 48.5 / 88.8 h | 20.9 / 35.8 / 61.8 h | medium |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-25 23:59Z – 2026-09-27 16:53Z (likely 2026-09-26 14:53Z) | dependency path D10 → M5 → M6 → E3C | 27.1 / 48.5 / 88.8 h | 20.9 / 35.8 / 61.8 h | medium |
 | `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
 | `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4 | — | — | unknown |
 | `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4 | — | — | unknown |
@@ -126,7 +126,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 |---|---|---|---|---|---|---|---|---|
 | S3 | S3 all | complete | codex/s3-reconcile | dff31efc → 289eef6e | none | 2026-09-24 21:58Z | — | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 21:58Z; basis: merged (fff8416e; edits fdbbf87c) |
 | TRACKER | support 06-progress-tracker (support) | complete | codex/tracker | dff31efc → 803f6cb1 | none | 2026-09-24 22:31Z | merged into claude/consumer-v1 at 2cae9a4c; the coordinator runs apply-updates at each handback | 0–0.5 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:31Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 803f6cb1) |
-| E2C | E2C follow-up: E3C WR-1..3 (e3c namespace, MinIO repin, BACKEND-LOCAL stage) + P-21 reservation | review | codex/e2c-verify | dff31efc → f61d2f0b | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-25 00:10Z | tests/d decoy collision from tasklocal efad43e0 (wiring 2, unchanged) | 1–6 h remaining (likely 3 h), confidence medium, estimated 2026-09-25 00:10Z; basis: unchanged: rerun consumer-local after the tasklocal decoy fix, E3C runner merge and an S3 endpoint |
+| E2C | E2C coordinator wiring: Makefile gates, pytest relock, rehearse MinIO pin, E2C-FR-2 | review | codex/e2c-wiring | 5bef53bc → 26ef3fc3 | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-25 03:02Z | consumer-local not PASS: rerun needed (S3 container removed mid-run); E2C-FR-1 signup Runner env not applied; integration-l3 needs the coordinator's e2 namespace run | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 03:02Z; basis: one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9 |
 | F2C-L | F2C fix-round | complete | codex/f2c-lifecycle | dff31efc → c4873027 | none | 2026-09-25 00:19Z | merged into claude/consumer-v1 at 78661bf0 (+ b413f253: R111-R116, SURFACE_VERSION contracts-v2.1, manifest F2C implemented) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:19Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at c4873027) |
 | F2C-C | F2C c | complete | codex/f2c-catalog | dff31efc → b8de6171 | none | 2026-09-24 22:36Z | merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:36Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171) |
 | E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | complete | codex/e1c-client | dff31efc → 6cb6c929 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-25 00:19Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:19Z; basis: merged; start dependency F2C implemented |
@@ -142,7 +142,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: E3C, E2C, W5, G7, M6, M5, D10.
+- Review queue: E3C, W5, G7, M6, M5, D10, E2C.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -161,11 +161,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Validation
 
-- warning: overlapping writers: E2C (review) and D10 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/d/
-- warning: overlapping writers: E2C (review) and M5 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
-- warning: overlapping writers: E2C (review) and W5 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/w/
-- warning: overlapping writers: E2C (review) and G7 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/
-- warning: overlapping writers: E2C (review) and M6 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/test_retention.py (+2 more)
+- Clean.
 
 ## Pending inputs
 
@@ -328,6 +324,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-25 03:02Z UTC, E2C: review → review; head 26ef3fc3; estimate likely 3 → 2 h (one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9)
 - 2026-09-25 03:04Z UTC, tracker: forecast E3C: 2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z) → 2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z) (because: dependency path D10 → M5 → M6 → E3C)
 - 2026-09-25 03:02Z UTC, D10: running → review; head 1f12cb6a; estimate likely 4 → 3 h (all D lists, full mutant list and Supabase-image runs green; left: review fixes and W5 fail_preparation SQL once F2C/R104 rule the port)
 - 2026-09-25 02:56Z UTC, tracker: forecast E3C: 2026-09-26 02:14Z – 2026-09-28 04:56Z (likely 2026-09-26 20:26Z) → 2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z) (because: dependency path E2C → D10 → M5 → M6 → E3C)

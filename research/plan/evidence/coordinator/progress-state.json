@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 32,
-  "updated": "2026-09-25T03:04:40Z",
+  "revision": 33,
+  "updated": "2026-09-25T03:05:17Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -266,12 +266,12 @@
     {
       "id": "E2C",
       "task": "E2C",
-      "slice": "follow-up: E3C WR-1..3 (e3c namespace, MinIO repin, BACKEND-LOCAL stage) + P-21 reservation",
+      "slice": "coordinator wiring: Makefile gates, pytest relock, rehearse MinIO pin, E2C-FR-2",
       "agent": "opus",
-      "branch": "codex/e2c-verify",
-      "worktree": ".claude/worktrees/codex-e2c-verify",
-      "base": "dff31efc",
-      "head": "f61d2f0b",
+      "branch": "codex/e2c-wiring",
+      "worktree": ".claude/worktrees/codex-e2c-wiring",
+      "base": "5bef53bc",
+      "head": "26ef3fc3",
       "isolation": {
         "ports": "postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e2c-",
@@ -279,60 +279,77 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T00:10:00Z",
-      "blocker": "tests/d decoy collision from tasklocal efad43e0 (wiring 2, unchanged)",
-      "next_action": "Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests).",
+      "updated": "2026-09-25T03:02:52Z",
+      "blocker": "consumer-local not PASS: rerun needed (S3 container removed mid-run); E2C-FR-1 signup Runner env not applied; integration-l3 needs the coordinator's e2 namespace run",
+      "next_action": "coordinator merges codex/e2c-wiring, runs make api-test/api-mutants on pytest 9.1.1, then reruns make consumer-local on e2c",
       "estimate": {
         "optimistic_h": 1,
-        "likely_h": 3,
-        "pessimistic_h": 6,
+        "likely_h": 2,
+        "pessimistic_h": 4,
         "confidence": "medium",
-        "basis": "unchanged: rerun consumer-local after the tasklocal decoy fix, E3C runner merge and an S3 endpoint",
-        "at": "2026-09-25T00:10Z"
+        "basis": "one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9",
+        "at": "2026-09-25T03:02:52Z"
       },
       "evidence": [
         "research/plan/evidence/e/E2C-3a113dc.md",
         "tests/integration/ENVIRONMENT.md",
         "tests/integration/environment.json",
-        "research/plan/evidence/e/E2C-f61d2f0.md"
+        "research/plan/evidence/e/E2C-f61d2f0.md",
+        "research/plan/evidence/e/E2C-wiring-26ef3fc.md"
       ],
       "commands": [
         {
-          "cmd": "docker pull quay.io/minio/minio@sha256:14cea493...",
+          "cmd": "pytest -q tests/integration/test_preflight.py -k make_target",
+          "exit": 0,
+          "summary": "4 passed"
+        },
+        {
+          "cmd": "uv lock",
+          "exit": 0,
+          "summary": "pytest 8.4.2 -> 9.1.1 only"
+        },
+        {
+          "cmd": "uv sync --frozen --all-extras",
+          "exit": 0,
+          "summary": "pytest 9.1.1 installed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'",
+          "exit": 0,
+          "summary": "1260 passed, 6 deselected"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/i/test_packaging.py",
+          "exit": 0,
+          "summary": "23 passed"
+        },
+        {
+          "cmd": "pytest -q tests/integration/test_run.py test_preflight.py test_harness.py",
+          "exit": 0,
+          "summary": "138 passed"
+        },
+        {
+          "cmd": "consumer-local gate (fix agent driver, 330e04f1 dirty)",
           "exit": 1,
-          "summary": "401 UNAUTHORIZED (old pin unpullable)"
-        },
-        {
-          "cmd": "docker buildx imagetools inspect pgsty/minio@sha256:b6bfe723...",
-          "exit": 0,
-          "summary": "OCI index; latest and RELEASE.2026-08-04T00-00-00Z resolve to it; minio --version commit d88f46cc"
-        },
-        {
-          "cmd": "infrx-e2c-selftest-minio on 55512 + boto3 health/bucket/put/get/list/NoSuchKey",
-          "exit": 0,
-          "summary": "all as expected; container removed"
-        },
-        {
-          "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py tests/integration/test_harness.py tests/integration/test_run.py",
-          "exit": 0,
-          "summary": "108 passed"
-        },
-        {
-          "cmd": "preflight.py consumer-local | integration-l2 | backend-certify",
-          "exit": 0,
-          "summary": "PASS x3; e2 ports 55500-block reported as ephemeral-overlap risk"
+          "summary": "FAIL: api-d decoy (lane tasklocal; passes at head), api-m/api-w S3 container vanished mid-run; l1/l3 BLOCKED; backend-local NOT RUN"
         }
       ],
       "owned_paths": [
-        "tests/integration/",
-        "apps/infrx-api/tests/ (portability fixes only)",
-        "research/plan/evidence/e/E2C-f61d2f0.md"
+        "Makefile",
+        "apps/infrx-api/pyproject.toml",
+        "apps/infrx-api/uv.lock",
+        "apps/infrx-api/deploy/rehearse.sh",
+        "apps/infrx-api/tests/i/test_packaging.py",
+        "tests/integration/run.py",
+        "tests/integration/test_run.py",
+        "tests/integration/test_preflight.py",
+        "research/plan/evidence/e/E2C-wiring-26ef3fc.md",
+        "research/plan/evidence/coordinator/updates/E2C-20260925T0302Z.json"
       ],
       "deviation": "Program 22 V0: E2C may begin environment inventory in parallel with S3.",
       "wiring_requests": [
-        "Makefile: backend-local target running tests/integration/backend/e3c/runner.py --out ${E3C_OUT:-${TMPDIR:-/tmp}/infrx-e3c} $(E3C_ARGS), plus consumer-local/backend-certify/app-e2e",
-        "host: add 55500-55599 to /etc/sysctl.d/60-infrx-task-ports.conf",
-        "apps/infrx-api/deploy/rehearse.sh:43 MINIO_IMAGE -> pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
+        "E2C-FR-1 tests/d/signup_mutants.py Runner env",
+        "host sysctl ip_local_reserved_ports += 55500-55599"
       ]
     },
     {
@@ -1335,12 +1352,6 @@
       "head": "8406c798"
     },
     {
-      "since": "2026-09-25T00:04:00Z",
-      "lane": "E2C",
-      "task": "E2C",
-      "head": "f61d2f0b"
-    },
-    {
       "since": "2026-09-25T00:35:00Z",
       "lane": "W5",
       "task": "W5",
@@ -1369,6 +1380,12 @@
       "lane": "D10",
       "task": "D10",
       "head": "1f12cb6a"
+    },
+    {
+      "since": "2026-09-25T00:04:00Z",
+      "lane": "E2C",
+      "task": "E2C",
+      "head": "26ef3fc3"
     }
   ],
   "integration_queue": [],
@@ -2538,6 +2555,12 @@
       "at": "2026-09-25T03:04:40Z",
       "by": "tracker",
       "what": "forecast E3C: 2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z) → 2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z) (because: dependency path D10 → M5 → M6 → E3C)"
+    },
+    {
+      "at": "2026-09-25T03:02:52Z",
+      "by": "E2C",
+      "what": "review → review; head 26ef3fc3; estimate likely 3 → 2 h (one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9)",
+      "source": "updates/E2C-20260925T0302Z.json"
     }
   ],
   "history": {
@@ -2710,10 +2733,14 @@
     "D10-20260925T0302Z.json": {
       "status": "applied",
       "at": "2026-09-25T03:02:00Z"
+    },
+    "E2C-20260925T0302Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T03:02:52Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T03:04:40Z",
+    "computed_at": "2026-09-25T03:05:17Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2723,7 +2750,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z)",
+        "text": "2026-09-25 23:59Z – 2026-09-27 16:53Z (likely 2026-09-26 14:53Z)",
         "constraint": "dependency path D10 → M5 → M6 → E3C",
         "effort_h": [
           27.1,
@@ -2736,9 +2763,9 @@
           61.8
         ],
         "finish": [
-          "2026-09-25T23:58:40Z",
-          "2026-09-26T14:52:40Z",
-          "2026-09-27T16:52:40Z"
+          "2026-09-25T23:59:17Z",
+          "2026-09-26T14:53:17Z",
+          "2026-09-27T16:53:17Z"
         ],
         "conditional": null,
         "confidence": "medium",
