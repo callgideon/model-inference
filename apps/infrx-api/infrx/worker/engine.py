@@ -948,11 +948,16 @@ class VllmEngine:
             # consumer that stops reading must close the upstream response now, not whenever
             # the loop finalises an abandoned async generator. Delegating with `async for`
             # and leaving it is what kept the engine generating after `aclose()`.
-            await inner.aclose()
-            stream.pins.close()                          # terminal: the media may go
-            # Every exit path, including `upstream_body` refusing before a request was ever
-            # sent: this generation is over, so its intent is spent and may be evicted.
-            self._retire(key)
+            try:
+                await inner.aclose()
+            finally:
+                # Terminal, and the upstream response closed (vLLM may read the file until
+                # then): the media may go - even when that close raised.
+                stream.pins.close()
+                # Every exit path, including `upstream_body` refusing before a request was
+                # ever sent: this generation is over, so its intent is spent and may be
+                # evicted.
+                self._retire(key)
 
     async def _hold_media(self, stream: "EngineStream") -> None:
         """M6 wiring 2: pin every prepared file this attempt hands the engine. A file that is

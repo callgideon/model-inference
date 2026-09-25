@@ -40,11 +40,14 @@ DRAIN = "test_worker_main_pg__sigterm_drains_the_in_flight_job_and_exits_0"
 UNREACHABLE = "test_worker_main_pg__an_unreachable_database_refuses_before_readiness"
 PILOT_BOX = "test_worker_main__the_pilot_box_runs_the_real_entry_point"
 PILOT_BOX_PG = "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
-PB = "../../../tests/integration/backend/pilotbox.py"
+PB = "../../../tests/integration/backend/pilotbox.py"      # E3B's pilot box, from `infrx/`
 ENGINE = "worker/engine.py"
 OWNER = "test_worker_main__the_worker_is_the_one_owner_of_housekeeping"
 KEEPER = "test_worker_main__the_keeper_never_removes_an_input_the_engine_is_reading"
-GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"      # E3B's pilot box, from `infrx/`
+GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"
+EXITS = "test_worker_main__every_exit_path_releases_every_pin"
+EVERY = "test_worker_main__a_housekeeping_loop_outlives_a_failed_step"
+RELEASE = "                stream.pins.close()\n                # Every exit path"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -117,8 +120,40 @@ MUTANTS = (
        ENGINE, "        await self._hold_media(stream)                   # released by `_generate`\n",
        "", KEEPER, GONE),
     _m("engine_pin_never_released", "a terminal attempt releases its pins",
-       ENGINE, "            stream.pins.close()                          # terminal: the media may go\n",
-       "", KEEPER),
+       ENGINE, RELEASE, "                # Every exit path", KEEPER, EXITS),
+    # --- M6-WIRING fix round (0-M6W-C1..C6) ------------------------------------------------
+    _m("engine_pins_released_on_success_only", "every exit path releases the pins (C1)",
+       ENGINE, RELEASE, "                stream.pins.close() if stream.complete else None\n"
+                        "                # Every exit path", EXITS),
+    _m("engine_close_raising_leaks_the_pins", "a close that raises still releases (C3)",
+       ENGINE, "            try:\n                await inner.aclose()\n            finally:\n",
+       "            await inner.aclose()\n            if True:\n", EXITS),
+    _m("engine_pins_released_before_the_upstream_close",
+       "the pins outlive the upstream response (C3)",
+       ENGINE, "            try:\n                await inner.aclose()\n",
+       "            stream.pins.close()\n            try:\n                await inner.aclose()\n",
+       EXITS),
+    _m("engine_only_the_first_input_pinned", "every file:// input of a request is pinned (C5)",
+       ENGINE, "                for ref in videos:\n                    uri = str(self.local_uri(ref))",
+       "                for ref in videos[:1]:\n                    uri = str(self.local_uri(ref))",
+       EXITS),
+    _m("engine_reprepare_for_another_job", "a gone input is prepared for the attempt's job (C4)",
+       ENGINE, "await self.reprepare(stream.lease.job_id, videos[0].profile_version)",
+       "await self.reprepare(str(__import__('uuid').uuid4()), videos[0].profile_version)",
+       GONE),
+    _m("main_housekeeping_loop_dies_on_a_failed_step",
+       "a failed step does not end a housekeeping loop (C2)",
+       MAIN, "        try:\n            await step()\n        except Exception:\n"
+             '            log.exception("%s failed", what)\n', "        await step()\n", EVERY),
+    _m("main_housekeeping_loop_stops_after_a_failure",
+       "a housekeeping loop runs on after a failed step (C2)",
+       MAIN, '            log.exception("%s failed", what)\n',
+       '            log.exception("%s failed", what)\n            return\n', EVERY),
+    _m("main_housekeeping_cancelled_before_the_drain",
+       "housekeeping runs until the in-flight attempts have drained (C6)",
+       SERVICE, "        report = await self.loop.drain(bound)\n",
+       "        for task in self._housekeeping:\n            task.cancel()\n"
+       "        report = await self.loop.drain(bound)\n", OWNER),
     _m("main_engine_unpinned", "the composed engine pins through the composed cache",
        MAIN, "pin=media.cache.pin, reprepare=", "pin=None, reprepare=", KEEPER, OWNER),
     _m("engine_gone_input_refused_at_once", "a gone input is prepared again once",
