@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "b413f253",
+  "integration_head": "e56dbf19",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -20,12 +20,12 @@
     "target": "pilot box (single L40S)"
   },
   "revision": 44,
-  "updated": "2026-09-25T08:40:45Z",
+  "updated": "2026-09-25T16:51:01Z",
   "agent_slots": {
     "total": 16,
-    "active": 14,
+    "active": 7,
     "reserved": 2,
-    "note": "Dispatch 3 (21:59Z): 14 lanes active (12 writers + M6 phase 1 + E3C phase 1); 2 slots reserved for the verify-lane workflows (3 lenses + fix + recheck per handback)"
+    "note": "Session 04 after the 08:50–16:43Z login outage (16:55Z): lanes W5 PART B, M6-P2 verify (fix round), RUNTIME-LOGIN recheck, E3C-RERUN, D10-FOLLOWUP, CERTIFY-WIRING, I8 M6-wiring-4; detached gate+mutants on e1c/e2c; 2 slots reserved for verify-lane workflows."
   },
   "eta_params": {
     "review_rework_fraction": 0.3,

@@ -94,11 +94,14 @@ function prepareCopy() {
   symlinkSync(join(appRoot, "node_modules"), join(app, "node_modules"), "dir");
   writeFileSync(join(app, "tests/contracts/__conformance-only.test.ts"), ENTRY);
   // The v2 suites read the Python fixture base at ../../../../infrx-api/... from their own file.
-  cpSync(
-    resolve(appRoot, "../infrx-api/infrx/contracts/fixtures/v2"),
-    join(root, "infrx-api/infrx/contracts/fixtures/v2"),
-    { recursive: true },
-  );
+  // ...and the published-model projection at ../../../../infrx-api/infrx/contracts/v2/published/.
+  for (const dir of ["fixtures/v2", "v2/published"]) {
+    cpSync(
+      resolve(appRoot, "../infrx-api/infrx/contracts", dir),
+      join(root, "infrx-api/infrx/contracts", dir),
+      { recursive: true },
+    );
+  }
   return { root, app };
 }
 
