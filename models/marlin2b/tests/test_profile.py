@@ -701,7 +701,7 @@ def test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap():
                       ({"max_spend": float("nan")}, "max_spend"),
                       ({"outstanding_holds": float("nan")}, "outstanding_holds"),
                       ({"rates": {**CREDIT_SPEND["rates"], "input_per_mtok": float("inf")}},
-                       "input_per_mtok")):
+                       "rates.input_per_mtok")):
         got = runprofile.spend_projection(with_spend(CREDIT_SPEND, **over), 10 ** 9)
         assert got["projected"] is None and got["errors"] == [
             f"bounds.spend.{key}: must be finite"], (over, got)
@@ -712,3 +712,19 @@ def test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap():
         code, v = validate_only(argv_for(tmp, manifest, profile_for(
             clips, manifest, **{"bounds.spend": spend})))
         assert code == 2 and "$.bounds.spend.max_spend: must be finite" in v["errors"], v
+
+
+def test_a_huge_integer_spend_validates_and_only_float_inf_or_nan_is_refused():
+    """Oracle (PCC-V5): math.isfinite on a Python int above ~1.8e308 raises OverflowError,
+    so a well-formed integer cap crashed the validator (bench exits 'bench failed') instead
+    of validating. Ints are always finite; float Infinity/NaN must still be refused."""
+    spend_schema = runprofile.load_schema()["properties"]["bounds"]["properties"]["spend"]
+    assert runprofile.schema_errors({**CREDIT_SPEND, "max_spend": 10 ** 400}, spend_schema) == []
+    for bad in (float("inf"), float("nan")):
+        assert runprofile.schema_errors({**CREDIT_SPEND, "max_spend": bad}, spend_schema) == [
+            "$.max_spend: must be finite"], bad
+    with tempfile.TemporaryDirectory() as tmp:        # through bench: the literal in the file
+        clips, manifest = setup(tmp)
+        code, v = validate_only(argv_for(tmp, manifest, profile_for(
+            clips, manifest, **{"bounds.spend": {**CREDIT_SPEND, "max_spend": 10 ** 400}})))
+        assert code == 0 and v["runnable"] and v["derived"]["spend_currency"] == "CREDIT", v

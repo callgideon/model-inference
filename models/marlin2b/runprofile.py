@@ -58,7 +58,9 @@ def schema_errors(value, schema, path="$"):
         if "pattern" in schema and not re.search(schema["pattern"], value):
             out.append(f"{path}: does not match {schema['pattern']}")
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        if not math.isfinite(value):             # json.load accepts Infinity/NaN
+        # json.load accepts Infinity/NaN; an int is always finite (PCC-V5: isfinite on one
+        # above ~1.8e308 raises OverflowError)
+        if isinstance(value, float) and not math.isfinite(value):
             return [f"{path}: must be finite"]
         if "minimum" in schema and value < schema["minimum"]:
             out.append(f"{path}: below {schema['minimum']}")
@@ -272,7 +274,8 @@ def spend_projection(bounds, n):
         return out
     v = {new: exact(node[name(new, old)]) for node, keys, _ in groups
          for new, old in keys.items()}
-    out["errors"] += [f"bounds.spend.{k}: must be finite" for k, d in v.items()
+    out["errors"] += [f"bounds.spend.{'rates.' * (k in RATE_KEYS)}{k}: must be finite"
+                      for k, d in v.items()
                       if d is not None and not d.is_finite()]
     if out["errors"]:                    # a money cap fails closed: Infinity admits anything
         return out

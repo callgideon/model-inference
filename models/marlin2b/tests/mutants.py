@@ -449,6 +449,11 @@ MUTANTS: tuple[Mutant, ...] = (
            "runprofile.py", "                      if d is not None and not d.is_finite()]",
            "                      if False]", "non_finite",
            cases=("test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap",)),
+    Mutant("e1cp25", "an integer spend literal of any size validates; only a float is non-finite "
+           "(PCC-V5)", "runprofile.py",
+           "        if isinstance(value, float) and not math.isfinite(value):",
+           "        if not math.isfinite(value):", "huge_integer",
+           cases=("test_a_huge_integer_spend_validates_and_only_float_inf_or_nan_is_refused",)),
     Mutant("e1cp06", "a missing rate/budget blocks a paid run",
            "runprofile.py",
            '    res["runnable"] = res["valid"] and (local or not res["blocks"])',
