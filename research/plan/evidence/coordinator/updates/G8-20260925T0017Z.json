@@ -1,0 +1,34 @@
+{
+  "task": "G8",
+  "slice": "fix round: 0-G8-R1/2-ACC-1 (pre-freeze admission straddling the transition), 0-G8-R2/1-G8-RULES-1/2-ACC-2 (contracts run on 55432; evidence correction), 0-G8-R3 (revoked-key read bound routed to G7)",
+  "activity": "review",
+  "head": "44ea4770",
+  "worktree": ".claude/worktrees/codex-g8-credit-ops",
+  "branch": "codex/g8-credit-ops",
+  "owned_paths": [
+    "apps/infrx-api/infrx/operations/",
+    "apps/infrx-api/tests/g/ops/",
+    "research/plan/evidence/g/G8-44ea477.md",
+    "research/plan/evidence/g/G8-6a075c5.md (appended Fix round section)"
+  ],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py", "exit": 0, "summary": "116 passed, 0 skipped"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops", "exit": 0, "summary": "82 passed"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen python tests/g/ops/mutants.py --list", "exit": 0, "summary": "92 mutants over 51 named cases"},
+    {"cmd": "INFRX_D_TASK=g8 INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py", "exit": 0, "summary": "98 passed: 92/92 killed + 4 self-tests + 2 list checks"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/ops", "exit": 0, "summary": "527 passed"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/contracts", "exit": 0, "summary": "1078 passed, 0 skipped (PG projection cases on 55447); supersedes the earlier non-g8 record"},
+    {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q tests/g/ops/test_transition.py tests/g/ops/test_transition_pg.py (at 6a075c56 code, new tests)", "exit": 1, "summary": "fail-first: 2 failed (fake: no wait; PG straddler: transition exit 0 with CREDIT enabled), 10 passed; 12 passed at 44ea4770"},
+    {"cmd": "INFRX_D_TASK=g8 PYTHONPATH=. uv run --frozen python scratchpad/g8acc/race.py", "exit": 0, "summary": "reviewer reproduction after fix: transition exit 1 (open_transactions), freeze only, audited 0; dry-run exit 1 in_flight"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium",
+               "basis": "unchanged from 6a075c5: merged-SHA rerun with D10/G7/F2C-C, wiring requests, box dry-run, post-P-01 window",
+               "at": "2026-09-25T00:17Z"},
+  "blockers": ["P-01 approved launch rates (live activation only)", "coordinator box dry-run window (read-only)"],
+  "wiring_requests": [
+    "D10 SQL: infrx.require_feature reads the flag FOR SHARE (durable DB-side guard; the transition's own wait now closes the hole without it)",
+    "D10 integration: add infrx.readiness_cutover_check() to transition inventory once 0019 merges; pgworld.settle may need claim_preparation_ready",
+    "G7/auth: rule on revoked-key job reads (document the KEY_TTL 60 s bound, or recheck revoked_at on reads)"
+  ],
+  "evidence": ["research/plan/evidence/g/G8-44ea477.md", "research/plan/evidence/g/G8-6a075c5.md"]
+}
