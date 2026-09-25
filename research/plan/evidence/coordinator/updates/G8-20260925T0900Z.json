@@ -1,0 +1,11 @@
+{"task":"G8","slice":"G8-TRANSITION-LOCK round 2","activity":"review","head":"c26ef96","worktree":".claude/worktrees/codex-g8-transition-lock","branch":"codex/g8-transition-lock",
+ "owned_paths":["apps/infrx-api/infrx/operations/","apps/infrx-api/tests/g/ops/","research/plan/evidence/g/G8-*.md","research/plan/evidence/coordinator/updates/G8-*.json"],
+ "commands":[
+  {"cmd":"INFRX_D_TASK=g8 timeout 120 pytest tests/g/ops/test_transition_pg.py -k overlapping with 1b1fc11a transition.py","exit":1,"summary":"did not return within 30.0s (fail-first)"},
+  {"cmd":"INFRX_D_TASK=g8 pytest -q tests/g/ops/test_transition_pg.py","exit":0,"summary":"6 passed"},
+  {"cmd":"INFRX_D_TASK=g8 pytest -q tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py","exit":0,"summary":"118 passed"},
+  {"cmd":"INFRX_D_TASK=g8 INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py","exit":0,"summary":"100 passed (94/94 killed)"},
+  {"cmd":"pytest -q tests/g --ignore=tests/g/ops","exit":0,"summary":"528 passed"}],
+ "estimate":{"optimistic_h":0.5,"likely_h":1,"pessimistic_h":3,"confidence":"medium","basis":"merge + merged-tree rerun; V-G8TL-2 follow-up after D10 SQL","at":"2026-09-25T09:00Z"},
+ "blockers":[],"wiring_requests":["V-G8TL-2 (D10): fair bounded flag writer infrx.set_feature_flag (SECURITY DEFINER, share row exclusive table lock) - text in research/plan/evidence/g/G8-c26ef96.md"],
+ "evidence":["research/plan/evidence/g/G8-c26ef96.md"]}
