@@ -21,6 +21,7 @@ import {
   type Answer,
   type CreditClient,
   type CreditReads,
+  type Filter,
 } from "../../app/(console)/billing/credit-reads.ts";
 import { creditCardState, creditsPageModel, legacyUsdState } from "../../app/(console)/billing/credit-view-model.ts";
 import { jobsPageModel, parseJobFilters, jobsPageRequest } from "../../app/(console)/usage/credit-view-model.ts";
@@ -86,29 +87,41 @@ function pgClient(user: string): CreditClient {
           (order.length ? ` order by ${order.join(", ")}` : "") +
           (limit === null ? "" : ` limit ${limit}`),
       );
-    const chain = {
-      eq: (c: string, v: string) => (where.push(`${ident(c)} = ${lit(v)}`), chain),
-      neq: (c: string, v: string) => (where.push(`${ident(c)} <> ${lit(v)}`), chain),
-      or: (filter: string) => {
+    const chain: Filter = {
+      eq(c, v) {
+        where.push(`${ident(c)} = ${lit(v)}`);
+        return chain;
+      },
+      neq(c, v) {
+        where.push(`${ident(c)} <> ${lit(v)}`);
+        return chain;
+      },
+      or(filter) {
         const keyset = /^created_at\.lt\."([^"]+)",and\(created_at\.eq\."([^"]+)",entry_id\.lt\.([0-9a-f-]{36})\)$/.exec(filter);
         if (keyset === null || keyset[1] !== keyset[2]) throw new TypeError(`unsupported filter ${filter}`);
         where.push(`(created_at < ${lit(keyset[1])} or (created_at = ${lit(keyset[1])} and entry_id < ${lit(keyset[3])}))`);
         return chain;
       },
-      order: (c: string, o: { ascending: boolean }) => (order.push(`${ident(c)} ${o.ascending ? "asc" : "desc"}`), chain),
-      limit: (n: number) => ((limit = n), chain),
-      then: <A, B>(ok?: (a: Answer) => A, bad?: (e: unknown) => B) => Promise.resolve().then(run).then(ok, bad),
+      order(c, o) {
+        order.push(`${ident(c)} ${o.ascending ? "asc" : "desc"}`);
+        return chain;
+      },
+      limit(n) {
+        limit = n;
+        return chain;
+      },
+      then(ok, bad) {
+        return Promise.resolve().then(run).then(ok, bad);
+      },
     };
     return chain;
   };
   return {
     from: (relation) => ({ select: (columns) => query(relation, columns) }),
-    rpc: (fn, args) => ({
-      then: (ok, bad) =>
-        Promise.resolve()
-          .then(() => sql(user, `select * from public.${ident(fn)}(${Object.entries(args).map(([k, v]) => `${ident(k)} => ${lit(v)}`).join(", ")})`))
-          .then(ok, bad),
-    }),
+    rpc: (fn, args) =>
+      Promise.resolve().then(() =>
+        sql(user, `select * from public.${ident(fn)}(${Object.entries(args).map(([k, v]) => `${ident(k)} => ${lit(v)}`).join(", ")})`),
+      ),
   };
 }
 

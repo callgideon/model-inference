@@ -25,16 +25,11 @@ const PRODUCTION_BUILD = process.env.NODE_ENV === "production";
  * A fresh fake per request: it is deterministic, so two requests render the same rows, and a
  * mutation in one request cannot leak into another.
  */
-export type PreviewEnv = { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string };
-
-/** The one gate for every console fixture (the v1 services here, the CREDIT reads in U1R). */
-export function previewAllowed(env: PreviewEnv = process.env): boolean {
-  if (PRODUCTION_BUILD) return false;
-  return env.INFRX_CONSOLE_PREVIEW === "1" && ["development", "test"].includes(env.NODE_ENV ?? "");
-}
-
-export function consoleContext(env: PreviewEnv = process.env): ConsoleContext | null {
-  if (!previewAllowed(env)) return null;
+export function consoleContext(env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string } = process.env): ConsoleContext | null {
+  if (PRODUCTION_BUILD) return null;
+  if (env.INFRX_CONSOLE_PREVIEW !== "1" || !["development", "test"].includes(env.NODE_ENV ?? "")) {
+    return null;
+  }
   const services = createFakeConsoleServices();
   return {
     services,
@@ -42,4 +37,12 @@ export function consoleContext(env: PreviewEnv = process.env): ConsoleContext | 
     // The fake's clock is frozen (documented fake-only behaviour); a real provider uses `new Date()`.
     now: new Date(orgsFixture.clock),
   };
+}
+
+/**
+ * The same gate for the U1R CREDIT fixture: one gate, so the preview can never be open for one
+ * console fixture and closed for another. A production build answers false without building anything.
+ */
+export function previewAllowed(env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string } = process.env): boolean {
+  return consoleContext(env) !== null;
 }
