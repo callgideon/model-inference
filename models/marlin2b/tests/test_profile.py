@@ -119,7 +119,9 @@ def test_validate_only_passes_a_complete_profile_and_sends_nothing():
         assert code == 0 and v["valid"] and v["runnable"], v
         # a local fake needs no key inventory: the block is reported, not enforced
         assert v["blocks"] == ["no --key-inventory: the target's active keys are unknown (P-24)"]
-        assert v["derived"]["projected_spend_usd"] == round(4 * (20000 * 0.1 + 512 * 0.3) / 1e6, 6)
+        # the committed legacy *_usd naming still reads, as USD (exact: 4 x 0.0021536)
+        assert (v["derived"]["spend_currency"], v["derived"]["projected_spend"]) == (
+            "USD", "0.0086144"), v["derived"]
 
 
 def test_a_missing_group_or_field_refuses_the_run_before_any_request():
@@ -390,7 +392,7 @@ def test_the_hosted_smoke_template_refuses_until_filled_and_then_fits_its_comman
         code, v = smoke(filled)
         assert code == 2 and v["valid"] and v["blocks"] == [
             "outstanding holds undeclared: the budget check needs them"], v
-        filled["bounds"]["spend"]["outstanding_holds_usd"] = 0.0
+        filled["bounds"]["spend"]["outstanding_holds"] = 0.0
         code, v = smoke(filled)
         assert code == 0 and v["runnable"], v
         assert v["derived"]["scheduled_requests"] == 4 and v["derived"]["target_path"] == "public-edge"
@@ -600,3 +602,93 @@ def routed_to(gw):
         yield
     finally:
         httpx.AsyncClient = real
+
+
+# ------------------------------------------------ P-24 amendment: a spend cap in CREDIT
+
+from decimal import Decimal
+
+CREDIT_SPEND = {"currency": "CREDIT", "max_spend": 50000, "outstanding_holds": 0,
+                "rates": {"input_per_mtok": 400, "output_per_mtok": 1200,
+                          "source": "P-01 rc_marlin2b_20260925_launch", "as_of": "2026-09-25"}}
+E4C_BOUNDS = {"max_input_tokens_per_request": 30720, "max_output_tokens_per_request": 1024}
+
+
+def with_spend(spend, **over):
+    return {**E4C_BOUNDS, "spend": {**json.loads(json.dumps(spend)), **over}}
+
+
+def test_a_credit_cap_projects_in_credit_with_exact_arithmetic():
+    """Oracle: a schema that pins USD (no CREDIT cap can be written), a projection that
+    relabels its unit, or a binary-float cap comparison: 5 x 13.5168 + 0.01 CREDIT of holds
+    is exactly 67.594, which floats compute as 67.59400000000001 and refuse at a 67.594 cap."""
+    one = runprofile.spend_projection(with_spend(CREDIT_SPEND), 1)
+    assert (one["currency"], one["projected"], one["errors"]) == ("CREDIT", Decimal("13.5168"), [])
+    soak = runprofile.spend_projection(with_spend(CREDIT_SPEND), 3600)   # the draft's E4C soak
+    assert soak["projected"] == Decimal("48660.48") and not soak["errors"] and not soak["blocks"]
+    edge = with_spend(CREDIT_SPEND, max_spend=67.594, outstanding_holds=0.01)
+    assert runprofile.spend_projection(edge, 5)["errors"] == []
+    over = runprofile.spend_projection(with_spend(CREDIT_SPEND, max_spend=67.5939,
+                                                  outstanding_holds=0.01), 5)
+    assert len(over["errors"]) == 1 and "67.5940 CREDIT" in over["errors"][0], over
+    assert runprofile.spend_projection(with_spend(CREDIT_SPEND, max_spend=48660.47), 3600)[
+        "errors"], "a cap below the soak ceiling must refuse"
+    # through bench: the CREDIT profile validates and derives its projection in CREDIT
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        code, v = validate_only(argv_for(tmp, manifest, profile_for(
+            clips, manifest, **{"bounds.spend": CREDIT_SPEND})))
+        assert code == 0 and v["runnable"], v
+        assert (v["derived"]["spend_currency"], v["derived"]["projected_spend"]) == (
+            "CREDIT", str(4 * (20000 * 400 + 512 * 1200) / Decimal(10 ** 6))), v["derived"]
+        assert not any("deprecated" in w for w in v["warnings"]), v["warnings"]
+
+
+def test_a_usd_profile_reads_both_namings_and_never_as_credit():
+    """Oracle: the committed legacy USD keys no longer validating, or a USD figure read in a
+    CREDIT profile (a silent 1 USD = 1 CREDIT conversion)."""
+    usd = with_spend({"currency": "USD", "max_spend": 12.5, "outstanding_holds": 0.0,
+                      "rates": {"input_per_mtok": 0.10, "output_per_mtok": 0.30,
+                                "source": "P-22", "as_of": "2026-09-24"}})
+    new = runprofile.spend_projection(usd, 3600)
+    legacy = runprofile.spend_projection(with_spend(
+        {"currency": "USD", "max_usd": 12.5, "outstanding_holds_usd": 0.0,
+         "rates": {"input_usd_per_mtok": 0.10, "output_usd_per_mtok": 0.30,
+                   "source": "P-22", "as_of": "2026-09-24"}}), 3600)
+    assert new["projected"] == legacy["projected"] == Decimal("12.16512"), (new, legacy)
+    assert new["currency"] == legacy["currency"] == "USD" and not new["errors"] + legacy["errors"]
+    assert any("deprecated" in w for w in legacy["warnings"]) and not new["warnings"]
+    as_credit = runprofile.spend_projection(with_spend(
+        {"currency": "CREDIT", "max_usd": 12.5, "outstanding_holds_usd": 0.0,
+         "rates": {"input_usd_per_mtok": 0.10, "output_usd_per_mtok": 0.30,
+                   "source": "P-22", "as_of": "2026-09-24"}}), 1)
+    assert as_credit["projected"] is None and any(
+        "never converted" in e for e in as_credit["errors"]), as_credit
+
+
+def test_mixed_spend_units_or_an_unknown_currency_refuse_the_run():
+    """Oracle: a profile naming a cap in one unit and holds or rates in another (or in no
+    known unit) validating: its cap would compare amounts that are not the same unit."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        rates = dict(CREDIT_SPEND["rates"])
+        cases = {
+            "unknown currency": ({**CREDIT_SPEND, "currency": "EUR"}, "bounds.spend.currency"),
+            "cap new, holds legacy": ({"currency": "USD", "max_spend": 1.0,
+                                       "outstanding_holds_usd": 0.0,
+                                       "rates": {"input_per_mtok": 0.1, "output_per_mtok": 0.3,
+                                                 "source": "s", "as_of": "2026-09-24"}}, "mix"),
+            "legacy rates in CREDIT": ({**CREDIT_SPEND, "rates": {
+                **{k: v for k, v in rates.items() if k.endswith("of") or k == "source"},
+                "input_usd_per_mtok": 400, "output_usd_per_mtok": 1200}}, "mix"),
+            "legacy keys in CREDIT": ({"currency": "CREDIT", "max_usd": 50000,
+                                       "outstanding_holds_usd": 0, "rates": None},
+                                      "never converted"),
+            "no cap at all": ({k: v for k, v in CREDIT_SPEND.items() if k != "max_spend"},
+                              "bounds.spend.max_spend: required"),
+        }
+        for why, (spend, needle) in cases.items():
+            code, v = validate_only(argv_for(tmp, manifest, profile_for(
+                clips, manifest, **{"bounds.spend": spend})))
+            assert code == 2 and not v["valid"] and any(needle in e for e in v["errors"]), (
+                why, v["errors"])

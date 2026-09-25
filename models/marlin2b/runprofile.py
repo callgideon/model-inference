@@ -15,6 +15,7 @@ holds) refuse a PAID run but not a local/fake one - validation and local fixture
 need a price (§1: "A missing rate/budget blocks paid testing, not profile validation").
 """
 import json, os, re, urllib.parse
+from decimal import Decimal
 from hashlib import sha256
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +27,10 @@ TYPES = {"object": dict, "array": list, "string": str, "integer": int, "number":
 SECRET_SHAPE = re.compile(r"(?i)(\bsk[-_][a-z0-9]|\bbearer\s|://[^/\s:@]+:[^/\s@]+@|"
                           r"password\s*[=:]|private key|\bAKIA[0-9A-Z]{12})")
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+# P-24 amendment: unit-neutral spend keys (the unit is bounds.spend.currency) -> the legacy
+# USD-only names, still read as USD so committed profiles keep validating.
+SPEND_KEYS = {"max_spend": "max_usd", "outstanding_holds": "outstanding_holds_usd"}
+RATE_KEYS = {"input_per_mtok": "input_usd_per_mtok", "output_per_mtok": "output_usd_per_mtok"}
 
 
 def load_schema():
@@ -211,21 +216,13 @@ def validate(profile, a, schedule, *, keys=(), carries_key=lambda v, k: False, l
     elif sum(sizes) > bounds["max_input_bytes"]:
         errors.append(f"bounds.max_input_bytes {bounds['max_input_bytes']} < {sum(sizes)}")
 
-    spend = bounds["spend"]
-    rates = spend["rates"]
-    if rates is None or spend["max_usd"] is None:
-        res["blocks"].append("no approved rates or spend budget: a paid run is refused")
-    if spend["outstanding_holds_usd"] is None:
-        res["blocks"].append("outstanding holds undeclared: the budget check needs them")
-    if rates is not None and spend["max_usd"] is not None:
-        per_request = (bounds["max_input_tokens_per_request"] * rates["input_usd_per_mtok"]
-                       + bounds["max_output_tokens_per_request"] * rates["output_usd_per_mtok"]
-                       ) / 1e6
-        projected = n * per_request + (spend["outstanding_holds_usd"] or 0.0)
-        res["derived"]["projected_spend_usd"] = round(projected, 6)
-        if projected > spend["max_usd"]:
-            errors.append(f"spend: the schedule's ceiling plus outstanding holds "
-                          f"({projected:.4f} USD) exceeds bounds.spend.max_usd {spend['max_usd']}")
+    spend = spend_projection(bounds, n)
+    errors += spend["errors"]
+    res["blocks"] += spend["blocks"]
+    res["warnings"] += spend["warnings"]
+    res["derived"]["spend_currency"] = spend["currency"]
+    if spend["projected"] is not None:
+        res["derived"]["projected_spend"] = str(spend["projected"])
     res["derived"].update(scheduled_requests=n, output_token_ceiling=out_tokens,
                           media_bytes=None if None in sizes else sum(sizes),
                           expect_model=ident["model_revision"], target_path=target["path"],
@@ -234,6 +231,58 @@ def validate(profile, a, schedule, *, keys=(), carries_key=lambda v, k: False, l
                           profile_sha256=sha256(json.dumps(profile, sort_keys=True)
                                                 .encode()).hexdigest())
     return finish(res, local)
+
+
+def exact(v):
+    """A JSON number as an exact Decimal: str() of the parsed float is the literal written."""
+    # ponytail: a literal with more than 15 significant digits is rounded by json first;
+    # parse with parse_float=Decimal if a profile ever needs one.
+    return None if v is None else Decimal(str(v))
+
+
+def spend_projection(bounds, n):
+    """The schedule's spend ceiling plus outstanding holds against the cap, in
+    bounds.spend.currency, in exact decimals. USD and CREDIT are never converted: the legacy
+    *_usd keys are read as USD and only in a USD profile, and never mixed with the new keys."""
+    spend, cur = bounds["spend"], bounds["spend"]["currency"]
+    out = {"currency": cur, "projected": None, "errors": [], "blocks": [], "warnings": []}
+    groups = [(spend, SPEND_KEYS, "bounds.spend")]
+    if spend["rates"] is not None:
+        groups.append((spend["rates"], RATE_KEYS, "bounds.spend.rates"))
+    legacy = [f"{p}.{old}" for node, keys, p in groups for old in keys.values() if old in node]
+    if legacy and any(new in node for node, keys, _ in groups for new in keys):
+        out["errors"].append(f"spend: {legacy} mix the legacy *_usd keys with the unit-neutral "
+                             f"ones; one profile states one unit")
+        return out
+    if legacy and cur != "USD":
+        out["errors"].append(f"spend: {legacy} are USD amounts but bounds.spend.currency is "
+                             f"{cur}; units are never converted")
+        return out
+    if legacy:
+        out["warnings"].append("bounds.spend: the *_usd keys are deprecated (read as USD); "
+                               "write max_spend/outstanding_holds/input_per_mtok/"
+                               "output_per_mtok with currency USD")
+    name = lambda new, old: old if legacy else new
+    missing = [f"{p}.{new}: required" for node, keys, p in groups for new, old in keys.items()
+               if name(new, old) not in node]
+    if missing:
+        out["errors"] += missing
+        return out
+    v = {new: exact(node[name(new, old)]) for node, keys, _ in groups
+         for new, old in keys.items()}
+    if spend["rates"] is None or v["max_spend"] is None:
+        out["blocks"].append("no approved rates or spend budget: a paid run is refused")
+    if v["outstanding_holds"] is None:
+        out["blocks"].append("outstanding holds undeclared: the budget check needs them")
+    if spend["rates"] is not None and v["max_spend"] is not None:
+        per_request = (bounds["max_input_tokens_per_request"] * v["input_per_mtok"]
+                       + bounds["max_output_tokens_per_request"] * v["output_per_mtok"]) / 10 ** 6
+        out["projected"] = n * per_request + (v["outstanding_holds"] or 0)
+        if out["projected"] > v["max_spend"]:
+            out["errors"].append(f"spend: the schedule's ceiling plus outstanding holds "
+                                 f"({out['projected']:.4f} {cur}) exceeds bounds.spend.max_spend "
+                                 f"{v['max_spend']} {cur}")
+    return out
 
 
 def finish(res, local):

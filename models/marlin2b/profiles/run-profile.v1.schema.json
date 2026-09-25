@@ -69,18 +69,23 @@
         "spend": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["currency", "max_usd", "outstanding_holds_usd", "rates"],
+          "description": "Amounts are in `currency`; USD and CREDIT are different units and are never converted. runprofile.py requires max_spend, outstanding_holds and the rates' input_per_mtok/output_per_mtok, or (deprecated, USD only) the legacy max_usd, outstanding_holds_usd, input_usd_per_mtok/output_usd_per_mtok; never a mix of the two namings.",
+          "required": ["currency", "rates"],
           "properties": {
-            "currency": {"const": "USD"},
-            "max_usd": {"type": ["number", "null"], "minimum": 0},
-            "outstanding_holds_usd": {"type": ["number", "null"], "minimum": 0},
+            "currency": {"enum": ["USD", "CREDIT"]},
+            "max_spend": {"type": ["number", "null"], "minimum": 0},
+            "outstanding_holds": {"type": ["number", "null"], "minimum": 0},
+            "max_usd": {"type": ["number", "null"], "minimum": 0, "description": "Deprecated: read as max_spend with currency USD."},
+            "outstanding_holds_usd": {"type": ["number", "null"], "minimum": 0, "description": "Deprecated: read as outstanding_holds with currency USD."},
             "rates": {
               "type": ["object", "null"],
               "additionalProperties": false,
-              "required": ["input_usd_per_mtok", "output_usd_per_mtok", "source", "as_of"],
+              "required": ["source", "as_of"],
               "properties": {
-                "input_usd_per_mtok": {"type": "number", "minimum": 0},
-                "output_usd_per_mtok": {"type": "number", "minimum": 0},
+                "input_per_mtok": {"type": "number", "minimum": 0},
+                "output_per_mtok": {"type": "number", "minimum": 0},
+                "input_usd_per_mtok": {"type": "number", "minimum": 0, "description": "Deprecated: read as input_per_mtok with currency USD."},
+                "output_usd_per_mtok": {"type": "number", "minimum": 0, "description": "Deprecated: read as output_per_mtok with currency USD."},
                 "source": {"type": "string", "minLength": 1},
                 "as_of": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
               }
