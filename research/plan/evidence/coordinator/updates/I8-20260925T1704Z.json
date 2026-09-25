@@ -1,0 +1,61 @@
+{
+  "task": "I8-M6-WIRING",
+  "slice": "M6 phase 2 wiring request 4",
+  "activity": "review",
+  "head": "e526366a",
+  "worktree": ".claude/worktrees/codex-i8-m6-wiring",
+  "branch": "codex/i8-m6-wiring",
+  "owned_paths": [
+    "infra/alerts/dashboard.json",
+    "infra/alerts/operations.json",
+    "infra/runbooks/observe.md",
+    "apps/infrx-api/deploy/s3-lifecycle.json",
+    "apps/infrx-api/tests/i/"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_observe.py",
+      "exit": 0,
+      "summary": "16 passed, 1 xfailed (red before: 3 failed)"
+    },
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/recovery/test_observe.py",
+      "exit": 0,
+      "summary": "16 passed"
+    },
+    {
+      "cmd": "mutants_i3b.py --only i3bm24",
+      "exit": 0,
+      "summary": "1/1 killed"
+    },
+    {
+      "cmd": "tests/i/mutants.py m6_panel_missing m6_abort_rule_blunted bucket_rule_whole_bucket",
+      "exit": 0,
+      "summary": "3/3 killed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_mutants.py",
+      "exit": 0,
+      "summary": "50 passed"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "WR-I8-M6-1 follow-up only; bucket apply is a coordinator step",
+    "at": "2026-09-25T17:04:34Z"
+  },
+  "blockers": [
+    "WR-I8-M6-1: M6 records no retention/cache metric and FAMILIES declares none",
+    "P-25: retention interval, cache high water"
+  ],
+  "wiring_requests": [
+    "WR-I8-M6-1: declare 11-12 families in metrics.py FAMILIES; record Report in RetentionCollector.run and evictions/refusals in ProcessingCache; pass the worker Registry; I8 then moves pending panels into rows"
+  ],
+  "evidence": [
+    "research/plan/evidence/i/I8-m6-wiring-26e0576.md"
+  ],
+  "at": "2026-09-25T17:04:34Z"
+}
