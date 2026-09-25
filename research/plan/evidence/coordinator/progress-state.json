@@ -1909,8 +1909,8 @@
     },
     {
       "id": "P-19",
-      "status": "open",
-      "what": "DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures",
+      "status": "resolved",
+      "what": "RESOLVED 2026-09-25: g6e.2xlarge row added to cloud-pricing.md §3.1 (est. derivations) (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures",
       "owner": "research lane (cloud-pricing.md row)",
       "blocks": [
         "E4C"

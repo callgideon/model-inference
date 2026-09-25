@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-25 19:00Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 49, updated 2026-09-25 18:23Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-25 19:01Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 49, updated 2026-09-25 18:23Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -18,7 +18,6 @@ Generated 2026-09-25 19:00Z UTC by `python3 research/plan/scripts/progress.py` f
 - P-06 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) (owner coordinator (SSM inventory.sh); I8 (record + PINNED); blocks E4C)
 - P-17 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) (owner coordinator at E4C handback; blocks E4C)
 - P-18 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C (owner E4C lane (protocol §5 + certify.py thresholds before first qualifying run); blocks E4C)
-- P-19 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures (owner research lane (cloud-pricing.md row); blocks E4C)
 - P-24 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run (owner E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust); blocks E4C)
 - P-25 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle (owner M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read); blocks E4C)
 - P-26 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3) (owner A3/U2 (copy only); blocks E4C)
@@ -35,9 +34,9 @@ Generated 2026-09-25 19:00Z UTC by `python3 research/plan/scripts/progress.py` f
 - task-local services E1C held by E1C
 - task-local services I8 held by I8
 - task-local services E3C held by E3C
-- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
-- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4
-- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4
+- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
+- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4
+- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4
 
 ### Next ready work
 
@@ -61,10 +60,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 01:12Z – 2026-09-26 18:06Z (likely 2026-09-26 06:24Z) | dependency path W5 → E3C | 6.2 / 11.4 / 23.1 h | 6.2 / 11.4 / 23.1 h | medium |
-| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
-| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4 | — | — | unknown |
-| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4 | — | — | unknown |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 01:13Z – 2026-09-26 18:07Z (likely 2026-09-26 06:25Z) | dependency path W5 → E3C | 6.2 / 11.4 / 23.1 h | 6.2 / 11.4 / 23.1 h | medium |
+| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
+| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4 | — | — | unknown |
+| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4 | — | — | unknown |
 
 ## Gates
 
@@ -107,7 +106,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (22.2 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (22.3 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -173,7 +172,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | P-06 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) | coordinator (SSM inventory.sh); I8 (record + PINNED) | E4C |
 | P-17 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) | coordinator at E4C handback | E4C |
 | P-18 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C | E4C lane (protocol §5 + certify.py thresholds before first qualifying run) | E4C |
-| P-19 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures | research lane (cloud-pricing.md row) | E4C |
+| P-19 | resolved | RESOLVED 2026-09-25: g6e.2xlarge row added to cloud-pricing.md §3.1 (est. derivations) (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures | research lane (cloud-pricing.md row) | E4C |
 | P-22 | resolved | CLOSED: decided 2026-09-24 as R109 (resolve, then price); Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows) | F2C-C/D10/G7 (D/G decision) | E4C |
 | P-24 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run | E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust) | E4C |
 | P-25 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle | M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read) | E4C |
