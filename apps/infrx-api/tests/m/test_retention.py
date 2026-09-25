@@ -747,9 +747,6 @@ def test_the_runtimes_writers_register_every_object_before_writing_it(make_world
     assert {k: rows_by_key(world)[k] for k in written} == {k: "live" for k in written}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "fix round R2/A1, wiring request 7 (D10 SQL + the F2C reference fake): a written "
-    "re-registration of a live key must refresh eligible_at; until then this is the race"))
 def test_a_source_fetched_again_is_not_collected_before_its_admission(make_world):
     """Fix round R2/A1 (a known race, strict xfail until wiring request 7 lands): a clip
     fetched again after its first row became eligible gets the old row back (the first

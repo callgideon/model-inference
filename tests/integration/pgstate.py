@@ -726,6 +726,7 @@ FUNCTIONS = {
     "infrx.expire_journal(jsonb)": SERVICE,                       # 0017 (D4)
     "infrx.extend_model_limits()": SERVICE,
     "infrx.fail_dispatch(jsonb)": SERVICE,
+    "infrx.fail_preparation(jsonb)": SERVICE,                     # 0022 (D10 follow-up)
     "infrx.fence_lease(jsonb,text[],double precision)": NOBODY,
     "infrx.forbid_truncate()": NOBODY,
     "infrx.forbid_update_delete()": NOBODY,
@@ -743,8 +744,8 @@ FUNCTIONS = {
     "infrx.jobs_guard()": NOBODY,
     "infrx.jobs_no_delete_when_terminal()": NOBODY,
     "infrx.jobs_pins_guard()": SERVICE,
-    # 0021 (D10) revokes nothing on it: 0004:53's default privilege, like its sibling guards
-    "infrx.jobs_result_expiry_guard()": SERVICE,
+    # 0022 (D10 follow-up, L3-REBASE F2) revokes it from everyone, like its sibling guards
+    "infrx.jobs_result_expiry_guard()": NOBODY,
     "infrx.jobs_settlement_record_guard()": NOBODY,               # 0018 (D5)
     "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
     "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
@@ -789,6 +790,7 @@ FUNCTIONS = {
     "infrx.retired_wallet_guard()": SERVICE,
     "infrx.revoke_key(uuid,text,text,text)": SERVICE,
     "infrx.scrub_content(infrx.content_objects,timestamp with time zone)": NOBODY,  # 0020
+    "infrx.set_feature_flag(text,boolean,text,text)": SERVICE,    # 0022 (V-G8TL-2)
     "infrx.set_suspension(uuid,boolean,text,text,text,text)": SERVICE,
     "infrx.settle_credit(uuid,numeric)": NOBODY,                  # 0018 (D5)
     "infrx.settle_legacy_usd(uuid,numeric)": NOBODY,              # 0018 (D5)
@@ -964,7 +966,8 @@ RUNTIME_FUNCTIONS = (                                             # 0021:490-515
     "infrx.content_claim(jsonb)", "infrx.content_references(jsonb)",
     "infrx.content_register(jsonb)", "infrx.content_tombstone(jsonb)",
     "infrx.dispatch_pending(jsonb)", "infrx.dispatch_snapshot()", "infrx.expire_journal(jsonb)",
-    "infrx.fail_dispatch(jsonb)", "infrx.gc_outbox(jsonb)", "infrx.heartbeat(jsonb)",
+    "infrx.fail_dispatch(jsonb)", "infrx.fail_preparation(jsonb)",  # 0022
+    "infrx.gc_outbox(jsonb)", "infrx.heartbeat(jsonb)",
     "infrx.idempotency_lookup(jsonb)", "infrx.job_admission(uuid)", "infrx.journal_usage()",
     "infrx.load_work(jsonb)", "infrx.load_work_credit(jsonb)", "infrx.now()",
     "infrx.prepare(jsonb)", "infrx.put_result(jsonb)", "infrx.read_journal(jsonb)",
