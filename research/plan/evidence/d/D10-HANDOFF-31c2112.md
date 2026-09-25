@@ -172,7 +172,20 @@ Nothing is mid-edit: the tree is clean at `31c2112c`.
 
 Optimistic 2 h, likely 4 h, pessimistic 8 h (confidence medium): the three runs above plus triage; integration effort is the wiring lanes' (G7/W5/M5/M6/I8/G8/C0), estimated there. Basis: all D10 SQL, adapters and checks are committed and green on the plain image; the Supabase image has passed every earlier D suite, and 0019-0021 use no image-specific feature except role creation (`create role … nologin noinherit`, allowed to Supabase's `postgres`).
 
+## 13. Addendum: the `INFRX_MUTANTS=all` run finished (head `31c2112c`)
+
+`INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py tests/d/test_signup.py`: exit 1, **720 passed, 4 failed** (1487 s). All four are **survivors** (the check ran and passed with the mutant applied); none is a setup error:
+
+| Mutant | Anchor | Likely cause (to confirm) |
+|---|---|---|
+| `d1r_usd_job_may_carry_pins` | 0006 `jobs_regime_fixes_provenance` (`num_nulls(wallet_id, model_id, requested_model, …)`) | superseded: 0021 replaces the constraint with `jobs_regime_fixes_provenance_v2`; move the mutant to the v2 body (superseded-body pattern, as for the 22 already moved) |
+| `d1r_credit_job_may_carry_usd_price` | 0006, same constraint (`else price_version is null and price_snapshot is null`) | same as above |
+| `d2_readmits_a_request_uuid_credit` | 0011 `admission_idempotency` credit replay | 0021's redefinitions or 0019 `admit_ready` (replay first) may shadow the 0011 body; check which body runs and re-anchor, or strengthen the check to use the credit path |
+| `d2_finalized_upload_rewritable` | 0019 `media_uploads_guard` (`if old.state <> 'created' and row(new.*) is distinct from row(old.*)`) | the check's rewrite is probably refused earlier by 0019's constraints (`finalized_is_the_receipt`, receipt once), so the guard line is not the killer; make the check rewrite a column no constraint covers (e.g. `mime`) |
+
+Next step 1 (§11) is now: fix these four (re-anchor or strengthen the check), then rerun only `-k` for the four names plus the default subset.
+
 ## Verification log
 
 - 2026-09-25: HANDOFF written at the coordinator's session-limit notice; head `31c2112c`; unverified items listed in §3/§11.
-
+- 2026-09-25: addendum §13: the full mutant run finished (720 passed, 4 survivors named with likely causes).

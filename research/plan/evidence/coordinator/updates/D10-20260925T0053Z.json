@@ -34,8 +34,8 @@
     },
     {
       "cmd": "INFRX_MUTANTS=all D mutant lists",
-      "exit": null,
-      "summary": "interrupted by the session limit; 3 F seen by 29%; rerun"
+      "exit": 1,
+      "summary": "31c2112c: 720 passed, 4 survived: d1r_usd_job_may_carry_pins, d1r_credit_job_may_carry_usd_price (0006 constraint superseded by 0021 v2), d2_readmits_a_request_uuid_credit, d2_finalized_upload_rewritable; triage in handoff \u00a713"
     }
   ],
   "estimate": {
@@ -63,5 +63,5 @@
     "research/plan/evidence/d/D10-HANDOFF-31c2112.md",
     "research/plan/evidence/d/D10-runtime-functions.txt"
   ],
-  "next_action": "rerun INFRX_MUTANTS=all D lists and triage; INFRX_D1_IMAGE=supabase D10 suites + test_postgrest_d10; probe on the Supabase image"
+  "next_action": "fix the 4 surviving mutants (handoff \u00a713); INFRX_D1_IMAGE=supabase D10 suites + test_postgrest_d10; probe on the Supabase image"
 }
