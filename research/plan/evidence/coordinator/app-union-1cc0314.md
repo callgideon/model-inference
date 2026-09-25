@@ -174,3 +174,8 @@ Confidence is medium. The basis:
 ## Verification log
 
 - 2026-09-25T23:25Z: written at code head `1cc03146` (base `ca226130`). Every command above was run in this worktree at the step head named, except the WR-7 data point, which ran from a scratch `git archive` export of tree `806b2360`.
+
+## Follow-up (2026-09-25, branch `codex/g-app-examples-mutant` from `8d9e5b5f`): G mutant coverage for A3 WR-1
+
+- `tests/g/mutants.py` gains `docs_resume_not_replayed` (`gateway/routes/jobs.py` `idempotency_replayed=replayed)` → `False)`, case `test_app_journey__every_docs_example_is_served_by_the_mounted_routes`), and `_layout` links `apps/app` read-only into the mutant copy. Without the link, the copy has no `example-calls.json` and the runner reports `broken_runner` (a pristine-baseline failure).
+- `INFRX_MUTANTS=all uv run --frozen --no-sync pytest -q tests/g/test_mutants.py -k "every_case or well_formed or docs_resume_not_replayed"` exits 0 (3 passed; the mutant is killed on the resume assertion). `tests/g/test_app_examples.py` exits 0 (1 passed), and the default `tests/g/test_mutants.py` subset exits 0 (30 passed).
