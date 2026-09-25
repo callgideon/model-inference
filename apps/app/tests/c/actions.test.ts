@@ -28,6 +28,7 @@ import {
   operatorCommand,
   runOperatorCommand,
   sameOrigin,
+  type GrantOutcome,
   type KeyStore,
   type OperatorPort,
 } from "../../lib/services/actions.ts";
@@ -38,6 +39,8 @@ const MY_ORG = "0e000000-0000-4000-8000-000000000001";
 const MY_WALLET = "aaaaaaaa-0000-4000-8000-000000000001";
 const KEY = "c7000000-0000-4000-8000-000000000001";
 const AT = "2026-09-25T12:00:00.000Z";
+/** `keyOf` projects every timestamp to six fractional digits. */
+const AT6 = "2026-09-25T12:00:00.000000Z";
 
 const account: ConsumerAccount = { userId: ME, email: "me@example.com", walletId: MY_WALLET, orgId: MY_ORG, suspended: false };
 const ready: ConsumerContext = { state: "ready", account };
@@ -190,7 +193,7 @@ test("key create: a replay under the same idempotency key never mints twice and 
   // A replay reads the key's CURRENT state: a revocation since is visible, not the first answer.
   valueOf(await act.revokeKey(ready, store, first.id), "revoke");
   const late = valueOf(await act.createKey(ready, store, { name: "ci", idempotency_key: "dialog-1" }), "late replay");
-  assert.equal(late.revoked_at, AT);
+  assert.equal(late.revoked_at, AT6);
   assert.equal(late.secret, null);
 });
 
@@ -244,9 +247,9 @@ test("key revoke: tenant-scoped, idempotent, and allowed while suspended", async
   const act = actions();
   const created = valueOf(await act.createKey(ready, store, { name: "k" }), "create");
   const revoked = valueOf(await act.revokeKey(suspended, store, created.id), "revoke while suspended");
-  assert.equal(revoked.revoked_at, AT);
+  assert.equal(revoked.revoked_at, AT6);
   const again = valueOf(await act.revokeKey(ready, store, created.id), "revoke again");
-  assert.equal(again.revoked_at, AT, "a second revoke answers the first revocation");
+  assert.equal(again.revoked_at, AT6, "a second revoke answers the first revocation");
   const theirs = rows[0];
   assert.equal(codeOf(await act.revokeKey(ready, store, theirs.id)), "not_found");
   assert.equal(theirs.revoked_at, null, "another tenant's key is untouched");
@@ -311,7 +314,7 @@ test("grant: an unverified, signed-out or unknown context never calls the grant"
 test("grant: denials are answers with no reason; an outage or a foreign row is never a grant", async () => {
   for (const status of ["identity_reused", "rollout_hold", "retired"]) {
     const { client } = rpcOf(() => ({ data: [{ ...GRANT_ROW, status, wallet_id: null, amount: null }], error: null }));
-    const held = valueOf(await actions().claimGrant(onboarding, () => client), status);
+    const held: GrantOutcome = valueOf(await actions().claimGrant(onboarding, () => client), status);
     assert.deepEqual(held, { status: "held" }, `${status} names no reason (no enumeration)`);
   }
   const { client: lagging } = rpcOf(() => ({ data: [{ ...GRANT_ROW, status: "unverified", amount: null }], error: null }));
