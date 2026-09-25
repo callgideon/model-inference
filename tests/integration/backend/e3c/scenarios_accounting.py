@@ -207,9 +207,9 @@ def test_s09_a_transition_meeting_a_parked_admission_refuses_within_its_bound(wo
                                        "--reason", "e3c: a parked admission bounds the freeze")
             took = time.monotonic() - began
             parked.rollback()
-        codes = {b["code"] for b in answer.get("blockers", [])}
-        assert status == 1 and "open_transactions" in codes, (status, answer)
-        assert not answer.get("applied"), f"a refused transition applied: {answer['applied']}"
+        # the CLI's refusal is the `state_conflict` envelope naming the blockers
+        assert status == 1 and answer.get("error") == "state_conflict" \
+            and "open_transactions" in answer.get("message", ""), (status, answer)
         # the drain bound + the statement margin + one CLI process start and inventory
         assert took <= LOCK_BOUND_S + 15, f"the refusal took {took:.1f} s"
         assert books(trip) == before, "a refused transition moved flags or money"
