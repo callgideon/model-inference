@@ -1,34 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { safeNext } from "@/lib/utils";
-
-const loginWithError = (origin: string, message: string) =>
-  NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(message)}`);
+import { completeCallback } from "@/app/(auth)/flow";
+import { claimSignupGrant } from "@/app/(auth)/grant";
 
 /**
- * Supabase sends the browser here with either ?code=… (PKCE) or
- * ?token_hash=…&type=recovery (the plain email-link form), then we forward to ?next=.
+ * Supabase sends the browser here from an email link, with ?code=… (PKCE) or
+ * ?token_hash=…&type=… . `completeCallback` (app/(auth)/flow.ts, tests/a) verifies it, claims the
+ * one-time grant for the verified user, and picks a same-site path; failures become fixed codes.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
-  const code = searchParams.get("code");
-  const tokenHash = searchParams.get("token_hash");
-  const type = searchParams.get("type") as EmailOtpType | null;
-  const target = safeNext(searchParams.get("next"));
-
-  // Supabase reports a failed round-trip as ?error=…&error_description=…
-  const linkError = searchParams.get("error");
-  if (linkError) {
-    return loginWithError(origin, searchParams.get("error_description") ?? linkError);
-  }
-  if (!code && !(tokenHash && type)) return loginWithError(origin, "missing code");
-
   const supabase = await createClient();
-  const { error } = code
-    ? await supabase.auth.exchangeCodeForSession(code)
-    : await supabase.auth.verifyOtp({ token_hash: tokenHash!, type: type! });
-  if (error) return loginWithError(origin, error.message);
-
-  return NextResponse.redirect(`${origin}${target}`);
+  const target = await completeCallback(request.nextUrl.searchParams, {
+    exchangeCode: (code) => supabase.auth.exchangeCodeForSession(code),
+    verifyOtp: (tokenHash, type) => supabase.auth.verifyOtp({ token_hash: tokenHash, type }),
+    verifiedUserId: async () => (await supabase.auth.getUser()).data.user?.id ?? null,
+    claim: claimSignupGrant,
+  });
+  return NextResponse.redirect(new URL(target, request.nextUrl.origin));
 }

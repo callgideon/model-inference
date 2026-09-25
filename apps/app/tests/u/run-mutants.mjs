@@ -34,7 +34,24 @@ const BOUNDARY = "app/(console)/usage/boundary.ts";
 const USAGE_ERROR = "app/(console)/usage/error.tsx";
 const BILLING_ERROR = "app/(console)/billing/error.tsx";
 
-const SUITE = ["tests/u/usage-view-model.test.ts", "tests/u/billing-view-model.test.ts"];
+// U1R: the CREDIT display helpers, read adapter and view models (credit-pg.test.ts needs a database
+// and skips here; its world script is the real-PostgreSQL oracle).
+const FORMAT = "lib/format.ts";
+const READS = "app/(console)/billing/credit-reads.ts";
+const CREDITS = "app/(console)/billing/credit-view-model.ts";
+const JOBS = "app/(console)/usage/credit-view-model.ts";
+const GATE = "app/(console)/usage/fake-console-context.ts";
+const SOURCE = "app/(console)/billing/credit-fixture.ts";
+
+const SUITE = [
+  "tests/u/usage-view-model.test.ts",
+  "tests/u/billing-view-model.test.ts",
+  "tests/u/credit-format.test.ts",
+  "tests/u/credit-reads.test.ts",
+  "tests/u/credits-view-model.test.ts",
+  "tests/u/usage-credits-view-model.test.ts",
+  "tests/u/credit-preview-gate.test.ts",
+];
 
 const T = {
   url: "U1-T01 the URL is untrusted: an unrecognised range falls back, `all` means no filter",
@@ -65,6 +82,34 @@ const T = {
   billingModel: "U1-T28 the billing page model states every branch, and page sizes are named here",
   boundary: "U1-T19 the error boundaries wire up the recovery that can actually recover",
   absences: "U1-T29 a legacy row and a deleted key render as absences, never as invented values",
+  // U1R
+  fExact: "U1R-F01 credits and legacy USD keep every one of the eight digits, with no float round-trip",
+  fLabel: "U1R-F02 a CREDIT amount never carries a dollar sign and a USD amount is always labelled USD",
+  fSigned: "U1R-F04 a signed ledger amount reads as a credit or a debit in its own unit",
+  rWallet: "U1R-R01 the wallet is the caller's own consumer wallet, read exactly, and none is an explicit state",
+  rLedger: "U1R-R02 the ledger is filtered to the caller's wallet, keyset-ordered, and a forged cursor never reaches a filter",
+  rJobs: "U1R-R03 jobs page through consumer_jobs on its own cursor, one extra row decides the next page",
+  rUnavailable: "U1R-R04 an error, a transport failure or an inexact row is an explicit failure, never a zero",
+  rUnits: "U1R-R05 a job's unit follows its regime, and a CREDIT row labelled USD is refused",
+  rCreditsIn: "U1R-R06 credits-in is a bounded read of the non-debit entries, and past the bound it is unknown",
+  bFigures: "U1R-B01 available, reserved and spent are exact credits from their own fields, never dollars",
+  bIdentity: "U1R-B02 available = balance - reserved, and a wallet that disagrees is flagged",
+  bStates: "U1R-B03 no wallet, zero/negative, low and funded funds are four different states",
+  bFailed: "U1R-B04 a failed wallet read is an error, never a zero, and a failed spent read is 'unavailable'",
+  bLedger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, no principal is shown",
+  bLegacy: "U1R-B07 legacy USD is a separate USD section when history exists, and an error is not an empty history",
+  bPage: "U1R-B08 the page model walks the ledger on its own cursors and states every branch",
+  uHold: "U1R-U01 a pending or unreconciled job shows its hold and no charge; only a settled job shows a charged amount",
+  uUnits: "U1R-U02 each row is in its own unit: credits never carry '$', legacy USD always says USD",
+  uStatus: "U1R-U04 state, cause and settlement each read as what they are, and an unknown settlement is not a charge",
+  uTokens: "U1R-U03 unreported usage shows no token count and says nothing is estimated",
+  uWindow: "U1R-U05 the date window is cut on the ordered stream at its inclusive start, and ends the walk",
+  uHrefs: "U1R-U06 every href is computed here: pages, window changes reset the cursor, rows link to their detail",
+  uWalk: "U1R-U08 walking every page visits each job once, and the totals equal the wallet's spent and reserved",
+  bSidebar: "U1R-B09 the sidebar figure is the wallet's exact available credits, never dollars, and a failed read is null",
+  gGate: "U1R-G01 the CREDIT fixture gate opens only on an explicit development opt-in",
+  gSource: "U1R-G02 with the gate closed the pages get the real session reads, never the fixture",
+  gBuild: "U1R-G03 a production build never serves the CREDIT fixture whatever environment it is handed",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -613,6 +658,94 @@ const MUTANTS = [
       "      filters.keyId === null ? null : usageHref(withFilter(filters, { keyId: null, model: null })),",
     cases: [T.pageHrefs],
   },
+  // --- U1R: CREDIT display, read adapter, Credits and Usage view models ------------------------
+  { id: "U1R-M01", what: "credits are formatted through Number", file: FORMAT,
+    find: "  return displayCredit(parseCredit(value));",
+    replace: "  return `${Number(value).toLocaleString(\"en-US\", { minimumFractionDigits: 2 })} credits`;",
+    cases: [T.fExact] },
+  { id: "U1R-M02", what: "legacy USD loses its USD label", file: FORMAT,
+    find: "  return `${displayMoney(parseMoney(value))} USD`;",
+    replace: "  return displayMoney(parseMoney(value));",
+    cases: [T.fExact, T.fLabel] },
+  { id: "U1R-M03", what: "a ledger credit loses its plus sign", file: FORMAT,
+    find: "? shown : `+${shown}`;", replace: "? shown : shown;", cases: [T.fSigned] },
+  { id: "U1R-M04", what: "the wallet read is not scoped to the signed-in owner (an operator sees any wallet)", file: READS,
+    find: "          .eq(\"owner_user_id\", userId)\n", replace: "", cases: [T.rWallet] },
+  { id: "U1R-M05", what: "the ledger read is not scoped to the caller's wallet", file: READS,
+    find: "        .eq(\"wallet_id\", walletId);", replace: ";", cases: [T.rLedger] },
+  { id: "U1R-M06", what: "any cursor text is spliced into the PostgREST filter", file: READS,
+    find: "Z)\\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;",
+    replace: "Z)\\|(.+)$/;", cases: [T.rLedger] },
+  { id: "U1R-M07", what: "the ledger asks for no probe row, so it never has a next page", file: READS,
+    find: "          .limit(page.limit + 1),", replace: "          .limit(page.limit),", cases: [T.rLedger] },
+  { id: "U1R-M08", what: "the jobs read asks for no probe row", file: READS,
+    find: "p_limit: page.limit + 1 }", replace: "p_limit: page.limit }", cases: [T.rJobs] },
+  { id: "U1R-M09", what: "a JSON number is accepted as a wallet amount", file: READS,
+    find: "  return parseCredit(text(row, name));",
+    replace: "  const v = field(row, name);\n  return parseCredit(typeof v === \"number\" ? v.toFixed(8) : v);",
+    cases: [T.rUnavailable] },
+  { id: "U1R-M10", what: "a permission refusal reads as an outage", file: READS,
+    find: "if (error.code === \"42501\")", replace: "if (error.code === \"x42501\")", cases: [T.rUnavailable] },
+  { id: "U1R-M11", what: "a job's stated unit is not checked against its regime", file: READS,
+    find: "  if (text(row, \"unit\") !== unit) throw", replace: "  if (false) throw", cases: [T.rUnits] },
+  { id: "U1R-M12", what: "credits-in sums a partial read past its bound", file: READS,
+    find: "found.length > CREDITS_IN_BOUND ? null :", replace: "false ? null :", cases: [T.rCreditsIn] },
+  { id: "U1R-M13", what: "the Available figure shows the balance, ignoring holds", file: CREDITS,
+    find: "      value: credits(wallet.available),", replace: "      value: credits(wallet.ledgerTotal),", cases: [T.bFigures] },
+  { id: "U1R-M14", what: "a wallet that does not reconcile is never flagged", file: CREDITS,
+    find: "  return subCredit(wallet.ledgerTotal, wallet.reservedTotal) === wallet.available;",
+    replace: "  return true;", cases: [T.bIdentity] },
+  { id: "U1R-M15", what: "exactly zero available is not exhausted", file: CREDITS,
+    find: "compareCredit(wallet.available, ZERO_CREDIT) <= 0", replace: "compareCredit(wallet.available, ZERO_CREDIT) < 0",
+    cases: [T.bStates] },
+  { id: "U1R-M16", what: "an unreadable spent total is shown as zero", file: CREDITS,
+    find: "      value: spent === null ? UNAVAILABLE : credits(spent),",
+    replace: "      value: credits(spent ?? ZERO_CREDIT),", cases: [T.bFailed] },
+  { id: "U1R-M17", what: "legacy USD history with a zero balance is hidden", file: CREDITS,
+    find: "(value) => value.entryCount === 0)", replace: "(value) => value.balance === \"0.00000000\")",
+    cases: [T.bLegacy] },
+  { id: "U1R-M18", what: "a failed wallet read leaves the ledger looking empty", file: CREDITS,
+    find: "          input.wallet.ok\n", replace: "          true\n", cases: [T.bPage] },
+  { id: "U1R-M19", what: "the ledger page selects actor again (visible_principal() on every wallet row)", file: READS,
+    find: '.select("entry_id, created_at, kind, amount, unit, request_id, reason")',
+    replace: '.select("entry_id, created_at, kind, amount, unit, request_id, reason, actor")', cases: [T.rLedger] },
+  { id: "U1R-M20", what: "the request link is not encoded", file: CREDITS,
+    find: "  return `/usage/${encodeURIComponent(requestId)}`;", replace: "  return `/usage/${requestId}`;",
+    cases: [T.bLedger] },
+  { id: "U1R-M21", what: "a pending job shows a zero charge", file: JOBS,
+    find: "        label: \"Pending\",\n        amount: null,", replace: "        label: \"Pending\",\n        amount: amount(\"0\", job.unit),",
+    cases: [T.uHold] },
+  { id: "U1R-M22", what: "a settled job whose charge is unreadable shows zero", file: JOBS,
+    find: "        amount: job.charged === null ? \"Unavailable\" : amount(job.charged, job.unit),",
+    replace: "        amount: amount(job.charged ?? \"0\", job.unit),", cases: [T.uHold] },
+  { id: "U1R-M23", what: "a released hold is still shown as held", file: JOBS,
+    find: "(job.holdState === \"held\" || job.holdState === \"unknown\")", replace: "job.holdState !== null",
+    cases: [T.uStatus] },
+  { id: "U1R-M24", what: "a legacy USD job is labelled credits", file: JOBS,
+    find: "    unit: job.unit === \"CREDIT\" ? \"credits\" : \"legacy USD\",", replace: "    unit: \"credits\",",
+    cases: [T.uUnits] },
+  { id: "U1R-M25", what: "unauthoritative token counts are shown as usage", file: JOBS,
+    find: "  if (job.usageCertainty !== \"authoritative\" || ", replace: "  if (", cases: [T.uTokens] },
+  { id: "U1R-M26", what: "the window's start is exclusive", file: JOBS,
+    find: "job.createdAt >= start", replace: "job.createdAt > start", cases: [T.uWindow] },
+  { id: "U1R-M27", what: "a page that crossed the window's start keeps its next link", file: JOBS,
+    find: "{ items: kept, next_cursor: null }", replace: "{ items: kept, next_cursor: page.next_cursor }",
+    cases: [T.uWindow] },
+  { id: "U1R-M28", what: "changing the window keeps the old cursor", file: JOBS,
+    find: "  return { range, cursor: null, trail: [] };", replace: "  return { ...filters, range };", cases: [T.uHrefs] },
+  { id: "U1R-M29", what: "the next page resumes from the first row instead of the last", file: READS,
+    find: "cursors[shown.length - 1]", replace: "cursors[0]", cases: [T.rJobs] },
+  // Fix round (0-U1R-V-01): the production/preview seam in front of the CREDIT fixture.
+  { id: "U1R-M30", what: "the fixture gate is forced open (reviewer P1)", file: GATE,
+    find: "  return consoleContext(env) !== null;", replace: "  return true;", cases: [T.gGate] },
+  { id: "U1R-M31", what: "the fixture is chosen whatever the gate says (reviewer P2)", file: SOURCE,
+    find: "  if (previewAllowed(env)) {", replace: "  if (true) {", cases: [T.gSource, T.gBuild] },
+  // Fix round (1-U1R-V02 / WR-2): the sidebar figure the layout will render.
+  { id: "U1R-M32", what: "a failed wallet read shows zero credits in the sidebar", file: CREDITS,
+    find: "  if (!wallet.ok) return null;", replace: "  if (!wallet.ok) return credits(\"0\");", cases: [T.bSidebar] },
+  { id: "U1R-M33", what: "the sidebar shows the balance, ignoring holds", file: CREDITS,
+    find: "? \"No credits yet\" : credits(wallet.value.available);", replace: "? \"No credits yet\" : credits(wallet.value.ledgerTotal);",
+    cases: [T.bSidebar] },
 ];
 
 /**
@@ -716,6 +849,10 @@ function classify(mutant, run) {
     return { outcome: "runner-error", why: "the suite failed without naming a case" };
   }
   if (run.code === 0) return { outcome: "survived", why: "the suite passed" };
+  // A test FILE that failed to load is reported under its path: that is a broken copy, not a kill.
+  if (run.failed.some((entry) => /\.test\.ts$/.test(entry.name))) {
+    return { outcome: "runner-error", why: "a test file did not load" };
+  }
   if (run.passed.length === 0) {
     return { outcome: "runner-error", why: "every case failed, so the copy is broken" };
   }

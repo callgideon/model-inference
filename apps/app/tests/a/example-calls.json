@@ -1,0 +1,305 @@
+{
+  "model": "nemostation/marlin-2b",
+  "examples": {
+    "text": [
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": "In one sentence, what is dense video captioning?"
+            }
+          ]
+        },
+        "status": 200
+      }
+    ],
+    "video": [
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "https://example.com/clip.mp4"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 200
+      }
+    ],
+    "stream": [
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "stream": true,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "https://example.com/clip.mp4"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 200
+      }
+    ],
+    "upload": [
+      {
+        "method": "POST",
+        "route": "/v1/uploads",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "max_bytes": 76,
+          "bytes": 76,
+          "accepted_mime": [
+            "video/mp4"
+          ]
+        },
+        "status": 201
+      },
+      {
+        "method": "PUT",
+        "route": "/v1/uploads/{handle}",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "video/mp4"
+        },
+        "body": null,
+        "status": 204
+      },
+      {
+        "method": "POST",
+        "route": "/v1/uploads/{handle}/complete",
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
+        "body": null,
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "infrx-upload:{upload}"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 200
+      }
+    ],
+    "inline": [
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "data:video/mp4;base64,{clip}"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 200
+      }
+    ],
+    "async": [
+      {
+        "method": "POST",
+        "route": "/v1/jobs",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json",
+          "idempotency-key": "clip-0001"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "https://example.com/clip.mp4"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "route": "/v1/jobs/{handle}",
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
+        "body": null,
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "route": "/v1/jobs/{handle}/result",
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
+        "body": null,
+        "status": 200
+      }
+    ],
+    "resume": [
+      {
+        "method": "POST",
+        "route": "/v1/jobs",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json",
+          "idempotency-key": "clip-0001"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "video_url",
+                  "video_url": {
+                    "url": "https://example.com/clip.mp4"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Provide a spatial description of this clip followed by time-ranged events."
+                }
+              ]
+            }
+          ]
+        },
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "route": "/v1/jobs/{handle}/events",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "last-event-id": "1-2"
+        },
+        "body": null,
+        "status": 200
+      }
+    ],
+    "revoke": [
+      {
+        "method": "POST",
+        "route": "/v1/chat/completions",
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "nemostation/marlin-2b",
+          "max_tokens": 512,
+          "messages": [
+            {
+              "role": "user",
+              "content": "ping"
+            }
+          ]
+        },
+        "status": 401
+      }
+    ]
+  }
+}
