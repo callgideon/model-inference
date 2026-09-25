@@ -102,8 +102,8 @@ def test_ops_recover__the_proof_driver_counts_a_skipped_suite_as_a_fail(tmp_path
               "runs": "def test_a():\n    pass\n"}
     for name, body in bodies.items():
         (api / "tests" / "d" / f"test_{name}.py").write_text(f"import pytest\n\n\n{body}")
-    env = {"VIRTUAL_ENV": sys.prefix}                   # this interpreter's pytest, outside a project
-    verdict = {name: PROOF["run_suite"](api, f"tests/d/test_{name}.py", env) for name in bodies}
+    pytest = (sys.executable, "-m", "pytest")           # the scratch tree's `uv run` is not the point
+    verdict = {name: PROOF["run_suite"](api, f"tests/d/test_{name}.py", {}, pytest) for name in bodies}
     assert {name: ok for name, (ok, _) in verdict.items()} == \
         {"skips": False, "partly": False, "xfails": False, "runs": True}, verdict
     assert "1 skipped" in verdict["skips"][1]

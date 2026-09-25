@@ -181,12 +181,13 @@ def task_env(api: Path, task: str) -> dict[str, str]:
             "INFRX_D2_VALKEY_CONTAINER": valkey.container}
 
 
-def run_suite(api: Path, suite: str, env: dict[str, str]) -> tuple[bool, str]:
+def run_suite(api: Path, suite: str, env: dict[str, str],
+              pytest: tuple[str, ...] = ("uv", "run", "--frozen", "--no-sync", "pytest")) -> tuple[bool, str]:
     skip = [case for case in SHAPE if case.startswith(f"{suite}::")]
     for case in skip:
         print(f"SKIP {case} {SHAPE[case]}", flush=True)
-    done = subprocess.run(["uv", "run", "--frozen", "--no-sync", "pytest", "-q", "-p",
-                           "no:cacheprovider", suite, *(f"--deselect={c}" for c in skip)],
+    done = subprocess.run([*pytest, "-q", "-p", "no:cacheprovider", suite,
+                           *(f"--deselect={c}" for c in skip)],
                           cwd=api, capture_output=True, text=True,
                           env={**os.environ, **env})
     log = api.parents[1] / "logs" / f"{Path(suite).stem}.log"      # the whole run, for evidence
