@@ -142,7 +142,6 @@ test(T.ledgerScope, async () => {
     unit: "CREDIT",
     request_id: `b1000000-0000-4000-8000-00000000000${n}`,
     reason: "inference",
-    actor: "platform",
   });
   const { client, calls } = recording({
     console_credit_ledger: [ok([entry(1), entry(2), entry(3)]), ok([entry(3)])],
@@ -155,6 +154,9 @@ test(T.ledgerScope, async () => {
   assert.equal(first.value.items[0].requestId, "b1000000-0000-4000-8000-000000000001");
   assert.notEqual(first.value.next_cursor, null);
   assert.deepEqual(calls[0].ops.find(([op]) => op === "eq"), ["eq", "wallet_id", WALLET]);
+  // No `actor`: the view computes visible_principal() for it on EVERY wallet row before the sort
+  // and limit (1.5 s a page at 10k entries, 8 ms without), and a consumer only ever sees `platform`.
+  assert.deepEqual(calls[0].ops[0], ["select", "entry_id, created_at, kind, amount, unit, request_id, reason"]);
   assert.deepEqual(calls[0].ops.find(([op]) => op === "limit"), ["limit", 3]);
   assert.deepEqual(
     calls[0].ops.filter(([op]) => op === "order"),

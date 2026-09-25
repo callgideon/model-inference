@@ -85,7 +85,6 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
                   <TableHead>When (UTC)</TableHead>
                   <TableHead>Kind</TableHead>
                   <TableHead>Reason</TableHead>
-                  <TableHead>By</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
@@ -103,7 +102,6 @@ export default async function CreditsPage({ searchParams }: PageProps<"/billing"
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{row.reason}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{row.actor}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.amount}</TableCell>
                   </TableRow>
                 ))}

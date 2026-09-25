@@ -54,7 +54,7 @@ const T = {
   states: "U1R-B03 no wallet, zero/negative, low and funded funds are four different states",
   failed: "U1R-B04 a failed wallet read is an error, never a zero, and a failed spent read is 'unavailable'",
   grant: "U1R-B05 the grant is one-time 10,000 credits, with no refill, expiry or payment offered",
-  ledger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, the platform is not a person",
+  ledger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, no principal is shown",
   legacy: "U1R-B07 legacy USD is a separate USD section when history exists, and an error is not an empty history",
   page: "U1R-B08 the page model walks the ledger on its own cursors and states every branch",
 };
@@ -140,11 +140,13 @@ test(T.grant, () => {
 test(T.ledger, () => {
   const entry = (over: Partial<CreditLedgerEntry>): CreditLedgerEntry => ({
     id: "e1", createdAt: "2026-09-20T12:00:00.000000Z", kind: "signup_grant",
-    amount: "10000.00000000" as Credit, requestId: null, reason: "", actor: "platform", ...over,
+    amount: "10000.00000000" as Credit, requestId: null, reason: "", ...over,
   });
   const grant = ledgerEntryView(entry({}));
-  assert.deepEqual([grant.kind, grant.amount, grant.actor, grant.detailHref],
-    ["One-time signup grant", "+10,000.00 credits", "infrx platform", null]);
+  assert.deepEqual([grant.kind, grant.amount, grant.detailHref],
+    ["One-time signup grant", "+10,000.00 credits", null]);
+  // R59-1: every entry a consumer can see is the platform's, so the row names nobody at all.
+  assert.deepEqual(Object.keys(grant).sort(), ["amount", "detailHref", "id", "kind", "reason", "when"]);
   const debit = ledgerEntryView(entry({ kind: "inference_debit", amount: "-0.00012345" as Credit, requestId: "b1/../x", reason: "inference" }));
   assert.deepEqual([debit.kind, debit.amount, debit.detailHref],
     ["Request charge", "-0.00012345 credits", "/usage/b1%2F..%2Fx"]);
@@ -172,7 +174,7 @@ test(T.legacy, () => {
 test(T.page, () => {
   const e = (n: number): CreditLedgerEntry => ({
     id: `e${n}`, createdAt: "2026-09-20T12:00:00.000000Z", kind: "inference_debit",
-    amount: "-1.00000000" as Credit, requestId: `r${n}`, reason: "inference", actor: "platform",
+    amount: "-1.00000000" as Credit, requestId: `r${n}`, reason: "inference",
   });
   const page: Page<CreditLedgerEntry> = { items: [e(1), e(2)], next_cursor: "C2" };
   const first = creditsPageModel({

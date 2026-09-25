@@ -17,7 +17,7 @@ import {
   ZERO_CREDIT,
   type Credit,
 } from "../../../lib/contracts/v2/money-units.ts";
-import { PLATFORM_ACTOR, type Page, type Result } from "../../../lib/contracts/types.ts";
+import type { Page, Result } from "../../../lib/contracts/types.ts";
 import {
   spentCredit,
   type CreditLedgerEntry,
@@ -194,7 +194,6 @@ export type LedgerEntryView = {
   when: string;
   kind: string;
   reason: string;
-  actor: string;
   amount: string;
   detailHref: string | null;
 };
@@ -205,8 +204,6 @@ export function ledgerEntryView(entry: CreditLedgerEntry): LedgerEntryView {
     when: instantLabel(entry.createdAt),
     kind: Object.hasOwn(KIND_LABELS, entry.kind) ? KIND_LABELS[entry.kind] : "Other",
     reason: entry.reason === "" ? "—" : entry.reason,
-    // R41: the view already masks operators to `platform`; never imply an individual.
-    actor: entry.actor === PLATFORM_ACTOR ? "infrx platform" : entry.actor,
     amount: signedAmount(entry.amount, "CREDIT"),
     detailHref: entry.requestId === null ? null : requestDetailHref(entry.requestId),
   };

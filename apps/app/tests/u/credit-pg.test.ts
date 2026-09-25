@@ -45,14 +45,22 @@ function pgEnv(): NodeJS.ProcessEnv {
   };
 }
 
-/** One statement's rows as JSON, as `user` (a JWT subject) or as the owner (`null`). */
-function sql(user: string | null, statement: string): Answer {
+/** One statement, as `user` (a JWT subject) or as the owner (`null`), in a rolled-back transaction. */
+function psql(user: string | null, statement: string) {
   const impersonate =
     user === null
       ? ""
       : `\\o /dev/null\nset local role authenticated;\nselect set_config('request.jwt.claims', '{"sub":"${user}","role":"authenticated"}', true), set_config('request.jwt.claim.sub', '${user}', true), set_config('request.jwt.claim.role', 'authenticated', true);\n\\o\n`;
-  const script = `\\set ON_ERROR_STOP 1\n\\set VERBOSITY verbose\nbegin;\n${impersonate}select coalesce(json_agg(t), '[]'::json) from (${statement}) t;\nrollback;\n`;
-  const run = spawnSync("psql", ["-X", "-q", "-A", "-t"], { input: script, env: pgEnv(), encoding: "utf8" });
+  const script = `\\set ON_ERROR_STOP 1\n\\set VERBOSITY verbose\nbegin;\n${impersonate}${statement};\nrollback;\n`;
+  return spawnSync("psql", ["-X", "-q", "-A", "-t"], { input: script, env: pgEnv(), encoding: "utf8" });
+}
+
+/** Every SELECT the PostgREST double issued, so a case can inspect what reached the database. */
+const issued: string[] = [];
+
+/** One statement's rows as JSON, as `user` (a JWT subject) or as the owner (`null`). */
+function sql(user: string | null, statement: string): Answer {
+  const run = psql(user, `select coalesce(json_agg(t), '[]'::json) from (${statement}) t`);
   if (run.status !== 0) {
     const match = /ERROR:\s+([0-9A-Z]{5}):\s*(.*)/.exec(run.stderr);
     if (match === null) throw new Error(`psql failed: ${run.stderr.slice(0, 300)}`);
@@ -79,14 +87,15 @@ function pgClient(user: string): CreditClient {
     const where: string[] = [];
     const order: string[] = [];
     let limit: number | null = null;
-    const run = () =>
-      sql(
-        user,
+    const run = () => {
+      const statement =
         `select ${columns.split(",").map((c) => ident(c.trim())).join(", ")} from public.${ident(relation)}` +
-          (where.length ? ` where ${where.join(" and ")}` : "") +
-          (order.length ? ` order by ${order.join(", ")}` : "") +
-          (limit === null ? "" : ` limit ${limit}`),
-      );
+        (where.length ? ` where ${where.join(" and ")}` : "") +
+        (order.length ? ` order by ${order.join(", ")}` : "") +
+        (limit === null ? "" : ` limit ${limit}`);
+      issued.push(statement);
+      return sql(user, statement);
+    };
     const chain: Filter = {
       eq(c, v) {
         where.push(`${ident(c)} = ${lit(v)}`);
@@ -223,6 +232,15 @@ test(T.ledger, { skip }, async () => {
   assert.equal(ids.length, count.n, "an entry was lost");
   assert.equal(new Set(ids).size, ids.length, "an entry was repeated");
   assert.equal(totalCredit(amounts), own.ledger_total);
+  // The page stays indexed: selecting `actor` makes the view run visible_principal() on every row of
+  // the wallet before the sort and limit (1.5 s a page at 10k entries). Neither the select list nor
+  // the plan PostgreSQL chose for the browser principal may carry it.
+  const pages = issued.filter((q) => q.includes("from public.console_credit_ledger") && q.includes(" order by "));
+  assert.ok(pages.length > 1, "no ledger page reached the database");
+  for (const page of pages) assert.doesNotMatch(page.slice(0, page.indexOf(" from ")), /\bactor\b/, page);
+  const plan = psql(WORLD.user, `explain (verbose, costs off) ${pages[0]}`);
+  assert.equal(plan.status, 0, plan.stderr);
+  assert.doesNotMatch(plan.stdout, /visible_principal/, "the ledger page evaluates visible_principal() per row");
 });
 
 test(T.jobs, { skip }, async () => {

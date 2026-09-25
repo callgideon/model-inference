@@ -77,11 +77,10 @@ export function defaultCreditFixture(): CreditFixture {
       amount: subCredit(ZERO_CREDIT, j.charged as Credit),
       requestId: j.requestId,
       reason: "inference",
-      actor: "platform",
     }));
   const ledger: CreditLedgerEntry[] = [
-    { id: "e1000000-0000-4000-8000-0000000000a1", createdAt: "2026-09-20T09:00:00.000000Z", kind: "signup_grant", amount: "10000.00000000" as Credit, requestId: null, reason: "", actor: "platform" },
-    { id: "e1000000-0000-4000-8000-0000000000a2", createdAt: "2026-09-20T10:00:00.000000Z", kind: "operator_adjustment", amount: "-5.00000000" as Credit, requestId: null, reason: "Correction of a duplicated test grant", actor: "platform" },
+    { id: "e1000000-0000-4000-8000-0000000000a1", createdAt: "2026-09-20T09:00:00.000000Z", kind: "signup_grant", amount: "10000.00000000" as Credit, requestId: null, reason: "" },
+    { id: "e1000000-0000-4000-8000-0000000000a2", createdAt: "2026-09-20T10:00:00.000000Z", kind: "operator_adjustment", amount: "-5.00000000" as Credit, requestId: null, reason: "Correction of a duplicated test grant" },
     ...debits,
   ];
   const ledgerTotal = totalCredit(ledger.map((e) => e.amount));

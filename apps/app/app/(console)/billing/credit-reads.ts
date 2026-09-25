@@ -73,7 +73,6 @@ export type CreditLedgerEntry = {
   amount: Credit;
   requestId: string | null;
   reason: string;
-  actor: string;
 };
 
 export type LegacyUsd = { balance: Usd; entryCount: number; rolloutHold: boolean };
@@ -207,7 +206,6 @@ function entryOf(row: unknown): CreditLedgerEntry {
     amount: credit(row, "amount"),
     requestId: optionalText(row, "request_id"),
     reason: text(row, "reason"),
-    actor: text(row, "actor"),
   };
 }
 
@@ -318,9 +316,12 @@ export function postgrestCreditReads(client: CreditClient, userId: string): Cred
       if (page.cursor !== null && match === null) {
         return fail("invalid_cursor", "This page link is no longer valid.");
       }
+      // No `actor`: the view computes visible_principal() for it on every row of the wallet before
+      // the sort and limit (1.5 s a page at 10k entries, 8 ms without), and every entry a consumer
+      // can read is masked to `platform` anyway (R59-1).
       let query = client
         .from("console_credit_ledger")
-        .select("entry_id, created_at, kind, amount, unit, request_id, reason, actor")
+        .select("entry_id, created_at, kind, amount, unit, request_id, reason")
         .eq("wallet_id", walletId);
       if (match !== null) {
         const [, at, id] = match;

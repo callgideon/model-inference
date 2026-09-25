@@ -40,6 +40,8 @@ const FORMAT = "lib/format.ts";
 const READS = "app/(console)/billing/credit-reads.ts";
 const CREDITS = "app/(console)/billing/credit-view-model.ts";
 const JOBS = "app/(console)/usage/credit-view-model.ts";
+const GATE = "app/(console)/usage/fake-console-context.ts";
+const SOURCE = "app/(console)/billing/credit-fixture.ts";
 
 const SUITE = [
   "tests/u/usage-view-model.test.ts",
@@ -48,6 +50,7 @@ const SUITE = [
   "tests/u/credit-reads.test.ts",
   "tests/u/credits-view-model.test.ts",
   "tests/u/usage-credits-view-model.test.ts",
+  "tests/u/credit-preview-gate.test.ts",
 ];
 
 const T = {
@@ -93,7 +96,7 @@ const T = {
   bIdentity: "U1R-B02 available = balance - reserved, and a wallet that disagrees is flagged",
   bStates: "U1R-B03 no wallet, zero/negative, low and funded funds are four different states",
   bFailed: "U1R-B04 a failed wallet read is an error, never a zero, and a failed spent read is 'unavailable'",
-  bLedger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, the platform is not a person",
+  bLedger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, no principal is shown",
   bLegacy: "U1R-B07 legacy USD is a separate USD section when history exists, and an error is not an empty history",
   bPage: "U1R-B08 the page model walks the ledger on its own cursors and states every branch",
   uHold: "U1R-U01 a pending or unreconciled job shows its hold and no charge; only a settled job shows a charged amount",
@@ -103,6 +106,9 @@ const T = {
   uWindow: "U1R-U05 the date window is cut on the ordered stream at its inclusive start, and ends the walk",
   uHrefs: "U1R-U06 every href is computed here: pages, window changes reset the cursor, rows link to their detail",
   uWalk: "U1R-U08 walking every page visits each job once, and the totals equal the wallet's spent and reserved",
+  gGate: "U1R-G01 the CREDIT fixture gate opens only on an explicit development opt-in",
+  gSource: "U1R-G02 with the gate closed the pages get the real session reads, never the fixture",
+  gBuild: "U1R-G03 a production build never serves the CREDIT fixture whatever environment it is handed",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -699,9 +705,9 @@ const MUTANTS = [
     cases: [T.bLegacy] },
   { id: "U1R-M18", what: "a failed wallet read leaves the ledger looking empty", file: CREDITS,
     find: "          input.wallet.ok\n", replace: "          true\n", cases: [T.bPage] },
-  { id: "U1R-M19", what: "the ledger names an actor instead of the platform", file: CREDITS,
-    find: "    actor: entry.actor === PLATFORM_ACTOR ? \"infrx platform\" : entry.actor,",
-    replace: "    actor: entry.actor,", cases: [T.bLedger] },
+  { id: "U1R-M19", what: "the ledger page selects actor again (visible_principal() on every wallet row)", file: READS,
+    find: '.select("entry_id, created_at, kind, amount, unit, request_id, reason")',
+    replace: '.select("entry_id, created_at, kind, amount, unit, request_id, reason, actor")', cases: [T.rLedger] },
   { id: "U1R-M20", what: "the request link is not encoded", file: CREDITS,
     find: "  return `/usage/${encodeURIComponent(requestId)}`;", replace: "  return `/usage/${requestId}`;",
     cases: [T.bLedger] },
@@ -728,6 +734,11 @@ const MUTANTS = [
     find: "  return { range, cursor: null, trail: [] };", replace: "  return { ...filters, range };", cases: [T.uHrefs] },
   { id: "U1R-M29", what: "the next page resumes from the first row instead of the last", file: READS,
     find: "cursors[shown.length - 1]", replace: "cursors[0]", cases: [T.rJobs] },
+  // Fix round (0-U1R-V-01): the production/preview seam in front of the CREDIT fixture.
+  { id: "U1R-M30", what: "the fixture gate is forced open (reviewer P1)", file: GATE,
+    find: "  return consoleContext(env) !== null;", replace: "  return true;", cases: [T.gGate] },
+  { id: "U1R-M31", what: "the fixture is chosen whatever the gate says (reviewer P2)", file: SOURCE,
+    find: "  if (previewAllowed(env)) {", replace: "  if (true) {", cases: [T.gSource, T.gBuild] },
 ];
 
 /**
