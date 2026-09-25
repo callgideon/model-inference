@@ -54,7 +54,8 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
     'reservations', coalesce((select jsonb_agg(jsonb_build_object(
         'request_id', r.request_id, 'org_id', r.org_id, 'key_id', r.key_id,
         'kind', r.kind, 'amount', r.amount, 'active', r.active,
-        'reserved_at', r.reserved_at) order by r.kind)
+        'reserved_at', r.reserved_at) order by array_position(
+          array['preparation', 'inference', 'journal_bytes'], r.kind), r.kind)
       from infrx.capacity_reservations r where r.request_id = j.request_id), '[]'),
     'outbox', coalesce((select jsonb_agg(jsonb_build_object(
         'event_id', o.event_id, 'aggregate_id', o.aggregate_id, 'kind', o.kind,

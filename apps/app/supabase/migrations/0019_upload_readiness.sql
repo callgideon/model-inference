@@ -593,8 +593,10 @@ begin
   if u.state = 'aborted' then
     return infrx.upload_doc(u);
   end if;
-  if u.state <> 'created' then
-    perform infrx.lifecycle_refuse('upload_not_open', 'upload ' || u.handle || ' is ' || u.state);
+  -- A ticket past its window is closed to every step, an abort included (F2C.a / M5).
+  if u.state <> 'created' or infrx.now() >= u.expires_at then
+    perform infrx.lifecycle_refuse('upload_not_open', 'upload ' || u.handle || ' is '
+                                   || u.state || ' or past its window');
   end if;
   update infrx.media_uploads set state = 'aborted', aborted_reason = p_args->>'refusal'
    where handle = u.handle returning * into u;

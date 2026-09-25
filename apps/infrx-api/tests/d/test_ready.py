@@ -195,6 +195,17 @@ def test_abort_is_durable_idempotent_and_final() -> None:
             assert refusal_of(refused) is LifecycleRefusal.too_large
         else:
             raise AssertionError("a receipt over max_bytes was accepted")
+        # a ticket past its window is closed to an abort too
+        late = await _store().create(org, constraints)
+        conn.execute("select infrx_test.advance(%s)", (cr.WINDOW_S,))
+        try:
+            await _store().abort(org, late.upload_handle, LifecycleRefusal.media_refused)
+        except errors.StateConflict as refused:
+            assert refusal_of(refused) is LifecycleRefusal.upload_not_open
+        else:
+            raise AssertionError("an abort past the window was accepted")
+        assert (await _store().abort(org, ticket.upload_handle, LifecycleRefusal.too_large)
+                ) == aborted, "an aborted ticket answers as it stands, past its window too"
         data = b"abort-finalized"
         done = await _store().create(org, constraints)
         await _store().acknowledge_put(org, done.upload_handle, bytes=len(data),
