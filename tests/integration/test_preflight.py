@@ -5,12 +5,14 @@ profile, a skip or a broken seam into a pass.
 """
 from __future__ import annotations
 
+import http.server
 import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -51,8 +53,8 @@ def test_the_environment_manifest_is_self_consistent():
     from infrx.contracts.tasklocal import local_services     # the one registry, not a copy
     own = local_services("e2c")
     assert pf.namespace(ENV["namespaces"]["e2c"]) == \
-        ([own["postgres"].host_port, own["valkey"].host_port],
-         ["infrx-e2c-postgres", "infrx-e2c-valkey"])
+        ([own["postgres"].host_port, own["valkey"].host_port, own["s3"].host_port],
+         ["infrx-e2c-postgres", "infrx-e2c-valkey", "infrx-e2c-s3"])
     assert all("@sha256:" in image["ref"] for image in ENV["images"].values())
 
 
@@ -181,6 +183,56 @@ def test_a_live_certify_never_starts_from_the_wrapper(tmp_path):
     assert not (out / "certify.log").exists()
 
 
+URL, ENGINE = "http://127.0.0.1:1/v1", "http://127.0.0.1:2"
+
+
+@pytest.mark.parametrize("spelling", [
+    ["--target", URL, "--engine-url", ENGINE],                 # --target without --box
+    [f"--target={URL}", f"--engine-url={ENGINE}"],             # argparse's = form
+    ["--tar", URL, "--engine-url", ENGINE],                    # an abbreviation (allow_abbrev)
+    ["--b", f"--t={URL}", "--engine-url", ENGINE],
+], ids=["target-alone", "target-equals", "target-abbreviated", "box-and-target-abbreviated"])
+def test_a_remote_certify_flag_in_any_spelling_never_starts_a_run(tmp_path, monkeypatch,
+                                                                   spelling):
+    """certify.py's parser accepts `--target=URL` and unambiguous prefixes; each is a remote
+    run, so it needs a profile (INVALID without one) and is NOT RUN with one. The oracle is
+    a stub for the process launcher that fails the test if anything is started."""
+    def started(name, argv, *rest, **kw):
+        raise AssertionError(f"LIVE RUN STARTED: {argv}")
+    monkeypatch.setattr(gates, "run", started)
+    monkeypatch.setattr(gates, "preflight_stage", lambda profile, out, certify=None: {
+        "stage": f"preflight:{profile}", "verdict": "PASS", "exit": 0})
+    out = tmp_path / "a"
+    assert gates.main(["backend-certify", "--out", str(out), "--", *spelling]) == 4
+    assert [s["stage"] for s in json.loads((out / "verdict.json").read_text())["stages"]] \
+        == ["certify-profile"]
+    (tmp_path / "p.json").write_text(json.dumps(GOOD_PROFILE))
+    out = tmp_path / "b"
+    assert gates.main(["backend-certify", "--out", str(out), "--certify-profile",
+                       str(tmp_path / "p.json"), "--", *spelling]) == 3
+    assert json.loads((out / "verdict.json").read_text())["stages"][-1]["verdict"] == "NOT RUN"
+
+
+def test_a_local_certify_run_is_started(tmp_path, monkeypatch):
+    """The other half: flags that are not a remote target do reach certify.py (else a
+    detector calling everything remote would pass the case above)."""
+    seen = []
+    def started(name, argv, cwd, out, env=None):
+        seen.append(argv)
+        log = out / f"{name}.log"
+        log.write_text("")
+        return 0, 0.0, log
+    monkeypatch.setattr(gates, "run", started)
+    monkeypatch.setattr(gates, "preflight_stage", lambda profile, out, certify=None: {
+        "stage": f"preflight:{profile}", "verdict": "PASS", "exit": 0})
+    gates.main(["backend-certify", "--out", str(tmp_path), "--", "--no-stack", "--scale",
+                "tiny", "--engine-url", ENGINE])
+    assert [argv[1] for argv in seen] == ["tests/integration/backend/certify.py"]
+
+
+EMPTY = "import pytest\n@pytest.mark.parametrize('mutant', ())\ndef test_m(mutant):\n    pass\n"
+
+
 def junit(tmp_path: Path, cases: str) -> Path:
     path = tmp_path / "j.xml"
     path.write_text(f'<testsuites><testsuite name="pytest">{cases}</testsuite></testsuites>')
@@ -206,13 +258,55 @@ def test_junit_counts_keep_xfails_apart_from_skips(tmp_path):
     ("def test_bad():\n    assert False\n", "FAIL"),
     ("import pytest\n@pytest.mark.xfail(strict=True, reason='known gap')\n"
      "def test_q():\n    assert False\n", "BLOCKED"),
-], ids=["pass", "skip-is-blocked", "fail", "quarantine-is-blocked"])
+    # the missing-service path inside a stage: the fixture that connects raises
+    ("import pytest\n@pytest.fixture\ndef db():\n"
+     "    raise ConnectionRefusedError('postgres 127.0.0.1:55448 refused')\n"
+     "def test_q(db):\n    pass\n", "FAIL"),
+    # a list whose default subset is empty (INFRX_MUTANTS unset) has no case to run
+    (EMPTY + "def test_ok():\n    pass\n", "PASS"),
+    (EMPTY + "import pytest\ndef test_s():\n    pytest.skip('no db')\n", "BLOCKED"),
+], ids=["pass", "skip-is-blocked", "fail", "quarantine-is-blocked", "setup-error-is-fail",
+        "empty-parametrization-is-not-a-case", "empty-parametrization-hides-no-skip"])
 def test_a_pytest_stage_that_skipped_is_not_a_pass(tmp_path, body, verdict):
     (tmp_path / "test_probe.py").write_text(body)
     out = tmp_path / "out"
     out.mkdir()
     stage = gates.pytest_stage("probe", [PY, "-m", "pytest", "-q", "-p", "no:cacheprovider",
                                          "test_probe.py"], tmp_path, out)
+    assert stage["verdict"] == verdict, stage
+    if body.startswith(EMPTY):              # listed, not hidden
+        assert stage["counts"]["empty_params"] == ["test_probe::test_m[NOTSET]"], stage
+
+
+def test_a_pytest_stage_that_crashed_without_a_report_fails(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    stage = gates.pytest_stage("probe", [PY, "-c", "import sys; sys.exit(2)"], tmp_path, out)
+    assert (stage["verdict"], stage["exit"]) == ("FAIL", 2), stage
+
+
+FAKE_RUN = """import json, sys
+report = sys.argv[sys.argv.index("--report") + 1]
+if {write}:
+    runs = [{{"argv": "pytest tests/integration", "counts": {{"passed": 5, "skipped": {skipped}}}}}]
+    open(report, "w").write(json.dumps({{"stages": [{{"stage": "suites", "status": "PASS",
+                                                      "runs": runs}}]}}))
+sys.exit({code})
+"""
+
+
+@pytest.mark.parametrize("code,skipped,write,verdict", [
+    (0, 0, True, "PASS"), (0, 103, True, "BLOCKED"), (3, 0, True, "BLOCKED"),
+    (1, 0, True, "FAIL"), (0, 0, False, "FAIL"),
+], ids=["clean", "skips-are-blocked", "pending", "fail", "no-report"])
+def test_a_runner_stage_passes_only_when_every_case_ran(tmp_path, code, skipped, write, verdict):
+    """run.py exits 0 with 103 skipped tests/integration cases at layer 1; a runner's exit
+    code alone is not evidence that its cases ran."""
+    script = tmp_path / "fake_run.py"
+    script.write_text(FAKE_RUN.format(write=write, skipped=skipped, code=code))
+    report = tmp_path / "r.json"
+    stage = gates.runner_stage("probe", [PY, str(script), "--report", str(report)], tmp_path,
+                               report)
     assert stage["verdict"] == verdict, stage
 
 
@@ -246,25 +340,6 @@ def test_an_absent_e3c_runner_is_not_run(tmp_path):
     assert gates.e3c_stage(tmp_path, tmp_path / "missing.py")["verdict"] == "NOT RUN"
 
 
-@pytest.mark.skipif(shutil.which("docker") is None,
-                    reason="BLOCKED platform prerequisite: needs a docker CLI to inspect images")
-def test_an_image_that_is_not_local_is_blocked_and_never_pulled():
-    """E3C WR-2: a pin that cannot be pulled (the former quay MinIO answered 401) stays
-    BLOCKED with its pull line; preflight never pulls, so it cannot turn into a pass."""
-    env = json.loads(json.dumps(ENV))
-    absent = "infrx-e2c-selftest/absent@sha256:" + "0" * 64
-    env["images"]["absent"] = {"ref": absent}
-    env["profiles"]["probe"] = {"tools": ["python", "docker"], "images": ["absent"],
-                                "namespaces": []}
-    result = pf.preflight("probe", env=env)
-    rows = {c["check"]: c for c in result["checks"]}
-    if rows["tool:docker"]["status"] != "ok":
-        pytest.skip("BLOCKED platform prerequisite: docker daemon unreachable")
-    assert result["verdict"] == "BLOCKED"
-    assert rows["image:absent"] == {"check": "image:absent", "want": absent,
-                                    "status": "missing", "detail": f"docker pull {absent}"}
-
-
 def test_the_worst_stage_decides_the_gate():
     assert gates.worst(["PASS", "NOT RUN"]) == "NOT RUN"
     assert gates.worst(["NOT RUN", "BLOCKED", "PASS"]) == "BLOCKED"
@@ -285,3 +360,220 @@ def test_a_deliberately_broken_seam_fails_the_gate(tmp_path, seam):
     stage = verdict["stages"][-1]
     assert (done.returncode, verdict["verdict"]) == (1, "FAIL"), stage
     assert (stage["stage"], stage["outcome"]) == (f"seam:{seam}", "killed"), stage
+
+
+STUB_DOCKER = """#!/bin/sh
+echo "$*" >> "{log}"
+case "$1 $2" in
+  "image inspect") exit 1 ;;
+  "version --format") echo 29.0.0; exit 0 ;;
+  "run -d") exit {run} ;;
+esac
+exit 0
+"""
+
+
+def stub_docker(tmp_path: Path, monkeypatch, run: int = 0) -> Path:
+    """A `docker` first on PATH that logs every argv; `image inspect` finds nothing and
+    everything else (a pull included) succeeds, so a pull would be seen, not masked."""
+    bin_, log = tmp_path / "stub-bin", tmp_path / "docker.log"
+    bin_.mkdir()
+    (bin_ / "docker").write_text(STUB_DOCKER.format(log=log, run=run))
+    (bin_ / "docker").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    log.touch()
+    return log
+
+
+def test_an_image_that_is_not_local_is_blocked_and_never_pulled(tmp_path, monkeypatch):
+    """E3C WR-2: a pin that is not on the host (the former quay MinIO answered 401) stays
+    BLOCKED with its pull line, and preflight never runs `docker pull` - with a docker that
+    WOULD pull successfully, so a pulling preflight fails here."""
+    log = stub_docker(tmp_path, monkeypatch)
+    env = json.loads(json.dumps(ENV))
+    absent = "infrx-e2c-selftest/absent@sha256:" + "0" * 64
+    env["images"]["absent"] = {"ref": absent}
+    env["profiles"]["probe"] = {"tools": ["python", "docker"], "images": ["absent"],
+                                "namespaces": []}
+    result = pf.preflight("probe", env=env)
+    rows = {c["check"]: c for c in result["checks"]}
+    assert result["verdict"] == "BLOCKED"
+    assert rows["image:absent"] == {"check": "image:absent", "want": absent,
+                                    "status": "missing", "detail": f"docker pull {absent}"}
+    calls = log.read_text().splitlines()
+    assert f"image inspect {absent}" in calls
+    assert not [call for call in calls if "pull" in call.split()], calls
+
+
+def test_a_tool_at_the_wrong_version_is_blocked():
+    """The pin is the version, not the name: a Python that is not 3.12 is a mismatch."""
+    env = json.loads(json.dumps(ENV))
+    env["tools"]["python"]["match"] = r"^Python 2\."
+    env["profiles"]["probe"] = {"tools": ["python"], "images": [], "namespaces": []}
+    result = pf.preflight("probe", env=env)
+    row = next(c for c in result["checks"] if c["check"] == "tool:python")
+    assert (result["verdict"], result["not_ok"], row["status"]) == \
+        ("BLOCKED", ["tool:python"], "mismatch")
+    assert row["found"].startswith("Python 3.12"), row
+
+
+def test_a_host_that_is_not_linux_is_blocked(monkeypatch):
+    env = json.loads(json.dumps(ENV))
+    env["profiles"]["probe"] = {"tools": ["python"], "images": [], "namespaces": []}
+    assert pf.preflight("probe", env=env)["verdict"] == "PASS"
+    monkeypatch.setattr(sys, "platform", "darwin")
+    result = pf.preflight("probe", env=env)
+    assert (result["verdict"], result["not_ok"]) == ("BLOCKED", ["platform"])
+
+
+def test_a_container_left_in_the_namespace_is_blocked(monkeypatch):
+    """A crashed run's container holds the namespace even when its port is free - for a
+    profile that needs no docker tool too (self-test)."""
+    monkeypatch.setattr(pf, "containers", lambda: ["infrx-e2c-selftest-left", "unrelated"])
+    result = pf.preflight("self-test")
+    row = next(c for c in result["checks"] if c["check"] == "namespace:e2c-selftest")
+    assert (result["verdict"], row["status"], row["existing_containers"]) == \
+        ("BLOCKED", "busy", ["infrx-e2c-selftest-left"])
+
+
+class Health(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):                                   # noqa: N802
+        self.send_response(200 if self.path == "/minio/health/live" else 404)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def test_the_s3_endpoint_starts_from_the_local_pin_and_is_removed(tmp_path, monkeypatch):
+    """The one service the gate starts: the manifest's MinIO pin with `--pull never` (an
+    absent image fails the start, it is never fetched), the credential literals passed by
+    name only, healthy before any suite uses it, and removed by name afterwards."""
+    log = stub_docker(tmp_path, monkeypatch)
+    block = ENV["namespaces"]["e2c-selftest"]["ports"]
+    port = next(p for p in block[3:] if pf.port_free(p))
+    server = http.server.HTTPServer(("127.0.0.1", port), Health)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        row = gates.s3_up(port, "infrx-e2c-selftest-s3", tmp_path, wait_s=10)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert (row["verdict"], row["started"]) == ("PASS", True), row
+    started = log.read_text().splitlines()[0].split()
+    assert started[:4] == ["run", "-d", "--pull", "never"]
+    assert ENV["images"]["minio"]["ref"] in started and f"127.0.0.1:{port}:9000" in started
+    assert "infrx-e2-local-secret" not in row["command"]
+    gates.s3_down("infrx-e2c-selftest-s3", tmp_path)
+    assert log.read_text().splitlines()[-1] == "rm -f -v infrx-e2c-selftest-s3"
+    assert gates.s3_up(port, "infrx-e2c-selftest-s3", tmp_path, wait_s=1)["verdict"] \
+        == "BLOCKED"                                    # nothing healthy answers
+
+
+def test_an_s3_endpoint_that_cannot_start_is_blocked(tmp_path, monkeypatch):
+    stub_docker(tmp_path, monkeypatch, run=125)         # e.g. the pin is not local
+    row = gates.s3_up(55519, "infrx-e2c-selftest-s3", tmp_path, wait_s=1)
+    assert (row["verdict"], row["started"]) == ("BLOCKED", False), row
+
+
+API_SUITES = sorted({p.relative_to(gates.API / "tests").parts[0]
+                     for p in (gates.API / "tests").rglob("test_*.py")})
+
+
+class Composed:
+    """consumer_local with every stage replaced by a recorder: which stages, in which
+    order, with which environment - the composition itself, not the stages."""
+
+    def __init__(self, monkeypatch, *, l3_preflight="PASS", s3="PASS", raise_in=None):
+        self.calls: list[tuple] = []
+
+        def preflight_stage(profile, out, certify_profile=None):
+            self.calls.append(("preflight", profile))
+            verdict = l3_preflight if profile == "integration-l3" else "PASS"
+            return {"stage": f"preflight:{profile}", "verdict": verdict, "exit": 0}
+
+        def pytest_stage(name, argv, cwd, out, env=None):
+            self.calls.append(("pytest", name, argv, env))
+            if name == raise_in:
+                raise KeyboardInterrupt(name)
+            return {"stage": name, "verdict": "PASS", "env": env}
+
+        def runner_stage(name, argv, out, report=None):
+            self.calls.append(("runner", name, argv))
+            return {"stage": name, "verdict": "PASS"}
+
+        def e3c_stage(out, runner=gates.E3C_RUNNER):
+            self.calls.append(("e3c",))
+            return {"stage": "backend-local", "verdict": "PASS"}
+
+        def s3_up(port, name, out, wait_s=60.0):
+            self.calls.append(("s3-up", port, name))
+            return {"stage": "s3", "verdict": s3, "started": s3 == "PASS"}
+
+        def s3_down(name, out):
+            self.calls.append(("s3-down", name))
+
+        for name, fake in (("preflight_stage", preflight_stage), ("pytest_stage", pytest_stage),
+                           ("runner_stage", runner_stage), ("e3c_stage", e3c_stage),
+                           ("s3_up", s3_up), ("s3_down", s3_down)):
+            monkeypatch.setattr(gates, name, fake)
+
+    def gate(self, tmp_path):
+        out = tmp_path / "out"
+        code = gates.main(["consumer-local", "--out", str(out)])
+        return code, json.loads((out / "verdict.json").read_text())
+
+
+def test_a_green_consumer_local_composition_passes_on_its_own_namespace(tmp_path, monkeypatch):
+    from infrx.contracts.tasklocal import local_services
+    own = local_services("e2c")
+    composed = Composed(monkeypatch)
+    code, verdict = composed.gate(tmp_path)
+    assert (code, verdict["verdict"]) == (0, "PASS")
+    names = [s["stage"] for s in verdict["stages"]]
+    assert names == ["preflight:consumer-local", "s3", *[f"api-{s}" for s in API_SUITES],
+                     "bench-test", "integration-l3", "backend-local"], names
+    assert ("s3-up", own["s3"].host_port, own["s3"].container) in composed.calls
+    api = [c for c in composed.calls if c[0] == "pytest" and c[1].startswith("api-")]
+    for _, name, argv, env in api:
+        assert env == {"INFRX_D_TASK": "e2c", "INFRX_D2_VALKEY_PORT": str(own["valkey"].host_port),
+                       "INFRX_D2_VALKEY_CONTAINER": own["valkey"].container,
+                       "INFRX_Q_VALKEY_PORT": str(own["valkey"].host_port),
+                       "INFRX_M_S3_ENDPOINT": f"http://127.0.0.1:{own['s3'].host_port}",
+                       "INFRX_M_S3_LOCAL_CREDS": "1"}, name
+    down = composed.calls.index(("s3-down", own["s3"].container))
+    assert down > composed.calls.index(api[-1])          # after the last suite that uses it
+    runners = [c[2] for c in composed.calls if c[0] == "runner"]
+    assert len(runners) == 1 and runners[0][2:5] == ["--layer", "3", "--only-suites"], runners
+    assert all("--only-suites" in argv for argv in runners)   # never run.py's `make api-test`
+    assert next(s for s in verdict["stages"] if s["stage"] == "api-d")["isolation"].startswith(
+        "partial")
+
+
+def test_a_consumer_local_without_the_stack_is_blocked_and_still_runs_layer_1(tmp_path,
+                                                                            monkeypatch):
+    composed = Composed(monkeypatch, l3_preflight="BLOCKED")
+    code, verdict = composed.gate(tmp_path)
+    assert (code, verdict["verdict"]) == (3, "BLOCKED")
+    rows = {s["stage"]: s for s in verdict["stages"]}
+    assert rows["integration-l3"]["verdict"] == "BLOCKED"
+    runners = [c[2] for c in composed.calls if c[0] == "runner"]
+    assert [argv[2:5] for argv in runners] == [["--layer", "1", "--only-suites"]]
+    assert [s["stage"] for s in verdict["stages"]][-1] == "backend-local"
+
+
+def test_a_consumer_local_without_its_s3_endpoint_is_blocked_and_sets_none(tmp_path,
+                                                                          monkeypatch):
+    composed = Composed(monkeypatch, s3="BLOCKED")
+    code, verdict = composed.gate(tmp_path)
+    assert (code, verdict["verdict"]) == (3, "BLOCKED")
+    api = [c[3] for c in composed.calls if c[0] == "pytest" and c[1].startswith("api-")]
+    assert api and not any("INFRX_M_S3_ENDPOINT" in env for env in api)
+    assert not [c for c in composed.calls if c[0] == "s3-down"]     # not ours: not removed
+
+
+def test_the_s3_endpoint_is_removed_when_a_suite_is_interrupted(tmp_path, monkeypatch):
+    composed = Composed(monkeypatch, raise_in="api-m")
+    with pytest.raises(KeyboardInterrupt):
+        composed.gate(tmp_path)
+    assert composed.calls[-1][0] == "s3-down"

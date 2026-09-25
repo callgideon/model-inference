@@ -50,6 +50,7 @@ make api-env                                            # pinned Python env (uv 
 (cd apps/app && pnpm install --frozen-lockfile)         # App checks
 docker pull <ref>                                       # each image the profile lists (see preflight output)
 apps/infrx-api/.venv/bin/python tests/integration/preflight.py consumer-local   # 0 = ready
+apps/infrx-api/.venv/bin/python tests/integration/preflight.py integration-l3   # 0 = the stack stage runs
 tests/integration/consumer-local.sh                     # or backend-certify.sh / app-e2e.sh
 ```
 
@@ -63,9 +64,9 @@ anything.
 
 | Wrapper | Composes | Verdict |
 |---|---|---|
-| `consumer-local.sh` | preflight → `tests/contracts`, `tests/d`, `m`, `w`, `g` (each `uv run --frozen pytest -q`, on the lane's own services) → the `bench-test` suite → `run.py --layer 1 --only-suites --no-mutants` → `run.py --layer 2 --no-mutants` when its own preflight passes → E3C's `tests/integration/backend/e3c/runner.py --out <out>/e3c` (NOT RUN while the file is absent; its `verdict.json["verdict"]` counts only if it agrees with the runner's exit code, else INVALID) | worst stage |
+| `consumer-local.sh` | preflight → `s3`: the gate starts the manifest's MinIO pin as `infrx-e2c-s3` on e2c's S3 port (`docker run --pull never`, health-checked; BLOCKED and no endpoint exported if it cannot start) → every maintained API suite, `tests/{contracts,d,g,i,j,m,q,t,w}` (each `uv run --frozen pytest -q`, on e2c: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER`, `INFRX_Q_VALKEY_PORT`, `INFRX_M_S3_ENDPOINT` + `INFRX_M_S3_LOCAL_CREDS=1`) → `infrx-e2c-s3` removed (also on an interrupt) → the `bench-test` suite → `run.py --layer 3 --only-suites --no-mutants` when the `integration-l3` preflight passes (stack, migrate, RLS, E3B backend, `tests/integration` with the stack up), else `run.py --layer 1 --only-suites --no-mutants` plus an `integration-l3` BLOCKED row → E3C's `tests/integration/backend/e3c/runner.py --out <out>/e3c` (NOT RUN while the file is absent; its `verdict.json["verdict"]` counts only if it agrees with the runner's exit code, else INVALID) | worst stage |
 | `consumer-local.sh --break-seam readiness\|expiry` | preflight → one existing mutant (`tests.g.mutants:pilot_starts_unreachable`, `tests.contracts.mutants:upload_expiry_ignored`) through the shared runner, pristine baseline first | must be **FAIL** (killed); PASS would be an undetected broken seam |
-| `backend-certify.sh [--certify-profile P] [--validate-only] [-- flags]` | preflight (+ profile shape) → `tests/integration/backend/certify.py` for the local fake-engine target only | `--box`/`--target` without a profile: INVALID; with one: NOT RUN, prints the recorded box command, starts nothing |
+| `backend-certify.sh [--certify-profile P] [--validate-only] [-- flags]` | preflight (+ profile shape) → `tests/integration/backend/certify.py` for the local fake-engine target only | `--box`/`--target` in any spelling certify.py's argparse accepts (`--target=URL`, an abbreviation such as `--tar`/`--b`) without a profile: INVALID; with one: NOT RUN, prints the recorded box command, starts nothing |
 | `app-e2e.sh` | preflight → `make console-test console-lint console-typecheck` | NOT RUN until E3A's browser journey exists |
 
 Each writes `<out>/verdict.json` (`--out DIR`, default a fresh `$TMPDIR/infrx-e2c-<gate>-*`),
@@ -75,15 +76,25 @@ Exit codes: **0** PASS, **1** FAIL, **3** BLOCKED or NOT RUN, **4** INVALID. Ord
 FAIL > INVALID > BLOCKED > NOT RUN > PASS.
 
 - A pytest stage that exits 0 **with skips** is BLOCKED: a required case that did not run
-  certifies nothing.
+  certifies nothing. A setup error or a pytest that exits nonzero (with or without a junit
+  report) is FAIL.
+- An **empty parametrization** (`got empty parameter set`: a mutant list whose default subset
+  is empty - tests/m `test_pilot_mutants`, tests/w `test_prep_worker_mutants` and
+  `test_worker_main_mutants` PG lists without `INFRX_MUTANTS=all`) has no case to run: it is
+  listed under `counts.empty_params`, not counted as a skip. `make api-mutants` runs those lists.
+- A **runner stage** (`run.py`, `certify.py`) is PASS only on exit 0 with a readable report
+  whose runs record no skipped case; exit 3 (PENDING) is BLOCKED, exit 0 without a report is
+  FAIL. At layer 1, `tests/integration` skips 103 stack cases (79 backend, 24 seeded
+  services), so `integration-l1` is BLOCKED; they run at layer 3.
 - **Quarantine** is a strict `xfail` (or a skip): the stage is BLOCKED and lists the reasons, so
   the gate cannot be PASS while one stands. tests/d carries five today (0007 public-listing
   case, two unbuilt provider_dev admissions, the 0011 `state_conflict` vs fake
   `idempotency_conflict` delta, the F2 two-organization case); none records an owner or expiry
   yet - add them to the reason when quarantining.
-- pytest stages run with `--basetemp=<out>/basetemp/<stage>`: pytest < 9.0.3 roots its
-  temporary directories in the shared `/tmp/pytest-of-<user>` (GHSA-6w46-j5rx-g56g). `TMPDIR`
-  is deliberately not moved: the D/Q harnesses take their host-wide `flock`s under it.
+- pytest stages run with a private `--basetemp` (`mkdtemp`, mode 0700, `$TMPDIR/infrx-e2c-<stage>-*`,
+  removed afterwards): pytest < 9.0.3 roots its temporary directories in the shared
+  `/tmp/pytest-of-<user>` (GHSA-6w46-j5rx-g56g). `TMPDIR` is deliberately not moved: the D/Q
+  harnesses take their host-wide `flock`s under it.
 
 ## Namespaces and teardown
 
@@ -94,8 +105,8 @@ Ports, container names and database names come from **one registry**,
 
 | Namespace | Source | Ports | Containers / DB / objects | Used by |
 |---|---|---|---|---|
-| `e2c` | tasklocal `e2c` | 55448 PostgreSQL, 55474 Valkey (55475 S3 reserved, unused) at efad43e0 | `infrx-e2c-postgres` (`infrx_e2c`), `infrx-e2c-valkey`; object prefix `test/e2c/` | consumer-local API stages: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER` |
-| `e2` | harness `e2` | 55500, 55523, 55532, 55579, 55580, 55590 | `infrx-e2-*`, `infrx_e2`, `test/e2/`, `infrx_e2:` | `run.py` layers, certify.py local |
+| `e2c` | tasklocal `e2c` | 55448 PostgreSQL, Valkey and S3 from tasklocal (55474/55475 at efad43e0; 55493/55494 on `claude/consumer-v1`, whose value wins at merge) | `infrx-e2c-postgres` (`infrx_e2c`), `infrx-e2c-valkey`, `infrx-q3-valkey-<valkey port>` (tests/q's name for a non-default port), `infrx-e2c-s3` (started and removed by the gate); buckets `infrx-m1l2` and tests/w's | consumer-local API stages: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER`, `INFRX_Q_VALKEY_PORT`, `INFRX_M_S3_ENDPOINT` |
+| `e2` | harness `e2` | 55500, 55523, 55532, 55579, 55580, 55590 (PostgREST 55530/55531 at layer 3) | `infrx-e2-*`, `infrx_e2`, `test/e2/`, `infrx_e2:` | consumer-local's `integration-l3` (`run.py --layer 3`), certify.py local |
 | `e3c` | harness `e3c` (E2's layout +1400; tasklocal block 56900–56999) | 56900, 56923, 56932, 56979, 56980, 56990 | `infrx-e3c-*`, `infrx_e3c` | E3C's `backend/e3c/runner.py` (consumer-local's last stage) |
 | `e2c-selftest` | E2C lane block | 55510–55519 | none (`infrx-e2c-selftest-*` reserved) | `test_preflight.py` binds 55510 |
 
@@ -112,7 +123,7 @@ Preflight reports the exposed ports as `ephemeral-overlap: risk`; it never chang
 because a collision can only produce a spurious BLOCKED/FAIL, not a pass. The host owner has
 since reserved `55432-55499,56379,56700-56999,58123,59000,59100,59110` (P-21,
 `/etc/sysctl.d/60-infrx-task-ports.conf`): tasklocal's per-lane ports and the e3b2/e4b/e3c
-compose blocks are safe. Still exposed, and reported as a risk by `integration-l2` and
+compose blocks are safe. Still exposed, and reported as a risk by `integration-l3` and
 `backend-certify`: E2's own block **55500–55599** (55500, 55523, 55532, 55579, 55580, 55590)
 and the E2C self-test block 55510–55519. Adding `55500-55599` to the same file closes it.
 Teardown belongs to the runner that created the resource: `pgharness`/`vkstore` remove their
@@ -121,9 +132,18 @@ containers at interpreter exit (only ones carrying this checkout's label), `run.
 `docker ps -a --filter name=infrx-e2c-` and `docker ps -a --filter name=infrx-e2-`; the next
 run of the same harness replaces its own labelled leftovers and reports foreign ones.
 
-Known limit: mutant copies of DB-backed lists run with the shared runner's fixed environment
-(`Runner.env`), which does not carry `INFRX_D_TASK`, so they fall back to `d1` (55432) under
-its host-wide lock.
+Known limits (each recorded in the verdict, each a wiring request in the E2C evidence):
+
+- `api-d` is **not fully isolated**: mutant copies of DB-backed D lists (tests/d/test_signup.py's
+  code mutants) run with the shared runner's fixed environment (`Runner.env=()`), which does
+  not carry `INFRX_D_TASK`, so they use `d1`'s PostgreSQL (55432) under its host-wide lock. The
+  `api-d` row carries `"isolation": "partial: …"`.
+- `run.py --layer 3` reruns `tests/integration` after the backend stage has removed PostgREST,
+  so the two journey cases that need it skip there (read from `run.py`, not measured here):
+  `integration-l3` stays BLOCKED until `run.py`'s layer-3 suites run leaves out the backend
+  suite its own stage already ran.
+- `run.py`'s own `make api-test` (without `--only-suites`) pins `INFRX_D_TASK=e3b2d` and
+  `INFRX_Q_VALKEY_PORT=55469` (d10's Valkey); the gate never runs it.
 
 **Credentials.** None are needed. Every local credential is a fixed test literal in the
 harness/compose files. Nothing here reaches the hosted database, the pilot box or AWS; a
@@ -146,3 +166,7 @@ INVALID.
 
 - 2026-09-24 (E2C): manifest measured on the development host; preflight, gates and platform
   declarations added; counts and failures in `research/plan/evidence/e/E2C-*.md`.
+- 2026-09-25 (E2C fix round): every API suite in consumer-local; the gate starts its own
+  MinIO for the S3 cases; runner stages read their reports' skips; the stack stage is layer 3;
+  empty parametrizations listed, not skipped; remote certify flags in any argparse spelling;
+  known limits above. Evidence `research/plan/evidence/e/E2C-f61d2f0.md` (fix round).

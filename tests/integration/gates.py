@@ -12,8 +12,11 @@ The gate is the WORST stage: FAIL > INVALID > BLOCKED > NOT RUN > PASS. A stage 
 not run (missing tool, image, busy namespace) is BLOCKED; a pytest stage that passed with
 skips is BLOCKED too, because a required case that did not run cannot certify anything; and
 so is one with strict xfails - they are the suite's quarantine (known gaps), and a quarantine
-prevents claiming the gate passed. Both are listed with their reasons.
-Nothing here provisions, pulls or deletes: the runners it calls own their own resources.
+prevents claiming the gate passed. Both are listed with their reasons. So is a runner stage
+whose report records a skipped case. An empty parametrization (a mutant list whose default
+subset is empty) has no case to run: it is listed, not counted as a skip.
+Nothing here pulls. The runners own their resources; the gate starts one itself - the MinIO
+for tests/m and tests/w's S3 cases on e2c's S3 port (`--pull never`), removed afterwards.
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +53,20 @@ SEAMS = {
 }
 # E3C's BACKEND-LOCAL runner (E3C WR-3): its own verdict.json, E2C's ranking and exit codes.
 E3C_RUNNER = REPO / "tests" / "integration" / "backend" / "e3c" / "runner.py"
+# certify.py flags that point it at a deployed endpoint (its argparse also takes `--flag=v`
+# and unambiguous prefixes, allow_abbrev).
+REMOTE_FLAGS = ("--box", "--target")
+# pytest's placeholder for a parametrization with no values: not a case that did not run.
+EMPTY_PARAMS = "got empty parameter set"
+# Every maintained suite `make api-test` runs (apps/infrx-api/tests/<suite>; brief 03
+# "Existing verification entrypoints to retain").
+API_SUITES = ("contracts", "d", "g", "i", "j", "m", "q", "t", "w")
+# The shared mutant runner copies only `Runner.env`; the D runners declare none, so a copy
+# of a DB-backed D list (tests/d/test_signup.py's code mutants) resolves pgharness to d1.
+D_ISOLATION = ("partial: mutant copies of DB-backed D lists run with the shared runner's "
+               "fixed environment (Runner.env=()), so they use d1's PostgreSQL (55432) under "
+               "its host-wide lock, not e2c's; wiring request E2C-FR-1")
+S3_LABEL = "ai.infrx.e2c.checkout"
 # The recorded E4B box invocation (certify.py's docstring; E4B box protocol).
 BOX_FLAGS = ("--no-stack --box --target http://127.0.0.1:8001/v1 --engine-url "
              "http://127.0.0.1:8000 --metrics-url http://127.0.0.1:8001/metrics "
@@ -65,12 +83,16 @@ def junit_counts(path: Path) -> dict:
     """Counts from a pytest junit file. pytest writes an xfail as <skipped type=pytest.xfail>;
     it is counted apart from a real skip."""
     counts = collections.Counter()
-    skips, xfails, failed = collections.Counter(), collections.Counter(), []
+    skips, xfails, failed, empty = collections.Counter(), collections.Counter(), [], []
     for case in ET.parse(path).getroot().iter("testcase"):
-        counts["tests"] += 1
         node = f"{case.get('classname')}::{case.get('name')}"
         outcome = next((child for child in case
                         if child.tag in ("failure", "error", "skipped")), None)
+        if outcome is not None and outcome.tag == "skipped" and \
+                outcome.get("message", "").startswith(EMPTY_PARAMS):
+            empty.append(node)
+            continue
+        counts["tests"] += 1
         if outcome is None:
             counts["passed"] += 1
         elif outcome.tag == "skipped" and outcome.get("type") == "pytest.xfail":
@@ -85,7 +107,7 @@ def junit_counts(path: Path) -> dict:
     return {**{k: counts[k] for k in ("tests", "passed", "failed", "errors", "skipped",
                                       "xfailed")},
             "skip_reasons": dict(skips.most_common()), "xfail_reasons": dict(xfails),
-            "failed_ids": failed}
+            "failed_ids": failed, "empty_params": empty}
 
 
 def run(name: str, argv: list[str], cwd: Path, out: Path, env: dict | None = None):
@@ -128,12 +150,27 @@ def pytest_stage(name: str, argv: list[str], cwd: Path, out: Path,
 
 
 def runner_stage(name: str, argv: list[str], out: Path, report: Path | None = None) -> dict:
-    """A runner with the 0 PASS / 1 FAIL / 3 PENDING convention (run.py, certify.py)."""
+    """A runner with the 0 PASS / 1 FAIL / 3 PENDING convention (run.py, certify.py). Exit 0
+    is not evidence that every case ran: run.py passes `pytest tests/integration` with 103
+    skipped layer-3 cases at layer 1. The report's per-run skip counts decide, and exit 0
+    with no readable report proved nothing."""
     code, seconds, log = run(name, argv, REPO, out)
+    row = {"stage": name, "command": " ".join(argv), "exit": code, "duration_s": seconds,
+           "log": str(log), **({"report": str(report)} if report else {})}
     verdict = {0: PASS, 3: BLOCKED}.get(code, FAIL)
-    return {"stage": name, "command": " ".join(argv), "exit": code, "duration_s": seconds,
-            "verdict": verdict, "log": str(log),
-            **({"report": str(report)} if report else {})}
+    if verdict != PASS or report is None:
+        return {**row, "verdict": verdict}
+    try:
+        stages = json.loads(report.read_text())["stages"]
+        skipped = {f"{stage['stage']}: {one.get('argv')}": one["counts"]["skipped"]
+                   for stage in stages for one in stage.get("runs") or ()
+                   if (one.get("counts") or {}).get("skipped")}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {**row, "verdict": FAIL, "detail": f"exit 0 and no readable report: {exc!r}"}
+    if skipped:
+        return {**row, "verdict": BLOCKED, "skipped": skipped,
+                "detail": f"{sum(skipped.values())} case(s) skipped inside the runner"}
+    return {**row, "verdict": PASS}
 
 
 def preflight_stage(profile: str, out: Path, certify_profile: Path | None = None) -> dict:
@@ -194,6 +231,39 @@ def uv() -> list[str]:
     return ["uv", "run", "--frozen", "pytest", "-q", "-p", "no:cacheprovider"]
 
 
+def s3_up(port: int, name: str, out: Path, wait_s: float = 60.0) -> dict:
+    """MinIO (the manifest's pin, `--pull never`: an absent image fails the start) on e2c's
+    S3 port, with the E2 stack's local literals passed by NAME so no value is in argv or
+    the verdict. tests/m and tests/w only read an endpoint; nothing else starts one."""
+    import harness
+    argv = ["docker", "run", "-d", "--pull", "never", "--name", name,
+            "--label", f"{S3_LABEL}={REPO}", "-p", f"127.0.0.1:{port}:9000",
+            "-e", "MINIO_ROOT_USER", "-e", "MINIO_ROOT_PASSWORD",
+            pf.load()["images"]["minio"]["ref"], "server", "/data", "--address", ":9000"]
+    code, seconds, log = run("s3", argv, REPO, out,
+                             {"MINIO_ROOT_USER": harness.S3_ACCESS_KEY,
+                              "MINIO_ROOT_PASSWORD": harness.S3_SECRET_KEY})
+    row = {"stage": "s3", "command": " ".join(argv), "exit": code, "log": str(log),
+           "started": code == 0}
+    if code != 0:
+        return {**row, "verdict": BLOCKED, "detail": "the S3 endpoint could not start"}
+    health = f"http://127.0.0.1:{port}/minio/health/live"
+    deadline = time.monotonic() + wait_s
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(health, timeout=2) as answer:
+                if answer.status == 200:
+                    return {**row, "verdict": PASS, "endpoint": f"http://127.0.0.1:{port}"}
+        except OSError:
+            pass
+        time.sleep(0.5)
+    return {**row, "verdict": BLOCKED, "detail": f"{health} not healthy after {wait_s:.0f} s"}
+
+
+def s3_down(name: str, out: Path) -> None:
+    run("s3-down", ["docker", "rm", "-f", "-v", name], REPO, out)
+
+
 def consumer_local(args, out: Path) -> list[dict]:
     if args.break_seam:                  # the seam's cases need no container
         stages = [preflight_stage("seam", out)]
@@ -202,35 +272,54 @@ def consumer_local(args, out: Path) -> list[dict]:
     stages = [preflight_stage("consumer-local", out)]
     if stages[0]["verdict"] != PASS:
         return stages
-    # The lane's own task-local services (tasklocal.py `e2c`), not D1's shared defaults.
-    ports, containers = pf.namespace(pf.load()["namespaces"]["e2c"])
-    own = {"INFRX_D_TASK": "e2c", "INFRX_D2_VALKEY_PORT": str(ports[1]),
-           "INFRX_D2_VALKEY_CONTAINER": containers[1]}
-    for suite in ("contracts", "d", "m", "w", "g"):
-        stages.append(pytest_stage(f"api-{suite}", [*uv(), f"tests/{suite}"], API, out, own))
+    # The lane's own task-local services (tasklocal.py `e2c`), never D1's/Q3's defaults.
+    spec = pf.load()["namespaces"]["e2c"]
+    own = dict(zip(spec["services"], zip(*pf.namespace(spec))))    # service -> (port, name)
+    env = {"INFRX_D_TASK": "e2c", "INFRX_D2_VALKEY_PORT": str(own["valkey"][0]),
+           "INFRX_D2_VALKEY_CONTAINER": own["valkey"][1],
+           "INFRX_Q_VALKEY_PORT": str(own["valkey"][0])}
+    s3 = s3_up(*own["s3"], out)
+    stages.append(s3)
+    if s3["verdict"] == PASS:            # else the S3 cases skip: BLOCKED, not FAIL
+        env |= {"INFRX_M_S3_ENDPOINT": f"http://127.0.0.1:{own['s3'][0]}",
+                "INFRX_M_S3_LOCAL_CREDS": "1"}
+    try:
+        for suite in API_SUITES:
+            stage = pytest_stage(f"api-{suite}", [*uv(), f"tests/{suite}"], API, out, env)
+            stages.append({**stage, "isolation": D_ISOLATION} if suite == "d" else stage)
+    finally:
+        if s3["started"]:
+            s3_down(own["s3"][1], out)
     stages.append(pytest_stage("bench-test", [str(PY), "-m", "pytest", "-q", "-p",
                                               "no:cacheprovider", "models/marlin2b/tests"],
                                REPO, out))
-    report = out / "integration-l1.json"
-    stages.append(runner_stage("integration-l1", [str(PY), "tests/integration/run.py",
-                                                  "--layer", "1", "--only-suites",
-                                                  "--no-mutants", "--report", str(report)],
-                               out, report))
-    ready = preflight_stage("integration-l2", out)
-    if ready["verdict"] != PASS:
-        stages.append({**ready, "stage": "integration-l2",
-                       "detail": "not run: the layer-2 stack's prerequisites are missing"})
-    else:
-        report = out / "integration-l2.json"
-        stages.append(runner_stage("integration-l2", [str(PY), "tests/integration/run.py",
-                                                      "--layer", "2", "--no-mutants",
-                                                      "--report", str(report)], out, report))
+    # tests/integration's stack cases (backend + seeded services) run only at layer 3, which
+    # also provisions, migrates and checks RLS (layer 2's stages). `--only-suites`: run.py's
+    # own `make api-test` pins other lanes' task ports (e3b2d, 55469) - the stages above
+    # already ran those suites on e2c.
+    ready = preflight_stage("integration-l3", out)
+    layer = "3" if ready["verdict"] == PASS else "1"
+    report = out / f"integration-l{layer}.json"
+    stages.append(runner_stage(f"integration-l{layer}", [
+        str(PY), "tests/integration/run.py", "--layer", layer, "--only-suites", "--no-mutants",
+        "--report", str(report)], out, report))
+    if layer == "1":
+        stages.append({**ready, "stage": "integration-l3",
+                       "detail": "not run: the E2 stack's prerequisites are missing"})
     stages.append(e3c_stage(out))
     return stages
 
 
+def remote_flags(certify_args: list[str]) -> list[str]:
+    """Every argument certify.py's parser would read as --box or --target: exact, `=value`
+    or an unambiguous prefix (`--tar`). Fail closed: any such prefix counts."""
+    return [arg for arg in certify_args if arg.startswith("--")
+            and len(name := arg.split("=", 1)[0]) > 2
+            and any(flag.startswith(name) for flag in REMOTE_FLAGS)]
+
+
 def backend_certify(args, out: Path) -> list[dict]:
-    remote = any(flag in args.certify_args for flag in ("--box", "--target"))
+    remote = remote_flags(args.certify_args)
     if remote and args.certify_profile is None:
         return [{"stage": "certify-profile", "verdict": INVALID,
                  "detail": "a --box/--target run needs --certify-profile (E1C's load/cert "

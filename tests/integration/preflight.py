@@ -183,7 +183,9 @@ def preflight(profile: str, certify_profile: Path | None = None,
     checks += [check_tool(name, env["tools"][name]) for name in wanted["tools"]]
     docker_ok = any(c["check"] == "tool:docker" and c["status"] == "ok" for c in checks)
     checks += [check_image(name, env["images"][name], docker_ok) for name in wanted["images"]]
-    names = containers() if docker_ok else None
+    # a leftover container holds a namespace even when its port is free, whether or not
+    # the profile itself needs docker (containers() is None when docker cannot answer)
+    names = containers() if wanted["namespaces"] else None
     spaces = [check_namespace(name, env["namespaces"][name], names)
               for name in wanted["namespaces"]]
     checks += spaces

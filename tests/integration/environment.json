@@ -33,13 +33,13 @@
     "postgrest": {"ref": "postgrest/postgrest@sha256:a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732", "tag": "v13.0.4", "used_by": "tests/integration/backend/compose.yaml (layer 3)"}
   },
   "namespaces": {
-    "e2c": {"tasklocal": "e2c", "services": ["postgres", "valkey"], "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c) and INFRX_D2_VALKEY_PORT/_CONTAINER (infrx-e2c-valkey); ports from infrx/contracts/tasklocal.py"},
-    "e2": {"harness": "e2", "use": "make integration / run.py layers 1-3 and certify.py's local stack; ports from tests/integration/harness.py (asserted against tasklocal's E block)"},
+    "e2c": {"tasklocal": "e2c", "services": ["postgres", "valkey", "s3"], "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER and INFRX_Q_VALKEY_PORT (the e2c Valkey port), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py"},
+    "e2": {"harness": "e2", "use": "make integration / run.py layers 2-3 (consumer-local's integration-l3 stage) and certify.py's local stack; ports from tests/integration/harness.py (asserted against tasklocal's E block)"},
     "e2c-selftest": {"ports": [55510, 55511, 55512, 55513, 55514, 55515, 55516, 55517, 55518, 55519], "container_prefix": "infrx-e2c-selftest-", "use": "test_preflight.py binds 55510 to prove a busy port is BLOCKED; E2C lane block, no service"}
   },
   "profiles": {
-    "consumer-local": {"tools": ["python", "uv", "bash", "coreutils", "flock", "systemd-analyze", "git", "docker"], "images": ["postgres-plain", "valkey"], "namespaces": ["e2c"]},
-    "integration-l2": {"tools": ["python", "docker", "docker-compose"], "images": ["supabase-postgres", "valkey", "clickhouse", "minio"], "namespaces": ["e2"]},
+    "consumer-local": {"tools": ["python", "uv", "bash", "coreutils", "flock", "systemd-analyze", "git", "docker"], "images": ["postgres-plain", "valkey", "minio"], "namespaces": ["e2c"]},
+    "integration-l3": {"tools": ["python", "docker", "docker-compose"], "images": ["supabase-postgres", "valkey", "clickhouse", "minio", "postgrest"], "namespaces": ["e2"]},
     "backend-certify": {"tools": ["python", "uv", "bash", "coreutils", "git", "docker", "docker-compose"], "images": ["supabase-postgres", "valkey", "clickhouse", "minio", "postgrest"], "namespaces": ["e2"]},
     "app-e2e": {"tools": ["node", "pnpm"], "images": [], "namespaces": []},
     "seam": {"tools": ["python"], "images": [], "namespaces": []},
