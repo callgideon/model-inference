@@ -151,6 +151,19 @@ FAMILIES: dict[str, Spec] = {
     "infrx_gpu_memory_bytes": Spec("gauge", "GPU memory.",
                                    (("gpu", _DEVICE), ("state", frozenset({"used", "total"})))),
     "infrx_gpu_utilization_ratio": Spec("gauge", "GPU utilization, 0-1.", (("gpu", _DEVICE),)),
+    # --- database pool (psycopg_pool pop_stats at scrape, WR-I8-2) ----------------------
+    "infrx_db_pool_connections": Spec(
+        "gauge", "Connections of this process's database pool.",
+        (("state", frozenset({"size", "available", "max"})),)),
+    "infrx_db_pool_requests_waiting": Spec("gauge", "Requests queued for a pool connection."),
+    "infrx_db_pool_requests_total": Spec("counter", "Connections requested from the pool."),
+    "infrx_db_pool_wait_seconds_total": Spec("counter", "Time requests waited for a connection."),
+    "infrx_db_pool_timeouts_total": Spec(
+        "counter", "Pool requests that ended in an error (timeout, queue full)."),
+    "infrx_db_pool_connection_errors_total": Spec(
+        "counter", "Failed attempts to open a server connection."),
+    "infrx_db_pool_connections_lost_total": Spec(
+        "counter", "Pooled connections found broken."),
     "infrx_build_info": Spec("gauge", "1, labelled with the deployed git revision and image.",
                              (("revision", _REVISION), ("image", _IMAGE))),
 }
@@ -375,3 +388,16 @@ def record_reconciliation(reg: Registry, *, drift: int, holds_unknown: int,
     reg.set("infrx_unsettleable_jobs", unsettleable)
     if drift == 0:
         reg.set("infrx_reconciliation_last_success_timestamp_seconds", now)
+
+
+def record_pool(reg: Registry, stats: Mapping[str, float]) -> None:
+    """`AsyncConnectionPool.pop_stats()` at scrape: gauges as read, counters as the deltas
+    since the previous pop (psycopg_pool omits a counter that has not moved)."""
+    for state in ("size", "available", "max"):
+        reg.set("infrx_db_pool_connections", stats.get(f"pool_{state}", 0), state=state)
+    reg.set("infrx_db_pool_requests_waiting", stats.get("requests_waiting", 0))
+    reg.inc("infrx_db_pool_requests_total", stats.get("requests_num", 0))
+    reg.inc("infrx_db_pool_wait_seconds_total", stats.get("requests_wait_ms", 0) / 1000)
+    reg.inc("infrx_db_pool_timeouts_total", stats.get("requests_errors", 0))
+    reg.inc("infrx_db_pool_connection_errors_total", stats.get("connections_errors", 0))
+    reg.inc("infrx_db_pool_connections_lost_total", stats.get("connections_lost", 0))

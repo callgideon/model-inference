@@ -21,7 +21,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .host import collect_host
-from .metrics import CONTENT_TYPE, Registry
+from .metrics import CONTENT_TYPE, Registry, record_pool
 
 PATH = "/metrics"
 LOOPBACK = frozenset({"127.0.0.1", "::1"})
@@ -50,6 +50,9 @@ def register(app, rt):
         limit = getattr(getattr(rt, "settings", None), "max_inflight", None)
         if limit is not None:
             rt.metrics.set("infrx_inflight_limit", limit)
+        pool = getattr(getattr(rt, "lifetime", None), "pool", None)
+        if pool is not None:                  # WR-I8-2: the stores' pool, read at scrape
+            record_pool(rt.metrics, pool.pop_stats())
         await asyncio.to_thread(collect_host, rt.metrics, disks)
         return PlainTextResponse(rt.metrics.render(), media_type=CONTENT_TYPE)
 

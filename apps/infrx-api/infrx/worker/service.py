@@ -41,7 +41,7 @@ import signal
 from dataclasses import asdict, dataclass, field
 
 from ..contracts.records import IndexEvent
-from ..observe.metrics import CONTENT_TYPE
+from ..observe.metrics import CONTENT_TYPE, record_pool
 from .loop import DrainReport, WorkerLoop
 
 log = logging.getLogger("infrx.worker")
@@ -67,6 +67,7 @@ class WorkerService:
     health_host: str = "127.0.0.1"
     health_port: int | None = None               # None: no listener (embedded use)
     metrics: object | None = None                # observe.metrics.Registry, on GET /metrics
+    pool: object | None = None                   # psycopg_pool, read into metrics at scrape
     preparation: WorkerLoop | None = None        # PREP-WORKER: the prepare_dispatch pool
     preparation_concurrency: int = 1
     reaped: int = 0
@@ -245,6 +246,8 @@ class WorkerService:
             method, path = (request + ["", ""])[:2]
             kind = "application/json"
             if method == "GET" and path == METRICS_PATH and self.metrics is not None:
+                if self.pool is not None:        # WR-I8-2
+                    record_pool(self.metrics, self.pool.pop_stats())
                 status, raw, kind = 200, self.metrics.render().encode(), CONTENT_TYPE
             else:
                 if method != "GET" or path not in (READY_PATH, LIVE_PATH):
