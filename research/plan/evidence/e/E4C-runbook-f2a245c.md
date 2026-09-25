@@ -221,3 +221,95 @@ Proof: `python3 research/plan/scripts/validate_plan.py` checks local links, and 
 - Remaining for this lane: 0 h optimistic, 0.5 h likely (a review fix round), 1.5 h pessimistic.
 - Confidence: high.
 - Basis: all five deliverables are done and checked; the full e4b mutant run was about 56 % through with no survivor at handback.
+
+## Fix round (2026-09-25; handback `e46079ea` → fix `b04693eb`, evidence commit follows)
+
+- **Commits:**
+  - `030cee11`: the failing regression, committed alone.
+  - `b04693eb`: the fix.
+- **Paths changed:**
+  - `models/marlin2b/results/E4C-runbook.md`
+  - `models/marlin2b/profiles/E4C-box.two-tenant.base.json` (this lane's own new file, never frozen or run)
+  - `models/marlin2b/tests/test_profile.py`
+- **Not touched:** `E4C-box.base.json` is byte-identical (`c0d4aa1b…d2ff`). `certify.py`, `test_certify.py`, `e4b_mutants.py` and the edge profile are unchanged. No box, AWS, SSM, hosted DB, docker or secret was used.
+
+### Findings
+
+| id | fixed | what changed |
+|---|---|---|
+| 0-RB-1, 1-RB-1 | yes | The key phases are split. 0.6 now creates only the tenant-2 account and grant. The key is issued in §5.0, after certify's report is fetched. 0.8 is a **fresh** read-only `credit-transition --dry-run` taken after 0.5 and 0.6. Its `taken_at` is that dry-run's `as_of`, and its `source` is that dry-run's sha256, which fixes the misstated source. Its active prefixes must be exactly `142c7d81`, or the run stops. It is written as `keys-certify.json`, and §3 and §4 use it. §5.0 takes a second fresh inventory, `keys-journey.json` (`142c7d81` plus tenant 2), used only by the journey. No key may be issued between 0.8 and the end of §4. A certify rerun after §5.0 revokes the tenant-2 key first. §1 step 5: O4 runs **without** `P24_APPROVED` (canary timer off) until §5 ends. A canary key other than `142c7d81` must not be active at 0.8. After §5, O4 is re-run with `P24_APPROVED`, then O5 |
+| 0-RB-2 | yes | The §3 box line is `--rate 0.5 --requests 3600`: exit 0, runnable, projected 48660.4800. A note says certify stamps 0.5, 1.0 and 2.0 for the envelope and 0.25 for the soak into each cell's own copy, and forbids editing the filled rate |
+| 0-RB-3, 1-RB-3 | yes (runbook); the leg is BLOCKED on an operator input | The journey profile's forms are now `upload, upload, video_b64, video_b64, video_url, text, text, video_url` with 24 requests, so each tenant sends 3 of each of the four forms (bounds below). The command passes `--media-base-url "$MEDIA_BASE_URL"`, an **[operator-held]** https prefix serving the corpus by basename. None exists in the repo or the decisions, so until one is named the leg is BLOCKED and check 5 stays false (§5.0 item 4). New sync leg: a non-stream text call and its idempotent replay per tenant, through header-file curl. New foreign-call leg: GET, result read and DELETE on the other tenant's job must answer 404 `not_found`, and the owner's job must still end `succeeded`. §5 now says a NOT RUN or BLOCKED leg leaves check 5 false and BACKEND-READY pending. Tick-off row 5 lists every required mode |
+| 1-RB-2 | yes | `--cancel-fraction 0.4` with the fixed seed cancels seqs **4, 7, 8, 18**: A `video_url` c016, B `video_url` c037 (72 s, in-cap), A upload c019, A `video_b64` c015. That is at least one per tenant, all in-cap media, no text. The runbook records them as "expected cancelled seqs" and adds a `python3 -c … build_schedule` line that must print `[4, 7, 8, 18]` before the run. There is also one over-cap item per tenant (seq 3 B c025, seq 12 A c051) for the typed-400 path |
+
+**Journey profile, new values.**
+- `max_requests` 24
+- `max_output_tokens` 3,072
+- `max_spend` 299 CREDIT: 24 × 12.4416 = 298.5984. Tenant B's worst case is 149.2992.
+- Media bytes 89,418,031, under 210,000,000.
+- sha256 `497c00100e8a586e665e569aaa63818eacc0aa6acf4d72389ee56a644ab0faf2` (was `886bb02b…`).
+
+The layout was chosen by search:
+- Seed 20260922 is kept, and so is the 8-form cycle.
+- 24 is the smallest request count where each tenant keeps an accepted item of every form and has at least one in-cap media cancel.
+- With the natural order (url, url, text, text) it takes 32.
+
+### The regression (tests first)
+
+`test_every_runbook_bench_command_validates_as_written_and_the_journey_covers_p17_5` (in `test_profile.py`).
+
+**What it does:**
+- It parses the runbook itself: every `bench.py` command, with `$M` and `$C` expanded, and every key inventory the runbook writes, by file name.
+- It runs each command with `--validate-only` against the filled base the command names and the inventory the command names. Each must exit 0, runnable, with no errors, blocks or warnings, and must match the `projected` figure in its comment.
+- Each inventory must equal its profile's `test_key_ids`.
+- For the journey command, it rebuilds the schedule from the command's own flags. Each tenant must have an accepted item of each of the four forms and at least one cancel. Every cancel must be an in-cap media item. The cancel list must equal the runbook's stated seqs. `--media-base-url` must be https.
+
+**Fails-before** (at `030cee11`, against the handback runbook; one run shows every finding):
+
+```
+E4C-box.json with keys.json: exit 2, errors ["key inventory: 1 active key(s) outside target.test_key_ids: ['5e5e5e5e'] ...", 'measurement.rate_per_s is 0.5, the run uses 0.25']   # 0-RB-1/1-RB-1, 0-RB-2
+E4C-edge.json with keys.json: exit 2, errors ["key inventory: 1 active key(s) outside target.test_key_ids: ['5e5e5e5e'] ..."]                                              # 0-RB-1/1-RB-1
+tenant 0: no accepted ['text', 'video_url'] / tenant 1: no accepted ['text', 'video_url']                                                                              # 0-RB-3/1-RB-3
+tenant 0: nothing cancelled, so nothing to replay / tenant 1: the same; cancelled seqs []                                                                              # 1-RB-2
+the journey passes no https --media-base-url for its video_url leg                                                                                                    # 0-RB-3
+```
+
+**After `b04693eb`:** pass.
+
+**Hand mutations of the fixed runbook**, each run then restored. All were killed:
+- `keys-certify.json` gains the tenant-2 prefix
+- the box line goes back to `--rate 0.25`
+- `--cancel-fraction 0.25`
+- the stated cancel seqs are edited
+- the forms go back to the four-item list
+- `--media-base-url` is dropped
+- the journey points at `keys-certify.json` (killed by the inventory-equals-test-keys check, added after this mutant first survived)
+
+**The existing two-tenant test** (`test_the_e4c_two_tenant_profile_…`) was updated to the new shape: 24 requests, the eight forms, `--media-base-url`, and 298.5984 ≤ 299.
+
+**No new e4b mutant.** The `e4b_mutants.py` suites are `test_certify.py` and `test_endpoint_doc.py`, and this round changed no certify code.
+
+### Commands (at `b04693eb`)
+
+| cmd | exit | result |
+|---|---|---|
+| `make bench-test` | 0 | **116 passed** (115 + 1 new) |
+| `apps/infrx-api/.venv/bin/python -m pytest -q models/marlin2b/tests/test_profile.py` | 0 | 25 passed |
+| `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py tests/integration/test_run.py` | 0 | 102 passed |
+| `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_e4b_mutants.py` (default subset) | 0 | 5 passed |
+| `apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py` | 0 | 116 mutants: 113 killed, 3 controls survived (unchanged) |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS (932 local links) |
+| the runbook's `python3 -c … build_schedule` cancel line | 0 | `[4, 7, 8, 18]` |
+
+### Open issues added by this round
+
+6. **`MEDIA_BASE_URL`** (operator input). The video URL form needs an approved public https prefix serving the E1 corpus by basename. Without one, the SSE journey is BLOCKED and P-17 check 5 stays false. A proposed 15-pending-inputs row is for the coordinator.
+7. **Cancel timing.** Seq 18 (c015, 5 s, 37 KB) and seq 4 (c016, 7 s) may finish before the 2 s cancel point. The pass needs only one `cancelled` row per tenant. Tenant B's only cancel is seq 7 (c037, 72 s, fetched by URL), the most likely to still be in prefill at 2 s. It was not measured here.
+
+Open issue 2 (sync leg) is closed by the header-file curl leg. It is still unrun: it runs in the window.
+
+### Estimate
+
+- Remaining for this lane: 0 h optimistic, 0.25 h likely (review of this round), 1 h pessimistic.
+- Confidence: high.
+- Basis: every finding has a failing-then-passing oracle, and every suite is green.
