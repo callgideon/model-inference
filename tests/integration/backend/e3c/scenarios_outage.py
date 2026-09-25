@@ -17,25 +17,40 @@ import world                                            # noqa: E402
 
 import stack                                            # noqa: E402
 
-BOUND_S = 45.0           # a paused dependency must be answered within this, not waited on
+# R130 (G7), per service: a request meeting one stalled PostgreSQL call answers a retryable
+# 503 within 40 s; the s3 case is a video request whose stall lands in media preparation
+# (the source write), which answers at the preparation bound (fetch + probe + 10 s = 40 s
+# by default) - R130's "a preparation ... followed by a stalled store call within 60 s"
+# clause is its ceiling. (E3C phase 1 had proposed one 45 s bound; interim run 1 measured
+# 20.0 s and 40.04 s, the latter the preparation bound plus the client's round trip.)
+BOUND_S = {"postgres": 40.0, "s3": 60.0}
+MEASURE_S = 180.0        # how long the client waits to measure a late answer
 
 
-def bounded_refusal(trip, tenant, messages, key: str) -> dict:
-    """The acceptance during the outage: a retryable 503 (or a typed 504) within BOUND_S."""
+def bounded_refusal(trip, tenant, messages, key: str, record_property,
+                    bound_s: float) -> dict:
+    """The acceptance during the outage: a retryable 503 (or a typed 504) within its bound.
+    The client waits up to MEASURE_S so the answer time is MEASURED (and recorded) even when
+    it is past the bound (F-2), then the bound is asserted."""
     import httpx
-    began = time.monotonic()
+    began, answer = time.monotonic(), None
     try:
-        with httpx.Client(base_url=trip.box.url, timeout=BOUND_S + 15) as http:
+        with httpx.Client(base_url=trip.box.url, timeout=MEASURE_S) as http:
             answer = http.post("/v1/jobs", headers=trip.headers(tenant, key),
                                json={"model": stack.CREDIT_ALIAS, "messages": messages})
     except httpx.TimeoutException:
-        raise AssertionError(f"no answer within {BOUND_S + 15:.0f} s: an unbounded wait on "
-                             "the unavailable dependency") from None
+        pass
     took = time.monotonic() - began
-    assert took <= BOUND_S, f"answered only after {took:.0f} s ({answer.status_code})"
+    seen = {"status": answer.status_code if answer is not None else None,
+            "code": world.code(answer) if answer is not None else None,
+            "seconds": round(took, 1)}
+    record_property("refusal", seen)
+    assert answer is not None, f"no answer within {MEASURE_S:.0f} s: an unbounded wait on " \
+                               "the unavailable dependency"
+    assert took <= bound_s, f"answered only after {took:.1f} s ({answer.status_code})"
     assert answer.status_code in (503, 504), \
         f"not a retryable refusal: {answer.status_code} {answer.text[:200]}"
-    return {"status": answer.status_code, "code": world.code(answer), "seconds": round(took, 1)}
+    return seen
 
 
 def recovers_once(trip, tenant, messages, key: str) -> None:
@@ -59,8 +74,7 @@ def test_s08_an_unavailable_store_is_a_bounded_refusal_then_one_job(workdir, ser
         key = f"e3c-s08-{service}"
         with stack.harness.Faults() as faults:
             faults.pause(service)
-            refused = bounded_refusal(trip, alpha, messages, key)
-        record_property("refusal", refused)
+            bounded_refusal(trip, alpha, messages, key, record_property, BOUND_S[service])
         recovers_once(trip, alpha, messages, key)
 
 

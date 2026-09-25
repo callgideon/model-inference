@@ -20,7 +20,7 @@ processes and a journey's reads (`pilotbox`), and E2's controlled protocol engin
 * **bypasses** (`BYPASSES`): `INFRX_E3C_BYPASS=<name>` removes one corrective control in
   the process (the negative controls). A bypass whose target is absent refuses to start the
   process (exit 5) so a renamed seam is NOT RUN, never a vacuous pass.
-* **collector**: one real `MediaCollector` pass in a fresh process over the box's object
+* **collector**: one real M6 `RetentionCollector` pass in a fresh process over the box's object
   store and the job store's liveness - the RV-03 question ("does a fresh process know what
   is live?") asked of the real S3 and PostgreSQL.
 
@@ -266,20 +266,24 @@ def _upload_local() -> None:
 
 
 def _expiry_recompute() -> None:
-    """RESULT-EXPIRY removed: the reported and enforced expiry is recomputed from the route's
-    CURRENT `RESULT_TTL_S` over the settlement time - the base tree's `Jobs.result_expiry`."""
-    jobs = _target("infrx.gateway.routes.jobs", "Jobs")
-    _target("infrx.gateway.routes.jobs", "Jobs.result_expiry")
+    """RESULT-EXPIRY removed: the reported and enforced expiry is recomputed from the
+    gateway's CURRENT `RESULT_TTL_S` over the settlement time (the base tree's rule). G7 reads
+    the persisted `result_expires_at` off the owned outcome on every read (status, result,
+    same-key replay: all through `Relay._owned`), so the bypass rewrites it there."""
+    relay = _target("infrx.gateway.routes.relay", "Relay")
+    original = _target("infrx.gateway.routes.relay", "Relay._owned")
     from datetime import timedelta
 
     from infrx.contracts.records import JobState
 
-    def result_expiry(self, outcome):
-        if (outcome is None or outcome.state is not JobState.succeeded
-                or outcome.usage is None or not outcome.result_ref):
-            return None
-        return outcome.settled_at + timedelta(seconds=self.relay.limits.result_ttl_s)
-    jobs.result_expiry = result_expiry
+    async def _owned(self, org_id, handle):
+        admission, outcome = await original(self, org_id, handle)
+        if (outcome is not None and outcome.state is JobState.succeeded
+                and outcome.usage is not None and outcome.result_ref):
+            outcome = outcome.model_copy(update={"result_expires_at": outcome.settled_at
+                                                 + timedelta(seconds=self.limits.result_ttl_s)})
+        return admission, outcome
+    relay._owned = _owned
 
 
 def _revoke_ignored() -> None:
@@ -666,37 +670,40 @@ def objects(trip, under: str = "media/") -> set[str]:
 
 # ------------------------------------------------------------------ the collector process
 
-async def collect_once(grace_s: float) -> dict:
-    """One `MediaCollector` pass in THIS (fresh) process, composed as the pilot composes the
-    media store (M5: D10's `PgLifecycle` as ticket authority and content lifecycle): the box's
-    object store, the job store's liveness, the processing cache of the box. What it deleted,
-    by key.
+async def collect_once(grace_s: float = 0.0) -> dict:
+    """One M6 `RetentionCollector` pass in THIS (fresh) process (wiring request 3, amended):
+    D10's `PgLifecycle` decides every deletion (candidates, claim, tombstone rechecking the
+    references inside PostgreSQL), the box's object store deletes. What it deleted, by key.
+    `grace_s` no longer applies here: the grace is persisted at registration as
+    `content_objects.eligible_at` (0019), so a test moves the store clock past it instead.
+    The collector's DSN carries a connect timeout: against a paused PostgreSQL the pass must
+    answer (aborted, nothing deleted), not wait on TCP."""
+    from psycopg.conninfo import make_conninfo
 
-    Phase 2: over a durable ticket authority the base collector has no process-local tickets
-    (`MediaUploads.uploads` raises) and stops before any delete - the durable retention pass
-    over the content rows is M6's. That answers `{"blocked": "M6", ...}`: a pass that cannot
-    run is not a pass that kept everything (never a vacuous green)."""
     from infrx.config import from_env
     from infrx.gateway import pilot
-    from infrx.media.gc import MediaCollector
-    from infrx.media.prepare import ProcessingCache
-    from infrx.media.uploads import MediaUploads
-    from infrx.state.jobstore import PgJobStore, connector
+    from infrx.media.retention import RetentionCollector
+    from infrx.state.jobstore import connector
+    from infrx.state.lifecycle import PgLifecycle
     settings = from_env()
     limits = settings.pilot
-    lifecycle = pilot._pg_lifecycle(connector(limits.database_url), limits) \
-        if hasattr(pilot, "_pg_lifecycle") else None
-    store = MediaUploads(pilot.object_store(settings), limits=limits, uploads=lifecycle,
-                         content=lifecycle,
-                         cache=ProcessingCache(limits.processing_cache_dir,
-                                               ttl_s=limits.processing_cache_ttl_s))
-    if lifecycle is not None and not hasattr(store.tickets, "records"):
-        return {"blocked": "M6", "why": "the durable ticket authority has no process-local "
-                "records; the base MediaCollector stops before any delete (gc.py) and no "
-                "durable retention pass is in the tree"}
-    jobs = PgJobStore(connector(limits.database_url), limits=limits)
-    swept = await MediaCollector(store, is_live=jobs.is_live, grace_s=grace_s).sweep()
-    return {"deleted": swept.deleted, "uploads_expired": swept.uploads_expired}
+    dsn = make_conninfo(limits.database_url, connect_timeout=COLLECTOR_CONNECT_TIMEOUT_S)
+    # composed as the pilot pool is (RUNTIME-LOGIN, R127): no `set role` on a dedicated login
+    lifecycle = PgLifecycle(connector(dsn, set_role=not pilot.dedicated_login(dsn)),
+                            limits=limits)
+    report = await RetentionCollector(lifecycle, pilot.object_store(settings)).sweep()
+    return {"deleted": [key for _, key, _ in report.deleted], "uploads_expired": 0,
+            "retained": dict(report.retained), "aborted": report.aborted}
+
+
+COLLECTOR_CONNECT_TIMEOUT_S = 5
+
+
+def grace_passed() -> float:
+    """Seconds to move the store clock so content registered now is past its persisted
+    grace (`PgLifecycle`'s GRACE_S, persisted as eligible_at), with a minute to spare."""
+    from infrx.state.lifecycle import GRACE_S
+    return float(GRACE_S) + 60.0
 
 
 def collector_blocked(answers: list[dict]) -> None:

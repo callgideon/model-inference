@@ -1,0 +1,28 @@
+{
+  "task": "E3C",
+  "slice": "phase 2 interim rerun: harness re-pointed to G7 (s13 PublishedModel, expiry bypass), R130 (s08 measured), G8 lock bound (s09), RUNTIME-LOGIN (whole matrix on infrx_runtime), M6 phase 2 (WR-3 collector + grace)",
+  "activity": "review",
+  "at": "2026-09-25T18:20:00+00:00",
+  "head": "7d0d3d7b",
+  "base": "19670a8c",
+  "worktree": ".claude/worktrees/codex-e3c-rerun",
+  "branch": "codex/e3c-rerun",
+  "owned_paths": ["tests/integration/backend/e3c/", "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
+                  "research/plan/evidence/coordinator/updates/E3C-20260925T1820Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/backend/e3c (no stack)", "exit": 0, "summary": "34 passed; new bypass-install regression fails on the phase-2 world.py (expiry-recompute)"},
+    {"cmd": "make backend-local (run 1, interim, G7 head 5b38ab08, owner login)", "exit": 2, "summary": "runner exit 1, gate FAIL; 9 failed, 68 passed, 3 skipped in 760 s; s07 s13 PASS (former G7); non-passes W5 3, M6 4, harness 1 (s08 s3 zero-margin oracle), F-3 3, F-1 1"},
+    {"cmd": "consumer-local.sh --break-seam readiness / expiry", "exit": 1, "summary": "both seams FAIL (mutants killed) as required"},
+    {"cmd": "scratch mutant: content_referenced -> NULL, runner.py --only s06", "exit": 1, "summary": "s06-live FAIL (live media deleted): WR-3 s06-live oracle not vacuous; reverted"},
+    {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 make backend-local (run 2, merged tree 7d0d3d7b)", "exit": 2, "summary": "runner exit 1, gate FAIL; 8 failed, 72 passed, 0 skipped in 727 s; s08 s10 PASS (F-1, F-2 closed); non-passes W5 3, F-3 3 (relay admits via admit_credit, no admit_ready), F-4 2 (stream journal never pruned); harness 0, M6 0; teardown clean"}
+  ],
+  "measurements": {"F-2": {"postgres_s": 20.0, "s3_video_s": 40.0, "status": 503, "code": "dependency_unavailable", "bound": "R130: 40 s one stall; 60 s preparation+store", "holds": true}},
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium",
+               "basis": "one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees",
+               "at": "2026-09-25T18:20:00+00:00"},
+  "blockers": ["W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission",
+               "F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness",
+               "F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race"],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/E3C-rerun-7d0d3d7.md"]
+}
