@@ -103,7 +103,7 @@ def test_e4b_a_skip_or_pending_without_a_known_owner_is_a_failure():
         assert entry["detail"]["untyped"] == status
     assert report.check("e4b.typed", certify.PENDING, "why", owners=("BOX",))["status"] \
         == certify.PENDING
-    assert {"BOX", "STACK"} | set(certify.recoverykit.PENDING) == set(certify.OWNERS)
+    assert {"BOX", "STACK", "PROFILE"} | set(certify.recoverykit.PENDING) == set(certify.OWNERS)
 
 
 # ------------------------------------------------------------------------------ hashes
@@ -734,7 +734,9 @@ def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
     monkeypatch.setattr(certify, "load_cells",
                         lambda report, target, workdir, url, cap_s: seen.update(load=cap_s))
     out = tmp_path / "report.json"
+    base, inventory = _base_profile(tmp_path)
     certify.main(["--no-stack", "--target", "http://gw/v1", "--engine-url", "http://engine",
+                  "--run-profile", str(base), "--key-inventory", str(inventory),
                   "--workdir", str(tmp_path), "--report", str(out)])
     doc = json.loads(out.read_text())
     pin = next(entry for entry in doc["stages"] if entry["stage"] == "e4b.b.config-pin")
@@ -742,7 +744,7 @@ def test_e4b_the_run_reads_the_deployed_cap_once_and_every_cell_judges_by_it(
             pin["measured"].get("deployed_max_video_seconds")) == (CAP, CAP)
     assert seen == {"parity": (CAP, "gateway"), "dataset": CAP, "load": CAP}
     engine = {"kind": "remote", "bench_target": "direct", "engine_url": "http://engine",
-              "label": certify.UNVERIFIED}
+              "label": certify.UNVERIFIED, "run_profile": base, "key_inventory": inventory}
     certify.engine_checks(certify.Report(engine), engine, tmp_path,
                           argparse.Namespace(parity_baseline=None, metrics_url=None), CAP)
     assert seen["parity"] == (CAP, None)
@@ -977,6 +979,9 @@ def _attempt(clip, outcome="accepted", *, status=200, ttft=1.0, latency=5.0, cod
             "error_class": error}
 
 
+VALID_CELL = {"validity": {"verdict": "VALID", "reasons": []}}     # bench's summary, VALID
+
+
 def _verdict(verdicts, name):
     (row,) = [row for row in verdicts if row[0] == name]
     return row[1]
@@ -990,12 +995,13 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     and meets its limit."""
     clips = _clips()
     rung = (lambda rows, gateway=True: certify.rung_verdicts(rows, clips, gateway=gateway,
-                                                              cap_s=CAP))
+                                                              cap_s=CAP, summary=VALID_CELL,
+                                                              local=False))
     typed = {"status": certify.OVER_CAP["http_status"], "code": certify.OVER_CAP["code"]}
     ok = [_attempt("short") for _ in range(60)] + [_attempt("long", latency=20.0)] * 3
     capped = [*ok, _attempt("over", "rejected", **typed)]
     assert {row[0]: row[1] for row in rung(capped)} == {
-        "duration_cap": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
+        "duration_cap": "pass", "bench_validity": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
         "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
     # the box rerun: every rung carried the over-cap clips' refusals - by design, never a
     # refusal that lowers the supported rate
@@ -1075,19 +1081,22 @@ def test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause():
     clips = _clips()
     ok = [_attempt("short") for _ in range(84)]
     timeouts = [_attempt("short", "failed", status=None, error="ReadTimeout")] * 36
-    verdicts = certify.rung_verdicts([*ok, *timeouts], clips, gateway=True, cap_s=CAP)
+    verdicts = certify.rung_verdicts([*ok, *timeouts], clips, gateway=True, cap_s=CAP,
+                                      summary=VALID_CELL, local=False)
     assert _verdict(verdicts, "failure_rate") == "fail"
     assert ("failure_rate", "fail", "36/120 (0 platform-caused)", "BOX") in verdicts
     dead = [_attempt("short", "failed", status=None, error="ConnectError")] * 120
-    nothing = certify.rung_verdicts(dead, clips, gateway=True, cap_s=CAP)
+    nothing = certify.rung_verdicts(dead, clips, gateway=True, cap_s=CAP,
+                                      summary=VALID_CELL, local=False)
     assert _verdict(nothing, "answered") == _verdict(nothing, "failure_rate") == "fail"
     assert certify.envelope_summary([(0.5, nothing), (1.0, nothing)]) == (certify.FAIL, (), None)
     only_capped = [_attempt("over", "rejected", status=400)] * 5
-    unanswered = certify.rung_verdicts(only_capped, clips, gateway=True, cap_s=CAP)
+    unanswered = certify.rung_verdicts(only_capped, clips, gateway=True, cap_s=CAP,
+                                      summary=VALID_CELL, local=False)
     assert _verdict(unanswered, "answered") == "fail"
     assert certify.envelope_summary([(0.5, unanswered)])[2] is None
     gave_up = certify.rung_verdicts([_attempt("short", "cancelled")] * 20, clips, gateway=True,
-                                    cap_s=CAP)
+                                    cap_s=CAP, summary=VALID_CELL, local=False)
     assert _verdict(gave_up, "failure_rate") == "pass" and _verdict(gave_up, "answered") == "fail"
     assert certify.envelope_summary([(0.5, gave_up)]) == (certify.FAIL, (), None)
     flat = [{"rss_mib": 900.0, "gpu_used_mib": 40000.0, "drift": 0, "unsettleable": 0}] * 8
@@ -1263,9 +1272,8 @@ def test_e4b_each_client_run_is_bounded_by_its_own_schedule_never_a_flat_hour(tm
     monkeypatch.setattr(certify.run, "shell", lambda argv, *, cwd, env, timeout: (
         bounds.__setitem__(Path(argv[argv.index("--raw") + 1]).name if "--raw" in argv
                            else "parity", timeout), {"exit": 0, "tail": ""})[1])
-    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
-    box = certify.remote_target(argparse.Namespace(target="http://gw/v1", engine_url="http://e",
-                                                   scale=None, box=True))
+    box = _remote(monkeypatch, **dict(zip(("run_profile", "key_inventory"),
+                                          _base_profile(tmp_path))))
     soak = certify.MATRIX["box"]["soak"]
     rate = 0.25                                            # half a supported 0.5/s
     certify.client(certify.bench_argv(box, tmp_path, "soak", rate=rate,
@@ -1476,9 +1484,8 @@ def test_e4b_each_stated_client_rule_holds_one_assertion_each(tmp_path, monkeypa
     idle."""
     import argparse
     local = certify.local_target("tiny", 1)
-    box = certify.remote_target(argparse.Namespace(target="http://gw/v1", engine_url="http://e",
-                                                   scale=None, box=True))
-    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    box = _remote(monkeypatch, **dict(zip(("run_profile", "key_inventory"),
+                                          _base_profile(tmp_path))))
     for target, subset in ((local, "fast"), (box, "full")):
         argv = certify.bench_argv(target, tmp_path, "cell", rate=1.0, requests=4,
                                   dataset_version="v")
@@ -1529,6 +1536,209 @@ def test_e4b_a_box_run_names_its_release_and_reads_its_metrics(tmp_path, monkeyp
             certify.main(argv)
     assert certify.main(box + [arg for flags in needed for arg in flags]) == 1
     assert json.loads((tmp_path / "r.json").read_text())["stages"][0]["stage"] == "runner-error"
+
+
+# ------------------------------------------------------- E1C wiring: profile, inventory, validity
+
+def _base_profile(tmp_path, host="gw.example"):
+    """A complete, runnable `infrx.run-profile/1` for a remote certify target: the template's
+    identity/target/bounds filled in (nothing secret; a key is named by env var only)."""
+    profile = json.loads((certify.MARLIN / "profiles" / "P0-hosted-smoke.template.json")
+                         .read_text())
+    profile["identity"].update({"run_id": "e4c-box", "source_sha": "a" * 40,
+                                **{k: "sha256:" + "0" * 64 for k in (
+                                    "image_digest", "weights_sha256", "tokenizer_sha256",
+                                    "processor_sha256", "template_sha256")},
+                                "config_version": "cfg-1"})
+    profile["target"].update({"path": "direct-gateway", "allowlist": [host],
+                              "test_key_ids": ["abcd1234"]})
+    clips = json.loads((certify.MARLIN / "corpus" / "manifest.json").read_text())["clips"]
+    profile["bounds"].update({"max_requests": 10000, "max_duration_s": 100000,
+                              "max_input_bytes": 10 ** 12, "max_output_tokens_per_request": 1024,
+                              "max_output_tokens": 10 ** 8, "max_concurrency": 64})
+    profile["bounds"]["spend"].update({"max_usd": 1000.0, "outstanding_holds_usd": 0.0})
+    profile["workload"].update({"item_ids": [c["id"] for c in clips], "expected_invalid": [
+        c["id"] for c in clips if c["derived"]["duration_s"] > CAP]})
+    profile["measurement"].update({"profile_class": "P1", "client": {
+        "location": "test", "resources": "one process", "clock": "perf_counter"}})
+    path = tmp_path / "base-profile.json"
+    path.write_text(json.dumps(profile))
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text(json.dumps({"active_key_id_prefixes": ["abcd1234"],
+                                     "taken_at": "2026-09-25T00:00Z", "source": "test"}))
+    return path, inventory
+
+
+def _remote(monkeypatch, scale=None, **paths):
+    import argparse
+    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    return certify.remote_target(argparse.Namespace(
+        target="https://gw.example/v1", engine_url="http://e", scale=scale, box=True, **paths))
+
+
+def test_e1c_a_remote_cell_runs_under_its_own_profile_and_the_key_inventory(tmp_path,
+                                                                           monkeypatch):
+    """E1C WR-1: every remote bench cell carries `--profile` (the coordinator's base profile,
+    stamped with this cell's run id, dataset version, arrival and manifest) and
+    `--key-inventory`, never `--unprofiled`; bench itself accepts the stamped profile
+    (`--validate-only`, no request). A local cell stays unprofiled. Oracle: an argv without
+    the profile, or a profile that does not describe the cell, fails here."""
+    import subprocess
+    base, inventory = _base_profile(tmp_path)
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory)
+    argv = certify.bench_argv(box, tmp_path, "envelope-r0.5", rate=0.5, requests=12,
+                              dataset_version="e4c-abc-envelope-r0.5")
+    assert "--unprofiled" not in argv
+    assert "--profile" in argv and "--key-inventory" in argv, argv
+    assert argv[argv.index("--key-inventory") + 1] == str(inventory)
+    stamped = json.loads(Path(argv[argv.index("--profile") + 1]).read_text())
+    assert stamped["identity"]["run_id"] == "e4c-box-envelope-r0.5"
+    assert (stamped["workload"]["dataset_version"], stamped["measurement"]["rate_per_s"],
+            stamped["measurement"]["arrival"]) == ("e4c-abc-envelope-r0.5", 0.5, "open-loop")
+    assert stamped["bounds"] == json.loads(base.read_text())["bounds"]   # never loosened
+    env = {**certify.os.environ, "INFRX_API_KEY": "k" * 24}
+    env.pop("MARLIN_API_KEY", None)
+    done = subprocess.run([*argv, "--validate-only"], cwd=certify.harness.REPO_ROOT, env=env,
+                          capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stdout[-2000:] + done.stderr[-2000:]
+    assert json.loads(done.stdout)["runnable"] is True
+    local = certify.bench_argv(certify.local_target("tiny", 1), tmp_path, "cell", rate=1.0,
+                               requests=4, dataset_version="v")
+    assert "--profile" not in local and "--key-inventory" not in local
+
+
+def test_e1c_a_remote_run_without_its_profile_or_inventory_is_blocked_never_pass(
+        tmp_path, monkeypatch):
+    """No remote bench cell starts without both files: the dataset, envelope, soak and
+    overload cells are PENDING on PROFILE (BLOCKED), the client never runs, and the report
+    cannot exit 0. Oracle: a runner that starts an unprofiled remote cell, or passes it."""
+    base, inventory = _base_profile(tmp_path)
+    ran = []
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: ran.append(argv))
+    monkeypatch.setattr(certify, "interrupted_run", lambda argv, *a, **k: ran.append(argv))
+    monkeypatch.setattr(certify, "parity_check", lambda report, **kw: None)
+    wrong = tmp_path / "not-a-profile.json"
+    wrong.write_text(json.dumps({"schema": "infrx.run-profile/0"}))
+    import argparse
+    for paths in ({}, {"run_profile": base}, {"key_inventory": inventory},
+                  {"run_profile": tmp_path / "absent.json", "key_inventory": inventory},
+                  {"run_profile": wrong, "key_inventory": inventory}):
+        box = _remote(monkeypatch, **paths)
+        report = certify.Report(box)
+        try:
+            certify.engine_checks(report, box, tmp_path,
+                                  argparse.Namespace(parity_baseline=None, metrics_url=None), CAP)
+        except Exception:                           # noqa: BLE001 - the stages judge it
+            pass
+        assert [(e["stage"], e["status"], e["owners"]) for e in report.stages] == [
+            (cell, certify.PENDING, ["PROFILE"]) for cell in (
+                "e4b.a.dataset-resume", "e4b.b.envelope", "e4b.b.soak", "e4b.b.overload")], paths
+        assert all(e["detail"].startswith("BLOCKED") for e in report.stages), paths
+        assert report.exit_code != 0 and ran == [], paths
+        try:
+            certify.bench_argv(box, tmp_path, "cell", rate=1.0, requests=4, dataset_version="v")
+            refused = None
+        except Exception as error:                  # noqa: BLE001 - its type is the oracle
+            refused = error
+        assert isinstance(refused, certify.Blocked), (paths, refused)
+
+
+def test_e1c_a_rung_whose_bench_summary_is_not_valid_fails(tmp_path):
+    """E1C WR-1: `validity.verdict` != VALID fails the rung and so the envelope, whatever the
+    latency rows say; a remote rung with no summary fails; only a local (fake-engine) rung
+    whose one reason is `unprofiled` stays unjudged. Oracle: an INVALID cell that PASSes."""
+    clips = _clips()
+    ok = [_attempt("short") for _ in range(60)] + [_attempt("long", latency=20.0)] * 3
+    valid = {"validity": {"verdict": "VALID", "reasons": []}}
+    replayed = {"validity": {"verdict": "INVALID", "reasons": ["unexpected replay: 3"]}}
+    unprofiled = {"validity": {"verdict": "INVALID", "reasons": [certify.bench.UNPROFILED]}}
+
+    def rung(summary, local=False):
+        return certify.rung_verdicts(ok, clips, gateway=True, cap_s=CAP, summary=summary,
+                                     local=local)
+
+    def validity(rows):
+        return {row[0]: row[1] for row in rows}.get("bench_validity")
+    assert validity(rung(valid)) == "pass"
+    assert validity(rung(replayed)) == "fail"
+    assert certify.summarise(rung(replayed))[0] == certify.FAIL
+    assert certify.envelope_summary([(0.5, rung(replayed)), (1.0, rung(valid))])[0] \
+        == certify.FAIL
+    assert validity(rung(None)) == "fail"
+    assert validity(rung(unprofiled)) == "fail"
+    assert ("bench_validity", "fail", [certify.bench.UNPROFILED], "BOX") in rung(unprofiled)
+    assert validity(rung(unprofiled, local=True)) == certify.UNKNOWN
+    assert validity(rung(None, local=True)) == certify.UNKNOWN
+    assert validity(rung(replayed, local=True)) == "fail"
+    assert validity(rung({"validity": {"verdict": "INVALID", "reasons": []}}, local=True)) \
+        == "fail"                                   # CW-V5: a reasonless INVALID still fails
+    out = tmp_path / "cell.jsonl"
+    out.write_text(json.dumps(replayed) + "\n" + json.dumps(valid) + "\n")
+    assert certify.bench_summary(out) == valid                         # the latest line
+    assert certify.bench_summary(tmp_path / "absent.jsonl") is None
+
+
+def test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid(tmp_path,
+                                                                          monkeypatch):
+    """The same gate on the other two bench cells: identical rows, and only the summary's
+    validity differs - VALID leaves soak unjudged (no samples) and overload PASS; INVALID
+    fails both. Oracle: a soak or overload cell that ignores its own validity."""
+    base, inventory = _base_profile(tmp_path)
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    verdict = {}
+
+    def fake_client(argv, env=None):
+        raw = Path(argv[argv.index("--raw") + 1])
+        rows = [dict(_attempt("c039-bbb1080p30-1080-square"), send_s=i) for i in range(20)]
+        if raw.name.startswith("overload"):
+            rows = [_attempt("c039-bbb1080p30-1080-square")] + [
+                _attempt("c039-bbb1080p30-1080-square", "rejected", status=429,
+                         code="rate_limited", retry=1.0)]
+        raw.write_text("".join(json.dumps({**r, "item_key": f"k{i}"}) + "\n"
+                               for i, r in enumerate(rows)))
+        Path(argv[argv.index("--out") + 1]).write_text(json.dumps(verdict) + "\n")
+        return {"exit": 0, "tail": ""}
+    monkeypatch.setattr(certify, "client", fake_client)
+    statuses = {}
+    for name, summary in (("valid", VALID_CELL), ("invalid", {"validity": {
+            "verdict": "INVALID", "reasons": ["unexpected replay: 2"]}})):
+        verdict.clear()
+        verdict.update(summary)
+        report = certify.Report(box)
+        certify.load_cells(report, box, tmp_path, None, CAP)
+        statuses[name] = {e["stage"]: e["status"] for e in report.stages}
+    assert (statuses["valid"]["e4b.b.soak"], statuses["valid"]["e4b.b.overload"]) == (
+        certify.PENDING, certify.PASS)
+    assert statuses["invalid"] == {"e4b.b.envelope": certify.FAIL, "e4b.b.soak": certify.FAIL,
+                                   "e4b.b.overload": certify.FAIL}
+
+
+def test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs(tmp_path, monkeypatch):
+    """CW-V1: bench appends to --out and refuses (exit 2) before opening either file, and the
+    box reuses its --workdir. A previous VALID summary and rows in it must not judge this
+    run: every cell whose client exited 2 and wrote nothing FAILs, overload included.
+    Oracle: stale outputs read again, or the overload client's exit ignored."""
+    base, inventory = _base_profile(tmp_path)
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    rows = [_attempt("c039-bbb1080p30-1080-square")] + [
+        _attempt("c039-bbb1080p30-1080-square", "rejected", status=429, code="rate_limited",
+                 retry=1.0)]
+    for name in ("overload", "soak", f"envelope-r{certify.MATRIX['tiny']['envelope']['rates'][0]}"):
+        (tmp_path / f"{name}.jsonl").write_text(json.dumps(VALID_CELL) + "\n")
+        (tmp_path / f"{name}-raw.jsonl").write_text("".join(
+            json.dumps({**r, "item_key": f"k{i}", "send_s": i}) + "\n"
+            for i, r in enumerate(rows)))
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: {"exit": 2, "tail": ""})
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    assert {e["stage"]: e["status"] for e in report.stages} == {
+        "e4b.b.envelope": certify.FAIL, "e4b.b.soak": certify.FAIL,
+        "e4b.b.overload": certify.FAIL}
+    assert not (tmp_path / "overload.jsonl").exists()
+    assert not (tmp_path / "overload-raw.jsonl").exists()
+    overload = report.stages[-1]["detail"]
+    assert "the bench client exited 2" in overload, overload
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

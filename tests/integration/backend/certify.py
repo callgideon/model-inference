@@ -89,7 +89,10 @@ OWNERS = {**recoverykit.PENDING,
                  "runner with --target/--engine-url/--inventory --box, the real engine, "
                  "gateway and stores (research/plan/evidence/e/E4B box protocol)",
           "STACK": "this runner at the same SHA on a host with the E2 compose stack (the dev "
-                   "host): the stack suite is bound to the SHA, not to the target"}
+                   "host): the stack suite is bound to the SHA, not to the target",
+          "PROFILE": "the coordinator's run profile (infrx.run-profile/1) and sanitized key "
+                     "inventory for a remote target: --run-profile and --key-inventory "
+                     "(consumer-v1/05 section 1, E1C)"}
 
 # models/marlin2b/results/E4B-protocol.md §5, the one place these numbers live in code.
 CRITERIA = {
@@ -606,21 +609,77 @@ def tenant_ledger():
 
 # --- the bench client ------------------------------------------------------------------
 
+class Blocked(Exception):
+    """A remote bench cell without its run profile or key inventory: it never starts."""
+
+
+def profile_blocked(target: dict) -> str | None:
+    """Why a remote target's bench cells may not start, or None (a local target needs no
+    profile). E1C: no paid cell runs unbounded, and an unprofiled one is INVALID anyway."""
+    if target["kind"] == "local":
+        return None
+    paths = {"--run-profile": target.get("run_profile"),
+             "--key-inventory": target.get("key_inventory")}
+    absent = [flag for flag, path in paths.items() if not path or not Path(path).is_file()]
+    if absent:
+        return f"BLOCKED: a remote bench cell needs {' and '.join(absent)} (a readable file)"
+    try:
+        schema = json.loads(Path(target["run_profile"]).read_text()).get("schema")
+    except (OSError, ValueError, AttributeError) as e:
+        return f"BLOCKED: --run-profile unreadable: {type(e).__name__}"
+    if schema != RUN_PROFILE_SCHEMA:
+        return f"BLOCKED: --run-profile schema is {schema!r}, not {RUN_PROFILE_SCHEMA}"
+    return None
+
+
+RUN_PROFILE_SCHEMA = "infrx.run-profile/1"
+BENCH_FORMS, BENCH_MAX_TOKENS = "video_b64", "128,512,1024"
+
+
+def cell_profile(target: dict, workdir: Path, name: str, *, rate: float,
+                 dataset_version: str, corpus: Path) -> Path:
+    """The coordinator's base profile stamped with this cell's run shape - run id, dataset
+    version, arrival, the manifest this runner hands bench, seed, forms and output mix.
+    Identity, target, bounds, spend and item ids stay the coordinator's: bench refuses the
+    cell (exit 2, a FAIL) when they do not cover it."""
+    profile = json.loads(Path(target["run_profile"]).read_text())
+    profile["identity"]["run_id"] = f"{profile['identity']['run_id']}-{name}"[:64]
+    profile["workload"].update(dataset_version=dataset_version, seed=SEED,
+                               manifest_sha256=sha256_file(corpus),
+                               forms=[BENCH_FORMS],
+                               max_tokens_mix=[int(t) for t in BENCH_MAX_TOKENS.split(",")])
+    profile["measurement"].update(arrival="open-loop", rate_per_s=rate)
+    path = workdir / f"{name}-profile.json"
+    path.write_text(json.dumps(profile, indent=2))
+    return path
+
+
 def bench_argv(target: dict, workdir: Path, name: str, *, rate: float, requests: int,
                dataset_version: str, extra: tuple[str, ...] = (),
                corpus: Path = MARLIN / "corpus" / "manifest.json") -> list[str]:
     """E1B's client, as the protocol shapes it: licensed corpus, frozen seed, output mix,
-    no retries (a retry may not hide a refusal), inline media. Outputs in `workdir` only."""
+    no retries (a retry may not hide a refusal), inline media. Outputs in `workdir` only.
+    A remote cell runs under its own stamped profile and the key inventory, or not at all."""
+    if why := profile_blocked(target):
+        raise Blocked(why)
+    # bench appends to --out and may refuse (exit 2) before opening either file: a reused
+    # workdir's previous summary and rows must never be read as this run's (CW-V1)
+    for stale in (workdir / f"{name}.jsonl", workdir / f"{name}-raw.jsonl"):
+        stale.unlink(missing_ok=True)
     argv = [sys.executable, str(MARLIN / "bench.py"),
             "--corpus", str(corpus),
             "--subset", "full" if target["scale"] == "box" else "fast",
             "--base-url", target["base_url"], "--target", target["bench_target"],
             "--rate", str(rate), "--requests", str(requests), "--seed", str(SEED),
-            "--dataset-version", dataset_version, "--forms", "video_b64",
-            "--max-tokens", "128,512,1024", "--retries", "0",
+            "--dataset-version", dataset_version, "--forms", BENCH_FORMS,
+            "--max-tokens", BENCH_MAX_TOKENS, "--retries", "0",
             "--out", str(workdir / f"{name}.jsonl"), "--raw", str(workdir / f"{name}-raw.jsonl")]
     if target["bench_target"] == "gateway":
         argv += ["--model", target["model"]]
+    if target["kind"] != "local":
+        argv += ["--profile", str(cell_profile(target, workdir, name, rate=rate,
+                                               dataset_version=dataset_version, corpus=corpus)),
+                 "--key-inventory", str(target["key_inventory"])]
     return argv + list(extra)
 
 
@@ -1083,14 +1142,37 @@ def cap_verdict(rows: list[dict], counted: list[dict], cap_s: float) -> tuple:
         "cap_s": cap_s}, "BOX")
 
 
-def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float) -> list[tuple]:
+def bench_summary(path: Path) -> dict | None:
+    """A cell's bench summary: the last line bench appended to its --out."""
+    lines = path.read_text().splitlines() if path.exists() else []
+    return json.loads(lines[-1]) if lines else None
+
+
+def bench_validity(summary: dict | None, local: bool) -> tuple:
+    """E1C BENCH-VALIDITY: a cell whose summary is not VALID supports nothing. A local
+    (fake-engine) cell is unprofiled by design: that reason alone leaves it unjudged."""
+    validity = (summary or {}).get("validity") or {}
+    if validity.get("verdict") == "VALID":
+        return ("bench_validity", decide.PASS, "VALID", "BOX")
+    stated = validity.get("reasons") or []
+    reasons = [r for r in stated if not (local and r == bench.UNPROFILED)]
+    if reasons or not local or (validity and not stated):
+        return ("bench_validity", decide.FAIL, reasons or (
+            f"verdict {validity.get('verdict')!r} with no reason" if validity
+            else "no bench summary: the cell's validity is unknown"), "BOX")
+    return ("bench_validity", UNKNOWN, "local fake engine: unprofiled, not a measurement", "BOX")
+
+
+def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float,
+                  summary: dict | None, local: bool) -> list[tuple]:
     """Protocol §4 envelope criteria for one rate. Attempts on clips over the deployed cap
     are the cap's: each must get the typed over-cap refusal at admission, and they are no
-    one's failures; a clip within the cap is never refused as over it."""
+    one's failures; a clip within the cap is never refused as over it. A cell bench did not
+    call VALID fails (E1C)."""
     counted = judged(rows, clips, cap_s)
     out = [cap_verdict(rows, counted, cap_s) if gateway else
            ("duration_cap", UNKNOWN, "an engine target has no admission", "BOX")]
-    out += [failures(counted), answered(counted)]
+    out += [bench_validity(summary, local), failures(counted), answered(counted)]
     refusals = [r for r in counted if r.get("outcome") == "rejected"]
     out.append(("rejections", decide.FAIL if refusals else decide.PASS,
                 f"{len(refusals)} refused within the cap", "BOX"))
@@ -1123,8 +1205,10 @@ def envelope_summary(rungs: list[tuple[float, list[tuple]]]) -> tuple[str, tuple
         supported, chosen = rate, verdicts
     if chosen is None:
         return FAIL, (), None
-    caps = [row for _, verdicts in rungs for row in verdicts if row[0] == "duration_cap"]
-    status, owners = summarise([row for row in chosen if row[0] != "duration_cap"] + caps)
+    caps = [row for _, verdicts in rungs for row in verdicts
+            if row[0] in ("duration_cap", "bench_validity")]
+    status, owners = summarise([row for row in chosen
+                                if row[0] not in ("duration_cap", "bench_validity")] + caps)
     return status, owners, supported
 
 
@@ -1222,7 +1306,7 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                cap_s: float) -> None:
     """E4B.b's envelope, soak and overload cells (protocol §4, shapes §5)."""
     shape, clips, env = MATRIX[target["scale"]], parity.clips(), bench_env(target)
-    gateway = target["bench_target"] == "gateway"
+    gateway, local = target["bench_target"] == "gateway", target["kind"] == "local"
     version = f"e4b-{(report.head.get('sha') or 'nosha')[:7]}-" \
               f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     rungs, runs = [], {}
@@ -1234,7 +1318,8 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
         runs[name] = client(bench_argv(target, workdir, name, rate=rate, requests=requests,
                                        dataset_version=f"{version}-{name}"), env)["exit"]
         rungs.append((rate, rung_verdicts(raw_rows(workdir / f"{name}-raw.jsonl"), clips,
-                                          gateway=gateway, cap_s=cap_s)
+                                          gateway=gateway, cap_s=cap_s, local=local,
+                                          summary=bench_summary(workdir / f"{name}.jsonl"))
                       + [client_exit(runs[name])]))
     status, owners, supported = envelope_summary(rungs)
     report.check("e4b.b.envelope", status,
@@ -1252,7 +1337,8 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                        requests=max(1, round(rate * soak["seconds"])),
                        dataset_version=f"{version}-soak"), env, metrics_url, soak["sample_s"])
         verdicts = soak_verdicts(raw_rows(workdir / "soak-raw.jsonl"), samples, clips,
-                                 cap_s, gateway) + [client_exit(done["exit"])]
+                                 cap_s, gateway) + [client_exit(done["exit"]), bench_validity(
+                                     bench_summary(workdir / "soak.jsonl"), local)]
         status, owners = summarise(verdicts)
         report.check("e4b.b.soak", status, {"rate_per_s": rate, "seconds": soak["seconds"],
                                             "client_exit": done["exit"], "verdicts": verdicts,
@@ -1264,10 +1350,16 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                      owners=("BOX",), label=target["label"])
         return
     burst = shape["overload"]["burst"]
-    client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
-                      dataset_version=f"{version}-overload", extra=("--burst", str(burst))), env)
+    done = client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
+                             dataset_version=f"{version}-overload",
+                             extra=("--burst", str(burst))), env)
     rows = raw_rows(workdir / "overload-raw.jsonl")
     problems = overload_problems(rows, clips, cap_s)
+    if client_exit(done["exit"])[1] == decide.FAIL:
+        problems.append(f"the bench client exited {done['exit']}")
+    validity = bench_validity(bench_summary(workdir / "overload.jsonl"), local)
+    if validity[1] == decide.FAIL:
+        problems.append(f"the bench cell is not VALID: {validity[2]}")
     report.check("e4b.b.overload", FAIL if problems else PASS, problems or "honest refusals",
                  measured={"attempts": len(rows),
                            "accepted": sum(r.get("outcome") == "accepted" for r in rows),
@@ -1288,7 +1380,9 @@ def remote_target(args) -> dict:
     return {"kind": "remote", "base_url": args.target.rstrip("/"), "engine_url": args.engine_url,
             "metered": True, "bench_target": "gateway",
             "model": published_release()["requested_model"], "scale": args.scale or "box",
-            "label": UNVERIFIED, "namespace": None}
+            "label": UNVERIFIED, "namespace": None,
+            "run_profile": getattr(args, "run_profile", None),
+            "key_inventory": getattr(args, "key_inventory", None)}
 
 
 def target_label(target: dict, box: bool, preconditions: str) -> str:
@@ -1333,6 +1427,13 @@ def main(argv: list[str] | None = None) -> int:
                                                       "is read (box: http://127.0.0.1:8002/metrics)")
     parser.add_argument("--inventory", type=Path,
                         help="measure/inventory.sh's output from the box (the deployed engine)")
+    parser.add_argument("--run-profile", type=Path,
+                        help="remote target: the base infrx.run-profile/1 JSON each bench cell "
+                             "is stamped from (models/marlin2b/profiles); without it and "
+                             "--key-inventory the bench cells are BLOCKED")
+    parser.add_argument("--key-inventory", type=Path,
+                        help="remote target: the sanitized active key-id prefixes (the "
+                             "coordinator's read-only op), passed to every bench cell")
     parser.add_argument("--box", action="store_true",
                         help="the maintenance-window preconditions (E4B_WINDOW_OK=1 etc.)")
     parser.add_argument("--release-sha", help="the release under test, the FULL 40-character "
@@ -1420,6 +1521,11 @@ def engine_checks(report: Report, target: dict, workdir: Path, args, cap_s: floa
                      baseline=args.parity_baseline, label=target["label"],
                      local=target["kind"] == "local", cap_s=cap_s,
                      gateway=target if target["bench_target"] == "gateway" else None)
+        if why := profile_blocked(target):
+            for check_id in ("e4b.a.dataset-resume", "e4b.b.envelope", "e4b.b.soak",
+                             "e4b.b.overload"):
+                report.check(check_id, PENDING, why, owners=("PROFILE",), label=target["label"])
+            return
         dataset_check(report, target, workdir, cap_s)
         load_cells(report, target, workdir, args.metrics_url, cap_s)
     finally:
