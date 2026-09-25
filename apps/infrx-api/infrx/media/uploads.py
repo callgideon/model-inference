@@ -48,8 +48,7 @@ from ..contracts import errors
 from ..contracts.ids import UPLOAD_HANDLE_RE, new_upload_handle
 from ..contracts.records import MediaKind, MediaRef, UploadState
 from ..contracts.v2.lifecycle import (DESTINATION_SCHEME, UPLOAD_ABORT_REASONS,
-                                      ContentIdentity, ContentKind, ContentLocation,
-                                      ContentOrigin, FinalizedSource, LifecycleRefusal as R,
+                                      ContentKind, FinalizedSource, LifecycleRefusal as R,
                                       UploadConstraints, UploadReceipt, UploadTicket,
                                       refusal_of, refuse)
 from ..contracts.wire import UploadCreated
@@ -187,28 +186,24 @@ class MediaUploads(MediaPreparation):
     """`ports.MediaStore` complete: M1's staging, M2's preparation and M3/M5's uploads.
     `uploads` is the ticket authority (an `UploadRepository`); None is `ProcessUploads`.
     `content` (a `ContentLifecycle`, D10's same adapter in the pilot) gets a row for each
-    object before it is written; None registers nothing (M3's collector, in process)."""
+    object before it is written (`MediaStaging._register`); None registers nothing."""
 
-    def __init__(self, objects, *, uploads=None, content=None, now=_utc_now,
+    def __init__(self, objects, *, uploads=None, now=_utc_now,
                  new_handle=new_upload_handle, **preparation) -> None:
         super().__init__(objects, **preparation)
         self.now = now
         self.new_handle = new_handle
-        self.content = content
         # Read through `self` on every call, so a case that moves `now` moves the window.
         self.tickets = uploads if uploads is not None else ProcessUploads(
             now=lambda: self.now(), new_handle=lambda: self.new_handle(),
             window_s=self.limits.processing_cache_ttl_s)
-        # Object key -> when it was last used (staged, attached, re-finalized). `gc.py` reads
-        # it: nothing used within the grace period is collected.
-        self.idle_since: dict[str, datetime] = {}
         # (org, handle) -> the completion running in this process; an entry leaves when its
         # completion ends, so this holds what is in flight and nothing else.
         self._finalizing: dict[tuple[str, str], asyncio.Future] = {}
 
     @property
     def uploads(self) -> dict[str, UploadTicket]:
-        """A process-local repository's tickets (tests; the collector's destination sweep).
+        """A process-local repository's tickets (tests).
         A durable repository keeps none in process, so it has no such view."""
         return self.tickets.records
 
@@ -223,22 +218,6 @@ class MediaUploads(MediaPreparation):
         if not isinstance(handle, str) or not UPLOAD_HANDLE_RE.fullmatch(handle):
             raise errors.NotFound(f"no such upload owned by org {org_id}")
         return self.upload_key(org_id, handle)
-
-    async def _register(self, kind: ContentKind, org_id: str, key: str, digest: str,
-                        size: int, handle: str | None = None) -> None:
-        """F2C: the content row before the object (origin `written`), so a crash between
-        the two leaves a row with a persisted grace for M6's collector, never an object no
-        row names. A key whose delete is pending is `content_retiring` (a 503 to retry)."""
-        if self.content is not None:
-            await self.content.register(ContentIdentity(
-                org_id=org_id, kind=kind, location=ContentLocation.object_store,
-                object_key=key, digest=digest, bytes=size, upload_handle=handle,
-                origin=ContentOrigin.written))
-
-    def _touch(self, refs) -> None:
-        now = self.now()
-        for ref in refs:
-            self.idle_since[ref.storage_ref] = now
 
     # --- create ---------------------------------------------------------------
     async def create_upload(self, org_id: str, constraints: dict) -> dict:
@@ -269,7 +248,7 @@ class MediaUploads(MediaPreparation):
         digest = await asyncio.to_thread(digest_of, data)
         await self.tickets.acknowledge_put(org_id, handle, bytes=len(data), digest=digest)
         await self._register(ContentKind.upload_destination, org_id, key, digest, len(data),
-                             handle)
+                             handle=handle)
         await self._write_once(key, data, content_type)
 
     # --- finalize -------------------------------------------------------------
@@ -300,8 +279,6 @@ class MediaUploads(MediaPreparation):
             return ref
         ref = await self._verified(org_id, handle, key)
         ticket = await self.tickets.complete(org_id, handle, ref)
-        if ref.storage_ref in self.idle_since:  # a use; first sight is the collector's own
-            self.idle_since[ref.storage_ref] = self.now()
         return self._ref_of(ticket)
 
     async def _verified(self, org_id: str, handle: str, key: str) -> MediaRef:
@@ -416,11 +393,6 @@ class MediaUploads(MediaPreparation):
         record = await self.resolve_owned(org_id, ref.handle)
         return record if record == ref else None
 
-    async def stage(self, org_id, request):
-        refs = await super().stage(org_id, request)
-        self._touch(refs)
-        return refs
-
     async def attach(self, job_id, refs) -> None:
         try:
             await super().attach(job_id, refs)
@@ -434,4 +406,3 @@ class MediaUploads(MediaPreparation):
             if bound != tuple(refs):
                 raise
             self.by_job[job_id] = bound
-        self._touch(self.by_job[job_id])

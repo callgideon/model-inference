@@ -15,15 +15,16 @@ claims. One pass:
    **tombstone**: the store rechecks references and grace inside that transaction, under
    the row lock admission/attach also take. Any refusal keeps the object. A collector whose
    claim expired gets `claim_lost` and never reaches step 3.
-3. only after the tombstone commits, the **external delete**, outside every lock and
-   idempotent - and only while the claim still has `delete_timeout_s` (the object store's
-   worst-case call) left, so the delete has landed or been abandoned before the lease can
-   pass to another collector (D10's rule in 0020). Short of that it is left tombstoned for
-   a fresh claim (`lease_short`). The margin is measured from before the claim was asked
-   for, on this process's monotonic clock, so it is never optimistic. Objects are also
-   addressed by generation (`generation_key`): once writers write there (M6 phase 2), a
-   delete delayed past its lease anyway can remove only the generation it tombstoned.
-   Database content has no external step.
+3. only after the tombstone commits, the **external delete** of the key the writer wrote,
+   outside every lock and idempotent - and only while the claim still has
+   `delete_timeout_s` (the object store's worst-case call) left, so the delete has landed
+   or been abandoned before the lease can pass to another collector (D10's rule in 0020).
+   Short of that it is left tombstoned for a fresh claim (`lease_short`). The margin is
+   measured from before the claim was asked for, on this process's monotonic clock, so it
+   is never optimistic. The tombstone is what keeps a delayed delete off a newer object at
+   the same key: the key cannot be registered again (`content_retiring`) until a delete
+   was acknowledged, and none is acknowledged before its delete returned. Database content
+   has no external step.
 4. **acknowledge_delete** - for database content this is the scrub (F2C.b): the store
    empties the body in that transaction and keeps the row's metadata (D3). A lost
    acknowledgement leaves the row tombstoned: unreadable, and a candidate again once the
@@ -53,13 +54,6 @@ DELETABLE_PREFIXES = ("media/", "uploads/", "payloads/")
 #: The longest one object-store delete can take: `s3.py`'s client makes 2 attempts of
 #: (5 s connect + 30 s read), plus backoff. D10's claim TTL (300 s) exceeds it.
 DELETE_TIMEOUT_S = 75.0
-
-
-def generation_key(object_key: str, generation: int) -> str:
-    """Where generation `generation` of `object_key` lives. Generation 1 is the bare key
-    (every object written before M6); a key re-created after an acknowledged delete gets a
-    new physical name, so a delayed delete of an older generation cannot reach it."""
-    return object_key if generation == 1 else f"{object_key}.g{generation}"
 
 
 def deletable(object_key: str) -> bool:
@@ -157,8 +151,7 @@ class RetentionCollector:
                 report.retained["lease_short"] += 1     # tombstoned: a fresh claim deletes it
                 return
             try:
-                await self.objects.delete(generation_key(tombstone.object_key,
-                                                         tombstone.generation))
+                await self.objects.delete(tombstone.object_key)
             except errors.DependencyUnavailable:
                 report.delete_failed += 1
                 report.aborted = "object_store_unavailable"

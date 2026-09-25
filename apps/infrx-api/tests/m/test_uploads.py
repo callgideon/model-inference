@@ -390,8 +390,10 @@ def test_an_expired_window_is_upload_expired_and_stays_closed():
             run(adapter.finalize_upload(b.ORG_A, handle))
         with pytest.raises(errors.UploadExpired):
             run(adapter.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
+    fresh = created(adapter)                       # inside its own window: not closed
     assert run(adapter.tickets.expire(10)) == 1
     assert adapter.uploads[handle].state is UploadState.expired
+    assert adapter.uploads[fresh].state is UploadState.created
     with pytest.raises(errors.UploadExpired):
         run(adapter.finalize_upload(b.ORG_A, handle))
     with pytest.raises(errors.Conflict):
