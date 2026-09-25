@@ -147,6 +147,10 @@ CW_STALE = "test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs"
 P18 = "test_e4c_the_p18_limits_are_the_runners_and_request_latency_p95_is_judged"
 E4C_RATE = "test_e4c_the_box_supports_only_the_declared_rate_and_soaks_at_p18s_fixed_rate"
 E4C_BURST = "test_e4c_the_overload_burst_is_p4_and_enters_through_the_public_edge_or_is_blocked"
+E4C_EDGE = "test_e4c_the_committed_edge_profile_is_the_burst_certify_runs_once_frozen"
+E4P_V7 = "test_e4c_an_overload_profile_with_no_edge_host_is_blocked_never_a_crash"
+E4P_V8 = "test_e4c_any_remote_burst_without_an_edge_profile_is_blocked_not_run"
+BURST_GATE = "    if not local:\n        # S3 F5 / E1B-protocol rule 11"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -366,8 +370,18 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("p4_stamp_dropped", "the overload cell is stamped P4, so bench refuses it off the edge",
        '        profile["measurement"]["profile_class"] = "P4"', "        pass", E4C_BURST),
     _m("box_burst_unblocked", "a box burst without a public-edge profile is BLOCKED, never run",
-       '    if not local and (edge or target["scale"] == "box"):', "    if not local and edge:",
-       E4C_BURST),
+       BURST_GATE, BURST_GATE.replace("local:", "local and edge:"), E4C_BURST),
+    _m("remote_burst_unblocked_off_the_box", "E4P-V8: any remote burst without a public-edge "
+       "profile is BLOCKED, not only the box scale's",
+       BURST_GATE, BURST_GATE.replace("local:", 'local and (edge or target["scale"] == "box"):'),
+       E4P_V8),
+    _m("edge_host_unchecked", "E4P-V7: an --overload-profile with no allowlist host is "
+       "BLOCKED, never sent anywhere",
+       "    return hosts[0] if isinstance(hosts, list) and hosts and isinstance(hosts[0], str) "
+       "\\\n        and hosts[0] else None", "    return str(hosts)", E4P_V7),
+    _m("edge_cap_below_the_burst", "the committed edge profile's CREDIT cap covers the "
+       "32-burst's ceiling (432.5376)", '"max_spend": 433,', '"max_spend": 432,', E4C_EDGE,
+       file="models/marlin2b/profiles/E4C-edge.overload.base.json"),
     _m("burst_off_the_edge", "the burst runs under --overload-profile through the edge",
        '        target = {**target, "run_profile": edge, "base_url": f"https://{host}/v1"}',
        "        target = {**target}", E4C_BURST),

@@ -1592,6 +1592,15 @@ def _base_profile(tmp_path, host="gw.example"):
     return path, inventory
 
 
+def _edge_profile(tmp_path, base, host="gw.example"):
+    """A public-edge copy of a base profile: what --overload-profile names (E4P-V2/V8)."""
+    edge = json.loads(Path(base).read_text())
+    edge["target"].update(path="public-edge", allowlist=[host])
+    path = tmp_path / "edge-profile.json"
+    path.write_text(json.dumps(edge))
+    return path
+
+
 def _remote(monkeypatch, scale=None, **paths):
     import argparse
     monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
@@ -1707,7 +1716,8 @@ def test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid(tmp_
     validity differs - VALID leaves soak unjudged (no samples) and overload PASS; INVALID
     fails both. Oracle: a soak or overload cell that ignores its own validity."""
     base, inventory = _base_profile(tmp_path)
-    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny",
+                  overload_profile=_edge_profile(tmp_path, base))
     verdict = {}
 
     def fake_client(argv, env=None):
@@ -1742,7 +1752,8 @@ def test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs(tmp_path
     run: every cell whose client exited 2 and wrote nothing FAILs, overload included.
     Oracle: stale outputs read again, or the overload client's exit ignored."""
     base, inventory = _base_profile(tmp_path)
-    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny",
+                  overload_profile=_edge_profile(tmp_path, base))
     rows = [_attempt("c039-bbb1080p30-1080-square")] + [
         _attempt("c039-bbb1080p30-1080-square", "rejected", status=429, code="rate_limited",
                  retry=1.0)]
@@ -1897,6 +1908,101 @@ def test_e4c_the_overload_burst_is_p4_and_enters_through_the_public_edge_or_is_b
         "P4", "public-edge")
     code, verdict = _validate_only(burst)
     assert code == 0 and verdict["runnable"], verdict
+
+
+# ---------------------------------------------------------------- E4C-RUNBOOK (E4P-V7/V8)
+
+E4C_FROZEN = {"identity": {"source_sha": "c" * 40, "deployed_sha": "d" * 40,
+                           "migration_version": "0025", "config_version": "cfg-1",
+                           **{k: "sha256:" + "0" * 64 for k in (
+                               "image_digest", "weights_sha256", "processor_sha256")}},
+              "target": {"maintenance_window": "mw-1"}}
+
+
+def test_e4c_the_committed_edge_profile_is_the_burst_certify_runs_once_frozen(tmp_path,
+                                                                             monkeypatch):
+    """Oracle (item 1; S3 F5, P-18 burst): the committed public-edge overload profile
+    refusing the stamped 32-burst for anything but its FILL placeholders, or, frozen, not
+    being the profile certify's --overload-profile runs the burst under - P4 at
+    https://marlin2b.callbill.ai/v1, admitted by bench, projecting
+    32 x (30,720 x 400 + 1,024 x 1,200) / 1e6 = 432.5376 CREDIT under its 433 cap."""
+    committed = certify.MARLIN / "profiles" / "E4C-edge.overload.base.json"
+    edge = json.loads(committed.read_text())
+    assert (edge["target"]["path"], edge["target"]["allowlist"]) == (
+        "public-edge", ["marlin2b.callbill.ai"])
+    assert (edge["bounds"]["max_requests"], edge["bounds"]["spend"]["currency"]) == (
+        certify.MATRIX["box"]["overload"]["burst"], "CREDIT")
+    box = _e4c_box(tmp_path, monkeypatch, overload_profile=committed)
+    stamped = {**box, "run_profile": committed, "base_url": "https://marlin2b.callbill.ai/v1"}
+    code, verdict = _validate_only(certify.bench_argv(
+        stamped, tmp_path, "overload", rate=1000.0, requests=32, dataset_version="v",
+        extra=("--burst", "32")))
+    fills = {e.split(":")[0] for e in verdict["errors"] if "FILL placeholder" in e}
+    assert code == 2 and fills and all(e.split(":")[0] in fills for e in verdict["errors"]), \
+        verdict["errors"]
+    for group, values in E4C_FROZEN.items():
+        edge[group].update(values)
+    assert "FILL" not in json.dumps(edge)
+    (tmp_path / "edge.json").write_text(json.dumps(edge))
+    box, calls = _e4c_box(tmp_path, monkeypatch, overload_profile=tmp_path / "edge.json"), {}
+    _fake_cells(monkeypatch, calls)
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]
+    burst = calls["overload-raw.jsonl"]
+    assert burst[burst.index("--base-url") + 1] == "https://marlin2b.callbill.ai/v1"
+    code, verdict = _validate_only(burst)
+    assert code == 0 and verdict["runnable"], verdict
+    assert (verdict["derived"]["profile_class"], verdict["derived"]["spend_currency"]) == (
+        "P4", "CREDIT")
+    assert Decimal(verdict["derived"]["projected_spend"]) == Decimal("432.5376") \
+        <= Decimal(edge["bounds"]["spend"]["max_spend"])
+
+
+def test_e4c_an_overload_profile_with_no_edge_host_is_blocked_never_a_crash(tmp_path,
+                                                                            monkeypatch):
+    """Oracle (E4P-V7): an --overload-profile with no target block, no allowlist or an
+    empty one crashing load_cells (KeyError/IndexError: no overload cell in the report),
+    or sending the burst anywhere. It is the overload cell's PENDING on PROFILE."""
+    base = json.loads((certify.MARLIN / "profiles" / "E4C-edge.overload.base.json")
+                      .read_text())
+    no_target = {k: v for k, v in base.items() if k != "target"}
+    no_allowlist = {**base, "target": {k: v for k, v in base["target"].items()
+                                       if k != "allowlist"}}
+    empty = {**base, "target": {**base["target"], "allowlist": []}}
+    for name, doc in (("no-target", no_target), ("no-allowlist", no_allowlist),
+                      ("empty", empty), ("not-a-block", {**base, "target": "edge"})):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(doc))
+        box, calls = _e4c_box(tmp_path, monkeypatch, overload_profile=path), {}
+        _fake_cells(monkeypatch, calls)
+        report = certify.Report(box)
+        certify.load_cells(report, box, tmp_path, None, CAP)
+        over = report.stages[-1]
+        assert (over["stage"], over["status"], over["owners"]) == (
+            "e4b.b.overload", certify.PENDING, ["PROFILE"]), (name, over)
+        assert over["detail"].startswith("BLOCKED") and "target.allowlist" in over["detail"], \
+            (name, over["detail"])
+        assert "overload-raw.jsonl" not in calls, name
+
+
+def test_e4c_any_remote_burst_without_an_edge_profile_is_blocked_not_run(tmp_path,
+                                                                         monkeypatch):
+    """Oracle (E4P-V8): a remote target at the tiny scale (not only the box) running the
+    burst through its direct-gateway run profile when no --overload-profile is given - bench
+    refuses the P4 stamp (a FAIL "bench client exited 2"), or a fake answers and it PASSes
+    as P1. Either way the burst must not start: PENDING on PROFILE, named."""
+    base, inventory = _base_profile(tmp_path)
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    calls = {}
+    _fake_cells(monkeypatch, calls)
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    over = report.stages[-1]
+    assert (over["stage"], over["status"], over["owners"]) == (
+        "e4b.b.overload", certify.PENDING, ["PROFILE"]), over
+    assert over["detail"].startswith("BLOCKED") and "--overload-profile" in over["detail"]
+    assert "overload-raw.jsonl" not in calls and "exited" not in over["detail"]
 
 
 if __name__ == "__main__":
