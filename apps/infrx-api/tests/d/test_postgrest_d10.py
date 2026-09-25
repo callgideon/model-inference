@@ -82,6 +82,14 @@ def _up() -> str:
     _docker("network", "connect", "--alias", DB_ALIAS, NETWORK, pgharness.CONTAINER,
             check=False)
     pgharness._sb("postgres", f"alter role authenticator with login password '{AUTHN_PASSWORD}'")
+    # The image's init script defines `auth.uid()` from the per-claim GUC only
+    # (`request.jwt.claim.sub`); hosted projects run GoTrue's migration, which also reads
+    # `request.jwt.claims` - the only form PostgREST >= 10 sets. Install the hosted body
+    # (the shim's, `infrx/state/supabase_shim.sql`) so the principal is the token's subject.
+    pgharness._sb(DB, "create or replace function auth.uid() returns uuid language sql stable "
+                      "as $f$ select coalesce(nullif(current_setting('request.jwt.claim.sub', "
+                      "true), ''), nullif(nullif(current_setting('request.jwt.claims', true), "
+                      "'')::jsonb ->> 'sub', ''))::uuid $f$")
     _docker("run", "-d", "--name", NAME, "--network", NETWORK,
             "--label", f"{LABEL}={pgharness.checkout()}",
             "-e", f"PGRST_DB_URI=postgres://authenticator:{AUTHN_PASSWORD}@{DB_ALIAS}:5432/{DB}",
