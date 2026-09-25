@@ -78,6 +78,16 @@ function isClientModule(file: string): boolean {
 
 const SERVER_ONLY = join(appRoot, "lib", "services");
 
+/**
+ * A `"use server"` module is the one legitimate crossing: the bundler replaces its exports with
+ * action references, so its own imports (C3A's `app/actions.ts` -> `lib/services/actions.ts`) never
+ * reach a browser chunk. Every other module is followed.
+ */
+function isServerActionModule(file: string): boolean {
+  const head = readFileSync(file, "utf8").slice(0, 400);
+  return /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use server["']/.test(head);
+}
+
 /** The first path from a client module to a server-only one, or null. */
 function pathToServices(entry: string): string[] | null {
   const seen = new Set<string>();
@@ -91,6 +101,7 @@ function pathToServices(entry: string): string[] | null {
       const resolved = resolveImport(file, specifier);
       if (resolved === null) continue;
       if (resolved.startsWith(SERVER_ONLY)) return [...trail, resolved];
+      if (isServerActionModule(resolved)) continue;
       queue.push({ file: resolved, trail: [...trail, resolved] });
     }
   }
@@ -107,6 +118,9 @@ test("the walker actually finds client modules and can follow an import", () => 
   assert.ok(resolved.some((file) => file !== null), "the resolver must resolve at least one local import");
   // And the detector is not simply always-true.
   assert.ok(!isClientModule(join(appRoot, "lib", "services", "query.ts")), "a server module is not a client one");
+  // The action boundary is recognised, and only there: a server-only service module is not one.
+  assert.ok(isServerActionModule(join(appRoot, "app", "actions.ts")), "app/actions.ts is a server action module");
+  assert.ok(!isServerActionModule(join(appRoot, "lib", "services", "actions.ts")), "the adapter is not an action module");
 });
 
 test("no client component reaches lib/services, however indirectly", () => {
@@ -171,5 +185,20 @@ test("the server-only modules carry their run-time guard as well", () => {
       /typeof window !== "undefined"/,
       `${name} must refuse to run in a browser as well as being kept out of one`,
     );
+  }
+});
+
+/**
+ * 1-C0-V1. The console layout wraps /admin as well as the consumer pages, so a redirect to onboarding
+ * there locks out an operator with no consumer wallet, and a redirect to a route that has not shipped
+ * is a 404. `consoleShell` owns both decisions (operator bypass, route gates); the layout may not
+ * redirect to either route itself. Holds for today's legacy layout and for WR-1 as revised.
+ */
+test("the console layout never redirects to onboarding or verification itself; the consumer context goes through consoleShell", () => {
+  const layout = readFileSync(join(appRoot, "app", "(console)", "layout.tsx"), "utf8");
+  assert.doesNotMatch(layout, /redirect\(\s*["'`]\/(onboarding|verify-email)/, "those redirects are consoleShell's, gated on the route");
+  if (/consumerSession\(\)/.test(layout)) {
+    assert.match(layout, /consoleShell\(/, "the consumer context reaches the shell only through consoleShell");
+    assert.doesNotMatch(layout, /getBalance\(|sidebarBalance\(/, "and the sidebar shows CREDIT, not the legacy USD org summary");
   }
 });

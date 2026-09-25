@@ -1,0 +1,87 @@
+{
+  "task": "C3A",
+  "slice": "trusted consumer actions: key create/revoke, grant claim, same-origin guard, operator command validation (port unavailable), real-DB DUR-RLS",
+  "activity": "review",
+  "head": "3f4e5f1c",
+  "worktree": ".claude/worktrees/codex-app-c3a",
+  "branch": "codex/app-c3a",
+  "owned_paths": [
+    "apps/app/app/actions.ts",
+    "apps/app/lib/services/actions.ts",
+    "apps/app/lib/services/console.ts (keyOf export only)",
+    "apps/app/tests/c/",
+    "research/plan/evidence/c/C3A-3f4e5f1.md"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/app && node --test tests/c/actions.test.ts (at 33058670, tests only)",
+      "exit": 1,
+      "summary": "fails before: lib/services/actions.ts absent"
+    },
+    {
+      "cmd": "cd apps/app && node --test tests/c/actions.test.ts",
+      "exit": 0,
+      "summary": "17/17 pass"
+    },
+    {
+      "cmd": "cd apps/infrx-api && INFRX_D_TASK=app-c3a INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/actions_stack.py",
+      "exit": 0,
+      "summary": "9/9 real-DB pass; 5 concurrent claims -> 1 granted + 4 replayed, 1 durable signup_grant entry; old re-revoke path -> 23514 (fails-before)"
+    },
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "419 tests: 398 pass, 0 fail, 21 skipped (real-stack files)"
+    },
+    {
+      "cmd": "cd apps/app && pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "212/212 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/v/run-mutants.mjs",
+      "exit": 0,
+      "summary": "40/40 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/u/run-mutants.mjs",
+      "exit": 0,
+      "summary": "64/64 killed"
+    },
+    {
+      "cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "174/174 killed (32 new C3A)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "C3A code done; remaining is coordinator/U2/U3/A2 wiring (WR-1 proven composed); D10 ports WR-3/WR-4 extra 3/5/8 h",
+    "at": "20260925T2305Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C3A-1 (U2): api-keys dialog/revoke use createConsumerKey/revokeConsumerKey from @/app/actions; delete app/(console)/api-keys/actions.ts (patch in evidence, proven composed)",
+    "WR-C3A-2 (U3): delete admin addCredit (service-role USD balance edit); forms call operatorAction",
+    "WR-C3A-3 (D10+G): App-reachable audited operator port; durable key-create idempotency function",
+    "WR-C3A-4 (D10): api_keys insert policy requires a verified individual/wallet (unverified direct insert accepted today)",
+    "WR-C3A-5 (A2): onboarding page calls claimSignupGrant; GET callback composes claimGrant directly; set consoleShell routes.onboarding",
+    "WR-C3A-6 (coordinator, optional): make target for the actions real-DB stack"
+  ],
+  "evidence": [
+    "research/plan/evidence/c/C3A-3f4e5f1.md"
+  ]
+}
