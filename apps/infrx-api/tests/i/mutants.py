@@ -631,7 +631,7 @@ MUTANTS += (
        '"$CADDY_DIR/infrx/Caddyfile.maintenance"\n  for f in Caddyfile Caddyfile.maintenance; do',
        "test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness"),
     _m("engine_restart_ignored", "the cutover can restart the engine onto its new pin",
-       INSTALL, 'if [ "${ENGINE:-start}" = restart ]; then', "if false; then",
+       INSTALL, 'if [ "${ENGINE:-start}" = restart ]; then systemctl restart marlin2b-vllm', "if false; then systemctl restart marlin2b-vllm",
        "test_backend_deploy__a_dev_install_pins_the_image_it_probed"),
     _m("worker_readiness_skipped", "the edge opens only once the worker is ready too",
        LIB, ' && wait_http "$WORKER_READY" "${READY_S:-120}"', "",
