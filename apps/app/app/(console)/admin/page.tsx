@@ -1,168 +1,240 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { money, num } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { Result } from "@/lib/contracts/types";
+import { amount, credits, dateTime } from "@/lib/format";
 import { getSession } from "@/lib/session";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { addCredit } from "./actions";
+import { createClient } from "@/lib/supabase/server";
+import { OperatorForms } from "./operator-forms";
+import { ACCOUNT_LIMIT, operatorReads, type ReadClient } from "./operator-reads";
 
-export const metadata = { title: "Admin · infrx" };
+export const metadata = { title: "Operator · infrx" };
 
-const SELECT_CLASS =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+/** A section whose read failed says so; it never shows an empty table or a zero in its place. */
+function Section<T>({ result, children }: { result: Result<T>; children: (value: T) => React.ReactNode }) {
+  if (!result.ok) {
+    return (
+      <p role="status" className="p-4 text-sm text-destructive">
+        Unavailable: {result.error.message}.
+      </p>
+    );
+  }
+  return <>{children(result.value)}</>;
+}
 
-const thirtyDaysAgo = () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+function Empty({ cols, text }: { cols: number; text: string }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={cols} className="py-8 text-center text-sm text-muted-foreground">
+        {text}
+      </TableCell>
+    </TableRow>
+  );
+}
 
+const Mono = ({ children }: { children: React.ReactNode }) => <span className="font-mono text-xs break-all">{children}</span>;
+
+/**
+ * U3: minimal platform-operator controls. Protected operations, not the provider Lab: operator
+ * authority is the platform flag, the page is 404 without it, every read uses the operator's own
+ * session, and every change is one audited, idempotent operation that needs a reason.
+ */
 export default async function AdminPage() {
   const session = await getSession();
   if (!session.isOperator) notFound();
 
-  const admin = createAdminClient();
-  const since = thirtyDaysAgo();
-
-  // ponytail: aggregates in JS over the last 30 days of usage_events. Fine at this
-  // volume; move to a SQL view when a single org passes a few hundred thousand rows.
-  const [orgs, members, keys, events, ledger] = await Promise.all([
-    admin.from("organizations").select("id, name, slug, created_at").order("created_at"),
-    admin.from("org_members").select("org_id"),
-    admin.from("api_keys").select("org_id, revoked_at"),
-    admin.from("usage_events").select("org_id, cost_usd").gte("created_at", since),
-    admin.from("credit_ledger").select("org_id, delta_usd"),
-  ]);
-
-  const count = <T extends { org_id: string }>(rows: T[] | null, keep: (r: T) => boolean) => {
-    const map = new Map<string, number>();
-    for (const r of rows ?? []) if (keep(r)) map.set(r.org_id, (map.get(r.org_id) ?? 0) + 1);
-    return map;
-  };
-  const sum = (rows: { org_id: string }[] | null, field: string) => {
-    const map = new Map<string, number>();
-    for (const r of rows ?? []) {
-      const v = Number((r as Record<string, unknown>)[field] ?? 0);
-      map.set(r.org_id, (map.get(r.org_id) ?? 0) + v);
-    }
-    return map;
-  };
-
-  const memberCount = count(members.data, () => true);
-  const keyCount = count(keys.data, (k) => !(k as { revoked_at: string | null }).revoked_at);
-  const requestCount = count(events.data, () => true);
-  const cost = sum(events.data, "cost_usd");
-  const balance = sum(ledger.data, "delta_usd");
-  const rows = orgs.data ?? [];
+  const view = await operatorReads((await createClient()) as unknown as ReadClient);
 
   return (
     <>
-      <PageHeader title="Admin" subtitle="Every organization, and the credit ledger." />
+      <PageHeader
+        title="Operator"
+        subtitle="Platform operations. Every change is audited, idempotent and needs a reason; balances are never edited directly."
+      />
 
-      <Card>
+      <OperatorForms />
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Accounts</CardTitle>
+          <CardDescription>Consumer CREDIT wallets, most recently moved first (up to {ACCOUNT_LIMIT}).</CardDescription>
+        </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Organization</TableHead>
-                <TableHead className="text-right">Members</TableHead>
-                <TableHead className="text-right">Active keys</TableHead>
-                <TableHead className="text-right">Requests 30d</TableHead>
-                <TableHead className="text-right">Cost 30d</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((o) => (
-                <TableRow key={o.id}>
-                  <TableCell>
-                    <div className="font-medium">{o.name}</div>
-                    <div className="font-mono text-xs text-muted-foreground">{o.slug}</div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {num(memberCount.get(o.id) ?? 0)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {num(keyCount.get(o.id) ?? 0)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {num(requestCount.get(o.id) ?? 0)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(cost.get(o.id) ?? 0)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(balance.get(o.id) ?? 0)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    No organizations yet.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+          <Section result={view.accounts}>
+            {(accounts) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Individual</TableHead>
+                    <TableHead>Organization</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead className="text-right">Reserved</TableHead>
+                    <TableHead className="text-right">Available</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accounts.map((a) => (
+                    <TableRow key={a.walletId}>
+                      <TableCell>
+                        <div className="font-medium">{a.email ?? "—"}</div>
+                        <Mono>{a.userId}</Mono>
+                      </TableCell>
+                      <TableCell>
+                        <Mono>{a.orgId}</Mono>
+                      </TableCell>
+                      <TableCell>
+                        {a.suspended ? (
+                          <Badge variant="destructive">Suspended ({a.suspensionReason ?? "no code"})</Badge>
+                        ) : (
+                          <Badge variant="outline">Active</Badge>
+                        )}
+                        {a.signupGrantedAt === null ? <div className="mt-1 text-xs text-muted-foreground">Signup grant not received</div> : null}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{credits(a.ledgerTotal)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{credits(a.reservedTotal)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{credits(a.available)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {accounts.length === 0 ? <Empty cols={6} text="No consumer wallets yet." /> : null}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
         </CardContent>
       </Card>
 
-      <Card className="mt-4 max-w-xl">
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Unknown usage awaiting reconciliation</CardTitle>
+            <CardDescription>
+              Requests whose token usage is unknown. The hold is never charged; after its 24 h window it is released with the audited
+              operations CLI (<code>reconcile --org … --request …</code>).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Section result={view.unknownUsage}>
+              {(held) => (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Request</TableHead>
+                      <TableHead>Since</TableHead>
+                      <TableHead className="text-right">Held</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {held.map((h) => (
+                      <TableRow key={h.requestId}>
+                        <TableCell>
+                          <Mono>{h.requestId}</Mono>
+                          <div className="text-xs text-muted-foreground">
+                            org <Mono>{h.orgId}</Mono>
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{dateTime(h.createdAt)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{h.hold === null ? "Released" : amount(h.hold.amount, h.hold.unit)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {held.length === 0 ? <Empty cols={3} text="Nothing is waiting for reconciliation." /> : null}
+                  </TableBody>
+                </Table>
+              )}
+            </Section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Wallet reconciliation</CardTitle>
+            <CardDescription>Wallets whose summary differs from their ledger and active holds. Any row here is an incident.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Section result={view.drift}>
+              {(drift) => (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead className="text-right">Ledger drift</TableHead>
+                      <TableHead className="text-right">Reserved drift</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {drift.map((d) => (
+                      <TableRow key={d.walletId}>
+                        <TableCell>
+                          <Mono>{d.walletId}</Mono>
+                          <div className="text-xs text-muted-foreground">{d.kind}</div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{credits(d.ledgerDrift)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{credits(d.reservedDrift)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {drift.length === 0 ? <Empty cols={3} text="Every wallet reconciles with its ledger and holds." /> : null}
+                  </TableBody>
+                </Table>
+              )}
+            </Section>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Add a ledger entry</CardTitle>
+          <CardTitle>Rates</CardTitle>
+          <CardDescription>
+            Rates are published only as approved, immutable rate cards with the audited operations CLI (<code>publish-card</code>). A
+            new card applies to newly admitted requests only. The published catalog is on{" "}
+            <Link href="/models" className="underline underline-offset-4">
+              Models
+            </Link>
+            .
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form action={addCredit} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="org_id">Organization</Label>
-              <select id="org_id" name="org_id" required className={SELECT_CLASS}>
-                {rows.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name} ({o.slug})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="delta_usd">Amount (USD)</Label>
-                <Input
-                  id="delta_usd"
-                  name="delta_usd"
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="25.00"
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="kind">Kind</Label>
-                <select id="kind" name="kind" defaultValue="grant" className={SELECT_CLASS}>
-                  <option value="grant">grant</option>
-                  <option value="purchase">purchase</option>
-                  <option value="usage">usage</option>
-                  <option value="adjustment">adjustment</option>
-                </select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="reason">Reason</Label>
-              <Input id="reason" name="reason" placeholder="launch credit" className="w-full" />
-            </div>
-            <Button type="submit">Add entry</Button>
-          </form>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Audit trail</CardTitle>
+          <CardDescription>The newest operator writes. Append-only.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Section result={view.audit}>
+            {(entries) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Actor</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entries.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="whitespace-nowrap">{dateTime(e.at)}</TableCell>
+                      <TableCell>
+                        <Mono>{e.action}</Mono>
+                      </TableCell>
+                      <TableCell>
+                        <Mono>{e.actor}</Mono>
+                      </TableCell>
+                      <TableCell>{e.targetOrgId === null ? "—" : <Mono>{e.targetOrgId}</Mono>}</TableCell>
+                      <TableCell className="max-w-xs break-words">{e.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                  {entries.length === 0 ? <Empty cols={5} text="No operator writes yet." /> : null}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
         </CardContent>
       </Card>
     </>
