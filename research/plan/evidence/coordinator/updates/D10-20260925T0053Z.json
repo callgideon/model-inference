@@ -1,0 +1,67 @@
+{
+  "task": "D10",
+  "slice": "d (a, b, c committed)",
+  "activity": "running",
+  "head": "31c2112c",
+  "worktree": ".claude/worktrees/codex-d10-durable",
+  "branch": "codex/d10-durable",
+  "owned_paths": [
+    "apps/app/supabase/migrations/ (0019, 0020, 0021 new)",
+    "apps/infrx-api/infrx/state/",
+    "apps/infrx-api/tests/d/",
+    "research/plan/evidence/d/"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=d10 uv run --frozen pytest -q tests/d (full, default mutant subset)",
+      "exit": 0,
+      "summary": "f44499ea: 791 passed, 1 skipped, 8 xfailed, 0 failed"
+    },
+    {
+      "cmd": "pytest -q tests/d/test_ready.py test_lifecycle_conformance.py test_jobstore_conformance.py test_credit_jobstore_conformance.py test_admission.py test_settle.py test_reads.py",
+      "exit": 0,
+      "summary": "31c2112c: 195 passed, 7 xfailed; F2C.d transcripts 24/24 after normalization"
+    },
+    {
+      "cmd": "other tracks' PG tests on the D10 schema (contracts, g/ops, m, w, q)",
+      "exit": 0,
+      "summary": "31c2112c: 324 passed, 7 skipped"
+    },
+    {
+      "cmd": "I8 privilege_probe.py --role infrx_runtime (plain image)",
+      "exit": 0,
+      "summary": "PASS, 62 checks"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all D mutant lists",
+      "exit": null,
+      "summary": "interrupted by the session limit; 3 F seen by 29%; rerun"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "code/SQL committed and green on plain PG; remaining: full mutant list, Supabase-image runs, probe on that image",
+    "at": "2026-09-25T00:53Z"
+  },
+  "blockers": [
+    "lane ports lie in the kernel ephemeral range (32768-60999): a foreign outgoing connection took 127.0.0.1:55442 twice; pgharness retries, coordinator may move ports below 32768"
+  ],
+  "wiring_requests": [
+    "G7 relay.admit -> PgLifecycle.admit_ready; jobs.py result expiry from outcome.result_expires_at + read_outcome",
+    "W5 preparation -> PgLifecycle.claim_preparation + readiness().sources",
+    "M5 uploads over PgLifecycle UploadRepository; register before every write",
+    "M6 retention over ContentLifecycle; DB content scrubbed in acknowledge_delete; factory pgtesting.make_lifecycle_factory",
+    "coordinator: PgLifecycle(connect, limits=settings.pilot, upload_window_s, grace_s, claim_ttl_s, retention_s) on the existing pool; configure_connection per WR-I8-1",
+    "I8: logins infrx_runtime/infrx_monitor, research/plan/evidence/d/D10-runtime-functions.txt, readiness_cutover_check, validate jobs_success_has_result_expiry",
+    "G8: transition readiness query; pgworld.settle -> claim_preparation_ready; spent -> consumer_jobs",
+    "C0/U4: public.consumer_jobs / consumer_job_result"
+  ],
+  "evidence": [
+    "research/plan/evidence/d/D10-HANDOFF-31c2112.md",
+    "research/plan/evidence/d/D10-runtime-functions.txt"
+  ],
+  "next_action": "rerun INFRX_MUTANTS=all D lists and triage; INFRX_D1_IMAGE=supabase D10 suites + test_postgrest_d10; probe on the Supabase image"
+}
