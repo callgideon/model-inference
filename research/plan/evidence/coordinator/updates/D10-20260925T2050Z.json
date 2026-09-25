@@ -1,0 +1,16 @@
+{"task": "D10", "slice": "D10-FOLLOWUP fix round (0-D10F-1, 0-D10F-2, 2-D10F-ACC-1, 2-D10F-ACC-2)", "activity": "review",
+ "head": "9d4bd28f", "worktree": ".claude/worktrees/codex-d10-followup", "branch": "codex/d10-followup",
+ "owned_paths": ["apps/app/supabase/migrations/0022_*", "apps/infrx-api/infrx/state/", "apps/infrx-api/tests/d/", "research/plan/evidence/d/D10-*", "research/plan/evidence/coordinator/updates/D10-*"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=d10 pytest tests/d/test_migration_mutants.py -k d10_fail_prep_replay_ignores (before the assertion)", "exit": 1, "summary": "d10_fail_prep_replay_ignores_generation SURVIVED; worker half killed"},
+  {"cmd": "INFRX_D_TASK=d10 pytest tests/d/test_migration_mutants.py -k 'd10_fail_prep or well_formed' (after)", "exit": 0, "summary": "12 passed"},
+  {"cmd": "INFRX_D_TASK=d10 pytest -q tests/d", "exit": 1, "summary": "843 passed, 1 failed (transcript, needs W2), 1 skipped, 8 xfailed"},
+  {"cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py", "exit": 0, "summary": "734 passed, 0 survivors"},
+  {"cmd": "scratch merge e481584b + 9d4bd28f: pytest tests/integration/test_harness.py without / with wiring patch", "exit": 0, "summary": "1 failed 26 passed without W4; 27 passed with"},
+  {"cmd": "scratch merge: pytest tests/m/test_retention.py tests/d/test_lifecycle_conformance.py tests/d/test_followup_d10.py tests/d/test_composition_pg.py [+ tests/g/ops/test_transition_pg.py] without / with patch", "exit": 0, "summary": "2 failed (W3 XPASS strict, W2 transcript) 108 passed without; 117 passed with"},
+  {"cmd": "scratch merge + patch: pytest tests/contracts -k 'not pg'", "exit": 0, "summary": "1260 passed"}
+ ],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "coordinator merge of the branch with W1-W4 as one atomic set, then 0023 after W5/G7", "at": "2026-09-25T20:50Z"},
+ "blockers": [],
+ "wiring_requests": ["W1-W4 in research/plan/evidence/d/D10-followup-wiring.patch are ONE atomic merge set with codex/d10-followup on claude/consumer-v1 (W2+W3+W4 required for green; W1 for V-G8TL-2)"],
+ "evidence": ["research/plan/evidence/d/D10-followup-4b46209.md", "research/plan/evidence/d/D10-followup-wiring.patch"]}
