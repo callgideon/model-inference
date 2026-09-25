@@ -210,6 +210,8 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
         "0019_upload_readiness.sql", "0020_content_lifecycle.sql", "0021_read_authority.sql",
         # D10 follow-up (fail_preparation, set_feature_flag, WR-7 refetch, F2 guard revoke)
         "0022_preparation_refusal_and_flag_writer.sql",
+        # D10 door revoke (the runtime login loses admit/claim_preparation, R123)
+        "0023_runtime_unmarked_door_revoke.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

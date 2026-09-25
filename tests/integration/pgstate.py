@@ -954,14 +954,14 @@ def write_rows() -> list[Check]:
 
 # D10's two dedicated logins (0021:458-560, R127), read off the migration text: NOLOGIN here
 # (the operator grants LOGIN out of band), NOINHERIT, no attribute that widens, a member of
-# nothing, and exactly the surface 0021 grants. The runtime still holds the two unmarked
-# doors `admit`/`claim_preparation` - R123's interim clause; D10's follow-up migration revokes
-# them, and that migration re-baselines RUNTIME_FUNCTIONS. Read as `postgres`, catalog-wide
-# over `infrx`/`public`, so a grant that appears anywhere fails the row.
-RUNTIME_FUNCTIONS = (                                             # 0021:490-515
-    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit(jsonb)", "infrx.admit_ready(jsonb)",
+# nothing, and exactly the surface 0021 grants, plus 0022's `fail_preparation`, minus the
+# two unmarked doors `admit`/`claim_preparation` 0023 revokes (R123; the W5 runtime admits
+# and claims through the ready doors). Read as `postgres`, catalog-wide over
+# `infrx`/`public`, so a grant that appears anywhere fails the row.
+RUNTIME_FUNCTIONS = (                                             # 0021:490-515, 0022, 0023
+    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",
     "infrx.append(jsonb)", "infrx.cancel(jsonb)", "infrx.claim(jsonb)",
-    "infrx.claim_preparation(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+    "infrx.claim_preparation_ready(jsonb)",
     "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
     "infrx.content_claim(jsonb)", "infrx.content_references(jsonb)",
     "infrx.content_register(jsonb)", "infrx.content_tombstone(jsonb)",
