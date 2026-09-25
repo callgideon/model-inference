@@ -1727,6 +1727,11 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "            if at is None or not 0 <= rt.clock() - at < rt.settings.price_ttl:",
        "            if True:",
        "test_catalog_truth__a_catalog_change_reaches_discovery_within_the_cache_window"),
+    # --- A3 WR-1: the Docs examples replayed on the mounted routes (resume is a replay) ---
+    _m("docs_resume_not_replayed", "the Docs resume example is answered as a replay of its job",
+       "gateway/routes/jobs.py", "                                idempotency_replayed=replayed)",
+       "                                idempotency_replayed=False)",
+       "test_app_journey__every_docs_example_is_served_by_the_mounted_routes"),
 )
 
 
@@ -1767,6 +1772,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     for name in ("pyproject.toml", "client_example.py"):
         shutil.copy2(API_DIR / name, api / name)
     (root / "models").symlink_to(API_DIR.parents[1] / "models")
+    # A3 WR-1: `test_app_examples` reads the App's recorded Docs calls (read only).
+    (root / "apps" / "app").symlink_to(API_DIR.parent / "app")
     return api
 
 
