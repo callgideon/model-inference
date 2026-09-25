@@ -184,38 +184,101 @@ def discovery(trip) -> dict:
     return answer.json()
 
 
+# One value per parameter name the validator knows (G7 publishes `capability.parameters` and
+# `unsupported_parameters` from `validate.SUPPORTED`/`UNSUPPORTED`). `model`, `messages`
+# and `stream` are the request itself.
+SAMPLES = {"max_tokens": 8, "max_completion_tokens": 8, "n": 1, "seed": 7, "stop": ["zz"],
+           "temperature": 0.5, "top_p": 0.9, "presence_penalty": 0.0,
+           "frequency_penalty": 0.0,
+           "tools": [{"type": "function", "function": {"name": "f", "parameters": {}}}],
+           "tool_choice": "none", "parallel_tool_calls": False,
+           "functions": [{"name": "f", "parameters": {}}], "function_call": "none",
+           "response_format": {"type": "json_object"}, "logit_bias": {}, "logprobs": True,
+           "top_logprobs": 1, "price_snapshot": {}}
+ITSELF = {"model", "messages", "stream"}
+
+
 def test_s13_discovery_claims_nothing_serving_contradicts(workdir):
-    """No zero-data-retention claim (serving stores payloads, media, results: RV-01), no
-    concurrency promise, no advertised parameter that admission refuses."""
+    """G7's `/v1/models` (F2C-C `PublishedModel` entries): no zero-data-retention claim
+    (serving stores payloads, media, results: RV-01), no concurrency promise, a video cap no
+    longer than the approved 82 s, and every advertised parameter really accepted by
+    admission - every parameter it lists as refused really refused."""
     with world.composed(workdir) as trip:
         doc, problems = discovery(trip), []
+        assert doc.get("data"), f"discovery publishes nothing for the served model: {doc}"
         for model in doc["data"]:
+            name, cap = model["id"], model["capability"]
             if (model.get("compliance") or {}).get("zdr") or \
-                    (model.get("retention") or {}).get("zero_data_retention"):
-                problems.append(f"{model['id']}: claims zero data retention")
-            for cap in model.get("capacity", []):
-                if cap.get("type") == "concurrency":
-                    problems.append(f"{model['id']}: promises concurrency {cap.get('value')}")
-            for output in model.get("output_modalities", []):
-                for name in (output.get("supported_parameters") or {}):
-                    extra = {"tools": [{"type": "function", "function": {"name": "f",
-                                                                          "parameters": {}}}],
-                             "seed": 7, "stop_sequences": None}.get(name)
-                    if extra is None:
+                    model["retention"]["zero_data_retention"]:
+                problems.append(f"{name}: claims zero data retention")
+            if "capacity" in model:
+                problems.append(f"{name}: promises a capacity/concurrency")
+            if (cap.get("video") or {}).get("max_seconds", 0) > 82:
+                problems.append(f"{name}: advertises {cap['video']['max_seconds']} s video")
+            for listed, accepted in ((cap["parameters"], True),
+                                     (cap["unsupported_parameters"], False)):
+                for param in sorted(set(listed) - ITSELF):
+                    if param not in SAMPLES:
+                        problems.append(f"{name}: `{param}` has no probe (extend SAMPLES)")
                         continue
                     answer = trip.send(trip.world.alpha, "sync", world.TEXT, None,
-                                       **{name: extra})
-                    if answer.status_code == 400:
-                        problems.append(f"{model['id']}: advertises `{name}`, admission "
-                                        f"refuses it ({world.code(answer)})")
+                                       **{param: SAMPLES[param]})
+                    if accepted and answer.status_code == 400:
+                        problems.append(f"{name}: advertises `{param}`, admission refuses "
+                                        f"it ({world.code(answer)})")
+                    if not accepted and answer.status_code != 400:
+                        problems.append(f"{name}: lists `{param}` as refused, admission "
+                                        f"answers {answer.status_code}")
         assert not problems, problems
 
 
+def running_profile(trip):
+    """The serving profile of the box as it runs: its own environment's settings, the
+    served deployment and serving revision read from the clone's catalog, the validator's
+    allow-list, the MIME types both the validator and the media profile accept, and the
+    modes this box serves (sync, SSE when the revision declares it, async: /v1/jobs)."""
+    import asyncio
+
+    from infrx import config
+    from infrx.contracts.records import ExecutionMode
+    from infrx.contracts.v2 import published_model as pm
+    from infrx.contracts.v2.records import CredentialAudience
+    from infrx.gateway.routes import validate
+    from infrx.media.prepare import MediaProfile
+    from infrx.state.catalog import PgCatalogDirectory
+    from infrx.state.jobstore import connector
+    settings = config.from_env(trip.box.env)
+    catalog = PgCatalogDirectory(connector(stack.harness.pg_dsn(trip.world.database)))
+
+    async def rows():
+        deployment = await catalog.resolve(settings.model_id,
+                                           audience=CredentialAudience.consumer,
+                                           endpoint_id=None)
+        return deployment, await catalog.serving_revision(deployment.serving_version_id)
+    deployment, serving = asyncio.run(rows())
+    modes = [ExecutionMode.sync, ExecutionMode.async_] + \
+        ([ExecutionMode.stream] if serving.capability.stream_output else [])
+    return pm.serving_profile(
+        limits=settings.pilot, deployment=deployment, serving=serving,
+        parameters=validate.SUPPORTED, refused=validate.UNSUPPORTED,
+        video_mime=set(settings.allowed_video_mime) & set(MediaProfile().allowed_mime),
+        fps=int(settings.fps), min_frames=settings.min_frames,
+        max_frames=settings.max_frames, max_pixels_per_frame=settings.px_per_frame,
+        execution_modes=modes)
+
+
 def test_s13_discovery_matches_the_running_serving_profile(workdir):
-    """F2C-C's `violations(published, serving_profile(...))` is empty for what G7 serves."""
-    try:
-        from infrx.contracts.v2 import published_model   # noqa: F401
-    except ImportError:
-        world.blocked("F2C", "G7", why="no published-model projection in this tree (F2C-C)")
-    world.blocked("G7", why="the route does not yet serve the projection with the running "
-                            "profile it was checked against; wire G7's hook here (phase 2)")
+    """F2C-C's `violations(published, profile)` is empty for every entry G7 serves, against
+    the approved release profile (82 s, `published_fixtures.deployed_profile`) AND against
+    the profile of the box actually running (its environment and the clone's catalog)."""
+    from infrx.contracts.v2 import published_model as pm
+    from infrx.contracts.v2.published_fixtures import deployed_profile
+    with world.composed(workdir) as trip:
+        entries = [pm.PublishedModel.model_validate(e) for e in discovery(trip)["data"]]
+        assert entries, "discovery publishes nothing for the served model"
+        running, problems = running_profile(trip), []
+        for entry in entries:
+            for label, profile in (("approved", deployed_profile()), ("running", running)):
+                problems += [f"{entry.id} vs {label}: {v}"
+                             for v in pm.violations(entry, profile)]
+        assert not problems, problems

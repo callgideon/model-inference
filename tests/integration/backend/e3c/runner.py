@@ -148,7 +148,8 @@ REQUIRED = {
             "test_s08_a_lost_valkey_index_is_rebuilt_and_loses_no_accepted_job"),
     "s09": ("test_s09_concurrent_signup_callbacks_and_grants_grant_exactly_once",
             "test_s09_a_historical_usd_job_keeps_its_units_while_credit_serves",
-            "test_s09_the_credit_transition_is_a_reported_dry_run_first"),
+            "test_s09_the_credit_transition_is_a_reported_dry_run_first",
+            "test_s09_a_transition_meeting_a_parked_admission_refuses_within_its_bound"),
     "s10": ("test_s10_the_runtime_login_cannot_become_an_owner_or_rewrite_money",
             "test_s10_the_browser_roles_reach_nothing_outside_the_console_surface",
             "test_s10_operator_and_consumer_credentials_stay_in_their_lane"),
@@ -186,7 +187,9 @@ REQUIRED = {
             "test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port",
             "test_s12_a_barrier_holds_on_whichever_candidate_the_process_calls",
             "test_s12_a_collector_that_cannot_run_is_blocked_not_passed",
-            "test_s12_the_dedicated_runtime_login_is_a_real_box_database"),
+            "test_s12_the_dedicated_runtime_login_is_a_real_box_database",
+            *(f"test_s12_every_bypass_installs_on_this_tree[{n}]" for n in (
+                "upload-local", "expiry-recompute", "revoke-ignored", "tenant-blind"))),
 }
 # 2-ACC-2: infrastructure that broke under a case (never a product gap): INVALID[harness].
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError|BypassTargetMissing)\b"

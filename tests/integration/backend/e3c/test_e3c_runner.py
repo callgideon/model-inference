@@ -122,6 +122,19 @@ def test_s12_every_fault_point_and_bypass_names_code_that_exists():
                                    "tenant-blind"}
 
 
+@pytest.mark.parametrize("name", ["upload-local", "expiry-recompute", "revoke-ignored",
+                                  "tenant-blind"])
+def test_s12_every_bypass_installs_on_this_tree(name):
+    """A negative control whose bypass targets code the tree no longer has is INVALID, not a
+    proof: each bypass must install (in a fresh process - it monkeypatches the tree). E3C
+    rerun: G7 removed `Jobs.result_expiry`, so the phase-2 `expiry-recompute` could not
+    install; it now rewrites the outcome `Relay._owned` returns."""
+    import subprocess
+    done = subprocess.run([sys.executable, "-c", f"import world; world.BYPASSES[{name!r}]()"],
+                          cwd=str(HERE), capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr[-800:]
+
+
 def test_s12_the_namespace_is_the_reserved_block():
     """WR-1's row, however it is provided: the e3c layout is tasklocal's 56900-56999."""
     import world

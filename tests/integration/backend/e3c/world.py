@@ -266,20 +266,24 @@ def _upload_local() -> None:
 
 
 def _expiry_recompute() -> None:
-    """RESULT-EXPIRY removed: the reported and enforced expiry is recomputed from the route's
-    CURRENT `RESULT_TTL_S` over the settlement time - the base tree's `Jobs.result_expiry`."""
-    jobs = _target("infrx.gateway.routes.jobs", "Jobs")
-    _target("infrx.gateway.routes.jobs", "Jobs.result_expiry")
+    """RESULT-EXPIRY removed: the reported and enforced expiry is recomputed from the
+    gateway's CURRENT `RESULT_TTL_S` over the settlement time (the base tree's rule). G7 reads
+    the persisted `result_expires_at` off the owned outcome on every read (status, result,
+    same-key replay: all through `Relay._owned`), so the bypass rewrites it there."""
+    relay = _target("infrx.gateway.routes.relay", "Relay")
+    original = _target("infrx.gateway.routes.relay", "Relay._owned")
     from datetime import timedelta
 
     from infrx.contracts.records import JobState
 
-    def result_expiry(self, outcome):
-        if (outcome is None or outcome.state is not JobState.succeeded
-                or outcome.usage is None or not outcome.result_ref):
-            return None
-        return outcome.settled_at + timedelta(seconds=self.relay.limits.result_ttl_s)
-    jobs.result_expiry = result_expiry
+    async def _owned(self, org_id, handle):
+        admission, outcome = await original(self, org_id, handle)
+        if (outcome is not None and outcome.state is JobState.succeeded
+                and outcome.usage is not None and outcome.result_ref):
+            outcome = outcome.model_copy(update={"result_expires_at": outcome.settled_at
+                                                 + timedelta(seconds=self.limits.result_ttl_s)})
+        return admission, outcome
+    relay._owned = _owned
 
 
 def _revoke_ignored() -> None:

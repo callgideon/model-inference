@@ -186,6 +186,35 @@ def test_s09_the_credit_transition_is_a_reported_dry_run_first(workdir):
                        request_id) == [("legacy_usd",)]
 
 
+LOCK_BOUND_S = 5.0     # the transition's drain bound in this case
+
+
+def test_s09_a_transition_meeting_a_parked_admission_refuses_within_its_bound(workdir):
+    """G8 lock bound (R117/R118 amended; b06e3757): an admission in flight holds its regime's
+    flag FOR SHARE (0021 `require_feature`) until it commits. A transition that must freeze
+    that flag waits no longer than its drain bound, then refuses `open_transactions` with
+    nothing applied - never an UPDATE parked behind the admission for ever. The parked
+    admission is the exact call admission makes, left open on its own connection."""
+    import psycopg
+    with world.composed(workdir, start=("gateway",)) as trip:
+        before = books(trip)
+        with psycopg.connect(stack.harness.pg_dsn(trip.world.database)) as parked:
+            parked.execute("select infrx.require_feature('credit_admission')")  # txn open
+            began = time.monotonic()
+            status, answer = world.cli(trip, "credit-transition", "--to", "legacy_usd",
+                                       "--drain-timeout-s", str(LOCK_BOUND_S),
+                                       "--poll-s", "0.5", "--idempotency-key", "t-e3c-lock",
+                                       "--reason", "e3c: a parked admission bounds the freeze")
+            took = time.monotonic() - began
+            parked.rollback()
+        codes = {b["code"] for b in answer.get("blockers", [])}
+        assert status == 1 and "open_transactions" in codes, (status, answer)
+        assert not answer.get("applied"), f"a refused transition applied: {answer['applied']}"
+        # the drain bound + the statement margin + one CLI process start and inventory
+        assert took <= LOCK_BOUND_S + 15, f"the refusal took {took:.1f} s"
+        assert books(trip) == before, "a refused transition moved flags or money"
+
+
 # ------------------------------------------------------------------ s11
 
 
