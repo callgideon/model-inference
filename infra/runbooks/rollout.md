@@ -32,7 +32,8 @@ HOSTED="host=aws-0-us-east-2.pooler.supabase.com port=5432 user=postgres.fcbnscg
 
 `preflight.py` writes the env file; secrets come from SSM (`--param-prefix /model-inference`),
 tunables only through `INFRX_SET`. `ENGINE_MAX_NUM_SEQS` travels on its own: 50-install puts
-it into `INFRX_SET` itself (default 32, the old box value), and a name given twice is refused.
+it into `INFRX_SET` itself and refuses to start without it (no default since ROLLOUT-FIXES;
+it was 32, the old box value), and a name given twice is refused.
 
 | Name | Value | Source |
 |---|---|---|
@@ -53,8 +54,8 @@ it into `INFRX_SET` itself (default 32, the old box value), and a name given twi
 
 ```bash
 INSTALL_ARGS=(RELEASE="$RELEASE" ENGINE_MAX_NUM_SEQS=8
-  INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8")
-# I8 (proposed, interim until WR-I8-1): add DATABASE_POOL_MAX_SIZE=6 to INFRX_SET
+  INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8 DATABASE_POOL_MAX_SIZE=6")
+# DATABASE_POOL_MAX_SIZE=6: I8's interim pin until WR-I8-1 (pool_budget.py: 21 > 15 at defaults, 13 at 6)
 ```
 
 ## 2. The window
@@ -246,3 +247,7 @@ Nothing here has run; every row's output goes into the I8 evidence record.
   §4 lists the continuous-operations ops O1-O14 with their pass criteria and blockers. Not
   run.
 - 2026-09-25 (OPS-CLI-DSN): W7d names the operator CLI's own `OPERATIONS_DATABASE_URL` and its refusal of the dedicated logins. Not run.
+- 2026-09-25 (ROLLOUT-FIXES): §1's `INSTALL_ARGS` carries `DATABASE_POOL_MAX_SIZE=6` inside
+  `INFRX_SET` (it was a comment; the rehearsal's `pool_budget.py` FAILs at defaults, peak 21 +
+  headroom 2 > 15, and PASSes at 6, peak 13); 50-install requires `ENGINE_MAX_NUM_SEQS` (its
+  default of 32 is gone). Not run on the box.
