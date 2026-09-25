@@ -688,7 +688,9 @@ async def collect_once(grace_s: float = 0.0) -> dict:
     settings = from_env()
     limits = settings.pilot
     dsn = make_conninfo(limits.database_url, connect_timeout=COLLECTOR_CONNECT_TIMEOUT_S)
-    lifecycle = PgLifecycle(connector(dsn), limits=limits)
+    # composed as the pilot pool is (RUNTIME-LOGIN, R127): no `set role` on a dedicated login
+    lifecycle = PgLifecycle(connector(dsn, set_role=not pilot.dedicated_login(dsn)),
+                            limits=limits)
     report = await RetentionCollector(lifecycle, pilot.object_store(settings)).sweep()
     return {"deleted": [key for _, key, _ in report.deleted], "uploads_expired": 0,
             "retained": dict(report.retained), "aborted": report.aborted}
