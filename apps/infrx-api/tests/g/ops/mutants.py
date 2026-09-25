@@ -55,6 +55,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("operations_dsn_ignored", "the adapters dial the deployment's DATABASE_URL",
        C, "    connect = connector(dsn)\n", '    connect = connector("postgresql:///infrx")\n',
        OPS_ROOT),
+    # --- OPS-CLI-DSN (RL-V5): the operator tool never dials a dedicated login, and its own
+    # DSN wins over the runtime env file's DATABASE_URL.
+    _m("operations_dedicated_login_admitted", "the operator tool refuses the runtime login",
+       C, "    if dedicated:\n", "    if False:\n",
+       "test_api_ops__the_operator_tool_refuses_a_dedicated_runtime_login"),
+    _m("operations_dsn_precedence_inverted", "OPERATIONS_DATABASE_URL wins over DATABASE_URL",
+       C, "    dsn = environ.get(OPERATIONS_DSN_ENV, \"\").strip()\n", "    dsn = \"\"\n",
+       "test_api_ops__the_operator_dsn_takes_precedence_over_database_url",
+       "test_api_ops__the_operator_tool_refuses_a_dedicated_runtime_login"),
     # --- the published release's measured pins (E4B certification, CUTOVER item 6) ---------
     _m("release_image_placeholder_restored", "the release names W3's digest-pinned image",
        V2FIX, '    "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"',

@@ -1,0 +1,13 @@
+{"task": "G8", "slice": "OPS-CLI-DSN", "activity": "review", "head": "952ea8c",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-ops-cli-dsn",
+ "branch": "codex/ops-cli-dsn",
+ "owned_paths": ["apps/infrx-api/infrx/operations/cli.py", "apps/infrx-api/tests/g/ops/", "infra/rollout/README.md", "infra/runbooks/", "research/plan/evidence/g/", "research/plan/evidence/coordinator/updates/"],
+ "commands": [
+  {"cmd": "uv run --frozen pytest -q tests/g/ops/test_cli.py (base cli.py)", "exit": 1, "summary": "2 new cases fail before"},
+  {"cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q tests/g/ops tests/g/test_composition.py", "exit": 0, "summary": "112 passed"},
+  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/ops/test_mutants.py -k 'operations_ or well_formed or every_case'", "exit": 0, "summary": "6 passed; 2 new mutants killed"},
+  {"cmd": "python -c 'from deploy import preflight; print(preflight.schema_id())'", "exit": 0, "summary": "c947948d1106e4fc unchanged"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high", "basis": "complete; review only", "at": "2026-09-25T17:34Z"},
+ "next_action": "coordinator review/merge; box operator shell exports OPERATIONS_DATABASE_URL before DATABASE_URL moves to infrx_runtime",
+ "blockers": [], "wiring_requests": [],
+ "evidence": ["research/plan/evidence/g/OPS-CLI-DSN-952ea8c.md"]}

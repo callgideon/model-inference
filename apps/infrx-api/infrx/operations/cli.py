@@ -10,11 +10,13 @@ Secrets never travel through argv or output: the operator secret comes from
 issued secret is written once into `--secret-file` (created 0600, never overwritten).
 stdout carries the JSON result without the secret.
 
-The composition root is `build_operations()`: the D5/A1 PostgreSQL adapters over the
-deployment's `DATABASE_URL` (`config.from_env`, the one environment reader), one fresh
-`service_role` connection per operation. Without it the tool refuses (the fakes live in
-tests only), so it cannot run against a store that would silently accept writes nobody
-persists.
+The composition root is `build_operations()`: the D5/A1 PostgreSQL adapters over
+`$OPERATIONS_DATABASE_URL` (the owner or broad login, read like `$INFRX_OPERATOR_KEY`),
+else the deployment's `DATABASE_URL` (`config.from_env`), one fresh `service_role`
+connection per operation. Without either the tool refuses (the fakes live in tests only),
+so it cannot run against a store that would silently accept writes nobody persists. A
+dedicated login (`infrx_runtime`/`infrx_monitor`, R127) is refused before anything is
+dialled: it cannot `set role`, and the runtime login must never rewrite money.
 """
 from __future__ import annotations
 
@@ -31,16 +33,29 @@ from ..contracts.v2 import fixtures as v2fix
 from . import service, transition
 
 OPERATOR_KEY_ENV = "INFRX_OPERATOR_KEY"
+OPERATIONS_DSN_ENV = "OPERATIONS_DATABASE_URL"
 
 
-def build_operations(settings=None) -> service.Operations:
-    """D5 request 4 / E4B request 4: the operator ports on PostgreSQL, from `settings`
-    (default: the process environment, as the gateway reads it)."""
+def build_operations(settings=None, *, environ=os.environ) -> service.Operations:
+    """D5 request 4 / E4B request 4: the operator ports on PostgreSQL, from
+    `$OPERATIONS_DATABASE_URL`, else `settings` (default: the process environment, as the
+    gateway reads it). Messages name the variable, never the DSN."""
     from ..config import from_env
-    dsn = (from_env() if settings is None else settings).pilot.database_url.strip()
+    from ..gateway.pilot import dedicated_login
+    dsn = environ.get(OPERATIONS_DSN_ENV, "").strip()
+    source = OPERATIONS_DSN_ENV if dsn else "DATABASE_URL"
+    dsn = dsn or (from_env() if settings is None else settings).pilot.database_url.strip()
     if not dsn:
-        raise SystemExit("DATABASE_URL is not set: this tool runs only against the "
-                         "PostgreSQL store, never an in-memory one")
+        raise SystemExit(f"DATABASE_URL is not set (nor {OPERATIONS_DSN_ENV}): this tool runs "
+                         "only against the PostgreSQL store, never an in-memory one")
+    try:
+        dedicated = dedicated_login(dsn)
+    except Exception:
+        raise SystemExit(f"{source} is not a valid connection string") from None
+    if dedicated:
+        raise SystemExit(f"{source} logs in as a dedicated login (runtime/monitor), which "
+                         f"the operator tool refuses: export {OPERATIONS_DSN_ENV} with the "
+                         "owner or broad login's DSN")
     from ..state import operations as pg
     from ..state.catalog import PgCatalogDirectory
     from ..state.jobstore import PgJobStore, connector
@@ -196,7 +211,7 @@ def main(argv=None, *, ops=None, environ=os.environ, prompt=getpass.getpass) -> 
     else:
         secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()
     try:
-        result = asyncio.run(dispatch(ops or build_operations(), secret, a))
+        result = asyncio.run(dispatch(ops or build_operations(environ=environ), secret, a))
     except transition.TransitionBlocked as e:
         print(json.dumps(e.report, sort_keys=True))         # what blocked it, what changed
         print(json.dumps({"error": e.code, "message": str(e)}), file=sys.stderr)
