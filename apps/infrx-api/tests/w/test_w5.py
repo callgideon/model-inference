@@ -604,6 +604,7 @@ def failing(prep: Prep) -> FailPreparation:
 
 
 CAP = DEFAULTS.replace(max_video_seconds=82.0)          # the deployed cap (P-20 decision B)
+WAS = DEFAULTS.replace(max_video_seconds=120.0)         # the cap before P-20 (G7 WR-1 moved the default)
 
 
 @pytest.mark.parametrize("refusal", ["over_the_cap", "over_the_context"])
@@ -619,6 +620,7 @@ def test_w5_refuse__a_permanent_refusal_ends_the_job_once(tmp_path, refusal):
 
     async def case():
         if refusal == "over_the_cap":
+            prep.media.profile = MediaProfile.pinned(WAS)
             request = await prep.admit(video=True, clip=mp4(seconds=100.0))   # admitted at 120
             prep.media.profile = MediaProfile.pinned(CAP)
         else:
@@ -657,6 +659,7 @@ def test_w5_refuse__without_fail_preparation_a_permanent_refusal_lapses_within_i
 
     async def case():
         if refusal == "over_the_cap":
+            prep.media.profile = MediaProfile.pinned(WAS)
             request = await prep.admit(video=True, clip=mp4(seconds=100.0))   # admitted at 120
             prep.media.profile = MediaProfile.pinned(CAP)
         else:
@@ -776,6 +779,7 @@ def test_w5_refuse__a_permanent_refusal_racing_a_cancel_settles_once(tmp_path):
     ends = failing(prep)
 
     async def case():
+        prep.media.profile = MediaProfile.pinned(WAS)
         request = await prep.admit(video=True, clip=mp4(seconds=100.0))
         prep.media.profile = MediaProfile.pinned(CAP)
         real = prep.media.prepare
