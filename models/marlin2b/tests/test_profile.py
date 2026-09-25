@@ -692,3 +692,23 @@ def test_mixed_spend_units_or_an_unknown_currency_refuse_the_run():
                 clips, manifest, **{"bounds.spend": spend})))
             assert code == 2 and not v["valid"] and any(needle in e for e in v["errors"]), (
                 why, v["errors"])
+
+
+def test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap():
+    """Oracle (PCC-V1): json.load accepts Infinity/NaN; an Infinity cap admitting any schedule
+    (1e9 requests), or a NaN cap crashing with InvalidOperation instead of refusing."""
+    for over, key in (({"max_spend": float("inf")}, "max_spend"),
+                      ({"max_spend": float("nan")}, "max_spend"),
+                      ({"outstanding_holds": float("nan")}, "outstanding_holds"),
+                      ({"rates": {**CREDIT_SPEND["rates"], "input_per_mtok": float("inf")}},
+                       "input_per_mtok")):
+        got = runprofile.spend_projection(with_spend(CREDIT_SPEND, **over), 10 ** 9)
+        assert got["projected"] is None and got["errors"] == [
+            f"bounds.spend.{key}: must be finite"], (over, got)
+    # through bench: the literal Infinity in the profile file is a schema refusal
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        spend = {**CREDIT_SPEND, "max_spend": float("inf")}
+        code, v = validate_only(argv_for(tmp, manifest, profile_for(
+            clips, manifest, **{"bounds.spend": spend})))
+        assert code == 2 and "$.bounds.spend.max_spend: must be finite" in v["errors"], v

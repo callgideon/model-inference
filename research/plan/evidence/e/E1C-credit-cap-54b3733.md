@@ -60,3 +60,20 @@
 - Remaining for this lane: 0 h (review only).
 - optimistic 0.25 h / likely 0.5 h / pessimistic 1 h to address review findings.
 - Confidence: high. Basis: all listed suites are green.
+
+## Fix round (coordinator recheck of dbc3aeef: ACCEPT with PCC-V1 low, PCC-V2 optional)
+- **PCC-V1 (fixed).** `json.load` accepts `Infinity` and `NaN`, and `minimum: 0` let them through: an Infinity cap admitted any schedule, and a NaN cap crashed with `InvalidOperation`. Now:
+  - `schema_errors` refuses any non-finite number (`$.<path>: must be finite`).
+  - `spend_projection` independently refuses any non-finite cap, hold or rate after `exact()` (`bounds.spend.<key>: must be finite`) and returns before any comparison, so the check fails closed and never raises.
+- **PCC-V2 (done).** The projection is computed under `decimal.localcontext(prec=100)`, so rounding cannot admit a run.
+- New test `test_a_non_finite_spend_amount_is_a_refusal_not_an_open_cap`: Infinity cap, NaN cap, NaN holds and an Infinity rate at n = 1e9 are each refused, and an Infinity cap in the profile file is refused through bench `--validate-only`.
+  - Fails-before: 1 failed on a scratch copy with the dbc3aeef `runprofile.py`.
+- New mutant e1cp24 (finite check in `spend_projection` removed): killed.
+
+| cmd | exit | result |
+|---|---|---|
+| `pytest -q models/marlin2b/tests/test_profile.py` | 0 | 20 passed |
+| `make bench-test` | 0 | 111 passed |
+| `apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py` | 0 | 113 mutants: 110 killed, 3 controls survived, 0 problems |
+| `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py tests/integration/test_run.py` | 0 | 96 passed |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS |

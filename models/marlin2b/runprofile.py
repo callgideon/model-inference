@@ -14,8 +14,8 @@ Verdict: `errors` refuse the run outright; `blocks` (no approved rates, budget o
 holds) refuse a PAID run but not a local/fake one - validation and local fixtures never
 need a price (§1: "A missing rate/budget blocks paid testing, not profile validation").
 """
-import json, os, re, urllib.parse
-from decimal import Decimal
+import json, math, os, re, urllib.parse
+from decimal import Decimal, localcontext
 from hashlib import sha256
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +58,8 @@ def schema_errors(value, schema, path="$"):
         if "pattern" in schema and not re.search(schema["pattern"], value):
             out.append(f"{path}: does not match {schema['pattern']}")
     if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if not math.isfinite(value):             # json.load accepts Infinity/NaN
+            return [f"{path}: must be finite"]
         if "minimum" in schema and value < schema["minimum"]:
             out.append(f"{path}: below {schema['minimum']}")
         if "exclusiveMinimum" in schema and value <= schema["exclusiveMinimum"]:
@@ -270,18 +272,24 @@ def spend_projection(bounds, n):
         return out
     v = {new: exact(node[name(new, old)]) for node, keys, _ in groups
          for new, old in keys.items()}
+    out["errors"] += [f"bounds.spend.{k}: must be finite" for k, d in v.items()
+                      if d is not None and not d.is_finite()]
+    if out["errors"]:                    # a money cap fails closed: Infinity admits anything
+        return out
     if spend["rates"] is None or v["max_spend"] is None:
         out["blocks"].append("no approved rates or spend budget: a paid run is refused")
     if v["outstanding_holds"] is None:
         out["blocks"].append("outstanding holds undeclared: the budget check needs them")
-    if spend["rates"] is not None and v["max_spend"] is not None:
+    if spend["rates"] is None or v["max_spend"] is None:
+        return out
+    with localcontext(prec=100):             # no rounding can ever admit a run
         per_request = (bounds["max_input_tokens_per_request"] * v["input_per_mtok"]
                        + bounds["max_output_tokens_per_request"] * v["output_per_mtok"]) / 10 ** 6
         out["projected"] = n * per_request + (v["outstanding_holds"] or 0)
-        if out["projected"] > v["max_spend"]:
-            out["errors"].append(f"spend: the schedule's ceiling plus outstanding holds "
-                                 f"({out['projected']:.4f} {cur}) exceeds bounds.spend.max_spend "
-                                 f"{v['max_spend']} {cur}")
+    if out["projected"] > v["max_spend"]:
+        out["errors"].append(f"spend: the schedule's ceiling plus outstanding holds "
+                             f"({out['projected']:.4f} {cur}) exceeds bounds.spend.max_spend "
+                             f"{v['max_spend']} {cur}")
     return out
 
 
