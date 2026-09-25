@@ -426,6 +426,57 @@ def check_flag_freeze_race(connect, database: str) -> str:
     return "a freeze waited for the admission in flight: " + ", ".join(report)
 
 
+#: The functions `infrx_runtime` executes: 0021's grant loop (0021:490-515), plus 0022's
+#: `fail_preparation`, minus 0023's two unmarked doors (R123) - the relay admits through
+#: `admit_ready` and the preparation worker claims through `claim_preparation_ready` (W5).
+REVOKED_DOORS = frozenset({"infrx.admit(jsonb)", "infrx.claim_preparation(jsonb)"})
+RUNTIME_FUNCTIONS = frozenset({
+    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)", "infrx.append(jsonb)",
+    "infrx.cancel(jsonb)", "infrx.claim(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+    "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
+    "infrx.content_claim(jsonb)", "infrx.content_references(jsonb)",
+    "infrx.content_register(jsonb)", "infrx.content_tombstone(jsonb)",
+    "infrx.dispatch_pending(jsonb)", "infrx.dispatch_snapshot()", "infrx.expire_journal(jsonb)",
+    "infrx.fail_dispatch(jsonb)", "infrx.fail_preparation(jsonb)", "infrx.gc_outbox(jsonb)",
+    "infrx.heartbeat(jsonb)", "infrx.idempotency_lookup(jsonb)", "infrx.job_admission(uuid)",
+    "infrx.journal_usage()", "infrx.load_work(jsonb)", "infrx.load_work_credit(jsonb)",
+    "infrx.now()", "infrx.prepare(jsonb)", "infrx.put_result(jsonb)",
+    "infrx.read_journal(jsonb)", "infrx.read_result(uuid,text)", "infrx.readiness_doc(uuid)",
+    "infrx.recover(jsonb)", "infrx.release_dispatch(jsonb)", "infrx.reopen_dispatch(jsonb)",
+    "infrx.terminalize(jsonb)", "infrx.upload_abort(jsonb)",
+    "infrx.upload_acknowledge_put(jsonb)", "infrx.upload_complete(jsonb)",
+    "infrx.upload_create(jsonb)", "infrx.upload_expire(jsonb)", "infrx.upload_resolve(jsonb)",
+    "infrx.usd_price(text)"})
+
+
+def check_door_revoke(owner, runtime) -> str:
+    """DOOR-REVOKE (0023, R123): on the runtime LOGIN itself (`runtime`, no `set role`),
+    each revoked door is refused by name, and the doors the W5 runtime calls still run
+    (a refusal they answer is data, never a missing EXECUTE); `service_role` still runs the
+    revoked ones; the cutover gate's `runtime_unmarked_doors` reads []."""
+    def denied(conn, fn: str) -> bool:           # every door named here takes one jsonb
+        name = fn.removesuffix("(jsonb)")
+        try:
+            with conn.transaction():
+                conn.execute(f"select {name}(%s)", (Jsonb({}),))
+        except psycopg.Error as refused:
+            return refused.sqlstate == "42501" and \
+                f"permission denied for function {name.split('.')[1]}" in str(refused)
+        return False
+    for fn in sorted(REVOKED_DOORS):
+        assert denied(runtime, fn), f"infrx_runtime still executes {fn}"
+    for fn in ("infrx.admit_ready(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+               "infrx.fail_preparation(jsonb)"):
+        assert not denied(runtime, fn), f"infrx_runtime lost {fn}"
+    for fn in sorted(REVOKED_DOORS):
+        with owner.transaction():
+            owner.execute("set local role service_role")
+            assert not denied(owner, fn), f"service_role lost {fn}"
+    gate, = owner.execute("select infrx.readiness_cutover_check()").fetchone()
+    assert gate["runtime_unmarked_doors"] == [], gate
+    return f"revoked {sorted(REVOKED_DOORS)}; {len(RUNTIME_FUNCTIONS)} runtime doors kept"
+
+
 def check_reads_privileges(conn) -> str:
     """DUR-RLS for 0021: the consumer reads are the signed-in principal's only; a browser
     session never writes a key's audience, individual, provider or endpoint; the runtime role
@@ -452,6 +503,19 @@ def check_reads_privileges(conn) -> str:
     runtime = {"infrx.admit_ready(jsonb)", "infrx.claim_preparation_ready(jsonb)",
                "infrx.terminalize(jsonb)", "infrx.append(jsonb)", "infrx.read_result(uuid,text)",
                "infrx.content_claim(jsonb)"}
+    # DOOR-REVOKE: the exact surface, by name, catalog-wide (a grant anywhere fails it);
+    # an extension's own functions (pgcrypto in `public` on the plain image) are not ours
+    held = {f for f, in conn.execute(
+        "select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = "
+        "p.pronamespace where n.nspname in ('infrx', 'public') "
+        "and has_function_privilege('infrx_runtime', p.oid, 'execute') and not exists "
+        "(select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')")}
+    assert held == RUNTIME_FUNCTIONS, ("infrx_runtime executes", sorted(held - RUNTIME_FUNCTIONS),
+                                       "and not", sorted(RUNTIME_FUNCTIONS - held))
+    for fn in REVOKED_DOORS:             # the operator's service login keeps the old doors
+        allowed, = conn.execute("select has_function_privilege('service_role', %s, 'execute')",
+                                (fn,)).fetchone()
+        assert allowed, f"service_role lost {fn}"
     denied = {"infrx.grant_credit(jsonb)", "infrx.reconcile(jsonb)",
               "infrx.set_suspension(jsonb)", "public.claim_signup_grant(uuid,text,uuid)",
               "infrx.register_existing_database_content(jsonb)",

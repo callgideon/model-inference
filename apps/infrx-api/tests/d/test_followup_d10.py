@@ -74,12 +74,15 @@ def test_the_adapter_ends_a_preparation_as_the_runtime_login() -> None:
     store = PgJobStore(connector(pgharness.dsn(DB).replace(
         f"postgres:{pgharness.PASSWORD}@", f"infrx_runtime:{RUNTIME_PASSWORD}@"),
         set_role=False))
+    # 0023: the unmarked claim is no longer the runtime's; the owner claims (the W5 worker
+    # claims through `claim_preparation_ready`), the runtime login ends the preparation
+    owner = PgJobStore(connector(pgharness.dsn(DB)))
     world = ca.World(conn)
     request = b.request(world)
     ca.admit(conn, request, b.idem(request, request.request_id))
 
     async def run():
-        lease = await store.claim_preparation(request.request_id, "prep-rt")
+        lease = await owner.claim_preparation(request.request_id, "prep-rt")
         assert lease.kind is LeaseKind.preparation
         with pytest.raises(errors.InvalidRequest):
             await store.fail_preparation(lease, TerminalCause.engine_error)
@@ -94,7 +97,7 @@ def test_the_adapter_ends_a_preparation_as_the_runtime_login() -> None:
         with pytest.raises(errors.AlreadyTerminal):
             await store.fail_preparation(lease, TerminalCause.preparation_failed)
         with pytest.raises(errors.AlreadyTerminal):
-            await store.claim_preparation(request.request_id, "prep-rt-2")
+            await owner.claim_preparation(request.request_id, "prep-rt-2")
     try:
         asyncio.run(run())
     finally:

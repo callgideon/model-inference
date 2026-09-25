@@ -1,0 +1,17 @@
+{"task": "D10", "slice": "DOOR-REVOKE (0023: revoke infrx.admit / infrx.claim_preparation from infrx_runtime, R123)",
+ "activity": "review", "head": "1d0a418d", "worktree": ".claude/worktrees/codex-door-revoke", "branch": "codex/door-revoke",
+ "owned_paths": ["apps/app/supabase/migrations/0023_runtime_unmarked_door_revoke.sql", "apps/infrx-api/tests/d/",
+                 "research/plan/evidence/d/DOOR-REVOKE-1d0a418.md", "research/plan/evidence/d/DOOR-REVOKE-wiring.patch",
+                 "research/plan/evidence/d/DOOR-REVOKE-runtime-functions.txt"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_reads.py -k 'lost_exactly or reads_privileges' (before 0023)", "exit": 1, "summary": "2 failed (fails-before: exactly admit/claim_preparation extra)"},
+  {"cmd": "scratch migrations dir minus 0023, both checks", "exit": 0, "summary": "both FAILED as expected"},
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/d", "exit": 1, "summary": "837 passed, 9 failed (composition_pg needs W5; inherited lifecycle transcript; 7 valkey HarnessBusy from another lane's lock), 1 skipped, 8 xfailed"},
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/d/test_outbox_relay.py", "exit": 0, "summary": "20 passed"},
+  {"cmd": "INFRX_D_TASK=revoke pytest -q tests/g/test_composition.py", "exit": 0, "summary": "26 passed"},
+  {"cmd": "temp merge codex/w5-merge (aborted): tests/d/test_composition_pg.py; tests/d/test_reads.py", "exit": 0, "summary": "3 passed; 42 passed 3 xfailed"},
+  {"cmd": "privilege_probe.py --role infrx_runtime --allow-functions DOOR-REVOKE-runtime-functions.txt (task-local)", "exit": 0, "summary": "63 checks pass"}],
+ "estimate": {"optimistic_h": 0.25, "likely_h": 0.5, "pessimistic_h": 1.5, "confidence": "medium", "basis": "union merge with w5-merge + D10F W4 then W-DR1; one composed tests/d + layer-3 RLS run", "at": "2026-09-25T21:50Z"},
+ "blockers": [],
+ "wiring_requests": ["W-DR1 tests/integration/pgstate.py RUNTIME_FUNCTIONS -2 (41) + test_harness.py 0023 pin; separate hunks applied AFTER D10F W4 (DOOR-REVOKE-wiring.patch)", "W-DR2 I8/operator: probe with DOOR-REVOKE-runtime-functions.txt; optional MUST_DENY infrx.admit", "ORDER: merge/deploy 0023 only with/after codex/w5-merge"],
+ "evidence": ["research/plan/evidence/d/DOOR-REVOKE-1d0a418.md", "research/plan/evidence/d/DOOR-REVOKE-wiring.patch", "research/plan/evidence/d/DOOR-REVOKE-runtime-functions.txt"]}

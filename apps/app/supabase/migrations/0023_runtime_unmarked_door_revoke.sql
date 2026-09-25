@@ -1,0 +1,33 @@
+-- D10 door revoke (R123): the dedicated runtime login loses the two doors that write no
+-- execution-ready marker.
+--
+--   infrx.admit(jsonb)              the pre-D10 admission. The W5 relay admits through
+--                                   `infrx.admit_ready` (one transaction: admission, the
+--                                   rechecks, the manifest and the marker); a PostgreSQL job
+--                                   store without its ReadinessStore refuses to start
+--                                   (`pilot.admission_readiness`).
+--   infrx.claim_preparation(jsonb)  the pre-D10 preparation claim. The W5 preparation worker
+--                                   claims through `infrx.claim_preparation_ready` (the lease
+--                                   requires the marker); the worker composition always wires
+--                                   its PgLifecycle.
+--
+-- After this, 0019's `readiness_cutover_check()` reports `runtime_unmarked_doors = []`: the
+-- barrier for `infrx_runtime` is the grants, not the runtime's good behaviour. `infrx_runtime`
+-- keeps the other 41 doors (0021's grant loop minus these two, plus 0022's
+-- `fail_preparation`). `service_role` keeps both functions (0011/0019 grants untouched): the
+-- operator and the test rigs still admit and claim through them. No body, table or other
+-- role changes.
+--
+-- ORDER. Apply only after the runtime that calls `admit_ready`/`claim_preparation_ready`
+-- (W5 wiring) is the one deployed; a pre-W5 gateway or worker on the runtime login answers
+-- permission denied (42501) on every admission and preparation claim.
+--
+-- ROLLBACK (0023 alone; a pre-W5 runtime is rolled back to):
+--   grant execute on function infrx.admit(jsonb), infrx.claim_preparation(jsonb)
+--     to infrx_runtime;
+-- Nothing else moved; no money, job or row state depends on the grant.
+--
+-- Re-runnable: revoking a privilege the role does not hold is a no-op.
+
+revoke execute on function infrx.admit(jsonb) from infrx_runtime;
+revoke execute on function infrx.claim_preparation(jsonb) from infrx_runtime;
