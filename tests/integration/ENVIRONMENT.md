@@ -134,10 +134,12 @@ run of the same harness replaces its own labelled leftovers and reports foreign 
 
 Known limits (each recorded in the verdict, each a wiring request in the E2C evidence):
 
-- `api-d` is **not fully isolated**: mutant copies of DB-backed D lists (tests/d/test_signup.py's
-  code mutants) run with the shared runner's fixed environment (`Runner.env=()`), which does
-  not carry `INFRX_D_TASK`, so they use `d1`'s PostgreSQL (55432) under its host-wide lock. The
-  `api-d` row carries `"isolation": "partial: …"`.
+- `api-d` leaves out `tests/d/test_signup.py::test_code_mutant_is_killed` and adds an
+  `api-d-mutants` **NOT RUN** row while `tests/d/signup_mutants.py`'s Runner declares no `env`:
+  the shared mutant runner copies only `Runner.env` into a copy's environment, so those copies
+  would resolve pgharness to `d1`'s PostgreSQL (55432, another lane's port, under its host-wide
+  lock) whatever the gate exported. The gate reads the Runner file and runs the case in full
+  once it names `INFRX_D_TASK` (wiring request E2C-FR-1).
 - `run.py --layer 3` reruns `tests/integration` after the backend stage has removed PostgREST,
   so the two journey cases that need it skip there (read from `run.py`, not measured here):
   `integration-l3` stays BLOCKED until `run.py`'s layer-3 suites run leaves out the backend
@@ -169,4 +171,7 @@ INVALID.
 - 2026-09-25 (E2C fix round): every API suite in consumer-local; the gate starts its own
   MinIO for the S3 cases; runner stages read their reports' skips; the stack stage is layer 3;
   empty parametrizations listed, not skipped; remote certify flags in any argparse spelling;
-  known limits above. Evidence `research/plan/evidence/e/E2C-f61d2f0.md` (fix round).
+  the D mutant case NOT RUN until its copies inherit the task; `gates.py`/`preflight.py`
+  resolve the checkout through `harness.REPO_ROOT`, so `mutants.py` (`e2cg*`, `e2cp*`: one
+  mutant per gate and preflight rule, run by `run.py`'s mutation stage) can copy them; known
+  limits above. Evidence `research/plan/evidence/e/E2C-f61d2f0.md` (fix round).

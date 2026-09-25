@@ -270,8 +270,10 @@ def test_junit_counts_keep_xfails_apart_from_skips(tmp_path):
     # a list whose default subset is empty (INFRX_MUTANTS unset) has no case to run
     (EMPTY + "def test_ok():\n    pass\n", "PASS"),
     (EMPTY + "import pytest\ndef test_s():\n    pytest.skip('no db')\n", "BLOCKED"),
+    (EMPTY, "BLOCKED"),                     # nothing ran at all
 ], ids=["pass", "skip-is-blocked", "fail", "quarantine-is-blocked", "setup-error-is-fail",
-        "empty-parametrization-is-not-a-case", "empty-parametrization-hides-no-skip"])
+        "empty-parametrization-is-not-a-case", "empty-parametrization-hides-no-skip",
+        "empty-parametrization-alone-is-blocked"])
 def test_a_pytest_stage_that_skipped_is_not_a_pass(tmp_path, body, verdict):
     (tmp_path / "test_probe.py").write_text(body)
     out = tmp_path / "out"
@@ -489,8 +491,12 @@ class Composed:
     """consumer_local with every stage replaced by a recorder: which stages, in which
     order, with which environment - the composition itself, not the stages."""
 
-    def __init__(self, monkeypatch, *, l3_preflight="PASS", s3="PASS", raise_in=None):
+    def __init__(self, monkeypatch, tmp_path, *, l3_preflight="PASS", s3="PASS", raise_in=None,
+                 d_runner="RUNNER = Runner(env=('INFRX_D_TASK', 'INFRX_D2_VALKEY_PORT'))\n"):
         self.calls: list[tuple] = []
+        # the D mutant list's Runner as the wiring would leave it (default) or as it is today
+        (tmp_path / "signup_mutants.py").write_text(d_runner)
+        monkeypatch.setattr(gates, "D_RUNNER", str(tmp_path / "signup_mutants.py"))
 
         def preflight_stage(profile, out, certify_profile=None):
             self.calls.append(("preflight", profile))
@@ -532,7 +538,7 @@ class Composed:
 def test_a_green_consumer_local_composition_passes_on_its_own_namespace(tmp_path, monkeypatch):
     from infrx.contracts.tasklocal import local_services
     own = local_services("e2c")
-    composed = Composed(monkeypatch)
+    composed = Composed(monkeypatch, tmp_path)
     code, verdict = composed.gate(tmp_path)
     assert (code, verdict["verdict"]) == (0, "PASS")
     names = [s["stage"] for s in verdict["stages"]]
@@ -551,13 +557,27 @@ def test_a_green_consumer_local_composition_passes_on_its_own_namespace(tmp_path
     runners = [c[2] for c in composed.calls if c[0] == "runner"]
     assert len(runners) == 1 and runners[0][2:5] == ["--layer", "3", "--only-suites"], runners
     assert all("--only-suites" in argv for argv in runners)   # never run.py's `make api-test`
-    assert next(s for s in verdict["stages"] if s["stage"] == "api-d")["isolation"].startswith(
-        "partial")
+    assert next(c[2] for c in api if c[1] == "api-d")[-1] == "tests/d"   # every case
+
+
+def test_the_d_mutant_case_is_not_run_until_its_copies_inherit_the_task(tmp_path, monkeypatch):
+    """tests/d/signup_mutants.py's Runner declares no env today, so its copies would run on
+    d1's 55432 (another lane's port) whatever the gate exports: the case is deselected and
+    reported NOT RUN, and the gate cannot PASS - not silently run on the shared default."""
+    composed = Composed(monkeypatch, tmp_path, d_runner="RUNNER = shared.Runner(name='a1')\n")
+    code, verdict = composed.gate(tmp_path)
+    assert (code, verdict["verdict"]) == (3, "NOT RUN")
+    names = [s["stage"] for s in verdict["stages"]]
+    assert names[names.index("api-d") + 1] == "api-d-mutants"
+    row = next(s for s in verdict["stages"] if s["stage"] == "api-d-mutants")
+    assert (row["verdict"], row["case"]) == ("NOT RUN", gates.D_MUTANT_CASE)
+    argv = next(c[2] for c in composed.calls if c[0] == "pytest" and c[1] == "api-d")
+    assert argv[-3:] == ["tests/d", "--deselect", gates.D_MUTANT_CASE]
 
 
 def test_a_consumer_local_without_the_stack_is_blocked_and_still_runs_layer_1(tmp_path,
                                                                             monkeypatch):
-    composed = Composed(monkeypatch, l3_preflight="BLOCKED")
+    composed = Composed(monkeypatch, tmp_path, l3_preflight="BLOCKED")
     code, verdict = composed.gate(tmp_path)
     assert (code, verdict["verdict"]) == (3, "BLOCKED")
     rows = {s["stage"]: s for s in verdict["stages"]}
@@ -569,7 +589,7 @@ def test_a_consumer_local_without_the_stack_is_blocked_and_still_runs_layer_1(tm
 
 def test_a_consumer_local_without_its_s3_endpoint_is_blocked_and_sets_none(tmp_path,
                                                                           monkeypatch):
-    composed = Composed(monkeypatch, s3="BLOCKED")
+    composed = Composed(monkeypatch, tmp_path, s3="BLOCKED")
     code, verdict = composed.gate(tmp_path)
     assert (code, verdict["verdict"]) == (3, "BLOCKED")
     api = [c[3] for c in composed.calls if c[0] == "pytest" and c[1].startswith("api-")]
@@ -578,7 +598,7 @@ def test_a_consumer_local_without_its_s3_endpoint_is_blocked_and_sets_none(tmp_p
 
 
 def test_the_s3_endpoint_is_removed_when_a_suite_is_interrupted(tmp_path, monkeypatch):
-    composed = Composed(monkeypatch, raise_in="api-m")
+    composed = Composed(monkeypatch, tmp_path, raise_in="api-m")
     with pytest.raises(KeyboardInterrupt):
         composed.gate(tmp_path)
     assert composed.calls[-1][0] == "s3-down"

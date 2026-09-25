@@ -37,9 +37,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import harness                                           # noqa: E402
 import preflight as pf                                   # noqa: E402
 
-REPO = HERE.parents[1]
+REPO = harness.REPO_ROOT       # the checkout; INFRX_E2_REPO_ROOT inside a mutant copy
 API = REPO / "apps" / "infrx-api"
 PY = API / ".venv" / "bin" / "python"
 PASS, FAIL, BLOCKED, INVALID, NOT_RUN = "PASS", "FAIL", "BLOCKED", "INVALID", "NOT RUN"
@@ -61,11 +62,13 @@ EMPTY_PARAMS = "got empty parameter set"
 # Every maintained suite `make api-test` runs (apps/infrx-api/tests/<suite>; brief 03
 # "Existing verification entrypoints to retain").
 API_SUITES = ("contracts", "d", "g", "i", "j", "m", "q", "t", "w")
-# The shared mutant runner copies only `Runner.env`; the D runners declare none, so a copy
-# of a DB-backed D list (tests/d/test_signup.py's code mutants) resolves pgharness to d1.
-D_ISOLATION = ("partial: mutant copies of DB-backed D lists run with the shared runner's "
-               "fixed environment (Runner.env=()), so they use d1's PostgreSQL (55432) under "
-               "its host-wide lock, not e2c's; wiring request E2C-FR-1")
+# The shared mutant runner copies only `Runner.env` into a mutant copy's environment, and
+# tests/d/signup_mutants.py's Runner declares none: a copy of its DB-backed list resolves
+# pgharness to d1's PostgreSQL (55432, another lane's port, under its host-wide lock) whatever
+# INFRX_D_TASK the gate set. Until that Runner carries the D variables (wiring request
+# E2C-FR-1), the gate does not run the case and reports it NOT RUN.
+D_MUTANT_CASE = "tests/d/test_signup.py::test_code_mutant_is_killed"
+D_RUNNER = "tests/d/signup_mutants.py"
 S3_LABEL = "ai.infrx.e2c.checkout"
 # The recorded E4B box invocation (certify.py's docstring; E4B box protocol).
 BOX_FLAGS = ("--no-stack --box --target http://127.0.0.1:8001/v1 --engine-url "
@@ -147,6 +150,17 @@ def pytest_stage(name: str, argv: list[str], cwd: Path, out: Path,
     else:
         verdict = PASS
     return {**row, "verdict": verdict, "counts": counts}
+
+
+def api_d_stages(out: Path, env: dict) -> list[dict]:
+    """tests/d on e2c; the DB-backed mutant case only once its copies inherit the task."""
+    # ponytail: a text check, not an import - the module loads the D harness at import time
+    if "INFRX_D_TASK" in (API / D_RUNNER).read_text():
+        return [pytest_stage("api-d", [*uv(), "tests/d"], API, out, env)]
+    return [pytest_stage("api-d", [*uv(), "tests/d", "--deselect", D_MUTANT_CASE], API, out, env),
+            {"stage": "api-d-mutants", "verdict": NOT_RUN, "case": D_MUTANT_CASE,
+             "detail": f"not isolated: {D_RUNNER}'s Runner.env carries no INFRX_D_TASK, so its "
+                       "copies would use d1's PostgreSQL (55432); wiring request E2C-FR-1"}]
 
 
 def runner_stage(name: str, argv: list[str], out: Path, report: Path | None = None) -> dict:
@@ -235,7 +249,6 @@ def s3_up(port: int, name: str, out: Path, wait_s: float = 60.0) -> dict:
     """MinIO (the manifest's pin, `--pull never`: an absent image fails the start) on e2c's
     S3 port, with the E2 stack's local literals passed by NAME so no value is in argv or
     the verdict. tests/m and tests/w only read an endpoint; nothing else starts one."""
-    import harness
     argv = ["docker", "run", "-d", "--pull", "never", "--name", name,
             "--label", f"{S3_LABEL}={REPO}", "-p", f"127.0.0.1:{port}:9000",
             "-e", "MINIO_ROOT_USER", "-e", "MINIO_ROOT_PASSWORD",
@@ -285,8 +298,8 @@ def consumer_local(args, out: Path) -> list[dict]:
                 "INFRX_M_S3_LOCAL_CREDS": "1"}
     try:
         for suite in API_SUITES:
-            stage = pytest_stage(f"api-{suite}", [*uv(), f"tests/{suite}"], API, out, env)
-            stages.append({**stage, "isolation": D_ISOLATION} if suite == "d" else stage)
+            stages += api_d_stages(out, env) if suite == "d" else \
+                [pytest_stage(f"api-{suite}", [*uv(), f"tests/{suite}"], API, out, env)]
     finally:
         if s3["started"]:
             s3_down(own["s3"][1], out)

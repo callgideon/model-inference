@@ -23,7 +23,10 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+import harness                                           # noqa: E402
+
+REPO = harness.REPO_ROOT       # the checkout; INFRX_E2_REPO_ROOT inside a mutant copy
 ENVIRONMENT = HERE / "environment.json"
 PASS, BLOCKED, INVALID = "PASS", "BLOCKED", "INVALID"
 EXIT = {PASS: 0, BLOCKED: 3, INVALID: 4}
