@@ -5,8 +5,8 @@
 
 What `create_app` calls at the cutover, once per process:
 
-* `PgJobStore` over a psycopg pool whose connections `set role service_role` (D2 request 7)
-  and carry the deployment's statement timeout;
+* `PgJobStore` over a psycopg pool whose connections `set role service_role` (D2 request 7;
+  never on 0021's dedicated logins, R127) and carry the deployment's statement timeout;
 * the `Relay` (G2's acceptor, sync wait and SSE relay), dispatching admission on
   `ACCOUNTING_REGIME` and holding the CREDIT pins to `ACTIVE_RATE_CARD_VERSION`;
 * one `MediaUploads` (M3 request 3), exposed as `rt.media_store` - the instance G4U's upload
@@ -113,15 +113,29 @@ def journal_check(stream):
     return check
 
 
-def configure_connection(statement_timeout_ms: int, *, session_state: bool = True):
+#: 0021's dedicated logins (R127): members of no role, so they never `set role`.
+DEDICATED_LOGINS = frozenset({"infrx_runtime", "infrx_monitor"})
+
+
+def dedicated_login(dsn: str) -> bool:
+    """True when the DSN logs in as a dedicated login - bare, or as Supavisor's
+    `<role>.<project-ref>`. Every other login (bda1586's broad one) keeps D2 request 7."""
+    from psycopg.conninfo import conninfo_to_dict
+    return (conninfo_to_dict(dsn).get("user") or "").split(".")[0] in DEDICATED_LOGINS
+
+
+def configure_connection(statement_timeout_ms: int, *, session_state: bool = True,
+                         set_role: bool = True):
     """The pool's `configure` hook (D2 request 7): 0004's BYPASSRLS is not inherited, so the
     role is SET on every connection, as PostgREST does; and no statement runs unbounded.
     Without `session_state` (the transaction pooler, WR-I8-1) it sends nothing: a session
-    SET there is lost and leaked, so the login role's own defaults carry both."""
+    SET there is lost and leaked, so the login role's own defaults carry both. Without
+    `set_role` (a dedicated login, R127 / E3C F-1) only the statement timeout is SET."""
     async def configure(conn) -> None:
         if not session_state:
             return
-        await conn.execute("set role service_role")
+        if set_role:
+            await conn.execute("set role service_role")
         await conn.execute(f"set statement_timeout = {int(statement_timeout_ms)}")
     return configure
 
@@ -146,7 +160,8 @@ def connection_pool(settings):
     deployment = settings.deployment
     configure = configure_connection(deployment.database_pool_statement_timeout_ms,
                                      session_state=session_state_allowed(
-                                         settings.pilot.database_url))
+                                         settings.pilot.database_url),
+                                     set_role=not dedicated_login(settings.pilot.database_url))
     # prepare_threshold=None: no server-side prepared statements (unsupported on the
     # transaction pooler, WR-I8-1; harmless on the session port)
     pool = AsyncConnectionPool(
