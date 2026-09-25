@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "68128815",
+ "integration_head": "8d9e5b5f",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 57,
- "updated": "2026-09-25T23:28:33Z",
+ "revision": 59,
+ "updated": "2026-09-25T23:50:01Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -618,9 +618,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:40:00Z",
-   "updated": "2026-09-25T22:42:57Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-   "next_action": "ROLLOUT-FIXES merged a1e06236 (rehearsal G5 fixed → 48 PASS, ssm.sh help/step guard, INSTALL_ARGS pins, pytest re-pin, pre-I8 step guards, README refresh). KNOWN-GOOD-PROOF lane running (schema_proof for bda1586/4226315). Operator-held: SNS topic/webhook, IAM sns:Publish, boto3 on the box, hosted backup rehearsal.",
+   "next_action": "ROLLOUT-FIXES merged; KNOWN-GOOD-PROOF verified f5293057 (both targets proven through 0023) → via the union; ALERT-SNS merged; operator-held items unchanged",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -882,9 +882,9 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T22:42:57Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
-   "next_action": "W5-ADMIT-WIRING f18c72f7 verification in its fix round; union carries it at 9d61d1e1. E3C early run closed F-3/F-4 and found F-5 (relay recheck after admit_ready can refuse a ran job) + F-6 (reconciliation reader on the runtime login) → W5-F5 micro-lane (wf_5e483fbc-a92) on codex/w5-f5. Then R134–R137, manifest implemented.",
+   "next_action": "union round 2 landed (door-revoke, w5-merge delta, tip, known-good-proof) at 74183655; W5-F5 lenses running; then union merge → R134–R137, W5 implemented",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -946,9 +946,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T08:29:44Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": "merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses",
-   "next_action": "merged into claude/consumer-v1 via codex/g7-merge 739c0414 (WR-1/2/4/5/6 applied); R130-R131 numbered; manifest G7 implemented; WR-7 is A3; MODELS_DOC retired (box env must not set it)",
+   "next_action": "G7-PROVISIONAL merged 2b112a05 (provisional flag from the approval record); G mutant list needs one entry for A3 WR-1's tests/g/test_app_examples.py (follow-up in flight)",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -1645,9 +1645,9 @@
    },
    "activity": "review",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:28:33Z",
+   "updated": "2026-09-25T23:50:01Z",
    "blocker": null,
-   "next_action": "fix round running (5 majors: actions.ts composition tests, one claim_signup_grant adapter, DUR-RLS api_keys insert policy → WR-C3A-4 to D10-APP-SQL)",
+   "next_action": "fix round done, rechecks in; merges with U4 in APP-UNION round 2",
    "estimate": {
     "optimistic_h": 0.5,
     "likely_h": 1.5,
@@ -1703,11 +1703,11 @@
     "prefix": "infrx-app-u2-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "running",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:28:33Z",
-   "blocker": "starts when C3A hands back (U1R done)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:50:01Z",
+   "blocker": null,
+   "next_action": "implementing (App wave wf_77b93903-38d) on top of U1R + C3A",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 5,
@@ -1733,11 +1733,11 @@
     "prefix": "infrx-app-u3-",
     "db": null
    },
-   "activity": "queued",
+   "activity": "running",
    "started": "2026-09-25T21:11:40Z",
-   "updated": "2026-09-25T23:28:33Z",
-   "blocker": "starts when C3A hands back (U1R done)",
-   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "updated": "2026-09-25T23:50:01Z",
+   "blocker": null,
+   "next_action": "implementing (App wave) on top of U1R + C3A",
    "estimate": {
     "optimistic_h": 2,
     "likely_h": 5,
@@ -1745,6 +1745,66 @@
     "confidence": "low",
     "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
     "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "I2A",
+   "task": "I2A",
+   "slice": "I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy",
+   "agent": "opus",
+   "branch": "codex/i2a-prep",
+   "worktree": ".claude/worktrees/codex-i2a-prep",
+   "base": "fd40748c",
+   "head": null,
+   "isolation": {
+    "ports": "none",
+    "prefix": "infrx-i2a-prep-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-25T23:50:01Z",
+   "blocker": null,
+   "next_action": "workflow wf_e714e949-a6a (implement → 2 lenses → fix → recheck); the live deploy waits for the accepted backend and the operator inputs (Vercel env, P-05 auth settings)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "low",
+    "basis": "preparation lane; not yet inspected",
+    "at": "2026-09-25T23:50:01Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "E3A",
+   "task": "E3A",
+   "slice": "E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed",
+   "agent": "opus",
+   "branch": "codex/e3a-prep",
+   "worktree": ".claude/worktrees/codex-e3a-prep",
+   "base": "fd40748c",
+   "head": null,
+   "isolation": {
+    "ports": "e4b compose block 56800–56899",
+    "prefix": "infrx-e3a-prep-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T23:50:01Z",
+   "updated": "2026-09-25T23:50:01Z",
+   "blocker": null,
+   "next_action": "workflow wf_06c06a68-c32; E3A proper runs after BACKEND-LOCAL (E3C) and the remaining App merges (C3A/U2/U3/U4)",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 4,
+    "pessimistic_h": 8,
+    "confidence": "low",
+    "basis": "preparation lane; not yet inspected",
+    "at": "2026-09-25T23:50:01Z"
    },
    "evidence": [],
    "commands": []
@@ -3333,6 +3393,18 @@
    "by": "coordinator",
    "what": "APP-UNION merged 68128815: C0, U1R, A2, A3 implemented (verified lanes + coordinator wirings); U4 verified, C3A in its fix round; D10-APP-SQL 0024 takes WR-U4-2 and WR-C3A-4",
    "source": "research/plan/evidence/coordinator/app-union-1cc0314.md"
+  },
+  {
+   "at": "2026-09-25T23:50:01Z",
+   "by": "tracker",
+   "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+   "source": "updates/G7-20260925T2326Z.json"
+  },
+  {
+   "at": "2026-09-25T23:50:01Z",
+   "by": "coordinator",
+   "what": "G7-PROVISIONAL merged 2b112a05; App union checks green; user override extended to I2A; I2A-PREP and E3A-PREP dispatched; union round 2 at 74183655; U2/U3 implementing",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],
  "history": {
@@ -3668,10 +3740,15 @@
    "status": "rejected",
    "at": "2026-09-25T23:25:00Z",
    "reason": "unknown task ID 'APP-UNION'"
+  },
+  "G7-20260925T2326Z.json": {
+   "status": "rejected",
+   "at": "2026-09-25T23:26:00Z",
+   "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
   }
  },
  "eta": {
-  "computed_at": "2026-09-25T23:28:33Z",
+  "computed_at": "2026-09-25T23:50:01Z",
   "params": {
    "review_rework_fraction": 0.3,
    "integration_h_per_task": 0.5,
@@ -3681,7 +3758,7 @@
    "E3C": {
     "gate": "BACKEND-LOCAL",
     "status": "forecast",
-    "text": "2026-09-26 03:04Z – 2026-09-26 10:52Z (likely 2026-09-26 05:40Z)",
+    "text": "2026-09-26 03:26Z – 2026-09-26 11:14Z (likely 2026-09-26 06:02Z)",
     "constraint": "dependency path W5 → E3C",
     "effort_h": [
      3.6,
@@ -3694,9 +3771,9 @@
      11.4
     ],
     "finish": [
-     "2026-09-26T03:04:33Z",
-     "2026-09-26T05:40:33Z",
-     "2026-09-26T10:52:33Z"
+     "2026-09-26T03:26:01Z",
+     "2026-09-26T06:02:01Z",
+     "2026-09-26T11:14:01Z"
     ],
     "conditional": null,
     "confidence": "medium",
