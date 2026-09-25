@@ -25,8 +25,8 @@ the approved profile - publishes nothing. `provider_document` renders the same e
 OpenRouter v2.4 provider document (OpenRouter is deferred: nothing serves it yet).
 
 `release_violations`/`assert_release_profile` are the settings-only half of the gate, for
-the composition root's startup refusal (a wiring request: the code default
-`MAX_VIDEO_SECONDS` is profile v1's 120, not this release's 82).
+the composition root's startup refusal (`app.create_app`, pilot mode; the code default
+`MAX_VIDEO_SECONDS` is this release's 82).
 """
 from __future__ import annotations
 
@@ -177,12 +177,12 @@ def publish(rt, rows, now: datetime) -> list[pm.PublishedModel]:
 
 
 def price_check(catalog, settings):
-    """The `price_source` readiness probe, for `pilot.build_ingress_deps` to adopt (wiring
-    request): the served model resolves for a consumer, callable, with a CREDIT card (the
-    ingress's resolution needs one in both regimes, R69) - and priced in the regime
+    """The `price_source` readiness probe `pilot.build_ingress_deps` composes (G7 WR-2):
+    the served model resolves for a consumer, callable, with a CREDIT card (the ingress's
+    resolution needs one in both regimes, R69) - and priced in the regime
     admission charges: the approved card in CREDIT, the USD identity of the canonical
-    revision in legacy (P-22). `pilot.price_check` asks for a card in both regimes, so a
-    legacy pilot with no USD row read ready."""
+    revision in legacy (P-22). The retired `pilot.price_check` asked for a card in both
+    regimes, so a legacy pilot with no USD row read ready."""
     async def check() -> bool:
         deployment = await catalog.resolve(settings.model_id,
                                            audience=CredentialAudience.consumer,

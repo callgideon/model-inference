@@ -14,7 +14,9 @@ from __future__ import annotations
 import dataclasses
 from datetime import datetime, timedelta
 
+from ..records import PriceSnapshot
 from ..v2 import fixtures as v2fix, ports as v2ports, records as v2
+from .builders import DEFAULT_PRICE
 
 IDS = v2fix.IDS
 
@@ -53,6 +55,8 @@ class FakeCatalogDirectory:
     servings: dict[str, v2.ServingRevision] = dataclasses.field(default_factory=dict)
     rate_cards: dict[str, v2.RateCardSnapshot] = dataclasses.field(default_factory=dict)
     policies: dict[str, v2.DataAccessPolicyRef] = dataclasses.field(default_factory=dict)
+    # D10's `usd_price` (G7 WR-3a): the legacy regime's USD row, keyed by model revision.
+    prices: dict[str, PriceSnapshot] = dataclasses.field(default_factory=dict)
 
     async def resolve(self, requested_model: str, *, audience: v2.CredentialAudience,
                       endpoint_id: str | None) -> v2.DeploymentRevision | None:
@@ -77,6 +81,9 @@ class FakeCatalogDirectory:
     async def data_access_policy(self,
                                  deployment_revision_id: str) -> v2.DataAccessPolicyRef | None:
         return self.policies.get(deployment_revision_id)
+
+    async def usd_price(self, model_revision: str) -> PriceSnapshot | None:
+        return self.prices.get(model_revision)
 
     def publish(self, card: v2.RateCardSnapshot) -> None:
         """An operator publishing a new approved card. Future admissions only."""
@@ -143,7 +150,8 @@ def fake_v2_harness() -> V2Harness:
         # The dev deployment is deliberately *unpriced*: an operator-funded preview
         # still needs an approved internal card, and the fixture proves the refusal.
         rate_cards={prod.deployment_revision_id: card},
-        policies={prod.deployment_revision_id: policy, dev.deployment_revision_id: policy})
+        policies={prod.deployment_revision_id: policy, dev.deployment_revision_id: policy},
+        prices={DEFAULT_PRICE.model_revision: DEFAULT_PRICE})   # what the store's legacy hold reads
     membership = built("provider_membership.json")
     grant = built("access_grant.json")
     providers = FakeProviderDirectory(

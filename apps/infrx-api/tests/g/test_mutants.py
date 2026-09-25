@@ -33,7 +33,8 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           "composition_root_drops_jobs", "objects_from_settings_in_memory",
           "build_info_not_required_in_pilot", "release_sha_accepts_a_short_id",
           # G7: discovery past the approved profile, and admission drifting from discovery
-          "approved_profile_gate_removed", "admission_ceiling_below_advertised")
+          "approved_profile_gate_removed", "admission_ceiling_below_advertised",
+          "release_refusal_removed")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

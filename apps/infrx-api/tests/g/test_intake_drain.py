@@ -183,8 +183,8 @@ def test_media_sec__an_unauthenticated_caller_is_drained_only_up_to_1_mib():
 
 
 # --- WR-I8-3: the gate and the drain on the gateway's /metrics ---------------------------
-# The declarations the coordinator adds to `observe.metrics.FAMILIES` (the wiring request,
-# verbatim); until then the intake records nothing rather than raise on the request path.
+# The declarations `observe.metrics.FAMILIES` carries since the G7 merge (WR-4, verbatim);
+# without them the intake records nothing rather than raise on the request path.
 WIRED = {
     intake.SLOTS_IN_USE: metrics.Spec(
         "gauge", "Large request and upload bodies holding a slot now (LARGE_BODY_LIMIT)."),
@@ -196,6 +196,12 @@ WIRED = {
         "counter", "Refused bodies read to their declared end so the caller reads the refusal.",
         (("code", intake.CLOSE_CODES),)),
 }
+
+
+def test_ops_alert__the_gateway_declares_the_large_body_families_as_the_intake_records_them():
+    """G7 WR-4: the declared families are the intake's, name, kind, help and labels. Oracle:
+    a drifted or missing declaration leaves the gate invisible on `/metrics`."""
+    assert {name: metrics.FAMILIES.get(name) for name in WIRED} == WIRED
 
 
 def sample(registry, name, **labels) -> float | None:

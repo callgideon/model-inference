@@ -23,11 +23,6 @@ from .contracts.v2.money_units import ACCOUNTING_REGIMES, CREDIT_REGIME, LEGACY_
 from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
 from .contracts.limits import JUDGE_MODES, MODE_UNSET, MODES, PilotSettings, env_name
 
-# apps/infrx-api (the retired gateway.py shim's directory): MODELS_DOC used to be
-# resolved against it, and that is this package's parent, not the package itself.
-_API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-DEFAULT_MODELS_DOC = os.path.join(_API_DIR, "openrouter", "provider-models.json")
 # No `video/mpeg` (F2R, coordinator relay): the pilot's pinned profile does not serve it,
 # so ingress refuses it up front rather than fetching bytes preparation must reject.
 DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"
@@ -47,7 +42,7 @@ class Settings:
     legacy_key: str = ""
     model_id: str = "nemostation/marlin-2b"
     max_inflight: int = 16
-    max_video_seconds: float = 120.0
+    max_video_seconds: float = 82.0
     max_video_mb: float = 64.0
     fetch_timeout_s: float = 30.0
     max_redirects: int = 3
@@ -57,7 +52,6 @@ class Settings:
     usage_failed_log: str = None        # None (not "") is "unset": derived from usage_log below
     supabase_url: str = ""
     supabase_key: str = ""
-    models_doc: str = DEFAULT_MODELS_DOC
     fps: float = 2.0
     min_frames: int = 4
     max_frames: int = 240
@@ -96,7 +90,7 @@ def from_env(env=None):
         legacy_key=e.get("GATEWAY_API_KEY", ""),
         model_id=e.get("MODEL_ID", "nemostation/marlin-2b"),
         max_inflight=int(e.get("MAX_INFLIGHT", "16")),
-        max_video_seconds=float(e.get("MAX_VIDEO_SECONDS", "120")),
+        max_video_seconds=float(e.get("MAX_VIDEO_SECONDS", "82")),
         max_video_mb=float(e.get("MAX_VIDEO_MB", "64")),
         fetch_timeout_s=float(e.get("FETCH_TIMEOUT_S", "30")),
         max_redirects=int(e.get("MAX_REDIRECTS", "3")),
@@ -105,7 +99,6 @@ def from_env(env=None):
         usage_failed_log=e.get("USAGE_FAILED_LOG"),
         supabase_url=e.get("SUPABASE_URL", "").rstrip("/"),
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
-        models_doc=e.get("MODELS_DOC", DEFAULT_MODELS_DOC),
         pilot=pilot_from_env(e),
         deployment=deployment_from_env(e),
     )

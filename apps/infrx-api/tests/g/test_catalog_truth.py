@@ -51,6 +51,18 @@ def priced(catalog=None, snapshot=USD):
     return catalog
 
 
+class NoUsdReader:
+    """A catalog without D10's `usd_price` (the contract fake has one since G7 WR-2)."""
+
+    def __init__(self, catalog):
+        self._catalog = catalog
+
+    def __getattr__(self, name):
+        if name == "usd_price":
+            raise AttributeError(name)
+        return getattr(self._catalog, name)
+
+
 def discovery_app(config=None, *, catalog=None, checks=None):
     """The composition order of `app.ROUTERS`: models, then the ingress, over one
     `rt.ingress` (the catalog admission resolves through) and a recording acceptor."""
@@ -136,7 +148,7 @@ def test_catalog_truth__discovery_is_the_catalog_resolution_admission_uses():
     del unpriced.rate_cards[IDS.prod_deployment]
     assert listed(discovery_app(catalog=unpriced)[0]) == []
     assert listed(discovery_app(catalog=priced(snapshot=None))[0]) == []
-    assert listed(discovery_app(catalog=support.catalog())[0]) == []     # no USD reader
+    assert listed(discovery_app(catalog=NoUsdReader(support.catalog()))[0]) == []  # no reader
     retired = priced()
     retired.deployments[IDS.prod_deployment] = retired.deployments[
         IDS.prod_deployment].model_copy(update={"state": DeploymentState.retired})
@@ -195,14 +207,14 @@ def test_catalog_truth__availability_follows_readiness_not_a_file():
 
 # --- the release profile gate -------------------------------------------------------
 def test_catalog_truth__a_runtime_past_the_approved_release_profile_advertises_nothing():
-    """The code default MAX_VIDEO_SECONDS=120 is profile v1's, not this release's (P-20:
-    the engine's encoder cache refuses past 82 s). A runtime whose enforced profile exceeds
-    the approved release profile publishes no model, in any mode; `release_violations`
-    names the setting for the composition root's startup refusal (wiring request)."""
-    stale = support.settings()                        # pilot, the code default 120
+    """Profile v1's MAX_VIDEO_SECONDS=120 is not this release's (P-20: the engine's encoder
+    cache refuses past 82 s). A runtime whose enforced profile exceeds the approved release
+    profile publishes no model, in any mode; `release_violations` names the setting for the
+    composition root's startup refusal (`app.create_app`, G7 WR-1)."""
+    stale = support.settings(max_video_seconds=120.0)  # pilot, profile v1's ceiling
     assert models.release_violations(stale) == ["MAX_VIDEO_SECONDS: 120 > approved 82"]
     assert listed(discovery_app(stale)[0]) == []
-    assert listed(discovery_app(support.settings("dev"))[0]) == []
+    assert listed(discovery_app(support.settings("dev", max_video_seconds=120.0))[0]) == []
     assert models.release_violations(support.settings(**DEPLOYED)) == []
     longer = support.settings(result_ttl_s=172_800.0, **DEPLOYED)
     assert models.release_violations(longer) == ["RESULT_TTL_S: 172800 > approved 86400"]
@@ -433,7 +445,7 @@ def test_catalog_truth__readiness_asks_the_price_admission_actually_reads():
     legacy = support.settings(**DEPLOYED)
     assert probe(priced(), legacy) is True
     assert probe(priced(snapshot=None), legacy) is False          # no USD row
-    assert probe(support.catalog(), legacy) is False              # no USD reader (pre-D10)
+    assert probe(NoUsdReader(support.catalog()), legacy) is False  # no USD reader (pre-D10)
     retired = priced()
     retired.deployments[IDS.prod_deployment] = retired.deployments[
         IDS.prod_deployment].model_copy(update={"state": DeploymentState.retired})
