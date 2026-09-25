@@ -253,3 +253,4 @@ box run of `W5-box-warmup.sh` (about 1 h of operator time after run3).
 ## Log
 
 - 2026-09-25: W5 lane evidence at code head `27afab76` (items 1-4, S3 F4, F2C.d replay, E3C s04/s05 cases).
+- 2026-09-25 (after the handoff commit): the final full run completed - `INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs` at `27afab76`: exit 0, 296 passed, 11 skipped (8 need a local MinIO, 1 needs D10's `PgLifecycle`, 2 empty mutant parameter sets), 761 s.
