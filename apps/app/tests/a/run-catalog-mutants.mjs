@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // R32 for A3: every invariant the A3 cases name must be killable.
 //
-// Each mutant in `mutants.json` is one edit to an A3 module (catalog, content, examples, or a page's
+// Each mutant in `catalog-mutants.json` is one edit to an A3 module (catalog, content, examples, or a page's
 // source the copy guard reads), applied to a throwaway copy of the console. It is killed only when a
 // case it DECLARES fails on an assertion. A stale `find`, a copy that fails to load, a failure in an
 // undeclared case or a failure by exception is not a kill. Two self-checks prove the runner can
@@ -11,7 +11,7 @@
 // real tree, because the suite reads the Python contract fixtures and the generated endpoint
 // document by relative path. Nothing is written through the symlinks.
 //
-// Usage: node tests/a/run-mutants.mjs [--only ID,ID] [--timeout MS] [--keep]
+// Usage: node tests/a/run-catalog-mutants.mjs [--only ID,ID] [--timeout MS] [--keep]
 import { spawn } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,7 +29,7 @@ const timeoutMs = Math.max(1000, Number(flag("--timeout", "120000")) || 120000);
 const keep = args.includes("--keep");
 
 const SUITE = ["tests/a/catalog.test.ts", "tests/a/content.test.ts", "tests/a/examples.test.ts", "tests/a/fake-gateway.test.ts"];
-const { mutants: MUTANTS } = JSON.parse(readFileSync(join(here, "mutants.json"), "utf8"));
+const { mutants: MUTANTS } = JSON.parse(readFileSync(join(here, "catalog-mutants.json"), "utf8"));
 
 const CATALOG = "app/(console)/models/catalog.ts";
 const SELF = [

@@ -1,5 +1,5 @@
 {
-  "_comment": "A3 (R32): one single-edit mutant per invariant the A3 cases claim; node tests/a/run-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
+  "_comment": "A3 (R32): one single-edit mutant per invariant the A3 cases claim; node tests/a/run-catalog-mutants.mjs applies each to a copy and requires a DECLARED case to fail on an assertion.",
   "mutants": [
     {
       "id": "CAT-NOCFG-FAKE",
@@ -287,6 +287,187 @@
       "replace": "await supabase.from(\"models\").select(\"*\");\n  const { data: keys } = await supabase",
       "cases": [
         "the pages read only the published catalog: no public.models table, no USD columns, no stale copy"
+      ]
+    },
+    {
+      "id": "PAGE-M-PROVISIONAL",
+      "what": "the Models card never shows the Provisional badge and note",
+      "file": "app/(console)/models/page.tsx",
+      "find": "{price.provisional ? (",
+      "replace": "{false ? (",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-M-CREDIT-UNIT",
+      "what": "the Models input rate drops its CREDIT label",
+      "file": "app/(console)/models/page.tsx",
+      "find": "value={displayCredit(price.input)}",
+      "replace": "value={price.input}",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-M-USD-UNIT",
+      "what": "the Models legacy input rate drops its USD label",
+      "file": "app/(console)/models/page.tsx",
+      "find": "value={`USD ${price.input}`}",
+      "replace": "value={price.input}",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-M-FACTS",
+      "what": "the Models card lists no video or request limits",
+      "file": "app/(console)/models/page.tsx",
+      "find": "{[...videoFacts(model.capability), ...requestFacts(model.capability)].map(",
+      "replace": "{[].map(",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-PROVISIONAL",
+      "what": "the Docs pricing never shows the provisional note",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "{provisional ? <p",
+      "replace": "{false ? <p",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-PROVISIONAL-PROP",
+      "what": "the Docs pricing is told the card is approved",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "provisional={price.provisional}",
+      "replace": "provisional={false}",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-RETENTION",
+      "what": "the Docs retention facts disappear",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "retentionFacts(retention).map",
+      "replace": "[].map",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-REVOCATION",
+      "what": "the Docs revocation copy disappears",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "<p>{REVOCATION_COPY}</p>",
+      "replace": "<p></p>",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-DISCLOSURE",
+      "what": "the Docs P-01 rates and failure policy disappear",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "disclosure.intro.map",
+      "replace": "[].map",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-NEVER-CHARGED",
+      "what": "the Docs never-charged list disappears",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "disclosure.neverCharged.map",
+      "replace": "[].map",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-OUTRO",
+      "what": "the Docs undetermined-usage sentence disappears",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "<p>{disclosure.outro}</p>",
+      "replace": "<p></p>",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-LIMITS",
+      "what": "the Docs Limits list is emptied",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "{[...videoFacts(model.capability), ...requestFacts(model.capability)].map(",
+      "replace": "{[].map(",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-LIVE",
+      "what": "the Docs Streaming section drops 'live video input is not supported'",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "The input is always a finished video file; live video input is not\n            supported.",
+      "replace": "The input is always a finished video file.",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-REFILL",
+      "what": "the Docs grant sentence claims a monthly refill",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "It is not refilled\n        and does not expire.",
+      "replace": "It is refilled monthly.",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy",
+        "the pages read only the published catalog: no public.models table, no USD columns, no stale copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-GRANT-UNIT",
+      "what": "the Docs grant amount drops its CREDIT label",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "{displayCredit(INITIAL_SIGNUP_GRANT_CREDIT)}",
+      "replace": "{INITIAL_SIGNUP_GRANT_CREDIT}",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "PAGE-D-USD-UNIT",
+      "what": "the Docs legacy rates drop their USD label",
+      "file": "app/(console)/docs/page.tsx",
+      "find": "USD {price.input} per million input tokens",
+      "replace": "{price.input} per million input tokens",
+      "cases": [
+        "the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy"
+      ]
+    },
+    {
+      "id": "COPY-TOPUP",
+      "what": "the 402 row tells the caller to top up",
+      "file": "app/(console)/docs/content.ts",
+      "find": "The grant is not refilled.\"]",
+      "replace": "Top up your balance to continue.\"]",
+      "cases": [
+        "no rendered sentence carries a stale or false claim"
+      ]
+    },
+    {
+      "id": "COPY-EXPIRES",
+      "what": "the 402 row says the grant expires",
+      "file": "app/(console)/docs/content.ts",
+      "find": "The grant is not refilled.\"]",
+      "replace": "The grant expires after 90 days.\"]",
+      "cases": [
+        "no rendered sentence carries a stale or false claim"
       ]
     }
   ]

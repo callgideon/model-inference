@@ -45,6 +45,9 @@ const BANNED: [RegExp, string][] = [
   [/concurrency (of )?16/i, "the stale concurrency-16 claim"],
   [/\$\s?\d/, "a dollar amount beside CREDIT"],
   [/metadata only/i, "a metadata-only usage claim"],
+  [/\brefill(s|ed)? (monthly|weekly|daily|every|each|automatically)\b|\b(monthly|weekly|daily) (refill|grant|allowance)\b/i, "a CREDIT refill claim"],
+  [/\btop[- ]?ups?\b/i, "a top-up claim"],
+  [/(?<!not |never )\bexpires?\b/i, "a CREDIT expiry claim"],
 ];
 
 function assertClean(text: string, where: string) {
@@ -147,5 +150,48 @@ test("the pages read only the published catalog: no public.models table, no USD 
 test("an unavailable catalog renders its fixed copy and no figure", () => {
   for (const { path, source } of PAGES) {
     assert.match(source, /catalog\.status !== "ok"[\s\S]{0,400}CATALOG_UNAVAILABLE/, `${path} has no unavailable branch`);
+  }
+});
+
+/**
+ * What each page renders, held on its source (whitespace folded): `node --test` cannot render a
+ * `.tsx` server component, so these are the JSX expressions that put each decided fact on screen.
+ * Oracle: a page that hides the Provisional badge/note (G7 publishes every card provisional), drops
+ * a CREDIT or USD unit label, empties the limits, retention, revocation or P-01 disclosure, drops
+ * the no-live-video sentence, or claims the one-time grant refills or expires.
+ */
+const RENDERS: Record<string, [RegExp, string][]> = {
+  "app/(console)/models/page.tsx": [
+    [/\{price\.provisional \? \( <p[^>]*> <Badge[^>]*>Provisional<\/Badge> \{PROVISIONAL_NOTE\} <\/p> \) : null\}/, "the Provisional badge and note on a provisional card"],
+    [/value=\{displayCredit\(price\.input\)\}/, "the CREDIT input rate with its unit"],
+    [/value=\{displayCredit\(price\.output\)\}/, "the CREDIT output rate with its unit"],
+    [/value=\{displayCredit\(price\.maxHold\)\}/, "the largest hold with its unit"],
+    [/value=\{`USD \$\{price\.input\}`\}/, "the legacy USD input rate with its unit"],
+    [/value=\{`USD \$\{price\.output\}`\}/, "the legacy USD output rate with its unit"],
+    [/\{\[\.\.\.videoFacts\(model\.capability\), \.\.\.requestFacts\(model\.capability\)\]\.map\(\(fact\) => \( <li key=\{fact\}>\{fact\}<\/li>/, "the video and request limits"],
+    [/Charged in CREDIT from your one-time grant; CREDIT has no USD exchange rate\./, "the no-exchange-rate note"],
+  ],
+  "app/(console)/docs/page.tsx": [
+    [/provisional=\{price\.provisional\}/, "the card's own provisional flag"],
+    [/\{provisional \? <p[^>]*>\{PROVISIONAL_NOTE\}<\/p> : null\}/, "the provisional note on a provisional card"],
+    [/disclosure=\{chargeDisclosure\(price\)\}/, "the P-01 disclosure from the card"],
+    [/\{disclosure\.intro\.map\(\(paragraph\) => \( <p key=\{paragraph\}>\{paragraph\}<\/p>/, "the P-01 rates and failure policy"],
+    [/\{disclosure\.neverCharged\.map\(\(item\) => \( <li key=\{item\}>\{item\}<\/li>/, "the never-charged list"],
+    [/<p>\{disclosure\.outro\}<\/p>/, "the undetermined-usage sentence"],
+    [/\{displayCredit\(maxHold\)\}[\s\S]{0,120}\{displayCredit\(exampleHold\)\}/, "both holds with their unit"],
+    [/A verified individual account receives \{displayCredit\(INITIAL_SIGNUP_GRANT_CREDIT\)\} once\. It is not refilled and does not expire\./, "the one-time, no-refill, no-expiry grant"],
+    [/USD \{price\.input\} per million input tokens and USD \{price\.output\} per million output tokens\. USD is never converted to or from CREDIT\./, "the legacy USD rates with their unit"],
+    [/const retention = model\.retention;/, "the record's retention"],
+    [/\{retentionFacts\(retention\)\.map\(\(fact\) => \( <li key=\{fact\}>\{fact\}<\/li>/, "the retention facts, capture-off-is-not-deletion included"],
+    [/<p>\{REVOCATION_COPY\}<\/p>/, "the P-26 revocation copy"],
+    [/\{\[\.\.\.videoFacts\(model\.capability\), \.\.\.requestFacts\(model\.capability\)\]\.map\(\(fact\) => \( <li key=\{fact\}>\{fact\}<\/li>/, "the Limits list"],
+    [/The input is always a finished video file; live video input is not supported\./, "the no-live-video sentence"],
+  ],
+};
+
+test("the pages render the provisional note, unit labels, limits, retention, revocation, disclosure and grant copy", () => {
+  for (const { path, source } of PAGES) {
+    const flat = source.replace(/\s+/g, " ");
+    for (const [pattern, what] of RENDERS[path]) assert.match(flat, pattern, `${path} no longer renders ${what}`);
   }
 });
