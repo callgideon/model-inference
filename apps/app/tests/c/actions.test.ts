@@ -9,8 +9,8 @@
 // - the key plaintext exists only in the first response; a replay (double-click, retry) never mints a
 //   second key and never shows a secret; a lost response is revoke-and-recreate, not redisplay;
 // - revocation is idempotent and tenant-scoped (another tenant's key is `not_found`, not revoked);
-// - the grant is the DB's one idempotent entitlement for the session's own user; denials are answers
-//   with fixed text that enumerate nothing; an outage is never a grant;
+// - the server actions (`app/actions.ts` -> `consoleActions`) refuse a cross-site request before
+//   resolving anyone, and revalidate only after an acknowledged change;
 // - the DB's own error text never reaches a caller; a write whose outcome is unknown says so;
 // - operator actions need operator authority, a reason and an idempotency key, and the audit actor is
 //   the session, never the form.
@@ -21,15 +21,15 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { Result } from "../../lib/contracts/types.ts";
-import type { ConsumerAccount, ConsumerContext, RpcClient } from "../../lib/services/console.ts";
+import type { ConsumerAccount, ConsumerContext } from "../../lib/services/console.ts";
 import {
-  SIGNUP_CAMPAIGN,
+  consoleActions,
   createConsumerActions,
   operatorCommand,
   runOperatorCommand,
   sameOrigin,
   supabaseKeyStore,
-  type GrantOutcome,
+  type ActionDeps,
   type KeyClient,
   type KeyStore,
   type OperatorPort,
@@ -69,7 +69,7 @@ type Answer = { data: unknown; error: { code?: string; message?: string } | null
 type StoredKey = { id: string; org_id: string; created_by: string; name: string; prefix: string; key_hash: string; revoked_at: string | null };
 
 /** A key table that behaves like `public.api_keys` under the owner's JWT for the three calls used. */
-function memoryStore(options: { failInsert?: Answer["error"]; failRevoke?: Answer["error"]; slow?: boolean } = {}) {
+function memoryStore(options: { failInsert?: Answer["error"]; failRevoke?: Answer["error"]; slow?: boolean; rlsFiltersRevoke?: boolean } = {}) {
   const rows: StoredKey[] = [
     { id: "c7000000-0000-4000-8000-0000000000f2", org_id: "0e000000-0000-4000-8000-000000000002", created_by: OTHER, name: "theirs", prefix: "sk-infrx-theirs00", key_hash: "x", revoked_at: null },
   ];
@@ -92,6 +92,8 @@ function memoryStore(options: { failInsert?: Answer["error"]; failRevoke?: Answe
     async revoke(orgId, keyId, at) {
       calls.push("revoke");
       if (options.failRevoke) return { data: null, error: options.failRevoke };
+      // A non-owner's update that RLS filters out: no error, no rows, nothing changed.
+      if (options.rlsFiltersRevoke) return { data: [], error: null };
       const hit = rows.filter((row) => row.id === keyId && row.org_id === orgId && row.revoked_at === null);
       for (const row of hit) row.revoked_at = at;
       return { data: hit.map(view), error: null };
@@ -102,17 +104,6 @@ function memoryStore(options: { failInsert?: Answer["error"]; failRevoke?: Answe
     },
   };
   return { store, rows, calls };
-}
-
-function rpcOf(handler: (fn: string, args: Record<string, unknown>) => Answer) {
-  const calls: [string, Record<string, unknown>][] = [];
-  const client: RpcClient = {
-    rpc(fn, args) {
-      calls.push([fn, args]);
-      return Promise.resolve(handler(fn, args));
-    },
-  };
-  return { client, calls };
 }
 
 const actions = () => createConsumerActions({ now: () => new Date(AT) });
@@ -275,67 +266,13 @@ test("key revoke: a malformed id or an unready context never reaches the store",
   assert.ok(!failed.ok && !failed.error.message.includes("10.0.0.5"));
 });
 
-// -------------------------------------------------------------------------------- signup grant
-
-const GRANT_ROW = {
-  status: "granted",
-  user_id: ME,
-  wallet_id: MY_WALLET,
-  ledger_operation_id: "0b000000-0000-4000-8000-000000000001",
-  amount: "10000.00000000",
-  granted_at: "2026-09-25T12:00:00+00:00",
-};
-
-test("grant: the DB's one entitlement for the SESSION's user, never an input, exact CREDIT string", async () => {
-  const { client, calls } = rpcOf(() => ({ data: [GRANT_ROW], error: null }));
-  const granted = valueOf(await actions().claimGrant(onboarding, () => client), "claim");
-  assert.deepEqual(calls, [["claim_signup_grant", { p_user_id: ME, p_campaign_version: SIGNUP_CAMPAIGN, p_operation_id: null }]]);
-  assert.deepEqual(granted, { status: "granted", wallet_id: MY_WALLET, amount: "10000.00000000", granted_at: GRANT_ROW.granted_at });
-  const { client: again } = rpcOf(() => ({ data: [{ ...GRANT_ROW, status: "replayed" }], error: null }));
-  const replayed = valueOf(await actions().claimGrant(ready, () => again), "replay");
-  assert.equal(replayed.status, "already_granted");
-  assert.equal(typeof replayed.amount, "string");
-});
-
-test("grant: an unverified, signed-out or unknown context never calls the grant", async () => {
-  for (const [label, context, code] of [
-    ["signed out", { state: "signed_out" }, "forbidden"],
-    ["unverified", unverified, "forbidden"],
-    ["unavailable", { state: "unavailable" }, "dependency_unavailable"],
-  ] as [string, ConsumerContext, string][]) {
-    let asked = 0;
-    const result = await actions().claimGrant(context, () => {
-      asked += 1;
-      return rpcOf(() => ({ data: [GRANT_ROW], error: null })).client;
-    });
-    assert.equal(codeOf(result), code, label);
-    assert.equal(asked, 0, `${label}: the service client is not even built`);
-  }
-});
-
-test("grant: denials are answers with no reason; an outage or a foreign row is never a grant", async () => {
-  for (const status of ["identity_reused", "rollout_hold", "retired"]) {
-    const { client } = rpcOf(() => ({ data: [{ ...GRANT_ROW, status, wallet_id: null, amount: null }], error: null }));
-    const held: GrantOutcome = valueOf(await actions().claimGrant(onboarding, () => client), status);
-    assert.deepEqual(held, { status: "held" }, `${status} names no reason (no enumeration)`);
-  }
-  const { client: lagging } = rpcOf(() => ({ data: [{ ...GRANT_ROW, status: "unverified", amount: null }], error: null }));
-  assert.equal(codeOf(await actions().claimGrant(onboarding, () => lagging)), "forbidden");
-  const { client: down } = rpcOf(() => ({ data: null, error: { code: "P0001", message: "feature_disabled: signup_grant for 0e00..." } }));
-  const outage = await actions().claimGrant(onboarding, () => down);
-  assert.equal(codeOf(outage), "dependency_unavailable");
-  assert.ok(!outage.ok && !outage.error.message.includes("signup_grant"));
-  const { client: foreign } = rpcOf(() => ({ data: [{ ...GRANT_ROW, user_id: OTHER }], error: null }));
-  assert.equal(codeOf(await actions().claimGrant(onboarding, () => foreign)), "internal_error");
-  const { client: float } = rpcOf(() => ({ data: [{ ...GRANT_ROW, amount: 10000 }], error: null }));
-  assert.equal(codeOf(await actions().claimGrant(onboarding, () => float)), "internal_error", "a number is not an exact CREDIT string");
-  const { client: empty } = rpcOf(() => ({ data: [], error: null }));
-  assert.equal(codeOf(await actions().claimGrant(onboarding, () => empty)), "internal_error");
-  const missing = await actions().claimGrant(onboarding, () => {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  });
-  assert.equal(codeOf(missing), "dependency_unavailable");
-  assert.ok(!missing.ok && !missing.error.message.includes("SERVICE_ROLE"));
+test("key revoke: a revoke that changed nothing is ok only when the key really is revoked", async () => {
+  // RLS filters a non-owner member's update to zero rows without an error; the key is still active.
+  const { store, rows } = memoryStore({ rlsFiltersRevoke: true });
+  const act = actions();
+  const created = valueOf(await act.createKey(ready, store, { name: "still-active" }), "create");
+  assert.equal(codeOf(await act.revokeKey(ready, store, created.id)), "not_found", "an active key is never reported revoked");
+  assert.equal(rows[rows.length - 1].revoked_at, null);
 });
 
 // ------------------------------------------------------------------------------- cross-site guard
@@ -401,6 +338,73 @@ test("operator: no deployed port is an explicit unavailable state, never a silen
   const failed = await runOperatorCommand(command, throwing);
   assert.equal(codeOf(failed), "dependency_unavailable");
   assert.ok(!failed.ok && !failed.error.message.includes("10.0.0.9"));
+});
+
+// ------------------------------------------------------------------------------ the action seam
+
+const SAME = new Headers({ origin: "https://app.callbill.ai", host: "app.callbill.ai" });
+const CROSS = new Headers({ origin: "https://evil.example", host: "app.callbill.ai" });
+
+/** `consoleActions` over recording deps: which request APIs, clients and refreshes each action used. */
+function seam(options: { headers: Headers; context?: ConsumerContext; session?: { userId: string; isOperator: boolean }; store?: KeyStore }) {
+  const used: string[] = [];
+  const deps: ActionDeps = {
+    headers: async () => (used.push("headers"), options.headers),
+    context: async () => (used.push("context"), options.context ?? ready),
+    keys: async () => (used.push("keys"), options.store ?? memoryStore().store),
+    session: async () => (used.push("session"), options.session ?? operator),
+    endSession: async () => void used.push("endSession"),
+    revalidate: (path) => void used.push(`revalidate ${path}`),
+  };
+  return { act: consoleActions({ ...deps, actions: actions() }), used };
+}
+
+test("action seam: a cross-site request is refused before any session, store or refresh", async () => {
+  const calls: [string, (act: ReturnType<typeof consoleActions>) => Promise<Result<unknown>>][] = [
+    ["create", (act) => act.createKey({ name: "k" })],
+    ["revoke", (act) => act.revokeKey(KEY)],
+    ["operator", (act) => act.operator(ADJUST)],
+  ];
+  for (const [label, call] of calls) {
+    const { act, used } = seam({ headers: CROSS });
+    assert.equal(codeOf(await call(act)), "forbidden", label);
+    assert.deepEqual(used, ["headers"], `${label}: nothing past the Origin check`);
+  }
+  const { act, used } = seam({ headers: CROSS });
+  await act.signOut();
+  assert.deepEqual(used, ["headers"], "a cross-site sign-out ends no session");
+  const same = seam({ headers: SAME });
+  await same.act.signOut();
+  assert.deepEqual(same.used, ["headers", "endSession"]);
+});
+
+test("action seam: the read model is refreshed only after an acknowledged change", async () => {
+  const { store } = memoryStore();
+  const { act, used } = seam({ headers: SAME, store });
+  const created = valueOf(await act.createKey({ name: "k" }), "create");
+  assert.deepEqual(used, ["headers", "context", "keys", "revalidate /api-keys"]);
+  used.length = 0;
+  valueOf(await act.revokeKey(created.id), "revoke");
+  assert.deepEqual(used, ["headers", "context", "keys", "revalidate /api-keys"]);
+  for (const [label, run] of [
+    ["refused create", () => seam({ headers: SAME, context: unverified })],
+    ["failed create", () => seam({ headers: SAME, store: memoryStore({ failInsert: { code: "08006", message: "lost" } }).store })],
+  ] as const) {
+    const { act: failing, used: seen } = run();
+    assert.equal((await failing.createKey({ name: "k" })).ok, false, label);
+    assert.ok(!seen.some((call) => call.startsWith("revalidate")), `${label}: no refresh`);
+  }
+  const unknown = seam({ headers: SAME });
+  assert.equal(codeOf(await unknown.act.revokeKey("c7000000-0000-4000-8000-00000000dead")), "not_found");
+  assert.ok(!unknown.used.some((call) => call.startsWith("revalidate")), "a failed revoke refreshes nothing");
+});
+
+test("action seam: the operator action is the session's, and with no port it is unavailable", async () => {
+  const { act, used } = seam({ headers: SAME });
+  assert.equal(codeOf(await act.operator(ADJUST)), "dependency_unavailable");
+  assert.deepEqual(used, ["headers", "session"], "authority is re-read from the session; nothing is refreshed");
+  const consumer = seam({ headers: SAME, session: { userId: ME, isOperator: false } });
+  assert.equal(codeOf(await consumer.act.operator(ADJUST)), "forbidden");
 });
 
 // --------------------------------------------------------------------------------- the real store
