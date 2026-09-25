@@ -64,8 +64,9 @@ def test_ops_continuous__the_pool_budget_step_hands_the_env_file_over_stdin(tmp_
     env_file.write_text(f"INFRX_MODE=pilot\nINFRX_IMAGE={image}\n"
                         f"DATABASE_URL=postgresql://u:{canary}@h:5432/d\n")
     stub = stubs(tmp_path, "docker")
-    text = (STEPS / "71-pool-budget.sh").read_text().replace("/etc/marlin2b-gateway.env",
-                                                             str(env_file))
+    text = (STEPS / "71-pool-budget.sh").read_text().replace(
+        "/etc/marlin2b-gateway.env", str(env_file)).replace(
+        "/home/ubuntu/model-inference", str(support.REPO))    # an I8+ checkout (the guard)
     done = run_step(text, stub, env={"SET": "DATABASE_POOL_MAX_SIZE=6"})
     assert done.returncode == 0, done.stderr
     (call,) = calls(stub)
@@ -357,3 +358,60 @@ def test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_
     assert sorted(p.name for p in nvme.iterdir()) == ["marlin2b", "restore-20260101T000000Z"]
     assert run_step(step, stub, env={**env, "KEEP": "1"}).returncode == 2
     assert run_step(step, stub, env={**env, "RESTORE_ID": "*"}).returncode == 2
+
+
+# ROLLOUT-FIXES item 5: each step and the checkout paths it reads that the known-good
+# targets (bda1586, 4226315, pre-I8) do not have, with the arguments that get it past its
+# own argument checks.
+PRE_I8 = {
+    "71-pool-budget.sh": (["infra/runbooks/pool_budget.py"], {}),
+    "72-observe-install.sh": (["infra/observe/systemd", "infra/alerts/operations.json"],
+                              {"RELEASE": "c" * 40, "CANARY_VIDEO": "/nonexistent.mp4",
+                               "CANARY_KEY_PARAM": "/model-inference/canary_key"}),
+    "74-alert-test.sh": (["infra/observe/deliver.py"], {}),
+    "80-mirror-artifacts.sh": (["infra/runbooks/artifacts.py"],
+                               {"RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/"}),
+    "81-restore-artifacts.sh": (["infra/runbooks/artifacts.py", "infra/observe/canary.sh"],
+                                {"RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/"}),
+    "86-cleanup.sh": (["infra/rollout/known-good.json"], {}),
+}
+BOX_TOOLS = ("docker", "aws", "git", "systemctl", "curl", "install", "python3", "sed", "tar",
+             "find", "mktemp")
+
+
+def test_ops_continuous__a_step_on_a_pre_i8_checkout_is_blocked_before_it_acts(tmp_path):
+    """Steps 71/72/74/80/81/86 read infra/runbooks, infra/observe or known-good.json from
+    the box's checkout, absent at every known-good target: after a revert to one, each
+    says BLOCKED (exit 3) naming the missing path before any command runs (every box tool
+    a recording stub: none is called, nothing is written). Oracle: without the guard they
+    ran on - 71 into docker, 72 into git/SSM, 86 into python3 on a missing file. With the
+    paths present the guard is silent. 81's MODE=undo reads nothing from the checkout and
+    stays available as the recovery path."""
+    for name, (needs, args) in PRE_I8.items():
+        path = STEPS / name
+        assert subprocess.run(["bash", "-n", str(path)]).returncode == 0, name
+        text = path.read_text().replace("/home/ubuntu/model-inference", "@REPO@")
+        for present in (False, True):
+            case = tmp_path / f"{name}-{present}"
+            repo, sandbox = case / "repo", case / "sandbox"
+            repo.mkdir(parents=True), sandbox.mkdir()
+            if present:
+                for need in needs:
+                    (repo / need).parent.mkdir(parents=True, exist_ok=True)
+                    (repo / need).touch() if "." in need.rsplit("/", 1)[-1] else (repo / need).mkdir()
+            stub = stubs(case, *BOX_TOOLS)
+            env = {"REPO": str(repo), "INFRX_ROOT": str(sandbox), "NVME": str(sandbox),
+                   "BACKUPS": str(sandbox), "ALERT_ENV": str(sandbox / "none.env"), **args}
+            done = run_step(text.replace("@REPO@", str(repo)), stub, env=env)
+            blocked = f"BLOCKED: this step needs an I8+ checkout (missing {needs[0]})"
+            if present:
+                assert "I8+ checkout" not in done.stderr, (name, done.stderr)
+                continue
+            assert done.returncode == 3 and blocked in done.stderr, (name, done.stderr)
+            assert calls(stub) == [], (name, calls(stub))
+            assert list(sandbox.iterdir()) == [], name
+    undo = run_step((STEPS / "81-restore-artifacts.sh").read_text(), stubs(tmp_path),
+                    env={"REPO": str(tmp_path / "empty"), "NVME": str(tmp_path),
+                         "RELEASE": "c" * 40, "MIRROR_URL": "s3://bucket/prefix/",
+                         "MODE": "undo", "RESTORE_ID": "20260925T000000Z"})
+    assert undo.returncode == 2 and "nothing moved aside" in undo.stderr, undo.stderr

@@ -20,6 +20,9 @@ set -euo pipefail
 : "${RELEASE:?the release commit}" "${CANARY_VIDEO:?an in-cap clip on the box}"
 : "${CANARY_KEY_PARAM:?the SSM name of the canary tenant key - no default, P-24 bounds its spend}"
 repo=${REPO:-/home/ubuntu/model-inference}
+for need in infra/observe/systemd infra/alerts/operations.json; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+  [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+done
 R=${INFRX_ROOT:-}                     # empty on the box; a sandbox root in tests (lib.sh's seam)
 [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] \
   || { echo "the checkout is not $RELEASE" >&2; exit 2; }

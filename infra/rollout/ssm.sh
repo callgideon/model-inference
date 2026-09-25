@@ -12,14 +12,18 @@
 set -euo pipefail
 INSTANCE=${INSTANCE:-i-0e8449a4ffca29bab}
 REGION=${REGION:-us-east-1}
-step=${1:?usage: ssm.sh <step.sh> [NAME=VALUE ...]}
+usage() { echo "usage: ssm.sh <step.sh> [NAME=VALUE ...]"; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+step=${1:-}
+# an option or a missing path would reach `cat` and send its output to the box
+[ -f "$step" ] || { usage >&2; exit 2; }
 shift
 header=""
 for pair in "$@"; do
   case "$pair" in [A-Z_]*=*) header+="export $(printf '%q' "$pair")"$'\n' ;;
                   *) echo "not NAME=VALUE: $pair" >&2; exit 2 ;; esac
 done
-b64=$( { printf '%s' "$header"; cat "$step"; } | base64 -w0)
+b64=$( { printf '%s' "$header"; cat -- "$step"; } | base64 -w0)
 aws() { env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
         aws --region "$REGION" "$@"; }
 params=$(printf '{"commands":["echo %s | base64 -d > /root/infrx-step.sh && bash /root/infrx-step.sh; rc=$?; rm -f /root/infrx-step.sh; exit $rc"],"executionTimeout":["%s"]}' \

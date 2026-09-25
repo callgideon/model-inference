@@ -10,6 +10,9 @@
 # DRY_RUN=1 (the default) prints what it would remove; DRY_RUN=0 removes it.
 set -euo pipefail
 repo=${REPO:-/home/ubuntu/model-inference}
+for need in infra/rollout/known-good.json; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+  [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+done
 backups=${BACKUPS:-/var/backups/infrx}
 nvme=${NVME:-/opt/dlami/nvme}
 KEEP=${KEEP:-3}

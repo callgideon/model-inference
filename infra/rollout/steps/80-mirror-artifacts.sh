@@ -13,6 +13,9 @@ set -euo pipefail
 : "${RELEASE:?the release commit}" "${MIRROR_URL:?s3://bucket/prefix/ the owner approved}"
 [[ $MIRROR_URL =~ ^s3://[a-z0-9.-]+/([A-Za-z0-9._-]+/)+$ ]] || { echo "MIRROR_URL must be s3://bucket/prefix/ (a prefix, ending in /)" >&2; exit 2; }
 repo=${REPO:-/home/ubuntu/model-inference}
+for need in infra/runbooks/artifacts.py; do  # absent at the pre-I8 known-good targets (bda1586, 4226315)
+  [ -e "$repo/$need" ] || { echo "BLOCKED: this step needs an I8+ checkout (missing $need)" >&2; exit 3; }
+done
 weights=${WEIGHTS:-/opt/dlami/nvme/marlin2b}
 [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] || { echo "the checkout is not $RELEASE" >&2; exit 2; }
 out=$(mktemp -d)
