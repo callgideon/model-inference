@@ -55,6 +55,10 @@ MINTED_SUFFIX = "_provisional_p01"
 UNAPPROVED_MARKERS = ("p-01", "provisional", "pending")
 
 
+#: What a flag write may run past its lock bound (the UPDATE and its triggers).
+STATEMENT_MARGIN_MS = 1000
+
+
 class FlagLocked(Exception):
     """A flag row stayed locked (an admission in flight holds it) past the bound."""
 
@@ -136,10 +140,12 @@ _QUERIES = {
 #: The transactions open in this database now, by the virtual transaction id each holds
 #: from its start (`pg_locks` and the pid, database and user of `pg_stat_activity` are
 #: readable by any role; autovacuum has no user and admits nothing). Waiting until those
-#: open at the freeze have ended is CREATE INDEX CONCURRENTLY's wait: `require_feature`
-#: reads the flag without a lock, so an admission that read it before the freeze committed
-#: can still commit its job (review G8-R1). The caller's own listing drops out of the
-#: intersection: each listing is a new transaction.
+#: open at the freeze have ended is CREATE INDEX CONCURRENTLY's wait: before 0021,
+#: `require_feature` read the flag without a lock, so an admission that read it before the
+#: freeze committed could still commit its job (review G8-R1). From 0021 on it reads FOR
+#: SHARE and the freeze waits for such admissions itself (V-G8TL-6); this wait then finds
+#: nothing of theirs and matters only on a schema before 0021. The caller's own listing
+#: drops out of the intersection: each listing is a new transaction.
 _OPEN_TRANSACTIONS = (
     "select l.virtualxid from pg_catalog.pg_locks l "
     "join pg_catalog.pg_stat_activity a on a.pid = l.pid "
@@ -183,19 +189,24 @@ class PgTransition:
         """True when this call changed it (attributed on the row); False when it already was.
         Raises `FlagLocked` when the row stays locked past `lock_timeout_s`: an admission
         holds it FOR SHARE until it commits (D10's `require_feature`), so an unbounded
-        UPDATE would wait on a parked admission forever."""
+        UPDATE would wait on a parked admission forever. `lock_timeout` bounds one wait;
+        overlapping admissions chain waits (one MultiXact after another), so
+        `statement_timeout` bounds the whole write (V-G8TL-1)."""
+        # PostgreSQL reads 0 as "no limit": the floor keeps a spent bound bounded. The
+        # statement's margin lets a 1 ms lock bound still run the UPDATE and its triggers.
+        ms = max(1, int(lock_timeout_s * 1000))
         conn = await self._connect()
         try:
             async with conn.transaction():
-                # PostgreSQL reads 0 as "no limit": the floor keeps a spent bound bounded.
-                await conn.execute(
-                    f"set local lock_timeout = {max(1, int(lock_timeout_s * 1000))}")
+                await conn.execute(f"set local lock_timeout = {ms}")
+                await conn.execute(f"set local statement_timeout = {ms + STATEMENT_MARGIN_MS}")
                 row = await (await conn.execute(
                     "update infrx.feature_flags set enabled = %s, updated_by = %s, reason = %s, "
                     "updated_at = infrx.now() where name = %s and enabled <> %s returning name",
                     (enabled, actor[:200], reason[:500], name, enabled))).fetchone()
         except Exception as exc:
-            if getattr(exc, "sqlstate", None) == "55P03":          # lock_not_available
+            # lock_not_available, query_canceled (the statement bound)
+            if getattr(exc, "sqlstate", None) in ("55P03", "57014"):
                 raise FlagLocked(name) from exc
             raise
         finally:

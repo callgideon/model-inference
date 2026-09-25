@@ -322,7 +322,7 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
         is False
     assert w.one("select count(*) from infrx.audit_entries where idempotency_key = 'straddle'") \
         == 0
-    assert "admitted" in box, box                             # it committed after the freeze
+    assert "admitted" in box, box                             # it committed once released
     code, dry, _ = cli_run(w, ["credit-transition", "--dry-run", *ACTIVATE[1:]], capsys,
                            operator=False)
     assert code == 1 and codes(dry) == {"in_flight"}, dry["blockers"]
@@ -331,3 +331,52 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
     code, result, _ = cli_run(w, argv, capsys)
     assert code == 0 and result["flags"]["credit_admission"] is True, result
     assert drift(w) == []
+
+
+def test_credit_cutover__overlapping_admissions_cannot_stretch_a_flag_write_past_its_bound():
+    """V-G8TL-1: admissions overlap, each holding the flag FOR SHARE (0021 `require_feature`),
+    so the flag's UPDATE waits on one MultiXact after another. `lock_timeout` bounds each
+    wait, not their sum; the write as a whole must end within its bound (plus the fixed
+    statement margin), refused (`FlagLocked`) or done.
+    Oracle: with only `lock_timeout` the write returned after 6.7-34 s against a 2 s bound
+    (four 50 ms lockers); eight 200 ms lockers keep the row share-locked, so it never does."""
+    w = pgworld.world("g8_overlap")
+    stop = threading.Event()
+
+    def locker():
+        conn = pgworld.pgharness.connect(w.database, autocommit=False)
+        try:
+            while not stop.is_set():
+                try:
+                    conn.execute("select infrx.require_feature('legacy_usd_admission')")
+                    conn.execute("select pg_sleep(0.2)")
+                    conn.commit()
+                except Exception:                             # the flag is off: refused
+                    conn.rollback()
+        finally:
+            conn.close()
+    lockers = [threading.Thread(target=locker, daemon=True) for _ in range(8)]
+    for t in lockers:
+        t.start()
+    box: dict = {}
+
+    def write():
+        started = time.monotonic()
+        try:
+            box["changed"] = run(w.ops.transitions.set_flag(
+                "legacy_usd_admission", False, "g8-probe", R, lock_timeout_s=2.0))
+        except transition.FlagLocked as exc:
+            box["refused"] = exc
+        box["elapsed"] = time.monotonic() - started
+    try:
+        time.sleep(0.3)                                       # the lockers overlap by now
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(HARD_S)
+        assert not writer.is_alive(), f"the flag write did not return within {HARD_S}s"
+    finally:
+        stop.set()
+        for t in lockers:
+            t.join(10)
+    assert "elapsed" in box, box
+    assert box["elapsed"] < 2.0 + 1.0 + 1.5, box              # bound + margin + slack
