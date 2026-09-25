@@ -78,8 +78,27 @@ is ready ([rollback.md](rollback.md#maintenance)). `PublicEdgeDown`: public `/he
 not answer 200 while the box's own readiness may: DNS, TLS, Caddy, or the
 503-after-readiness seen on 2026-09-24 — `docker logs --since 10m caddy`,
 `curl -s -o /dev/null -w '%{http_code}' https://marlin2b.callbill.ai/health`.
-`GatewayBodySlotsFull` (pending WR-I8-3): every large-body slot is in use; refusals are
-typed 429s, see [restart.md](restart.md#saturation).
+
+## Intake
+
+Dashboard row "Is the intake saturated?" (`routes/intake.py`, WR-I8-3, gateway only).
+A body over `LARGE_BODY_THRESHOLD_BYTES` holds one of `LARGE_BODY_LIMIT` slots while it is
+read; with every slot held the next large body is refused 429 `capacity_exhausted`
+(`Retry-After: 2`) and nothing is lost.
+
+- Slots in use pinned at the limit (`GatewayBodySlotsFull`, ticket, exact: at the limit):
+  load, not failure — the same stance as [restart.md](restart.md#saturation). Do not raise
+  `LARGE_BODY_LIMIT` from a ticket: it bounds the gateway's buffered memory. A pin with no
+  traffic behind it (in use stays at the limit while requests stop) is a leaked slot:
+  restart the gateway ([restart.md](restart.md#gateway)) and keep the journal.
+- Refusals (`infrx_large_body_refused_total`) rising: callers are retrying uploads into a
+  full gate; check "Refusals by tenant (hashed)" for one tenant. No rule: a refusal rate
+  worth a ticket is ⚠️ TO BE VERIFIED (P-25, from pilot traffic).
+- The drain (`infrx_intake_drained_total{code}`): a refused body with a declared length is
+  read to its end so the caller sees the refusal instead of a reset. `request_too_large` or
+  `invalid_api_key` drains are client behaviour; `capacity_exhausted` tracks the slots
+  above; `deadline_exceeded` means slow uploads hit `INTAKE_TIMEOUT_S` — look at the edge
+  ([Edge](#edge)) and the client's link before the gateway. No rule (⚠️ TO BE VERIFIED, P-25).
 
 ## Canary
 
@@ -101,15 +120,42 @@ waited, gave up or could not connect. Run `71-pool-budget.sh`; a FAIL there is t
 
 ## Delivery test
 
-P-25 supplies the destination (`ALERT_WEBHOOK_URL`), the owner (`ALERT_OWNER`) and the
-escalation (`ALERT_ESCALATION`) in `/etc/infrx-alert.env` (root 0600). Until then delivery
-is **BLOCKED**: `deliver.py` keeps each message in `/var/lib/infrx/metrics/undelivered.jsonl`
-(bounded to 200) and exits 3, so `infrx-observe.service` shows failed. The proof, once P-25
-is in place (coordinator, box, one step each):
+P-25 supplies the destination, the owner (`ALERT_OWNER`) and the escalation
+(`ALERT_ESCALATION`) in `/etc/infrx-alert.env` (root 0600, written by
+`72-observe-install.sh`). The destination is **exactly one** of:
+
+| Form | Install input (72) | Env file | Printed |
+|---|---|---|---|
+| Slack-compatible HTTPS webhook | `ALERT_WEBHOOK_PARAM=<SSM name>` (read on the box) | `ALERT_WEBHOOK_URL` | never (a credential) |
+| SNS topic, e-mail subscription | `ALERT_SNS_TOPIC_ARN=<arn>` (a plain value) | `ALERT_SNS_TOPIC_ARN` | the topic name |
+
+Both set is refused by the install step (exit 2) and, if an env file has both anyway, by
+`deliver.py` (BLOCKED, the message names the two variables). The SNS form publishes with
+the box's instance role (`Subject` ≤ 100 characters, the first line; `Message` the whole
+text) through boto3, imported only on that path: no boto3 on the box's `python3` is BLOCKED
+(`apt install python3-boto3`). The instance role needs, on that one topic (coordinator op,
+not applied by any step):
+
+```json
+{"Effect": "Allow", "Action": "sns:Publish",
+ "Resource": "arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts"}
+```
+
+The topic and its e-mail subscription are created by the operator; the subscription must be
+confirmed from the e-mail before anything arrives (SNS accepts a publish to a topic with no
+confirmed subscriber, so `sns=200` is not delivery either).
+
+Until a destination is configured delivery is **BLOCKED**: `deliver.py` keeps each message
+in `/var/lib/infrx/metrics/undelivered.jsonl` (bounded to 200) and exits 3, so
+`infrx-observe.service` shows failed (a webhook that is not `https://` is BLOCKED the same
+way); a failed send (HTTP non-2xx, a URL urllib cannot use, any SNS error such as
+`AuthorizationError`, an SNS answer without a 2xx) is kept the same way and exits 4, retried
+next cycle - only the error's type is printed, never the URL or the error's text. The proof, once
+P-25 is in place (coordinator, box, one step each):
 
 1. `infra/rollout/ssm.sh infra/rollout/steps/74-alert-test.sh` — one clearly marked
-   `[TEST FIRING] … NO ACTION REQUIRED` message with a nonce; the step prints `http=2xx`
-   and the nonce.
+   `[TEST FIRING] … NO ACTION REQUIRED` message with a nonce; the step prints the nonce and
+   `http=2xx` (webhook) or `sns=200 topic=<name>` (SNS; the nonce is in the e-mail subject).
 2. The owner confirms receipt of that nonce (screenshot or message link in the session
    record) — a 2xx alone is not delivery.
 3. `infra/rollout/ssm.sh infra/rollout/steps/74-alert-test.sh RESOLVE=<nonce>` — the
@@ -176,3 +222,10 @@ Keep `lifecycle-before.json` with the session record (it is the rollback). Not a
 - 2026-09-25 (I8, M6 wiring 4): retention and processing-cache sections, the bucket
   lifecycle rule and its apply stanza; rule set version `a1+o2`. The families are pending
   WR-I8-M6-1 (no producer at M6 phase 2 `8fe53ed9`); nothing applied to the bucket.
+- 2026-09-25 (I8, intake panels): Intake section and dashboard row for the WR-I8-3
+  families; `GatewayBodySlotsFull` now reads the declared `infrx_large_body_slots_*` names
+  (it named families nothing records) and points here. No new rule; nothing run on the box.
+- 2026-09-25 (I8, ALERT-SNS): P-25's second destination form, an SNS topic with an e-mail
+  subscription (`ALERT_SNS_TOPIC_ARN`), beside the webhook; exactly one, else BLOCKED; the
+  instance role's `sns:Publish` statement. Tests `tests/i/test_alert_sns.py` and two
+  `test_ops_steps.py` cases (boto3 faked). Nothing created in AWS, nothing run on the box.

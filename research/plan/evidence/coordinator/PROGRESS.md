@@ -1,28 +1,26 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-25 16:55Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 45, updated 2026-09-25 16:55Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-25 19:59Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 51, updated 2026-09-25 19:59Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
-- Integration branch `claude/consumer-v1` (head `e56dbf19`), base `dff31efc`, main `dff31efc`.
+- Integration branch `claude/consumer-v1` (head `4af8516e`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3.
 - Agent slots: 16 total, 4 active lanes, 2 reserved.
-- Validation: 0 error(s), 4 warning(s).
+- Validation: 0 error(s), 1 warning(s).
 
 ### Actionable blockers
 
-- P-01 open — Approved CREDIT rate card (unit, rounding, failed-execution disclosure) (owner operator; G8/D10/I8 inventory; blocks E4C)
-- P-02 open — Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion (owner operator; G8 inventory (with D10); blocks E4C)
-- P-05 open — Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3 (owner operator/coordinator; A2/I2A; blocks E1B, E4C, I2A, E4)
-- P-06 open — Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) (owner I8 slice 5 + wiring request for serving-version.json; blocks E4C)
-- P-17 open — Final operator decision accepting the backend candidate (then App before Lab) (owner coordinator/user; E4C; blocks E4C)
-- P-18 open — Predeclared workload/SLO/error/recovery limits for E4C (owner workload owner; S3/E4C; blocks E4C)
-- P-19 open — Sourced infrastructure price row or actual bill for cost-per-unit figures (owner pricing owner/user; E1C; blocks E4C)
-- P-22 open — Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows) (owner F2C-C/D10/G7 (D/G decision); blocks E4C)
-- P-24 open — Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run (owner E1C/E4C; coordinator op (key inventory); blocks E4C)
-- P-25 open — Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle (owner I8/D10/M6; blocks E4C)
-- P-26 open — Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3) (owner user/product; G7 implements; blocks E4C)
+- P-01 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Approved CREDIT rate card (unit, rounding, failed-execution disclosure) (owner coordinator (publish-card); blocks E4C)
+- P-02 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion (owner coordinator (read-only dry-run); blocks E4C)
+- P-05 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3 (owner operator-held (confirm 2nd user, verified-count read); then coordinator (grant/issue-key); A2/I2A public onboarding; blocks E1B, E4C, I2A, E4)
+- P-06 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) (owner coordinator (SSM inventory.sh); I8 (record + PINNED); blocks E4C)
+- P-17 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) (owner coordinator at E4C handback; blocks E4C)
+- P-18 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C (owner E4C lane (protocol §5 + certify.py thresholds before first qualifying run); blocks E4C)
+- P-24 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run (owner E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust); blocks E4C)
+- P-25 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle (owner M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read); blocks E4C)
+- P-26 open — DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3) (owner A3/U2 (copy only); blocks E4C)
 - GPU box (pilot, single L40S) held by E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z
 - SQL writer (migrations) held by D10
 - runner dir tests/integration/backend held by E2C
@@ -36,9 +34,9 @@ Generated 2026-09-25 16:55Z UTC by `python3 research/plan/scripts/progress.py` f
 - task-local services E1C held by E1C
 - task-local services I8 held by I8
 - task-local services E3C held by E3C
-- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
-- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4
-- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4
+- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C
+- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4
+- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4
 
 ### Next ready work
 
@@ -50,7 +48,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
-| Backend corrections | 9 / 14 | E2C, E3C, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
+| Backend corrections | 10 / 14 | E2C, E3C, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
 | App completion | 0 / 12 | none | APP-LOCAL 0/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
@@ -62,10 +60,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 09:31Z – 2026-09-27 11:31Z (likely 2026-09-26 18:37Z) | dependency path M6 → E3C | 21 / 34 / 58.7 h | 16.6 / 25.7 / 42.6 h | medium |
-| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
-| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4 | — | — | unknown |
-| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4 | — | — | unknown |
+| `E3C` | BACKEND-LOCAL (PENDING) | forecast | 2026-09-26 02:11Z – 2026-09-26 19:05Z (likely 2026-09-26 07:23Z) | dependency path W5 → E3C | 6.2 / 11.4 / 23.1 h | 6.2 / 11.4 / 23.1 h | medium |
+| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C | — | — | unknown |
+| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4 | — | — | unknown |
+| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4 | — | — | unknown |
 
 ## Gates
 
@@ -108,7 +106,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | recovery | NOT RUN | --no-stack | — |
 | dataset-resume | FAIL | S3: regime mismatch (legacy_usd vs the CREDIT ledger oracle), not a runtime defect; the client half passed (R106 holds live) | — |
 | envelope | FAIL | supported 0.5/s; the 1.0 rung missed a provisional target; cause read from the run3 report (S3) | — |
-| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (20.2 h since start); verdict still RUNNING: verify |
+| soak | RUNNING | bounded 14,400+900 s at 0.25/s; start ≈20:46Z from 609 rows at 21:26Z (S3); ends ≈01:01–01:20Z box clock. Cannot PASS at bda1586: reconciled_at_end is always UNKNOWN because record_reconciliation has no runtime caller (S3 finding 4) | expected end 2026-09-25 01:01Z–2026-09-25 01:20Z passed at generation (23.2 h since start); verdict still RUNNING: verify |
 | overload | PENDING | runs after the soak; first live exercise of the intake drain (32-burst to 127.0.0.1:8001, bypassing Caddy) | — |
 
 ### Historical run E1B-acceptance-bda1586 (complete)
@@ -127,23 +125,23 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 |---|---|---|---|---|---|---|---|---|
 | S3 | S3 all | complete | codex/s3-reconcile | dff31efc → 289eef6e | none | 2026-09-24 21:58Z | — | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 21:58Z; basis: merged (fff8416e; edits fdbbf87c) |
 | TRACKER | support 06-progress-tracker (support) | complete | codex/tracker | dff31efc → 803f6cb1 | none | 2026-09-24 22:31Z | merged into claude/consumer-v1 at 2cae9a4c; the coordinator runs apply-updates at each handback | 0–0.5 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:31Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 803f6cb1) |
-| E2C | E2C coordinator wiring: Makefile gates, pytest relock, rehearse MinIO pin, E2C-FR-2 | review | codex/e2c-wiring | 5bef53bc → 26ef3fc3 | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-25 03:02Z | consumer-local not PASS: rerun needed (S3 container removed mid-run); E2C-FR-1 signup Runner env not applied; integration-l3 needs the coordinator's e2 namespace run | 1–4 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 03:02Z — STALE; basis: one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9 |
+| E2C | E2C L3-REBASE | review | codex/l3-rebase | 5bef53bc → 8a94a855 | ports postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e2c- | 2026-09-25 18:12Z | coordinator review + merge; D10-FOLLOWUP's 0022 re-baselines the migration pin and RUNTIME_FUNCTIONS; G7/I8 add panels for the four intake metric families (ob10) | 0–1 h remaining (likely 0.25 h), confidence high, estimated 2026-09-25 18:12Z; basis: layer-3 rls green at head; only 0022 will need a re-baseline |
 | F2C-L | F2C fix-round | complete | codex/f2c-lifecycle | dff31efc → c4873027 | none | 2026-09-25 00:19Z | merged into claude/consumer-v1 at 78661bf0 (+ b413f253: R111-R116, SURFACE_VERSION contracts-v2.1, manifest F2C implemented) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:19Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at c4873027) |
 | F2C-C | F2C c | complete | codex/f2c-catalog | dff31efc → b8de6171 | none | 2026-09-24 22:36Z | merged into claude/consumer-v1 at 2bd7f347 with the export wiring (179a1a0b); R109 numbered; P-22 decided | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-24 22:36Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at b8de6171) |
-| E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | complete | codex/e1c-client | dff31efc → 6cb6c929 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-25 00:19Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:19Z; basis: merged; start dependency F2C implemented |
-| I8 | I8 fix round (review of 103d20a8/d2f90ce6): slices 1, 2, 3, 5, 6 | complete | codex/i8-operate | dff31efc → ce33c24c | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-25 01:38Z | P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 01:38Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c) |
+| E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | complete | codex/e1c-client | dff31efc → 6cb6c929 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-25 19:59Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:19Z; basis: merged; start dependency F2C implemented |
+| I8 | I8 fix round (review of 103d20a8/d2f90ce6): slices 1, 2, 3, 5, 6 | complete | codex/i8-operate | dff31efc → ce33c24c | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-25 19:59Z | P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 01:38Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c) |
 | D10 | D10 fix round (review of f9b6ce5c) | complete | codex/d10-durable | dff31efc → 483d9eca | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-25 08:19Z | merged into claude/consumer-v1 at 8d20e115 via codex/d10-merge dfc4fa75; R122-R127 numbered; manifest D10 implemented; OPEN: revoke migration after W5/G7, fail_preparation SQL, runtime-login composition (E3C F-1), P-25 values | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:19Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 483d9eca); follow-ups are separate lanes |
 | M5 | M5 fix round (verifier, one round): M5-R1 stack drill INFRX_D_TASK guard, M5-R1b R82 attach binding, M5-RS-1 WR-2 confirmation | complete | codex/m5-uploads | dff31efc → c0c4ce25 | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-25 08:19Z | D10: 0019 lacks F2C's media_refused / UPLOAD_ABORT_REASONS (strict xfail test_stack__os_processes_a_probe_refusal_is_final_on_postgres); WR-1 needs D10's infrx/state/lifecycle.py on the integration branch | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:19Z; basis: merged after the finish-verify fix round (ACCEPT_WITH_FIXES at c0c4ce25) |
 | W5 | W5 fix round (review findings 0-W5-R1..R3, 1-W5-RULES-1/2, 2-W5-ACC-1..3) | review | codex/w5-readiness | dff31efc → 97381015 | ports postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af), prefix infrx-w5- | 2026-09-25 03:03Z | merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3 | 3–12 h remaining (likely 6 h), confidence medium, estimated 2026-09-25 03:03Z — STALE; basis: unchanged: wiring 1-2, fail_preparation port/adapter, merged-tree PG round trip with MinIO, box warm-up run |
 | G7 | G7 fix round (CM-1..5, ACC-1..3) | complete | codex/g7-catalog | dff31efc → 2f7ed3ac | ports postgres 55446 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g7- | 2026-09-25 08:29Z | merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 08:29Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 2f7ed3ac) |
 | G8 | G8 fix round: 0-G8-R1/2-ACC-1 (pre-freeze admission straddling the transition), 0-G8-R2/1-G8-RULES-1/2-ACC-2 (contracts run on 55432; evidence correction), 0-G8-R3 (revoked-key read bound routed to G7) | complete | codex/g8-credit-ops | dff31efc → 09f4ab2a | ports postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g8- | 2026-09-25 00:44Z | P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only) | 0–0 h remaining (likely 0 h), confidence high, estimated 2026-09-25 00:44Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a) |
-| M6 | M6 phase-1 fix round (0-F1, 0-F2, 2-INT-1, 2-INT-2) | review | codex/m6-retention | f764e396 → 188a7f01 | ports 55444 postgres, 55471 s3, prefix infrx-m6-, db infrx_m6 | 2026-09-25 01:01Z | phase 2 waits for M5 to merge; full integration waits for D10 to merge (d10 world then runs; point-2 hooks + stand-in deletion); P-25 retention/grace/claim TTL/interval unresolved (parameterized) | 10–24 h remaining (likely 15 h), confidence medium, estimated 2026-09-25 01:01Z — STALE; basis: phase 2 8/12/20 h unchanged; d10 integration after D10 merges 1/2/3 h (world exists, 27/27 port cases pass in a scratch merge); review 1/1/1 h |
-| E3C | E3C phase 2: seams on D10+M5 (admission barrier on every candidate, collector composed as pilot with BLOCKED[M6], WR-4 dedicated runtime login, R106 dataset oracle, G8 transition wired) | review | codex/e3c-phase2 | ccf37b55 → 60ab7575 | ports compose block 56900-56999 (postgres 56932), prefix infrx-e3c-, db infrx_e3c | 2026-09-25 07:46Z | G7 (admit_ready composition, persisted-expiry reads, discovery); W5 (claim_preparation_ready, fail_preparation); M6 (durable retention pass); F-1 pilot.py:129-139 pool sets role service_role; infrx_runtime cannot serve; F-2 unbounded acceptance on stalled PostgreSQL / S3 (bound needs a ruling) | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-09-25 07:46Z — STALE; basis: three ~13-min reruns after G7, W5 and M6 merge, re-point collect_once to M6's entry, run nc-admission-ready / nc-retention-durable revert controls; F-1 fix then INFRX_E3C_RUNTIME_LOGIN=1 rerun; F-2 needs a ruling |
-| E4C | E4C  | queued | — | — → — | none | 2026-09-24 21:40Z | after E3C; needs an allocated GPU window | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
+| M6 | M6 phase 2 fix round: R1 prepared row-before-bytes proven; R3/R4/A2 pins hold on get, pin and evict; R2/A1 refetch race pinned as strict xfail (WR-7); A3 ruling, A4/A5 wiring | review | codex/m6-phase2 | bd556c5f → dea32507 | ports postgres 55444 (INFRX_D_TASK=m6), prefix infrx-m6-, db infrx_m6* | 2026-09-25 17:12Z | P-25 unresolved; WR-3 (E3C world.py + s06 clock) gates the merge; WR-7 (D10 register refresh) for the refetch race; R114 amendment | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 17:12Z; basis: lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25 |
+| E3C | E3C phase 2 interim rerun: harness re-pointed to G7 (s13 PublishedModel, expiry bypass), R130 (s08 measured), G8 lock bound (s09), RUNTIME-LOGIN (whole matrix on infrx_runtime), M6 phase 2 (WR-3 collector + grace) | review | codex/e3c-rerun | 19670a8c → 7d0d3d7b | ports compose block 56900-56999 (postgres 56932), prefix infrx-e3c-, db infrx_e3c | 2026-09-25 18:20Z | W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission; F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness; F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race | 1–5 h remaining (likely 2 h), confidence medium, estimated 2026-09-25 18:20Z; basis: one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees |
+| E4C | E4C  | queued | — | — → — | none | 2026-09-25 19:59Z | after E3C; needs an allocated GPU window | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 
 ### Queues and locks
 
-- Review queue: M6, E2C, W5, E3C.
+- Review queue: W5, M6, E3C, E2C.
 - Integration queue: empty.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -162,26 +160,23 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Validation
 
-- warning: stale estimate: lane E2C estimated at 2026-09-25T03:02:52Z (older than 6 h)
 - warning: stale estimate: lane W5 estimated at 2026-09-25T03:03:04Z (older than 6 h)
-- warning: stale estimate: lane M6 estimated at 2026-09-25T01:01:00Z (older than 6 h)
-- warning: stale estimate: lane E3C estimated at 2026-09-25T07:46:00+00:00 (older than 6 h)
 
 ## Pending inputs
 
 | Input | Status | What | Owner | Blocks |
 |---|---|---|---|---|
-| P-01 | open | Approved CREDIT rate card (unit, rounding, failed-execution disclosure) | operator; G8/D10/I8 inventory | E4C |
-| P-02 | open | Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion | operator; G8 inventory (with D10) | E4C |
-| P-05 | open | Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3 | operator/coordinator; A2/I2A | E1B, E4C, I2A, E4 |
-| P-06 | open | Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) | I8 slice 5 + wiring request for serving-version.json | E4C |
-| P-17 | open | Final operator decision accepting the backend candidate (then App before Lab) | coordinator/user; E4C | E4C |
-| P-18 | open | Predeclared workload/SLO/error/recovery limits for E4C | workload owner; S3/E4C | E4C |
-| P-19 | open | Sourced infrastructure price row or actual bill for cost-per-unit figures | pricing owner/user; E1C | E4C |
-| P-22 | open | Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows) | F2C-C/D10/G7 (D/G decision) | E4C |
-| P-24 | open | Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run | E1C/E4C; coordinator op (key inventory) | E4C |
-| P-25 | open | Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle | I8/D10/M6 | E4C |
-| P-26 | open | Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3) | user/product; G7 implements | E4C |
+| P-01 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Approved CREDIT rate card (unit, rounding, failed-execution disclosure) | coordinator (publish-card) | E4C |
+| P-02 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Re-opened by S3: inventory the pilot's USD 5.00 test grant and legacy_usd usage (W12, E1B, E4B) read-only before CREDIT activation; no conversion | coordinator (read-only dry-run) | E4C |
+| P-05 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Verified signup email/callback/recovery and abuse bounds on the target; also a second verified hosted test tenant (E1B --tenant-keys, E4C two-tenant/fairness cells) per S3 | operator-held (confirm 2nd user, verified-count read); then coordinator (grant/issue-key); A2/I2A public onboarding | E1B, E4C, I2A, E4 |
+| P-06 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Served-bytes digests of processor_config.json and preprocessor_config.json in the pinned serving record before E4C freezes the candidate (S3 finding 10) | coordinator (SSM inventory.sh); I8 (record + PINNED) | E4C |
+| P-17 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Final operator decision accepting the backend candidate (then App before Lab) | coordinator at E4C handback | E4C |
+| P-18 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Predeclared workload/SLO/error/recovery limits for E4C | E4C lane (protocol §5 + certify.py thresholds before first qualifying run) | E4C |
+| P-19 | resolved | RESOLVED 2026-09-25: g6e.2xlarge row added to cloud-pricing.md §3.1 (est. derivations) (15-pending-inputs.md 'Decisions 2026-09-25'): Sourced infrastructure price row or actual bill for cost-per-unit figures | research lane (cloud-pricing.md row) | E4C |
+| P-22 | resolved | CLOSED: decided 2026-09-24 as R109 (resolve, then price); Canonical alias/legacy price identity decision (resolve before pricing vs per-string rows) | F2C-C/D10/G7 (D/G decision) | E4C |
+| P-24 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Versioned test profile with numeric request/byte/spend caps (target/window/stop rules exist, S3 §4.2); read-only inventory of the two pre-cutover consumer keys before the next E4B_WINDOW_OK=1 run | E4C lane (profile); E1C micro-lane (CREDIT spend schema); operator-held (+40,000 CREDIT adjust) | E4C |
+| P-25 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Operations/retention ownership: TTLs, alert destination (missing; I8 slice 4 BLOCKED), hosted backup/PITR ⚠️ unverified, and the box's newest install backup (27af05a) is not a known-good rollback bundle | M6/I8 (collector wiring + settings); I8 micro-lane (deliver.py SNS); operator-held (topic or webhook, 72/74, PITR read) | E4C |
+| P-26 | open | DECIDED 2026-09-25, enactment pending (15-pending-inputs.md 'Decisions 2026-09-25'): Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3) | A3/U2 (copy only) | E4C |
 
 ## Rejected updates
 
@@ -193,6 +188,14 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - `G8-20260925T0808Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 - `G8-20260925T0900Z.json`: future-dated: at 2026-09-25T09:00:00Z is after host UTC now 2026-09-25T08:40:45Z (+15 min skew allowed); check the clock
 - `I8-20260925T1643Z.json`: unknown task ID 'RUNTIME-LOGIN'
+- `I8-20260925T0530Z.json`: unknown task ID 'I8-M6-WIRING'
+- `I8-20260925T1704Z.json`: unknown task ID 'I8-M6-WIRING'
+- `E1C-20260925T1713Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `OPS-CLI-DSN-20260925T1734Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `I8-20260925T1744Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `E1C-PROFILE-20260925T1910Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `I8-ALERT-20260925T1910Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- `I8-ALERT-20260925T1932Z.json`: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
 
 ## All manifest tasks
 
@@ -322,7 +325,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `E2C` | Make corrective verification reproducible on supported Linux | Backend corrections | implemented | review | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `D10` | Persist uploads, execution eligibility, safe cleanup and result read authority | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `M5` | Persist upload lifecycle across gateway replacement | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
-| `M6` | Implement restart-safe content cleanup and bounded caches | Backend corrections | planned | review | active: lane active |
+| `M6` | Implement restart-safe content cleanup and bounded caches | Backend corrections | implemented | review | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `W5` | Enforce execution readiness and bounded worker recovery | Backend corrections | planned | review | active: lane active |
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
 | `G8` | Prove headless consumer CREDIT operations and safe activation | Backend corrections | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
@@ -334,6 +337,27 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-25 19:59Z UTC, coordinator: E4C-PREP dispatched (base 56c284cf) and handed back at 1acf85b4; one-lens recheck running. D10-FOLLOWUP / M6-WIRING / W5-ADMIT-WIRING verify workflows running; union merge lane brief ready (trial merges: one trivial worker/service.py field conflict)
+- 2026-09-25 19:59Z UTC, coordinator: ALERT-SNS merged c1b74038 after its fix round + one-lens ACCEPT; post-merge tests/i 32/1 xfail, mutants 50, rollout 8
+- 2026-09-25 19:59Z UTC, coordinator: PROFILE-CREDIT-CAP merged 93fdab4e after a one-lens ACCEPT; ruling R132 numbered (W5 moves to R133–R136)
+- 2026-09-25 19:59Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)
+- 2026-09-25 19:59Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4)
+- 2026-09-25 19:59Z UTC, tracker: forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)
+- 2026-09-25 19:59Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 19:59Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 19:59Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 19:00Z UTC, coordinator: inputs P-01..P-26 decided under the operator's authorization; P-22 closed; the rest decided with enactment pending
+- 2026-09-25 18:12Z UTC, E2C: review → review; head 8a94a855; estimate likely 2 → 0.25 h (layer-3 rls green at head; only 0022 will need a re-baseline)
+- 2026-09-25 18:22Z UTC, tracker: forecast E3C: 2026-09-26 01:22Z – 2026-09-26 20:52Z (likely 2026-09-26 07:52Z) → 2026-09-26 00:34Z – 2026-09-26 17:28Z (likely 2026-09-26 05:46Z) (because: dependency path W5 → E3C)
+- 2026-09-25 18:20Z UTC, E3C: review → review; head 7d0d3d7b; estimate likely 4 → 2 h (one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees)
+- 2026-09-25 17:52Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 17:52Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 17:34Z UTC, tracker: forecast E3C: 2026-09-26 09:31Z – 2026-09-27 11:31Z (likely 2026-09-26 18:37Z) → 2026-09-26 01:04Z – 2026-09-26 20:34Z (likely 2026-09-26 07:34Z) (because: dependency path W5 → E3C)
+- 2026-09-25 17:34Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)
+- 2026-09-25 17:12Z UTC, M6: review → review; head dea32507; estimate likely 3 → 2 h (lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25)
+- 2026-09-25 17:34Z UTC, tracker: rejected update: unknown task ID 'I8-M6-WIRING'
+- 2026-09-25 07:59Z UTC, M6: review → review; head 5a027914; estimate likely 15 → 3 h (phases 1+2 implemented and green on D10 PostgreSQL; remaining = review round 1/2/3 h, composition proof after WR-1..3 0/1/2 h, coordinator box smoke 0/0/1 h)
+- 2026-09-25 17:34Z UTC, tracker: rejected update: unknown task ID 'I8-M6-WIRING'
 - 2026-09-25 16:55Z UTC, tracker: rejected update: unknown task ID 'RUNTIME-LOGIN'
 - 2026-09-25 08:40Z UTC, tracker: rejected update: future-dated: at 2026-09-25T09:00:00Z is after host UTC now 2026-09-25T08:40:45Z (+15 min skew allowed); check the clock
 - 2026-09-25 08:40Z UTC, tracker: rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)

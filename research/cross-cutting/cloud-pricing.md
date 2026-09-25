@@ -173,6 +173,7 @@ reads the AWS spot price history; spot moves continuously, treat as a snapshot).
 | `u-p6e-gb200x72` UltraServer | 72 | GB200 (B200 186GB) | not on-demand | — | — | — | — | [$10.582](https://aws.amazon.com/ec2/capacityblocks/pricing/) ($761.904/UltraServer-hr) |
 | `g7e.48xlarge` | 8 | RTX PRO 6000 Blackwell SE | [$33.1443](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20(N.%20Virginia)/Linux/index.json) | **$4.143** | [$2.506](https://instances.vantage.sh/aws/ec2/g7e.48xlarge) | N/A | N/A | not offered |
 | `g7e.2xlarge` | 1 | RTX PRO 6000 Blackwell SE | [$3.3631](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20(N.%20Virginia)/Linux/index.json) | **$3.363** | — | — | — | — |
+| `g6e.2xlarge` (the infrx pilot box `i-0e8449a4ffca29bab`) | 1 | L40S 48GB | [$2.24208](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20(N.%20Virginia)/Linux/index.json) | **$2.242** | $2.0354 meas. spot 2026-09-20 (`research/production-api/08`, 9 % off; spot quota 0 vCPU, not a pilot price) | ⚠️ n/a | ⚠️ n/a | — |
 
 ✅ **Re-pulled 2026-09-19 in the sweep** (us-east-1 and us-west-2 sheets, HTTP 200):
 `p4d` $21.9576, `p4de` $27.44705, `p5.4xlarge` $6.88, `p5.48xlarge` $55.04,
@@ -1770,3 +1771,7 @@ corrected to match, and the inline "both docs disagree" notes in `models/deepsee
 replaced with references to the resolved figure. **Nothing in this document changed** — §8.1,
 §8.2 (135 kW / 155 kW rack) and the §9 on-prem $/GPU-hour model were already correct and are
 untouched.
+
+## Audit log (2026-09-25)
+
+- P-19 (consumer-v1 pending input, decided 2026-09-25): added the `g6e.2xlarge` row to §3.1 from the AWS price sheet already pulled for `research/production-api/08` (us-east-1, Linux, `publicationDate` 2026-09-18T20:33:44Z, fetched 2026-09-20; same sheet URL as §1). The on-demand price is a primary-source list price; every pilot cost derived from it (E1B/E4B/marlin-sop cost-per-video-hour figures) is `est.` until a bill exists, and CREDIT consumption is never USD cost. No other number changed.

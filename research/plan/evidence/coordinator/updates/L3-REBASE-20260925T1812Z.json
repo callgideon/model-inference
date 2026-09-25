@@ -1,0 +1,14 @@
+{"task": "E2C", "slice": "L3-REBASE", "activity": "review", "head": "8a94a855",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-l3-rebase",
+ "branch": "codex/l3-rebase",
+ "owned_paths": ["tests/integration/test_harness.py", "tests/integration/pgstate.py", "tests/integration/mutants.py", "tests/integration/backend/recovery/test_restore.py", "research/plan/evidence/e/"],
+ "commands": [
+  {"cmd": "run.py --layer 3 --only-suites --no-mutants (head, e2 namespace)", "exit": 1, "summary": "rls PASS 880; backend 231 pass / 1 fail (ob10, G7 metrics without panels, not owned); suites PASS"},
+  {"cmd": "pytest -q tests/integration --ignore=tests/integration/backend", "exit": 0, "summary": "180 passed"},
+  {"cmd": "pytest -q tests/integration/backend/recovery/test_restore.py -k bk01", "exit": 0, "summary": "25 passed"},
+  {"cmd": "mutants.py --layer all --only e2m74|e2m75|e2m76", "exit": 0, "summary": "3/3 killed; control e2c02 survived"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high", "basis": "layer-3 rls green at head; only 0022 will need a re-baseline", "at": "2026-09-25T18:12Z"},
+ "next_action": "coordinator review + merge; D10-FOLLOWUP's 0022 re-baselines the migration pin and RUNTIME_FUNCTIONS; G7/I8 add panels for the four intake metric families (ob10)",
+ "blockers": [], "wiring_requests": [],
+ "evidence": ["research/plan/evidence/e/L3-REBASE-8a94a85.md"]}

@@ -53,6 +53,12 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e1c": {"postgres": 55449},
     # I8's PgBouncer stand-in for the hosted pooler (tests/i/pooler.py)
     "i8": {"postgres": 55450, "valkey": 55495, "pgbouncer": 55496},
+    # Coordinator integration lanes (2026-09-25): the union merge lane and the door-revoke
+    # migration lane. PostgreSQL 55458/55459 keep their decoys (55498/55499) clear of the
+    # live Valkey/S3/pooler ports 55491-55497; the Valkey/S3 ports sit in the unused
+    # 55454-55457 gap, below every decoy.
+    "union": {"postgres": 55458, "valkey": 55454, "s3": 55455},
+    "revoke": {"postgres": 55459},
     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
     "e3c": {"postgres": 56932},
 }

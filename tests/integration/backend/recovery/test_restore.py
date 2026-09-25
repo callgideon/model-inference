@@ -530,7 +530,14 @@ def test_i3b_bk01h_a_restored_job_results_keeps_its_rpcs_and_stays_owner_only(tm
     owner-only by an explicit revoke; pg_dump writes no ACL for it (it equals the owner's
     default), so the restore leaves it NULL. That is the same privilege set: the check is
     equal, the SECURITY DEFINER `put_result`/`read_result` (owner `postgres`) still write and
-    read it as service_role, and service_role still cannot touch the table itself."""
+    read it as service_role, and service_role still cannot touch the table itself.
+
+    L3-REBASE: since D10's 0020 (`read_result`, 0020:439-462; R125) a result is served only
+    for a SETTLED job while `infrx.now() < ` its persisted `result_expires_at`. The fixture's
+    terminal job persists 2026-09-22T00:05Z, so the read runs on the restored copy with the
+    test clock frozen just before that instant, and the restored expiry is proven to still be
+    the authority at it; the new write goes to an unsettled job, whose read is
+    `result_pending` - the row is read back as the owner instead."""
     import psycopg
     d = _d_checks()
     with scratch("infrx_i3b_results", "infrx_i3b_results_back") as (source, target):
@@ -557,12 +564,23 @@ def test_i3b_bk01h_a_restored_job_results_keeps_its_rpcs_and_stays_owner_only(tm
                 "'select')").fetchone() == (True, True, True, True, False, False)
         assert pg.compare(fingerprint(source), fingerprint(target)) == []
         with connect(target) as conn:             # the RPCs, used: a read and a new write
+            import pgstate
+            pgstate.install_test_clock(conn)      # after the compare: not part of the backup
+            expires = conn.execute("select result_expires_at from infrx.jobs where "
+                                   "request_id = %s", (d.JOB_TERMINAL,)).fetchone()[0]
+            conn.execute("select infrx_test.freeze(%s - interval '1 minute')", (expires,))
             assert _service_role(conn, "select infrx.read_result(%s, %s)",
                                  (d.ORG_A, kept)) == "kept"
+            conn.execute("select infrx_test.freeze(%s)", (expires,))
+            with pytest.raises(psycopg.errors.RaiseException, match="result_expired"):
+                _service_role(conn, "select infrx.read_result(%s, %s)", (d.ORG_A, kept))
             fresh = _service_role(conn, "select infrx.put_result(%s::jsonb)",
                                   (json.dumps({"job_id": d.JOB_QUEUED, "text": "new"}),))
-            assert _service_role(conn, "select infrx.read_result(%s, %s)",
-                                 (d.ORG_A, fresh)) == "new"
+            assert fresh == f"infrx-result:{d.JOB_QUEUED}"
+            assert conn.execute("select body from infrx.job_results where request_id = %s",
+                                (d.JOB_QUEUED,)).fetchone()[0] == "new"
+            with pytest.raises(psycopg.errors.RaiseException, match="result_pending"):
+                _service_role(conn, "select infrx.read_result(%s, %s)", (d.ORG_A, fresh))
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 _service_role(conn, "select count(*) from infrx.job_results")
 

@@ -5,9 +5,9 @@ After=docker.service
 
 [Service]
 Type=oneshot
-# P-25: ALERT_WEBHOOK_URL, ALERT_OWNER, ALERT_ESCALATION (root 0600). Optional so the cycle
-# still records and evaluates without it; delivery then exits 3 (BLOCKED) and this unit is
-# failed - visible in `systemctl --failed`, never a silent success.
+# P-25: ALERT_WEBHOOK_URL or ALERT_SNS_TOPIC_ARN, ALERT_OWNER, ALERT_ESCALATION (root
+# 0600). Optional so the cycle still records and evaluates without it; delivery then
+# exits 3 (BLOCKED) and this unit is failed - visible in `systemctl --failed`, never a silent success.
 EnvironmentFile=-/etc/infrx-alert.env
 RuntimeDirectory=infrx-observe
 RuntimeDirectoryMode=0700

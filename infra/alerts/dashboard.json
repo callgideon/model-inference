@@ -30,6 +30,15 @@
       ]
     },
     {
+      "title": "Is the intake saturated? (gateway large-body slots, refusal drain)",
+      "runbook": "infra/runbooks/observe.md#intake",
+      "panels": [
+        {"title": "Large-body slots in use vs limit", "metric": "infrx_large_body_slots_in_use", "compare": "infrx_large_body_slots_limit", "unit": "bodies"},
+        {"title": "Large bodies refused (every slot held)", "metric": "infrx_large_body_refused_total", "rate": true, "unit": "1/s"},
+        {"title": "Refused bodies drained, by code", "metric": "infrx_intake_drained_total", "by": ["code"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
       "title": "Is the database pool saturated? (per process, psycopg_pool pop_stats)",
       "panels": [
         {"title": "DB pool connections: size vs available vs max", "metric": "infrx_db_pool_connections", "by": ["process", "state"], "unit": "connections"},
