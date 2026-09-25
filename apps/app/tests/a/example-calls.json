@@ -5,10 +5,10 @@
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -26,10 +26,10 @@
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -58,10 +58,10 @@
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -91,10 +91,10 @@
       {
         "method": "POST",
         "route": "/v1/uploads",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "max_bytes": 76,
           "bytes": 76,
@@ -107,29 +107,29 @@
       {
         "method": "PUT",
         "route": "/v1/uploads/{handle}",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "video/mp4"
+        },
         "body": null,
         "status": 204
       },
       {
         "method": "POST",
         "route": "/v1/uploads/{handle}/complete",
-        "headers": [
-          "authorization"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
         "body": null,
         "status": 200
       },
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -158,10 +158,10 @@
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -190,11 +190,11 @@
       {
         "method": "POST",
         "route": "/v1/jobs",
-        "headers": [
-          "authorization",
-          "content-type",
-          "idempotency-key"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json",
+          "idempotency-key": "clip-0001"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -221,18 +221,18 @@
       {
         "method": "GET",
         "route": "/v1/jobs/{handle}",
-        "headers": [
-          "authorization"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
         "body": null,
         "status": 200
       },
       {
         "method": "GET",
         "route": "/v1/jobs/{handle}/result",
-        "headers": [
-          "authorization"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>"
+        },
         "body": null,
         "status": 200
       }
@@ -241,11 +241,11 @@
       {
         "method": "POST",
         "route": "/v1/jobs",
-        "headers": [
-          "authorization",
-          "content-type",
-          "idempotency-key"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json",
+          "idempotency-key": "clip-0001"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,
@@ -272,10 +272,10 @@
       {
         "method": "GET",
         "route": "/v1/jobs/{handle}/events",
-        "headers": [
-          "authorization",
-          "last-event-id"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "last-event-id": "1-2"
+        },
         "body": null,
         "status": 200
       }
@@ -284,10 +284,10 @@
       {
         "method": "POST",
         "route": "/v1/chat/completions",
-        "headers": [
-          "authorization",
-          "content-type"
-        ],
+        "headers": {
+          "authorization": "Bearer <key>",
+          "content-type": "application/json"
+        },
         "body": {
           "model": "nemostation/marlin-2b",
           "max_tokens": 512,

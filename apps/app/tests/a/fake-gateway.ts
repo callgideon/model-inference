@@ -41,7 +41,7 @@ export const ANSWER_TEXT: string = NONSTREAM.choices[0].message.content;
 export type Call = {
   method: string;
   route: string;
-  headers: string[];
+  headers: Record<string, string>;
   body: unknown;
   status: number;
 };
@@ -300,7 +300,7 @@ export async function startFakeGateway(
       const call: Call = {
         method: req.method ?? "GET",
         route: "",
-        headers: Object.keys(req.headers).sort(),
+        headers: Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k, String(v)])),
         body: null,
         status: 0,
       };

@@ -87,7 +87,14 @@ function normalize(call: Call) {
   return {
     method: call.method,
     route: call.route,
-    headers: call.headers.filter((h) => !TRANSPORT.has(h) || h === "content-type").sort(),
+    // The API's own headers with their values (the replay needs Idempotency-Key and Last-Event-ID);
+    // the key itself is never recorded.
+    headers: Object.fromEntries(
+      Object.entries(call.headers)
+        .filter(([h]) => !TRANSPORT.has(h) || h === "content-type")
+        .map(([h, v]) => [h, h === "authorization" ? "Bearer <key>" : v.split(";")[0].trim()])
+        .sort(([a], [b]) => (a < b ? -1 : 1)),
+    ),
     body: text === undefined ? null : JSON.parse(text),
     status: call.status,
   };
@@ -145,7 +152,7 @@ test("every request is a route of the gateway's table with only its header vocab
       assert.ok(calls.length > 0, `${lang} ${id} made no request`);
       for (const call of calls) {
         assert.ok(ROUTES.has(`${call.method} ${call.route}`), `${lang} ${id}: ${call.method} ${call.route} is not a gateway route`);
-        for (const header of call.headers) {
+        for (const header of Object.keys(call.headers)) {
           assert.ok(header === "content-type" || HEADERS.has(header), `${lang} ${id}: header ${header} is not in the API's vocabulary`);
         }
       }
