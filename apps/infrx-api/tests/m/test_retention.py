@@ -735,7 +735,7 @@ def test_the_runtimes_writers_register_every_object_before_writing_it(make_world
     run(process.stage(ORG, request))
     written = [k for step, k in order if step == "bytes"]
     for object_key in written:
-        assert order.index(("row", object_key)) < order.index(("bytes", object_key)), object_key
+        assert ("row", object_key) in order[:order.index(("bytes", object_key))], object_key
     assert set(written) == {process.upload_key(ORG, handle), uploaded.storage_ref,
                             fetched.storage_ref, f"payloads/{ORG}/{request.request_id}.json"}
     assert {k: rows_by_key(world)[k] for k in written} == {k: "live" for k in written}

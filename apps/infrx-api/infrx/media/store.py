@@ -53,9 +53,9 @@ class Recent(OrderedDict):
     grows with the tickets, jobs or requests a long-lived process has seen).
     ponytail: evicts by write order, not reads; LRU-on-read if a hot entry ever matters."""
 
-    def __init__(self, limit: int = MAX_PROCESS_ENTRIES) -> None:
+    def __init__(self, limit: int | None = None) -> None:
         super().__init__()
-        self.limit = limit
+        self.limit = limit or MAX_PROCESS_ENTRIES
 
     def __setitem__(self, key, value) -> None:
         super().__setitem__(key, value)

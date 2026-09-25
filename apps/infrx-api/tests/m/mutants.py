@@ -342,7 +342,7 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        await self._write_once(key, payload, \"application/json\")", "        pass",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size", dies_by=("KeyError",)),
     _m("payload_size_from_the_reference", "the durable payload's digest and size are measured",
-       S, "        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest_of(payload),\n"
+       S, "        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest,\n"
           "                                                          bytes=len(payload))",
        "        self.payloads[request.request_id] = StagedPayload(ref=key,\n"
        "                                                          digest=request.payload_digest,\n"
@@ -802,7 +802,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_the_cache_path_is_built_from_validated_parts_only"),
     _m("sweep_removes_live_entries",
        "a sweep removes what is past its life and nothing else",
-       R, "                   if now - entry.stored_at >= self.ttl_s]", "                   if True]",
+       R, "            if (now - mtime >= life or mtime > now + FUTURE_MTIME_SLACK_S) \\",
+       "            if True \\",
        "test_a_sweep_removes_expired_entries_and_leaves_live_ones"),
 
     # --- M1's store, where M2's probe hook meets it ------------------------
@@ -900,16 +901,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("expire_ignores_the_window", "expire closes only tickets past their window",
        U, "if t.state is UploadState.created and now >= t.expires_at),",
        "if t.state is UploadState.created),",
-       "test_upload_destinations_live_exactly_as_long_as_the_upload_is_open"),
+       "test_an_expired_window_is_upload_expired_and_stays_closed"),
     _m("bytes_before_the_receipt", "a refused PUT writes nothing: the receipt comes first",
        U, "        await self.tickets.acknowledge_put(org_id, handle, bytes=len(data), digest=digest)\n"
           "        await self._register(ContentKind.upload_destination, org_id, key, digest, len(data),\n"
-          "                             handle)\n"
+          "                             handle=handle)\n"
           "        await self._write_once(key, data, content_type)",
        "        await self._write_once(key, data, content_type)\n"
        "        await self.tickets.acknowledge_put(org_id, handle, bytes=len(data), digest=digest)\n"
        "        await self._register(ContentKind.upload_destination, org_id, key, digest, len(data),\n"
-       "                             handle)",
+       "                             handle=handle)",
        "test_upload_restart__another_tenant_is_not_found_in_every_process"),
     _m("finalize_unlocked", "concurrent finalizes in one process verify and copy once",
        U, "        flight = self._finalizing.get((org_id, upload_handle))", "        flight = None",
