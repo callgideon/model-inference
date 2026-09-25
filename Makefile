@@ -33,7 +33,7 @@ console-typecheck:
 	cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
 
 # R32/R36: exported console conformance must kill every declared mutant.
-# Track runners join here as their task merges (V1, U1, C1, A2). Each exits non-zero on a survivor.
+# Track runners join here as their task merges (V1, U1, C1, A2, A3). Each exits non-zero on a survivor.
 # The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
 console-mutants:
 	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
@@ -41,6 +41,7 @@ console-mutants:
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
 	cd apps/app && node tests/a/run-mutants.mjs
+	cd apps/app && node tests/a/run-catalog-mutants.mjs
 
 # C0 CONSOLE-TENANT through real Supabase PostgreSQL + PostgREST (Docker; fails visibly without it).
 # Gate for C0 / APP-M1 and E3A; rerun on the merged SHA once 0022 lands (WR-7).
