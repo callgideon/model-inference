@@ -73,3 +73,27 @@
 ## Remaining effort
 
 0 h on this lane. Optimistic 0 / likely 0.5 / pessimistic 2 h for coordinator review and merge. Confidence medium, based on the size of the diff and the green suites.
+
+## Fix round (verifier ACCEPT_WITH_FIXES on b9b7df3e): implementation `622b57fc`
+
+| Id | Fixed | Change |
+|---|---|---|
+| CW-V1 (blocking) | yes | Before every client run, `bench_argv` unlinks that cell's `<name>.jsonl` and `<name>-raw.jsonl` (`missing_ok`). Otherwise a reused `--workdir` hands a refused run (exit 2, nothing written) the previous VALID summary and rows. The overload cell now appends `the bench client exited N` to its problems whenever `client_exit` fails. |
+| CW-V2 (minor) | yes | Correction to the "before the implementation" row above: **4 failed, not 3**. The fourth was `test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid`, written after the first three and failing for the same reason. The old certify.py had no validity gate on the soak or overload cell, so their statuses were PENDING/PASS where FAIL was expected (it was recorded as killed through mutants `soak_validity_unwired` and `overload_validity_unwired`). |
+| CW-V5 (optional) | yes | `bench_validity` FAILs any non-VALID summary that states no reason, for local cells too. Before, a local cell with `{verdict: INVALID, reasons: []}` was UNKNOWN. |
+| CW-V3, CW-V4 | n/a | Recorded for the coordinator. |
+
+**Fails-before, run against `5921d956`'s certify.py:**
+- The new `test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs` failed with statuses envelope FAIL, soak FAIL, **overload PASS**. This is the verifier's probe.
+- The CW-V5 assertion in `test_e1c_a_rung_whose_bench_summary_is_not_valid_fails` failed with `'unknown' == 'fail'`.
+- Both pass after the fix.
+
+**Mutants:**
+- New, all killed: `stale_outputs_kept`, `overload_exit_ignored` and `reasonless_invalid_excused`.
+- Re-anchored: `missing_summary_excused`.
+
+**Commands at `622b57fc`:**
+- `pytest -q tests/integration/backend/test_certify.py tests/integration/test_run.py` → exit 0, **96 passed** (test_certify 43).
+- `validate_plan.py` → exit 0.
+- Full E4B mutant list: see below.
+- `INFRX_MUTANTS=all pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py` (detached) → exit 0, **242 passed in 589 s** (240 mutants killed + 2 list checks; 0 survived).
