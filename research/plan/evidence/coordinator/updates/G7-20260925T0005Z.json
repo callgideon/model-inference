@@ -1,0 +1,67 @@
+{
+  "task": "G7",
+  "slice": "1-4 (+WR-I8-3, revocation bound)",
+  "activity": "review",
+  "head": "2bbfe0e3",
+  "worktree": ".claude/worktrees/codex-g7-catalog",
+  "branch": "codex/g7-catalog",
+  "owned_paths": [
+    "apps/infrx-api/infrx/gateway/routes/",
+    "apps/infrx-api/openrouter/provider-models.json (deleted)",
+    "apps/infrx-api/tests/g/ (not ops/, not the host-metrics test)",
+    "research/plan/evidence/g/G7-2bbfe0e.md",
+    "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops",
+      "exit": 0,
+      "summary": "567 passed (baseline 527)"
+    },
+    {
+      "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py",
+      "exit": 0,
+      "summary": "505 passed at e3ba286f: every G/uploads/jobs mutant killed (33 new G, 5 new jobs); revocation_outlives_key_ttl 1/1 killed at 2bbfe0e3"
+    },
+    {
+      "cmd": "cd apps/infrx-api && INFRX_D_TASK=g7 uv run --frozen pytest -q",
+      "exit": 1,
+      "summary": "3912 passed, 1 failed, 27 skipped, 5 xfailed: tests/d/test_pgharness decoy ('d2', 55473) collides with 640cedd4's g8 valkey port - coordinator patch, not G7"
+    },
+    {
+      "cmd": "make console-typecheck && make console-test",
+      "exit": 0,
+      "summary": "tsc clean; 351/351 after the v2 export union"
+    },
+    {
+      "cmd": "tests/integration/backend/test_endpoint_doc.py",
+      "exit": 0,
+      "summary": "10 passed"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 8,
+    "confidence": "med",
+    "basis": "all points implemented and green; left: review fixes, rerun on M5/D10 adapters at merge, WR-1 default decision fallout",
+    "at": "2026-09-25T00:05:00Z"
+  },
+  "blockers": [
+    "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3, else every PG success reads unavailable (410)",
+    "legacy-regime discovery publishes nothing until D10's PgCatalogDirectory.usd_price (WR-3a)"
+  ],
+  "wiring_requests": [
+    "WR-1 app.py: pilot -> models.assert_release_profile(rt.settings); needs MAX_VIDEO_SECONDS default 82 (limits.py:62, config.py:50/:99, test_config_and_imports.py:26) or fixtures (trial: 43 failures otherwise)",
+    "WR-2 pilot.py:287 price_source -> Probe(models.price_check(catalog, settings)); with D10 usd_price",
+    "WR-3 D10: PgCatalogDirectory.usd_price(model_revision), active_rate_card = listing's card, owned reads carry result_expires_at (new migration), optional listing_version/card-approved flag",
+    "WR-4 observe/metrics.py FAMILIES: infrx_large_body_slots_in_use, infrx_large_body_slots_limit, infrx_large_body_refused_total, infrx_intake_drained_total{code} (exact Specs in evidence)",
+    "WR-5 retire MODELS_DOC (config.py, README, deploy/preflight.py)",
+    "WR-6 E endpoint_doc.py Limits table: approved 82 s, card from price()",
+    "WR-7 A3 docs/models pages read the projection",
+    "fix 640cedd4 tasklocal g8 valkey 55473 vs tests/d D2 decoy"
+  ],
+  "evidence": [
+    "research/plan/evidence/g/G7-2bbfe0e.md"
+  ]
+}
