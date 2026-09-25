@@ -1670,6 +1670,8 @@ def test_e1c_a_rung_whose_bench_summary_is_not_valid_fails(tmp_path):
     assert validity(rung(unprofiled, local=True)) == certify.UNKNOWN
     assert validity(rung(None, local=True)) == certify.UNKNOWN
     assert validity(rung(replayed, local=True)) == "fail"
+    assert validity(rung({"validity": {"verdict": "INVALID", "reasons": []}}, local=True)) \
+        == "fail"                                   # CW-V5: a reasonless INVALID still fails
     out = tmp_path / "cell.jsonl"
     out.write_text(json.dumps(replayed) + "\n" + json.dumps(valid) + "\n")
     assert certify.bench_summary(out) == valid                         # the latest line
@@ -1709,6 +1711,33 @@ def test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid(tmp_
         certify.PENDING, certify.PASS)
     assert statuses["invalid"] == {"e4b.b.envelope": certify.FAIL, "e4b.b.soak": certify.FAIL,
                                    "e4b.b.overload": certify.FAIL}
+
+
+def test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs(tmp_path, monkeypatch):
+    """CW-V1: bench appends to --out and refuses (exit 2) before opening either file, and the
+    box reuses its --workdir. A previous VALID summary and rows in it must not judge this
+    run: every cell whose client exited 2 and wrote nothing FAILs, overload included.
+    Oracle: stale outputs read again, or the overload client's exit ignored."""
+    base, inventory = _base_profile(tmp_path)
+    box = _remote(monkeypatch, run_profile=base, key_inventory=inventory, scale="tiny")
+    rows = [_attempt("c039-bbb1080p30-1080-square")] + [
+        _attempt("c039-bbb1080p30-1080-square", "rejected", status=429, code="rate_limited",
+                 retry=1.0)]
+    for name in ("overload", "soak", f"envelope-r{certify.MATRIX['tiny']['envelope']['rates'][0]}"):
+        (tmp_path / f"{name}.jsonl").write_text(json.dumps(VALID_CELL) + "\n")
+        (tmp_path / f"{name}-raw.jsonl").write_text("".join(
+            json.dumps({**r, "item_key": f"k{i}", "send_s": i}) + "\n"
+            for i, r in enumerate(rows)))
+    monkeypatch.setattr(certify, "client", lambda argv, env=None: {"exit": 2, "tail": ""})
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    assert {e["stage"]: e["status"] for e in report.stages} == {
+        "e4b.b.envelope": certify.FAIL, "e4b.b.soak": certify.FAIL,
+        "e4b.b.overload": certify.FAIL}
+    assert not (tmp_path / "overload.jsonl").exists()
+    assert not (tmp_path / "overload-raw.jsonl").exists()
+    overload = report.stages[-1]["detail"]
+    assert "the bench client exited 2" in overload, overload
 
 
 if __name__ == "__main__":

@@ -143,6 +143,7 @@ E1C_ARGV = "test_e1c_a_remote_cell_runs_under_its_own_profile_and_the_key_invent
 E1C_BLOCKED = "test_e1c_a_remote_run_without_its_profile_or_inventory_is_blocked_never_pass"
 E1C_VALIDITY = "test_e1c_a_rung_whose_bench_summary_is_not_valid_fails"
 E1C_CELLS = "test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid"
+CW_STALE = "test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -465,7 +466,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "if not (local and r == bench.UNPROFILED)]", "if not r == bench.UNPROFILED]",
        E1C_VALIDITY),
     _m("missing_summary_excused", "a remote cell with no summary fails",
-       "    if reasons or not local:\n", "    if reasons:\n", E1C_VALIDITY),
+       "    if reasons or not local or (validity and not stated):\n",
+       "    if reasons or (validity and not stated):\n", E1C_VALIDITY),
+    _m("reasonless_invalid_excused", "a local INVALID with no reason still fails (CW-V5)",
+       "    if reasons or not local or (validity and not stated):\n",
+       "    if reasons or not local:\n", E1C_VALIDITY),
+    _m("stale_outputs_kept", "a reused workdir's old summary and rows never judge a new run",
+       "        stale.unlink(missing_ok=True)\n", "        pass\n", CW_STALE),
+    _m("overload_exit_ignored", "an overload cell whose client did not exit 0 fails",
+       '    if client_exit(done["exit"])[1] == decide.FAIL:\n', "    if False:\n", CW_STALE),
     _m("other_rungs_validity_ignored", "an INVALID rung fails the envelope, not only the chosen",
        'if row[0] in ("duration_cap", "bench_validity")]', 'if row[0] == "duration_cap"]',
        E1C_VALIDITY),

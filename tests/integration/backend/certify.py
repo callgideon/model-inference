@@ -662,6 +662,10 @@ def bench_argv(target: dict, workdir: Path, name: str, *, rate: float, requests:
     A remote cell runs under its own stamped profile and the key inventory, or not at all."""
     if why := profile_blocked(target):
         raise Blocked(why)
+    # bench appends to --out and may refuse (exit 2) before opening either file: a reused
+    # workdir's previous summary and rows must never be read as this run's (CW-V1)
+    for stale in (workdir / f"{name}.jsonl", workdir / f"{name}-raw.jsonl"):
+        stale.unlink(missing_ok=True)
     argv = [sys.executable, str(MARLIN / "bench.py"),
             "--corpus", str(corpus),
             "--subset", "full" if target["scale"] == "box" else "fast",
@@ -1150,11 +1154,12 @@ def bench_validity(summary: dict | None, local: bool) -> tuple:
     validity = (summary or {}).get("validity") or {}
     if validity.get("verdict") == "VALID":
         return ("bench_validity", decide.PASS, "VALID", "BOX")
-    reasons = [r for r in validity.get("reasons") or []
-               if not (local and r == bench.UNPROFILED)]
-    if reasons or not local:
-        return ("bench_validity", decide.FAIL,
-                reasons or "no bench summary: the cell's validity is unknown", "BOX")
+    stated = validity.get("reasons") or []
+    reasons = [r for r in stated if not (local and r == bench.UNPROFILED)]
+    if reasons or not local or (validity and not stated):
+        return ("bench_validity", decide.FAIL, reasons or (
+            f"verdict {validity.get('verdict')!r} with no reason" if validity
+            else "no bench summary: the cell's validity is unknown"), "BOX")
     return ("bench_validity", UNKNOWN, "local fake engine: unprofiled, not a measurement", "BOX")
 
 
@@ -1345,10 +1350,13 @@ def load_cells(report: Report, target: dict, workdir: Path, metrics_url: str | N
                      owners=("BOX",), label=target["label"])
         return
     burst = shape["overload"]["burst"]
-    client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
-                      dataset_version=f"{version}-overload", extra=("--burst", str(burst))), env)
+    done = client(bench_argv(target, workdir, "overload", rate=1000.0, requests=burst,
+                             dataset_version=f"{version}-overload",
+                             extra=("--burst", str(burst))), env)
     rows = raw_rows(workdir / "overload-raw.jsonl")
     problems = overload_problems(rows, clips, cap_s)
+    if client_exit(done["exit"])[1] == decide.FAIL:
+        problems.append(f"the bench client exited {done['exit']}")
     validity = bench_validity(bench_summary(workdir / "overload.jsonl"), local)
     if validity[1] == decide.FAIL:
         problems.append(f"the bench cell is not VALID: {validity[2]}")
