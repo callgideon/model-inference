@@ -5,10 +5,11 @@
  *
  * - `console_credit_wallets` (0008): consumer CREDIT wallets, most recently moved first;
  * - `console_admin_orgs` (0005): the owner and suspension state of those wallets' organizations;
- * - `console_usage` (0008): requests whose usage is unknown (`held_unknown`), oldest first - the
- *   24 h reconciliation queue;
+ * - `operator_unknown_usage` (WR-U3-1, D10): requests whose usage is unknown (`held_unknown`),
+ *   oldest first - the 24 h reconciliation queue, both regimes (a CREDIT one has no usage row, so
+ *   `console_usage` cannot show it);
  * - `operator_wallet_drift` (WR-U3-1, D10): wallets whose summary differs from ledger and holds;
- *   until it exists the section is unavailable, which is the truth;
+ * until WR-U3-1 lands, those two sections are unavailable, which is the truth;
  * - `operator_audit` (0005): the newest operator writes.
  *
  * Each section is its own `Result`: a failed read, or a row that is not exactly what the relation
@@ -41,7 +42,7 @@ export const AUDIT_LIMIT = 25;
 export const OPERATOR_RELATIONS = [
   "console_credit_wallets",
   "console_admin_orgs",
-  "console_usage",
+  "operator_unknown_usage",
   "operator_wallet_drift",
   "operator_audit",
 ] as const;
@@ -63,6 +64,8 @@ export type UnknownUsage = {
   requestId: string;
   orgId: string;
   createdAt: string;
+  /** When the database clock allows the 24 h release (never a debit). */
+  reconcileAfter: string;
   /** The quarantined hold in the job's own unit; null once released. Never charged. */
   hold: { amount: Credit; unit: "CREDIT" } | { amount: Usd; unit: "USD" } | null;
 };
@@ -164,23 +167,28 @@ async function accounts(client: ReadClient): Promise<OperatorAccount[]> {
 async function unknownUsage(client: ReadClient): Promise<UnknownUsage[]> {
   const held = await rows(
     client
-      .from("console_usage")
-      .select("request_id,org_id,created_at,accounting_regime,credit_hold,max_hold")
-      .eq("settlement_state", "held_unknown")
+      .from("operator_unknown_usage")
+      .select("request_id,org_id,created_at,reconcile_after,unit,hold")
       .order("created_at", { ascending: true })
       .limit(UNKNOWN_LIMIT),
   );
   return held.map((r) => {
-    let hold: UnknownUsage["hold"];
-    if (r.accounting_regime === "credit") hold = r.credit_hold === null ? null : { amount: credit(r, "credit_hold"), unit: "CREDIT" };
-    else if (r.accounting_regime === "legacy_usd") {
+    let hold: UnknownUsage["hold"] = null;
+    if (r.unit !== "CREDIT" && r.unit !== "USD") throw new Malformed("unit");
+    if (r.hold !== null) {
       try {
-        hold = r.max_hold === null ? null : { amount: parseUsd(r.max_hold), unit: "USD" };
+        hold = r.unit === "CREDIT" ? { amount: parseCredit(r.hold), unit: "CREDIT" } : { amount: parseUsd(r.hold), unit: "USD" };
       } catch {
-        throw new Malformed("max_hold");
+        throw new Malformed("hold");
       }
-    } else throw new Malformed("accounting_regime");
-    return { requestId: str(r, "request_id"), orgId: str(r, "org_id"), createdAt: str(r, "created_at"), hold };
+    }
+    return {
+      requestId: str(r, "request_id"),
+      orgId: str(r, "org_id"),
+      createdAt: str(r, "created_at"),
+      reconcileAfter: str(r, "reconcile_after"),
+      hold,
+    };
   });
 }
 

@@ -230,15 +230,15 @@ const heldRow = (over: Record<string, unknown> = {}) => ({
   request_id: "f1000000-0000-4000-8000-00000000000f",
   org_id: ORG,
   created_at: "2026-09-24T09:00:00+00:00",
-  accounting_regime: "credit",
-  credit_hold: "14.74560000",
-  max_hold: null,
+  reconcile_after: "2026-09-25T09:00:00+00:00",
+  unit: "CREDIT",
+  hold: "14.74560000",
   ...over,
 });
 const WORLD = (): Record<string, Answer> => ({
   console_credit_wallets: { data: [walletRow()], error: null },
   console_admin_orgs: { data: [orgRow()], error: null },
-  console_usage: { data: [heldRow(), heldRow({ request_id: "f2000000-0000-4000-8000-00000000000f", accounting_regime: "legacy_usd", credit_hold: null, max_hold: "0.25000000" })], error: null },
+  operator_unknown_usage: { data: [heldRow(), heldRow({ request_id: "f2000000-0000-4000-8000-00000000000f", unit: "USD", hold: "0.25000000" })], error: null },
   operator_audit: { data: [auditRow()], error: null },
   operator_wallet_drift: { data: [], error: null },
 });
@@ -286,7 +286,7 @@ test("U3-R02 a figure that is not an exact decimal string, or does not reconcile
 
 test("U3-R03 each section fails on its own: an error, a rejected read or a missing relation is unavailable", async () => {
   const world = WORLD();
-  world.console_usage = { data: null, error: { code: "42501", message: "permission denied" } };
+  world.operator_unknown_usage = { data: null, error: { code: "42501", message: "permission denied" } };
   world.operator_wallet_drift = { data: null, error: { code: "PGRST205", message: "relation not found" } };
   delete (world as Partial<typeof world>).operator_audit;
   const reads = await operatorReads(readClient(world));
@@ -311,8 +311,7 @@ test("U3-R04 the reads touch only the operator read surface, bounded, with the d
     ["limit", ACCOUNT_LIMIT],
   ]);
   assert.deepEqual(of("console_admin_orgs").ops, [["in", "org_id", [ORG]]]);
-  assert.deepEqual(of("console_usage").ops, [
-    ["eq", "settlement_state", "held_unknown"],
+  assert.deepEqual(of("operator_unknown_usage").ops, [
     ["order", "created_at", { ascending: true }],
     ["limit", UNKNOWN_LIMIT],
   ]);
@@ -330,18 +329,21 @@ test("U3-R04 the reads touch only the operator read surface, bounded, with the d
 
 test("U3-R05 an unknown-usage hold keeps its own unit: CREDIT for a credit job, USD for a legacy one", async () => {
   const reads = await operatorReads(readClient(WORLD()));
+  const at = { orgId: ORG, createdAt: "2026-09-24T09:00:00+00:00", reconcileAfter: "2026-09-25T09:00:00+00:00" };
   assert.deepEqual(reads.unknownUsage, {
     ok: true,
     value: [
-      { requestId: "f1000000-0000-4000-8000-00000000000f", orgId: ORG, createdAt: "2026-09-24T09:00:00+00:00", hold: { amount: "14.74560000", unit: "CREDIT" } },
-      { requestId: "f2000000-0000-4000-8000-00000000000f", orgId: ORG, createdAt: "2026-09-24T09:00:00+00:00", hold: { amount: "0.25000000", unit: "USD" } },
+      { requestId: "f1000000-0000-4000-8000-00000000000f", ...at, hold: { amount: "14.74560000", unit: "CREDIT" } },
+      { requestId: "f2000000-0000-4000-8000-00000000000f", ...at, hold: { amount: "0.25000000", unit: "USD" } },
     ],
   });
   const world = WORLD();
-  world.console_usage = { data: [heldRow({ credit_hold: 14.7456 })], error: null };
-  assert.equal((await operatorReads(readClient(world))).unknownUsage.ok, false);
-  world.console_usage = { data: [heldRow({ accounting_regime: "barter" })], error: null };
-  assert.equal((await operatorReads(readClient(world))).unknownUsage.ok, false);
+  world.operator_unknown_usage = { data: [heldRow({ hold: null })], error: null };
+  assert.equal((await operatorReads(readClient(world))).unknownUsage.ok && (await operatorReads(readClient(world))).unknownUsage.value[0].hold, null);
+  for (const bad of [heldRow({ hold: 14.7456 }), heldRow({ unit: "barter" }), heldRow({ reconcile_after: null })]) {
+    world.operator_unknown_usage = { data: [bad], error: null };
+    assert.equal((await operatorReads(readClient(world))).unknownUsage.ok, false, JSON.stringify(bad));
+  }
 });
 
 test("U3-R06 the audit trail is the closed action vocabulary; drift rows are exact CREDIT", async () => {

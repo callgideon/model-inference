@@ -124,6 +124,7 @@ export default async function AdminPage() {
                     <TableRow>
                       <TableHead>Request</TableHead>
                       <TableHead>Since</TableHead>
+                      <TableHead>Releasable after</TableHead>
                       <TableHead className="text-right">Held</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -137,10 +138,11 @@ export default async function AdminPage() {
                           </div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{dateTime(h.createdAt)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{dateTime(h.reconcileAfter)}</TableCell>
                         <TableCell className="text-right tabular-nums">{h.hold === null ? "Released" : amount(h.hold.amount, h.hold.unit)}</TableCell>
                       </TableRow>
                     ))}
-                    {held.length === 0 ? <Empty cols={3} text="Nothing is waiting for reconciliation." /> : null}
+                    {held.length === 0 ? <Empty cols={4} text="Nothing is waiting for reconciliation." /> : null}
                   </TableBody>
                 </Table>
               )}
