@@ -51,7 +51,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "g8": {"postgres": 55447, "valkey": 55492},
     "e2c": {"postgres": 55448, "valkey": 55493, "s3": 55494},
     "e1c": {"postgres": 55449},
-    "i8": {"postgres": 55450, "valkey": 55495},
+    # I8's PgBouncer stand-in for the hosted pooler (tests/i/pooler.py)
+    "i8": {"postgres": 55450, "valkey": 55495, "pgbouncer": 55496},
     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
     "e3c": {"postgres": 56932},
 }

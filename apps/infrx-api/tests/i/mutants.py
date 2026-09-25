@@ -966,6 +966,10 @@ MUTANTS += (
        # waits for a server that never frees (query_wait_timeout) - the defect's absence,
        # observed as the pooler's refusal
        dies_by=("ProtocolViolation", "OperationalError")),
+    _m("stand_in_pooler_port_literal", "the stand-in's host port is the one reserved in "
+       "infrx.contracts.tasklocal", POOLER_PY,
+       "BOUNCER: BOUNCER_SERVICE.host_port}", "BOUNCER: 55496}",
+       "test_ops_continuous__the_stand_in_pooler_port_is_reserved_in_tasklocal"),
     _m("stand_in_pooler_replays_prepares", "the stand-in, like 6543, supports no prepared "
        "statements", POOLER_PY, "max_prepared_statements = 0", "max_prepared_statements = 100",
        "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler"),
