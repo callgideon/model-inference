@@ -1727,7 +1727,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_w5_admit__a_card_this_runtime_did_not_approve_admits_nothing",
        "test_w5_admit__an_upload_past_its_window_at_admission_admits_nothing",
        "test_w5_admit__a_refusal_is_its_wire_error_and_admits_nothing",
-       "test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job"),
+       "test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job",
+       "test_w5_admit__the_worker_prepares_a_video_the_moment_its_marker_commits",
+       # PostgreSQL (skipped in the runner's copy, which inherits no service env; killed
+       # with the w5 services in the fix-round evidence of W5-admit-wiring-f5784d0.md)
+       "test_w5_pg__the_worker_process_runs_a_video_admit_ready_admitted",
+       "test_w5_pg__a_claim_the_moment_the_marker_commits_prepares_the_manifest"),
     _m("w5_expectation_without_card", "a CREDIT runtime expects its approved card (R69)",
        P, 'accounting_regime=regime, rate_card_version=card if regime == "credit" else None)',
        "accounting_regime=regime, rate_card_version=None)",
