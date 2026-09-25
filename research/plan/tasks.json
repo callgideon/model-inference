@@ -4035,7 +4035,7 @@
       "track": "F",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4064,7 +4064,13 @@
       ],
       "acceptance": "Python/TS agree on exact units/lifecycle and every affected consumer has a committed contract.",
       "failure_oracle": "Empty versus missing readiness, expired availability and mismatched public limits must fail semantic conformance.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/f/F2C-catalog-d414607.md",
+        "research/plan/evidence/f/F2C-lifecycle-2d5e474.md",
+        "research/plan/evidence/f/F2C-lifecycle-9bf7a95.md"
+      ],
+      "closure_note": "2026-09-24: F2C-C merged 2bd7f347 (R109, P-22 decided) and F2C-L merged 78661bf0 (R111–R116) after verify-lane fix rounds; SURFACE_VERSION contracts-v2.1; implemented = reviewed contracts + conformance suites + acceptance transcripts; consumers integrate in E3C."
     },
     {
       "id": "E2C",

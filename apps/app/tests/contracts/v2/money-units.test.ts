@@ -150,7 +150,7 @@ test("credits are displayed as credits, never with a currency symbol", () => {
 test("the surface and schema version are declared once, and canonical form is exact", () => {
   // The cross-language comparison of these two lives in
   // tests/contracts/v2/test_parity_v2.py, which reads both halves' sources.
-  assert.equal(SURFACE_VERSION, "contracts-v2.0");
+  assert.equal(SURFACE_VERSION, "contracts-v2.1");
   assert.equal(V2_SCHEMA_VERSION, 2);
   assert.equal(isCanonicalAmount("1.00000000"), true);
   assert.equal(isCanonicalAmount("1.0"), false);

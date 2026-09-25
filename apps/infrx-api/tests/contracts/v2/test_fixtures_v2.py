@@ -66,7 +66,7 @@ V2_RECORDS = {name: value for name, value in vars(v2).items()
 
 
 def test_the_map_declares_the_one_reviewed_surface_version():
-    assert MAP["surface_version"] == SURFACE_VERSION == "contracts-v2.0"
+    assert MAP["surface_version"] == SURFACE_VERSION == "contracts-v2.1"
     assert MAP["schema_version"] == v2.SCHEMA_VERSION == 2
     assert MAP["appendix"] == "research/plan/01a-contracts-v2-map.md"
     assert MAP["database_map"] == "research/plan/06a-database-map-v2.md"

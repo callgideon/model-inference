@@ -384,7 +384,7 @@ def test_contracts_v2_resolves_by_attribute_access_like_every_submodule():
     differs from v1's."""
     import infrx.contracts as contracts
     assert "v2" in dir(contracts)
-    assert contracts.v2.SURFACE_VERSION == "contracts-v2.0"
+    assert contracts.v2.SURFACE_VERSION == "contracts-v2.1"
     assert contracts.v2.records.SCHEMA_VERSION == 2
 
 

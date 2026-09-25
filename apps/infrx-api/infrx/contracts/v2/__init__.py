@@ -29,7 +29,7 @@ from typing import Any
 # (F2P item 7). The console half declares the same string in
 # `apps/app/lib/contracts/v2/money-units.ts`; `tests/contracts/v2/test_parity_v2.py`
 # fails if the two drift.
-SURFACE_VERSION = "contracts-v2.0"
+SURFACE_VERSION = "contracts-v2.1"
 
 SCHEMA_VERSION = 2
 

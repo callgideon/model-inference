@@ -449,5 +449,5 @@
   ],
   "schema_version": 2,
   "schema_version_note": "every internal v2 record carries schema_version: 2; it is excluded from the per-record field lists below",
-  "surface_version": "contracts-v2.0"
+  "surface_version": "contracts-v2.1"
 }

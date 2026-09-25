@@ -26,7 +26,7 @@ import { MONEY_SCALE, tryMoneyFromUnits, tryParseMoneyUnits } from "../money.ts"
  * (F2P item 7). `infrx/contracts/v2/__init__.py` declares the same string and
  * `tests/contracts/v2/test_parity_v2.py` fails if the two drift.
  */
-export const SURFACE_VERSION = "contracts-v2.0";
+export const SURFACE_VERSION = "contracts-v2.1";
 
 /** Internal v2 schemas carry this; public OpenAI-style bodies do not change. */
 export const V2_SCHEMA_VERSION = 2;
