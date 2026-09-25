@@ -1,0 +1,25 @@
+{
+  "task": "E3C",
+  "slice": "phase 2 early run on the wave-4b union 9d61d1e1 (merged as 43178b58) + harness fixes H-1..H-6 (9107a5c6) + validation of s04/s06/s11 with both revert controls",
+  "activity": "review",
+  "at": "2026-09-25T22:30:00+00:00",
+  "head": "9107a5c6",
+  "base": "e607b705",
+  "worktree": ".claude/worktrees/codex-e3c-rerun",
+  "branch": "codex/e3c-rerun",
+  "owned_paths": ["tests/integration/backend/e3c/", "research/plan/evidence/e/E3C-early-9107a5c.md",
+                  "research/plan/evidence/coordinator/updates/E3C-20260925T2230Z.json"],
+  "commands": [
+    {"cmd": "final-run.sh 9d61d1e1: INFRX_E3C_RUNTIME_LOGIN=1 make backend-local E3C_ARGS='--control nc-admission-ready=<tree> --control nc-retention-durable=<tree>' (43178b58)", "exit": 2, "summary": "runner exit 1, gate FAIL; main 5 failed / 76 passed in 25:35 (load 44-64); FAIL s04 (late: F-5; permanent: harness H-4), s06 scrub (harness H-5), s11 live + race (harness H-6, H-5); PASS s01 s02 s03 s05 s07 s08 s09 s10 s12 s13; nc-retention-durable PASS right reason; nc-admission-ready PASS WRONG reason (tree worker NameError) -> H-1/H-3"},
+    {"cmd": "pytest -q tests/integration/backend/e3c (9107a5c6)", "exit": 0, "summary": "37 passed (2 new s12 regressions)"},
+    {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 runner.py --only s04,s06,s11 + both controls (9107a5c6)", "exit": 1, "summary": "s04 3/4 (late rejection F-5), s06 3/3, s11 3/3; nc-admission-ready PASS (RV-05 executed+debited on the reverted tree), nc-retention-durable PASS (live media deleted; request record before retention)"}
+  ],
+  "measurements": {"F-2": {"postgres_s": 20.1, "s3_video_s": 40.1, "bound": "R130 40 s + 2 s client margin", "holds": true}},
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 2, "confidence": "medium",
+               "basis": "one final run on the final SHA (13-25 min by host load) with the fixed harness and control builder; F-5 must land in W5-ADMIT-WIRING's fix round",
+               "at": "2026-09-25T22:30:00+00:00"},
+  "blockers": ["F-5 relay.py:216 _admitted rechecks capability after admit_ready; a refusal answers 4xx for a job that already ran and was charged (s04 late rejection) - W5-ADMIT-WIRING fix round"],
+  "findings": ["F-6 PgReconciliation on infrx_runtime: InsufficientPrivilege on infrx.wallet_reconciliation/credit_wallet_reconciliation (0021 grants infrx_monitor only); reconciliation gauges never published on the dedicated login"],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/E3C-early-9107a5c.md"]
+}
