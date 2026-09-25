@@ -93,7 +93,9 @@ import {
   type NamedQueryName,
   type Predicate,
   namedQuery,
+  postgrestPort,
   QueryPortError,
+  type PostgrestClient,
   type QueryPort,
   type Row,
   type SqlValue,
@@ -1557,6 +1559,72 @@ export function createConsumerReads(
     };
   }
   return out as ConsumerReads;
+}
+
+/** The consumer App's request context: who is asking, and - only for a ready account - their reads. */
+export type ConsumerSession = { context: ConsumerContext; reads: ConsumerReads | null };
+
+/** The Supabase server client as C0 uses it: GoTrue's `getUser()` plus PostgREST (the real one fits). */
+export type ConsumerClient = PostgrestClient & { auth: { getUser(): PromiseLike<AuthAnswer> } };
+
+/**
+ * `consumerSession()` without React's `cache` or the Next cookie client, so it is testable (R48).
+ *
+ * Everything runs as the individual: the client carries their cookie JWT, so RLS, the views' guards
+ * and D10's `consumer_*` functions decide what is visible. GoTrue's `getUser()` revalidates the token,
+ * and the account is found by wallet owner (`resolveConsumerContext`). The secret and the client are
+ * obtained inside the guard, the secret first: any failure - configuration, auth service, database -
+ * is `unavailable`, never onboarding (a second grant flow), signed out, a fixture or a zero.
+ */
+export async function consumerSessionFrom(
+  client: () => Promise<ConsumerClient>,
+  cursorSecret: () => string,
+): Promise<ConsumerSession> {
+  try {
+    const secret = cursorSecret();
+    const supabase = await client();
+    const user = authUserOutcome(await supabase.auth.getUser());
+    if (user === "unavailable") return { context: { state: "unavailable" }, reads: null };
+    const pg = postgrestPort(supabase);
+    const context = await resolveConsumerContext(pg, user);
+    if (context.state !== "ready") return { context, reads: null };
+    return { context, reads: createConsumerReads({ pg, rpc: supabase, cursorSecret: secret }, context.account) };
+  } catch {
+    return { context: { state: "unavailable" }, reads: null };
+  }
+}
+
+/** What the console shell (`app/(console)/layout.tsx`, WR-1) does with a request. */
+export type ConsoleShell =
+  | { kind: "redirect"; to: string }
+  | { kind: "render"; email: string; reads: ConsumerReads | null }
+  | { kind: "panel"; state: "unverified" | "onboarding" | "unavailable" };
+
+/**
+ * The shell's decision. An operator is not a consumer: operator access never waits on a consumer
+ * wallet, so an operator whose consumer state is onboarding gets the page (no reads) and reaches
+ * /admin, which checks the role itself. Verification and onboarding redirect only to a route that
+ * has shipped (`null` until A2/C3A land it): a redirect to a missing route is a 404, not a flow.
+ */
+export function consoleShell(
+  session: ConsumerSession,
+  isOperator: boolean,
+  routes: { verifyEmail: string | null; onboarding: string | null },
+): ConsoleShell {
+  const { context, reads } = session;
+  switch (context.state) {
+    case "signed_out":
+      return { kind: "redirect", to: "/login" };
+    case "unverified":
+      return routes.verifyEmail === null ? { kind: "panel", state: "unverified" } : { kind: "redirect", to: routes.verifyEmail };
+    case "onboarding":
+      if (isOperator) return { kind: "render", email: context.email, reads: null };
+      return routes.onboarding === null ? { kind: "panel", state: "onboarding" } : { kind: "redirect", to: routes.onboarding };
+    case "ready":
+      return reads === null ? { kind: "panel", state: "unavailable" } : { kind: "render", email: context.account.email, reads };
+    default:
+      return { kind: "panel", state: "unavailable" };
+  }
 }
 
 type AnyOperation = (...args: never[]) => Promise<Result<unknown>>;

@@ -14,15 +14,12 @@ import { getSession } from "../session.ts";
 import { createClient } from "../supabase/server.ts";
 import type { SessionContext } from "../contracts/types.ts";
 import {
-  authUserOutcome,
+  consumerSessionFrom,
   createConsoleServices,
-  createConsumerReads,
-  resolveConsumerContext,
   type ConsoleServicesConfig,
-  type ConsumerContext,
-  type ConsumerReads,
+  type ConsumerClient,
+  type ConsumerSession,
 } from "./console.ts";
-import { postgrestPort, type PostgrestClient } from "./query.ts";
 import type { ConsoleServices } from "../contracts/services.ts";
 
 function assertServer(what: string): void {
@@ -73,34 +70,12 @@ export function createServerConsoleServices(ports: Omit<ConsoleServicesConfig, "
   return createConsoleServices({ ...ports, cursorSecret: consoleCursorSecret() });
 }
 
-/** The consumer App's request context: who is asking, and - only for a ready account - their reads. */
-export type ConsumerSession = { context: ConsumerContext; reads: ConsumerReads | null };
-
-const UNAVAILABLE: ConsumerSession = { context: { state: "unavailable" }, reads: null };
-
 /**
- * C0: the signed-in individual's consumer account and read port, once per request.
- *
- * Everything runs as the individual: the Supabase server client carries their cookie JWT, so RLS,
- * the views' guards and D10's `consumer_*` functions decide what is visible. No service key, no
- * customer API key and no fixture is on this path. GoTrue's `getUser()` revalidates the token (the
- * cookie alone is not trusted), the account is found by wallet owner (`resolveConsumerContext`), and
- * any failure - configuration, auth service, database - is the `unavailable` state, never a
- * fixture, a zero or a redirect to sign-in.
+ * C0: the signed-in individual's consumer account and read port, once per request. The logic is
+ * `consumerSessionFrom` (tested in tests/c/consumer.test.ts); this only supplies the cookie client and
+ * the cursor secret, both read inside its guard.
  */
-export const consumerSession = cache(async (): Promise<ConsumerSession> => {
+export const consumerSession = cache((): Promise<ConsumerSession> => {
   assertServer("consumerSession()");
-  try {
-    const supabase = await createClient();
-    const user = authUserOutcome(await supabase.auth.getUser());
-    if (user === "unavailable") return UNAVAILABLE;
-    const client = supabase as unknown as PostgrestClient;
-    const pg = postgrestPort(client);
-    const context = await resolveConsumerContext(pg, user);
-    if (context.state !== "ready") return { context, reads: null };
-    return { context, reads: createConsumerReads({ pg, rpc: client, cursorSecret: consoleCursorSecret() }, context.account) };
-  } catch {
-    // A missing URL/anon key or cursor secret, or a client that threw instead of answering.
-    return UNAVAILABLE;
-  }
+  return consumerSessionFrom(async () => (await createClient()) as unknown as ConsumerClient, consoleCursorSecret);
 });

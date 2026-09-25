@@ -24,6 +24,7 @@ import {
   createConsumerReads,
   resolveConsumerContext,
   type ConsumerAccount,
+  type AuthUser,
   type ConsumerClient,
   type CreditLedgerEntry,
   type RpcClient,
@@ -585,7 +586,7 @@ const SHIPPED = { verifyEmail: "/verify-email", onboarding: "/onboarding" } as c
 const NOT_SHIPPED = { verifyEmail: null, onboarding: null } as const;
 
 /** A Supabase server client: GoTrue's answer plus what PostgREST returns per relation. */
-function supabaseAs(auth: { data: { user: typeof verified | null } | null; error: { name?: string; status?: number } | null }, tables: Record<string, Row[]> = {}): ConsumerClient {
+function supabaseAs(auth: { data: { user: AuthUser | null } | null; error: { name?: string; status?: number } | null }, tables: Record<string, Row[]> = {}): ConsumerClient {
   return {
     auth: { getUser: () => Promise.resolve(auth) },
     from: (relation: string) => recordingClient({ data: tables[relation] ?? [], error: null }).client.from(relation),
@@ -625,12 +626,16 @@ test("consumerSession: signed out, unverified and onboarding carry no reads; a r
   const none = await consumerSessionFrom(async () => supabaseAs({ data: { user: null }, error: { name: "AuthSessionMissingError", status: 400 } }), secret);
   assert.deepEqual(none, { context: { state: "signed_out" }, reads: null });
   const unverified = await consumerSessionFrom(async () => supabaseAs({ data: { user: { ...verified, email_confirmed_at: null } }, error: null }, myWallet), secret);
-  assert.deepEqual(unverified, { context: { state: "unverified", userId: ME, email: "me@example.com" }, reads: null });
+  assert.deepEqual(unverified.context, { state: "unverified", userId: ME, email: "me@example.com" });
+  // `ok(x === null)`, not `equal`: a failing diff over an object of functions does not serialise, and
+  // the mutant runner then cannot tell an assertion from a crash.
+  assert.ok(unverified.reads === null, "an unverified user gets no reads");
   const onboarding = await consumerSessionFrom(async () => supabaseAs(signedIn), secret);
-  assert.deepEqual(onboarding, { context: { state: "onboarding", userId: ME, email: "me@example.com" }, reads: null });
+  assert.deepEqual(onboarding.context, { state: "onboarding", userId: ME, email: "me@example.com" });
+  assert.ok(onboarding.reads === null, "an individual without a wallet gets no reads");
   const ready = await consumerSessionFrom(async () => supabaseAs(signedIn, myWallet), secret);
   assert.deepEqual(ready.context, { state: "ready", account });
-  assert.notEqual(ready.reads, null, "a ready account carries its reads");
+  assert.ok(ready.reads !== null, "a ready account carries its reads");
   const balance = await ready.reads!.balance();
   assert.equal(balance.ok ? "ok" : balance.error.code, "dependency_unavailable", "the reads run on the same client");
 });
@@ -657,6 +662,8 @@ test("the console shell: sign-in, verification, readiness and outages", async ()
   assert.deepEqual(consoleShell(unavailable, false, SHIPPED), { kind: "panel", state: "unavailable" });
   assert.deepEqual(consoleShell(unavailable, true, SHIPPED), { kind: "panel", state: "unavailable" }, "an outage is not onboarding for an operator either");
   const ready = await consumerSessionFrom(async () => supabaseAs(signedIn, myWallet), secret);
-  assert.deepEqual(consoleShell(ready, false, SHIPPED), { kind: "render", email: "me@example.com", reads: ready.reads });
+  const shell = consoleShell(ready, false, SHIPPED);
+  assert.deepEqual([shell.kind, "email" in shell && shell.email], ["render", "me@example.com"]);
+  assert.ok("reads" in shell && shell.reads === ready.reads, "the page gets the account's reads");
   assert.deepEqual(consoleShell({ context: ready.context, reads: null }, false, SHIPPED), { kind: "panel", state: "unavailable" }, "ready without reads");
 });

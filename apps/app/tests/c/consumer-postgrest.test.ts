@@ -19,9 +19,12 @@ import type { Page, Result } from "../../lib/contracts/types.ts";
 import { parseCredit, totalCredit, type Credit } from "../../lib/contracts/v2/types.ts";
 import { postgrestPort, type PostgrestClient } from "../../lib/services/query.ts";
 import {
+  consoleShell,
+  consumerSessionFrom,
   createConsumerReads,
   resolveConsumerContext,
   type ConsumerAccount,
+  type ConsumerClient,
   type ConsumerReads,
   type CreditLedgerEntry,
   type ConsumerRequest,
@@ -138,6 +141,26 @@ test("each session resolves to its own consumer account or a typed state - never
   }
   const anonymous = await resolveConsumerContext(postgrestPort(clientFor(null)), verifiedUser(S.users.c1));
   assert.deepEqual(anonymous, { state: "unavailable" }, "an anonymous token cannot read a wallet: unavailable, not onboarding");
+});
+
+test("the composed session and shell: an operator without a wallet reaches /admin; an individual is ready", { skip }, async () => {
+  // consumerSession()'s own composition over this stack; only GoTrue (absent here) is stubbed.
+  const sessionOf = (user: string) => {
+    const client = Object.assign(clientFor(user), {
+      auth: { getUser: async () => ({ data: { user: verifiedUser(user) }, error: null }) },
+    }) as unknown as ConsumerClient;
+    return consumerSessionFrom(async () => client, () => SECRET);
+  };
+  const routes = { verifyEmail: "/verify-email", onboarding: "/onboarding" };
+  const operator = await sessionOf(S.users.operator);
+  assert.equal(operator.context.state, "onboarding", "the view shows the operator every wallet; none is theirs");
+  assert.deepEqual(consoleShell(operator, true, routes), { kind: "render", email: `${S.users.operator.slice(-4)}@example.com`, reads: null });
+  assert.deepEqual(consoleShell(await sessionOf(S.users.ungranted), false, routes), { kind: "redirect", to: "/onboarding" });
+  const c1 = await sessionOf(S.users.c1);
+  const shell = consoleShell(c1, false, routes);
+  assert.equal(shell.kind, "render");
+  const balance = valueOf(await (shell as { reads: ConsumerReads }).reads.balance(), "c1 balance through the composed session");
+  assert.equal(balance.available, S.wallets.c1.available);
 });
 
 test("fails-before: the legacy session picks the first of several memberships", { skip }, async () => {

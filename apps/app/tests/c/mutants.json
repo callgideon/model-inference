@@ -1352,6 +1352,96 @@
       "cases": [
         "the PostgREST executor refuses what it cannot send, and turns an error into a port failure"
       ]
+    },
+    {
+      "id": "C0-SES-01",
+      "note": "an auth outage reads as signed out (0-C0-V1's V-SV-AUTH-OUTAGE, now in the tested function)",
+      "file": "lib/services/console.ts",
+      "find": "if (user === \"unavailable\") return { context: { state: \"unavailable\" }, reads: null };",
+      "replace": "if (user === \"unavailable\") return { context: { state: \"signed_out\" }, reads: null };",
+      "cases": [
+        "consumerSession: an auth outage is unavailable, never signed out"
+      ]
+    },
+    {
+      "id": "C0-SES-02",
+      "note": "a configuration or client failure reads as onboarding (0-C0-V1's V-SV-CATCH)",
+      "file": "lib/services/console.ts",
+      "find": "  } catch {\n    return { context: { state: \"unavailable\" }, reads: null };\n  }\n}\n\n/** What the console shell",
+      "replace": "  } catch {\n    return { context: { state: \"onboarding\", userId: \"\", email: \"\" }, reads: null };\n  }\n}\n\n/** What the console shell",
+      "cases": [
+        "consumerSession: a configuration or client failure is unavailable, never onboarding or signed out"
+      ]
+    },
+    {
+      "id": "C0-SES-03",
+      "note": "the cursor secret is read only for a ready account, so a missing secret lets onboarding through",
+      "file": "lib/services/console.ts",
+      "find": "    const secret = cursorSecret();\n    const supabase = await client();",
+      "replace": "    const supabase = await client();\n    const secret = user_ready_only();\n    function user_ready_only() { return \"lazy-cursor-secret-0123456789\"; }",
+      "cases": [
+        "consumerSession: a configuration or client failure is unavailable, never onboarding or signed out"
+      ]
+    },
+    {
+      "id": "C0-SES-04",
+      "note": "a non-ready context is handed reads",
+      "file": "lib/services/console.ts",
+      "find": "    if (context.state !== \"ready\") return { context, reads: null };\n    return { context, reads: createConsumerReads(",
+      "replace": "    if (context.state === \"signed_out\") return { context, reads: null };\n    return { context, reads: createConsumerReads(",
+      "cases": [
+        "consumerSession: signed out, unverified and onboarding carry no reads; a ready account does"
+      ]
+    },
+    {
+      "id": "C0-SHELL-01",
+      "note": "WR-1 as first written: an operator with no consumer wallet is sent to /onboarding and cannot reach /admin (1-C0-V1)",
+      "file": "lib/services/console.ts",
+      "find": "      if (isOperator) return { kind: \"render\", email: context.email, reads: null };\n",
+      "replace": "",
+      "cases": [
+        "the console shell: an operator without a consumer wallet reaches /admin, not /onboarding"
+      ]
+    },
+    {
+      "id": "C0-SHELL-02",
+      "note": "the onboarding redirect is not gated on the route shipping (a redirect to a 404)",
+      "file": "lib/services/console.ts",
+      "find": "return routes.onboarding === null ? { kind: \"panel\", state: \"onboarding\" } : { kind: \"redirect\", to: routes.onboarding };",
+      "replace": "return { kind: \"redirect\", to: routes.onboarding ?? \"/onboarding\" };",
+      "cases": [
+        "the console shell: an operator without a consumer wallet reaches /admin, not /onboarding"
+      ]
+    },
+    {
+      "id": "C0-SHELL-03",
+      "note": "the verification redirect is not gated on the route shipping",
+      "file": "lib/services/console.ts",
+      "find": "return routes.verifyEmail === null ? { kind: \"panel\", state: \"unverified\" } : { kind: \"redirect\", to: routes.verifyEmail };",
+      "replace": "return { kind: \"redirect\", to: routes.verifyEmail ?? \"/verify-email\" };",
+      "cases": [
+        "the console shell: sign-in, verification, readiness and outages"
+      ]
+    },
+    {
+      "id": "C0-SHELL-04",
+      "note": "an outage renders the shell for an operator (read as onboarding)",
+      "file": "lib/services/console.ts",
+      "find": "    default:\n      return { kind: \"panel\", state: \"unavailable\" };",
+      "replace": "    default:\n      return isOperator ? { kind: \"render\", email: \"\", reads: null } : { kind: \"panel\", state: \"unavailable\" };",
+      "cases": [
+        "the console shell: sign-in, verification, readiness and outages"
+      ]
+    },
+    {
+      "id": "C0-SHELL-05",
+      "note": "a ready account whose reads are missing renders as if it had them",
+      "file": "lib/services/console.ts",
+      "find": "return reads === null ? { kind: \"panel\", state: \"unavailable\" } : { kind: \"render\", email: context.account.email, reads };",
+      "replace": "return { kind: \"render\", email: context.account.email, reads };",
+      "cases": [
+        "the console shell: sign-in, verification, readiness and outages"
+      ]
     }
   ]
 }
