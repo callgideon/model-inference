@@ -8,7 +8,7 @@ set -euo pipefail
 root=${E4B_ROOT:-/opt/dlami/nvme/e4b}
 head_bytes=${HEAD_BYTES:-24000}
 [ -d "$root" ] || { echo "no $root"; exit 3; }
-run=${RUN:-$(ls -1 "$root" | sort | tail -n 1)}
+run=${RUN:-$(find "$root" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort | tail -n 1)}
 dir="$root/$run"
 [ -d "$dir" ] || { echo "no run $run under $root"; exit 3; }
 echo "== run $run"
