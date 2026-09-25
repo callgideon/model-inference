@@ -29,7 +29,7 @@
     "supabase-postgres": {"ref": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "tag": "17.6.1.173", "used_by": "tests/integration/compose.yaml; tests/d with INFRX_D1_IMAGE=supabase"},
     "valkey": {"ref": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1", "tag": "8.1-alpine", "used_by": "tests/integration/compose.yaml; apps/infrx-api/tests/q/vkharness.py; apps/infrx-api/tests/d/vkstore.py"},
     "clickhouse": {"ref": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146", "tag": "25.8.33.6-alpine", "used_by": "tests/integration/compose.yaml"},
-    "minio": {"ref": "quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e", "tag": "RELEASE.2025-09-07T16-13-09Z", "used_by": "tests/integration/compose.yaml"},
+    "minio": {"ref": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372", "tag": "RELEASE.2026-08-04T00-00-00Z", "used_by": "tests/integration/compose.yaml", "note": "pgsty MinIO community fork; the former pin quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e answers 401 on pull (2026-09-24)"},
     "postgrest": {"ref": "postgrest/postgrest@sha256:a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732", "tag": "v13.0.4", "used_by": "tests/integration/backend/compose.yaml (layer 3)"}
   },
   "namespaces": {

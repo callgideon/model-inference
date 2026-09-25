@@ -117,10 +117,14 @@ a comment only.
 | PostgreSQL | `supabase/postgres` | `sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd` | `17.6.1.173` |
 | Valkey | `valkey/valkey` | `sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1` | `8.1-alpine` |
 | ClickHouse | `clickhouse/clickhouse-server` | `sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146` | `25.8.33.6-alpine` |
-| S3-compatible | `quay.io/minio/minio` | `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e` | `RELEASE.2025-09-07T16-13-09Z` |
+| S3-compatible | `pgsty/minio` | `sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372` | `RELEASE.2026-08-04T00-00-00Z` |
 
-All four are public registries (Docker Hub, Quay). MinIO is no longer published on Docker
-Hub — `minio/minio` returns `object not found` — so it comes from Quay.
+All four are public Docker Hub repositories. MinIO is no longer published on Docker Hub
+(`minio/minio` returns `object not found`), and on 2026-09-24 the former Quay pin
+(`quay.io/minio/minio@sha256:14cea493…`, RELEASE.2025-09-07T16-13-09Z) answered `401
+UNAUTHORIZED`, so E2C repinned to pgsty's MinIO community fork (tag
+`RELEASE.2026-08-04T00-00-00Z`, `minio --version` commit `d88f46cc`), verified for health,
+bucket, put/get/list and `NoSuchKey` with this stack's command and credentials.
 
 ### Why `supabase/postgres`, and why the database is `infrx_e2`
 

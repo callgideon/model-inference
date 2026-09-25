@@ -23,7 +23,7 @@ Measured on the development host on 2026-09-24 (not the pilot box). `match` in
 | systemd | `systemd-analyze` present | 255 | `tests/i` verifies the shipped units |
 | git | ≥ 2.28 | 2.43.0 (`init.defaultBranch` unset → `master`) | tests pin their own branch names; see below |
 | Docker | server reachable | 29.6.2, Compose v5.3.1, overlayfs, cgroup v2 | D/Q task-local containers, E2 compose stack |
-| `net.ipv4.ip_local_reserved_ports` | covers every namespace port (reported as a **risk**, not pinned) | empty; ephemeral range 32768–60999 | task-local ports 554xx–569xx sit inside the ephemeral range (see below) |
+| `net.ipv4.ip_local_reserved_ports` | covers every namespace port (an uncovered one is reported as a **risk**, not pinned) | `55432-55499,56379,56700-56999,58123,59000,59100,59110` (`/etc/sysctl.d/60-infrx-task-ports.conf`, P-21, set 2026-09-24/25); ephemeral range 32768–60999 | task-local ports sit inside the ephemeral range (see below); the E2 block 55500–55599 is still exposed |
 
 Service images, every one pinned by digest (the tag is a comment). Whether a host has them
 is state, not a pin: preflight reports an absent one with its `docker pull` line, and a clean
@@ -35,7 +35,7 @@ host pulls them once, which is the only network step.
 | `supabase/postgres` | 17.6.1.173 | `7768d0d1…e8fd` | E2 stack; tests/d with `INFRX_D1_IMAGE=supabase` |
 | `valkey/valkey` | 8.1-alpine | `d2e18f34…43d1` | E2 stack; tests/q `vkharness.py`; tests/d `vkstore.py` |
 | `clickhouse/clickhouse-server` | 25.8.33.6-alpine | `87e0a5b7…6146` | E2 stack |
-| `quay.io/minio/minio` | RELEASE.2025-09-07T16-13-09Z | `14cea493…936e` | E2 stack (S3-compatible) |
+| `pgsty/minio` (MinIO community fork) | RELEASE.2026-08-04T00-00-00Z | `b6bfe723…d602372` (OCI index; `latest` resolved to it too) | E2 stack (S3-compatible). Replaces `quay.io/minio/minio@sha256:14cea493…`, which answers `401 UNAUTHORIZED` on pull |
 | `postgrest/postgrest` | v13.0.4 | `a312f4b2…7732` | `tests/integration/backend/compose.yaml` (layer 3) |
 
 Recorded host state that is not ours and must not be touched: two App dev servers
@@ -63,7 +63,7 @@ anything.
 
 | Wrapper | Composes | Verdict |
 |---|---|---|
-| `consumer-local.sh` | preflight → `tests/contracts`, `tests/d`, `m`, `w`, `g` (each `uv run --frozen pytest -q`, on the lane's own services) → the `bench-test` suite → `run.py --layer 1 --only-suites --no-mutants` → `run.py --layer 2 --no-mutants` when its own preflight passes | worst stage |
+| `consumer-local.sh` | preflight → `tests/contracts`, `tests/d`, `m`, `w`, `g` (each `uv run --frozen pytest -q`, on the lane's own services) → the `bench-test` suite → `run.py --layer 1 --only-suites --no-mutants` → `run.py --layer 2 --no-mutants` when its own preflight passes → E3C's `tests/integration/backend/e3c/runner.py --out <out>/e3c` (NOT RUN while the file is absent; its `verdict.json["verdict"]` counts only if it agrees with the runner's exit code, else INVALID) | worst stage |
 | `consumer-local.sh --break-seam readiness\|expiry` | preflight → one existing mutant (`tests.g.mutants:pilot_starts_unreachable`, `tests.contracts.mutants:upload_expiry_ignored`) through the shared runner, pristine baseline first | must be **FAIL** (killed); PASS would be an undetected broken seam |
 | `backend-certify.sh [--certify-profile P] [--validate-only] [-- flags]` | preflight (+ profile shape) → `tests/integration/backend/certify.py` for the local fake-engine target only | `--box`/`--target` without a profile: INVALID; with one: NOT RUN, prints the recorded box command, starts nothing |
 | `app-e2e.sh` | preflight → `make console-test console-lint console-typecheck` | NOT RUN until E3A's browser journey exists |
@@ -96,6 +96,7 @@ Ports, container names and database names come from **one registry**,
 |---|---|---|---|---|
 | `e2c` | tasklocal `e2c` | 55448 PostgreSQL, 55474 Valkey (55475 S3 reserved, unused) at efad43e0 | `infrx-e2c-postgres` (`infrx_e2c`), `infrx-e2c-valkey`; object prefix `test/e2c/` | consumer-local API stages: `INFRX_D_TASK=e2c`, `INFRX_D2_VALKEY_PORT/_CONTAINER` |
 | `e2` | harness `e2` | 55500, 55523, 55532, 55579, 55580, 55590 | `infrx-e2-*`, `infrx_e2`, `test/e2/`, `infrx_e2:` | `run.py` layers, certify.py local |
+| `e3c` | harness `e3c` (E2's layout +1400; tasklocal block 56900–56999) | 56900, 56923, 56932, 56979, 56980, 56990 | `infrx-e3c-*`, `infrx_e3c` | E3C's `backend/e3c/runner.py` (consumer-local's last stage) |
 | `e2c-selftest` | E2C lane block | 55510–55519 | none (`infrx-e2c-selftest-*` reserved) | `test_preflight.py` binds 55510 |
 
 Setup refuses (BLOCKED) when a namespace port is bound (a listener or a live connection;
@@ -108,9 +109,12 @@ as its source port. On 2026-09-24 a `make api-test` run lost its D container tha
 (`failed to bind host port 127.0.0.1:55432/tcp: address already in use`, 54 D cases failed),
 and an E2C test found its own 55510 held as the source port of a connection to 55448.
 Preflight reports the exposed ports as `ephemeral-overlap: risk`; it never changes the verdict,
-because a collision can only produce a spurious BLOCKED/FAIL, not a pass. The host fix is
-`sysctl -w net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999` (persisted under
-`/etc/sysctl.d/`), a coordinator/host-owner action.
+because a collision can only produce a spurious BLOCKED/FAIL, not a pass. The host owner has
+since reserved `55432-55499,56379,56700-56999,58123,59000,59100,59110` (P-21,
+`/etc/sysctl.d/60-infrx-task-ports.conf`): tasklocal's per-lane ports and the e3b2/e4b/e3c
+compose blocks are safe. Still exposed, and reported as a risk by `integration-l2` and
+`backend-certify`: E2's own block **55500–55599** (55500, 55523, 55532, 55579, 55580, 55590)
+and the E2C self-test block 55510–55519. Adding `55500-55599` to the same file closes it.
 Teardown belongs to the runner that created the resource: `pgharness`/`vkstore` remove their
 containers at interpreter exit (only ones carrying this checkout's label), `run.py` removes the
 `infrx-e2-*` stack in its `finally`. After a crash, list what is left with

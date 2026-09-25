@@ -2,6 +2,7 @@
 """E2C: the three local verification gates, composed from the maintained runners.
 
     tests/integration/consumer-local.sh   [--out DIR] [--break-seam readiness|expiry]
+                                          (last stage: E3C's backend/e3c/runner.py, when present)
     tests/integration/backend-certify.sh  [--out DIR] [--certify-profile P] [--validate-only]
                                           [-- <certify.py flags>]
     tests/integration/app-e2e.sh          [--out DIR]
@@ -46,6 +47,8 @@ SEAMS = {
     "readiness": ("tests.g.mutants", "pilot_starts_unreachable"),
     "expiry": ("tests.contracts.mutants", "upload_expiry_ignored"),
 }
+# E3C's BACKEND-LOCAL runner (E3C WR-3): its own verdict.json, E2C's ranking and exit codes.
+E3C_RUNNER = REPO / "tests" / "integration" / "backend" / "e3c" / "runner.py"
 # The recorded E4B box invocation (certify.py's docstring; E4B box protocol).
 BOX_FLAGS = ("--no-stack --box --target http://127.0.0.1:8001/v1 --engine-url "
              "http://127.0.0.1:8000 --metrics-url http://127.0.0.1:8001/metrics "
@@ -163,6 +166,30 @@ def seam_stage(seam: str, out: Path) -> dict:
                                INVALID: "the runner proved nothing"}[verdict]}
 
 
+def e3c_stage(out: Path, runner: Path = E3C_RUNNER) -> dict:
+    """The corrective scenario matrix on real services. Its verdict.json decides, and it must
+    agree with the runner's exit code: a runner that says PASS and exits 1 proved nothing."""
+    name = "backend-local"
+    if not runner.exists():
+        return {"stage": name, "verdict": NOT_RUN,
+                "detail": f"{runner} is not on this tree (E3C, codex/e3c-integration)"}
+    target = out / "e3c"
+    argv = [str(PY), str(runner), "--out", str(target)]
+    code, seconds, log = run(name, argv, REPO, out)
+    row = {"stage": name, "command": " ".join(argv), "exit": code, "duration_s": seconds,
+           "log": str(log), "report": str(target / "verdict.json")}
+    try:
+        verdict = json.loads((target / "verdict.json").read_text())["verdict"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {**row, "verdict": FAIL, "detail": f"exit {code} and no readable verdict.json"}
+    if verdict not in EXIT:
+        return {**row, "verdict": INVALID, "detail": f"unknown verdict {verdict!r}"}
+    if EXIT[verdict] != code:
+        return {**row, "verdict": INVALID,
+                "detail": f"verdict {verdict} but exit {code}: the runner contradicts itself"}
+    return {**row, "verdict": verdict}
+
+
 def uv() -> list[str]:
     return ["uv", "run", "--frozen", "pytest", "-q", "-p", "no:cacheprovider"]
 
@@ -198,6 +225,7 @@ def consumer_local(args, out: Path) -> list[dict]:
         stages.append(runner_stage("integration-l2", [str(PY), "tests/integration/run.py",
                                                       "--layer", "2", "--no-mutants",
                                                       "--report", str(report)], out, report))
+    stages.append(e3c_stage(out))
     return stages
 
 

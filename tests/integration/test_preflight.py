@@ -216,6 +216,55 @@ def test_a_pytest_stage_that_skipped_is_not_a_pass(tmp_path, body, verdict):
     assert stage["verdict"] == verdict, stage
 
 
+FAKE_RUNNER = """import json, pathlib, sys
+out = pathlib.Path(sys.argv[sys.argv.index("--out") + 1]); out.mkdir(parents=True)
+verdict, code = {verdict!r}, {code}
+if verdict is not None:
+    (out / "verdict.json").write_text(json.dumps({{"verdict": verdict}}))
+sys.exit(code)
+"""
+
+
+@pytest.mark.parametrize("verdict,code,expected", [
+    ("PASS", 0, "PASS"), ("FAIL", 1, "FAIL"), ("BLOCKED", 3, "BLOCKED"),
+    ("PASS", 1, "INVALID"),                 # the runner contradicts itself
+    (None, 0, "FAIL"),                      # exit 0 but no verdict file is not a pass
+    ("GREEN", 0, "INVALID"),
+], ids=["pass", "fail", "blocked", "contradiction", "no-verdict", "unknown"])
+def test_the_e3c_stage_takes_the_runners_verdict_only_when_it_is_consistent(
+        tmp_path, verdict, code, expected):
+    runner = tmp_path / "runner.py"
+    runner.write_text(FAKE_RUNNER.format(verdict=verdict, code=code))
+    out = tmp_path / "out"
+    out.mkdir()
+    stage = gates.e3c_stage(out, runner)
+    assert stage["verdict"] == expected, stage
+    assert stage["command"].endswith(f"--out {out / 'e3c'}")
+
+
+def test_an_absent_e3c_runner_is_not_run(tmp_path):
+    assert gates.e3c_stage(tmp_path, tmp_path / "missing.py")["verdict"] == "NOT RUN"
+
+
+@pytest.mark.skipif(shutil.which("docker") is None,
+                    reason="BLOCKED platform prerequisite: needs a docker CLI to inspect images")
+def test_an_image_that_is_not_local_is_blocked_and_never_pulled():
+    """E3C WR-2: a pin that cannot be pulled (the former quay MinIO answered 401) stays
+    BLOCKED with its pull line; preflight never pulls, so it cannot turn into a pass."""
+    env = json.loads(json.dumps(ENV))
+    absent = "infrx-e2c-selftest/absent@sha256:" + "0" * 64
+    env["images"]["absent"] = {"ref": absent}
+    env["profiles"]["probe"] = {"tools": ["python", "docker"], "images": ["absent"],
+                                "namespaces": []}
+    result = pf.preflight("probe", env=env)
+    rows = {c["check"]: c for c in result["checks"]}
+    if rows["tool:docker"]["status"] != "ok":
+        pytest.skip("BLOCKED platform prerequisite: docker daemon unreachable")
+    assert result["verdict"] == "BLOCKED"
+    assert rows["image:absent"] == {"check": "image:absent", "want": absent,
+                                    "status": "missing", "detail": f"docker pull {absent}"}
+
+
 def test_the_worst_stage_decides_the_gate():
     assert gates.worst(["PASS", "NOT RUN"]) == "NOT RUN"
     assert gates.worst(["NOT RUN", "BLOCKED", "PASS"]) == "BLOCKED"

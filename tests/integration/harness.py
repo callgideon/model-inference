@@ -44,8 +44,9 @@ E2_PORTS = {
     "fake_vllm": 55580,          # a host process, not a container (see fake_vllm.py)
 }
 # E3B phase 2: namespace -> offset of its block from E2's. A namespace moves the whole
-# layout, so two checkouts can run the stack at once (e3b2: 56700-56799, E2's +1200; e4b: 56800-56899, +1300).
-NAMESPACES = {"e2": 0, "e3b2": 1200, "e4b": 1300}
+# layout, so two checkouts can run the stack at once (e3b2: 56700-56799, E2's +1200; e4b: 56800-56899, +1300;
+# e3c: 56900-56999, +1400 - tasklocal's `e3c` block, E3C WR-1).
+NAMESPACES = {"e2": 0, "e3b2": 1200, "e4b": 1300, "e3c": 1400}
 NAMESPACE = os.environ.get("INFRX_E2_NAMESPACE") or "e2"
 if NAMESPACE not in NAMESPACES:
     raise ValueError(f"INFRX_E2_NAMESPACE={NAMESPACE!r}: expected one of {sorted(NAMESPACES)}")
