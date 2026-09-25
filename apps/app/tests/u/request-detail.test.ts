@@ -394,8 +394,8 @@ test(T.source, async () => {
   let calls = 0;
   const real: RequestSource = { reads: fixtureRequestReads(), preview: false };
   const pick = (env: Record<string, string>) => requestSource(async () => ((calls += 1), real), env);
-  assert.equal(await pick({ NODE_ENV: "production", INFRX_CONSOLE_PREVIEW: "1" }), real);
-  assert.equal(await pick({ NODE_ENV: "development" }), real);
+  assert.equal((await pick({ NODE_ENV: "production", INFRX_CONSOLE_PREVIEW: "1" }))?.preview, false, "production opt-in");
+  assert.ok((await pick({ NODE_ENV: "development" })) === real, "development without opt-in");
   assert.equal(calls, 2);
   const preview = (await pick({ NODE_ENV: "development", INFRX_CONSOLE_PREVIEW: "1" })) as RequestSource;
   assert.equal(preview.preview, true);

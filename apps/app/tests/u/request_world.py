@@ -136,7 +136,7 @@ def main() -> int:
         c.execute("select infrx_test.set_offset(%s)", (base,))
     world = {"user": ME, "other": OTHER, "jobs": jobs, "api": api, "base_offset": base,
              "instants": [int(d) for d in INSTANTS], "kept_ttl": KEPT_TTL, "short_ttl": SHORT_TTL,
-             "provider": cc.PROVIDER_ADMIN_USER, "ungranted": cc.UNGRANTED}
+             "provider": cc.PROVIDER_ADMIN_USER, "ungranted": cc.UNGRANTED, "org_a": b.ORG_A}
     print(f"U4 world: {len(jobs)} requests; API reads {json.dumps(api)}")
     run = subprocess.run(["node", "--test", "tests/u/request-pg.test.ts"], cwd=APP,
                          env={**os.environ, "U4_PG_DSN": pgharness.dsn(DB),
