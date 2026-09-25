@@ -1,0 +1,63 @@
+{
+  "task": "G7",
+  "slice": "1-4 (+WR-I8-3, revocation bound, E3C s08/s05)",
+  "activity": "review",
+  "head": "a0e0928a",
+  "worktree": ".claude/worktrees/codex-g7-catalog",
+  "branch": "codex/g7-catalog",
+  "owned_paths": [
+    "apps/infrx-api/infrx/gateway/routes/",
+    "apps/infrx-api/openrouter/provider-models.json (deleted)",
+    "apps/infrx-api/tests/g/ (not ops/, not the host-metrics test)",
+    "research/plan/evidence/g/G7-2bbfe0e.md",
+    "research/plan/evidence/g/G7-a0e0928.md",
+    "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json",
+    "research/plan/evidence/coordinator/updates/G7-20260925T0048Z.json"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops",
+      "exit": 0,
+      "summary": "573 passed at a0e0928a"
+    },
+    {
+      "cmd": "new/re-anchored mutants (12) via tests.g.mutants / tests.g.jobs.jobs_mutants",
+      "exit": 0,
+      "summary": "12/12 killed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all full G/uploads/jobs mutant lists at a0e0928a",
+      "exit": null,
+      "summary": "NOT COMPLETED (session limit): 69% run, 0 failures; last complete 505 passed at e3ba286f"
+    },
+    {
+      "cmd": "INFRX_D_TASK=g7 uv run --frozen pytest -q at a0e0928a",
+      "exit": null,
+      "summary": "NOT COMPLETED: 43% run, 0 failures; last complete at e3ba286f 3912 passed, 1 failed (pgharness decoy vs 640cedd4 port 55473)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 8,
+    "confidence": "med",
+    "basis": "all points implemented and green in tests/g; left: the two reruns, review fixes, integration reruns on M5/D10",
+    "at": "2026-09-25T00:48:00Z"
+  },
+  "blockers": [
+    "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3",
+    "legacy-regime discovery publishes nothing until D10 usd_price (WR-3a)"
+  ],
+  "wiring_requests": [
+    "WR-1..WR-7 as in G7-2bbfe0e.md",
+    "WR-8 (I8): adapter-side client timeouts that survive a stalled server (psycopg keepalive/tcp_user_timeout, botocore read_timeout+retries < 20 s)",
+    "proposed ruling: stalled dependency bound (text in G7-a0e0928.md)",
+    "proposed ruling: revocation bound <= KEY_TTL (text in G7-a0e0928.md)",
+    "fix 640cedd4 tasklocal g8 valkey 55473 vs tests/d D2 decoy"
+  ],
+  "next_action": "rerun the full G mutant lists and INFRX_D_TASK=g7 api-test at a0e0928a and record them; then coordinator review/merge with D10/M5",
+  "evidence": [
+    "research/plan/evidence/g/G7-2bbfe0e.md",
+    "research/plan/evidence/g/G7-a0e0928.md"
+  ]
+}
