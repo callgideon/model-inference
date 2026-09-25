@@ -1,6 +1,6 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-25 00:07Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 19, updated 2026-09-25 00:07Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-25 00:08Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 20, updated 2026-09-25 00:08Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
@@ -35,10 +35,10 @@ Generated 2026-09-25 00:07Z UTC by `python3 research/plan/scripts/progress.py` f
 - task-local services E1C held by E1C
 - task-local services I8 held by I8
 - task-local services E3C held by E3C
-- E3C (BACKEND-LOCAL): no remaining-effort estimate for D10, M5, W5
-- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, M5, W5
-- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, M5, U1R, U2, U3, U4, W5
-- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, M5, U1R, U2, U3, U4, W5
+- E3C (BACKEND-LOCAL): no remaining-effort estimate for D10, W5
+- E4C (BACKEND-READY): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, W5
+- E3A (APP-LOCAL): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4, W5
+- E4 (APP-PILOT): blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4, W5
 
 ### Next ready work
 
@@ -62,10 +62,10 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 | Milestone | Gate | Status | Forecast | Controlling constraint | Effort o/l/p | Wall-clock o/l/p | Confidence |
 |---|---|---|---|---|---|---|---|
-| `E3C` | BACKEND-LOCAL (PENDING) | unknown | unknown: no remaining-effort estimate for D10, M5, W5 | no remaining-effort estimate for D10, M5, W5 | — | — | unknown |
-| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, M5, W5 | — | — | unknown |
-| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, M5, U1R, U2, U3, U4, W5 | — | — | unknown |
-| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, M5, U1R, U2, U3, U4, W5 | — | — | unknown |
+| `E3C` | BACKEND-LOCAL (PENDING) | unknown | unknown: no remaining-effort estimate for D10, W5 | no remaining-effort estimate for D10, W5 | — | — | unknown |
+| `E4C` | BACKEND-READY (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, W5 | — | — | unknown |
+| `E3A` | APP-LOCAL (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4, W5 | — | — | unknown |
+| `E4` | APP-PILOT (PENDING) | blocked | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 | blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4, W5 | — | — | unknown |
 
 ## Gates
 
@@ -81,12 +81,12 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | Finding | Status | Corrective tasks | As of | Source |
 |---|---|---|---|---|
 | RV-01 | open | F2C (review), G7 (review), A3 (unassigned) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-02 | open | D10 (running), M5 (running), E1C (integration), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-02 | open | D10 (running), M5 (review), E1C (integration), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-03 | open | D10 (running), M6 (review), I8 (review), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-05 | open | F2C (review), D10 (running), W5 (running), G7 (review), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-06 | open | C0 (unassigned), C3A (unassigned), A2 (unassigned), A3 (unassigned), U1R (unassigned), U2 (unassigned), U3 (unassigned), U4 (unassigned), E3A (unassigned) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-07 | open | E1C (integration), M5 (running), G7 (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-07 | open | E1C (integration), M5 (review), G7 (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-08 | open | E1C (integration), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-09 | open | D10 (running), I8 (review), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-10 | open | I8 (review), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
@@ -133,7 +133,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | E1C | E1C E1C fix round (0-B1, 0-B2, 2-E1C-ACC-01..04, 0-M1..0-M4) | integration | codex/e1c-client | dff31efc → 6cb6c929 | ports postgres 55449 (contracts/tasklocal.py, bfb3a8af), prefix infrx-e1c- | 2026-09-24 23:05Z | UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence) | 0–2 h remaining (likely 0.5 h), confidence high, estimated 2026-09-24 23:05Z; basis: merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree |
 | I8 | I8 1-7 (code/config half) | review | codex/i8-operate | dff31efc → 103d20a8 | ports postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af), prefix infrx-i8- | 2026-09-24 22:58Z | P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator) | 4–16 h remaining (likely 8 h), confidence medium, estimated 2026-09-24 22:58Z; basis: code half done and tested; left: coordinator ops O1-O14 (two ~1 h maintenance windows), I8 follow-ups after WR-I8-1..5 land (~1-2 h), inputs P-25/D10 outside the lane |
 | D10 | D10 all (SQL writer) | running | codex/d10-durable | dff31efc → — | ports postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af), prefix infrx-d10- | 2026-09-24 21:58Z | Wire 0010 media_uploads and jobs.result_expires_at (S3 F9); role-bound login or SET LOCAL (F6); P-02 USD inventory with G8. | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
-| M5 | M5 all | running | codex/m5-uploads | dff31efc → — | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-24 21:58Z | Durable upload lifecycle across gateway replacement; wire media_uploads (S3 F9). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
+| M5 | M5 1-4 | review | codex/m5-uploads | dff31efc → 35c401bd | ports postgres 55443, s3 55470 (contracts/tasklocal.py, bfb3a8af), prefix infrx-m5- | 2026-09-24 23:44Z | D10: 0019 lacks F2C's media_refused / UPLOAD_ABORT_REASONS (probe refusal not final on PostgreSQL); wiring request 1 needs D10's infrx/state/lifecycle.py on main | 1–6 h remaining (likely 3 h), confidence medium, estimated 2026-09-24 23:44Z; basis: all four points green on D10's real adapter, MinIO and separate OS processes; remaining: two wiring patches, D10 media_refused alignment (one xfail flips), review fixes, one box smoke |
 | W5 | W5 all | running | codex/w5-readiness | dff31efc → — | ports postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af), prefix infrx-w5- | 2026-09-24 21:58Z | Execution readiness; worker producer for the reconciliation gauges (S3 F4). | unknown (not estimated at baseline (lane has not inspected its slice yet)) |
 | G7 | G7 1-4 (+WR-I8-3, revocation bound) | review | codex/g7-catalog | dff31efc → 2bbfe0e3 | ports postgres 55446 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g7- | 2026-09-25 00:05Z | D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3, else every PG success reads unavailable (410); legacy-regime discovery publishes nothing until D10's PgCatalogDirectory.usd_price (WR-3a) | 1–8 h remaining (likely 3 h), confidence medium, estimated 2026-09-25 00:05Z; basis: all points implemented and green; left: review fixes, rerun on M5/D10 adapters at merge, WR-1 default decision fallout |
 | G8 | G8 points 1-4 (trusted account ops; idempotent bounded transition; approved-card gate + dry-run; races/retries) + acceptance | review | codex/g8-credit-ops | dff31efc → 6a075c56 | ports postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af), prefix infrx-g8- | 2026-09-24 23:14Z | P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only) | 2–8 h remaining (likely 4 h), confidence medium, estimated 2026-09-24 23:14Z; basis: code + local real-PG/composed-app proofs done; remaining = merged-SHA rerun with D10 0019/0020 (ready marker in pgworld.settle), wiring request 1, review fixes, box dry-run support, post-P-01 activation window |
@@ -143,7 +143,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ### Queues and locks
 
-- Review queue: I8, F2C-L, G8, M6, E3C, E2C, G7.
+- Review queue: I8, F2C-L, G8, M6, E3C, E2C, G7, M5.
 - Integration queue: E1C.
 - GPU box (pilot, single L40S): E4B run3 (historical run on bda1586) until ≈2026-09-25 01:20Z. One window at a time; until = latest soak end (box clock); the overload cell follows the soak. I8 live steps serialize after run3. No window allocated for E1B or E4C.
 - SQL writer (migrations): D10. D10 alone writes migrations (0001–0018 immutable).
@@ -165,7 +165,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 - warning: overlapping writers: E2C (review) and F2C-L (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/contracts/
 - warning: overlapping writers: E2C (review) and I8 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/i/
 - warning: overlapping writers: E2C (review) and D10 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/d/
-- warning: overlapping writers: E2C (review) and M5 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
+- warning: overlapping writers: E2C (review) and M5 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/m/
 - warning: overlapping writers: E2C (review) and W5 (running) both own apps/infrx-api/tests/ / apps/infrx-api/tests/w/
 - warning: overlapping writers: E2C (review) and G7 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/
 - warning: overlapping writers: E2C (review) and G8 (review) both own apps/infrx-api/tests/ / apps/infrx-api/tests/g/ops/
@@ -319,7 +319,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `F2C` | Freeze durable lifecycle, expiry and public capability corrections | Backend corrections | planned | review | active: lane active |
 | `E2C` | Make corrective verification reproducible on supported Linux | Backend corrections | planned | review | active: lane active |
 | `D10` | Persist uploads, execution eligibility, safe cleanup and result read authority | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
-| `M5` | Persist upload lifecycle across gateway replacement | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
+| `M5` | Persist upload lifecycle across gateway replacement | Backend corrections | planned | review | active: started before F2C (see lane deviation) |
 | `M6` | Implement restart-safe content cleanup and bounded caches | Backend corrections | planned | review | active: started before F2C, M5 (see lane deviation) |
 | `W5` | Enforce execution readiness and bounded worker recovery | Backend corrections | planned | running | active: started before F2C (see lane deviation) |
 | `G7` | Align public capability discovery, alias pricing and persisted result expiry | Backend corrections | planned | review | active: started before F2C (see lane deviation) |
@@ -332,6 +332,11 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Activity log (newest first)
 
+- 2026-09-25 00:08Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4, W5)
+- 2026-09-25 00:08Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4, W5)
+- 2026-09-25 00:08Z UTC, tracker: forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, W5)
+- 2026-09-25 00:08Z UTC, tracker: forecast E3C: unknown: no remaining-effort estimate for D10, M5, W5 → unknown: no remaining-effort estimate for D10, W5 (because: no remaining-effort estimate for D10, W5)
+- 2026-09-24 23:44Z UTC, M5: running → review; head 35c401bd; estimate likely unknown → 3 h (all four points green on D10's real adapter, MinIO and separate OS processes; remaining: two wiring patches, D10 media_refused alignment (one xfail flips), review fixes, one box smoke)
 - 2026-09-25 00:07Z UTC, tracker: forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, M5, U1R, U2, U3, U4, W5)
 - 2026-09-25 00:07Z UTC, tracker: forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, M5, U1R, U2, U3, U4, W5)
 - 2026-09-25 00:07Z UTC, tracker: forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, M5, W5)
