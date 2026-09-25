@@ -13,19 +13,31 @@
    preparation lease as well as an inference one (0016/0018 `fence_lease(...,
    ['preparation', 'inference'])`, the fake's `_fence_for_work`); in the CREDIT regime the
    worker's `jobs` is `CreditWork`, so this is `load_work_credit`.
-3. Media, only when the request carries any: wait (bounded) for the admitting gateway's
-   durable attach, which lands just after the admission commits (R99 (c)), then M's
+3. **W5 (RV-05): the durable execution-ready manifest, for EVERY job** - text-only as well
+   as video. Nothing is prepared, counted or stored for a job until its manifest is
+   committed where this process reads it: with F2C's `ReadinessStore` wired (`readiness=`,
+   D10's adapter) the claim goes through its marker-gated `claim_preparation` and the
+   manifest is `readiness(job_id)` - `None` (no marker: the previous runtime's job, or an
+   admission that never completed) is NOT READY and is never read as legacy-ready from any
+   other record; without it (a pre-D10 composition) the manifest is the durable attach the
+   admitting gateway writes after its late card/capability rechecks (R99 (c)), where a
+   PostgreSQL text job has none, so it fails closed. The wait is bounded (`ATTACH_WAIT_S`;
+   `not_claimable`, F2C's `not_ready`, after it). An EMPTY manifest is a completed one (a
+   text job), never missing work. Then, only when the request carries media, M's
    `prepare(job_id, profile)` over the object store and the shared processing cache.
 4. **The count, exactly as the engine counts it**: vLLM's `POST /tokenize` on the chat body
    `VllmEngine.upstream_body` would send (the chat template; for a video, the local file and
    the pinned `mm_processor_kwargs`). The answer is checked, never replaced or estimated: an
    integer `count` and exactly that many `tokens` (vLLM always answers both), and for a
-   video between one and 196
-   `video_token_id`s per two-frame patch of the pinned budget (`models/marlin2b/tokens.py`,
-   marlin-sop.md §1.5) - one placeholder is a tokenizer that skipped the multimodal
-   processor, and more than the budget is an engine not running the pinned profile. No
-   answer within `PREPARATION_TIMEOUT_S`, or one that fails a check, is
-   `dependency_unavailable`.
+   video between one `video_token_id` per two-frame patch of the pinned budget and the most
+   the pinned processor gives ANY geometry at that budget (`most_video_tokens`: up to two
+   frames fewer sampled, each allowed more pixels - W4's `decide.worst_tokens`; marlin-sop.md
+   §1.5) - one placeholder is a tokenizer that skipped the multimodal processor, and more
+   than the worst case is an engine not running the pinned profile. No answer within
+   `PREPARATION_TIMEOUT_S`, or one that fails a check, is `dependency_unavailable`. A video
+   item past the served engine's encoder budget (`ENCODER_CACHE_TOKENS`) is
+   `unsupported_media`: `/tokenize` does not apply that check and the chat route would
+   refuse it after the job was queued (P-23).
 5. `prepared(lease, refs, prompt_tokens=count)`, logged at INFO with the count and the
    tokenizer's latency (`prepared <job>: <n> prompt tokens (engine /tokenize, <ms> ms)`); a
    lost claim is logged at INFO too, a refused attempt at WARNING.
@@ -47,15 +59,19 @@ lives in this process only: the worker is `PartOf=` the engine's unit, so an eng
 `MEMO_ENTRIES` and by `PROCESSING_CACHE_TTL_S` (it never outlives the retention of the media
 it counted).
 
-**A typed refusal anywhere prepares nothing** (a fetch or stage `not_found`, an
-`unsupported_media`, the tokenizer's `dependency_unavailable`, a count past the job's
-ceiling): the lease is left to lapse, `recover` requeues the job with a fresh
-`prepare_dispatch` (R93), and the retries are bounded by `MAX_PREPUBLICATION_RETRIES` and
-`preparation_deadline_at`, past which the store settles it `preparation_failed`, released
-free (R29) - there is no port operation that fails a preparation, so the store's own
-deadline and retry bound are what end it. Anything untyped propagates - from the attempt
-or from its lease renewal (the store unreachable on `heartbeat`) - and W3's crash-only
-service drains and exits for a restart, as the inference pool does.
+**A typed refusal anywhere prepares nothing.** W5 item 3 splits them. A PERMANENT one - the
+same input can never pass: `unsupported_media` (codec, container, over the cap, past the
+encoder budget), `request_too_large`, `context_length_exceeded` (`PERMANENT`) - ends the job
+at once through the store's fenced `fail_preparation(lease, cause)` (`invalid_media`, or
+`preparation_failed` for the context), released free with its hold in that transaction:
+never a preparation lease cycled until the retries run out. Every other refusal (a fetch or
+stage `not_found`, the tokenizer's `dependency_unavailable`, not ready) is temporary: the
+lease is left to lapse, `recover` requeues the job with a fresh `prepare_dispatch` (R93),
+and the retries are bounded by `MAX_PREPUBLICATION_RETRIES` and `preparation_deadline_at`,
+past which the store settles it `preparation_failed`, released free (R29). A store without
+`fail_preparation` (pre-D10) takes the temporary path, logged. Anything untyped propagates -
+from the attempt or from its lease renewal (the store unreachable on `heartbeat`) - and
+W3's crash-only service drains and exits for a restart, as the inference pool does.
 
 The lease is renewed every third of `PREPARATION_LEASE_TTL_S` while the attempt runs (R52;
 the store never renews it past the phase deadline). A typed refusal of a renewal
@@ -77,7 +93,7 @@ import httpx
 
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings
-from ..contracts.records import MediaRef
+from ..contracts.records import MediaRef, TerminalCause
 from .engine import prepared_request
 
 log = logging.getLogger("infrx.worker")
@@ -86,8 +102,17 @@ TOKENIZE_PATH = "/tokenize"
 # research/models/marlin2b/config.json `video_token_id`: one per merged video patch.
 VIDEO_TOKEN_ID = 248057
 # marlin-sop.md §1.5 (`tokens.py`, measured): 196 prompt tokens per two-frame patch, i.e.
-# `size.longest_edge` (the clip's pixel budget) // 2048 at most.
-TOKENS_PER_PATCH, PIXELS_PER_TOKEN = 196, 2048
+# `size.longest_edge` (the clip's pixel budget) // 2048 for a fully sampled clip, of frames
+# of at most `PX_PER_FRAME` pixels each (profile A, `config.px_per_frame`).
+TOKENS_PER_PATCH, PIXELS_PER_TOKEN, PX_PER_FRAME = 196, 2048, 200_704
+# The served engine's pre-allocated encoder cache (models/marlin2b/serving-version.json
+# `engine_limits.encoder_cache_tokens`, meas. 2026-09-23): a video item needing more is
+# refused by the chat route. A serving version with another budget changes it here too.
+ENCODER_CACHE_TOKENS = 16_384
+# W5 item 3: refusals the same input can never outgrow, and the cause each ends the job with.
+PERMANENT = {errors.UnsupportedMedia: TerminalCause.invalid_media,
+             errors.RequestTooLarge: TerminalCause.invalid_media,
+             errors.ContextLengthExceeded: TerminalCause.preparation_failed}
 # The attach lands just after the admission commits; the emulation this replaces waited 10 s.
 ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05
 # TOKCOST: the video counts one worker process remembers (a key and an int, ~200 bytes each).
@@ -162,6 +187,16 @@ async def engine_prompt_tokens(engine, prepared, *,
     return checked_count(found, budget)
 
 
+def most_video_tokens(longest_edge: int, min_frames: int) -> int:
+    """The most `video_token_id`s the pinned processor gives any geometry at a clip budget of
+    `longest_edge` pixels: it may sample up to two frames fewer than the budget's count (a
+    source just under 2 fps), each then allowed more pixels, rounded per two-frame group -
+    W4's `decide.worst_tokens`, which reproduces the engine's measured refusals."""
+    frames = longest_edge // PX_PER_FRAME
+    return max(-(-sampled // 2) * (longest_edge // (min(round(sampled / 2) * 2, sampled) * 1024))
+               for sampled in range(max(min_frames, frames - 2), frames + 1))
+
+
 def checked_count(found, budget: dict | None) -> int:
     """R105: the `/tokenize` answer `found` is the count only when it is one (an integer and
     exactly that many tokens; for a video, `budget`, the pinned number of `video_token_id`s),
@@ -173,12 +208,18 @@ def checked_count(found, budget: dict | None) -> int:
     if not isinstance(tokens, list) or len(tokens) != count:
         raise errors.DependencyUnavailable("the engine's count disagrees with its tokens")
     if budget:
-        most = budget["size"]["longest_edge"] // PIXELS_PER_TOKEN
+        longest = budget["size"]["longest_edge"]
+        patches = longest // PX_PER_FRAME // 2
+        most = most_video_tokens(longest, budget["min_frames"])
         video = tokens.count(VIDEO_TOKEN_ID)
-        if not most // TOKENS_PER_PATCH <= video <= most:
+        if not patches <= video <= most:
             raise errors.DependencyUnavailable(
                 f"the engine counted {video} video tokens; the pinned profile makes "
-                f"{most // TOKENS_PER_PATCH}..{most}")
+                f"{patches}..{most}")
+        if video > ENCODER_CACHE_TOKENS:
+            raise errors.UnsupportedMedia(
+                f"the video needs {video} video tokens; the served engine takes at most "
+                f"{ENCODER_CACHE_TOKENS}", param="messages")
     return count
 
 
@@ -191,6 +232,7 @@ class PreparationResult:
     refusal: str | None = None               # the error code when it was not
     prompt_tokens: int | None = None
     detail: str = ""
+    ended: str | None = None                 # W5: the cause a permanent refusal ended it with
 
 
 class PreparationRunner:
@@ -198,8 +240,12 @@ class PreparationRunner:
 
     def __init__(self, *, jobs, media, engine, worker_id: str,
                  limits: PilotSettings = DEFAULTS, attach_wait_s: float = ATTACH_WAIT_S,
-                 renew_every_s: float | None = None, memo: CountMemo | None = None) -> None:
+                 renew_every_s: float | None = None, memo: CountMemo | None = None,
+                 readiness=None) -> None:
         self.jobs = jobs                         # ports.JobStore (CreditWork in CREDIT)
+        # W5: F2C's `ReadinessStore` (D10's adapter) - the marker-gated claim and the manifest.
+        # None only in a pre-D10 composition (the durable attach record is the manifest).
+        self.readiness = readiness
         self.media = media                       # M's MediaPreparation
         self.engine = engine                     # VllmEngine: its body and its /tokenize
         self.worker_id = worker_id
@@ -209,9 +255,15 @@ class PreparationRunner:
         # One per process: the pool's runners share this runner (TOKCOST).
         self.memo = CountMemo(ttl_s=limits.processing_cache_ttl_s) if memo is None else memo
 
+    @property
+    def claims(self):
+        """The door a preparation is claimed through: the ReadinessStore's marker-gated
+        `claim_preparation` when one is wired, else the JobStore's (pre-D10)."""
+        return self.readiness or self.jobs
+
     async def run(self, job_id: str) -> PreparationResult:
         try:
-            lease = await self.jobs.claim_preparation(job_id, self.worker_id)
+            lease = await self.claims.claim_preparation(job_id, self.worker_id)
         except errors.DomainError as refused:
             # The index is a hint (02 §4): a candidate offered twice, or a job that moved
             # on, is a lost claim - answered, never a dead runner.
@@ -222,7 +274,8 @@ class PreparationRunner:
             count = await self._prepare(lease)
         except errors.DomainError as refused:
             log.warning("preparation of %s refused: %s", job_id, refused.code)
-            return PreparationResult(job_id, refusal=refused.code, detail=str(refused))
+            return PreparationResult(job_id, refusal=refused.code, detail=str(refused),
+                                     ended=await self._end(lease, refused))
         finally:
             renewing.cancel()
             await asyncio.gather(renewing, return_exceptions=True)
@@ -233,6 +286,8 @@ class PreparationRunner:
 
     async def _prepare(self, lease) -> int:
         work = await self.jobs.load_work(lease)
+        # W5 (RV-05): the barrier, for text as for media - before anything is counted.
+        await self._ready(lease.job_id)
         refs: tuple[MediaRef, ...] = ()
         if work.media_refs:
             refs = await self._media(lease.job_id)
@@ -254,18 +309,53 @@ class PreparationRunner:
                  took_ms)
         return count
 
+    async def _end(self, lease, refused: errors.DomainError) -> str | None:
+        """W5 item 3: a PERMANENT refusal ends the job once, through the store's fenced
+        `fail_preparation`; the settled cause, or the refusal of that call (another worker or
+        the client ended it first). None: temporary, the lease lapses."""
+        cause = next((cause for kind, cause in PERMANENT.items() if isinstance(refused, kind)),
+                     None)
+        if cause is None:
+            return None
+        fail = getattr(self.jobs, "fail_preparation", None)
+        if fail is None:
+            log.warning("preparation of %s refused for good, but the store cannot end it: "
+                        "its lease lapses", lease.job_id)
+            return None
+        try:
+            ended = await fail(lease, cause)
+        except errors.DomainError as lost:
+            return lost.code
+        log.warning("preparation of %s ended: %s", lease.job_id, ended.cause.value)
+        return ended.cause.value
+
     async def _ask(self, prepared) -> int:
         """The engine's own count, checked, within the preparation budget."""
         count = await engine_prompt_tokens(self.engine, prepared,
                                            timeout_s=self.limits.preparation_timeout_s)
         return count
 
-    async def _media(self, job_id: str) -> tuple[MediaRef, ...]:
+    async def _ready(self, job_id: str) -> tuple[MediaRef, ...]:
+        """The job's committed source manifest - `()` for a text job - waited for within
+        `attach_wait_s`, or `not_claimable` (F2C's `not_ready`): nothing is prepared."""
         end = time.monotonic() + self.attach_wait_s
-        while await self.media.attached(job_id) is None:
+        while (manifest := await self._manifest(job_id)) is None:
             if time.monotonic() >= end:
-                raise errors.NotFound(f"job {job_id} has no durable attach")
+                raise errors.NotClaimable(f"job {job_id} is not execution-ready")
             await asyncio.sleep(ATTACH_POLL_S)
+        return manifest
+
+    async def _manifest(self, job_id: str) -> tuple[MediaRef, ...] | None:
+        """The committed marker's sources (`None`: no marker - not ready, whatever else is
+        recorded), or without a `ReadinessStore` the durable attach record (R99 (c): a
+        pre-D10 PostgreSQL store records no attach of NO media, so a text job there is
+        never ready - fail closed until D10's marker is wired)."""
+        if self.readiness is None:
+            return await self.media.attached(job_id)
+        ready = await self.readiness.readiness(job_id)
+        return None if ready is None else tuple(source.ref for source in ready.sources)
+
+    async def _media(self, job_id: str) -> tuple[MediaRef, ...]:
         refs = await self.media.prepare(job_id, self.media.profile_version)
         # Verifier F3: MediaPreparation keeps a per-job entry for the gateway's relay; nothing in
         # this long-lived process reads it, so it must not grow by one video job forever.

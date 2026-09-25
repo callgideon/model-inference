@@ -1718,6 +1718,33 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "            if at is None or not 0 <= rt.clock() - at < rt.settings.price_ttl:",
        "            if True:",
        "test_catalog_truth__a_catalog_change_reaches_discovery_within_the_cache_window"),
+    # --- W5 wiring 4: admission through the ReadinessStore (the marker W5's worker claims on)
+    _m("w5_marker_skipped", "an admission writes its execution-ready marker (admit_ready)",
+       R, "            if self.readiness is not None:\n                # One transaction: admission,",
+       "            if False:\n                # One transaction: admission,",
+       "test_w5_admit__an_admission_writes_the_marker_the_worker_claims_on",
+       "test_w5_admit__a_credit_expectation_names_the_approved_card",
+       "test_w5_admit__a_card_this_runtime_did_not_approve_admits_nothing",
+       "test_w5_admit__an_upload_past_its_window_at_admission_admits_nothing",
+       "test_w5_admit__a_refusal_is_its_wire_error_and_admits_nothing",
+       "test_w5_admit__a_replay_admit_ready_answers_is_the_recorded_job"),
+    _m("w5_expectation_without_card", "a CREDIT runtime expects its approved card (R69)",
+       P, 'accounting_regime=regime, rate_card_version=card if regime == "credit" else None)',
+       "accounting_regime=regime, rate_card_version=None)",
+       "test_w5_compose__the_relay_gets_the_readiness_store_and_this_runtimes_expectation",
+       dies_by=("RuntimeMisconfigured",)),
+    _m("w5_pg_store_without_readiness", "a PostgreSQL job store never admits without a marker",
+       P, "        if isinstance(jobs, PgJobStore):", "        if False:",
+       "test_w5_compose__a_postgresql_job_store_never_admits_without_a_readiness_store"),
+    _m("w5_readiness_store_unchecked", "only a ReadinessStore is composed as one",
+       P, "    if not isinstance(readiness, ReadinessStore):", "    if False:",
+       "test_w5_compose__a_postgresql_job_store_never_admits_without_a_readiness_store"),
+    _m("w5_relay_expectation_unchecked", "a relay admits only with this runtime's expectation",
+       R, "            if not isinstance(expected, AdmissionExpectation) \\\n"
+          "                    or expected.accounting_regime.value != self.regime \\\n"
+          "                    or expected.rate_card_version != card:",
+       "            if False:",
+       "test_w5_compose__a_relay_refuses_an_expectation_that_is_not_its_own"),
 )
 
 

@@ -1,0 +1,22 @@
+{
+  "task": "W5",
+  "slice": "W5-ADMIT-WIRING (wiring request 4, gateway side)",
+  "activity": "review",
+  "head": "f5784d0c",
+  "worktree": ".claude/worktrees/codex-w5-merge",
+  "branch": "codex/w5-merge",
+  "owned_paths": ["apps/infrx-api/infrx/gateway/routes/relay.py", "apps/infrx-api/infrx/gateway/pilot.py", "apps/infrx-api/tests/g/"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=w5 +MinIO pytest -q -rxXs tests/w", "exit": 0, "summary": "308 passed, 3 skipped (mutant placeholders); 7 MinIO round trips ran; the 5 PG round trips pass"},
+    {"cmd": "INFRX_D_TASK=w5 +MinIO INFRX_MUTANTS=all w5/prep_worker/worker_main mutants", "exit": 0, "summary": "145 passed; no broken_runner"},
+    {"cmd": "INFRX_D_TASK=w5 pytest -q tests/g tests/m tests/contracts", "exit": 0, "summary": "2550 passed, 27 skipped (S3-gated M); no deselect"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/g/test_mutants.py", "exit": 1, "summary": "397 passed, 1 misdeclared (given_stores_replaced anchor) - fixed in f5784d0c, rerun killed; 5 new W5 mutants killed"},
+    {"cmd": "INFRX_D_TASK=w5 pytest -q tests/d/test_ready.py tests/d/test_composition_pg.py tests/g/test_composition.py", "exit": 1, "summary": "1 pre-existing failure (legacy_usd price_source), same on e1bcc662"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "W PG round trips and mutant lists green; remaining gap is M6 phase-2 fetched-source registration", "at": "2026-09-25T19:16Z"},
+  "next_action": "merge codex/w5-merge together with codex/m6-phase2-merge (URL video needs fetched sources registered for admit_ready), then rerun E3C",
+  "blockers": [],
+  "wiring_requests": ["M6 phase 2 must merge with this wiring: MediaPreparation.materialize must register fetched sources as content, else admit_ready refuses URL video not_found (404)"],
+  "evidence": ["research/plan/evidence/w/W5-admit-wiring-f5784d0.md"]
+}
