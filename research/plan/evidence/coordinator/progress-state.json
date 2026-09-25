@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 24,
-  "updated": "2026-09-25T00:44:22Z",
+  "revision": 25,
+  "updated": "2026-09-25T00:46:49Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -807,33 +807,82 @@
     {
       "id": "W5",
       "task": "W5",
-      "slice": "all",
+      "slice": "items 1-4 + S3 F4 + E3C s04/s05 cases (lane complete; integration pending wiring)",
       "agent": "opus",
       "branch": "codex/w5-readiness",
       "worktree": ".claude/worktrees/codex-w5-readiness",
       "base": "dff31efc",
-      "head": null,
+      "head": "27afab76",
       "isolation": {
         "ports": "postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-w5-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-24T21:58:00Z",
-      "blocker": null,
-      "next_action": "Execution readiness; worker producer for the reconciliation gauges (S3 F4).",
+      "updated": "2026-09-25T00:35:00Z",
+      "blocker": "merged-tree PostgreSQL round trip needs G7 admit_ready + D10 0019/PgLifecycle + wiring 1 together; fail_preparation port (F2C) and PostgreSQL adapter (D10) not yet committed: permanent refusals lapse (bounded) until then; box warmup/cold-cache run needs the pinned engine after certification run3",
+      "next_action": "rerun tests/w at 27afab76; apply W5-wiring-27afab7.patch with D10 PgLifecycle; fail_preparation port/adapter; G7 admit_ready; merged PG round trip; box warmup run after run3",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "lane code and local/PG proof done; left: apply wiring 1-2, F2C/D10 fail_preparation port+adapter, merged-tree PG round trip with G7 admit_ready, one box run of W5-box-warmup.sh",
+        "at": "2026-09-25T00:35:33Z"
       },
-      "evidence": [],
-      "commands": [],
-      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order."
+      "evidence": [
+        "research/plan/evidence/w/W5-27afab7.md",
+        "research/plan/evidence/w/W5-wiring-27afab7.patch",
+        "research/plan/evidence/w/W5-box-warmup.sh"
+      ],
+      "commands": [
+        {
+          "cmd": "make api-env",
+          "exit": 0,
+          "summary": "pinned env"
+        },
+        {
+          "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs (at 27afab76)",
+          "exit": null,
+          "summary": "not completed at handoff (session limit); last complete: d04526b9 291 passed, 10 skipped"
+        },
+        {
+          "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs (at 27afab76)",
+          "exit": 0,
+          "summary": "31 passed, 1 skipped: 25/25 service-free + 1/1 PostgreSQL mutants killed; 1 PostgreSQL mutant needs D10's adapter (killed on 16ff5771 + D10.a)"
+        },
+        {
+          "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_{mutants,loop_mutants,w3_mutants,w4_mutants,worker_main_mutants,prep_worker_mutants,w5_mutants}.py -rs (at 16ff5771)",
+          "exit": 0,
+          "summary": "551 passed, 13 skipped (12 need MinIO, 1 needs D10), 0 survived"
+        },
+        {
+          "cmd": "git apply --check W5-wiring-27afab7.patch; on 16ff5771+patch+D10.a: compose test + 2 wiring mutants",
+          "exit": 0,
+          "summary": "applies; 5 passed"
+        },
+        {
+          "cmd": "bash -n W5-box-warmup.sh; DRY_RUN=1 bash W5-box-warmup.sh",
+          "exit": 0,
+          "summary": "syntax ok; plan + self-check pass; box run pending (pinned engine, after run3)"
+        }
+      ],
+      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
+      "owned_paths": [
+        "apps/infrx-api/infrx/worker/",
+        "apps/infrx-api/tests/w/",
+        "research/plan/evidence/w/W5-27afab7.md",
+        "research/plan/evidence/w/W5-wiring-27afab7.patch",
+        "research/plan/evidence/w/W5-box-warmup.sh"
+      ],
+      "wiring_requests": [
+        "apps/infrx-api/infrx/worker/__main__.py compose(): PreparationRunner(readiness=PgLifecycle(connect, limits=limits)); WorkerService(reconciliation=PgReconciliation(connect)) - W5-wiring-27afab7.patch with its test and 2 mutants",
+        "Makefile api-mutants: add tests/w/test_w5_mutants.py (same patch)",
+        "F2C port + D10 PostgreSQL: JobStore.fail_preparation(lease, cause) (R104 third candidate), semantics in W5-27afab7.md",
+        "G7: gateway admission calls admit_ready (D1) for text and media",
+        "E/I8: read infrx_reconciliation_drift / infrx_unsettleable_jobs / infrx_holds_unknown from the worker's /metrics (8002) in certify's soak and the Prometheus scrape"
+      ]
     },
     {
       "id": "G7",
@@ -1229,6 +1278,12 @@
       "lane": "E2C",
       "task": "E2C",
       "head": "f61d2f0b"
+    },
+    {
+      "since": "2026-09-25T00:35:00Z",
+      "lane": "W5",
+      "task": "W5",
+      "head": "27afab76"
     }
   ],
   "integration_queue": [],
@@ -2289,6 +2344,32 @@
       "by": "G8",
       "what": "review → complete; head 09f4ab2a; estimate likely 4 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a))",
       "source": "updates/G8-20260925T004422Z.json"
+    },
+    {
+      "at": "2026-09-25T00:35:00Z",
+      "by": "W5",
+      "what": "running → review; head 27afab76; estimate likely unknown → 6 h (lane code and local/PG proof done; left: apply wiring 1-2, F2C/D10 fail_preparation port+adapter, merged-tree PG round trip with G7 admit_ready, one box run of W5-box-warmup.sh)",
+      "source": "updates/W5-20260925T0035Z.json"
+    },
+    {
+      "at": "2026-09-25T00:46:49Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, W5 → unknown: no remaining-effort estimate for D10 (because: no remaining-effort estimate for D10)"
+    },
+    {
+      "at": "2026-09-25T00:46:49Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C)"
+    },
+    {
+      "at": "2026-09-25T00:46:49Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4)"
+    },
+    {
+      "at": "2026-09-25T00:46:49Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)"
     }
   ],
   "history": {
@@ -2424,10 +2505,14 @@
     "G8-20260925T004422Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:44:22Z"
+    },
+    "W5-20260925T0035Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:35:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:44:22Z",
+    "computed_at": "2026-09-25T00:46:49Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2437,8 +2522,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, W5",
-        "constraint": "no remaining-effort estimate for D10, W5",
+        "text": "unknown: no remaining-effort estimate for D10",
+        "constraint": "no remaining-effort estimate for D10",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2451,7 +2536,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2464,7 +2549,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, U1R, U2, U3, U4",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2477,7 +2562,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4",
         "effort_h": null,
         "wall_h": null,
         "finish": null,

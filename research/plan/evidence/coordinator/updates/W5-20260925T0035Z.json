@@ -1,0 +1,73 @@
+{
+  "task": "W5",
+  "slice": "items 1-4 + S3 F4 + E3C s04/s05 cases (lane complete; integration pending wiring)",
+  "activity": "review",
+  "head": "27afab76",
+  "worktree": ".claude/worktrees/codex-w5-readiness",
+  "branch": "codex/w5-readiness",
+  "owned_paths": [
+    "apps/infrx-api/infrx/worker/",
+    "apps/infrx-api/tests/w/",
+    "research/plan/evidence/w/W5-27afab7.md",
+    "research/plan/evidence/w/W5-wiring-27afab7.patch",
+    "research/plan/evidence/w/W5-box-warmup.sh"
+  ],
+  "commands": [
+    {
+      "cmd": "make api-env",
+      "exit": 0,
+      "summary": "pinned env"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs (at 27afab76)",
+      "exit": null,
+      "summary": "not completed at handoff (session limit); last complete: d04526b9 291 passed, 10 skipped"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs (at 27afab76)",
+      "exit": 0,
+      "summary": "31 passed, 1 skipped: 25/25 service-free + 1/1 PostgreSQL mutants killed; 1 PostgreSQL mutant needs D10's adapter (killed on 16ff5771 + D10.a)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_{mutants,loop_mutants,w3_mutants,w4_mutants,worker_main_mutants,prep_worker_mutants,w5_mutants}.py -rs (at 16ff5771)",
+      "exit": 0,
+      "summary": "551 passed, 13 skipped (12 need MinIO, 1 needs D10), 0 survived"
+    },
+    {
+      "cmd": "git apply --check W5-wiring-27afab7.patch; on 16ff5771+patch+D10.a: compose test + 2 wiring mutants",
+      "exit": 0,
+      "summary": "applies; 5 passed"
+    },
+    {
+      "cmd": "bash -n W5-box-warmup.sh; DRY_RUN=1 bash W5-box-warmup.sh",
+      "exit": 0,
+      "summary": "syntax ok; plan + self-check pass; box run pending (pinned engine, after run3)"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "lane code and local/PG proof done; left: apply wiring 1-2, F2C/D10 fail_preparation port+adapter, merged-tree PG round trip with G7 admit_ready, one box run of W5-box-warmup.sh",
+    "at": "2026-09-25T00:35:33Z"
+  },
+  "blockers": [
+    "merged-tree PostgreSQL round trip needs G7 admit_ready + D10 0019/PgLifecycle + wiring 1 together",
+    "fail_preparation port (F2C) and PostgreSQL adapter (D10) not yet committed: permanent refusals lapse (bounded) until then",
+    "box warmup/cold-cache run needs the pinned engine after certification run3"
+  ],
+  "wiring_requests": [
+    "apps/infrx-api/infrx/worker/__main__.py compose(): PreparationRunner(readiness=PgLifecycle(connect, limits=limits)); WorkerService(reconciliation=PgReconciliation(connect)) - W5-wiring-27afab7.patch with its test and 2 mutants",
+    "Makefile api-mutants: add tests/w/test_w5_mutants.py (same patch)",
+    "F2C port + D10 PostgreSQL: JobStore.fail_preparation(lease, cause) (R104 third candidate), semantics in W5-27afab7.md",
+    "G7: gateway admission calls admit_ready (D1) for text and media",
+    "E/I8: read infrx_reconciliation_drift / infrx_unsettleable_jobs / infrx_holds_unknown from the worker's /metrics (8002) in certify's soak and the Prometheus scrape"
+  ],
+  "evidence": [
+    "research/plan/evidence/w/W5-27afab7.md",
+    "research/plan/evidence/w/W5-wiring-27afab7.patch",
+    "research/plan/evidence/w/W5-box-warmup.sh"
+  ],
+  "next_action": "rerun tests/w at 27afab76; apply W5-wiring-27afab7.patch with D10 PgLifecycle; fail_preparation port/adapter; G7 admit_ready; merged PG round trip; box warmup run after run3"
+}
