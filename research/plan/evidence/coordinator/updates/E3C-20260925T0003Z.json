@@ -1,0 +1,38 @@
+{
+  "task": "E3C",
+  "slice": "phase 1: red harness (runner + verdict, scenario matrix s01-s13, failure sensitivity)",
+  "activity": "review",
+  "head": "8406c798",
+  "worktree": ".claude/worktrees/codex-e3c-integration",
+  "branch": "codex/e3c-integration",
+  "owned_paths": ["tests/integration/backend/e3c/", "research/plan/evidence/e/E3C-8406c79.md",
+                  "research/plan/evidence/coordinator/updates/E3C-20260925T0003Z.json"],
+  "commands": [
+    {"cmd": "runner.py --pull --keep --only s12 --out $SC/boot", "exit": 3,
+     "summary": "every scenario BLOCKED: pinned quay.io/minio/minio@sha256:14cea4... answers 401 (missing-service path measured live)"},
+    {"cmd": "runner.py --s3-image pgsty/minio@sha256:b6bfe723... --out $SC/run1 (at 3f678997)", "exit": 1,
+     "summary": "15:04 wall; 20 failed, 32 passed, 3 skipped; gate FAIL"},
+    {"cmd": "runner.py --s3-image ... --out $SC/run2 (at db61306f)", "exit": 1,
+     "summary": "14:43 wall; 19 failed, 34 passed, 4 skipped; s05[readiness] premise race found and fixed in 8406c798"},
+    {"cmd": "runner.py --keep [--reuse] --only s05 -k 'readiness and s05' x3 (at 8406c798)", "exit": 1,
+     "summary": "s05[readiness] FAIL 3/3 (RV-05)"},
+    {"cmd": "runner.py --s3-image ... --out $SC/run3 (at 8406c798, the evidence run)", "exit": 1,
+     "summary": "13:46 wall; 20 failed, 33 passed, 4 skipped; FAIL s03 s04 s05 s06 s07 s08 s10 s13; BLOCKED s01(E1C) s09(G8) s11(M6,D10); PASS s02 s12; controls PASS 5, NOT RUN 4 (2 revert-type, 2 over red cases); teardown PASS"},
+    {"cmd": "pytest -q tests/integration/backend (layer 0, no stack)", "exit": 0, "summary": "130 passed, 79 skipped"},
+    {"cmd": "pytest -q tests/integration/backend/e3c (no stack)", "exit": 0, "summary": "12 passed"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 6, "pessimistic_h": 12, "confidence": "medium",
+               "basis": "phase 2 = rerun per merged SHA (~15 min) + re-pointing the named seams (POINTS candidates, collector entry, G8/G7 hooks, D10 lifecycle factory for F2C-L transcript replay) + the two revert-type controls",
+               "at": "2026-09-25T00:03Z"},
+  "blockers": [
+    "WR-2: the pinned MinIO digest is unpullable (quay 401); runs use --s3-image as a recorded deviation",
+    "phase 2 needs D10, M5, M6, W5, G7, G8, I8, E1C, F2C merged"
+  ],
+  "wiring_requests": [
+    "WR-1 E2C tests/integration/harness.py: NAMESPACES += {\"e3c\": 1400}",
+    "WR-2 E2C tests/integration/compose.yaml (+environment.json/ENVIRONMENT.md): repin s3 to a reachable digest (run used pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372)",
+    "WR-3 coordinator Makefile: backend-local target -> tests/integration/backend/e3c/runner.py --out ${E3C_OUT:-${TMPDIR:-/tmp}/infrx-e3c}; E2C gates.py consumer-local stage reading <out>/e3c/verdict.json",
+    "WR-4 D10/I8 -> E3C phase 2: the runtime login for the clone, passed by world.composed as DATABASE_URL"
+  ],
+  "evidence": ["research/plan/evidence/e/E3C-8406c79.md"]
+}

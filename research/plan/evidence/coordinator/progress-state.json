@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 17,
-  "updated": "2026-09-24T23:24:17Z",
+  "revision": 18,
+  "updated": "2026-09-25T00:05:33Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -914,33 +914,82 @@
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": "phase 1: red harness (tests/integration/backend/e3c/): scenario runner, fault injection, verdicts, the matrix run on the base tree; phase 2 = green on the merged SHA",
+      "slice": "phase 1: red harness (runner + verdict, scenario matrix s01-s13, failure sensitivity)",
       "agent": "opus",
       "branch": "codex/e3c-integration",
       "worktree": ".claude/worktrees/codex-e3c-integration",
       "base": "f764e396",
-      "head": null,
+      "head": "8406c798",
       "isolation": {
         "ports": "compose block 56900-56999 (postgres 56932)",
         "prefix": "infrx-e3c-",
         "db": "infrx_e3c"
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:59:40Z",
-      "updated": "2026-09-24T21:59:40Z",
-      "blocker": "after E2C + F2C; integrates all runtime lanes",
+      "updated": "2026-09-25T00:03:00Z",
+      "blocker": "WR-2: the pinned MinIO digest is unpullable (quay 401); runs use --s3-image as a recorded deviation; phase 2 needs D10, M5, M6, W5, G7, G8, I8, E1C, F2C merged",
       "next_action": "scenario matrix red/blocked on f764e396",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "dispatched; lane has not yet inspected the slice",
-        "at": "2026-09-24T21:59:40Z"
+        "optimistic_h": 3,
+        "likely_h": 6,
+        "pessimistic_h": 12,
+        "confidence": "medium",
+        "basis": "phase 2 = rerun per merged SHA (~15 min) + re-pointing the named seams (POINTS candidates, collector entry, G8/G7 hooks, D10 lifecycle factory for F2C-L transcript replay) + the two revert-type controls",
+        "at": "2026-09-25T00:03Z"
       },
-      "evidence": [],
-      "commands": [],
-      "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)"
+      "evidence": [
+        "research/plan/evidence/e/E3C-8406c79.md"
+      ],
+      "commands": [
+        {
+          "cmd": "runner.py --pull --keep --only s12 --out $SC/boot",
+          "exit": 3,
+          "summary": "every scenario BLOCKED: pinned quay.io/minio/minio@sha256:14cea4... answers 401 (missing-service path measured live)"
+        },
+        {
+          "cmd": "runner.py --s3-image pgsty/minio@sha256:b6bfe723... --out $SC/run1 (at 3f678997)",
+          "exit": 1,
+          "summary": "15:04 wall; 20 failed, 32 passed, 3 skipped; gate FAIL"
+        },
+        {
+          "cmd": "runner.py --s3-image ... --out $SC/run2 (at db61306f)",
+          "exit": 1,
+          "summary": "14:43 wall; 19 failed, 34 passed, 4 skipped; s05[readiness] premise race found and fixed in 8406c798"
+        },
+        {
+          "cmd": "runner.py --keep [--reuse] --only s05 -k 'readiness and s05' x3 (at 8406c798)",
+          "exit": 1,
+          "summary": "s05[readiness] FAIL 3/3 (RV-05)"
+        },
+        {
+          "cmd": "runner.py --s3-image ... --out $SC/run3 (at 8406c798, the evidence run)",
+          "exit": 1,
+          "summary": "13:46 wall; 20 failed, 33 passed, 4 skipped; FAIL s03 s04 s05 s06 s07 s08 s10 s13; BLOCKED s01(E1C) s09(G8) s11(M6,D10); PASS s02 s12; controls PASS 5, NOT RUN 4 (2 revert-type, 2 over red cases); teardown PASS"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend (layer 0, no stack)",
+          "exit": 0,
+          "summary": "130 passed, 79 skipped"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/e3c (no stack)",
+          "exit": 0,
+          "summary": "12 passed"
+        }
+      ],
+      "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)",
+      "owned_paths": [
+        "tests/integration/backend/e3c/",
+        "research/plan/evidence/e/E3C-8406c79.md",
+        "research/plan/evidence/coordinator/updates/E3C-20260925T0003Z.json"
+      ],
+      "wiring_requests": [
+        "WR-1 E2C tests/integration/harness.py: NAMESPACES += {\"e3c\": 1400}",
+        "WR-2 E2C tests/integration/compose.yaml (+environment.json/ENVIRONMENT.md): repin s3 to a reachable digest (run used pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372)",
+        "WR-3 coordinator Makefile: backend-local target -> tests/integration/backend/e3c/runner.py --out ${E3C_OUT:-${TMPDIR:-/tmp}/infrx-e3c}; E2C gates.py consumer-local stage reading <out>/e3c/verdict.json",
+        "WR-4 D10/I8 -> E3C phase 2: the runtime login for the clone, passed by world.composed as DATABASE_URL"
+      ]
     },
     {
       "id": "E4C",
@@ -997,6 +1046,12 @@
       "lane": "M6",
       "task": "M6",
       "head": "73760244"
+    },
+    {
+      "since": "2026-09-25T00:03:00Z",
+      "lane": "E3C",
+      "task": "E3C",
+      "head": "8406c798"
     }
   ],
   "integration_queue": [
@@ -1938,6 +1993,32 @@
       "at": "2026-09-24T23:24:17Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-25T00:03:00Z",
+      "by": "E3C",
+      "what": "running → review; head 8406c798; estimate likely unknown → 6 h (phase 2 = rerun per merged SHA (~15 min) + re-pointing the named seams (POINTS candidates, collector entry, G8/G7 hooks, D10 lifecycle factory for F2C-L transcript replay) + the two revert-type controls)",
+      "source": "updates/E3C-20260925T0003Z.json"
+    },
+    {
+      "at": "2026-09-25T00:05:33Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, E2C, E3C, G7, M5, W5 → unknown: no remaining-effort estimate for D10, E2C, G7, M5, W5 (because: no remaining-effort estimate for D10, E2C, G7, M5, W5)"
+    },
+    {
+      "at": "2026-09-25T00:05:33Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E4C, G7, M5, W5)"
+    },
+    {
+      "at": "2026-09-25T00:05:33Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4C, G7, M5, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-25T00:05:33Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5)"
     }
   ],
   "history": {
@@ -2028,10 +2109,14 @@
     "M6-20260924T2325Z.json": {
       "status": "applied",
       "at": "2026-09-24T23:25:00Z"
+    },
+    "E3C-20260925T0003Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:03:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-24T23:24:17Z",
+    "computed_at": "2026-09-25T00:05:33Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2041,8 +2126,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, E2C, E3C, G7, M5, W5",
-        "constraint": "no remaining-effort estimate for D10, E2C, E3C, G7, M5, W5",
+        "text": "unknown: no remaining-effort estimate for D10, E2C, G7, M5, W5",
+        "constraint": "no remaining-effort estimate for D10, E2C, G7, M5, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2055,7 +2140,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E3C, E4C, G7, M5, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E4C, G7, M5, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2068,7 +2153,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4C, G7, M5, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4C, G7, M5, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2081,7 +2166,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E3C, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
