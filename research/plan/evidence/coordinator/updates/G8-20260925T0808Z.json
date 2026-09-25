@@ -1,0 +1,10 @@
+{"task":"G8","slice":"G8-TRANSITION-LOCK","activity":"review","head":"15b5c863","worktree":".claude/worktrees/codex-g8-transition-lock","branch":"codex/g8-transition-lock",
+ "owned_paths":["apps/infrx-api/infrx/operations/","apps/infrx-api/tests/g/ops/","research/plan/evidence/g/G8-*.md","research/plan/evidence/coordinator/updates/G8-*.json"],
+ "commands":[
+  {"cmd":"INFRX_D_TASK=g8 timeout 120 pytest tests/g/ops/test_transition_pg.py -k across_the_freeze @bd556c5f (original)","exit":124,"summary":"hung (fail-first)"},
+  {"cmd":"same with the timed test @bd556c5f","exit":1,"summary":"did not return within 30.0s"},
+  {"cmd":"INFRX_D_TASK=g8 pytest -q tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py","exit":0,"summary":"117 passed"},
+  {"cmd":"INFRX_D_TASK=g8 INFRX_MUTANTS=all pytest -q tests/g/ops/test_mutants.py","exit":0,"summary":"100 passed (94/94 killed)"},
+  {"cmd":"pytest -q tests/g --ignore=tests/g/ops","exit":0,"summary":"528 passed"}],
+ "estimate":{"optimistic_h":0.5,"likely_h":1,"pessimistic_h":2,"confidence":"high","basis":"merge + merged-tree cross-track rerun without the straddle deselect","at":"2026-09-25T08:08Z"},
+ "blockers":[],"wiring_requests":[],"evidence":["research/plan/evidence/g/G8-44ea477.md"]}
