@@ -9,7 +9,9 @@
 #                      certify/E1B tenant is the one E4C reconciles
 #   P24_APPROVED       the P-24 approval reference for that recurring spend; unset = the
 #                      canary timer is NOT enabled (BLOCKED (P-24)), everything else installs
-#   ALERT_WEBHOOK_PARAM  SSM name of the P-25 destination; unset = delivery stays BLOCKED
+#   ALERT_WEBHOOK_PARAM  SSM name of a P-25 webhook destination (a credential), or
+#   ALERT_SNS_TOPIC_ARN  a P-25 SNS topic ARN (not a secret; the instance role needs
+#                        sns:Publish on it). Exactly one; neither = delivery stays BLOCKED
 #   ALERT_OWNER, ALERT_ESCALATION   P-25's owner and escalation (names/handles, not secrets)
 #   MONITOR_DSN_PARAM  SSM name of D10's read-only monitor DSN; unset = the runtime DSN on 6543
 # Rollback: systemctl disable --now infrx-observe.timer infrx-canary.timer; rm the four unit
@@ -22,6 +24,16 @@ R=${INFRX_ROOT:-}                     # empty on the box; a sandbox root in test
 [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] \
   || { echo "the checkout is not $RELEASE" >&2; exit 2; }
 [ -f "$CANARY_VIDEO" ] || { echo "no clip at CANARY_VIDEO" >&2; exit 2; }
+for literal in "${ALERT_OWNER:-}" "${ALERT_ESCALATION:-}"; do   # one line each in the env file
+  [[ ! $literal =~ [[:cntrl:]] ]] \
+    || { echo "ALERT_OWNER/ALERT_ESCALATION must not contain a control character" >&2; exit 2; }
+done
+if [ -n "${ALERT_SNS_TOPIC_ARN:-}" ]; then
+  [ -z "${ALERT_WEBHOOK_PARAM:-}" ] \
+    || { echo "ALERT_WEBHOOK_PARAM and ALERT_SNS_TOPIC_ARN are both set: exactly one destination" >&2; exit 2; }
+  [[ $ALERT_SNS_TOPIC_ARN =~ ^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$ ]] \
+    || { echo "ALERT_SNS_TOPIC_ARN is not an SNS topic ARN" >&2; exit 2; }
+fi
 param() { aws ssm get-parameter --region us-east-1 --with-decryption --name "$1" \
             --query Parameter.Value --output text; }
 write_env() {  # write_env FILE NAME=SSM-PARAM|NAME:=LITERAL ... - 0600 root, by rename
@@ -56,6 +68,7 @@ done
 write_env "$R/etc/infrx-canary.env" "INFRX_CANARY_KEY=$CANARY_KEY_PARAM" "CANARY_VIDEO:=$CANARY_VIDEO"
 alert=("ALERT_OWNER:=${ALERT_OWNER:-UNSET (P-25)}" "ALERT_ESCALATION:=${ALERT_ESCALATION:-UNSET (P-25)}")
 [ -n "${ALERT_WEBHOOK_PARAM:-}" ] && alert+=("ALERT_WEBHOOK_URL=$ALERT_WEBHOOK_PARAM")
+[ -n "${ALERT_SNS_TOPIC_ARN:-}" ] && alert+=("ALERT_SNS_TOPIC_ARN:=$ALERT_SNS_TOPIC_ARN")
 write_env "$R/etc/infrx-alert.env" "${alert[@]}"
 if [ -n "${MONITOR_DSN_PARAM:-}" ]; then write_env "$R/etc/infrx-observe.env" "MONITOR_DATABASE_URL=$MONITOR_DSN_PARAM"; fi
 systemctl daemon-reload

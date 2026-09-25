@@ -211,6 +211,77 @@ def test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_print
     assert run_step(step, stub, env={**env, "RESOLVE": "not-a-nonce"}).returncode == 2
 
 
+SNS_TOPIC = "arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts"
+
+
+def test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination(tmp_path):
+    """72-observe-install.sh with ALERT_SNS_TOPIC_ARN (P-25's SNS form): the ARN is a plain
+    value written into the 0600 alert env file, never an SSM read. Oracle: both destinations,
+    a malformed ARN, or a control character in the owner/escalation literals (a second line in
+    the env file) are refused before anything is written."""
+    stub = stubs(tmp_path, "aws", "systemctl", "git", outputs={"aws": "unused\n"})
+    (stub / "git.out").write_text("c" * 40 + "\n")
+    (stub / "install").write_text("#!/usr/bin/env bash\n"
+                                  'if [ "$1" = -d ]; then mkdir -p "${@: -1}"; else cp "${@: -2:1}" "${@: -1}"; fi\n')
+    (stub / "install").chmod(0o755)
+    root = tmp_path / "root"
+    (root / "etc" / "systemd" / "system").mkdir(parents=True)
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"x")
+    env = {"RELEASE": "c" * 40, "CANARY_VIDEO": str(clip), "INFRX_ROOT": str(root),
+           "REPO": str(support.REPO), "ALERT_SNS_TOPIC_ARN": SNS_TOPIC,
+           "ALERT_OWNER": "sofia", "CANARY_KEY_PARAM": "/model-inference/canary_key"}
+    step = (STEPS / "72-observe-install.sh").read_text()
+    alert = root / "etc" / "infrx-alert.env"
+    for bad in ({"ALERT_WEBHOOK_PARAM": "/model-inference/alert_webhook"},
+                {"ALERT_SNS_TOPIC_ARN": SNS_TOPIC + "\nALERT_WEBHOOK_URL=x"},
+                {"ALERT_OWNER": "sofia\nALERT_WEBHOOK_URL=https://x"},       # F4: injected line
+                {"ALERT_ESCALATION": "pager\rALERT_SNS_TOPIC_ARN=x"}):
+        done = run_step(step, stub, env={**env, **bad})
+        assert done.returncode == 2 and not alert.exists(), done.stderr
+        assert [c for c in calls(stub) if c["tool"] != "git"] == []
+    done = run_step(step, stub, env=env)
+    assert done.returncode == 0, done.stderr
+    assert f"ALERT_SNS_TOPIC_ARN={SNS_TOPIC}\n" in alert.read_text()
+    assert "ALERT_WEBHOOK_URL" not in alert.read_text() and "ALERT_OWNER=sofia\n" in alert.read_text()
+    assert oct(alert.stat().st_mode & 0o777) == "0o600"
+    ssm = [c["argv"] for c in calls(stub) if c["tool"] == "aws"]
+    assert [a[a.index("--name") + 1] for a in ssm] == ["/model-inference/canary_key"]
+
+
+def test_ops_continuous__the_delivery_proof_publishes_to_the_sns_topic(tmp_path):
+    """74-alert-test.sh with an SNS destination in the env file: the marked test goes to
+    the topic (boto3 faked on PYTHONPATH - no network), the recovery too. Oracle: a step
+    that does not pass ALERT_SNS_TOPIC_ARN through is BLOCKED (neither set)."""
+    fake = tmp_path / "fake"
+    (fake / "botocore").mkdir(parents=True)
+    (fake / "botocore" / "__init__.py").write_text("")
+    (fake / "botocore" / "exceptions.py").write_text(
+        "class ClientError(Exception): pass\nclass BotoCoreError(Exception): pass\n")
+    (fake / "boto3.py").write_text(
+        "import json, os\n"
+        "class _C:\n"
+        "    def publish(self, **kw):\n"
+        "        open(os.environ['SNS_LOG'], 'a').write(json.dumps(kw) + '\\n')\n"
+        "        return {'ResponseMetadata': {'HTTPStatusCode': 200}}\n"
+        "def client(service, region_name):\n"
+        "    return _C()\n")
+    log = tmp_path / "sns.log"
+    conf = tmp_path / "infrx-alert.env"
+    conf.write_text(f"ALERT_SNS_TOPIC_ARN={SNS_TOPIC}\nALERT_OWNER=sofia\nALERT_ESCALATION=pager\n")
+    env = {"REPO": str(support.REPO), "ALERT_ENV": str(conf), "PYTHONPATH": str(fake),
+           "SNS_LOG": str(log)}
+    step = (STEPS / "74-alert-test.sh").read_text()
+    done = run_step(step, stubs(tmp_path), env=env)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "topic=infrx-pilot-alerts" in done.stdout
+    nonce = done.stdout.split("nonce=")[1].split()[0]
+    done = run_step(step, stubs(tmp_path), env={**env, "RESOLVE": nonce})
+    assert done.returncode == 0, done.stdout + done.stderr
+    fired, resolved = [json.loads(line) for line in log.read_text().splitlines()]
+    assert fired["TopicArn"] == SNS_TOPIC and fired["Subject"].startswith("[TEST FIRING]")
+    assert resolved["Subject"].startswith("[TEST RESOLVED]") and nonce in resolved["Message"]
+
 def _backup(dirpath: Path, held: str | None, extra: str = "") -> None:
     import io
     import tarfile

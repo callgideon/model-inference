@@ -1,0 +1,28 @@
+{
+  "task": "I8",
+  "slice": "ALERT-SNS (P-25 alert destination: SNS topic or webhook)",
+  "activity": "review",
+  "head": "0bbf3363",
+  "worktree": ".claude/worktrees/codex-alert-sns",
+  "branch": "codex/alert-sns",
+  "owned_paths": ["infra/observe/deliver.py", "infra/observe/systemd/", "infra/rollout/steps/72-observe-install.sh",
+                  "infra/rollout/steps/74-alert-test.sh", "infra/runbooks/observe.md", "apps/infrx-api/tests/i/",
+                  "research/plan/evidence/i/", "research/plan/evidence/coordinator/updates/"],
+  "commands": [
+    {"cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_observe.py tests/i/test_ops_steps.py tests/i/test_alert_sns.py", "exit": 0, "summary": "31 passed, 1 xfailed (7 new cases red against base)"},
+    {"cmd": "uv run --frozen pytest -q tests/i/test_rollout.py", "exit": 0, "summary": "8 passed"},
+    {"cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_mutants.py", "exit": 0, "summary": "50 passed"},
+    {"cmd": "uv run --frozen python tests/i/mutants.py <7 new ALERT-SNS mutants>", "exit": 0, "summary": "7/7 killed"}
+  ],
+  "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high",
+               "basis": "all named suites and mutants green; AWS/box steps are coordinator ops", "at": "2026-09-25T19:10Z"},
+  "next_action": "coordinator: review and merge codex/alert-sns; operator creates topic+subscription; attach sns:Publish to the instance role; ensure python3-boto3 on the box; run 72 with ALERT_SNS_TOPIC_ARN then 74",
+  "blockers": [],
+  "wiring_requests": [
+    "IAM (not applied): instance role policy {\"Effect\":\"Allow\",\"Action\":\"sns:Publish\",\"Resource\":\"arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts\"}",
+    "operator: create SNS topic infrx-pilot-alerts (us-east-1) with a confirmed e-mail subscription",
+    "box: system python3 must import boto3 (apt install python3-boto3) or SNS delivery stays BLOCKED",
+    "infra/observe/observe.sh line 9 comment: 'to ALERT_WEBHOOK_URL' -> 'to the P-25 destination (webhook or SNS)' (cosmetic, not owned)"
+  ],
+  "evidence": ["research/plan/evidence/i/I8-alert-sns-0bbf336.md"]
+}

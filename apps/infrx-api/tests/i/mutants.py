@@ -1291,6 +1291,46 @@ MUTANTS += (
        INTAKE_RULE),
 )
 
+# --- ALERT-SNS (P-25's SNS destination form) --------------------------------------------
+SNS = "test_ops_alert_sns__"
+MUTANTS += (
+    _m("sns_failure_swallowed", "a failed SNS publish is kept in UNDELIVERED and retried",
+       OBS + "deliver.py", 'return -1, f"sns={type(failed).__name__}',
+       'return 200, f"sns={type(failed).__name__}', SNS + "a_failed_publish_is_kept_and_retried"),
+    _m("both_destinations_accepted", "exactly one destination is configured, else BLOCKED",
+       OBS + "deliver.py", "    if bool(hook) == bool(topic):\n", "    if not hook and not topic:\n",
+       SNS + "exactly_one_destination_or_blocked"),
+    _m("sns_subject_unbounded", "the SNS subject fits SNS's 100-character limit",
+       OBS + "deliver.py", '.decode()[:100]', ".decode()",
+       SNS + "publishes_one_subject_and_message_with_the_instance_role"),
+    _m("sns_without_boto3_passes", "the SNS path without boto3 is BLOCKED, never a success",
+       OBS + "deliver.py", 'return 0, "BLOCKED: ALERT_SNS_TOPIC_ARN is set but boto3',
+       'return 200, "BLOCKED: ALERT_SNS_TOPIC_ARN is set but boto3',
+       SNS + "without_boto3_the_sns_path_is_blocked"),
+    _m("sns_branch_dropped", "a configured topic is where the alert goes",
+       OBS + "deliver.py", "    if topic:\n        return publish(topic, text)\n", "",
+       SNS + "publishes_one_subject_and_message_with_the_instance_role",
+       SNS + "the_test_alert_and_its_recovery_go_to_the_topic"),
+    _m("observe_install_drops_the_topic", "72 writes the SNS topic into the alert env file",
+       STEP + "72-observe-install.sh",
+       '[ -n "${ALERT_SNS_TOPIC_ARN:-}" ] && alert+=("ALERT_SNS_TOPIC_ARN:=$ALERT_SNS_TOPIC_ARN")\n',
+       "", "test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination"),
+    _m("alert_test_drops_the_topic", "74 hands the SNS topic to deliver.py",
+       STEP + "74-alert-test.sh", "ALERT_WEBHOOK_URL|ALERT_SNS_TOPIC_ARN|", "ALERT_WEBHOOK_URL|",
+       "test_ops_continuous__the_delivery_proof_publishes_to_the_sns_topic"),
+    # fix round (verifier F1/F3/F4)
+    _m("webhook_value_error_escapes", "a malformed webhook URL is a kept failed send, never a traceback",
+       OBS + "deliver.py", "    except Exception:                  # URLError, OSError, InvalidURL",
+       "    except (urllib.error.URLError, OSError):  # URLError, OSError, InvalidURL",
+       SNS + "a_malformed_webhook_url_is_kept_and_never_printed"),
+    _m("sns_missing_metadata_is_success", "an SNS answer without an explicit 2xx is a failed send",
+       OBS + "deliver.py", '.get("HTTPStatusCode", -1)', '.get("HTTPStatusCode", 200)',
+       SNS + "a_failed_publish_is_kept_and_retried"),
+    _m("observe_install_owner_multiline", "the owner/escalation literals stay one line each",
+       STEP + "72-observe-install.sh", "  [[ ! $literal =~ [[:cntrl:]] ]] \\\n", "  true \\\n",
+       "test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination"),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
