@@ -184,6 +184,10 @@ test(T.gate, async () => {
 
   const down = recording({ consumer_jobs: [new Error("ECONNRESET")] });
   assert.deepEqual(await postgrestRequestReads(down.client, USER).result(ID), { state: "unavailable" });
+
+  // consumer_jobs' only 42501 is "not signed in" (or anon, which holds no EXECUTE): the session ended.
+  const signedOut = recording({ consumer_jobs: [err("42501", "not signed in")] });
+  assert.deepEqual(await postgrestRequestReads(signedOut.client, USER).result(ID), { state: "signed_out" });
 });
 
 test(T.result, async () => {

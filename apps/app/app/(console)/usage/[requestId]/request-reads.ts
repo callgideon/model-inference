@@ -81,7 +81,8 @@ export function postgrestRequestReads(client: CreditClient, userId: string): Req
       const id = requestIdOf(requestId);
       if (id === null) return { state: "not_found" };
       const read = await job(id);
-      if (!read.ok) return { state: "unavailable" };
+      // U1R maps consumer_jobs' 42501 ("not signed in", or anon without EXECUTE) to `forbidden`.
+      if (!read.ok) return { state: read.error.code === "forbidden" ? "signed_out" : "unavailable" };
       if (read.value === null) return { state: "not_found" };
       const access = resultAccessOf(read.value);
       if (access !== "available") return WITHHELD[access];
