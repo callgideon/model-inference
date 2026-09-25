@@ -4193,7 +4193,7 @@
       "track": "M",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4220,7 +4220,8 @@
       ],
       "acceptance": "Live media is protected; eligible content removed within declared bound; expiry independent of physical deletion.",
       "failure_oracle": "Local-only liveness or missing reference lock is caught by race tests; expired content cannot resurrect.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/m6-phase2-merge 0007fc16 (--no-ff of the verified head ff5aedb1; phase 1 via codex/m6-merge bd556c5f) after the verify-lane fix round (ACCEPT_WITH_FIXES); implemented = durable paginated candidates, fenced claims, tombstones and column scrub over F2C-L/D10 (gc.py retired, RetentionCollector), register-before-write for every runtime object, bounded process maps and a pinned/inode-checked local cache; R129 numbered, R114 amended. OPEN (not release acceptance): wiring 1+2 (worker single collector owner + cache keeper, W engine pin; must land together) with P-25 values, WR-7 (D10 0022 re-registration refreshes eligible_at; strict xfail test_a_source_fetched_again_is_not_collected_before_its_admission), WR-8, E3C wiring 3 (E3C-RERUN); RETENTION-DURABLE is not accepted end to end until those land."
     },
     {
       "id": "W5",

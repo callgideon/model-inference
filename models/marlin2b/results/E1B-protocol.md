@@ -68,7 +68,7 @@ Sample sufficiency is enforced by the client, not by the reader: a reported pN n
 ≥3 accepted samples beyond it (p50 ≥6, p95 ≥60, p99 ≥300), so L2's cells are sized
 from the tail they intend to quote, and an unsupported tail prints `—`.
 
-Amendment (E1C, 2026-09-24): a hosted cell runs with `--profile <infrx.run-profile/1> --key-inventory <sanitized inventory>`; `bench.py` refuses a non-local target without a runnable profile (the only opt-out is the explicit, logged `--unprofiled smoke` ≤ 4 requests / ≤ 512 output tokens, or `--unprofiled certify` until the E2C wiring passes profiles; an opted-out summary is INVALID).
+Amendment (E1C, 2026-09-24): a hosted cell runs with `--profile <infrx.run-profile/1> --key-inventory <sanitized inventory>`; `bench.py` refuses a non-local target without a runnable profile (the only opt-out is the explicit, logged `--unprofiled smoke` ≤ 4 requests / ≤ 512 output tokens; an opted-out summary is INVALID). Amended 2026-09-25 (E1C profile flip, CERTIFY-WIRING): the `certify` opt-out no longer exists; `certify.py --run-profile <base> --key-inventory <inv>` stamps the base per cell.
 
 ## 4. Provisional acceptance criteria (P-18) — quoted with their labels
 
