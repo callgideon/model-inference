@@ -1,0 +1,11 @@
+{"task": "G7", "slice": "fix round (CM-1..5, ACC-1..3)", "activity": "review", "head": "8906eb26",
+ "worktree": ".claude/worktrees/codex-g7-catalog", "branch": "codex/g7-catalog",
+ "owned_paths": ["apps/infrx-api/infrx/gateway/routes/", "apps/infrx-api/tests/g/ (not ops/)", "research/plan/evidence/g/G7-a0e0928.md", "research/plan/evidence/coordinator/updates/G7-20260925T0440Z.json"],
+ "commands": [
+  {"cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops", "exit": 0, "summary": "579 passed at 8906eb26"},
+  {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py", "exit": 0, "summary": "524 passed at 8906eb26 (log /tmp/g7fix/mutants-all.log)"},
+  {"cmd": "python -m tests.g.mutants (9 new) / tests.g.jobs.jobs_mutants (4 re-anchored)", "exit": 0, "summary": "13/13 killed"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 2, "pessimistic_h": 6, "confidence": "medium", "basis": "code findings closed; merge gates (D10 WR-3c before G7; WR-1; WR-2 after WR-3a) and merged-tree full suite remain", "at": "2026-09-25T04:40Z"},
+ "blockers": ["merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses"],
+ "wiring_requests": ["WR-1..WR-8 unchanged (G7-2bbfe0e.md); WR-1 breakdown corrected in G7-a0e0928.md Fix round"],
+ "evidence": ["research/plan/evidence/g/G7-a0e0928.md", "research/plan/evidence/g/G7-2bbfe0e.md"]}

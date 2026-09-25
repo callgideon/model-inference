@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 35,
-  "updated": "2026-09-25T03:29:47Z",
+  "revision": 36,
+  "updated": "2026-09-25T04:45:55Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -958,12 +958,12 @@
     {
       "id": "G7",
       "task": "G7",
-      "slice": "1-4 (+WR-I8-3, revocation bound, E3C s08/s05)",
+      "slice": "fix round (CM-1..5, ACC-1..3)",
       "agent": "opus",
       "branch": "codex/g7-catalog",
       "worktree": ".claude/worktrees/codex-g7-catalog",
       "base": "dff31efc",
-      "head": "a0e0928a",
+      "head": "8906eb26",
       "isolation": {
         "ports": "postgres 55446 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g7-",
@@ -971,16 +971,16 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T00:48:00Z",
-      "blocker": "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3; legacy-regime discovery publishes nothing until D10 usd_price (WR-3a)",
+      "updated": "2026-09-25T04:40:00Z",
+      "blocker": "merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses",
       "next_action": "rerun the full G mutant lists and INFRX_D_TASK=g7 api-test at a0e0928a and record them; then coordinator review/merge with D10/M5",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 3,
-        "pessimistic_h": 8,
+        "optimistic_h": 0.5,
+        "likely_h": 2,
+        "pessimistic_h": 6,
         "confidence": "medium",
-        "basis": "all points implemented and green in tests/g; left: the two reruns, review fixes, integration reruns on M5/D10",
-        "at": "2026-09-25T00:48:00Z"
+        "basis": "code findings closed; merge gates (D10 WR-3c before G7; WR-1; WR-2 after WR-3a) and merged-tree full suite remain",
+        "at": "2026-09-25T04:40Z"
       },
       "evidence": [
         "research/plan/evidence/g/G7-2bbfe0e.md",
@@ -990,40 +990,28 @@
         {
           "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops",
           "exit": 0,
-          "summary": "573 passed at a0e0928a"
+          "summary": "579 passed at 8906eb26"
         },
         {
-          "cmd": "new/re-anchored mutants (12) via tests.g.mutants / tests.g.jobs.jobs_mutants",
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py",
           "exit": 0,
-          "summary": "12/12 killed"
+          "summary": "524 passed at 8906eb26 (log /tmp/g7fix/mutants-all.log)"
         },
         {
-          "cmd": "INFRX_MUTANTS=all full G/uploads/jobs mutant lists at a0e0928a",
-          "exit": null,
-          "summary": "NOT COMPLETED (session limit): 69% run, 0 failures; last complete 505 passed at e3ba286f"
-        },
-        {
-          "cmd": "INFRX_D_TASK=g7 uv run --frozen pytest -q at a0e0928a",
-          "exit": null,
-          "summary": "NOT COMPLETED: 43% run, 0 failures; last complete at e3ba286f 3912 passed, 1 failed (pgharness decoy vs 640cedd4 port 55473)"
+          "cmd": "python -m tests.g.mutants (9 new) / tests.g.jobs.jobs_mutants (4 re-anchored)",
+          "exit": 0,
+          "summary": "13/13 killed"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
       "owned_paths": [
         "apps/infrx-api/infrx/gateway/routes/",
-        "apps/infrx-api/openrouter/provider-models.json (deleted)",
-        "apps/infrx-api/tests/g/ (not ops/, not the host-metrics test)",
-        "research/plan/evidence/g/G7-2bbfe0e.md",
+        "apps/infrx-api/tests/g/ (not ops/)",
         "research/plan/evidence/g/G7-a0e0928.md",
-        "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json",
-        "research/plan/evidence/coordinator/updates/G7-20260925T0048Z.json"
+        "research/plan/evidence/coordinator/updates/G7-20260925T0440Z.json"
       ],
       "wiring_requests": [
-        "WR-1..WR-7 as in G7-2bbfe0e.md",
-        "WR-8 (I8): adapter-side client timeouts that survive a stalled server (psycopg keepalive/tcp_user_timeout, botocore read_timeout+retries < 20 s)",
-        "proposed ruling: stalled dependency bound (text in G7-a0e0928.md)",
-        "proposed ruling: revocation bound <= KEY_TTL (text in G7-a0e0928.md)",
-        "fix 640cedd4 tasklocal g8 valkey 55473 vs tests/d D2 decoy"
+        "WR-1..WR-8 unchanged (G7-2bbfe0e.md); WR-1 breakdown corrected in G7-a0e0928.md Fix round"
       ]
     },
     {
@@ -1322,12 +1310,6 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-25T00:05:00Z",
-      "lane": "G7",
-      "task": "G7",
-      "head": "a0e0928a"
-    },
-    {
       "since": "2026-09-24T23:25:00Z",
       "lane": "M6",
       "task": "M6",
@@ -1362,6 +1344,12 @@
       "lane": "W5",
       "task": "W5",
       "head": "97381015"
+    },
+    {
+      "since": "2026-09-25T00:05:00Z",
+      "lane": "G7",
+      "task": "G7",
+      "head": "8906eb26"
     }
   ],
   "integration_queue": [],
@@ -2549,6 +2537,12 @@
       "by": "W5",
       "what": "review → review; head 97381015",
       "source": "updates/W5-20260925T0303Z.json"
+    },
+    {
+      "at": "2026-09-25T04:40:00Z",
+      "by": "G7",
+      "what": "review → review; head 8906eb26; estimate likely 3 → 2 h (code findings closed; merge gates (D10 WR-3c before G7; WR-1; WR-2 after WR-3a) and merged-tree full suite remain)",
+      "source": "updates/G7-20260925T0440Z.json"
     }
   ],
   "history": {
@@ -2733,10 +2727,14 @@
     "W5-20260925T0303Z.json": {
       "status": "applied",
       "at": "2026-09-25T03:03:00Z"
+    },
+    "G7-20260925T0440Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T04:40:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T03:29:47Z",
+    "computed_at": "2026-09-25T04:45:55Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2746,12 +2744,12 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 00:23Z – 2026-09-27 17:17Z (likely 2026-09-26 15:17Z)",
+        "text": "2026-09-26 01:39Z – 2026-09-27 18:33Z (likely 2026-09-26 16:33Z)",
         "constraint": "dependency path D10 → M5 → M6 → E3C",
         "effort_h": [
-          27.1,
-          48.5,
-          88.8
+          26.4,
+          47.2,
+          86.2
         ],
         "wall_h": [
           20.9,
@@ -2759,9 +2757,9 @@
           61.8
         ],
         "finish": [
-          "2026-09-26T00:23:47Z",
-          "2026-09-26T15:17:47Z",
-          "2026-09-27T17:17:47Z"
+          "2026-09-26T01:39:55Z",
+          "2026-09-26T16:33:55Z",
+          "2026-09-27T18:33:55Z"
         ],
         "conditional": null,
         "confidence": "medium",
