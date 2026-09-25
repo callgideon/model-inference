@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 52,
- "updated": "2026-09-25T21:06:43Z",
+ "revision": 53,
+ "updated": "2026-09-25T21:11:40Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -1244,6 +1244,246 @@
     "confidence": "unknown",
     "basis": "not estimated at baseline (lane has not inspected its slice yet)",
     "at": null
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "C0",
+   "task": "C0",
+   "slice": "C0 real consumer context and read port (query/server/console/credits adapters; real RLS/RPC tests)",
+   "agent": "opus",
+   "branch": "codex/app-c0",
+   "worktree": ".claude/worktrees/codex-app-c0",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-c0 postgres 55451",
+    "prefix": "infrx-app-c0-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U1R",
+   "task": "U1R",
+   "slice": "U1R CREDIT usage and balance views (exact decimal display, legacy USD separate, pagination, request-detail link)",
+   "agent": "opus",
+   "branch": "codex/app-u1r",
+   "worktree": ".claude/worktrees/codex-app-u1r",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u1r postgres 55457",
+    "prefix": "infrx-app-u1r-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "A2",
+   "task": "A2",
+   "slice": "A2 verified onboarding and recovery (signup/verify/resend/sign-in/recovery, once-only grant, next-step)",
+   "agent": "opus",
+   "branch": "codex/app-a2",
+   "worktree": ".claude/worktrees/codex-app-a2",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-a2 postgres 55460",
+    "prefix": "infrx-app-a2-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "A3",
+   "task": "A3",
+   "slice": "A3 models, pricing and executable API docs (served version, CREDIT card, examples run in tests)",
+   "agent": "opus",
+   "branch": "codex/app-a3",
+   "worktree": ".claude/worktrees/codex-app-a3",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "fakes only",
+    "prefix": "infrx-app-a3-",
+    "db": null
+   },
+   "activity": "running",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "none (user-authorized dispatch ahead of BACKEND-READY, 2026-09-25 21:1xZ; APP gates unchanged)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "C3A",
+   "task": "C3A",
+   "slice": "C3A trusted consumer actions (keys, grant retry, settings, operator actions via narrow ports; idempotency/CSRF)",
+   "agent": "opus",
+   "branch": "codex/app-c3a",
+   "worktree": ".claude/worktrees/codex-app-c3a",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-c3a postgres 55452",
+    "prefix": "infrx-app-c3a-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when C0 hands back (merges codex/app-c0)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U4",
+   "task": "U4",
+   "slice": "U4 owned request detail and result lifecycle (bounded polling, expiry, two-tenant probes)",
+   "agent": "opus",
+   "branch": "codex/app-u4",
+   "worktree": ".claude/worktrees/codex-app-u4",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u4 postgres 55456",
+    "prefix": "infrx-app-u4-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R hands back (merges codex/app-u1r)",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U2",
+   "task": "U2",
+   "slice": "U2 keys and supported settings (one-time plaintext, rotation, truthful privacy copy)",
+   "agent": "opus",
+   "branch": "codex/app-u2",
+   "worktree": ".claude/worktrees/codex-app-u2",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "fakes only",
+    "prefix": "infrx-app-u2-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R and C3A hand back",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
+   },
+   "evidence": [],
+   "commands": []
+  },
+  {
+   "id": "U3",
+   "task": "U3",
+   "slice": "U3 minimal operator controls (rate publication, reasoned adjust/grant, suspension, audited idempotent ops)",
+   "agent": "opus",
+   "branch": "codex/app-u3",
+   "worktree": ".claude/worktrees/codex-app-u3",
+   "base": "46776646",
+   "head": null,
+   "isolation": {
+    "ports": "app-u3 postgres 55453",
+    "prefix": "infrx-app-u3-",
+    "db": null
+   },
+   "activity": "queued",
+   "started": "2026-09-25T21:11:40Z",
+   "updated": "2026-09-25T21:11:40Z",
+   "blocker": "starts when U1R and C3A hand back",
+   "next_action": "App wave workflow wf_77b93903-38d: implement → 2 lenses → one fix round → recheck; handback writes updates/<ID>-<ts>.json (status review); coordinator merges in order C0 → U1R → A2/A3 → C3A → U2/U3/U4",
+   "estimate": {
+    "optimistic_h": 2,
+    "likely_h": 5,
+    "pessimistic_h": 10,
+    "confidence": "low",
+    "basis": "brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane",
+    "at": "2026-09-25T21:11:40Z"
    },
    "evidence": [],
    "commands": []
@@ -2703,6 +2943,12 @@
    "at": "2026-09-25T21:06:43Z",
    "by": "coordinator",
    "what": "Rollout gates rehearsal at e607b705 (G1/G3/G4 PASS; G5 harness defect; no rollback target once 0019+ applied); ROLLOUT-FIXES, KNOWN-GOOD-PROOF, DOOR-REVOKE, E4C-RUNBOOK lanes running as self-verifying workflows; E3C final run pre-staged",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:11:40Z",
+   "by": "coordinator",
+   "what": "User decision: App completion tasks dispatched ahead of BACKEND-READY (dispatch only; gates unchanged). App wave workflow wf_77b93903-38d: C0/U1R/A2/A3 running, C3A/U4/U2/U3 queued behind their predecessors",
    "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],

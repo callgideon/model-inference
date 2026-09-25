@@ -1166,13 +1166,18 @@
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/(console)/keys/",
         "apps/app/app/(console)/settings/",
         "apps/app/tests/u/ (keys/settings tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "U3",
@@ -1200,12 +1205,17 @@
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/(console)/admin/",
         "apps/app/tests/u/ (operator tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "V1",
@@ -1619,13 +1629,18 @@
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/(auth)/",
         "apps/app/app/auth/ (callback route if required)",
         "apps/app/tests/a/ (auth/onboarding tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "A3",
@@ -1654,13 +1669,18 @@
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/(console)/models/",
         "apps/app/app/(console)/docs/",
         "apps/app/tests/a/ (catalog/docs tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "D6F",
@@ -1853,13 +1873,18 @@
       "supersedes_part_of": "C3",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/actions.ts",
         "apps/app/lib/services/ (new action adapter; coordinate C0)",
         "apps/app/tests/c/ (action tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "C3F",
@@ -2315,8 +2340,7 @@
       "disposition": "new-revision",
       "amendment": "Supabase/PostgREST adapter, legacy projection, real user context; independent of Lab traces and judge.",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/lib/services/query.ts",
         "apps/app/lib/services/server.ts",
@@ -2324,7 +2348,13 @@
         "apps/app/lib/services/credits.ts",
         "apps/app/lib/session.ts (coordinate A2)",
         "apps/app/tests/c/ (read adapter)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "I0",
@@ -2447,14 +2477,19 @@
       "disposition": "new-revision",
       "amendment": "Preserve U1 view logic; revise units/labels/formatters and real context without erasing USD history.",
       "execution_class": "core",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate.",
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
       "owned_paths": [
         "apps/app/app/(console)/usage/",
         "apps/app/app/(console)/billing/",
         "apps/app/lib/format.ts",
         "apps/app/tests/u/ (usage/credit tests)"
-      ]
+      ],
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     },
     {
       "id": "F3",
@@ -4558,8 +4593,13 @@
       "acceptance": "Customer can inspect own real request/result/charge; expired and foreign content stays unavailable.",
       "failure_oracle": "Foreign IDs, changed policy TTL or cached expired output fail; retry cannot silently create another inference.",
       "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
-      "dispatch_after_gate": "BACKEND-READY",
-      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate."
+      "closure_amendment": "2026-09-24: consumer v1 corrective program 22; refined brief preserves original baseline/dependencies. Dispatch after accepted E4C; implemented code alone does not accept the gate. 2026-09-25: user decision (session 04, rey@callsofia.co): dispatch ahead of BACKEND-READY to reach v1 deployment sooner; dispatch only — APP-LOCAL/APP-PILOT acceptance and the backend gates are unchanged; original rule kept in dispatch_after_gate_original.",
+      "dispatch_after_gate_original": "BACKEND-READY",
+      "dispatch_override": {
+        "by": "user",
+        "at": "2026-09-25",
+        "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
+      }
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
