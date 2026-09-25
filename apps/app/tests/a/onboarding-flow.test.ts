@@ -308,7 +308,7 @@ test("A2-BAL-04 the /welcome read: exact balance, not issued, or unavailable —
 
 test("A2-SIGNIN-01 sign-in claims the grant once; only a replayed grant continues to next, every other outcome lands on /welcome", async () => {
   const NEXT = "/usage";
-  const credited = (first: boolean): OnboardingState => ({ kind: "credited", first, amount: "10000.00000000", grantedAt: GRANT_ROW.granted_at });
+  const credited = (first: boolean) => ({ kind: "credited", first, amount: "10000.00000000", grantedAt: GRANT_ROW.granted_at }) as OnboardingState;
   const cases: [string, () => Promise<OnboardingState>, string][] = [
     ["a first grant is announced on onboarding", async () => credited(true), AFTER_VERIFY],
     ["a replayed grant continues to next", async () => credited(false), NEXT],

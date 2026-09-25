@@ -20,6 +20,9 @@ import { parseCredit, type Credit } from "../../lib/contracts/v2/money-units.ts"
 export const AFTER_VERIFY = "/welcome";
 /** Recorded as `signup_entitlements.campaign_version` (audit metadata only; R71). */
 export const SIGNUP_CAMPAIGN = "consumer-v1";
+/** A1's eligibility operation (0015) and the named arguments grant.ts sends (tests/a pin both to 0015). */
+export const CLAIM_RPC = "claim_signup_grant";
+export const claimArgs = (userId: string) => ({ p_user_id: userId, p_campaign_version: SIGNUP_CAMPAIGN });
 /** Client-side hint only; the auth service's own policy is the authority (P-05). */
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -166,6 +169,21 @@ export function claimOutcome(data: unknown, error: PgFailure): OnboardingState {
   }
 }
 
+/**
+ * Where sign-in goes after claiming the grant once (the 02 first-login path; idempotent, R71). Only a
+ * replayed grant — onboarding already complete — continues to `next`; a new grant, a hold, or a claim
+ * that failed or threw lands on /welcome, which shows the balance or the retry. Never blocks sign-in.
+ */
+export async function afterSignIn(claim: () => Promise<OnboardingState>, next: string): Promise<string> {
+  let state: OnboardingState | null = null;
+  try {
+    state = await claim();
+  } catch {
+    // the retry on /welcome
+  }
+  return state?.kind === "credited" && !state.first ? next : AFTER_VERIFY;
+}
+
 /** The onboarding action's decision: the session's user or nobody; a throwing port is retryable. */
 export async function onboardingFor(
   sessionUserId: () => Promise<string | null>,
@@ -206,6 +224,16 @@ export function walletBalance(data: unknown, error: PgFailure): WalletView {
       available,
       grantedAt: typeof row.signup_granted_at === "string" ? row.signup_granted_at : null,
     };
+  } catch {
+    return { kind: "unavailable" };
+  }
+}
+
+/** /welcome's read (`console_wallet_summary`, injected): `walletBalance`, and a throw is `unavailable`. */
+export async function welcomeWallet(read: () => PromiseLike<{ data: unknown; error: PgFailure }>): Promise<WalletView> {
+  try {
+    const { data, error } = await read();
+    return walletBalance(data, error);
   } catch {
     return { kind: "unavailable" };
   }
@@ -264,3 +292,39 @@ export async function completeCallback(params: URLSearchParams, ports: CallbackP
 
 /** The `emailRedirectTo` for signup/resend links (the auth service's redirect allowlist, P-05). */
 export const verifyRedirect = (origin: string) => `${origin}/auth/callback?next=${AFTER_VERIFY}`;
+/** The recovery link: the PKCE form carries no `type`, so `next` is what reaches set-a-new-password. */
+export const resetRedirect = (origin: string) => `${origin}/auth/callback?next=/update-password`;
+
+// --------------------------------------------------------------------- the email forms ---
+
+type AuthAnswer = PromiseLike<{ error: AuthErrorLike | null }>;
+
+/** The slice of the browser auth client (supabase-js `auth`) the email forms use. */
+export type EmailAuth = {
+  signUp(credentials: { email: string; password: string; options: { emailRedirectTo: string } }): AuthAnswer;
+  resend(credentials: { type: "signup"; email: string; options: { emailRedirectTo: string } }): AuthAnswer;
+  resetPasswordForEmail(email: string, options: { redirectTo: string }): AuthAnswer;
+};
+
+/** The call's error; a throw (no answer) is a status-0 outage. */
+async function errorOf(call: () => AuthAnswer): Promise<AuthErrorLike | null> {
+  try {
+    return (await call()).error;
+  } catch {
+    return { status: 0 };
+  }
+}
+
+export async function requestSignup(auth: EmailAuth, email: string, password: string, origin: string) {
+  return signupSettled(await errorOf(() => auth.signUp({ email, password, options: { emailRedirectTo: verifyRedirect(origin) } })));
+}
+
+export async function requestResend(auth: EmailAuth, email: string, origin: string) {
+  return emailSettled(
+    await errorOf(() => auth.resend({ type: "signup", email, options: { emailRedirectTo: verifyRedirect(origin) } })),
+  );
+}
+
+export async function requestReset(auth: EmailAuth, email: string, origin: string) {
+  return emailSettled(await errorOf(() => auth.resetPasswordForEmail(email, { redirectTo: resetRedirect(origin) })));
+}

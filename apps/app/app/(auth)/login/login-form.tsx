@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { AFTER_VERIFY, FAILURE_COPY, authFailure, type AuthFailure } from "../flow";
+import { FAILURE_COPY, afterSignIn, authFailure, type AuthFailure } from "../flow";
 import { claimOnboarding } from "../welcome/actions";
 
 export function LoginForm({ next, initialError }: { next: string; initialError: string | null }) {
@@ -37,10 +37,9 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
     }
 
     // The first-login path (02): an existing verified user, or one whose link was opened on another
-    // device, receives the one-time grant here. Idempotent; a failure is onboarding's retry.
-    const state = await claimOnboarding().catch(() => null);
+    // device, receives the one-time grant here; anything short of a replayed grant lands on /welcome.
     // `next` is already checked to be a same-site path by the page.
-    router.push(state?.kind === "credited" && state.first ? AFTER_VERIFY : next);
+    router.push(await afterSignIn(claimOnboarding, next));
     router.refresh();
   }
 

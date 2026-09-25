@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, MIN_PASSWORD_LENGTH, signupSettled, verifyRedirect } from "../flow";
+import { FAILURE_COPY, MIN_PASSWORD_LENGTH, requestSignup } from "../flow";
 import { ResendForm } from "../verify-email/resend-form";
 
 /**
@@ -30,15 +30,8 @@ export function SignupForm() {
     const email = String(form.get("email")).trim();
     setPending(true);
     setError(null);
-    const { error } = await createClient()
-      .auth.signUp({
-        email,
-        password: String(form.get("password")),
-        options: { emailRedirectTo: verifyRedirect(window.location.origin) },
-      })
-      .catch(() => ({ error: { status: 0 } }));
+    const settled = await requestSignup(createClient().auth, email, String(form.get("password")), window.location.origin);
     setPending(false);
-    const settled = signupSettled(error);
     if (settled === "sent") setSentTo(email);
     else setError(FAILURE_COPY[settled]);
   }

@@ -232,6 +232,230 @@
       "cases": [
         "A2-A11Y-01 every auth input has a label, and every error region is announced"
       ]
+    },
+    {
+      "id": "EMAIL-SENT",
+      "note": "resend/reset report every answer as sent (the old forgot-password behaviour: a rate limit read as 'sent')",
+      "file": "app/(auth)/flow.ts",
+      "find": "  const failure = authFailure(error);\n  return failure === \"invalid_credentials\" ? \"sent\" : failure;",
+      "replace": "  return \"sent\";",
+      "cases": [
+        "A2-ENUM-04 resend and reset read an unknown address as sent, and report rate limits and outages truthfully",
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration"
+      ]
+    },
+    {
+      "id": "EMAIL-ENUM",
+      "note": "an unknown address on resend/reset reads as 'no such account' (enumeration)",
+      "file": "app/(auth)/flow.ts",
+      "find": "return failure === \"invalid_credentials\" ? \"sent\" : failure;",
+      "replace": "return failure;",
+      "cases": [
+        "A2-ENUM-04 resend and reset read an unknown address as sent, and report rate limits and outages truthfully",
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration"
+      ]
+    },
+    {
+      "id": "WELCOME-ZERO",
+      "note": "a failed /welcome read is shown as a confirmed 0 CREDIT (review M12)",
+      "file": "app/(auth)/flow.ts",
+      "find": "    return walletBalance(data, error);\n",
+      "replace": "    return error ? { kind: \"available\", available: parseCredit(\"0.00000000\"), grantedAt: null } : walletBalance(data, error);\n",
+      "cases": [
+        "A2-BAL-04 the /welcome read: exact balance, not issued, or unavailable — a failed or thrown read is never a confirmed zero"
+      ]
+    },
+    {
+      "id": "WELCOME-THROW",
+      "note": "a thrown /welcome read is shown as a confirmed 0 CREDIT",
+      "file": "app/(auth)/flow.ts",
+      "find": "    return walletBalance(data, error);\n  } catch {\n    return { kind: \"unavailable\" };",
+      "replace": "    return walletBalance(data, error);\n  } catch {\n    return { kind: \"available\", available: parseCredit(\"0.00000000\"), grantedAt: null };",
+      "cases": [
+        "A2-BAL-04 the /welcome read: exact balance, not issued, or unavailable — a failed or thrown read is never a confirmed zero"
+      ]
+    },
+    {
+      "id": "WELCOME-PAGE-FLOAT",
+      "note": "the page renders a Number()-floated balance (review M13)",
+      "file": "app/(auth)/welcome/page.tsx",
+      "find": "{displayCredit(wallet.available)}",
+      "replace": "{String(Number(wallet.available))}",
+      "cases": [
+        "A2-WIRE-04 /welcome shows the balance only from welcomeWallet's `available` answer, through displayCredit, never a float"
+      ]
+    },
+    {
+      "id": "WELCOME-PAGE-BYPASS",
+      "note": "the page maps the raw rpc answer itself, with a zero fallback",
+      "file": "app/(auth)/welcome/page.tsx",
+      "find": "  const wallet = await welcomeWallet(() => supabase.rpc(\"console_wallet_summary\", { p_user: user.id }));",
+      "replace": "  const { error } = await supabase.rpc(\"console_wallet_summary\", { p_user: user.id });\n  const wallet = error ? ({ kind: \"unavailable\" } as const) : ({ kind: \"available\", available: \"0.00000000\" } as const);",
+      "cases": [
+        "A2-WIRE-04 /welcome shows the balance only from welcomeWallet's `available` answer, through displayCredit, never a float"
+      ]
+    },
+    {
+      "id": "SIGNIN-NOCLAIM",
+      "note": "sign-in never claims the grant (review M07 / RS-01)",
+      "file": "app/(auth)/flow.ts",
+      "find": "    state = await claim();\n",
+      "replace": "",
+      "cases": [
+        "A2-SIGNIN-01 sign-in claims the grant once; only a replayed grant continues to next, every other outcome lands on /welcome"
+      ]
+    },
+    {
+      "id": "SIGNIN-STRANDED",
+      "note": "a failed or held claim at sign-in goes to next with no route back to /welcome (RS-02)",
+      "file": "app/(auth)/flow.ts",
+      "find": "return state?.kind === \"credited\" && !state.first ? next : AFTER_VERIFY;",
+      "replace": "return state?.kind === \"credited\" && state.first ? AFTER_VERIFY : next;",
+      "cases": [
+        "A2-SIGNIN-01 sign-in claims the grant once; only a replayed grant continues to next, every other outcome lands on /welcome"
+      ]
+    },
+    {
+      "id": "LOGIN-NOCLAIM",
+      "note": "the login form stops claiming at sign-in (RS-01)",
+      "file": "app/(auth)/login/login-form.tsx",
+      "find": "router.push(await afterSignIn(claimOnboarding, next));",
+      "replace": "router.push(next);",
+      "cases": [
+        "A2-WIRE-01 sign-in claims the grant through afterSignIn and goes where it says"
+      ]
+    },
+    {
+      "id": "SIGNUP-FORM-BYPASS",
+      "note": "the signup form maps the answer itself (review M08)",
+      "file": "app/(auth)/signup/signup-form.tsx",
+      "find": "    if (settled === \"sent\") setSentTo(email);",
+      "replace": "    if (settled === \"sent\" && Math.random() > 1) setSentTo(email);",
+      "cases": [
+        "A2-WIRE-02 signup, resend and reset go through the tested requests with the live auth client, and nothing bypasses them"
+      ]
+    },
+    {
+      "id": "VERIFY-DIRECT",
+      "note": "the verification link skips /auth/callback, so no grant is claimed at verification (review M03)",
+      "file": "app/(auth)/flow.ts",
+      "find": "export const verifyRedirect = (origin: string) => `${origin}/auth/callback?next=${AFTER_VERIFY}`;",
+      "replace": "export const verifyRedirect = (origin: string) => `${origin}${AFTER_VERIFY}`;",
+      "cases": [
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration",
+        "A2-EMAIL-02 the links those emails carry, completed by the callback, claim the grant and land where the brief says"
+      ]
+    },
+    {
+      "id": "SIGNUP-NOREDIRECT",
+      "note": "signup drops emailRedirectTo (review M23)",
+      "file": "app/(auth)/flow.ts",
+      "find": "auth.signUp({ email, password, options: { emailRedirectTo: verifyRedirect(origin) } })",
+      "replace": "auth.signUp({ email, password } as never)",
+      "cases": [
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration"
+      ]
+    },
+    {
+      "id": "RESET-NEXT",
+      "note": "the recovery link no longer reaches set-a-new-password (review M10)",
+      "file": "app/(auth)/flow.ts",
+      "find": "export const resetRedirect = (origin: string) => `${origin}/auth/callback?next=/update-password`;",
+      "replace": "export const resetRedirect = (origin: string) => `${origin}/auth/callback?next=/models`;",
+      "cases": [
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration",
+        "A2-EMAIL-02 the links those emails carry, completed by the callback, claim the grant and land where the brief says"
+      ]
+    },
+    {
+      "id": "RESET-FORM-BYPASS",
+      "note": "forgot-password calls the auth service directly with its own redirect",
+      "file": "app/(auth)/forgot-password/page.tsx",
+      "find": "    const settled = await requestReset(createClient().auth, email, window.location.origin);",
+      "replace": "    const { error } = await createClient().auth.resetPasswordForEmail(email);\n    const settled = error ? (\"unavailable\" as const) : (\"sent\" as const);",
+      "cases": [
+        "A2-WIRE-02 signup, resend and reset go through the tested requests with the live auth client, and nothing bypasses them"
+      ]
+    },
+    {
+      "id": "RESEND-NOCOOLDOWN",
+      "note": "the 60 s resend cooldown is gone (review M09)",
+      "file": "app/(auth)/verify-email/resend-form.tsx",
+      "find": "      setCoolingDown(true);\n",
+      "replace": "",
+      "cases": [
+        "A2-WIRE-03 resend cools down for 60 s, and an expired reset session offers a new link"
+      ]
+    },
+    {
+      "id": "RESET-EXPIRED",
+      "note": "an expired reset session no longer offers a new link (review M11)",
+      "file": "app/(auth)/update-password/page.tsx",
+      "find": "setExpired(failure === \"link_expired\");",
+      "replace": "setExpired(false);",
+      "cases": [
+        "A2-WIRE-03 resend cools down for 60 s, and an expired reset session offers a new link"
+      ]
+    },
+    {
+      "id": "SIGNUP-FOCUS",
+      "note": "focus no longer moves to the 'Check your email' heading after signup",
+      "file": "app/(auth)/signup/signup-form.tsx",
+      "find": "    if (sentTo) heading.current?.focus();\n",
+      "replace": "",
+      "cases": [
+        "A2-A11Y-02 after signup, focus moves to the 'Check your email' heading"
+      ]
+    },
+    {
+      "id": "GRANT-RPC-NAME",
+      "note": "the grant calls a function 0015 does not define (review M04)",
+      "file": "app/(auth)/flow.ts",
+      "find": "export const CLAIM_RPC = \"claim_signup_grant\";",
+      "replace": "export const CLAIM_RPC = \"claim_signup_grants\";",
+      "cases": [
+        "A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error"
+      ]
+    },
+    {
+      "id": "GRANT-RPC-ARG",
+      "note": "the grant sends an argument name 0015 does not have (review M06)",
+      "file": "app/(auth)/flow.ts",
+      "find": "({ p_user_id: userId, p_campaign_version: SIGNUP_CAMPAIGN })",
+      "replace": "({ p_user: userId, p_campaign_version: SIGNUP_CAMPAIGN })",
+      "cases": [
+        "A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error"
+      ]
+    },
+    {
+      "id": "GRANT-WIRE-NAME",
+      "note": "grant.ts calls another function name than the pinned one",
+      "file": "app/(auth)/grant.ts",
+      "find": ".rpc(CLAIM_RPC, claimArgs(userId))",
+      "replace": ".rpc(\"claim_signup_grants\", claimArgs(userId))",
+      "cases": [
+        "A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error"
+      ]
+    },
+    {
+      "id": "GRANT-ERROR-DROPPED",
+      "note": "grant.ts drops the claim error before the mapper (review M05)",
+      "file": "app/(auth)/grant.ts",
+      "find": "claimOutcome(data, error)",
+      "replace": "claimOutcome(data, null)",
+      "cases": [
+        "A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error"
+      ]
+    },
+    {
+      "id": "SIGNUP-EXISTS-SHOWN",
+      "note": "signup through the flow reports an existing account differently from a new one (review M08)",
+      "file": "app/(auth)/flow.ts",
+      "find": "  return signupSettled(await errorOf(() => auth.signUp(",
+      "replace": "  return ((e) => (e ? authFailure(e) : \"sent\"))(await errorOf(() => auth.signUp(",
+      "cases": [
+        "A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration"
+      ]
     }
   ]
 }

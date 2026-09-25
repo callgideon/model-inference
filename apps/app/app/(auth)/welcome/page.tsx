@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { KeyRound, BookOpen, Boxes } from "lucide-react";
 import { displayCredit } from "@/lib/contracts/v2/money-units";
 import { createClient } from "@/lib/supabase/server";
-import { walletBalance } from "../flow";
+import { welcomeWallet } from "../flow";
 import { RetryGrant } from "./retry";
 
 export const metadata = { title: "Welcome · infrx" };
@@ -23,8 +23,7 @@ export default async function WelcomePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/welcome");
 
-  const { data, error } = await supabase.rpc("console_wallet_summary", { p_user: user.id });
-  const wallet = walletBalance(data, error);
+  const wallet = await welcomeWallet(() => supabase.rpc("console_wallet_summary", { p_user: user.id }));
 
   return (
     <>

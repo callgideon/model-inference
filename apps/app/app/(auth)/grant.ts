@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SIGNUP_CAMPAIGN, claimOutcome, type OnboardingState } from "./flow";
+import { CLAIM_RPC, claimArgs, claimOutcome, type OnboardingState } from "./flow";
 
 /** Server only: the service-role client must never reach a browser bundle (tests/a A2-BUNDLE-*). */
 if (typeof window !== "undefined") throw new Error("app/(auth)/grant.ts is server-only");
@@ -12,10 +12,7 @@ if (typeof window !== "undefined") throw new Error("app/(auth)/grant.ts is serve
  */
 export async function claimSignupGrant(userId: string): Promise<OnboardingState> {
   try {
-    const { data, error } = await createAdminClient().rpc("claim_signup_grant", {
-      p_user_id: userId,
-      p_campaign_version: SIGNUP_CAMPAIGN,
-    });
+    const { data, error } = await createAdminClient().rpc(CLAIM_RPC, claimArgs(userId));
     const state = claimOutcome(data, error);
     // Safe identifiers only: the outcome and the SQLSTATE, never the address or the message.
     if (state.kind === "unavailable") console.warn(`signup grant unavailable (code ${error?.code ?? "none"})`);

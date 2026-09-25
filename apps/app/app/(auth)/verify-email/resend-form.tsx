@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, emailSettled, verifyRedirect } from "../flow";
+import { FAILURE_COPY, requestResend } from "../flow";
 
 /** The auth service refuses a second verification email to one address within about a minute. */
 const COOLDOWN_MS = 60_000;
@@ -27,11 +27,8 @@ export function ResendForm({ email }: { email?: string }) {
     setPending(true);
     setError(null);
     setNotice(null);
-    const { error } = await createClient()
-      .auth.resend({ type: "signup", email: address, options: { emailRedirectTo: verifyRedirect(window.location.origin) } })
-      .catch(() => ({ error: { status: 0 } }));
+    const settled = await requestResend(createClient().auth, address, window.location.origin);
     setPending(false);
-    const settled = emailSettled(error);
     if (settled === "sent") {
       setNotice("If that address is waiting for verification, a new link is on its way.");
       setCoolingDown(true);

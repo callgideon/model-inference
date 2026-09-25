@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
 
-import { SIGNUP_CAMPAIGN, claimOutcome, walletBalance } from "../../app/(auth)/flow.ts";
+import { CLAIM_RPC, SIGNUP_CAMPAIGN, claimArgs, claimOutcome, walletBalance, welcomeWallet } from "../../app/(auth)/flow.ts";
 
 const DSN = process.env.INFRX_APP_A2_DSN;
 const skip = DSN ? false : "not run: INFRX_APP_A2_DSN is not set (start tests/a/pg_up.py)";
@@ -47,13 +47,10 @@ const asService = (body: string) => `begin; set local role service_role; ${body}
 const asUser = (user: string, body: string) =>
   `begin; set local role authenticated; set local request.jwt.claims = '{"sub":"${user}","role":"authenticated"}'; ${body}; commit;`;
 
-/** `supabase.rpc("claim_signup_grant", {p_user_id, p_campaign_version})` as JSON rows. */
+/** grant.ts's `.rpc(CLAIM_RPC, claimArgs(userId))`, built from the same constants, as JSON rows. */
+const named = (args: Record<string, string>) => Object.entries(args).map(([key, value]) => `${key} => '${value}'`).join(", ");
 async function claim(user: string) {
-  const out = await sql(
-    asService(
-      `select coalesce(json_agg(t), '[]') from public.claim_signup_grant(p_user_id => '${user}', p_campaign_version => '${SIGNUP_CAMPAIGN}') t`,
-    ),
-  );
+  const out = await sql(asService(`select coalesce(json_agg(t), '[]') from public.${CLAIM_RPC}(${named(claimArgs(user))}) t`));
   return JSON.parse(out) as Record<string, unknown>[];
 }
 
@@ -93,7 +90,7 @@ test("A2-PG-01 unverified: no grant, no wallet, and the page reads not_issued â€
   assert.equal(granted.kind, "credited");
   assert.equal(granted.kind === "credited" && granted.first, true);
   assert.equal(granted.kind === "credited" && granted.amount, "10000.00000000");
-  const balance = walletBalance(await wallet(user), null);
+  const balance = await welcomeWallet(async () => ({ data: await wallet(user), error: null }));
   assert.equal(balance.kind, "available");
   assert.equal(balance.kind === "available" && balance.available, "10000.00000000");
 });

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { FAILURE_COPY, emailSettled } from "../flow";
+import { FAILURE_COPY, requestReset } from "../flow";
 
 export default function ForgotPasswordPage() {
   const [pending, setPending] = useState(false);
@@ -19,15 +19,10 @@ export default function ForgotPasswordPage() {
     const email = String(new FormData(event.currentTarget).get("email"));
     setPending(true);
     setError(null);
-    const { error } = await createClient()
-      .auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
-      })
-      .catch(() => ({ error: { status: 0 } }));
-    setPending(false);
     // The same message whether or not the address has an account; only a rate limit or an
     // outage is reported, because "sent" would then be untrue.
-    const settled = emailSettled(error);
+    const settled = await requestReset(createClient().auth, email, window.location.origin);
+    setPending(false);
     if (settled === "sent") setSent(true);
     else setError(FAILURE_COPY[settled]);
   }
