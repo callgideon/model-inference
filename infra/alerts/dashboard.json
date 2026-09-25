@@ -30,6 +30,18 @@
       ]
     },
     {
+      "title": "Is the database pool saturated? (per process, psycopg_pool pop_stats)",
+      "panels": [
+        {"title": "DB pool connections: size vs available vs max", "metric": "infrx_db_pool_connections", "by": ["process", "state"], "unit": "connections"},
+        {"title": "DB pool waiters", "metric": "infrx_db_pool_requests_waiting", "by": ["process"], "unit": "requests"},
+        {"title": "DB pool requests", "metric": "infrx_db_pool_requests_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool wait time", "metric": "infrx_db_pool_wait_seconds_total", "by": ["process"], "rate": true, "unit": "s/s"},
+        {"title": "DB pool timeouts", "metric": "infrx_db_pool_timeouts_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool connect errors", "metric": "infrx_db_pool_connection_errors_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool connections lost", "metric": "infrx_db_pool_connections_lost_total", "by": ["process"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
       "title": "What happened to accepted jobs?",
       "panels": [
         {"title": "Accepted by mode", "metric": "infrx_jobs_accepted_total", "by": ["mode"], "rate": true, "unit": "1/s"},
@@ -67,5 +79,46 @@
         {"title": "Sanitizer refusals", "metric": "infrx_metrics_label_rejected_total", "by": ["family"], "rate": true, "unit": "1/s"}
       ]
     }
-  ]
+  ],
+  "pending": {
+    "description": "I8 / M6 wiring 4: panels for the retention collector's and the processing cache's families. M6 phase 2 (8fe53ed9) reports them in RetentionCollector's Report and ProcessingCache but records none, and infrx/observe/metrics.py FAMILIES declares none, so OB-10 cannot hold them in 'rows' yet. 'families' is the proposed declaration (WR-I8-M6-1: kind and closed label vocabularies); when a family is declared in FAMILIES its panels move into 'rows' and leave this section (tests/i/test_observe.py fails until they do). infrx_processing_cache_bytes is already written by infra/observe/host-probe.sh (process=host).",
+    "families": {
+      "infrx_retention_passes_total": {"kind": "counter", "help": "Retention passes run (RetentionCollector.sweep returned)."},
+      "infrx_retention_aborted_total": {"kind": "counter", "help": "Passes that stopped early (Report.aborted).", "labels": {"reason": ["dependency_unavailable", "object_store_unavailable"]}},
+      "infrx_retention_consecutive_aborted_passes": {"kind": "gauge", "help": "Aborted passes since the last completed one."},
+      "infrx_retention_last_success_timestamp_seconds": {"kind": "gauge", "help": "Unix time the last pass completed without aborting."},
+      "infrx_retention_deleted_total": {"kind": "counter", "help": "Content deleted and acknowledged (Report.deleted), by where it lived.", "labels": {"location": ["object_store", "database"]}},
+      "infrx_retention_retained_total": {"kind": "counter", "help": "Candidates kept this pass (Report.retained), by refusal.", "labels": {"reason": ["claim_held", "claim_lost", "foreign_key", "lease_short", "not_claimable", "not_eligible", "not_found", "not_ready", "reference_live", "stale_lease"]}},
+      "infrx_retention_delete_failed_total": {"kind": "counter", "help": "Object-store deletes that failed (Report.delete_failed)."},
+      "infrx_retention_ack_lost_total": {"kind": "counter", "help": "Deletes done whose acknowledgement did not commit (Report.ack_lost)."},
+      "infrx_retention_pending_delete_seconds": {"kind": "gauge", "help": "Oldest unfinished delete a pass took over (Report.max_pending_delete_s)."},
+      "infrx_processing_cache_bytes": {"kind": "gauge", "help": "Bytes under PROCESSING_CACHE_DIR."},
+      "infrx_processing_cache_evicted_total": {"kind": "counter", "help": "Cache files removed: above the high water (_make_room) or past their life (sweep).", "labels": {"reason": ["high_water", "expired"]}},
+      "infrx_processing_cache_refused_total": {"kind": "counter", "help": "Puts refused because what is left is pinned (retryable 503)."}
+    },
+    "rows": [
+      {
+        "title": "Is retention keeping up?",
+        "panels": [
+          {"title": "Retention passes", "metric": "infrx_retention_passes_total", "rate": true, "unit": "1/s"},
+          {"title": "Aborted passes by reason", "metric": "infrx_retention_aborted_total", "by": ["reason"], "rate": true, "unit": "1/s"},
+          {"title": "Consecutive aborted passes", "metric": "infrx_retention_consecutive_aborted_passes", "unit": "passes"},
+          {"title": "Last completed pass", "metric": "infrx_retention_last_success_timestamp_seconds", "unit": "unixtime"},
+          {"title": "Deleted by location", "metric": "infrx_retention_deleted_total", "by": ["location"], "rate": true, "unit": "1/s"},
+          {"title": "Retained by reason", "metric": "infrx_retention_retained_total", "by": ["reason"], "rate": true, "unit": "1/s"},
+          {"title": "Delete failures", "metric": "infrx_retention_delete_failed_total", "rate": true, "unit": "1/s"},
+          {"title": "Lost acknowledgements", "metric": "infrx_retention_ack_lost_total", "rate": true, "unit": "1/s"},
+          {"title": "Oldest pending delete", "metric": "infrx_retention_pending_delete_seconds", "unit": "s"}
+        ]
+      },
+      {
+        "title": "Processing cache",
+        "panels": [
+          {"title": "Cache bytes", "metric": "infrx_processing_cache_bytes", "unit": "bytes"},
+          {"title": "Evictions by reason", "metric": "infrx_processing_cache_evicted_total", "by": ["reason"], "rate": true, "unit": "1/s"},
+          {"title": "Refused puts (cache full of media in use)", "metric": "infrx_processing_cache_refused_total", "rate": true, "unit": "1/s"}
+        ]
+      }
+    ]
+  }
 }
