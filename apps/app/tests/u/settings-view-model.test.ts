@@ -35,8 +35,9 @@ test(T.facts, () => {
 
 test(T.truthful, () => {
   const text = all(settingsModel({ state: "ready", account: ACCOUNT }));
-  assert.doesNotMatch(text, /\bZDR\b|120[- ]?s|120 seconds|never stor|not stored|no data is stored|zero data retention(?! )/i);
-  assert.match(text, /This is not zero data retention/);
+  assert.match(text, /This is not zero data retention\./);
+  const claims = text.replaceAll("This is not zero data retention.", "");
+  assert.doesNotMatch(claims, /\bZDR\b|zero (data )?retention|120[- ]?s\b|120 seconds|never stor|not stored|no data is stored/i);
   const retention = settingsModel({ state: "ready", account: ACCOUNT }).privacy.find((r) => /retention/i.test(r.title));
   assert.equal(retention?.href, "/docs#retention", "the periods are the published record's, read on Docs");
   assert.match(retention?.detail ?? "", /video/);
