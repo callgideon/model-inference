@@ -2,12 +2,12 @@
 
     infrx-i8-postgres   127.0.0.1:55450  postgres:16 (digest), database infrx_i8 with the
                                          real schema: supabase_shim.sql + 0001-0018
-    infrx-i8-pgbouncer  127.0.0.1:55477  PgBouncer 1.24.1 (digest), two entries onto it:
+    infrx-i8-pgbouncer  127.0.0.1:55496  PgBouncer 1.24.1 (digest), two entries onto it:
         infrx_i8          pool_mode=transaction, 2 server connections, no prepared statements
         infrx_i8_session  pool_mode=session, max_db_client_connections=15
 
 (The task-local reservation of `infrx.contracts.tasklocal`, task `i8`: the PostgreSQL
-container, port and database are its; the pooler is on 55477 of the i8 block.)
+container, port and database are its; the pooler is on 55496 of the i8 block.)
 
 Why these settings model the hosted pooler (research/plan/evidence/i/I8-*.md):
 * session: Supavisor refuses the 16th session client (`EMAXCONNSESSION ... pool_size 15`,
@@ -46,7 +46,7 @@ SERVICE = local_services("i8")["postgres"]
 PREFIX = "infrx-i8-"
 NETWORK = PREFIX + "net"
 PG, BOUNCER = SERVICE.container, PREFIX + "pgbouncer"
-PORTS = {PG: SERVICE.host_port, BOUNCER: 55477}
+PORTS = {PG: SERVICE.host_port, BOUNCER: 55496}
 DATABASE = SERVICE.database                        # infrx_i8
 # The three ways in: straight to PostgreSQL, and the pooler's two modes.
 PG_DIRECT, TXN, SESSION = "direct", "transaction", "session"

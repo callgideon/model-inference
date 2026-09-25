@@ -54,6 +54,11 @@ HELPERS = {"record_outcome": ("infrx_jobs_terminal_total", "infrx_settlements_to
                                      "infrx_unsettleable_jobs",
                                      "infrx_reconciliation_last_success_timestamp_seconds"),
            "observe_phases": ("infrx_phase_seconds",),
+           "record_pool": ("infrx_db_pool_connections", "infrx_db_pool_requests_waiting",
+                           "infrx_db_pool_requests_total", "infrx_db_pool_wait_seconds_total",
+                           "infrx_db_pool_timeouts_total",
+                           "infrx_db_pool_connection_errors_total",
+                           "infrx_db_pool_connections_lost_total"),
            "collect_host": ("infrx_host_cpus", "infrx_host_load1", "infrx_host_memory_bytes",
                             "infrx_process_resident_bytes", "infrx_disk_bytes",
                             "infrx_disk_free_ratio", "infrx_gpu_up", "infrx_gpu_memory_bytes",
@@ -113,7 +118,7 @@ def test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_know
     ops = json.loads((ALERTS / "operations.json").read_text())
     pending = set(ops["pending_producers"])
     for name, metrics in rule_metrics(ops["rules"]).items():
-        assert metrics <= exporter_producers() | pending, (name, metrics)
+        assert metrics <= exporter_producers() | runtime_producers() | pending, (name, metrics)
     assert pending.isdisjoint(runtime_producers() | exporter_producers()), \
         "a pending producer landed: move it out of pending_producers"
 
@@ -122,6 +127,76 @@ def test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_know
                                        + ", ".join(sorted(KNOWN_UNPRODUCED)))
 def test_ops_continuous__every_alert_rule_names_a_metric_something_produces():
     assert _unproduced(json.loads((ALERTS / "alerts.json").read_text())["rules"]) == set()
+
+
+class _Pool:
+    """psycopg_pool's `pop_stats()` shape: gauges always, counters only once they moved."""
+    pops = 0
+
+    def pop_stats(self):
+        self.pops += 1
+        return {"pool_min": 2, "pool_max": 6, "pool_size": 4, "pool_available": 1,
+                "requests_waiting": 3, "requests_num": 10, "requests_wait_ms": 2500,
+                "requests_errors": 1, "connections_errors": 2, "connections_lost": 1}
+
+
+POOL_SERIES = {'infrx_db_pool_connections{process="%s",state="size"} 4.0',
+               'infrx_db_pool_connections{process="%s",state="available"} 1.0',
+               'infrx_db_pool_connections{process="%s",state="max"} 6.0',
+               'infrx_db_pool_requests_waiting{process="%s"} 3.0',
+               'infrx_db_pool_requests_total{process="%s"} 20.0',
+               'infrx_db_pool_wait_seconds_total{process="%s"} 5.0',
+               'infrx_db_pool_timeouts_total{process="%s"} 2.0',
+               'infrx_db_pool_connection_errors_total{process="%s"} 4.0',
+               'infrx_db_pool_connections_lost_total{process="%s"} 2.0'}
+
+
+def _gateway_scrape(rt):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from infrx.observe import route
+    app = FastAPI()
+    route.register(app, rt)
+    client = TestClient(app, client=("127.0.0.1", 1))
+    return [client.get(route.PATH).text for _ in range(2)][-1]
+
+
+def test_ops_continuous__both_processes_export_their_db_pool_at_scrape():
+    """WR-I8-2: the gateway's /metrics and the worker's read the pool's pop_stats at each
+    scrape - gauges as read, counters accumulated across pops (two scrapes: 2x). Oracle: a
+    scrape that skips the pool, reads counters as gauges, or wait in ms."""
+    import asyncio
+    from types import SimpleNamespace
+    from infrx.observe.metrics import Registry
+    from infrx.worker import WorkerService
+    rt = SimpleNamespace(metrics=Registry("gateway"), lifetime=SimpleNamespace(pool=_Pool()))
+    text = _gateway_scrape(rt)
+    assert {s % "gateway" for s in POOL_SERIES} <= set(text.splitlines())
+
+    async def worker():
+        service = WorkerService(loop=None, jobs=None, engine=None, metrics=Registry("worker"),
+                                pool=_Pool())
+        server = await asyncio.start_server(service._probe, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        for _ in range(2):
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b"GET /metrics HTTP/1.1\r\nhost: x\r\n\r\n")
+            body = (await reader.read()).decode()
+            writer.close()
+        server.close()
+        return body
+    assert {s % "worker" for s in POOL_SERIES} <= set(asyncio.run(worker()).splitlines())
+
+
+def test_ops_continuous__the_gateway_exports_no_gpu_gauge():
+    """WR-I8-4: the gateway container has no nvidia-smi, so its scrape carries no GPU
+    family at all (the host probe's infrx_gpu_up is the GPU's). Oracle: a gateway that
+    still runs collect_gpu writes infrx_gpu_up (0 in the container) on every scrape."""
+    from types import SimpleNamespace
+    from infrx.observe.metrics import Registry
+    text = _gateway_scrape(SimpleNamespace(metrics=Registry("gateway")))
+    assert "infrx_host_cpus{" in text
+    assert not re.search(r"^infrx_gpu_\w+\{", text, re.M)
 
 
 def test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed():
@@ -215,7 +290,7 @@ def test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the
     assert {"ReconciliationDrift", "UnknownUsageOverdue", "ReadyBacklogOld"} <= fired
     # the monitor's DSN never leaves the process, and a dead database is a 0, not silence
     assert "infrx-i8-local" not in done.stdout + done.stderr
-    bad = {**os.environ, "MONITOR_DATABASE_URL": i8_stack.dsn(TXN).replace("55477", "55479")}
+    bad = {**os.environ, "MONITOR_DATABASE_URL": i8_stack.dsn(TXN).replace("55496", "55479")}
     done = subprocess.run([sys.executable, str(OBSERVE / "durable.py"), "--out", str(out)],
                           capture_output=True, text=True, env=bad)
     assert done.returncode == 1 and "infrx-i8-local" not in done.stderr

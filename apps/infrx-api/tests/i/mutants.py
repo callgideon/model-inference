@@ -936,10 +936,12 @@ MUTANTS += (
 BUDGET_PY, POOLER_PY = "../../infra/runbooks/pool_budget.py", "tests/i/pooler.py"
 PROBE_PY = "../../infra/runbooks/privilege_probe.py"
 ADMITS = "test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits"
-COMPOSED = "test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_pooler_today"
+COMPOSED = "test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler"
 TXN_CASES = ("test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler",
              "test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler",
              COMPOSED)
+ON_6543 = "test_ops_continuous__on_6543_the_runtime_sends_no_session_set"
+POOL_SCRAPE = "test_ops_continuous__both_processes_export_their_db_pool_at_scrape"
 ENVCHECK_REFUSES = "test_deploy_failclosed__envcheck_refuses_a_file_the_runtime_would_start_on"
 UNIT_REFUSES = "test_deploy_failclosed__each_runtime_unit_refuses_to_start_on_a_refused_env_file"
 LEAST = "test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail"
@@ -962,12 +964,41 @@ MUTANTS += (
        dies_by=("ProtocolViolation", "OperationalError")),
     _m("stand_in_pooler_replays_prepares", "the stand-in, like 6543, supports no prepared "
        "statements", POOLER_PY, "max_prepared_statements = 0", "max_prepared_statements = 100",
-       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler", COMPOSED),
+       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler"),
     _m("runtime_adds_a_session_statement", "no new session-only statement reaches the pool",
        "infrx/gateway/pilot.py", '        await conn.execute("set role service_role")\n',
        '        await conn.execute("set role service_role")\n'
        '        await conn.execute("set search_path = infrx, public")\n',
        "test_ops_continuous__the_runtime_sends_no_other_session_only_statement"),
+    # WR-I8-1..4 (i8-wiring): the runtime on 6543, the pool and GPU scrape
+    _m("pool_prepares_again", "no server-side prepares on the pool's connections (WR-I8-1)",
+       "infrx/gateway/pilot.py", 'kwargs={"autocommit": True, "prepare_threshold": None},',
+       'kwargs={"autocommit": True},', ON_6543, COMPOSED,
+       dies_by=("InvalidSqlStatementName", "DuplicatePreparedStatement")),
+    _m("pool_sets_session_state_on_6543", "the hook sends no session SET on 6543 (WR-I8-1)",
+       "infrx/gateway/pilot.py", "        if not session_state:\n            return\n", "",
+       ON_6543, COMPOSED, dies_by=("PoolTimeout",)),
+    _m("connector_sets_role_on_6543", "the CLI's connect sends no session SET on 6543",
+       "infrx/state/jobstore.py", "        if session_state_allowed(dsn):\n"
+       '            await conn.execute("set role service_role")',
+       '        await conn.execute("set role service_role")', ON_6543, COMPOSED,
+       dies_by=("InsufficientPrivilege",)),
+    _m("connector_prepares", "no server-side prepares on the CLI's connections (WR-I8-1)",
+       "infrx/state/jobstore.py", "autocommit=True,\n"
+       "                                                     prepare_threshold=None)",
+       "autocommit=True)", ON_6543),
+    _m("pool_wait_in_ms", "the pool's wait counter is in seconds (WR-I8-2)",
+       "infrx/observe/metrics.py", 'stats.get("requests_wait_ms", 0) / 1000)',
+       'stats.get("requests_wait_ms", 0))', POOL_SCRAPE),
+    _m("gateway_scrape_skips_pool", "the gateway's scrape reads its pool (WR-I8-2)",
+       "infrx/observe/route.py", "            record_pool(rt.metrics, pool.pop_stats())",
+       "            pass", POOL_SCRAPE),
+    _m("worker_scrape_skips_pool", "the worker's scrape reads its pool (WR-I8-2)",
+       "infrx/worker/service.py", "                    record_pool(self.metrics, self.pool.pop_stats())",
+       "                    pass", POOL_SCRAPE),
+    _m("gateway_collects_gpu", "the gateway exports no GPU gauge (WR-I8-4)",
+       "infrx/observe/route.py", "rt.metrics, disks, gpu=False)", "rt.metrics, disks)",
+       "test_ops_continuous__the_gateway_exports_no_gpu_gauge"),
     _m("pool_budget_step_env_as_mount", "the env file reaches the budget over stdin only",
        STEP + "71-pool-budget.sh", '"${sets[@]}" < "$env_file"', '"${sets[@]}"',
        "test_ops_continuous__the_pool_budget_step_hands_the_env_file_over_stdin"),

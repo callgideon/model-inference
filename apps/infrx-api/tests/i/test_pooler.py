@@ -281,8 +281,9 @@ def test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_poo
 # --- 3. the runtime's own patterns, pinned --------------------------------------------
 RUNTIME = API / "infrx"
 MIGRATIONS = REPO / "apps" / "app" / "supabase" / "migrations"
-# WR-I8-1: the only session-scoped statements the runtime sends today. Each is unsafe on
-# 6543 (shown above); the list shrinks when the wiring request lands, and a NEW one fails.
+# WR-I8-1: the only session-scoped statements the runtime sends. Each is unsafe on 6543
+# (shown above) and is sent only off it (`jobstore.session_state_allowed`; the composed
+# case below); a NEW one fails.
 KNOWN_SESSION_SET = {("gateway/pilot.py", "set role service_role"),
                      ("gateway/pilot.py", "set statement_timeout = "),
                      ("state/jobstore.py", "set role service_role")}
@@ -304,21 +305,72 @@ def test_ops_continuous__the_runtime_sends_no_other_session_only_statement():
         assert not re.search(r"\bLISTEN\s+\w", text, re.I), sql.name
 
 
-def test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_pooler_today(txn):
-    """WR-I8-1, as the gateway and the worker build their pool (`pilot.connection_pool`,
-    its configure hook and psycopg's default auto-prepare): on the transaction pooler the
-    twelfth-or-sooner statement served by the other server fails on a prepared statement
-    that server never saw. A characterization of today's defect: when WR-I8-1 lands this
-    case must be rewritten to "every answer has the same identity and a timeout"."""
-    import psycopg
-    dsn = txn
+def _login(i8_stack) -> str:
+    """A stand-in for D10's runtime login: its own `statement_timeout` default, no SET
+    needed (WR-I8-6). Its DSN on the transaction pooler."""
+    direct = _sync(i8_stack.dsn(PG_DIRECT))
+    direct.execute("drop role if exists infrx_i8_login")
+    direct.execute("create role infrx_i8_login login password 'infrx-i8-local'")
+    direct.execute("alter role infrx_i8_login set statement_timeout = '15s'")
+    direct.close()
+    i8_stack.users["infrx_i8_login"] = "infrx-i8-local"
+    i8_stack.write_bouncers()
+    return i8_stack.dsn(TXN, "infrx_i8_login")
 
-    async def run():
-        pool, connect = pilot.connection_pool(_settings(dsn))
-        await pool.open(wait=True, timeout=10)
-        last = None
-        ask = ("select pg_backend_pid(), current_user, current_setting('statement_timeout'), "
-               "count(*) from infrx.jobs where state = %s")
+
+def test_ops_continuous__on_6543_the_runtime_sends_no_session_set(monkeypatch):
+    """WR-I8-1: on the transaction pooler port the pool's hook sends nothing and neither the
+    pool nor its probe connection auto-prepares; on the session port the SETs stay.
+    Oracle: a hook that SETs on 6543, or a pool left on psycopg's default prepare."""
+    executed = []
+
+    class Connection:
+        async def execute(self, sql, *args):
+            executed.append(sql)
+    txn = "postgresql://u:p@pooler.example:6543/postgres"
+    pool, _ = pilot.connection_pool(_settings(txn))
+    asyncio.run(pool._configure(Connection()))
+    assert executed == [] and pool.kwargs.get("prepare_threshold", 0) is None
+    pool, _ = pilot.connection_pool(_settings(txn.replace("6543", "5432")))
+    asyncio.run(pool._configure(Connection()))
+    assert executed[0] == "set role service_role"
+    assert pool.kwargs.get("prepare_threshold", 0) is None
+    # the CLI's connector: same rule (its one-shot connections rarely reach psycopg's
+    # prepare threshold, so the kwargs are the oracle)
+    import psycopg
+    from infrx.state.jobstore import connector
+    seen = []
+
+    async def connect(dsn, **kw):
+        seen.append(kw)
+        return Connection()
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)
+    executed.clear()
+    asyncio.run(connector(txn)())
+    assert executed == [] and seen[-1].get("prepare_threshold", 0) is None
+    asyncio.run(connector(txn.replace("6543", "5432"))())
+    assert executed == ["set role service_role"]
+    assert seen[-1].get("prepare_threshold", 0) is None
+
+
+def test_ops_continuous__the_composed_runtime_pool_holds_on_the_transaction_pooler(
+        i8_stack, txn, monkeypatch):
+    """WR-I8-1, as the gateway and the worker build their pool (`pilot.connection_pool`) and
+    as the CLI connects (`jobstore.connector`), with the stand-in treated as the 6543 port:
+    every answer, whichever server serves it, has one identity and the login role's timeout,
+    and no statement fails on a prepared statement the other server never saw. Oracle: the
+    pre-WR code fails here with InvalidSqlStatementName (auto-prepare) and, without it,
+    would read identities that alternate with the leaked SETs."""
+    from infrx.state import jobstore
+    from .pooler import BOUNCER, PORTS
+    monkeypatch.setattr(jobstore, "TRANSACTION_POOLER_PORT", PORTS[BOUNCER])
+    dsn = _login(i8_stack)
+    ask = "select pg_backend_pid(), current_user, current_setting('statement_timeout'), %s::text"
+
+    async def run(connect, pool=None):
+        rows, last = [], None
+        if pool is not None:
+            await pool.open(wait=True, timeout=10)
         try:
             for _ in range(12):
                 conn = await connect()
@@ -330,8 +382,13 @@ def test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_poo
                             row = await (await conn.execute(ask, ("queued",))).fetchone()
                 finally:
                     await conn.close()
+                rows.append(row)
                 last = row[0]
         finally:
-            await pool.close()
-    with pytest.raises(psycopg.errors.InvalidSqlStatementName):
-        asyncio.run(run())
+            if pool is not None:
+                await pool.close()
+        return rows
+    pool, connect = pilot.connection_pool(_settings(dsn))
+    for rows in (asyncio.run(run(connect, pool)), asyncio.run(run(jobstore.connector(dsn)))):
+        assert len({r[0] for r in rows}) == 2
+        assert {r[1:] for r in rows} == {("infrx_i8_login", "15s", "queued")}

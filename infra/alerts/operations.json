@@ -10,9 +10,6 @@
     }
   },
   "pending_producers": {
-    "infrx_db_pool_requests_waiting": "WR-I8-2 (psycopg_pool get_stats on /metrics)",
-    "infrx_db_pool_timeouts_total": "WR-I8-2",
-    "infrx_db_pool_connection_errors_total": "WR-I8-2",
     "infrx_large_body_in_use": "WR-I8-3 (the gateway's LargeBodies occupancy on /metrics)",
     "infrx_large_body_limit": "WR-I8-3"
   },

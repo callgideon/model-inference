@@ -147,7 +147,7 @@ def compose(settings, *, objects=None, index=None):
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
-                            metrics=rt.metrics, preparation=preparation,
+                            metrics=rt.metrics, pool=pool, preparation=preparation,
                             preparation_concurrency=limits.preparation_concurrency)
     return service, pool
 
