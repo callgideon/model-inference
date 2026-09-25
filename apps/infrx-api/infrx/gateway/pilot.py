@@ -226,10 +226,10 @@ def adapters_from_env(settings, **injected):
                     "attachments": PgAttachments(connect),
                     # M5 (RV-02): upload tickets and content rows, on the same pool
                     "lifecycle": lifecycle,
-                    "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     # W5 wiring 4: the same adapter is the admission's ReadinessStore -
                     # only beside the job store it was built with (one database)
                     **({} if "jobs" in adapters else {"readiness": lifecycle}),
+                    "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     **adapters}
     return adapters
 
