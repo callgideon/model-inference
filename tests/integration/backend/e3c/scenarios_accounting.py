@@ -282,8 +282,48 @@ def test_s11_cancel_racing_completion_and_reconcile_ends_once(workdir):
         trip.conserved(alpha)
 
 
+def scrubbed_content(trip, request_id: str) -> dict:
+    """The content-bearing rows s06 requires scrubbed past the persisted expiry."""
+    return {"job_results.body": trip.one("select count(*) from infrx.job_results where "
+                                         "request_id = %s and body <> ''", request_id)[0],
+            "jobs.request_record messages": trip.one(
+                "select count(*) from infrx.jobs where request_id = %s and "
+                "request_record::text like %s", request_id, "%Describe the van.%")[0],
+            "stream_chunks deltas": trip.one("select count(*) from infrx.stream_chunks where "
+                                             "job_id = %s and event_type = 'delta'",
+                                             request_id)[0]}
+
+
 def test_s11_reconcile_never_recreates_scrubbed_content(workdir):
-    """Reconcile racing the retention pass must not bring content back. There is no retention
-    scrub on this tree to race (s06 is red), so this waits for M6's pass (D10's content
-    lifecycle doors are merged, phase 2)."""
-    world.blocked("M6", why="no durable retention scrub to race (RV-03; s06)")
+    """Reconcile racing M6's retention pass (a fresh collector process) on a settled job past
+    its persisted expiry: whichever wins, the content ends scrubbed (nothing recreated), the
+    reconcile answers typed, no money moves, the settlement stays single."""
+    with world.composed(workdir, RESULT_TTL_S="600") as trip:
+        alpha = trip.world.alpha
+        answer = trip.send(alpha, "sync", world.TEXT, "e3c-s11-scrub")
+        assert answer.status_code == 200, answer.text
+        request_id = answer.headers["inference-id"]
+        settled = trip.wallet(alpha)
+        world.set_clock(trip.world.database, 4000.0)      # past the result TTL and journal's
+        start = threading.Barrier(2)
+
+        def reconcile():
+            start.wait()
+            return world.cli(trip, "reconcile", "--org", alpha.org_id, "--request", request_id,
+                             "--idempotency-key", "rc-scrub", "--reason", "e3c scrub race")
+
+        def collect():
+            start.wait()
+            return world.collectors(trip, count=1)
+        with ThreadPoolExecutor(2) as pool:
+            reconciled, collected = pool.submit(reconcile), pool.submit(collect)
+            (status, typed), answers = reconciled.result(), collected.result()
+        assert status == 0 or typed.get("error") == "state_conflict", \
+            f"reconcile racing the scrub answered untyped: {status} {typed}"
+        again = world.collectors(trip, count=1)              # a pass after the race
+        content = scrubbed_content(trip, request_id)
+        assert not any(content.values()), \
+            f"content present after the race: {content} (passes: {answers}, {again})"
+        assert trip.wallet(alpha) == settled, "the race moved money"
+        world.settled_once(trip, request_id)
+        trip.conserved(alpha)

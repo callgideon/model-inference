@@ -20,7 +20,7 @@ processes and a journey's reads (`pilotbox`), and E2's controlled protocol engin
 * **bypasses** (`BYPASSES`): `INFRX_E3C_BYPASS=<name>` removes one corrective control in
   the process (the negative controls). A bypass whose target is absent refuses to start the
   process (exit 5) so a renamed seam is NOT RUN, never a vacuous pass.
-* **collector**: one real `MediaCollector` pass in a fresh process over the box's object
+* **collector**: one real M6 `RetentionCollector` pass in a fresh process over the box's object
   store and the job store's liveness - the RV-03 question ("does a fresh process know what
   is live?") asked of the real S3 and PostgreSQL.
 
