@@ -1,0 +1,24 @@
+{
+  "task": "I8",
+  "slice": "I8-INTAKE-PANELS (OB-10 follow-up, WR-I8-3 families)",
+  "activity": "review",
+  "head": "a4efcf1c",
+  "worktree": ".claude/worktrees/codex-i8-intake-panels",
+  "branch": "codex/i8-intake-panels",
+  "owned_paths": ["infra/alerts/dashboard.json", "infra/alerts/operations.json", "infra/runbooks/observe.md",
+                  "apps/infrx-api/tests/i/test_observe.py", "apps/infrx-api/tests/i/mutants.py",
+                  "research/plan/evidence/i/", "research/plan/evidence/coordinator/updates/"],
+  "commands": [
+    {"cmd": ".venv/bin/python -m pytest -q tests/integration/backend/recovery/test_observe.py", "exit": 0, "summary": "16 passed (red at 130e948b: OB-10 failed)"},
+    {"cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_observe.py", "exit": 0, "summary": "18 passed, 1 xfailed (red before: 2 new cases failed)"},
+    {"cmd": "tests/i/mutants.py intake_panel_missing intake_vocabulary_widened intake_rule_stale_family", "exit": 0, "summary": "3/3 killed"},
+    {"cmd": "INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_mutants.py", "exit": 0, "summary": "50 passed"},
+    {"cmd": "mutants_i3b.py --only i3bm24", "exit": 0, "summary": "1/1 killed"}
+  ],
+  "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 1, "confidence": "high",
+               "basis": "all named suites green; dashboard/rule/runbook only", "at": "2026-09-25T17:44Z"},
+  "next_action": "coordinator: review and merge codex/i8-intake-panels",
+  "blockers": [],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/i/I8-intake-panels-a4efcf1c.md"]
+}

@@ -78,8 +78,27 @@ is ready ([rollback.md](rollback.md#maintenance)). `PublicEdgeDown`: public `/he
 not answer 200 while the box's own readiness may: DNS, TLS, Caddy, or the
 503-after-readiness seen on 2026-09-24 — `docker logs --since 10m caddy`,
 `curl -s -o /dev/null -w '%{http_code}' https://marlin2b.callbill.ai/health`.
-`GatewayBodySlotsFull` (pending WR-I8-3): every large-body slot is in use; refusals are
-typed 429s, see [restart.md](restart.md#saturation).
+
+## Intake
+
+Dashboard row "Is the intake saturated?" (`routes/intake.py`, WR-I8-3, gateway only).
+A body over `LARGE_BODY_THRESHOLD_BYTES` holds one of `LARGE_BODY_LIMIT` slots while it is
+read; with every slot held the next large body is refused 429 `capacity_exhausted`
+(`Retry-After: 2`) and nothing is lost.
+
+- Slots in use pinned at the limit (`GatewayBodySlotsFull`, ticket, exact: at the limit):
+  load, not failure — the same stance as [restart.md](restart.md#saturation). Do not raise
+  `LARGE_BODY_LIMIT` from a ticket: it bounds the gateway's buffered memory. A pin with no
+  traffic behind it (in use stays at the limit while requests stop) is a leaked slot:
+  restart the gateway ([restart.md](restart.md#gateway)) and keep the journal.
+- Refusals (`infrx_large_body_refused_total`) rising: callers are retrying uploads into a
+  full gate; check "Refusals by tenant (hashed)" for one tenant. No rule: a refusal rate
+  worth a ticket is ⚠️ TO BE VERIFIED (P-25, from pilot traffic).
+- The drain (`infrx_intake_drained_total{code}`): a refused body with a declared length is
+  read to its end so the caller sees the refusal instead of a reset. `request_too_large` or
+  `invalid_api_key` drains are client behaviour; `capacity_exhausted` tracks the slots
+  above; `deadline_exceeded` means slow uploads hit `INTAKE_TIMEOUT_S` — look at the edge
+  ([Edge](#edge)) and the client's link before the gateway. No rule (⚠️ TO BE VERIFIED, P-25).
 
 ## Canary
 
@@ -176,3 +195,6 @@ Keep `lifecycle-before.json` with the session record (it is the rollback). Not a
 - 2026-09-25 (I8, M6 wiring 4): retention and processing-cache sections, the bucket
   lifecycle rule and its apply stanza; rule set version `a1+o2`. The families are pending
   WR-I8-M6-1 (no producer at M6 phase 2 `8fe53ed9`); nothing applied to the bucket.
+- 2026-09-25 (I8, intake panels): Intake section and dashboard row for the WR-I8-3
+  families; `GatewayBodySlotsFull` now reads the declared `infrx_large_body_slots_*` names
+  (it named families nothing records) and points here. No new rule; nothing run on the box.
