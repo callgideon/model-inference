@@ -139,6 +139,10 @@ CAUSE_AUTH = "test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_mo
 SUCCESS = "test_e4b_every_success_status_the_prose_cites_is_the_one_its_route_answers"
 MODEL = "test_e4b_the_model_table_says_whether_the_published_release_is_the_measured_pin"
 D = "tests/integration/backend/endpoint_doc.py"
+E1C_ARGV = "test_e1c_a_remote_cell_runs_under_its_own_profile_and_the_key_inventory"
+E1C_BLOCKED = "test_e1c_a_remote_run_without_its_profile_or_inventory_is_blocked_never_pass"
+E1C_VALIDITY = "test_e1c_a_rung_whose_bench_summary_is_not_valid_fails"
+E1C_CELLS = "test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -299,8 +303,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if any(v != decide.PASS for v in core):\n            break",
        "        if any(v != decide.PASS for v in core):\n            continue", CLIMB),
     _m("other_rungs_cap_ignored", "a cap failure on any rung fails the envelope",
-       'summarise([row for row in chosen if row[0] != "duration_cap"] + caps)',
-       "summarise(chosen)", CLIMB),
+       'if row[0] not in ("duration_cap", "bench_validity")] + caps)',
+       "] + [])", CLIMB),
     _m("unknown_is_pass", "an unjudged criterion pends; it never passes",
        "    if UNKNOWN in states:\n", "    if False:\n", CLIMB, SOAK),
     # --- E4B.b: the soak ---------------------------------------------------------------
@@ -399,7 +403,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '"bench_target": "direct", "model": "marlin2b", "scale": scale, "label": FAKE,',
        '"bench_target": "direct", "model": "marlin2b", "scale": scale, "label": MEAS,', LABELS),
     _m("remote_run_measured_by_default", "a --target run is unverified until the box proves it",
-       '            "label": UNVERIFIED, "namespace": None}', '            "label": MEAS, "namespace": None}',
+       '            "label": UNVERIFIED, "namespace": None,', '            "label": MEAS, "namespace": None,',
        LABELS),
     _m("unready_box_measured", "a box run whose preconditions failed measures nothing",
        "    return MEAS if box and preconditions == PASS else UNVERIFIED",
@@ -434,10 +438,46 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("seqs_read_from_the_record_not_serve_sh", "serve.sh's concurrency is held against the record",
        '            "engine_max_num_seqs": pins["seqs"],',
        '            "engine_max_num_seqs": record["settings"]["ENGINE_MAX_NUM_SEQS"],', RECORD),
+    # --- E1C wiring: per-cell profile + key inventory, the validity gate ---------------
+    _m("profile_dropped_from_argv", "a remote cell runs under its own profile and the inventory",
+       '    if target["kind"] != "local":\n        argv += ["--profile"',
+       '    if False:\n        argv += ["--profile"', E1C_ARGV),
+    _m("profile_not_stamped_per_cell", "the stamped profile describes this cell's arrival",
+       '    profile["measurement"].update(arrival="open-loop", rate_per_s=rate)\n', "", E1C_ARGV),
+    _m("profile_bounds_loosened", "the coordinator's bounds reach bench unchanged",
+       '    path = workdir / f"{name}-profile.json"\n',
+       '    profile["bounds"]["max_requests"] = 10 ** 9\n    path = workdir / f"{name}-profile.json"\n',
+       E1C_ARGV),
+    _m("unprofiled_remote_cells_run", "a remote cell without profile + inventory never starts",
+       '        if why := profile_blocked(target):\n            for check_id',
+       '        if False:\n            for check_id', E1C_BLOCKED),
+    _m("bench_argv_starts_unprofiled", "bench_argv refuses a remote cell without its files",
+       '    if why := profile_blocked(target):\n        raise Blocked(why)',
+       '    if False:\n        raise Blocked(why)', E1C_BLOCKED),
+    _m("profile_schema_unchecked", "only an infrx.run-profile/1 file unblocks a cell",
+       "    if schema != RUN_PROFILE_SCHEMA:\n", "    if False:\n", E1C_BLOCKED),
+    _m("validity_gate_removed", "a rung bench did not call VALID never passes",
+       "    out += [bench_validity(summary, local), failures(counted), answered(counted)]",
+       "    out += [failures(counted), answered(counted)]", E1C_VALIDITY, CELLS),
+    _m("validity_invalid_is_pass", "validity != VALID fails",
+       '    if validity.get("verdict") == "VALID":\n', "    if True:\n", E1C_VALIDITY, E1C_CELLS),
+    _m("remote_unprofiled_excused", "only a local cell's `unprofiled` goes unjudged",
+       "if not (local and r == bench.UNPROFILED)]", "if not r == bench.UNPROFILED]",
+       E1C_VALIDITY),
+    _m("missing_summary_excused", "a remote cell with no summary fails",
+       "    if reasons or not local:\n", "    if reasons:\n", E1C_VALIDITY),
+    _m("other_rungs_validity_ignored", "an INVALID rung fails the envelope, not only the chosen",
+       'if row[0] in ("duration_cap", "bench_validity")]', 'if row[0] == "duration_cap"]',
+       E1C_VALIDITY),
+    _m("soak_validity_unwired", "the soak judges its own bench validity",
+       '[client_exit(done["exit"]), bench_validity(\n                                     bench_summary(workdir / "soak.jsonl"), local)]',
+       '[client_exit(done["exit"])]', E1C_CELLS),
+    _m("overload_validity_unwired", "overload judges its own bench validity",
+       "    if validity[1] == decide.FAIL:\n", "    if False:\n", E1C_CELLS),
     # --- review F8: one assertion per stated rule -------------------------------------
     _m("retries_hide_refusals", "the client never retries: a retry may not hide a refusal",
-       '"--max-tokens", "128,512,1024", "--retries", "0",',
-       '"--max-tokens", "128,512,1024", "--retries", "3",', RULES),
+       '"--max-tokens", BENCH_MAX_TOKENS, "--retries", "0",',
+       '"--max-tokens", BENCH_MAX_TOKENS, "--retries", "3",', RULES),
     _m("box_runs_the_fast_subset", "the box scale runs the full corpus",
        '"--subset", "full" if target["scale"] == "box" else "fast",', '"--subset", "fast",',
        RULES),
@@ -608,8 +648,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("soak_reports_a_cap_pass", "the soak never reports the cap as passing",
        "    if gateway and cap[1] == decide.FAIL:\n", "    if gateway:\n", SOAK),
     _m("soak_gateway_unwired", "the load cells tell the soak it runs against a gateway",
-       '                                 cap_s, gateway) + [client_exit(done["exit"])]',
-       '                                 cap_s) + [client_exit(done["exit"])]', CELLS),
+       '                                 cap_s, gateway) + [client_exit(done["exit"]), bench_validity(',
+       '                                 cap_s) + [client_exit(done["exit"]), bench_validity(', CELLS),
     _m("v_soak_cut_at_an_hour", "a bench run is bounded by its own schedule, never a flat hour",
        "    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=client_timeout_s(argv))",
        "    return run.shell(argv, cwd=harness.REPO_ROOT, env=env, timeout=3600.0)", TIMEOUTS),
