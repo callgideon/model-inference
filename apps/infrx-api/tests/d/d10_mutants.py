@@ -72,14 +72,14 @@ MIGRATION_MUTANTS = (
        "      for share;",
        "    select * into u from infrx.media_uploads where org_id = p_org and handle = p_handle;",
        "ready_races", "an abort or completion races an admission on the same ticket"),
-    _m("d10_register_outside_the_prefix", READY,
+    _m("d10_register_outside_the_prefix", FOLLOWUP,
        "  if not exists (select 1 from public.organizations o where o.id::text = "
        "p_identity->>'org_id')\n     or (p_identity->>'location' = 'object_store' and not coalesce(",
        "  if not exists (select 1 from public.organizations o where o.id::text = "
        "p_identity->>'org_id')\n     or (false and not coalesce(", "register_guards",
        "ambiguous ownership is registered (and so becomes deletable) instead of retained"),
     # M6 findings (2026-09-25): a dot segment inside the tenant prefix; the unlocked row.
-    _m("d10_register_dot_segment", READY,
+    _m("d10_register_dot_segment", FOLLOWUP,
        "           or p_identity->>'object_key' ~ '(^|/)\\.\\.?(/|$)') then",
        "           or false) then", "register_guards",
        "a '..' key inside one tenant's prefix is registered and deleted as another's object"),
@@ -95,12 +95,12 @@ MIGRATION_MUTANTS = (
        "                where state = 'created' and expires_at <= infrx.now()\n",
        "                where state = 'created' and expires_at <= infrx.now() + interval '1 year'\n",
        "upload_ticket", "the sweep closes tickets still inside their window (review 0-D10-R4)"),
-    _m("d10_register_other_bytes", READY,
+    _m("d10_register_other_bytes", FOLLOWUP,
        "  if (c.digest is not null and p_identity->>'digest' is not null\n"
        "      and c.digest <> p_identity->>'digest')",
        "  if (false)", "register_guards",
        "one key comes to name two sets of bytes, and a delete of one removes the other"),
-    _m("d10_tombstoned_key_recreated", READY,
+    _m("d10_tombstoned_key_recreated", FOLLOWUP,
        "  if c.state = 'tombstoned' then\n    perform infrx.lifecycle_refuse('content_retiring',\n"
        "      'the object at this key",
        "  if false then\n    perform infrx.lifecycle_refuse('content_retiring',\n"

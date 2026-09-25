@@ -95,4 +95,9 @@ def test_the_adapter_ends_a_preparation_as_the_runtime_login() -> None:
             await store.fail_preparation(lease, TerminalCause.preparation_failed)
         with pytest.raises(errors.AlreadyTerminal):
             await store.claim_preparation(request.request_id, "prep-rt-2")
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    finally:
+        # the role is cluster-wide: leave it NOLOGIN, as 0021 made it (test_reads asserts it)
+        with pgharness.connect("postgres") as admin:
+            admin.execute("alter role infrx_runtime nologin password null")
