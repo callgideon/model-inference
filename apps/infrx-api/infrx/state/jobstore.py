@@ -478,6 +478,17 @@ class PgJobStore:
         settled = _outcome(doc["outcome"])
         return settled, _settlement(doc, settled)
 
+    async def fail_preparation(self, lease: Lease, cause: TerminalCause) -> TerminalOutcome:
+        """W5 wiring request 3 (R104's third candidate; 0022): a PERMANENT preparation
+        refusal ends the job once, fenced on the preparation lease like `prepared` - `failed`
+        with `cause`, no usage, released free, hold/reservations/attempt released in the same
+        transaction. `cause` is `invalid_media` or `preparation_failed`, else
+        `invalid_request`. The same lease's identical retry answers the committed outcome;
+        a stale lease is `stale_lease`, a job already ended `already_terminal` (nothing
+        changes); both regimes through this one door."""
+        return _outcome((await self._fenced("fail_preparation", lease,
+                                            cause=str(cause)))["outcome"])
+
     async def recover(self) -> tuple[TerminalOutcome | IndexEvent, ...]:
         """The reaper, on the database clock (R7). Requeues become outbox dispatch rows (the
         relay delivers them) and are also returned as `IndexEvent`s with the same ids. A job

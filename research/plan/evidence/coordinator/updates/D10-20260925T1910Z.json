@@ -1,0 +1,17 @@
+{"task": "D10", "slice": "D10-FOLLOWUP (0022: fail_preparation, set_feature_flag, WR-7/WR-8, F2; composition_pg legacy seed)",
+ "activity": "review", "head": "4b462094", "worktree": ".claude/worktrees/codex-d10-followup", "branch": "codex/d10-followup",
+ "owned_paths": ["apps/app/supabase/migrations/0022_preparation_refusal_and_flag_writer.sql", "apps/infrx-api/infrx/state/", "apps/infrx-api/tests/d/",
+                 "research/plan/evidence/d/D10-followup-4b46209.md", "research/plan/evidence/d/D10-followup-wiring.patch", "research/plan/evidence/d/D10-runtime-functions.txt"],
+ "commands": [
+  {"cmd": "INFRX_D_TASK=d10 uv run --frozen pytest -q tests/d", "exit": 1, "summary": "841 passed, 1 failed (lifecycle transcript, needs W2), 1 skipped, 8 xfailed"},
+  {"cmd": "INFRX_D_TASK=d10 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q <D10 suites + test_followup_d10 + test_composition_pg>", "exit": 1, "summary": "133 passed, 1 failed (same transcript), 4 xfailed"},
+  {"cmd": "tests/d/test_lifecycle_conformance.py with W2 applied, plain/supabase", "exit": 0, "summary": "27 passed / 27 passed"},
+  {"cmd": "INFRX_D_TASK=d10 INFRX_MUTANTS=all uv run --frozen pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py", "exit": 0, "summary": "732 passed, 0 survivors"},
+  {"cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'", "exit": 0, "summary": "1260 passed"},
+  {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"},
+  {"cmd": "privilege_probe.py --role infrx_runtime --allow-functions D10-runtime-functions.txt (d10 stand-in, plain/supabase)", "exit": 0, "summary": "PASS 64 checks each"},
+  {"cmd": "scratch m6-phase2+d10-followup+W2: tests/m/test_retention.py + tests/d/test_lifecycle_conformance.py", "exit": 0, "summary": "102 passed; refetch case [f2c] and [d10] pass, fail without the refresh"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 4, "confidence": "medium", "basis": "all D lists green except the W2-gated transcript; merge with W1-W4, then 0023 door revoke after W5/G7", "at": "2026-09-25T19:10Z"},
+ "blockers": [],
+ "wiring_requests": ["W1 G8 transition.set_flag -> infrx.set_feature_flag", "W2 F2C fake register WR-7 + acceptance lifecycle.json regen (merge WITH this branch)", "W3 M6 remove strict xfail on the refetch case", "W4 layer-3 pgstate FUNCTIONS/RUNTIME_FUNCTIONS + test_harness migration pin", "W5 none (PgJobStore.fail_preparation now exists)", "W6 optional I8 MUST_DENY set_feature_flag"],
+ "evidence": ["research/plan/evidence/d/D10-followup-4b46209.md", "research/plan/evidence/d/D10-followup-wiring.patch"]}
