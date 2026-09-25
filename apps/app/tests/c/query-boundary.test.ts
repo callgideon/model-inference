@@ -32,6 +32,9 @@ const OTHER = "22222222-2222-4222-8222-222222222222";
  */
 const TENANT_SCOPED = [
   "consent_history",
+  // C0: the owner is the tenant of the wallet lookup, the wallet the tenant of its CREDIT ledger.
+  "consumer_wallet",
+  "credit_ledger_page",
   "feedback_by_request",
   "judge_runs_page",
   "key_by_id",

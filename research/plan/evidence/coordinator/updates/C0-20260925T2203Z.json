@@ -1,0 +1,47 @@
+{
+  "task": "C0",
+  "slice": "all brief items 1-3: consumer context, PostgREST read port, real RLS/RPC grant matrix",
+  "activity": "review",
+  "head": "acfd9a51",
+  "worktree": ".claude/worktrees/codex-app-c0",
+  "branch": "codex/app-c0",
+  "owned_paths": [
+    "apps/app/lib/services/query.ts",
+    "apps/app/lib/services/server.ts",
+    "apps/app/lib/services/console.ts",
+    "apps/app/lib/services/credits.ts",
+    "apps/app/tests/c/",
+    "research/plan/evidence/c/C0-acfd9a5.md"
+  ],
+  "commands": [
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "386 tests: 375 pass, 0 fail, 11 skipped (real-stack file without INFRX_C0_STACK); base 351/351"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs", "exit": 0, "summary": "4 self-tests; 133/133 killed (29 new C0)"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "64/64 killed"},
+    {"cmd": "cd apps/infrx-api && INFRX_D_TASK=app-c0 INFRX_D1_IMAGE=supabase uv run --frozen python ../app/tests/c/realdb/stack.py", "exit": 0, "summary": "real Supabase PG 0001-0021 + PostgREST v13.0.4: 11/11 pass; 20,001-entry ledger walked exactly once, page plan on credit_ledger_wallet_created_idx, 12.3 ms"}
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "code+tests done; remaining = coordinator WR-1..WR-4 patches, rerun of real stack and App suites on the merged SHA with 0022, review fixes; page rewrites belong to U1R/U4",
+    "at": "2026-09-25T22:03:49Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-1 app/(console)/layout.tsx: consumerSession() typed states + sidebarCredit(reads.balance()) instead of getSession/getBalance (patch + static test in evidence)",
+    "WR-2 usage/billing pages (U1R/U4): replace fake consoleContext() with consumerSession().reads",
+    "WR-3 lib/contracts: promote ConsumerContext/ConsumerAccount/ConsumerReads/ConsumerRequest/CreditLedgerEntry/AuthUser",
+    "WR-4 Makefile: console-c0-real target running tests/c/realdb/stack.py",
+    "WR-5 D10 SQL: consumer_credit_ledger(p_after,p_limit) definer function for O(limit) pages; visible_principal() per-row cost in console_credit_ledger/console_ledger",
+    "WR-6 lib/session.ts (A2): first-membership pick; restrict to operator flag after WR-1",
+    "WR-7 rerun WR-4 on the merged SHA with 0022"
+  ],
+  "evidence": [
+    "research/plan/evidence/c/C0-acfd9a5.md"
+  ]
+}
