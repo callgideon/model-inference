@@ -1,0 +1,31 @@
+{
+  "task": "E2C",
+  "activity": "review",
+  "at": "2026-09-25T03:02:52Z",
+  "slice": "coordinator wiring: Makefile gates, pytest relock, rehearse MinIO pin, E2C-FR-2",
+  "head": "26ef3fc3",
+  "base": "5bef53bc",
+  "branch": "codex/e2c-wiring",
+  "worktree": ".claude/worktrees/codex-e2c-wiring",
+  "owned_paths": ["Makefile", "apps/infrx-api/pyproject.toml", "apps/infrx-api/uv.lock",
+                  "apps/infrx-api/deploy/rehearse.sh", "apps/infrx-api/tests/i/test_packaging.py",
+                  "tests/integration/run.py", "tests/integration/test_run.py",
+                  "tests/integration/test_preflight.py",
+                  "research/plan/evidence/e/E2C-wiring-26ef3fc.md",
+                  "research/plan/evidence/coordinator/updates/E2C-20260925T0302Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/test_preflight.py -k make_target", "exit": 0, "summary": "4 passed"},
+    {"cmd": "uv lock", "exit": 0, "summary": "pytest 8.4.2 -> 9.1.1 only"},
+    {"cmd": "uv sync --frozen --all-extras", "exit": 0, "summary": "pytest 9.1.1 installed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'", "exit": 0, "summary": "1260 passed, 6 deselected"},
+    {"cmd": "uv run --frozen pytest -q tests/i/test_packaging.py", "exit": 0, "summary": "23 passed"},
+    {"cmd": "pytest -q tests/integration/test_run.py test_preflight.py test_harness.py", "exit": 0, "summary": "138 passed"},
+    {"cmd": "consumer-local gate (fix agent driver, 330e04f1 dirty)", "exit": 1, "summary": "FAIL: api-d decoy (lane tasklocal; passes at head), api-m/api-w S3 container vanished mid-run; l1/l3 BLOCKED; backend-local NOT RUN"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 4, "confidence": "medium",
+               "basis": "one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9", "at": "2026-09-25T03:02:52Z"},
+  "blockers": ["consumer-local not PASS: rerun needed (S3 container removed mid-run)", "E2C-FR-1 signup Runner env not applied", "integration-l3 needs the coordinator's e2 namespace run"],
+  "next_action": "coordinator merges codex/e2c-wiring, runs make api-test/api-mutants on pytest 9.1.1, then reruns make consumer-local on e2c",
+  "wiring_requests": ["E2C-FR-1 tests/d/signup_mutants.py Runner env", "host sysctl ip_local_reserved_ports += 55500-55599"],
+  "evidence": ["research/plan/evidence/e/E2C-wiring-26ef3fc.md"]
+}
