@@ -31,6 +31,9 @@ BROWSER_FUNCTIONS = {
     "public.org_wallet_summary", "public.console_wallet_summary",
     "public.console_usage_summary", "public.console_usage_daily",
     "public.console_legacy_usd_statement"}
+# 0021 (D10, C0/U4): the signed-in consumer's own reads, auth.uid()-scoped, granted to
+# `authenticated` only - never `anon` (anon executing them is still reported).
+SIGNED_IN_FUNCTIONS = {"public.consumer_jobs", "public.consumer_job_result"}
 BROWSER_WRITES = {("public.profiles", "UPDATE"), ("public.organizations", "UPDATE"),
                   ("public.api_keys", "UPDATE")}
 
@@ -45,29 +48,44 @@ RUNTIME_PROBES = {
 
 
 def test_s10_the_runtime_login_cannot_become_an_owner_or_rewrite_money(workdir):
-    """As the box's own DATABASE_URL, configured as its pool configures every connection
-    (`set role service_role`): the login is no owner (else `reset role` undoes the role), and
-    the runtime role rewrites no money and runs no DDL. Every probe rolls back."""
+    """WR-4: the box's DATABASE_URL is D10's dedicated login (0021 `infrx_runtime`, given
+    LOGIN on the clone as the operator would). As that login - itself, and after `set role
+    service_role` if it can - it is no owner, rewrites no money and runs no DDL (every probe
+    rolls back). Then the box must SERVE on it: gateway and worker started on that login, one
+    text job succeeds and settles once (else the dedicated login is a probe, not the runtime)."""
     import psycopg
-    with world.composed(workdir, start=()) as trip:
-        allowed = []
-        with psycopg.connect(trip.box.env["DATABASE_URL"], autocommit=True) as conn:
-            owner, = conn.execute(
-                "select rolsuper or pg_has_role(session_user, (select relowner from pg_class "
-                "where oid = 'infrx.credit_ledger'::regclass), 'MEMBER') from pg_roles "
-                "where rolname = session_user").fetchone()
+    with world.composed(workdir, start=(), runtime_login=True) as trip:
+        dsn, allowed = trip.box.env["DATABASE_URL"], []
+        with psycopg.connect(dsn, autocommit=True) as conn:
+            who, owner = conn.execute(
+                "select session_user, rolsuper or pg_has_role(session_user, (select relowner "
+                "from pg_class where oid = 'infrx.credit_ledger'::regclass), 'MEMBER') from "
+                "pg_roles where rolname = session_user").fetchone()
+            assert who == world.RUNTIME_ROLE, f"the box's login is {who}"
             if owner:
                 allowed.append("reach the money tables' owner by `reset role`")
             for what, sql in RUNTIME_PROBES.items():
-                try:
-                    with conn.transaction():
-                        conn.execute("set local role service_role")
-                        conn.execute(sql)
-                        allowed.append(what)
-                        raise _Rollback
-                except (_Rollback, psycopg.errors.InsufficientPrivilege):
-                    pass
+                for role in (None, "service_role"):
+                    try:
+                        with conn.transaction():
+                            if role:
+                                conn.execute(f"set local role {role}")
+                            conn.execute(sql)
+                            allowed.append(f"{what} (as {role or who})")
+                            raise _Rollback
+                    except (_Rollback, psycopg.errors.InsufficientPrivilege):
+                        pass
         assert not allowed, f"the runtime login can: {allowed} (RV-09 / D-31)"
+        secret = dsn.split(":", 2)[2].split("@", 1)[0]
+        try:
+            for role in ("worker", "gateway"):
+                trip.box.start(role)
+        except RuntimeError as refused:
+            raise AssertionError("the box cannot serve on the dedicated runtime login: "
+                                 + str(refused).replace(secret, "***")[-900:]) from None
+        answer = trip.send(trip.world.alpha, "sync", world.TEXT, "e3c-s10-runtime")
+        assert answer.status_code == 200, answer.text[:300]
+        world.settled_once(trip, answer.headers["inference-id"])
 
 
 class _Rollback(Exception):
@@ -94,7 +112,7 @@ def browser_surface(trip) -> dict:
            and has_table_privilege(r.rolname, c.oid, w.priv)""")
     return {"functions": sorted({(role, fn) for role, fn in rows
                                  if fn not in BROWSER_FUNCTIONS
-                                 and not (role == "authenticated" and fn in BROWSER_FUNCTIONS)}),
+                                 and not (role == "authenticated" and fn in SIGNED_IN_FUNCTIONS)}),
             "writes": sorted({(role, table, priv) for role, table, priv in writes
                               if not (role == "authenticated"
                                       and (table, priv) in BROWSER_WRITES)})}

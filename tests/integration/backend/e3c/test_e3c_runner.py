@@ -286,3 +286,73 @@ def test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port(monkeypat
     reader = world.readiness_reader("postgresql://nobody@127.0.0.1:1/x")
     assert reader is not None and reader.__self__.__class__ is PgLifecycle
     assert world.point_target("admission")[0] is PgLifecycle
+
+
+def test_s12_a_barrier_holds_on_whichever_candidate_the_process_calls(monkeypatch, tmp_path):
+    """Phase 2: D10's `PgLifecycle.admit_ready` exists while the gateway still admits through
+    `PgJobStore.admit_credit` (G7 composes the former). The admission hold must fire on the
+    step actually taken, once - not wait on the first candidate for ever."""
+    import asyncio
+    import types
+    import world
+
+    class First:
+        async def admit_ready(self, *args):
+            return "never called"
+
+    class Second:
+        async def admit_credit(self, job):
+            return f"admitted {job}"
+    for name, cls in (("e3c_fake_first", First), ("e3c_fake_second", Second)):
+        module = types.ModuleType(name)
+        setattr(module, cls.__name__, cls)
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setitem(world.POINTS, "admission", (
+        ("e3c_fake_first", "First", "admit_ready", "after", False),
+        ("e3c_fake_second", "Second", "admit_credit", "after", False)))
+    monkeypatch.setattr(First, "admit_ready", First.admit_ready)
+    monkeypatch.setattr(Second, "admit_credit", Second.admit_credit)
+    marker = tmp_path / "barrier-gateway.json"
+    world.install_barrier("admission", marker)
+
+    async def call_then_release():
+        task = asyncio.create_task(Second().admit_credit("job-1"))
+        for _ in range(100):
+            if marker.exists():
+                break
+            await asyncio.sleep(0.01)
+        assert marker.exists() and not task.done(), "the called candidate did not hold"
+        assert json.loads(marker.read_text())["jobs"][0] == "job-1"
+        marker.unlink()
+        assert await task == "admitted job-1"
+        assert await Second().admit_credit("job-2") == "admitted job-2"   # once only
+        assert not marker.exists()
+    asyncio.run(call_then_release())
+
+
+def test_s12_a_collector_that_cannot_run_is_blocked_not_passed():
+    """A collector answering `blocked` (the durable ticket authority with no retention pass:
+    M6) makes the case BLOCKED[M6] - never a green 'deleted nothing'."""
+    import world
+    world.collector_blocked([{"deleted": [], "uploads_expired": 0}])        # a real pass
+    with pytest.raises(pytest.skip.Exception, match=r"BLOCKED\[M6\]") as skipped:
+        world.collector_blocked([{"deleted": []}, {"blocked": "M6", "why": "no pass"}])
+    result = runner.classify(junit(("test_s06_x", "skip", str(skipped.value))), required={})
+    assert result["scenarios"]["s06"]["status"] == "BLOCKED"
+
+
+def test_s12_the_dedicated_runtime_login_is_a_real_box_database():
+    """WR-4: a box on `infrx_runtime` over this namespace's PostgreSQL is on the real
+    services; the same login on another port is not."""
+    from urllib.parse import urlsplit
+    import world
+    owner = world.harness.pg_dsn("x")
+    parts = urlsplit(owner)
+    runtime = owner.replace(f"{parts.username}:{parts.password}@", "infrx_runtime:s@", 1)
+    real = {"INFRX_MODE": "pilot", "DATABASE_URL": runtime,
+            "S3_MEDIA_BUCKET": world.harness.S3_BUCKET,
+            "S3_ENDPOINT_URL": world.harness.s3_endpoint(),
+            "VALKEY_URL": world.harness.valkey_url()}
+    assert world.fake_only(real) == []
+    elsewhere = runtime.replace(f":{parts.port}/", ":1/")
+    assert world.fake_only({**real, "DATABASE_URL": elsewhere}) == ["DATABASE_URL"]

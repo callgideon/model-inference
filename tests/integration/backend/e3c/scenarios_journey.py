@@ -234,10 +234,24 @@ def test_s01_the_external_dataset_client_resumes_uploads_across_a_gateway_restar
                                   text=True, timeout=60)
         assert exported.returncode == 0, exported.stderr[-1500:]
         rows = [json.loads(line) for line in results.read_text().splitlines() if line.strip()]
-        assert len(rows) == 4 and not failures.read_text().strip(), (rows, failures.read_text())
-        jobs = trip.db("select request_id::text, idempotency_key from infrx.jobs where "
-                       "org_id = %s", alpha.org_id)
-        assert len(jobs) == 4 and len({key for _, key in jobs}) == 4, jobs
-        for request_id, _ in jobs:
+        failed = [json.loads(line) for line in failures.read_text().splitlines()
+                  if line.strip()]
+        items = sorted(row["item_id"] for row in rows + failed)
+        assert items == [f"item-{n}" for n in range(4)], (rows, failed)
+        jobs = {key: (request_id, state, cause) for request_id, key, state, cause in trip.db(
+            "select request_id::text, idempotency_key, state, outcome_cause from infrx.jobs "
+            "where org_id = %s", alpha.org_id)}
+        assert len(jobs) == 4, jobs                          # one job per item, ever
+        # R106: the interrupted client's in-flight SSE items were cancelled by its disconnect;
+        # their same-key replay is `state_conflict` and terminal for that key (quarantined,
+        # never re-sent under a new key). Every other item resumed to one success.
+        for row in failed:
+            assert (row["state"], row["error_code"]) == ("quarantined", "state_conflict"), row
+            assert jobs[row["idempotency_key"]][1:] == ("cancelled", "client_disconnected"), \
+                (row, jobs[row["idempotency_key"]])
+        assert rows and len(failed) <= 2, "the resume completed nothing"   # concurrency 2
+        for row in rows:
+            assert jobs[row["idempotency_key"]][1] == "succeeded", (row, jobs)
+        for request_id, _, _ in jobs.values():
             world.settled_once(trip, request_id)
         trip.conserved(alpha)
