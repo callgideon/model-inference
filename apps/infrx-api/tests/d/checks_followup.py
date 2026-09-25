@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import timedelta
+
+from psycopg.types.json import Jsonb
 
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.limits import DEFAULTS
 
 from . import checks_admission as ca
+from . import checks_content as ck
 from . import checks_credit as cc
+from . import checks_ready as cr
 from . import checks_settle as cs
 from .checks_dispatch import advance, claim, kinds, outcome, prepare
 from .checks_leases import LIMITS, d3, dump, running, waiting_on_a_lock
@@ -305,5 +310,53 @@ def check_flag_writer_lands_under_overlapping_lockers(connect, database: str) ->
     return f"{LOCKERS} overlapping lockers: the write landed in {box['elapsed']:.2f}s"
 
 
-__all__ = ["check_fail_preparation", "check_flag_writer_lands_under_overlapping_lockers",
+def check_written_reregistration_refreshes(conn) -> str:
+    """M6 WR-7 (0022): a `written` registration of the SAME bytes at a live key restarts its
+    grace - `eligible_at = greatest(eligible_at, now + grace)` - so a clip fetched again
+    after its first row became eligible is not collected before its admission; a claim
+    granted before the refresh can no longer tombstone it (`not_eligible`). A `discovered`
+    registration never refreshes; a shorter grace never shortens; no writer moves a live
+    eligibility earlier or a retiring row's at all (the guard)."""
+    def body():
+        org = cr.c1_org(conn)
+        clip = cr.source_ref(org, b"refetched-clip")
+        first = cr.register(conn, clip)
+        ck.at(conn, first["eligible_at"])
+        advance(conn, cr.GRACE_S)                        # eligible for a while now
+        row = ck.row_of(conn, clip.storage_ref)
+        claim = cr.call(conn, "content_claim", ck._claim_args(row, "sweeper-wr7"))
+        again = cr.register(conn, clip)                  # request 2 fetches the same clip
+        now = conn.execute("select infrx.now()").fetchone()[0]
+        assert again["content_id"] == first["content_id"] and \
+            ck.row_of(conn, clip.storage_ref)["eligible_at"] == \
+            now + timedelta(seconds=cr.GRACE_S), (first, again)
+        got = cr.refusal(conn, "content_tombstone", {"claim": claim})
+        assert got == ("not_claimable", "not_eligible"), \
+            f"a claim from before the refetch tombstoned the refetched bytes: {got}"
+        refreshed = ck.row_of(conn, clip.storage_ref)["eligible_at"]
+        advance(conn, 1)
+        found = cr.call(conn, "content_register", {"identity": {
+            **again["identity"], "origin": "discovered"}, "grace_s": cr.GRACE_S})
+        assert ck.row_of(conn, clip.storage_ref)["eligible_at"] == refreshed, \
+            f"a discovered registration refreshed the grace: {found}"
+        why = cc.attempt(conn, "select infrx.content_register(%s)", (Jsonb(
+            {"identity": again["identity"], "grace_s": 0}),))
+        assert why is None, f"a shorter-grace written registration was refused: {why}"
+        assert ck.row_of(conn, clip.storage_ref)["eligible_at"] == refreshed, \
+            "a shorter grace shortened the eligibility"
+        for sql in ("update infrx.content_objects set eligible_at = eligible_at - "
+                    "interval '1 second' where object_key = %s",):
+            why = cc.attempt(conn, sql, (clip.storage_ref,))
+            assert why is not None and why.startswith("23514"), f"moved earlier: {why}"
+        conn.execute("update infrx.content_objects set state = 'tombstoned', tombstoned_at = "
+                     "infrx.now() where object_key = %s", (clip.storage_ref,))
+        why = cc.attempt(conn, "update infrx.content_objects set eligible_at = eligible_at + "
+                         "interval '1 day' where object_key = %s", (clip.storage_ref,))
+        assert why is not None and why.startswith("23514"), f"a retiring row moved: {why}"
+        return "written refetch restarts the grace and defeats an earlier claim; " \
+               "discovered/shorter never; guard: later-only, live-only"
+    return ca._in_rollback(conn, body)
+
+
+__all__ = ["check_fail_preparation", "check_written_reregistration_refreshes", "check_flag_writer_lands_under_overlapping_lockers",
            "check_flag_writer_queues_new_readers", "check_followup_privileges"]

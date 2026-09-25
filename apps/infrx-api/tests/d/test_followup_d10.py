@@ -45,6 +45,10 @@ def test_fail_preparation_is_fenced_permanent_and_replayable() -> None:
     print(cf.check_fail_preparation(_db()))
 
 
+def test_a_written_refetch_restarts_the_grace() -> None:
+    print(cf.check_written_reregistration_refreshes(_db()))
+
+
 def test_followup_privileges() -> None:
     print(cf.check_followup_privileges(_db()))
 

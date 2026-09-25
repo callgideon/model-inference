@@ -294,6 +294,28 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "the read-only monitor login reads request records (customer content)"),
 
     # --- 0022: fail_preparation (W5 request 3) and the flag writer (V-G8TL-2) ------------
+    _m("d10_refetch_not_refreshed", FOLLOWUP,
+       "  if p_identity->>'origin' = 'written' and c.state = 'live'\n"
+       "     and c.digest = p_identity->>'digest' then",
+       "  if false then", "refetch_refresh",
+       "M6 WR-7: a clip fetched again is collected before its admission (not_found)"),
+    _m("d10_refetch_discovered_refreshes", FOLLOWUP,
+       "  if p_identity->>'origin' = 'written' and c.state = 'live'",
+       "  if c.state = 'live'", "refetch_refresh",
+       "a collector's discovery keeps an orphan alive for ever"),
+    _m("d10_refetch_shortens", FOLLOWUP,
+       "       set eligible_at = greatest(eligible_at, v_now + make_interval(secs => p_grace_s))",
+       "       set eligible_at = v_now + make_interval(secs => p_grace_s)", "refetch_refresh",
+       "a registration with a shorter grace makes a protected object deletable early"),
+    _m("d10_guard_eligibility_earlier", FOLLOWUP,
+       "                  and new.eligible_at > old.eligible_at)) then",
+       "                  )) then", "refetch_refresh",
+       "any writer moves a live object's eligibility earlier (deletable before its grace)"),
+    _m("d10_guard_retiring_eligibility", FOLLOWUP,
+       "         and not (old.state = 'live' and new.state = 'live'\n"
+       "                  and new.eligible_at > old.eligible_at)) then",
+       "         and not (new.eligible_at > old.eligible_at)) then", "refetch_refresh",
+       "a tombstoned row's eligibility is rewritten under its delete"),
     _m("d10_fail_prep_any_cause", FOLLOWUP,
        "  if v_cause is null or v_cause not in ('invalid_media', 'preparation_failed') then",
        "  if v_cause is null then", "fail_preparation",
@@ -365,6 +387,7 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
 
 _d._CHECKS.update({
     "fail_preparation": checks_followup.check_fail_preparation,
+    "refetch_refresh": checks_followup.check_written_reregistration_refreshes,
     "followup_privileges": checks_followup.check_followup_privileges,
     "flag_writer_queue": lambda conn: checks_followup.check_flag_writer_queues_new_readers(
         pgharness.connect, _d.MUT_DB),
