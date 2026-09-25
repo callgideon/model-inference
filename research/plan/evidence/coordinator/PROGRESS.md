@@ -1,14 +1,14 @@
 # Consumer v1 progress tracker
 
-Generated 2026-09-25 23:50Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 59, updated 2026-09-25 23:50Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
+Generated 2026-09-25 23:50Z UTC by `python3 research/plan/scripts/progress.py` from [tasks.json](../../tasks.json) (manifest v4) and [progress-state.json](progress-state.json) (overlay revision 60, updated 2026-09-25 23:50Z UTC). Generated file; never hand-edit. Program: [consumer-v1 (program 22)](../../22-consumer-v1-implementation.md). Full view: [progress.html](progress.html).
 
 ## Overview
 
 - Integration branch `claude/consumer-v1` (head `8d9e5b5f`), base `dff31efc`, main `dff31efc`.
 - Deployed candidate `bda15866e5700f3856d7142580da842fba9bbd23` (third install; image infrx-runtime:bda1586 = sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb (S3 identity table); MAX_VIDEO_SECONDS=82, ENGINE_MAX_NUM_SEQS=8, WORKER_CONCURRENCY=8, LARGE_BODY_LIMIT=8; regime **legacy_usd**).
 - Lowest open band: V2 runtime repairs; bands with active work: V0, V1, V2, V3, V5, V6.
-- Agent slots: 16 total, 10 active lanes, 2 reserved.
-- Validation: 1 error(s), 15 warning(s).
+- Agent slots: 16 total, 9 active lanes, 2 reserved.
+- Validation: 0 error(s), 14 warning(s).
 
 ### Actionable blockers
 
@@ -49,7 +49,7 @@ Task counts: manifest implemented/integrated over an explicit denominator. Cells
 | Category | Implemented/integrated | Active | Acceptance cells PASS |
 |---|---|---|---|
 | Backend corrections | 10 / 14 | E2C, E3C, M6, W5 | BACKEND-LOCAL 0/7; BACKEND-READY 0/6 |
-| App completion | 4 / 12 | C3A, E3A, I2A, U2, U3, U4 | APP-LOCAL 0/17; APP-PILOT 0/5 |
+| App completion | 4 / 12 | C3A, I2A, U2, U3, U4 | APP-LOCAL 0/17; APP-PILOT 0/5 |
 | Deferred Lab / hosting / later | 0 / 57 | none | n/a |
 | Reused baseline | 44 / 44 | none | n/a |
 | Superseded | 0 / 6 | none | n/a |
@@ -83,7 +83,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | RV-03 | open | D10 (complete), M6 (review), I8 (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-04 | open | S3 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-05 | open | F2C (complete), D10 (complete), W5 (review), G7 (complete), E3C (review) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
-| RV-06 | open | C0 (complete), C3A (review), A2 (complete), A3 (complete), U1R (complete), U2 (running), U3 (running), U4 (review), E3A (running) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
+| RV-06 | open | C0 (complete), C3A (review), A2 (complete), A3 (complete), U1R (complete), U2 (running), U3 (running), U4 (review), E3A (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-07 | open | E1C (complete), M5 (complete), G7 (complete) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-08 | open | E1C (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
 | RV-09 | open | D10 (complete), I8 (complete), E4C (queued) | dff31efc | [research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md](2026-09-24-S3-reconciliation.md) |
@@ -147,7 +147,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | U2 | U2 U2 keys and supported settings (one-time plaintext, rotation, truthful privacy copy) | running | codex/app-u2 | 46776646 → — | ports fakes only, prefix infrx-app-u2- | 2026-09-25 23:50Z | implementing (App wave wf_77b93903-38d) on top of U1R + C3A | 2–10 h remaining (likely 5 h), confidence low, estimated 2026-09-25 21:11Z; basis: brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane |
 | U3 | U3 U3 minimal operator controls (rate publication, reasoned adjust/grant, suspension, audited idempotent ops) | running | codex/app-u3 | 46776646 → — | ports app-u3 postgres 55453, prefix infrx-app-u3- | 2026-09-25 23:50Z | implementing (App wave) on top of U1R + C3A | 2–10 h remaining (likely 5 h), confidence low, estimated 2026-09-25 21:11Z; basis: brief-sized 2–8 h slices plus in-workflow verification; not yet inspected by the lane |
 | I2A | I2A I2A-PREP: hosting configuration as code (env matrix, preview credential isolation, callback allowlists, private no-store, release identity) + App deploy/rollback runbook; no live deploy | running | codex/i2a-prep | fd40748c → — | ports none, prefix infrx-i2a-prep- | 2026-09-25 23:50Z | workflow wf_e714e949-a6a (implement → 2 lenses → fix → recheck); the live deploy waits for the accepted backend and the operator inputs (Vercel env, P-05 auth settings) | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-25 23:50Z; basis: preparation lane; not yet inspected |
-| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed | running | codex/e3a-prep | fd40748c → — | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-25 23:50Z | workflow wf_06c06a68-c32; E3A proper runs after BACKEND-LOCAL (E3C) and the remaining App merges (C3A/U2/U3/U4) | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-25 23:50Z; basis: preparation lane; not yet inspected |
+| E3A | E3A E3A-PREP (coordinator): browser + real-adapter journey harness on the e4b compose block; gate not claimed | queued | codex/e3a-prep | fd40748c → — | ports e4b compose block 56800–56899, prefix infrx-e3a-prep- | 2026-09-25 23:50Z | E3A proper dispatches after BACKEND-LOCAL/READY; E3A-PREP (coordinator preparation lane, workflow wf_06c06a68-c32) builds the harness now without claiming the gate | 2–8 h remaining (likely 4 h), confidence low, estimated 2026-09-25 23:50Z; basis: preparation lane; not yet inspected |
 
 ### Queues and locks
 
@@ -170,22 +170,20 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 
 ## Validation
 
-- error: impossible gate transition: lane E3A is running but E3A dispatches only after BACKEND-READY is accepted
 - warning: stale estimate: lane M6 estimated at 2026-09-25T17:12:10Z (older than 6 h)
-- warning: lane E3A is running before start dependencies E3C with no deviation recorded
-- warning: overlapping writers: E4C (queued) and E3A (running) both own tests/integration/backend/ / tests/integration/
+- warning: overlapping writers: E4C (queued) and E3A (queued) both own tests/integration/backend/ / tests/integration/
 - warning: overlapping writers: C3A (review) and I2A (running) both own apps/app/app/actions.ts / apps/app/ (+2 more)
-- warning: overlapping writers: C3A (review) and E3A (running) both own apps/app/tests/c/ / apps/app/tests/
+- warning: overlapping writers: C3A (review) and E3A (queued) both own apps/app/tests/c/ / apps/app/tests/
 - warning: overlapping writers: U4 (review) and U2 (running) both own apps/app/tests/u/ / apps/app/tests/u/
 - warning: overlapping writers: U4 (review) and U3 (running) both own apps/app/tests/u/ / apps/app/tests/u/
 - warning: overlapping writers: U4 (review) and I2A (running) both own apps/app/app/(console)/usage/ / apps/app/ (+1 more)
-- warning: overlapping writers: U4 (review) and E3A (running) both own apps/app/tests/u/ / apps/app/tests/
+- warning: overlapping writers: U4 (review) and E3A (queued) both own apps/app/tests/u/ / apps/app/tests/
 - warning: overlapping writers: U2 (running) and U3 (running) both own apps/app/tests/u/ / apps/app/tests/u/
 - warning: overlapping writers: U2 (running) and I2A (running) both own apps/app/app/(console)/keys/ / apps/app/ (+2 more)
-- warning: overlapping writers: U2 (running) and E3A (running) both own apps/app/tests/u/ / apps/app/tests/
+- warning: overlapping writers: U2 (running) and E3A (queued) both own apps/app/tests/u/ / apps/app/tests/
 - warning: overlapping writers: U3 (running) and I2A (running) both own apps/app/app/(console)/admin/ / apps/app/ (+1 more)
-- warning: overlapping writers: U3 (running) and E3A (running) both own apps/app/tests/u/ / apps/app/tests/
-- warning: overlapping writers: I2A (running) and E3A (running) both own apps/app/ / apps/app/tests/
+- warning: overlapping writers: U3 (running) and E3A (queued) both own apps/app/tests/u/ / apps/app/tests/
+- warning: overlapping writers: I2A (running) and E3A (queued) both own apps/app/ / apps/app/tests/
 
 ## Pending inputs
 
@@ -294,7 +292,7 @@ Never a date while an open input or an unallocated GPU window sits on the remain
 | `L4` | Model/deployment/publication UI and aggregate health | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `I2A` | Reproducible App and single-GPU runtime deployment | App completion | planned | running | active: lane active |
 | `I2L` | Independent Lab app and control-service deployment | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
-| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | running | blocked: gated: dispatch only after BACKEND-READY is accepted |
+| `E3A` | Consumer failure, security and signup-to-spend integration gate | App completion | planned | queued | blocked: gated: dispatch only after BACKEND-READY is accepted |
 | `E3L` | Provider access, publication and rollback integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `E5L` | Provider traces, review and evaluation integration gate | Deferred Lab / hosting / later | planned | unassigned | blocked: deferred: Lab, hosting and later work follow App acceptance and their activation gates |
 | `F2R` | Close remaining wave-2 contract and verification carryovers | Reused baseline | implemented | complete | done: implemented/integrated in the manifest (evidence-backed status, not release acceptance) |
