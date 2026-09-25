@@ -1260,6 +1260,21 @@ MUTANTS += (
        "CANARY_KEY_PARAM=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}", INSTALL_OBSERVE),
 )
 
+# --- KNOWN-GOOD-PROOF: a schema proof reaches its `through` and no further ---------------
+PROOF_PY = "../../infra/runbooks/schema_proof.py"
+MUTANTS += (
+    _m("known_good_proof_ignores_through", "a schema_proof proves the schema only through its `through`",
+       KG, 'proven = (proof.get("through", "0000") >= applied and bool(proof.get("evidence"))',
+       'proven = (bool(proof.get("evidence"))',
+       "test_ops_recover__a_schema_proof_reaches_exactly_its_through"),
+    _m("known_good_record_unproven", "both known-good targets carry their schema proof",
+       "../../infra/rollout/known-good.json", '"schema_proof"', '"schema_proof_withdrawn"',
+       "test_ops_recover__the_record_proves_both_targets_on_the_candidate_schema"),
+    _m("schema_proof_trusts_moved_statements", "a migrated history that differs from the files is refused",
+       PROOF_PY, "parts != [files[v]] and not (", "False and not (",
+       "test_ops_recover__the_proof_driver_refuses_a_bad_target_and_a_moved_history"),
+)
+
 # --- M6 wiring 4: retention/cache panels and rules, the bucket lifecycle rule -------------
 DASH = "../../infra/alerts/dashboard.json"
 M6_PANELS = "test_ops_retention__every_m6_family_has_a_pending_panel_and_a_closed_vocabulary"
