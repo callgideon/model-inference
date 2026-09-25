@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 29,
-  "updated": "2026-09-25T01:11:50Z",
+  "revision": 30,
+  "updated": "2026-09-25T01:38:31Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -610,24 +610,24 @@
       "branch": "codex/i8-operate",
       "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-i8-operate",
       "base": "dff31efc",
-      "head": "b55b3c5e",
+      "head": "ce33c24c",
       "isolation": {
         "ports": "postgres 55450, valkey 55476 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-i8-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T00:02:00Z",
+      "updated": "2026-09-25T01:38:31Z",
       "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-      "next_action": "Code/config slices; every live box step is a coordinator op serialized after run3.",
+      "next_action": "merged 63011a31; R119-R121 numbered; manifest I8 implemented (2-ACC-3 replacement-instance restore open, P-25 input added); merged-tree tests/i and the I8 mutant list running detached (results in the record); WR-I8-1/2/4/5 being applied on codex/i8-wiring; the 15 box ops follow run3's fetch",
       "estimate": {
-        "optimistic_h": 5,
-        "likely_h": 11,
-        "pessimistic_h": 20,
-        "confidence": "medium",
-        "basis": "earlier 4/8/16 plus the replacement-instance restore path (image store decision, ECR copy, timed restore on a second instance, coordinator-run) and the P-24 canary decision",
-        "at": "2026-09-25T00:02Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c)",
+        "at": "2026-09-25T01:38:31Z"
       },
       "evidence": [
         "research/plan/evidence/i/I8-103d20a.md"
@@ -1333,12 +1333,6 @@
       "lane": "G7",
       "task": "G7",
       "head": "a0e0928a"
-    },
-    {
-      "since": "2026-09-24T22:58:00Z",
-      "lane": "I8",
-      "task": "I8",
-      "head": "b55b3c5e"
     },
     {
       "since": "2026-09-24T23:25:00Z",
@@ -2475,6 +2469,17 @@
       "by": "M6",
       "what": "review → review; head 188a7f01; estimate likely 16 → 15 h (phase 2 8/12/20 h unchanged; d10 integration after D10 merges 1/2/3 h (world exists, 27/27 port cases pass in a scratch merge); review 1/1/1 h)",
       "source": "updates/M6-20260925T0101Z.json"
+    },
+    {
+      "at": "2026-09-25T01:38:31Z",
+      "by": "I8",
+      "what": "review → complete; head ce33c24c; estimate likely 11 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c))",
+      "source": "updates/I8-20260925T013831Z.json"
+    },
+    {
+      "at": "2026-09-25T01:38:31Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 01:47Z – 2026-09-28 15:23Z (likely 2026-09-26 23:05Z) → 2026-09-26 02:14Z – 2026-09-28 04:56Z (likely 2026-09-26 20:26Z) (because: dependency path E2C → D10 → M5 → M6 → E3C)"
     }
   ],
   "history": {
@@ -2630,10 +2635,14 @@
     "M6-20260925T0101Z.json": {
       "status": "applied",
       "at": "2026-09-25T01:01:00Z"
+    },
+    "I8-20260925T013831Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T01:38:31Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T01:11:50Z",
+    "computed_at": "2026-09-25T01:38:31Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2643,22 +2652,22 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 01:47Z – 2026-09-28 15:23Z (likely 2026-09-26 23:05Z)",
-        "constraint": "dependency path E2C → D10 → M5 → W5 → I8 → E3C",
+        "text": "2026-09-26 02:14Z – 2026-09-28 04:56Z (likely 2026-09-26 20:26Z)",
+        "constraint": "dependency path E2C → D10 → M5 → M6 → E3C",
         "effort_h": [
-          37.8,
-          70.3,
-          128.8
+          30.8,
+          55.5,
+          102.3
         ],
         "wall_h": [
           24.6,
-          45.9,
-          86.2
+          42.8,
+          75.3
         ],
         "finish": [
-          "2026-09-26T01:47:50Z",
-          "2026-09-26T23:05:50Z",
-          "2026-09-28T15:23:50Z"
+          "2026-09-26T02:14:31Z",
+          "2026-09-26T20:26:31Z",
+          "2026-09-28T04:56:31Z"
         ],
         "conditional": null,
         "confidence": "medium",
@@ -2666,8 +2675,7 @@
           "E2C",
           "D10",
           "M5",
-          "W5",
-          "I8",
+          "M6",
           "E3C"
         ],
         "stale": []

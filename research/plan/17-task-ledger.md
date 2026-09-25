@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 79 planned; 43 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 78 planned; 44 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -57,7 +57,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | G7 | planned / G | [Align public capability discovery, alias pricing and persisted result expiry](consumer-v1/02-runtime.md) | F2C, G3 | D10, M5 |
 | G8 | implemented / G | [Prove headless consumer CREDIT operations and safe activation](consumer-v1/02-runtime.md) | F2C, G6B, A1 | D10, G7 |
 | E1C | implemented / E | [Repair upload client and deliver valid resumable dataset/load measurement](consumer-v1/05-client-and-load-testing.md) | F2C, E1 | E2C, G7, M5 |
-| I8 | planned / I | [Operate continuously with bounded DB pools, durable artifacts and real rollback](consumer-v1/03-operations-and-verification.md) | F2C, I3B | D10, W5 |
+| I8 | implemented / I | [Operate continuously with bounded DB pools, durable artifacts and real rollback](consumer-v1/03-operations-and-verification.md) | F2C, I3B | D10, W5 |
 | E3C | planned / E | [Integrate corrective backend with real services and process faults](consumer-v1/03-operations-and-verification.md) | E2C, F2C, E3B | D10, M5, M6, W5, G7, G8, I8, E1C |
 | E4C | planned / E | [Certify repaired CREDIT backend on final Marlin deployment](consumer-v1/03-operations-and-verification.md) | E3C, E4B | I8, E1C, G8 |
 

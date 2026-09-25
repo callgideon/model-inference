@@ -4385,7 +4385,7 @@
       "track": "I",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4418,7 +4418,11 @@
       ],
       "acceptance": "Load holds connection bounds; alerts delivered; replacement and rollback serve real requests with correct state.",
       "failure_oracle": "Dashboard-only, readiness-only, local-NVMe-only or privileged-runtime configurations cannot pass.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/i/I8-103d20a.md"
+      ],
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 at 63011a31 after the verify-lane fix round (ACCEPT_WITH_FIXES at ce33c24c; 35 findings, blocking + majors fixed); implemented = reviewed code/config half + task-local proofs; OPEN: replacement-instance restore (2-ACC-3: engine/runtime images not mirrored, restore reuses the same host/NVMe) — a P-25 input (image mirror such as ECR) and a coordinator-run timed restore on a second instance; the 15 coordinator box ops, WR-I8-1/2/4/5 wiring (branch codex/i8-wiring) and P-25/P-24 inputs remain (E4C)."
     },
     {
       "id": "E3C",

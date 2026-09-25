@@ -148,3 +148,4 @@ See [load protocol](consumer-v1/05-client-and-load-testing.md) for machine-check
 
 ### P-21 — RESOLVED on the coordinator host (2026-09-24T23:27:20Z)
 `net.ipv4.ip_local_reserved_ports = 55432-55499,56379,56700-56999,58123,59000,59100,59110` applied with `sysctl -p` and persisted in `/etc/sysctl.d/60-infrx-task-ports.conf` (the user authorized the root change; the M6 lane had seen a client take 127.0.0.1:55444 as an ephemeral source port). The ephemeral range stays 32768–60999; the task-local service ports from `infrx/contracts/tasklocal.py` are no longer handed out as source ports.
+- **P-25 (2026-09-25, I8 verification 2-ACC-3):** add an approved durable image store (ECR or equivalent registry copy, digest-verified) for the pinned engine and runtime images, and a fresh-instance restore rehearsal (NVMe + image load + env from SSM names) timed by the coordinator; until then replacement-instance restore is uncovered and the rollback evidence is same-host only.
