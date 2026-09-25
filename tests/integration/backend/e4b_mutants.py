@@ -144,6 +144,7 @@ E1C_BLOCKED = "test_e1c_a_remote_run_without_its_profile_or_inventory_is_blocked
 E1C_VALIDITY = "test_e1c_a_rung_whose_bench_summary_is_not_valid_fails"
 E1C_CELLS = "test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid"
 CW_STALE = "test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs"
+P18 = "test_e4c_the_p18_limits_are_the_runners_and_request_latency_p95_is_judged"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -234,6 +235,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("superseded_row_unmarked", "the superseded §5 row says so in place",
        "`MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |",
        "`MAX_VIDEO_SECONDS=72` |", PROTOCOL, file="models/marlin2b/results/E4B-protocol.md"),
+    # --- E4C-PREP: P-18 decided (protocol amendment 6) ---------------------------------
+    _m("e2e_limit_reverted_to_provisional", "the e2e p95 per clip-minute limit is P-18's 90 s",
+       '"e2e_p95_s_per_clip_minute": 90.0,', '"e2e_p95_s_per_clip_minute": 45.0,', P18, PROTOCOL),
+    _m("request_latency_row_dropped", "each envelope rung judges request latency p95 <= 9.0 s",
+       '                                ("latency_p95", latency, CRITERIA["latency_p95_s"]),\n',
+       "", P18, RUNG),
+    _m("e4c_base_bound_off_the_soak", "the P-24 base bounds exactly the soak P-18 decided",
+       '  "max_requests": 3600,', '  "max_requests": 7200,', P18,
+       file="models/marlin2b/profiles/E4C-box.base.json"),
     _m("superseded_envelope_row_unmarked", "the superseded §4 envelope rule says so in place",
        "is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one "
        "bound, and a clip over it gets the typed refusal* |",

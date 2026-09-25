@@ -101,7 +101,8 @@ CRITERIA = {
     "ttft_p95_short_s": 6.0,
     "short_clip_max_s": 30.0,
     "short_clip_max_edge_px": 1280,
-    "e2e_p95_s_per_clip_minute": 45.0,
+    "e2e_p95_s_per_clip_minute": 90.0,
+    "latency_p95_s": 9.0,
     "max_host_growth_mib": decide.MAX_HOST_GROWTH_MIB,
     "max_gpu_growth_mib": decide.MAX_GPU_GROWTH_MIB,
     "soak_latency_drift": 1.5,
@@ -1181,7 +1182,9 @@ def rung_verdicts(rows: list[dict], clips: dict, *, gateway: bool, cap_s: float,
              and short_clip(clips.get(r.get("clip_id"), {}))]
     per_minute = [r["latency_s"] / (_duration(r, clips) / 60) for r in accepted
                   if r.get("latency_s") is not None and _duration(r, clips) > 0]
+    latency = [r["latency_s"] for r in accepted if r.get("latency_s") is not None]
     for name, values, limit in (("ttft_p95_short", short, CRITERIA["ttft_p95_short_s"]),
+                                ("latency_p95", latency, CRITERIA["latency_p95_s"]),
                                 ("e2e_p95_per_clip_minute", per_minute,
                                  CRITERIA["e2e_p95_s_per_clip_minute"])):
         tail = decide.p95(values)

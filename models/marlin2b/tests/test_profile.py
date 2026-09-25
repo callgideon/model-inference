@@ -728,3 +728,75 @@ def test_a_huge_integer_spend_validates_and_only_float_inf_or_nan_is_refused():
         code, v = validate_only(argv_for(tmp, manifest, profile_for(
             clips, manifest, **{"bounds.spend": {**CREDIT_SPEND, "max_spend": 10 ** 400}})))
         assert code == 0 and v["runnable"] and v["derived"]["spend_currency"] == "CREDIT", v
+
+
+# ------------------------------------------------ E4C-PREP: the committed E4C base profile (P-24)
+
+E4C_BASE = os.path.join(PROFILES, "E4C-box.base.json")
+E4C_FILLS = {"identity": {"source_sha": "c" * 40, "deployed_sha": "d" * 40,
+                          "image_digest": "sha256:" + SHA, "weights_sha256": "sha256:" + SHA,
+                          "processor_sha256": "sha256:" + SHA, "migration_version": "0025",
+                          "config_version": "sha256:" + SHA},
+             "target": {"allowed_fault_targets": ["marlin2b-vllm", "infrx-worker", "infrx-valkey"],
+                        "maintenance_window": "mw-e4c-test"}}
+
+
+def e4c_validate(tmp, profile, rate, requests):
+    """bench --validate-only as certify runs a box cell: the licensed manifest, the frozen
+    seed and output mix, the profile stamped with the cell's rate (certify.cell_profile)."""
+    import test_bench
+    bench.load_corpus = test_bench.REAL_LOAD_CORPUS
+    profile = {**profile, "measurement": {**profile["measurement"], "rate_per_s": rate}}
+    path, inv = os.path.join(tmp, "p.json"), os.path.join(tmp, "keys.json")
+    for file, doc in ((path, profile), (inv, {"active_key_id_prefixes": ["142c7d81"]})):
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+    argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
+            "--subset", "full", "--base-url", "http://127.0.0.1:8001/v1", "--target", "gateway",
+            "--model", "nemostation/marlin-2b", "--rate", str(rate), "--requests", str(requests),
+            "--seed", "20260922", "--dataset-version", "e4c-1", "--forms", "video_b64",
+            "--max-tokens", "128,512,1024", "--retries", "0", "--out", os.path.join(tmp, "b.jsonl"),
+            "--profile", path, "--key-inventory", inv, "--validate-only"]
+    out, saved = io.StringIO(), {n: os.environ.pop(n, None) for n in bench.KEY_ENV}
+    try:
+        with contextlib.redirect_stdout(out):
+            code = bench.main(argv)
+    finally:
+        os.environ.update({n: v for n, v in saved.items() if v is not None})
+    return code, json.loads(out.getvalue())
+
+
+def test_the_e4c_base_profile_refuses_only_on_its_fill_identities_then_bounds_the_soak():
+    """Oracle (P-24): the committed E4C base validating while its frozen identities are FILL
+    placeholders (a paid run on an undeclared candidate), refusing a soak or rung for any other
+    reason once they are filled, or projecting spend in another unit or off the exact figure:
+    3,600 x (30,720 x 400 + 1,024 x 1,200) / 1e6 = 48,660.48 CREDIT under the 50,000 cap."""
+    base = json.load(open(E4C_BASE, encoding="utf-8"))
+    assert len(base["workload"]["item_ids"]) == 64 and sorted(base["workload"][
+        "expected_invalid"]) == sorted(i for i in base["workload"]["item_ids"]
+                                       if i.split("-")[0] in ("c012", "c025", "c038", "c051"))
+    with tempfile.TemporaryDirectory() as tmp:
+        code, v = e4c_validate(tmp, base, 0.25, 3600)
+        assert code == 2 and v["errors"] and all(
+            e.startswith("$.identity.") and "does not match" in e
+            and base["identity"][e.split(":")[0].split(".")[-1]].startswith("FILL")
+            for e in v["errors"]), v["errors"]
+        filled = json.loads(json.dumps(base))
+        for group, values in E4C_FILLS.items():
+            filled[group].update(values)
+        assert "FILL" not in json.dumps(filled)
+        b, spend = filled["bounds"], filled["bounds"]["spend"]
+        per_request = (b["max_input_tokens_per_request"] * Decimal(spend["rates"]["input_per_mtok"])
+                       + b["max_output_tokens_per_request"]
+                       * Decimal(spend["rates"]["output_per_mtok"])) / 10 ** 6
+        projected = {}
+        for rate, n in ((0.25, 3600), (0.5, 135)):     # the soak, and one 0.5 req/s rung
+            code, v = e4c_validate(tmp, filled, rate, n)
+            assert code == 0 and v["runnable"] and not v["warnings"], (rate, v)
+            projected[n] = Decimal(v["derived"]["projected_spend"])
+            assert v["derived"]["spend_currency"] == "CREDIT" and projected[n] == n * per_request
+            assert v["derived"]["media_bytes"] <= b["max_input_bytes"], v["derived"]
+        assert projected[3600] == Decimal("48660.48") < Decimal(spend["max_spend"]) == 50000
+        # one request more than the soak is over the profile's bounds: refused, not run
+        code, v = e4c_validate(tmp, filled, 0.25, 3601)
+        assert code == 2 and "bounds.max_requests 3600 < scheduled requests 3601" in v["errors"]

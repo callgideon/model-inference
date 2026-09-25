@@ -1002,7 +1002,7 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     capped = [*ok, _attempt("over", "rejected", **typed)]
     assert {row[0]: row[1] for row in rung(capped)} == {
         "duration_cap": "pass", "bench_validity": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
-        "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
+        "ttft_p95_short": "pass", "latency_p95": "pass", "e2e_p95_per_clip_minute": "pass"}
     # the box rerun: every rung carried the over-cap clips' refusals - by design, never a
     # refusal that lowers the supported rate
     assert certify.envelope_summary([(0.5, rung(capped))]) == (certify.PASS, (), 0.5)
@@ -1043,15 +1043,40 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
         assert _verdict(rung(mixed), "ttft_p95_short") == "pass", other
     slow = [_attempt("short", ttft=7.0) for _ in range(60)]
     assert _verdict(rung(slow), "ttft_p95_short") == "fail"
-    dragging = [_attempt("short", latency=8.0) for _ in range(60)]
+    dragging = [_attempt("short", latency=16.0) for _ in range(60)]     # 96 s/clip-minute
     assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
     # box run2's e2e p95 is a measurement the release decision quotes with its p50 and count
     assert [row for row in rung(dragging) if row[0] == "e2e_p95_per_clip_minute"] == [(
         "e2e_p95_per_clip_minute", "fail",
-        "p95 48.0, p50 48.0 over 60 accepted samples (needs 60)", "BOX")]
+        "p95 96.0, p50 96.0 over 60 accepted samples (needs 60)", "BOX")]
     few = rung(ok[:10])
     assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
         "unknown"
+
+
+def test_e4c_the_p18_limits_are_the_runners_and_request_latency_p95_is_judged():
+    """Oracle (P-18, decided 2026-09-25): the provisional 45 s per clip-minute left in place
+    (run3's measured 77.3 would fail a limit that is now 90), a request-latency p95 above
+    9.0 s passing a rung because no row judges it, or that row judged below the sample
+    floor; and a P-24 base profile whose request bound is not the box soak P-18 decided
+    (0.25 req/s = half the declared 0.5 x 14,400 s): a soak derived from a higher passing
+    rung (0.5 or 1.0 req/s) is then over the bound and bench refuses it, never a pass."""
+    assert certify.CRITERIA["e2e_p95_s_per_clip_minute"] == 90.0
+    assert certify.CRITERIA["latency_p95_s"] == 9.0
+    soak = certify.MATRIX["box"]["soak"]
+    base = json.loads((certify.MARLIN / "profiles" / "E4C-box.base.json").read_text())
+    assert base["bounds"]["max_requests"] == round(0.5 * soak["rate_fraction"] * soak["seconds"])
+    assert all(round(rate * soak["rate_fraction"] * soak["seconds"]) > base["bounds"][
+        "max_requests"] for rate in certify.MATRIX["box"]["envelope"]["rates"][1:])
+    clips = _clips()
+    rung = (lambda rows: certify.rung_verdicts(rows, clips, gateway=True, cap_s=CAP,
+                                               summary=VALID_CELL, local=False))
+    latency = (lambda seconds, n=60: [row[1] for row in rung(
+        [_attempt("short", latency=seconds) for _ in range(n)]) if row[0] == "latency_p95"])
+    assert (latency(9.5), latency(8.9), latency(9.5, 59)) == (["fail"], ["pass"], ["unknown"])
+    # judged beside the TTFT row, so a failing latency fails the envelope's chosen rung
+    slow = rung([_attempt("short", latency=9.5) for _ in range(60)])
+    assert certify.envelope_summary([(0.5, slow)])[0] == certify.FAIL
 
 
 def test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95():
