@@ -223,7 +223,7 @@ export async function startFakeGateway(
 
     if (route === "/v1/chat/completions" && method === "POST") {
       const body = checkChat(json(), key);
-      const prefer = (req.headers.prefer ?? "").split(",").map((t) => t.trim().split("=")[0].toLowerCase());
+      const prefer = String(req.headers.prefer ?? "").split(",").map((t) => t.trim().split("=")[0].toLowerCase());
       const idemKey = req.headers["idempotency-key"] as string | undefined;
       if (prefer.includes("respond-async")) {
         if (body.stream) throw new Refusal("invalid_request");

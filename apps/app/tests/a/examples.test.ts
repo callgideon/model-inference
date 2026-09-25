@@ -64,7 +64,7 @@ async function execute(example: Example, lang: Language, baseUrl: string, dir: s
   const { stdout } = await run(cmd, args, {
     cwd: dir,
     timeout: 30_000,
-    env: { PATH: process.env.PATH, HOME: dir, INFRX_API_KEY: key },
+    env: { PATH: process.env.PATH, HOME: dir, INFRX_API_KEY: key } as unknown as NodeJS.ProcessEnv,
   });
   return stdout;
 }
