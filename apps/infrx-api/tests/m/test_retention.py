@@ -710,8 +710,9 @@ def rows_by_key(world) -> dict:
 def test_the_runtimes_writers_register_every_object_before_writing_it(make_world):
     """M5/M6's writers: an upload's destination (before the PUT's write), its verified
     source (before the copy), a fetched source (`materialize`) and the staged envelope
-    (`stage`, for its request's job) - each has its content row, `written`, before its
-    bytes exist, so the collector reaches every object the runtime makes."""
+    (`stage`, for its request's job) and the prepared artifact (`prepare`) - each has its
+    content row, `written`, before its bytes exist, so the collector reaches every object
+    the runtime makes."""
     from .test_uploads import CLIP
     world = make_world()
     process = media_process(world)
@@ -733,12 +734,40 @@ def test_the_runtimes_writers_register_every_object_before_writing_it(make_world
     fetched = run(process.materialize(ORG, data_url(support.mp4(seconds=4.0))))
     request = cases._request(world.harness, (fetched,))
     run(process.stage(ORG, request))
+    # And the prepared artifact (`prepare`, for the job), the fix round's R1.
+    process.jobs[request.request_id] = ORG
+    run(process.attach(request.request_id, (fetched,)))
+    (prepared,) = run(process.prepare(request.request_id, "v1"))
     written = [k for step, k in order if step == "bytes"]
     for object_key in written:
         assert ("row", object_key) in order[:order.index(("bytes", object_key))], object_key
     assert set(written) == {process.upload_key(ORG, handle), uploaded.storage_ref,
-                            fetched.storage_ref, f"payloads/{ORG}/{request.request_id}.json"}
+                            fetched.storage_ref, f"payloads/{ORG}/{request.request_id}.json",
+                            prepared.storage_ref}
     assert {k: rows_by_key(world)[k] for k in written} == {k: "live" for k in written}
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "fix round R2/A1, wiring request 7 (D10 SQL + the F2C reference fake): a written "
+    "re-registration of a live key must refresh eligible_at; until then this is the race"))
+def test_a_source_fetched_again_is_not_collected_before_its_admission(make_world):
+    """Fix round R2/A1 (a known race, strict xfail until wiring request 7 lands): a clip
+    fetched again after its first row became eligible gets the old row back (the first
+    registration wins, its eligibility never reset), so a collector pass between this
+    request's `materialize` and its admission deletes the bytes it just fetched and the
+    admission answers `not_found`. Expected once fixed: the admission succeeds and the
+    source is still there."""
+    world = make_world()
+    process = media_process(world)
+    source = data_url(support.mp4(seconds=4.0))
+    run(process.materialize(ORG, source))
+    world.clock.advance(2 * GRACE_S)                 # the first request's row is eligible
+    ref = run(process.materialize(ORG, source))      # request 2 fetches the same clip
+    run(collector(world).sweep())                    # a pass before request 2's admission
+    request = cases._request(world.harness, (ref,))
+    run(process.stage(ORG, request))
+    run(world.port.admit_ready(request, cases._idem(request, "refetch"), cases.CARD))
+    assert run(world.objects.get(ref.storage_ref)) is not None
 
 
 def test_rv03_probe_the_durable_collector_keeps_a_restarted_gateways_live_upload(make_world):

@@ -233,3 +233,60 @@ def test_a_put_in_flight_is_never_evicted(tmp_path):
     put(cache, 2)
     put(cache, 3)
     assert os.path.exists(part)
+
+
+def test_an_expired_pinned_file_is_a_miss_and_is_not_removed(tmp_path):
+    """Fix round R3: `get` (and so `prepare` and the worker's `local_uri`) past the life
+    of a pinned file answers a miss but leaves the file to its pin; the next look after
+    the pin is released removes it."""
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock)
+    data = clip(1)
+    entry = cache.put(ORG, digest(data), "v1", data, PROBED)
+    clock.now += DAY
+    with cache.pin(entry.local_path):
+        assert cache.get(ORG, digest(data), "v1") is None
+        assert os.path.exists(entry.local_path), "a pinned file was removed by get()"
+    assert cache.get(ORG, digest(data), "v1") is None
+    assert not os.path.exists(entry.local_path)
+
+
+def test_a_pin_that_loses_the_race_with_an_eviction_is_not_found(tmp_path, monkeypatch):
+    """Fix round R4: the sweep removes the file between `pin`'s open and its lock. The
+    pin then holds an unlinked inode, so it answers `not_found` (prepare again) rather
+    than yielding a path that is gone - or a later file at that path it does not hold."""
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock)
+    entry = put(cache, 1)
+    clock.now += DAY
+    flock = prepare.fcntl.flock
+
+    def evict_first(fd, operation):
+        if operation == prepare.fcntl.LOCK_SH:          # the pin, before its lock lands
+            assert cache.sweep() == 1
+        return flock(fd, operation)
+    monkeypatch.setattr(prepare.fcntl, "flock", evict_first)
+    with pytest.raises(errors.NotFound), cache.pin(entry.local_path):
+        pytest.fail("pin() succeeded on a file the sweep removed")
+
+
+def test_an_eviction_that_loses_the_race_with_a_put_keeps_the_new_file(tmp_path, monkeypatch):
+    """Fix round R4, the evictor's side: a `put` replaces the expired file between the
+    sweep's open and its lock. The sweep holds the old inode, so the fresh file at that
+    path - which someone may pin next - is not its to remove."""
+    clock = CacheClock()
+    cache = cache_at(tmp_path, clock)
+    data = clip(1)
+    entry = cache.put(ORG, digest(data), "v1", data, PROBED)
+    clock.now += DAY
+    flock = prepare.fcntl.flock
+
+    def put_first(fd, operation):
+        if operation & prepare.fcntl.LOCK_EX:           # the sweep, before its lock lands
+            monkeypatch.setattr(prepare.fcntl, "flock", flock)
+            cache.put(ORG, digest(data), "v1", data, PROBED)
+        return flock(fd, operation)
+    monkeypatch.setattr(prepare.fcntl, "flock", put_first)
+    assert cache.sweep() == 0
+    assert os.path.exists(entry.local_path)
+    assert cache.get(ORG, digest(data), "v1") is not None

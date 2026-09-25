@@ -204,14 +204,15 @@ class ProcessingCache:
 
     def get(self, org_id: str, digest: str, profile: str,
             mime: str | None = None) -> CacheEntry | None:
-        """The live entry, or None. An expired one is deleted rather than returned. With
+        """The live entry, or None. An expired one is removed (unless pinned) rather than
+        returned. With
         `mime`, an entry another process wrote is found on disk and indexed (MPILOT)."""
         key = (org_id, digest, profile)
         entry = self.entries.get(key) or (self._load(key, mime) if mime else None)
         if entry is None:
             return None
         if self.clock() - entry.stored_at >= self.ttl_s:
-            self._remove(key, entry)
+            self._evict_file(entry.local_path)        # a pinned file stays with its pin
             return None
         if not os.path.exists(entry.local_path):
             # The object vanished under us (an operator, a tmpfs reboot, another sweep).
@@ -328,6 +329,8 @@ class ProcessingCache:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
                     return False
+                if not _names(path, fd):    # a later `put` replaced it: not ours to take
+                    return False
             for key in [k for k, e in self.entries.items() if e.local_path == path]:
                 del self.entries[key]
             with contextlib.suppress(OSError):
@@ -351,20 +354,23 @@ class ProcessingCache:
                 from None
         try:
             fcntl.flock(fd, fcntl.LOCK_SH)
+            # An evictor between the open and the lock leaves this lock on an unlinked
+            # inode (or a later file at the path it does not hold): prepare again.
+            if not _names(local_path, fd):
+                raise errors.NotFound("the prepared media is not in the processing cache")
             yield local_path
         finally:
             os.close(fd)
 
-    def _remove(self, key: tuple[str, str, str], entry: CacheEntry) -> None:
-        self.entries.pop(key, None)
-        try:
-            os.remove(entry.local_path)
-        except OSError:
-            pass
-        try:            # the digest directory, when nothing else lives in it
-            os.rmdir(os.path.dirname(entry.local_path))
-        except OSError:
-            pass
+
+def _names(path: str, fd: int) -> bool:
+    """Whether `path` still names the file open at `fd`."""
+    try:
+        now = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return False
+    held = os.fstat(fd)
+    return (now.st_dev, now.st_ino) == (held.st_dev, held.st_ino)
 
 
 class MediaPreparation(MediaStaging):

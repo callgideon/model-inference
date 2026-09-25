@@ -51,11 +51,25 @@ SWEEP_PIN = "test_the_sweep_never_removes_a_pinned_file"
 CROSS_PROCESS = "test_another_process_pin_protects_the_file"
 PREPARE_FULL = "test_a_full_cache_still_writes_the_durable_artifact_and_prepare_retries"
 IN_FLIGHT = "test_a_put_in_flight_is_never_evicted"
+GET_PINNED = "test_an_expired_pinned_file_is_a_miss_and_is_not_removed"
+PIN_RACE = "test_a_pin_that_loses_the_race_with_an_eviction_is_not_found"
+EVICT_RACE = "test_an_eviction_that_loses_the_race_with_a_put_keeps_the_new_file"
 
 
 def _m(name, invariant, old, new, *cases, file=R, dies_by=()) -> Mutant:
     return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
                   dies_by=tuple(dies_by))
+
+
+_PREPARED_ROW = (
+    "                await self._register(ContentKind.prepared, ref.org_id, prepared_key,\n"
+    "                                     ref.digest if body is data\n"
+    "                                     else await asyncio.to_thread(digest_of, body),\n"
+    "                                     len(body), job_id=job_id)\n")
+_PREPARED_COMMENT = (
+    "                # Durable before local: the prepared artifact exists in the object store\n"
+    "                # before anything downstream can be told the job is prepared.\n")
+_PREPARED_WRITE = "                await self._write_once(prepared_key, body, probed.mime)\n"
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -156,6 +170,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "                                     else await asyncio.to_thread(digest_of, body),\n"
        "                                     len(body), job_id=job_id)\n", "",
        EVERY_STEP, file=P),
+    _m("m6_prepared_registered_after_the_write",
+       "a prepared artifact's row comes before its bytes, never after",
+       _PREPARED_ROW + _PREPARED_COMMENT + _PREPARED_WRITE,
+       _PREPARED_WRITE + _PREPARED_ROW, WRITERS, file=P),
     # --- phase 2: bounded process maps --------------------------------------------------------
     _m("m6_maps_unbounded", "no process map keeps more than MAX_PROCESS_ENTRIES",
        "        while len(self) > self.limit:", "        while False:", MAPS, file=S),
@@ -190,6 +208,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:\n            raise", FULL, PREPARE_FULL, file=P),
     _m("m6_parts_evicted_in_flight", "a put in flight is never the high water's to take",
        ' and not f[2].endswith(".part")]', "]", IN_FLIGHT, file=P),
+    # --- fix round: pins hold on every path ---------------------------------------------------
+    _m("m6_get_ignores_pins", "an expired lookup never removes a pinned file",
+       "            self._evict_file(entry.local_path)        # a pinned file stays with its pin",
+       "            os.remove(entry.local_path)", GET_PINNED, file=P),
+    _m("m6_pin_trusts_a_stale_open", "a pin that lost the race with an eviction is not_found",
+       "            if not _names(local_path, fd):\n                raise",
+       "            if False:\n                raise", PIN_RACE, file=P),
+    _m("m6_evict_takes_a_replaced_file", "an evictor removes only the inode it locked",
+       "                if not _names(path, fd):    # a later `put` replaced it: not ours to take",
+       "                if False:", EVICT_RACE, file=P),
 )
 
 RUNNER = Runner(name="m6", targets=("tests/m/test_retention.py", "tests/m/test_cache_bounds.py",
