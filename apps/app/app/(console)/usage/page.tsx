@@ -1,7 +1,6 @@
-import { ConsoleDataUnavailable, ConsolePreviewNotice } from "@/components/console-data-state";
 import Link from "next/link";
+import { ConsolePreviewNotice } from "@/components/console-data-state";
 import { PageHeader } from "@/components/page-header";
-import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -12,127 +11,56 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PromotionalBalanceCard } from "../billing/balance-card";
-import { balanceCardState, historyProbeQuery } from "../billing/view-model";
-import { consoleContext } from "./fake-console-context";
-import { EmptyPanel, ErrorPanel, InlineError, Pager } from "./states";
-import { UsageChart } from "./usage-chart";
+import { CreditBalanceCard } from "../billing/credit-card";
+import { consumerCreditReads } from "../billing/credit-context";
+import { creditCardState } from "../billing/credit-view-model";
+import { jobsPageModel, jobsPageRequest, parseJobFilters, type JobRowView } from "./credit-view-model";
+import { EmptyPanel, ErrorPanel, Pager } from "./states";
 import { UsageControls } from "./usage-controls";
-import {
-  parseUsageFilters,
-  usagePageModel,
-  usagePageQuery,
-  usageScopeQuery,
-  type UsageRowView,
-} from "./view-model";
 
 export const metadata = { title: "Usage · infrx" };
 
 export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
   const params = await searchParams;
-  const context = consoleContext();
-  if (context === null) return <ConsoleDataUnavailable title="Usage" />;
-  const { services, session, now } = context;
-  const filters = parseUsageFilters(params);
-  const scope = usageScopeQuery(filters, now);
+  const { reads, preview, now } = await consumerCreditReads();
+  const filters = parseJobFilters(params);
 
-  const [usage, summary, daily, keys, balance, history] = await Promise.all([
-    services.usage(session, usagePageQuery(filters, now)),
-    services.usageSummary(session, scope),
-    services.usageDaily(session, scope),
-    services.keys.list(session),
-    services.balances(session),
-    services.ledger(session, historyProbeQuery()),
-  ]);
-
-  const model = usagePageModel({ filters, usage, summary, daily, keys });
-  const card = balanceCardState(balance, history);
+  const [wallet, jobs] = await Promise.all([reads.wallet(), reads.jobs(jobsPageRequest(filters))]);
+  const creditsIn = wallet.ok && wallet.value !== null ? await reads.creditsIn(wallet.value.walletId) : null;
+  const card = creditCardState(wallet, creditsIn);
+  const model = jobsPageModel({ filters, jobs, now });
 
   return (
     <>
-      <ConsolePreviewNotice />
+      {preview ? <ConsolePreviewNotice /> : null}
       <PageHeader
         title="Usage"
-        subtitle="Example request metadata and legacy USD balances."
-        action={
-          <UsageControls filters={model.filters} keys={model.keyOptions} models={model.models} />
-        }
+        subtitle="Your requests, newest first, with what each one charged or holds."
+        action={<UsageControls filters={model.filters} />}
       />
 
-      {model.keys.kind === "error" ? (
-        <InlineError state={model.keys} href={model.here}>
-          The API key list could not be loaded, so the key filter is incomplete.
-        </InlineError>
-      ) : null}
-      {model.keyNotice === null ? null : (
-        <p role="status" className="mb-3 text-sm text-destructive">
-          {model.keyNotice}{" "}
-          {model.clearKeyFilterHref === null ? null : (
-            <Link className="underline underline-offset-4" href={model.clearKeyFilterHref}>
-              Clear it
-            </Link>
-          )}
-        </p>
-      )}
-
-      {model.summary.kind === "ready" ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {model.summary.value.map((tile) => (
-            <StatTile key={tile.label} label={tile.label} value={tile.value} hint={tile.hint} />
-          ))}
-        </div>
-      ) : null}
-      {model.summary.kind === "error" ? (
+      {card.kind === "ready" ? <CreditBalanceCard model={card.value} /> : null}
+      {card.kind === "error" ? (
         <ErrorPanel
-          title="This range could not be totalled"
-          state={model.summary}
+          title="Your credits could not be loaded"
+          state={card}
           href={model.here}
           firstPageHref={model.firstHref}
         />
       ) : null}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card>
-          <CardContent>
-            {model.daily.kind === "error" ? (
-              <ErrorPanel
-                title="The daily breakdown could not be loaded"
-                state={model.daily}
-                href={model.here}
-                firstPageHref={model.firstHref}
-              />
-            ) : (
-              <UsageChart days={model.daily.kind === "ready" ? model.daily.value : []} />
-            )}
-          </CardContent>
-        </Card>
-        {card.kind === "ready" ? <PromotionalBalanceCard model={card.value} /> : null}
-        {card.kind === "error" ? (
-          <ErrorPanel
-            title="Your balance could not be loaded"
-            state={card}
-            href={model.here}
-            firstPageHref={model.firstHref}
-          />
-        ) : null}
-      </div>
-
       <h2 className="mt-8 mb-3 font-heading text-base font-medium">Requests</h2>
 
       {model.rows.kind === "error" ? (
         <ErrorPanel
-          title="These requests could not be loaded"
+          title="Your requests could not be loaded"
           state={model.rows}
           href={model.here}
           firstPageHref={model.firstHref}
         />
       ) : null}
 
-      {model.rows.kind === "empty" ? (
-        <EmptyPanel>
-          No requests in this range. Widen the time range, or clear the key and model filters.
-        </EmptyPanel>
-      ) : null}
+      {model.rows.kind === "empty" ? <EmptyPanel>{model.emptyText}</EmptyPanel> : null}
 
       {model.rows.kind === "ready" ? (
         <>
@@ -143,17 +71,19 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
                   <TableRow>
                     <TableHead>When (UTC)</TableHead>
                     <TableHead>Model</TableHead>
-                    <TableHead>Key</TableHead>
-                    <TableHead>Outcome</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Input</TableHead>
                     <TableHead className="text-right">Output</TableHead>
                     <TableHead className="text-right">Charged</TableHead>
                     <TableHead className="text-right">Held</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Request</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {model.rows.value.rows.map((row) => (
-                    <UsageTableRow key={row.requestId} row={row} />
+                    <JobRow key={row.requestId} row={row} />
                   ))}
                 </TableBody>
               </Table>
@@ -167,9 +97,10 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
             nextHref={model.rows.value.nextHref}
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            <strong>Charged</strong> is what left your balance. <strong>Held</strong> is a ceiling
-            reserved while a request runs or awaits reconciliation — it is not a charge, and usage we
-            cannot verify is never estimated into one.
+            <strong>Charged</strong> is what settlement took from your balance, in the unit shown.{" "}
+            <strong>Held</strong> is reserved while a request runs or awaits reconciliation — it is
+            not a charge, and usage that was not reported is never estimated into one. Filtering by
+            API key or model is not available yet.
           </p>
         </>
       ) : null}
@@ -177,34 +108,35 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
   );
 }
 
-function UsageTableRow({ row }: { row: UsageRowView }) {
+function JobRow({ row }: { row: JobRowView }) {
   return (
     <TableRow>
       <TableCell className="whitespace-nowrap text-muted-foreground">{row.when}</TableCell>
-      <TableCell className="whitespace-nowrap">{row.model}</TableCell>
-      <TableCell className="whitespace-nowrap text-muted-foreground">{row.keyName}</TableCell>
+      <TableCell className="whitespace-nowrap">
+        <span title={row.revision}>{row.model}</span>
+        <span className="block text-xs text-muted-foreground">{row.mode}</span>
+      </TableCell>
       <TableCell>
         <div className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2">
-            <Badge variant={row.settlement.tone === "warning" ? "destructive" : "outline"}>
-              {row.settlement.label}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              {row.outcome} · {row.httpStatus} · {row.mode}
-            </span>
+            <Badge variant={row.charge.tone === "warning" ? "destructive" : "outline"}>{row.charge.label}</Badge>
+            <span className="text-xs text-muted-foreground">{row.status}</span>
           </span>
-          <span className="text-xs text-muted-foreground">{row.settlement.detail}</span>
+          <span className="text-xs text-muted-foreground">{row.charge.detail}</span>
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums" title={row.tokens.note ?? undefined}>
-        {row.tokens.prompt}
+        {row.tokens.input}
       </TableCell>
       <TableCell className="text-right tabular-nums" title={row.tokens.note ?? undefined}>
-        {row.tokens.completion}
+        {row.tokens.output}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{row.amount.charged}</TableCell>
-      <TableCell className="text-right tabular-nums text-muted-foreground">
-        {row.amount.held ?? "—"}
+      <TableCell className="text-right tabular-nums">{row.charge.amount ?? "—"}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{row.charge.held ?? "—"}</TableCell>
+      <TableCell>
+        <Link className="text-sm underline underline-offset-4" href={row.detailHref}>
+          Details<span className="sr-only"> for request {row.requestId}</span>
+        </Link>
       </TableCell>
     </TableRow>
   );
