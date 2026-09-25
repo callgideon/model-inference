@@ -1,0 +1,46 @@
+{
+  "task": "C3A",
+  "slice": "fix round: consoleActions seam (0-C3A-VCM-1, 1-C3A-V-1), RLS-filtered revoke offline + REV-06 (0-C3A-VCM-2), grant adapter dropped for A2's grant.ts (1-C3A-V-2); 1-C3A-V-3 is D10 (WR-C3A-4)",
+  "activity": "review",
+  "head": "dd0d1a45",
+  "worktree": ".claude/worktrees/codex-app-c3a",
+  "branch": "codex/app-c3a",
+  "owned_paths": [
+    "apps/app/app/actions.ts",
+    "apps/app/lib/services/actions.ts",
+    "apps/app/tests/c/",
+    "research/plan/evidence/c/C3A-3f4e5f1.md"
+  ],
+  "commands": [
+    {"cmd": "cd apps/app && node --test tests/c/actions.test.ts (at bb9f8a15, tests only)", "exit": 1, "summary": "fails before: consoleActions not exported"},
+    {"cmd": "cd apps/app && node --test tests/c/actions.test.ts", "exit": 0, "summary": "18/18 pass"},
+    {"cmd": "cd apps/app && pnpm test", "exit": 0, "summary": "420 tests: 399 pass, 0 fail, 21 skipped (real-stack files)"},
+    {"cmd": "cd apps/app && pnpm lint", "exit": 0, "summary": "0 errors, 2 pre-existing warnings"},
+    {"cmd": "cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit", "exit": 0, "summary": "clean"},
+    {"cmd": "cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants", "exit": 0, "summary": "212/212 killed"},
+    {"cmd": "cd apps/app && node tests/v/run-mutants.mjs", "exit": 0, "summary": "40/40 killed"},
+    {"cmd": "cd apps/app && node tests/u/run-mutants.mjs", "exit": 0, "summary": "64/64 killed"},
+    {"cmd": "cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs", "exit": 0, "summary": "176/176 killed (34 C3A incl. REV-06 and SEAM-01..07; GRANT-01..06 retired)"},
+    {"cmd": "make console-c3a-real (WR-C3A-6 applied in tree, then restored)", "exit": 0, "summary": "9/9 real-DB pass; 1 durable signup_grant entry; unverified direct insert still ACCEPTED (gap, WR-C3A-4)"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 1,
+    "pessimistic_h": 2,
+    "confidence": "medium",
+    "basis": "C3A code done pending re-review; remaining is coordinator wiring WR-1/2/6 (WR-1, WR-6 proven composed); D10 WR-3/WR-4 separately 3/5/8 h",
+    "at": "2026-09-25T23:27Z"
+  },
+  "blockers": [],
+  "wiring_requests": [
+    "WR-C3A-1 (U2/coordinator): API Keys dialog/revoke button use createConsumerKey/revokeConsumerKey from @/app/actions; delete app/(console)/api-keys/actions.ts (unchanged, re-proven)",
+    "WR-C3A-2 (U3/coordinator): remove admin addCredit balance edit; operator forms call operatorAction (unchanged)",
+    "WR-C3A-3 (D10+G): App-reachable audited operator port; durable key-create idempotency (unchanged)",
+    "WR-C3A-4 (D10, restated): api_keys insert policy requires a verified creator via a security-definer public helper; flip stack case 9 to assert refusal",
+    "WR-C3A-5: withdrawn (C3A has no grant adapter; A2's app/(auth)/grant.ts is the one)",
+    "WR-C3A-6 (coordinator, restated exact against union): Makefile console-c3a-real beside console-c0-real"
+  ],
+  "evidence": [
+    "research/plan/evidence/c/C3A-3f4e5f1.md#fix-round-2026-09-25-code-head-dd0d1a45"
+  ]
+}

@@ -69,6 +69,21 @@ import {
   type ConsoleOperation,
   type ConsoleServices,
 } from "../contracts/services.ts";
+import {
+  LEDGER_ENTRY_KINDS_V2,
+  parseAmount,
+  parseCredit,
+  parseUsd,
+  unitOfRegime,
+  type AccountingRegime,
+  type Amount,
+  type BalanceV2,
+  type Credit,
+  type LedgerEntryKindV2,
+  type LegacyUsdStatement,
+  type ReadOutcome,
+} from "../contracts/v2/types.ts";
+import { creditBalanceOf } from "./credits.ts";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor.ts";
 import {
   buildPlan,
@@ -78,6 +93,9 @@ import {
   type NamedQueryName,
   type Predicate,
   namedQuery,
+  postgrestPort,
+  QueryPortError,
+  type PostgrestClient,
   type QueryPort,
   type Row,
   type SqlValue,
@@ -436,7 +454,7 @@ function ledgerEntryOf(row: Row, session: SessionContext): LedgerEntry {
   };
 }
 
-function keyOf(row: Row): ApiKeySummary {
+export function keyOf(row: Row): ApiKeySummary {
   return {
     id: text(row, "id"),
     name: text(row, "name"),
@@ -684,6 +702,43 @@ function auditEntryOf(row: Row): AuditEntry {
   };
 }
 
+/**
+ * One bounded keyset page. `limit + 1` rows are asked for so "is there more" needs no count, the
+ * cursor is verified against this exact scope before it is bound, and the next cursor is minted
+ * from the last row's sort key.
+ */
+async function keysetPage<T>(
+  port: QueryPort,
+  cursorSecret: string,
+  name: NamedQueryName,
+  scope: string,
+  query: PageQuery,
+  filters: Record<string, SqlValue>,
+  orgId: string | null,
+  project: (row: Row) => T,
+  keyOf: (row: Row) => Keyset,
+  extra: Predicate[] = [],
+): Promise<Result<Page<T>>> {
+  const limitProblem = badLimit(query.limit);
+  if (limitProblem !== null) return fail("invalid_request", limitProblem);
+  const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+  let keyset: Keyset | null = null;
+  if (query.cursor !== undefined && query.cursor !== null && query.cursor !== "") {
+    keyset = decodeCursor(cursorSecret, scope, query.cursor);
+    if (keyset === null) return fail("invalid_cursor", "the cursor was not issued by this service for this query");
+  }
+  const plan = buildPlan(name, { filters, keyset, limit: limit + 1, orgId });
+  for (const predicate of extra) plan.predicates.push(predicate);
+  const found = await port.run(plan);
+  const items = found.slice(0, limit).map(project);
+  const more = found.length > limit;
+  const lastRow = found[items.length - 1];
+  return ok({
+    items,
+    next_cursor: more && lastRow !== undefined ? encodeCursor(cursorSecret, scope, keyOf(lastRow)) : null,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The services
 // ---------------------------------------------------------------------------
@@ -757,24 +812,7 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
     keyOf: (row: Row) => Keyset,
     extra: Predicate[] = [],
   ): Promise<Result<Page<T>>> {
-    const limitProblem = badLimit(query.limit);
-    if (limitProblem !== null) return fail("invalid_request", limitProblem);
-    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
-    let keyset: Keyset | null = null;
-    if (query.cursor !== undefined && query.cursor !== null && query.cursor !== "") {
-      keyset = decodeCursor(cursorSecret, scope, query.cursor);
-      if (keyset === null) return fail("invalid_cursor", "the cursor was not issued by this service for this query");
-    }
-    const plan = buildPlan(name, { filters, keyset, limit: limit + 1, orgId });
-    for (const predicate of extra) plan.predicates.push(predicate);
-    const found = await portFor(name).run(plan);
-    const items = found.slice(0, limit).map(project);
-    const more = found.length > limit;
-    const lastRow = found[items.length - 1];
-    return ok({
-      items,
-      next_cursor: more && lastRow !== undefined ? encodeCursor(cursorSecret, scope, keyOf(lastRow)) : null,
-    });
+    return keysetPage(portFor(name), cursorSecret, name, scope, query, filters, orgId, project, keyOf, extra);
   }
 
   /**
@@ -1176,6 +1214,417 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
   };
 
   return guarded(services);
+}
+
+// ---------------------------------------------------------------------------
+// C0: the consumer context and read port
+// ---------------------------------------------------------------------------
+//
+// The consumer App's reads, for ONE signed-in individual, through the caller's own JWT: RLS, the
+// views' guards and D10's `consumer_*` functions decide what comes back, and every tenant-scoped
+// row is checked again by `scopedPort`. Nothing here holds a service key, a customer API key or a
+// fixture: a read that cannot answer returns a non-ok `Result`, and the page renders "unavailable".
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The part of a GoTrue user the context reads. `email_confirmed_at` is GoTrue's verification. */
+export type AuthUser = { id: string; email?: string | null; email_confirmed_at?: string | null };
+
+/** The individual's own consumer account: their wallet and the personal organization it funds. */
+export type ConsumerAccount = {
+  userId: string;
+  email: string;
+  walletId: string;
+  orgId: string;
+  /** R33: a suspended (or retired) individual keeps every read; new work is refused elsewhere. */
+  suspended: boolean;
+};
+
+/**
+ * Where a request stands. `onboarding` is a verified individual whose grant has not been issued
+ * (C3A/A2 own the retry); `unavailable` is any failure to find out - never read as onboarding, which
+ * would offer a grant flow to someone who has one, nor as signed out.
+ */
+export type ConsumerContext =
+  | { state: "signed_out" }
+  | { state: "unverified"; userId: string; email: string }
+  | { state: "onboarding"; userId: string; email: string }
+  | { state: "ready"; account: ConsumerAccount }
+  | { state: "unavailable" };
+
+type AuthAnswer = {
+  data: { user: AuthUser | null } | null;
+  error: { name?: string; status?: number } | null;
+};
+
+/**
+ * `supabase.auth.getUser()`'s answer: the user, `null` when there is no valid session (no cookie,
+ * an expired or rejected token), or `"unavailable"` when GoTrue could not be asked. An outage is
+ * never "signed out": that would send a signed-in customer to a login page that cannot help.
+ */
+export function authUserOutcome(answer: AuthAnswer): AuthUser | null | "unavailable" {
+  const { error } = answer;
+  if (error !== null) {
+    if (error.name === "AuthSessionMissingError") return null;
+    if (error.status === 401 || error.status === 403) return null;
+    return "unavailable";
+  }
+  return answer.data?.user ?? null;
+}
+
+/** Resolve the consumer account server-side, from the verified session user and nothing else. */
+export async function resolveConsumerContext(port: QueryPort, user: AuthUser | null): Promise<ConsumerContext> {
+  if (user === null) return { state: "signed_out" };
+  if (typeof user.id !== "string" || !UUID.test(user.id)) return { state: "unavailable" };
+  const email = user.email ?? "";
+  if (typeof user.email_confirmed_at !== "string" || user.email_confirmed_at === "") {
+    return { state: "unverified", userId: user.id, email };
+  }
+  try {
+    const pg = scopedPort(port);
+    const wallets = await pg.run(buildPlan("consumer_wallet", { orgId: user.id, limit: 2 }));
+    if (wallets.length === 0) return { state: "onboarding", userId: user.id, email };
+    // One consumer wallet per individual is a unique index (0006); two is not an account to guess at.
+    if (wallets.length !== 1) return { state: "unavailable" };
+    const walletId = text(wallets[0], "wallet_id");
+    const orgId = text(wallets[0], "org_id");
+    const orgs = await pg.run(buildPlan("org_status", { orgId, limit: 1 }));
+    if (orgs.length !== 1) return { state: "unavailable" };
+    return { state: "ready", account: { userId: user.id, email, walletId, orgId, suspended: flag(orgs[0], "suspended") } };
+  } catch {
+    return { state: "unavailable" };
+  }
+}
+
+/** The `rpc` half of a supabase-js client; the real client satisfies it. */
+export type RpcClient = {
+  rpc(
+    fn: string,
+    args: Record<string, SqlValue>,
+  ): PromiseLike<{ data: unknown; error: { code?: string | null; message?: string | null } | null }>;
+};
+
+/** One consumer CREDIT ledger entry. The unit is CREDIT by construction (the view carries only it). */
+export type CreditLedgerEntry = {
+  entry_id: string;
+  created_at: string;
+  kind: LedgerEntryKindV2;
+  amount: Credit;
+  request_id: string | null;
+  reason: string;
+};
+
+/**
+ * One of the individual's requests (D10 `consumer_jobs`). Money is in the row's OWN unit - CREDIT for
+ * a credit job, USD for a legacy one - and is never summed across units or converted. `charged` is
+ * `null` until the request is settled: an unsettled or uncertain charge is unknown, not zero.
+ * `result` is F2C.b's ReadOutcome from the DB's persisted expiry, never the page's clock.
+ */
+export type ConsumerRequest = {
+  request_id: string;
+  created_at: string;
+  model: string;
+  model_revision: string | null;
+  execution_mode: string | null;
+  state: string;
+  outcome_cause: string | null;
+  accounting_regime: AccountingRegime;
+  unit: "CREDIT" | "USD";
+  hold: Amount | null;
+  hold_state: string | null;
+  charged: Amount | null;
+  settlement_state: string | null;
+  usage_certainty: string | null;
+  usage: { prompt_tokens: number; completion_tokens: number } | null;
+  result: ReadOutcome;
+  result_expires_at: string | null;
+  settled_at: string | null;
+};
+
+export type ConsumerReads = {
+  balance(): Promise<Result<BalanceV2>>;
+  /** `null`: this personal organization has no legacy USD history. Never merged into `balance`. */
+  legacyUsd(): Promise<Result<LegacyUsdStatement | null>>;
+  ledger(query: PageQuery): Promise<Result<Page<CreditLedgerEntry>>>;
+  requests(query: PageQuery): Promise<Result<Page<ConsumerRequest>>>;
+  request(requestId: string): Promise<Result<ConsumerRequest>>;
+  /** The owned result body while the persisted expiry allows it. Never log or cache it. */
+  result(requestId: string): Promise<Result<string>>;
+  keys(): Promise<Result<ApiKeySummary[]>>;
+};
+
+/** The D10 refusals a consumer may see, each with fixed text (the DB's names identifiers). */
+const RPC_REFUSALS: Partial<Record<ErrorCode, string>> = {
+  not_found: "no such request for this account",
+  result_pending: "this request has no result yet",
+  result_expired: "this result has expired and is no longer available",
+  invalid_cursor: "the cursor was not issued by this service for this query",
+};
+
+function rpcFailure<T>(error: { code?: string | null; message?: string | null }): Result<T> {
+  const prefix = /^([a-z_]+):/.exec(error.message ?? "")?.[1] as ErrorCode | undefined;
+  if (error.code === "P0001" && prefix !== undefined && RPC_REFUSALS[prefix] !== undefined) {
+    return fail(prefix, RPC_REFUSALS[prefix]);
+  }
+  if (error.code === "42501") return fail("forbidden", "this account cannot read that");
+  return fail("dependency_unavailable", "your account data could not be read right now; try again");
+}
+
+function amountIn(row: Row, column: string, unit: "CREDIT" | "USD"): Amount | null {
+  const value = cell(row, column);
+  if (value === null) return null;
+  if (typeof value !== "string") throw new TypeError(`${column} must be a decimal string`);
+  return parseAmount(value, unit);
+}
+
+function resultOutcome(row: Row, usage: ConsumerRequest["usage"]): ReadOutcome {
+  if (optionalTimestamp(row, "settled_at") === null) return "pending";
+  if (optionalText(row, "settlement_state") === "held_unknown") return "held_unknown";
+  if (text(row, "state") !== "succeeded" || usage === null) return "no_result";
+  if (flag(row, "result_available")) return "available";
+  return optionalTimestamp(row, "result_expires_at") === null ? "unavailable" : "expired";
+}
+
+function consumerRequestOf(row: Row): ConsumerRequest {
+  const regime = text(row, "accounting_regime");
+  const unit = unitOfRegime(regime);
+  if (text(row, "unit") !== unit || (unit !== "CREDIT" && unit !== "USD")) {
+    throw new TypeError("a request's unit contradicts its accounting regime");
+  }
+  const prompt = optionalInteger(row, "prompt_tokens");
+  const completion = optionalInteger(row, "completion_tokens");
+  if ((prompt === null) !== (completion === null)) throw new TypeError("half a usage report");
+  const usage = prompt === null || completion === null ? null : { prompt_tokens: prompt, completion_tokens: completion };
+  return {
+    request_id: text(row, "request_id"),
+    created_at: timestamp(row, "created_at"),
+    model: text(row, "requested_model"),
+    model_revision: optionalText(row, "model_revision"),
+    execution_mode: optionalText(row, "execution_mode"),
+    state: text(row, "state"),
+    outcome_cause: optionalText(row, "outcome_cause"),
+    accounting_regime: regime as AccountingRegime,
+    unit,
+    hold: amountIn(row, "hold", unit),
+    hold_state: optionalText(row, "hold_state"),
+    charged: amountIn(row, "charged", unit),
+    settlement_state: optionalText(row, "settlement_state"),
+    usage_certainty: optionalText(row, "usage_certainty"),
+    usage,
+    result: resultOutcome(row, usage),
+    result_expires_at: optionalTimestamp(row, "result_expires_at"),
+    settled_at: optionalTimestamp(row, "settled_at"),
+  };
+}
+
+function creditLedgerEntryOf(row: Row): CreditLedgerEntry {
+  const kind = text(row, "kind");
+  if (!(LEDGER_ENTRY_KINDS_V2 as readonly string[]).includes(kind)) throw new TypeError("unknown ledger kind");
+  if (text(row, "unit") !== "CREDIT") throw new TypeError("a consumer ledger entry is CREDIT");
+  const amount = cell(row, "amount");
+  if (typeof amount !== "string") throw new TypeError("amount must be a decimal string");
+  return {
+    entry_id: text(row, "entry_id"),
+    created_at: timestamp(row, "created_at"),
+    kind: kind as LedgerEntryKindV2,
+    amount: parseCredit(amount),
+    request_id: optionalText(row, "request_id"),
+    reason: text(row, "reason"),
+  };
+}
+
+function oneRow(data: unknown): Row | null {
+  return Array.isArray(data) && data.length === 1 && typeof data[0] === "object" && data[0] !== null ? (data[0] as Row) : null;
+}
+
+/**
+ * The reads for one resolved account. `pg` is the PostgREST `QueryPort` (`postgrestPort`), `rpc` the
+ * same client's RPC entry point; both carry the individual's own JWT.
+ */
+export function createConsumerReads(
+  config: { pg: QueryPort; rpc: RpcClient; cursorSecret: string },
+  account: ConsumerAccount,
+): ConsumerReads {
+  const pg = scopedPort(config.pg);
+  const { rpc, cursorSecret } = config;
+  if (typeof cursorSecret !== "string" || cursorSecret.length < 16) {
+    throw new Error("createConsumerReads needs a cursor signing secret of at least 16 characters");
+  }
+
+  const reads: ConsumerReads = {
+    async balance() {
+      const { data, error } = await rpc.rpc("console_wallet_summary", { p_user: account.userId });
+      if (error !== null) return rpcFailure(error);
+      return creditBalanceOf(oneRow(data), account.walletId);
+    },
+
+    async legacyUsd() {
+      const { data, error } = await rpc.rpc("console_legacy_usd_statement", { p_org: account.orgId });
+      if (error !== null) return rpcFailure(error);
+      const row = oneRow(data);
+      if (row === null) return fail("internal_error", "the legacy statement returned no row");
+      if (text(row, "org_id") !== account.orgId || text(row, "unit") !== "USD" || text(row, "accounting_regime") !== "legacy_usd") {
+        return fail("internal_error", "the legacy statement is not this organization's USD");
+      }
+      const entries = integer(row, "entry_count");
+      if (entries === 0) return ok(null);
+      const balance = cell(row, "balance");
+      if (typeof balance !== "string") return fail("internal_error", "the legacy balance is not a decimal string");
+      return ok({
+        schema_version: 2,
+        org_id: account.orgId,
+        balance: parseUsd(balance),
+        entry_count: entries,
+        as_of: timestamp(row, "as_of"),
+        rollout_hold: flag(row, "rollout_hold"),
+      });
+    },
+
+    async ledger(query) {
+      const rejected = badInput<Page<CreditLedgerEntry>>(query, PAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
+      return keysetPage(
+        pg,
+        cursorSecret,
+        "credit_ledger_page",
+        cursorScope(account.walletId, "credit_ledger", query),
+        query,
+        {},
+        account.walletId,
+        creditLedgerEntryOf,
+        (row) => ({ at: timestamp(row, "created_at"), id: text(row, "entry_id") }),
+      );
+    },
+
+    async requests(query) {
+      const rejected = badInput<Page<ConsumerRequest>>(query, PAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
+      const limitProblem = badLimit(query.limit);
+      if (limitProblem !== null) return fail("invalid_request", limitProblem);
+      const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+      // The RPC caps a page at 100, so the look-ahead row is not available at the cap: a full capped
+      // page then carries a cursor (the next page may be empty) rather than being read as the last.
+      const ask = Math.min(limit + 1, MAX_PAGE_LIMIT);
+      const cursor = query.cursor === undefined || query.cursor === "" ? null : query.cursor;
+      // D10's cursor is its own keyset; the tenant is the JWT subject inside the function, so a cursor
+      // can only ever move within the caller's own rows, and a malformed one is its `invalid_cursor`.
+      const { data, error } = await rpc.rpc("consumer_jobs", { p_after: cursor, p_limit: ask });
+      if (error !== null) return rpcFailure(error);
+      if (!Array.isArray(data)) return fail("internal_error", "the request list did not return rows");
+      const rows = data as Row[];
+      const shown = rows.slice(0, limit);
+      const more = rows.length > limit || (ask === limit && rows.length === limit);
+      const last = shown[shown.length - 1];
+      return ok({
+        items: shown.map(consumerRequestOf),
+        next_cursor: more && last !== undefined ? text(last, "cursor") : null,
+      });
+    },
+
+    async request(requestId) {
+      if (typeof requestId !== "string" || !UUID.test(requestId)) return fail("not_found", RPC_REFUSALS.not_found!);
+      const { data, error } = await rpc.rpc("consumer_jobs", { p_after: null, p_limit: 1, p_request_id: requestId });
+      if (error !== null) return rpcFailure(error);
+      const row = oneRow(data);
+      if (row === null) return fail("not_found", RPC_REFUSALS.not_found!);
+      return ok(consumerRequestOf(row));
+    },
+
+    async result(requestId) {
+      if (typeof requestId !== "string" || !UUID.test(requestId)) return fail("not_found", RPC_REFUSALS.not_found!);
+      const { data, error } = await rpc.rpc("consumer_job_result", { p_request_id: requestId });
+      if (error !== null) return rpcFailure(error);
+      if (typeof data !== "string") return fail("internal_error", "a result is text");
+      return ok(data);
+    },
+
+    async keys() {
+      const found = await pg.run(buildPlan("keys_list", { orgId: account.orgId }));
+      return ok(found.map(keyOf));
+    },
+  };
+
+  // A read never throws: a port failure is `dependency_unavailable` (retry), anything else - a row
+  // that is not what its DTO says - is `internal_error`. Fixed text either way.
+  const out = {} as Record<string, unknown>;
+  for (const [name, read] of Object.entries(reads)) {
+    out[name] = async (...args: unknown[]) => {
+      try {
+        return await (read as (...a: unknown[]) => Promise<Result<unknown>>)(...args);
+      } catch (error) {
+        return error instanceof QueryPortError
+          ? fail("dependency_unavailable", "your account data could not be read right now; try again")
+          : fail("internal_error", "this read failed unexpectedly");
+      }
+    };
+  }
+  return out as ConsumerReads;
+}
+
+/** The consumer App's request context: who is asking, and - only for a ready account - their reads. */
+export type ConsumerSession = { context: ConsumerContext; reads: ConsumerReads | null };
+
+/** The Supabase server client as C0 uses it: GoTrue's `getUser()` plus PostgREST (the real one fits). */
+export type ConsumerClient = PostgrestClient & { auth: { getUser(): PromiseLike<AuthAnswer> } };
+
+/**
+ * `consumerSession()` without React's `cache` or the Next cookie client, so it is testable (R48).
+ *
+ * Everything runs as the individual: the client carries their cookie JWT, so RLS, the views' guards
+ * and D10's `consumer_*` functions decide what is visible. GoTrue's `getUser()` revalidates the token,
+ * and the account is found by wallet owner (`resolveConsumerContext`). The secret and the client are
+ * obtained inside the guard, the secret first: any failure - configuration, auth service, database -
+ * is `unavailable`, never onboarding (a second grant flow), signed out, a fixture or a zero.
+ */
+export async function consumerSessionFrom(
+  client: () => Promise<ConsumerClient>,
+  cursorSecret: () => string,
+): Promise<ConsumerSession> {
+  try {
+    const secret = cursorSecret();
+    const supabase = await client();
+    const user = authUserOutcome(await supabase.auth.getUser());
+    if (user === "unavailable") return { context: { state: "unavailable" }, reads: null };
+    const pg = postgrestPort(supabase);
+    const context = await resolveConsumerContext(pg, user);
+    if (context.state !== "ready") return { context, reads: null };
+    return { context, reads: createConsumerReads({ pg, rpc: supabase, cursorSecret: secret }, context.account) };
+  } catch {
+    return { context: { state: "unavailable" }, reads: null };
+  }
+}
+
+/** What the console shell (`app/(console)/layout.tsx`, WR-1) does with a request. */
+export type ConsoleShell =
+  | { kind: "redirect"; to: string }
+  | { kind: "render"; email: string; reads: ConsumerReads | null }
+  | { kind: "panel"; state: "unverified" | "onboarding" | "unavailable" };
+
+/**
+ * The shell's decision. An operator is not a consumer: operator access never waits on a consumer
+ * wallet, so an operator whose consumer state is onboarding gets the page (no reads) and reaches
+ * /admin, which checks the role itself. Verification and onboarding redirect only to a route that
+ * has shipped (`null` until A2/C3A land it): a redirect to a missing route is a 404, not a flow.
+ */
+export function consoleShell(
+  session: ConsumerSession,
+  isOperator: boolean,
+  routes: { verifyEmail: string | null; onboarding: string | null },
+): ConsoleShell {
+  const { context, reads } = session;
+  switch (context.state) {
+    case "signed_out":
+      return { kind: "redirect", to: "/login" };
+    case "unverified":
+      return routes.verifyEmail === null ? { kind: "panel", state: "unverified" } : { kind: "redirect", to: routes.verifyEmail };
+    case "onboarding":
+      if (isOperator) return { kind: "render", email: context.email, reads: null };
+      return routes.onboarding === null ? { kind: "panel", state: "onboarding" } : { kind: "redirect", to: routes.onboarding };
+    case "ready":
+      return reads === null ? { kind: "panel", state: "unavailable" } : { kind: "render", email: context.account.email, reads };
+    default:
+      return { kind: "panel", state: "unavailable" };
+  }
 }
 
 type AnyOperation = (...args: never[]) => Promise<Result<unknown>>;
