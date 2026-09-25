@@ -467,7 +467,7 @@ def test_f_base__the_startup_probe_connects_on_its_own_until_the_lifespan_opens_
     direct, pooled = Connection(), Connection()
 
     async def connect(dsn, **kw):
-        assert kw == {"autocommit": True}
+        assert kw == {"autocommit": True, "prepare_threshold": None}   # WR-I8-1
         return direct
 
     monkeypatch.setattr(psycopg.AsyncConnection, "connect", connect)

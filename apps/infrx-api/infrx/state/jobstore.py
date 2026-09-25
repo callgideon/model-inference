@@ -40,15 +40,31 @@ _OUTCOME_FIELDS = ("job_id", "state", "cause", "usage", "result_ref", "settlemen
                    "debit", "settled_at", "reconcile_after")
 
 
+#: Supabase's transaction pooler (Supavisor): session state is lost between transactions
+#: and server-side prepared statements are unsupported (WR-I8-1, R110).
+TRANSACTION_POOLER_PORT = 6543
+
+
+def session_state_allowed(dsn: str) -> bool:
+    """False on the transaction pooler: a session `SET` there is lost for its client and
+    leaked to another one, so the role and timeout must come from the login role itself."""
+    from urllib.parse import urlsplit
+    return urlsplit(dsn).port != TRANSACTION_POOLER_PORT
+
+
 def connector(dsn: str) -> Connect:
     """The simplest `Connect`: a fresh connection per operation, `set role service_role`
-    (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does).
+    (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does) - only
+    off the transaction pooler, where the login role carries its own defaults. No
+    server-side prepared statements on any port (WR-I8-1).
     ponytail: one connection per call; a psycopg pool with the same `configure` hook
     when the gateway wires `DATABASE_POOL_*`."""
     async def connect():
         import psycopg
-        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
-        await conn.execute("set role service_role")
+        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True,
+                                                     prepare_threshold=None)
+        if session_state_allowed(dsn):
+            await conn.execute("set role service_role")
         return conn
     return connect
 

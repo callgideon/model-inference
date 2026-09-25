@@ -44,7 +44,7 @@ from ..media.uploads import MediaUploads
 from ..observe.metrics import Registry
 from ..scheduling.reconcile import Reconciler
 from ..state.catalog import PgCatalogDirectory
-from ..state.jobstore import PgJobStore
+from ..state.jobstore import PgJobStore, session_state_allowed
 from ..state.journal import PgStreamStore
 from .routes import intake
 from .routes.ingress import IngressDeps
@@ -126,10 +126,14 @@ def price_check(catalog, model_id: str, regime: str, active_card: str):
     return check
 
 
-def configure_connection(statement_timeout_ms: int):
+def configure_connection(statement_timeout_ms: int, *, session_state: bool = True):
     """The pool's `configure` hook (D2 request 7): 0004's BYPASSRLS is not inherited, so the
-    role is SET on every connection, as PostgREST does; and no statement runs unbounded."""
+    role is SET on every connection, as PostgREST does; and no statement runs unbounded.
+    Without `session_state` (the transaction pooler, WR-I8-1) it sends nothing: a session
+    SET there is lost and leaked, so the login role's own defaults carry both."""
     async def configure(conn) -> None:
+        if not session_state:
+            return
         await conn.execute("set role service_role")
         await conn.execute(f"set statement_timeout = {int(statement_timeout_ms)}")
     return configure
@@ -153,9 +157,14 @@ def connection_pool(settings):
     belongs to the loop that opens it). Its connect is the stores' `Connect`."""
     from psycopg_pool import AsyncConnectionPool
     deployment = settings.deployment
-    configure = configure_connection(deployment.database_pool_statement_timeout_ms)
+    configure = configure_connection(deployment.database_pool_statement_timeout_ms,
+                                     session_state=session_state_allowed(
+                                         settings.pilot.database_url))
+    # prepare_threshold=None: no server-side prepared statements (unsupported on the
+    # transaction pooler, WR-I8-1; harmless on the session port)
     pool = AsyncConnectionPool(
-        settings.pilot.database_url, open=False, kwargs={"autocommit": True},
+        settings.pilot.database_url, open=False,
+        kwargs={"autocommit": True, "prepare_threshold": None},
         min_size=deployment.database_pool_min_size, max_size=deployment.database_pool_max_size,
         timeout=deployment.database_pool_connect_timeout_s, configure=configure)
 
@@ -166,7 +175,8 @@ def connection_pool(settings):
             # configured as a pooled one is, closed by the caller.
             import psycopg
             conn = await psycopg.AsyncConnection.connect(settings.pilot.database_url,
-                                                         autocommit=True)
+                                                         autocommit=True,
+                                                         prepare_threshold=None)
             await configure(conn)
             return conn
         return _Pooled(pool, await pool.getconn())
