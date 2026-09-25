@@ -187,9 +187,10 @@ def test_a_row_naming_a_key_outside_the_media_prefixes_is_never_deleted(make_wor
     """A corrupt or foreign row must not reach the bucket: only keys M writes (media/,
     uploads/, payloads/) and no `..` segment; anything else is kept and reported. D10's
     tenant-prefix CHECK (0019) refuses the first three rows outright; a `..` segment inside
-    the tenant's own prefix passes it, and the collector is what keeps that one."""
+    the tenant's own prefix is refused too (0019 register_content: not under this
+    organization's prefix); on the other worlds the collector is what keeps it."""
     world = make_world()
-    if world.kind == "d10" and not stray.startswith(f"media/{world.org}/"):
+    if world.kind == "d10":
         with pytest.raises(errors.NotFound):
             run(world.write("source", stray))
         return

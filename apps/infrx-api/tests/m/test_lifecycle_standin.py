@@ -694,7 +694,7 @@ def pg_world(**options) -> World:
     if reason:
         pytest.skip(f"PostgreSQL harness unavailable: {reason}")
     database = f"{pgharness.DATABASE}_retention"
-    if not _PG:
+    if "dsn" not in _PG:                    # d10_world may have filled _PG first
         pgharness.ensure()
         pgharness.recreate(database)
         _PG["dsn"] = pgharness.dsn(database)
