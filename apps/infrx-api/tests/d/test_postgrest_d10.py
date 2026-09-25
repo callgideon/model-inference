@@ -150,6 +150,27 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
         assert foreign.status_code >= 400 and "not_found" in foreign.text, foreign.text
         anon = rpc("consumer_jobs", {}, None)
         assert anon.status_code in (401, 403), anon.text
+        # 0024 (D10-APP-SQL): the own-ledger page and the consumer_jobs filters resolve
+        # through PostgREST's named-argument dispatch (one function each, no ambiguity)
+        ledger = rpc("consumer_credit_ledger", {"p_limit": 2}, _jwt(me))
+        wallet = cc.wallet_of(conn, me)
+        own = [str(e) for e, in conn.execute(
+            "select entry_id from infrx.credit_ledger where wallet_id = %s order by "
+            "created_at desc, entry_id desc limit 2", (wallet,))]
+        assert ledger.status_code == 200 and [r["entry_id"] for r in ledger.json()] == own \
+            and all(isinstance(r["amount"], str) and "wallet_id" not in r and "actor" not in r
+                    for r in ledger.json()), ledger.text
+        theirs = rpc("consumer_credit_ledger", {}, _jwt(other))
+        assert theirs.status_code == 200 and not {r["entry_id"] for r in theirs.json()} & \
+            set(own), theirs.text
+        capped = rpc("consumer_credit_ledger", {"p_limit": 101}, _jwt(me))
+        assert capped.status_code == 400 and "invalid_request" in capped.text, capped.text
+        assert rpc("consumer_credit_ledger", {}, None).status_code in (401, 403)
+        by_key = rpc("consumer_jobs", {"p_key_id": ca.C1_KEY, "p_limit": 10}, _jwt(me))
+        assert by_key.status_code == 200 and settled.request_id in \
+            {r["request_id"] for r in by_key.json()}, by_key.text
+        none = rpc("consumer_jobs", {"p_model": "nobody/none"}, _jwt(me))
+        assert none.status_code == 200 and none.json() == [], none.text
         # a browser session never writes a key's audience or provider scope
         patch = httpx.patch(f"{base}/api_keys?id=eq.{ca.C1_KEY}", json={"audience": "operator"},
                             headers={"Authorization": f"Bearer {_jwt(me)}",

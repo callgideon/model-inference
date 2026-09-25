@@ -1703,8 +1703,11 @@ EXPECTED_FUNCTION_CALLERS = {
     "public.console_wallet_summary(uuid)": {"authenticated", "service_role"},
     "public.console_legacy_usd_statement(uuid)": {"authenticated", "service_role"},
     # D10 (0021): C0/U4's signed-in reads (auth.uid() is the tenant; none as service).
-    "public.consumer_jobs(text,integer,uuid)": {"authenticated", "service_role"},
+    "public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
+    "timestamp with time zone)": {"authenticated", "service_role"},   # 0024's filters
     "public.consumer_job_result(uuid)": {"authenticated", "service_role"},
+    # D10-APP-SQL (0024): C0 WR-5's own-ledger page.
+    "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
 }
 
 

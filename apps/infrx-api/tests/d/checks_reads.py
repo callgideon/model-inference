@@ -481,7 +481,10 @@ def check_reads_privileges(conn) -> str:
     """DUR-RLS for 0021: the consumer reads are the signed-in principal's only; a browser
     session never writes a key's audience, individual, provider or endpoint; the runtime role
     holds its grant list and no operator operation, money writer, browser table or DDL."""
-    for fn, callers in (("public.consumer_jobs(text,integer,uuid)",
+    for fn, callers in (("public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with "
+                         "time zone,timestamp with time zone)",      # 0024's signature
+                         {"authenticated", "service_role"}),
+                        ("public.consumer_credit_ledger(text,integer)",   # 0024
                          {"authenticated", "service_role"}),
                         ("public.consumer_job_result(uuid)", {"authenticated", "service_role"}),
                         ("public.consumer_org()", set()),

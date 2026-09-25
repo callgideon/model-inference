@@ -10,12 +10,15 @@ runner, `assertion_kill` underneath. They are in the default subset (`ALWAYS`).
 """
 from __future__ import annotations
 
-from . import checks_content, checks_followup, checks_reads, checks_ready, pgharness
+from . import checks_content, checks_followup, checks_port, checks_reads, checks_ready, pgharness
 from . import migration_mutants as _d
 
 READY = _d.READY
 #: The D10 follow-up (W5 request 3, G8 V-G8TL-2).
 FOLLOWUP = "0022_preparation_refusal_and_flag_writer.sql"
+#: D10-APP-SQL: the console read port (C0 WR-5, U1R WR-3). It redefines 0021's
+#: `consumer_jobs`, so the mutants of that body live on 0024's copy (same name and check).
+PORT = "0024_console_read_port.sql"
 
 
 def _m(name, file, old, new, check, why, **kw):
@@ -216,7 +219,7 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_reconcile_race_untyped", READS,
        "  perform pg_advisory_xact_lock(hashtextextended(v_key, 0));\n", "", "reconcile_race",
        "duplicate reconcile audit: a racing replay dies on a raw 23505"),
-    _m("d10_consumer_reads_any_tenant", READS,
+    _m("d10_consumer_reads_any_tenant", PORT,
        "   where v_org is not null and j.org_id = v_org\n", "   where true\n", "consumer_reads",
        "bypass the tenant join: an individual lists other individuals' jobs"),
     _m("d10_consumer_result_past_expiry", READS,
@@ -249,11 +252,11 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "legacy_scrub",
        "R116: a NOT VALID success-has-expiry check re-checks every UPDATE of a pre-0018 "
        "success, so its content never scrubs and the sweep retries forever (review 1-RI-1)"),
-    _m("d10_consumer_unit_mislabelled", READS,
+    _m("d10_consumer_unit_mislabelled", PORT,
        "         case j.accounting_regime when 'credit' then 'CREDIT' else 'USD' end,",
        "         'CREDIT',", "consumer_reads",
        "a USD job is shown in the App labelled CREDIT (units are exact and separate)"),
-    _m("d10_consumer_limit_unbounded", READS,
+    _m("d10_consumer_limit_unbounded", PORT,
        "   limit greatest(1, least(coalesce(p_limit, 50), 100));",
        "   limit greatest(1, coalesce(p_limit, 50));", "consumer_reads",
        "a browser pages an unbounded history in one call"),
@@ -397,6 +400,43 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "a browser session flips a feature flag"),
 )
 
+MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
+    # --- 0024: the console read port (D10-APP-SQL) ---------------------------------------
+    _m("d10_ledger_any_wallet", PORT,
+       "   where w.owner_user_id = auth.uid() and w.kind = 'consumer';\n  return query\n"
+       "  select l.entry_id",
+       "   where w.kind = 'consumer';\n  return query\n  select l.entry_id", "port_ledger",
+       "drop the ownership check: an individual pages another individual's CREDIT ledger"),
+    _m("d10_ledger_limit_uncapped", PORT,
+       "  if p_limit is null or p_limit < 1 or p_limit > 100 then",
+       "  if p_limit is null or p_limit < 1 then", "port_ledger",
+       "drop the page cap: a browser reads an unbounded ledger in one call"),
+    _m("d10_ledger_page_sorts", PORT,
+       "   order by l.created_at desc, l.entry_id desc\n   limit p_limit;",
+       "   order by l.created_at desc, l.entry_id\n   limit p_limit;", "port_ledger_plan",
+       "the page no longer follows the index: a sort over the wallet per page (C0 WR-5)"),
+    _m("d10_credits_in_unindexed", PORT,
+       "create index if not exists credit_ledger_wallet_credits_in_idx\n"
+       "  on infrx.credit_ledger (wallet_id) where kind <> 'inference_debit';", "",
+       "port_credits_in", "\"Spent\" filters every wallet entry by kind (U1R WR-3(b))"),
+    _m("d10_jobs_key_filter_ignored", PORT,
+       "     and (p_key_id is null or j.key_id = p_key_id)\n", "", "port_jobs_filters",
+       "the per-key usage filter answers every key's jobs (U1R WR-3(a))"),
+    _m("d10_ledger_for_the_runtime", PORT,
+       "grant execute on function public.consumer_credit_ledger(text, integer)\n"
+       "  to authenticated, service_role;",
+       "grant execute on function public.consumer_credit_ledger(text, integer)\n"
+       "  to authenticated, service_role, infrx_runtime;", "port_privileges",
+       "the runtime login gains a consumer read (R122-R127 least privilege)"),
+)
+
+_d._CHECKS.update({
+    "port_ledger": checks_port.check_consumer_credit_ledger,
+    "port_ledger_plan": checks_port.check_ledger_page_plan,
+    "port_credits_in": checks_port.check_credits_in_index,
+    "port_jobs_filters": checks_port.check_consumer_jobs_filters,
+    "port_privileges": checks_port.check_port_privileges,
+})
 _d._CHECKS.update({
     "fail_preparation": checks_followup.check_fail_preparation,
     "refetch_refresh": checks_followup.check_written_reregistration_refreshes,
