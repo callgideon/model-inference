@@ -161,3 +161,78 @@
 
 ## Estimate
 - Remaining for this lane: 0 h optimistic, 0.5 h likely (a review fix round), 1.5 h pessimistic. Confidence high. Basis: all four deliverables are done and checked; only review findings remain.
+
+## Fix round (recheck ACCEPT_WITH_FIXES on 1acf85b4; implementation `fea6a58a`)
+- Base of this round: `1acf85b4`. Implementation: `fea6a58a`; this evidence commit follows it.
+- Scope: the coordinator's decisions E4P-V1 to V6 and open issues 1, 3 and 4. Nothing wider.
+
+### Changes
+- **E4P-V1 (declared rate)**
+  - `certify.CRITERIA["declared_rate_per_s"] = 0.5`.
+  - `envelope_summary(rungs, declared)`: the climb stops at the declared rate. The supported rate is the declared rung when it and every rung below pass, and only that rung's P-18 rows (TTFT, latency, e2e) are judged. If the declared rung fails, the result is FAIL with no supported rate.
+  - `load_cells`: the envelope detail adds `measured_passing_rate_per_s`, the old highest passing rung (measured only).
+  - `MATRIX["box"]["soak"]` is `{"rate": 0.25, "seconds": 14400, "sample_s": 30}`: fixed, not derived.
+  - The box soak runs only once the declared rung is supported; otherwise it FAILs with "no supported envelope rate to soak at" and does not run.
+  - The `tiny` scale is unchanged: no declared rate, and its fixed 2.0 soak runs as before. `rate_fraction` is gone.
+- **E4P-V2 (overload burst)**
+  - `cell_profile` stamps the overload cell `profile_class` P4, so bench refuses it on any profile but `public-edge`.
+  - New `certify --overload-profile <path>`. On a non-local target the burst runs under that profile at `https://<its first allowlist host>/v1`.
+  - Without the profile, a box run reports `e4b.b.overload` PENDING on `PROFILE` ("BLOCKED: … pass --overload-profile …") and the burst never runs.
+  - An unreadable profile, or one with a wrong schema, is BLOCKED by `profile_blocked`.
+- **E4P-V3 (FILL placeholders)**
+  - `runprofile.fill_paths` plus `validate`: every string starting with `FILL` is an error, reported by path only, alongside the schema errors.
+  - The committed base now fails validation with 15 errors: the 5 pattern errors plus the 10 FILL paths.
+  - Filling only the 5 pattern-bound identities still leaves 5 refused. Fully filled, the profile is runnable.
+  - The P0 template test and certify's `_base_profile` fill every FILL they carry, so they are unchanged.
+- **Open issue 3 (loopback)**
+  - `runprofile.is_local(a, profile=None)`: loopback is local only when no profile is given or the profile's `target.path` is `direct-engine`. An injected transport is still local.
+  - A profiled `direct-gateway` (or `public-edge`) run on loopback is metered: missing rates, cap, holds or key inventory refuse it (exit 2), as for a remote target.
+  - `bench.check_profile` and `dataset.check_profile` pass the loaded profile. The no-profile path is unchanged (e1cf28).
+- **E4P-V4 (brief)**, consumer-v1/03 checklist:
+  - item 4 now reads "…before the first qualifying run's start timestamp"
+  - item 5 now reads "…journey passed"
+  - item 7 adds `infra/rollout/steps/85-known-good-box.sh` (P-25)
+- **Open issue 4**: one runbook line in consumer-v1/03 §E4C. The box shell exports only `INFRX_API_KEY`; bench prefers `MARLIN_API_KEY` and refuses the cell when both are set.
+- **E4P-V5/V6 and V1/V2 protocol text**, in E4B-protocol:
+  - §4: the envelope row names the declared rung; the overload row says it is a P4 cell.
+  - §5: new `declared_rate_per_s` row; box soak cell `0.25 × 14400 (… fixed; runs only once the declared rung is supported)`.
+  - §5 decided-limits table: "Declared supported rate" and "Soak rate" (now in CRITERIA/MATRIX) are replaced by "Refusals within the cap at the declared 0.5 req/s | 0".
+  - §5 notes: the runner's failure rate is `< 1 %` over every unanswered attempt, platform and transport alike, which is stricter than P-18's platform ≤ 1 %. The E4C drill record prints each measured recovery time next to its §5 bound with PASS/FAIL (no runner code). The burst rule is restated.
+  - Log: "amendment 6, fix round" appended.
+- **Tests and mutants**
+  - `test_certify`: CELLS test now expects soak `(0.25, 3600)`; the protocol test binds the box soak cell to `MATRIX` (`0.25 × 14400`).
+  - The P-18 test now pins `max_requests == soak.rate × seconds == 3600` instead of the removed `rate_fraction`.
+  - New mutants: `models/marlin2b/tests/mutants.py` e1cp26 and e1cp27. `e4b_mutants.py`: `soak_without_a_supported_rate`, `declared_rate_not_applied`, `climb_past_the_declared_rate`, `declared_rung_failure_accepted`, `p4_stamp_dropped`, `box_burst_unblocked`, `burst_off_the_edge`, with `soak_at_the_full_rate` retargeted to the new soak line.
+
+### Fails-before (fix-round test files on the `1acf85b4` code, from a `git archive` copy)
+| test | before | after |
+|---|---|---|
+| `test_the_e4c_base_profile_refuses_until_every_fill_is_frozen_then_bounds_the_soak` | FAIL: no FILL errors (`set() == {…10 paths}`) | pass |
+| `test_a_profiled_loopback_gateway_is_metered_and_its_blocks_refuse_the_run` | FAIL: the unpriced loopback direct-gateway profile validated (`0 == 2`) | pass |
+| `test_e4c_the_box_supports_only_the_declared_rate_and_soaks_at_p18s_fixed_rate` | FAIL: `KeyError: 'declared_rate_per_s'` | pass |
+| `test_e4c_the_overload_burst_is_p4_and_enters_through_the_public_edge_or_is_blocked` | FAIL: overload PASS through the direct gateway (silent P1), not BLOCKED | pass |
+| `test_e4b_the_load_cells_run_the_declared_shapes…` (updated) | FAIL: `KeyError: 'rate'` | pass |
+| `test_e4b_the_protocol_file_states_the_numbers…` (updated) | FAIL: `KeyError: 'rate'` | pass |
+| `test_e4c_the_p18_limits_are_the_runners…` (updated) | FAIL: `KeyError: 'rate'` | pass |
+
+A replay on `1acf85b4` in which every box rung passes, using the E4C base with the FILL values frozen:
+- Before this round: `supported_rate_per_s` 2.0; the soak was derived at 1.0 req/s × 14,400 requests, and bench refused it (exit 2, `bounds.max_requests 3600 < scheduled requests 14400`); the overload cell reported PASS through the direct gateway as P1.
+- After: supported 0.5, `measured_passing_rate_per_s` 2.0, and a soak of 0.25 × 3,600 requests that bench admits (exit 0, projected 48,660.48 CREDIT). The overload cell is BLOCKED without `--overload-profile`, and runs P4 through `https://marlin2b.callbill.ai/v1` with it (bench exit 0).
+
+### Commands (at `fea6a58a`)
+| cmd | exit | result |
+|---|---|---|
+| `make bench-test` | 0 | 114 passed |
+| `apps/infrx-api/.venv/bin/python models/marlin2b/tests/mutants.py` | 0 | 116 mutants: 113 killed, 3 controls survived, 0 problems (e1cp26, e1cp27 new) |
+| `apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/backend/test_certify.py tests/integration/test_run.py` | 0 | 99 passed |
+| `INFRX_MUTANTS=all … pytest -q tests/integration/backend/test_e4b_mutants.py` (detached) | 0 | 252 passed in 689 s (every e4b mutant killed; 7 new and 1 retargeted in this round) |
+| `e4b_mutants.py` on the 8 new or retargeted mutants | 0 | 8/8 killed |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS (932 local links) |
+| `bench.py … --profile models/marlin2b/profiles/E4C-box.base.json --key-inventory … --validate-only` (committed base, soak shape) | 2 | 15 errors: the 5 identity pattern errors and the 10 FILL paths |
+| the same, fully filled, stamped at 0.25 req/s | 0 | runnable, no errors, blocks or warnings; `projected_spend` 48660.4800 CREDIT |
+
+- The base profile is unchanged: sha256 `c0d4aa1b9ef3f467ebb17b5d8bf6367a45507bf02685f2ebe8ddd9d279a0d2ff`.
+
+### Still open
+- None of this round's items. The run-time inputs listed above (key inventory, the +40,000 CREDIT adjust, card publication, FILL values, the two-tenant profile) stay with the E4C lane and the operator.
+- A public-edge P4 overload profile must now be supplied with `--overload-profile`.
