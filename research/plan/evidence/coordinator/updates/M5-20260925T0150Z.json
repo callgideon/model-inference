@@ -1,0 +1,56 @@
+{
+  "task": "M5",
+  "slice": "fix round (verifier, one round): M5-R1 stack drill INFRX_D_TASK guard, M5-R1b R82 attach binding, M5-RS-1 WR-2 confirmation",
+  "activity": "review",
+  "head": "dfe0533a",
+  "head_note": "code head; the evidence/update commit follows it on the branch",
+  "base": "dff31efc",
+  "worktree": ".claude/worktrees/codex-m5-uploads",
+  "branch": "codex/m5-uploads",
+  "owned_paths": [
+    "apps/infrx-api/infrx/media/",
+    "apps/infrx-api/tests/m/",
+    "research/plan/evidence/m/M5-35c401b.md",
+    "research/plan/evidence/coordinator/updates/M5-20260924T2344Z.json",
+    "research/plan/evidence/coordinator/updates/M5-20260925T0150Z.json"
+  ],
+  "findings": [
+    {"id": "M5-R1", "fixed": true, "by": "dfe0533a", "fails_before": "scratch copy, _pg line reverted: 1 failed (None != 'INFRX_D_TASK is not set'; pgharness.PORT 55432)", "passes_after": "1 passed; stack file without INFRX_D_TASK + MinIO: 3 passed, 7 skipped (os_processes visibly skipped)"},
+    {"id": "M5-R1b", "fixed": true, "by": "dfe0533a", "fails_before": "scratch copy, uploads.py reverted to e164bf11: forged test 1 failed (DID NOT RAISE NotFound)", "passes_after": "1 passed [reference]; [postgres] in the 30-passed restart run; mutants attach_accepts_a_forged_upload_ref, attach_compares_only_the_digest, expired_binding_not_replayed, upload_ref_bound_by_the_index all killed (list 249, uploads.py 47)"},
+    {"id": "M5-RS-1", "fixed": false, "by": "coordinator wiring WR-2 at the merge", "proof": "scratch copy of dfe0533a + WR-2 line: INFRX_MUTANTS=all pytest -q tests/g/uploads -> 69 passed"}
+  ],
+  "commands": [
+    {"cmd": "scratch(before): env -u INFRX_D_TASK pytest -q tests/m/test_upload_restart.py -k forged_digest  # uploads.py @e164bf11", "exit": 1, "summary": "1 failed, 1 skipped: DID NOT RAISE NotFound (fails before)"},
+    {"cmd": "scratch(before): env -u INFRX_D_TASK INFRX_M_S3_ENDPOINT=... pytest -q tests/m/test_upload_restart_stack.py -k without_a_named_task  # _pg unguarded", "exit": 1, "summary": "1 failed: _pg is None, pgharness.PORT 55432 (fails before)"},
+    {"cmd": "env -u INFRX_D_TASK INFRX_M_S3_ENDPOINT=... pytest -q -rs tests/m/test_upload_restart.py tests/m/test_upload_restart_stack.py -k 'forged_digest or without_a_named_task'", "exit": 0, "summary": "2 passed, 1 skipped (passes after)"},
+    {"cmd": "env -u INFRX_D_TASK INFRX_M_S3_ENDPOINT=... pytest -q -rs tests/m/test_upload_restart_stack.py", "exit": 0, "summary": "3 passed, 7 skipped: every os_processes case skipped 'INFRX_D_TASK is not set'"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/m/test_mutants.py -k 'attach_accepts_a_forged_upload_ref or attach_compares_only_the_digest or expired_binding_not_replayed or upload_ref_bound_by_the_index or well_formed or anchor'", "exit": 0, "summary": "6 passed: 4 mutants killed, list well-formed, anchors present"},
+    {"cmd": "scratch(wr2): INFRX_MUTANTS=all pytest -q tests/g/uploads  # dfe0533a + WR-2 line", "exit": 0, "summary": "69 passed in 4m11s"},
+    {"cmd": "INFRX_D_TASK=m5 INFRX_M_S3_ENDPOINT=http://127.0.0.1:55470 INFRX_M_S3_LOCAL_CREDS=1 INFRX_M_S3_BUCKET=infrx-m5 pytest -q -rxsf tests/m tests/g/uploads/test_uploads.py -k 'not test_mutant_is_killed'", "exit": 1, "summary": "487 passed, 1 failed (WR-2 G test), 2 skipped, 1 xfailed (D10 media_refused)"},
+    {"cmd": "INFRX_D_TASK=m5 ... pytest -q tests/m/test_upload_restart.py", "exit": 0, "summary": "30 passed"},
+    {"cmd": "INFRX_D_TASK=m5 ... pytest -q -rx tests/m/test_upload_restart_stack.py", "exit": 0, "summary": "9 passed, 1 xfailed"},
+    {"cmd": "INFRX_D_TASK=m5 ... pytest -q -rs tests/m/test_upload_wiring.py", "exit": 0, "summary": "4 passed, 1 skipped (WR-1)"},
+    {"cmd": "INFRX_D_TASK=m5 ... INFRX_MUTANTS=all pytest -q tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py", "exit": 0, "summary": "340 passed, 0 skipped in 37m23s (every M, MPILOT and S3 mutant killed)"}
+  ],
+  "estimate": {
+    "optimistic_h": 0.5,
+    "likely_h": 2,
+    "pessimistic_h": 4,
+    "confidence": "medium",
+    "basis": "both major code findings closed by dfe0533a with fails-before/passes-after and killed mutants; the lane's suites are green on the m5 harness except the one WR-2 G test; remaining: coordinator applies WR-1/WR-2 at the merge, resolves tasklocal.py/v2 exports, D10 media_refused alignment flips one xfail, minor findings for a later pass, one box smoke after composition",
+    "at": "2026-09-25T01:50:00Z"
+  },
+  "blockers": [
+    "D10: 0019 lacks F2C's media_refused / UPLOAD_ABORT_REASONS (strict xfail test_stack__os_processes_a_probe_refusal_is_final_on_postgres)",
+    "WR-1 needs D10's infrx/state/lifecycle.py on the integration branch"
+  ],
+  "next_action": "coordinator: merge codex/m5-uploads after D10 aligns with F2C final; in the same merge apply WR-2 (tests/g/uploads/test_uploads.py:666) and WR-1 (pilot.py), take consumer-v1's tasklocal.py block, union the v2 export lists; then rerun tests/m + tests/g/uploads and un-skip the pool-composition case",
+  "wiring_requests": [
+    "WR-1 apps/infrx-api/infrx/gateway/pilot.py: adapters_from_env builds PgLifecycle(connect, limits) on the stores' pool as 'lifecycle'; build_ingress_deps(lifecycle=None) passes uploads=lifecycle, content=lifecycle to MediaUploads (patch in the evidence; proof tests/m/test_upload_wiring.py WIRED path + the pool-composition case)",
+    "WR-2 apps/infrx-api/tests/g/uploads/test_uploads.py:666: replace `    ref = store.refs[(ORG_A, handle)]` with `    ref = asyncio.run(store.resolve_owned(ORG_A, handle))` (proof: scratch copy of dfe0533a + this line, INFRX_MUTANTS=all tests/g/uploads: 69 passed)",
+    "merge resolution (coordinator, not M5 files): apps/infrx-api/infrx/contracts/tasklocal.py takes consumer-v1's block; apps/infrx-api/infrx/contracts/v2/__init__.py and apps/app/lib/contracts/v2/types.ts are unions of F2C.a lifecycle and F2C.c published-model exports"
+  ],
+  "evidence": [
+    "research/plan/evidence/m/M5-35c401b.md"
+  ]
+}
