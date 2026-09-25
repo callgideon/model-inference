@@ -35,13 +35,20 @@
 --
 -- RETIRED (M6 WR-8). 0019's comment on `register_content` says a deleted key's next
 -- generation starts "not before the claim that deleted it has lapsed". No migration ever
--- implemented that, and none will: a row reaches `deleted` only through 0020's
--- `content_acknowledge_delete`, which the collector calls after the object store confirmed
--- the delete, and the delete itself is issued only while the claim has at least one store
--- request timeout left; a delete delayed past its lease anyway can reach only the
--- generation it tombstoned, because generation n > 1 lives at its own physical name
--- (M6 `retention.generation_key`: `<key>.g<n>`). Waiting for the lapse would only refuse a
--- legitimate re-registration for up to a claim TTL. The sentence is void from 0022 on.
+-- implemented that, and none will. R129 and the amended R114 decide the delete instead:
+-- a tombstoned key refuses registration (`content_retiring`) until its delete is
+-- acknowledged; 0020's `content_acknowledge_delete` accepts only the tombstone's current
+-- claim fence (a superseded claim's ack is refused), and the collector calls it only after
+-- the store's delete returned; the delete is issued only while the claim has at least one
+-- store request timeout left. Writers write bare keys, so every generation reuses the same
+-- physical key (`key.g<n>` names no object).
+-- The residual is R129's, named here: a delete the client abandoned at its timeout, which
+-- the store executes only after a later claim's acknowledged delete and a re-registration's
+-- write at the same key, removes that new generation's bytes. Waiting for the deleting
+-- claim to lapse would not close it (it adds one claim TTL to the delay such a request
+-- needs, and bounds nothing on the store's side) and would refuse a legitimate
+-- re-registration for up to a claim TTL. Generation-keyed physical names are R129's
+-- upgrade (M6 writers, `MediaRef`, D10 key matching). The sentence is void from 0022 on.
 --
 --   jobs_result_expiry_guard (L3-REBASE F2) revoked from everyone, like its sibling guards.
 --
