@@ -92,9 +92,9 @@ DEFAULT_MAX_DRIVER_LAG_S = 1.0
 UNPROFILED = "unprofiled: no --profile declares this run's bounds, target and identity"
 # ...and one against a non-local (paid) target does not start at all (tasks.json E1C: "no paid
 # run starts unbounded"), unless an explicit opt-out names why. `smoke` is itself a bound:
-# (max requests incl. warm-up, max output tokens per request). `certify` is certify's runner
-# until E2C passes it profiles (wiring request); it is logged in the summary and stays INVALID.
-UNPROFILED_OPT_OUT = {"smoke": (4, 512), "certify": None}
+# (max requests incl. warm-up, max output tokens per request). certify.py passes --profile
+# to every remote cell (CERTIFY-WIRING b9b7df3e), so there is no other opt-out.
+UNPROFILED_OPT_OUT = {"smoke": (4, 512)}
 RESULT_SCHEMA = "infrx.run-result/1"
 PCTS = (50, 90, 95, 99)
 # R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
@@ -473,8 +473,7 @@ def parse_args(argv=None):
                          "coordinator's read-only op); a paid profiled run needs it (P-24)")
     ap.add_argument("--unprofiled", choices=sorted(UNPROFILED_OPT_OUT), default=None,
                     help="run WITHOUT --profile against a non-local target, logged and "
-                         "INVALID: 'smoke' (at most 4 requests of <= 512 output tokens) or "
-                         "'certify' (certify's runner, until E2C passes it profiles)")
+                         "INVALID: 'smoke' (at most 4 requests of <= 512 output tokens)")
     ap.add_argument("--validate-only", action="store_true",
                     help="validate --profile against the other flags and print the verdict; "
                          "no request, no provisioning")
@@ -2076,7 +2075,7 @@ def unprofiled_refusal(a):
                 f"--profile, or an explicit --unprofiled {{{','.join(sorted(UNPROFILED_OPT_OUT))}}}")
     cap = UNPROFILED_OPT_OUT[a.unprofiled]
     sent = a.requests + int(not a.rate and not a.corpus and not a.no_warmup)
-    if cap and (sent > cap[0] or max(a.max_tokens_mix) > cap[1]):
+    if (sent > cap[0] or max(a.max_tokens_mix) > cap[1]):
         return (f"--unprofiled {a.unprofiled} is at most {cap[0]} requests (warm-up included) "
                 f"of <= {cap[1]} output tokens; this run is {sent} of <= "
                 f"{max(a.max_tokens_mix)}: declare a --profile")

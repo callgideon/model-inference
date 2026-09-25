@@ -1,0 +1,13 @@
+{"task": "E1C", "slice": "E1C-PROFILE-FLIP", "activity": "review", "at": "2026-09-25T17:13:28Z",
+ "head": "bdad5532", "base": "b9b7df3e", "branch": "codex/e1c-profile-flip",
+ "worktree": ".claude/worktrees/codex-e1c-profile-flip",
+ "owned_paths": ["models/marlin2b/bench.py", "models/marlin2b/tests/", "research/plan/evidence/e/", "research/plan/evidence/coordinator/updates/"],
+ "commands": [
+  {"cmd": "pytest -q models/marlin2b/tests/test_profile.py -k certify_opt_out (before change)", "exit": 1, "summary": "fails-before: paid --unprofiled certify run exited 0"},
+  {"cmd": "make bench-test", "exit": 0, "summary": "107 passed"},
+  {"cmd": "pytest -q tests/integration/backend/test_certify.py", "exit": 0, "summary": "42 passed"},
+  {"cmd": "python models/marlin2b/tests/mutants.py", "exit": 0, "summary": "108 mutants, 105 killed, 3 controls survived; new e1cf27, e1cf28 killed"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.25, "pessimistic_h": 0.5, "confidence": "high", "basis": "code+tests done; merge and protocol/R110 wording edit remain", "at": "2026-09-25T17:13:28Z"},
+ "blockers": [], "wiring_requests": [],
+ "next_action": "coordinator: merge codex/e1c-profile-flip; strike '--unprofiled certify' from E1B-protocol.md:71 and R110. Lane E1C is complete in the overlay (leaving complete is rejected), so reopen it or record this update manually.",
+ "evidence": ["research/plan/evidence/e/E1C-profile-flip-bdad553.md"]}

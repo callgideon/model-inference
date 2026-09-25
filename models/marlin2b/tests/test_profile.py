@@ -512,8 +512,8 @@ def test_an_unprofiled_run_against_a_paid_target_refuses_to_start():
     """Oracle (fix round 0-B2 / 2-E1C-ACC-01, tasks.json E1C "no paid run starts unbounded"):
     a run with no --profile against a non-local target dispatched its requests and was only
     labelled INVALID afterwards. It now exits 2 before any request, unless the explicit,
-    logged opt-out is given - `smoke` capped at 4 requests of <= 512 tokens, `certify` for
-    certify's runner until E2C passes it profiles."""
+    logged opt-out is given - `smoke` capped at 4 requests of <= 512 tokens. (`certify`, the
+    interim opt-out for certify's runner, is gone: see the test below.)"""
     paid = ["--base-url", "https://paid.invalid/v1"]
     with tempfile.TemporaryDirectory() as tmp:
         clips, manifest = setup(tmp)
@@ -538,7 +538,7 @@ def test_an_unprofiled_run_against_a_paid_target_refuses_to_start():
                           (("--unprofiled", "smoke"), {"max_tokens": 1024})):
             gw, summary, _, err = go(*paid, *extra, **kw)
             assert summary is None and not gw.seen, (extra, kw)
-        for kind in ("smoke", "certify"):
+        for kind in ("smoke",):
             gw, summary, raw, err = go(*paid, "--unprofiled", kind)
             assert len(gw.seen) == 4 and len(raw) == 4, kind
             assert summary["unprofiled_opt_out"] == kind and f"--unprofiled {kind}" in err
@@ -547,6 +547,42 @@ def test_an_unprofiled_run_against_a_paid_target_refuses_to_start():
         # a local target needs no opt-out (the fake, loopback): its runs are free
         gw, summary, raw, _ = go("--base-url", "http://127.0.0.1:9/v1")
         assert len(raw) == 4 and summary["unprofiled_opt_out"] is None
+
+
+def test_a_paid_run_needs_a_profile_and_the_certify_opt_out_is_gone(monkeypatch):
+    """Oracle (E1C follow-up, after CERTIFY-WIRING b9b7df3e passes --profile to every remote
+    cell): `--unprofiled certify` let a paid run start with no bounds at all. It must now be
+    an argparse error (exit 2, the choice named), and a paid run with neither a profile nor
+    the bounded smoke opt-out must refuse, naming --profile, before any file or request."""
+    monkeypatch.setenv("MARLIN_API_KEY", KEY)
+    with tempfile.TemporaryDirectory() as tmp:
+        clips, manifest = setup(tmp)
+        args = argv_for(tmp, manifest, {})
+        args = args[:args.index("--profile")] + ["--base-url", "https://paid.invalid/v1"]
+        args.remove("--dry-run-transport")
+        args.remove("fake_gateway:transport")
+        out, raw = (args[args.index(f) + 1] for f in ("--out", "--raw"))
+        for extra in (["--unprofiled", "certify"], ["--unprofiled", "certify", "--validate-only"],
+                      [], ["--validate-only"]):
+            gw = FakeGateway()
+            bench.load_transport = lambda spec: gw.transport()
+            err, stdout = io.StringIO(), io.StringIO()
+            with routed_to(gw), contextlib.redirect_stderr(err), \
+                    contextlib.redirect_stdout(stdout):
+                try:
+                    code = bench.main(args + extra)
+                except SystemExit as e:
+                    code = e.code
+            assert code == 2, (extra, code)
+            assert not gw.seen and not gw.uploads and gw.home is None, extra
+            assert not os.path.exists(out) and not os.path.exists(raw), extra
+            said = err.getvalue() + stdout.getvalue()
+            if "certify" in extra:
+                assert "invalid choice: 'certify'" in said, said
+            else:
+                assert "--profile" in said, said
+    assert set(bench.UNPROFILED_OPT_OUT) == {"smoke"}
+    assert bench.UNPROFILED_OPT_OUT["smoke"] == (4, 512)
 
 
 @contextlib.contextmanager
