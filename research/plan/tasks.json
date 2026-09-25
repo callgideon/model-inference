@@ -4116,7 +4116,7 @@
       "track": "D",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4148,7 +4148,8 @@
       ],
       "acceptance": "Cross-process lifecycle and exact accounting remain correct under races; immutable applied migrations preserved.",
       "failure_oracle": "Real DB races detect premature execution, deletion of live content, forged ownership or changed historical expiry.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/d10-merge dfc4fa75 (--no-ff of 483d9eca) after the verify-lane fix round (ACCEPT_WITH_FIXES; 3 lenses, 14 rechecks); implemented = 0019–0021 + PgLifecycle/read authority/dedicated logins with real-PG proofs (tests/d 811 passed; Supabase image 126; 741 D mutants killed; rulings R122–R127); OPEN: revoke infrx.admit/claim_preparation from infrx_runtime once W5/G7 wire the ready doors (readiness_cutover_check().runtime_unmarked_doors must read []); W5 fail_preparation SQL (R104/R133); pilot.py composition of the runtime login (E3C F-1: configure_connection still sets service_role) is coordinator wiring after G7; P-25 values."
     },
     {
       "id": "M5",

@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 37,
-  "updated": "2026-09-25T06:17:50Z",
+  "revision": 39,
+  "updated": "2026-09-25T08:18:32Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -706,12 +706,12 @@
     {
       "id": "D10",
       "task": "D10",
-      "slice": "survivor round (a-d committed; WR-3a, M6 findings, E2C-FR-1 folded in)",
+      "slice": "fix round (review of f9b6ce5c)",
       "agent": "opus",
       "branch": "codex/d10-durable",
       "worktree": ".claude/worktrees/codex-d10-durable",
       "base": "dff31efc",
-      "head": "1f12cb6a",
+      "head": "ff62913d",
       "isolation": {
         "ports": "postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-d10-",
@@ -719,75 +719,67 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T03:02:00Z",
-      "blocker": "W5 fail_preparation needs the F2C port signature and R104's ruling before D10 writes its SQL",
+      "updated": "2026-09-25T05:50:00Z",
+      "blocker": null,
       "next_action": "rerun INFRX_MUTANTS=all D lists and triage; INFRX_D1_IMAGE=supabase D10 suites + test_postgrest_d10; probe on the Supabase image",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 3,
-        "pessimistic_h": 6,
+        "optimistic_h": 0.5,
+        "likely_h": 2,
+        "pessimistic_h": 5,
         "confidence": "medium",
-        "basis": "all D lists, full mutant list and Supabase-image runs green; left: review fixes and W5 fail_preparation SQL once F2C/R104 rule the port",
-        "at": "2026-09-25T03:02Z"
+        "basis": "all D lists green; left: coordinator merge, W5/G7-gated revoke migration, W5 fail_preparation",
+        "at": "2026-09-25T05:50Z"
       },
       "evidence": [
         "research/plan/evidence/d/D10-HANDOFF-31c2112.md",
         "research/plan/evidence/d/D10-runtime-functions.txt",
-        "research/plan/evidence/d/D10-1f12cb6.md"
+        "research/plan/evidence/d/D10-1f12cb6.md",
+        "research/plan/evidence/d/D10-ff62913.md"
       ],
       "commands": [
         {
-          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py tests/d/test_signup.py",
+          "cmd": "pytest -q tests/d (INFRX_D_TASK=d10)",
           "exit": 0,
-          "summary": "9e3e149d: 728 passed, 0 survivors (4 former survivors killed, 4 new mutants)"
+          "summary": "811 passed, 1 skipped, 8 xfailed at 36dd64e2"
         },
         {
-          "cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_ready.py test_content.py test_reads.py test_lifecycle_conformance.py test_upgrade_d10.py test_postgrest_d10.py test_catalog_pg.py",
-          "exit": 1,
-          "summary": "9e3e149d: 123 passed, 4 xfailed, 1 failed (test_postgrest_d10: image auth.uid() legacy body)"
-        },
-        {
-          "cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_postgrest_d10.py",
+          "cmd": "INFRX_D1_IMAGE=supabase pytest -q (7 D10 suites)",
           "exit": 0,
-          "summary": "1f12cb6a: 1 passed after the fixture installs the hosted auth.uid()"
-        },
-        {
-          "cmd": "I8 privilege_probe.py --role infrx_runtime (Supabase image) + infrx_monitor attempt probe",
-          "exit": 0,
-          "summary": "PASS 63 checks, 0 failed; monitor read-only, 10s, 7 allowed, 7 denied"
-        },
-        {
-          "cmd": "other tracks on the D10 schema (contracts/g/m/w/q list)",
-          "exit": 0,
-          "summary": "9e3e149d: 324 passed, 7 skipped"
+          "summary": "126 passed, 4 xfailed"
         },
         {
           "cmd": "pytest -q tests/contracts",
           "exit": 0,
-          "summary": "9e3e149d: 1168 passed"
+          "summary": "1168 passed"
         },
         {
-          "cmd": "pytest -q tests/d (full, default mutant subset)",
+          "cmd": "INFRX_MUTANTS=all D mutant lists + test_signup",
           "exit": 0,
-          "summary": "9e3e149d: 796 passed, 1 skipped, 8 xfailed"
+          "summary": "741 passed, 0 survivors"
         },
         {
-          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_signup.py -k code_mutant (+docker events)",
+          "cmd": "cross-track list without tests/q",
           "exit": 0,
-          "summary": "1f12cb6a: 15 passed; no infrx-d1-* container created"
+          "summary": "132 passed, 7 skipped; only infrx-d10-postgres created"
+        },
+        {
+          "cmd": "scratch merge claude/consumer-v1 + ff62913d: test_lifecycle_conformance x3",
+          "exit": 0,
+          "summary": "27 passed each"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
       "owned_paths": [
-        "apps/app/supabase/migrations/ (0019, 0020, 0021 new)",
+        "apps/app/supabase/migrations/0019-0021",
         "apps/infrx-api/infrx/state/",
         "apps/infrx-api/tests/d/",
-        "research/plan/evidence/d/"
+        "research/plan/evidence/d/D10-*"
       ],
       "wiring_requests": [
-        "unchanged from D10-HANDOFF-31c2112.md section 8 (G7, W5, M5, M6, coordinator composition, I8, G8, C0/U4, tasklocal)",
-        "G7: WR-3a now available as PgCatalogDirectory.usd_price (0021 infrx.usd_price); WR-2 can land with D10",
-        "E3C WR-4: set infrx_runtime login password on the clone and pass that DSN as DATABASE_URL"
+        "W5+G7: then revoke infrx.admit/claim_preparation from infrx_runtime (D10 follow-up)",
+        "M6: test_retention.py:192 expect NotFound in d10 world; test_pg_* own database",
+        "M5: drop strict xfail on probe_refusal_is_final_on_postgres",
+        "merge: jobstore.py -> D10 side, other 13 conflicts -> integration side"
       ]
     },
     {
@@ -1322,12 +1314,6 @@
       "head": "dfe0533a"
     },
     {
-      "since": "2026-09-25T03:02:00Z",
-      "lane": "D10",
-      "task": "D10",
-      "head": "1f12cb6a"
-    },
-    {
       "since": "2026-09-25T00:04:00Z",
       "lane": "E2C",
       "task": "E2C",
@@ -1350,6 +1336,12 @@
       "lane": "G7",
       "task": "G7",
       "head": "8906eb26"
+    },
+    {
+      "since": "2026-09-25T03:02:00Z",
+      "lane": "D10",
+      "task": "D10",
+      "head": "ff62913d"
     }
   ],
   "integration_queue": [],
@@ -2573,6 +2565,23 @@
       "at": "2026-09-25T06:17:50Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)"
+    },
+    {
+      "at": "2026-09-25T05:50:00Z",
+      "by": "D10",
+      "what": "review → review; head ff62913d; estimate likely 3 → 2 h (all D lists green; left: coordinator merge, W5/G7-gated revoke migration, W5 fail_preparation)",
+      "source": "updates/D10-20260925T0550Z.json"
+    },
+    {
+      "at": "2026-09-25T08:18:09Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 03:11Z – 2026-09-27 20:05Z (likely 2026-09-26 18:05Z) → 2026-09-26 03:24Z – 2026-09-27 13:48Z (likely 2026-09-26 15:42Z) (because: dependency path M5 → M6 → E3C)"
+    },
+    {
+      "at": "2026-09-25T08:18:32Z",
+      "by": "tracker",
+      "what": "rejected update: lane D10 belongs to D10, not I8",
+      "source": "updates/D10-20260925T081832Z.json"
     }
   ],
   "history": {
@@ -2766,10 +2775,19 @@
       "status": "rejected",
       "at": "2026-09-25T04:00:00Z",
       "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "D10-20260925T0550Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T05:50:00Z"
+    },
+    "D10-20260925T081832Z.json": {
+      "status": "rejected",
+      "at": "2026-09-25T08:18:32Z",
+      "reason": "lane D10 belongs to D10, not I8"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T06:17:50Z",
+    "computed_at": "2026-09-25T08:18:32Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2779,32 +2797,34 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 03:11Z – 2026-09-27 20:05Z (likely 2026-09-26 18:05Z)",
-        "constraint": "dependency path D10 → M5 → M6 → E3C",
+        "text": "2026-09-26 03:24Z – 2026-09-27 13:48Z (likely 2026-09-26 15:42Z)",
+        "constraint": "dependency path M5 → M6 → E3C",
         "effort_h": [
-          26.4,
-          47.2,
-          86.2
+          24.6,
+          42.8,
+          77.9
         ],
         "wall_h": [
-          20.9,
-          35.8,
-          61.8
+          19.1,
+          31.4,
+          53.5
         ],
         "finish": [
-          "2026-09-26T03:11:50Z",
-          "2026-09-26T18:05:50Z",
-          "2026-09-27T20:05:50Z"
+          "2026-09-26T03:24:32Z",
+          "2026-09-26T15:42:32Z",
+          "2026-09-27T13:48:32Z"
         ],
         "conditional": null,
         "confidence": "medium",
         "critical_path": [
-          "D10",
           "M5",
           "M6",
           "E3C"
         ],
-        "stale": []
+        "stale": [
+          "M5",
+          "M6"
+        ]
       },
       "E4C": {
         "gate": "BACKEND-READY",
@@ -2817,7 +2837,10 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": []
+        "stale": [
+          "M5",
+          "M6"
+        ]
       },
       "E3A": {
         "gate": "APP-LOCAL",
@@ -2830,7 +2853,10 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": []
+        "stale": [
+          "M5",
+          "M6"
+        ]
       },
       "E4": {
         "gate": "APP-PILOT",
@@ -2843,7 +2869,10 @@
         "conditional": null,
         "confidence": null,
         "critical_path": null,
-        "stale": []
+        "stale": [
+          "M5",
+          "M6"
+        ]
       }
     }
   }
