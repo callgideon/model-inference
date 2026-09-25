@@ -5,7 +5,7 @@
  "integration_branch": "claude/consumer-v1",
  "base": "dff31efc",
  "main": "dff31efc",
- "integration_head": "4af8516e",
+ "integration_head": "b0cc5090",
  "deployed": {
   "release": "bda15866e5700f3856d7142580da842fba9bbd23",
   "install": "third install",
@@ -19,8 +19,8 @@
   "regime": "legacy_usd",
   "target": "pilot box (single L40S)"
  },
- "revision": 51,
- "updated": "2026-09-25T19:59:14Z",
+ "revision": 52,
+ "updated": "2026-09-25T21:06:43Z",
  "agent_slots": {
   "total": 16,
   "active": 7,
@@ -618,9 +618,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:40:00Z",
-   "updated": "2026-09-25T19:59:14Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED); P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED); P-25: approved MIRROR_URL prefix for the model mirror (O9-O12); image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance; Supabase personal access token for supabase_policy.py (O8); D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6); every live op after certification run3 (coordinator)",
-   "next_action": "ALERT-SNS merged c1b74038 (SNS or https webhook delivery, fail-closed, alert kept; ASN-V1 low carried). Operator-held: SNS topic + subscription (or the Slack webhook SSM param), IAM sns:Publish, python3-boto3 on the box; O4–O15 in the rollout window",
+   "next_action": "ALERT-SNS merged c1b74038. Rollout gates rehearsal at e607b705: G1/G3/G4 PASS, G5 harness defect, G2 blocked by port contention, G6 remote; ROLLOUT-FIXES lane (wf_07b7b9ae-ded) and KNOWN-GOOD-PROOF lane (schema_proof for bda1586/4226315 on the new schema) running",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -702,9 +702,9 @@
    },
    "activity": "complete",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T08:19:39Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": null,
-   "next_action": "merged into claude/consumer-v1 at 8d20e115 via codex/d10-merge dfc4fa75; R122-R127 numbered; manifest D10 implemented; OPEN: revoke migration after W5/G7, fail_preparation SQL, runtime-login composition (E3C F-1), P-25 values",
+   "next_action": "D10-FOLLOWUP verified ACCEPT_WITH_FIXES at c584f54a (0022 sha 1f44b4ae; W1–W4 wiring merge with the union). DOOR-REVOKE lane (wf_c628a416-603) writing 0023 + runtime function set",
    "estimate": {
     "optimistic_h": 0,
     "likely_h": 0,
@@ -882,16 +882,16 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:55:00Z",
-   "updated": "2026-09-25T03:03:00Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
-   "next_action": "rerun tests/w at 27afab76; apply W5-wiring-27afab7.patch with D10 PgLifecycle; fail_preparation port/adapter; G7 admit_ready; merged PG round trip; box warmup run after run3",
+   "next_action": "W5-ADMIT-WIRING f18c72f7 (E3C F-3 relay admit_ready) verification: two lenses done (major W5W-A1 marker-before-attach), third running; union lane merging w5-merge with the service.py field union; then R134–R137 + manifest implemented",
    "estimate": {
-    "optimistic_h": 3,
-    "likely_h": 6,
-    "pessimistic_h": 12,
+    "optimistic_h": 1,
+    "likely_h": 2,
+    "pessimistic_h": 4,
     "confidence": "medium",
-    "basis": "unchanged: wiring 1-2, fail_preparation port/adapter, merged-tree PG round trip with MinIO, box warm-up run",
-    "at": "2026-09-25T03:03:04Z"
+    "basis": "verification third lens + possible fix round, then the union merge and E3C final run",
+    "at": "2026-09-25T21:06:43Z"
    },
    "evidence": [
     "research/plan/evidence/w/W5-27afab7.md",
@@ -1091,9 +1091,9 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:59:30Z",
-   "updated": "2026-09-25T17:12:10Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "P-25 unresolved; WR-3 (E3C world.py + s06 clock) gates the merge; WR-7 (D10 register refresh) for the refetch race; R114 amendment",
-   "next_action": "durable candidates/claims/tombstones against the F2C-L port and D10.b adapter (fake until they land)",
+   "next_action": "M6-WIRING verified ACCEPT_WITH_FIXES at 28dd1af2 (pins released on every exit path, housekeeping loop resilient, F-4 journal prune); merging via the union lane with WR-M6W-1",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -1167,9 +1167,9 @@
    },
    "activity": "review",
    "started": "2026-09-24T21:59:40Z",
-   "updated": "2026-09-25T18:20:00Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission; F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness; F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race",
-   "next_action": "scenario matrix red/blocked on f764e396",
+   "next_action": "E3C-RERUN pre-staged at 5fadfdbe (tip merged, control trees, harness fix); the full matrix (~20 min) runs on the union SHA, again after the fix-round deltas → BACKEND-LOCAL verdict",
    "estimate": {
     "optimistic_h": 1,
     "likely_h": 2,
@@ -1234,9 +1234,9 @@
    },
    "activity": "queued",
    "started": null,
-   "updated": "2026-09-25T19:59:14Z",
+   "updated": "2026-09-25T21:06:43Z",
    "blocker": "after E3C; needs an allocated GPU window",
-   "next_action": "Blocked on BACKEND-LOCAL (E3C final rerun after the W5/M6-wiring/0022 union) and the operator-held items (publish-card P-01, adjust +40,000 CREDIT, scoped key issue + P-02 dry-run inventory, hosted rehearsal). Prep landing via E4C-PREP: base profile, P-18 criteria, P-17 checklist",
+   "next_action": "E4C-PREP merged dafd4030 (R133: predeclared criteria; P-24 base profile in CREDIT, P-18 latency/declared-rate/soak, P4 public-edge burst, FILL/loopback refusals). E4C-RUNBOOK lane dispatched (two-tenant + P4 edge profiles, runbook, evidence template, E4P-V7/V8). The run itself waits on BACKEND-LOCAL (E3C final on the union SHA) and the operator-held items (publish-card, adjust +40,000 CREDIT, scoped keys/P-02 dry-run, hosted rehearsal)",
    "estimate": {
     "optimistic_h": null,
     "likely_h": null,
@@ -2685,6 +2685,24 @@
    "at": "2026-09-25T19:59:14Z",
    "by": "coordinator",
    "what": "E4C-PREP dispatched (base 56c284cf) and handed back at 1acf85b4; one-lens recheck running. D10-FOLLOWUP / M6-WIRING / W5-ADMIT-WIRING verify workflows running; union merge lane brief ready (trial merges: one trivial worker/service.py field conflict)",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "E4C-PREP merged dafd4030 after fix round + ACCEPT; R133 numbered",
+   "source": "research/plan/evidence/e/E4C-prep-f30b281.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "M6-WIRING (28dd1af2) and D10-FOLLOWUP (c584f54a) verified ACCEPT_WITH_FIXES with all rechecks fixed; union lane merging both with W5",
+   "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
+  },
+  {
+   "at": "2026-09-25T21:06:43Z",
+   "by": "coordinator",
+   "what": "Rollout gates rehearsal at e607b705 (G1/G3/G4 PASS; G5 harness defect; no rollback target once 0019+ applied); ROLLOUT-FIXES, KNOWN-GOOD-PROOF, DOOR-REVOKE, E4C-RUNBOOK lanes running as self-verifying workflows; E3C final run pre-staged",
    "source": "research/plan/evidence/coordinator/2026-09-24-session-03.md"
   }
  ],
