@@ -95,6 +95,9 @@ test(T.status, () => {
   const odd = jobChargeView({ ...byN(1), settlementState: "something_new" });
   assert.equal(odd.amount, null);
   assert.match(odd.label, /unknown/i);
+  // Only a hold that is still held or unknown is shown as held; a released one is gone.
+  assert.equal(jobChargeView({ ...byN(5), settlementState: "something_new" }).held, null);
+  assert.equal(jobChargeView({ ...byN(3), settlementState: "something_new" }).held, "5.00 credits");
   const row = jobRowView(byN(1));
   assert.equal(row.model, "nemostation/marlin-2b");
   assert.equal(row.revision, "nemostation/marlin-2b@2026-09-01");
