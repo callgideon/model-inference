@@ -1,0 +1,85 @@
+{
+  "task": "A2",
+  "lane": "A2",
+  "slice": "public signup/verify/resend/sign-in/recovery + verified-callback grant claim + /welcome actual CREDIT balance and retry",
+  "activity": "review",
+  "at": "2026-09-25T21:27:00Z",
+  "head": "16fe503f",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-a2",
+  "branch": "codex/app-a2",
+  "owned_paths": [
+    "apps/app/app/(auth)/",
+    "apps/app/app/auth/callback/route.ts",
+    "apps/app/tests/a/",
+    "research/plan/evidence/a/A2-16fe503.md",
+    "research/plan/evidence/coordinator/updates/A2-20260925T2127Z.json"
+  ],
+  "isolation": {
+    "ports": "postgres 55460 (INFRX_D_TASK=app-a2), removed at end; next start on an ephemeral 127.0.0.1 port, stopped",
+    "prefix": "infrx-app-a2-",
+    "db": "infrx_app-a2"
+  },
+  "commands": [
+    {
+      "cmd": "cd apps/app && pnpm test",
+      "exit": 0,
+      "summary": "382 tests: 377 pass, 0 fail, 5 skipped (real-PG cases without DSN); base was 351/351"
+    },
+    {
+      "cmd": "INFRX_APP_A2_DSN=<local harness DSN> node --test tests/a/grant-pg.test.ts",
+      "exit": 0,
+      "summary": "5/5 pass on real PostgreSQL 0001-0021 (unverified, 8-way race, new membership, browser-role 42501, flag off)"
+    },
+    {
+      "cmd": "pnpm lint",
+      "exit": 0,
+      "summary": "0 errors, 2 pre-existing warnings"
+    },
+    {
+      "cmd": "pnpm exec next typegen && pnpm exec tsc --noEmit",
+      "exit": 0,
+      "summary": "clean"
+    },
+    {
+      "cmd": "node tests/a/run-mutants.mjs",
+      "exit": 0,
+      "summary": "23/23 killed (4 first-run survivors closed)"
+    },
+    {
+      "cmd": "node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants",
+      "exit": 0,
+      "summary": "14/14 self-tests; 212/212 killed"
+    },
+    {
+      "cmd": "node tests/v/run-mutants.mjs; node tests/u/run-mutants.mjs; node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs",
+      "exit": 0,
+      "summary": "v 40/40, u 64/64, c 104/104"
+    },
+    {
+      "cmd": "pnpm build (dummy public env)",
+      "exit": 0,
+      "summary": "/signup /verify-email /welcome built; no claim_signup_grant or service-role key name in .next/static"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 8,
+    "confidence": "medium",
+    "basis": "lane code complete and green; remaining WR-A2-1/2, review fixes, C3A reuse of the port, P-05 hosted auth config + staging fresh-email run",
+    "at": "2026-09-25T21:27:00Z"
+  },
+  "blockers": [
+    "P-05 hosted auth configuration (confirm email, custom SMTP, rate limits, redirect allowlist/templates) and staging fresh-email journey",
+    "WR-A2-1 middleware public paths (without it /signup redirects to /login)"
+  ],
+  "wiring_requests": [
+    "WR-A2-1 apps/app/lib/supabase/middleware.ts: PUBLIC += /signup, /verify-email; signed-in redirect also for /signup; add tests/a/public-routes.test.ts (patch + test in evidence; scratch proof 2 fail -> 2 pass, suite 384/379/0/5)",
+    "WR-A2-2 Makefile console-mutants: add `cd apps/app && node tests/a/run-mutants.mjs` (23/23)",
+    "WR-A2-3 (low) apps/app/lib/utils.ts safeNext has no production caller; delete or re-export app/(auth)/flow.ts safeNext"
+  ],
+  "evidence": [
+    "research/plan/evidence/a/A2-16fe503.md"
+  ]
+}
