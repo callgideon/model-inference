@@ -156,7 +156,10 @@ def test_runtime_role_is_refused_what_it_was_not_granted() -> None:
             assert timeout == ("15s",), timeout
             for sql in ("select infrx.reconcile('{}'::jsonb)",
                         "select count(*) from public.credit_ledger",
-                        "update infrx.credit_wallets set reserved_total = 0"):
+                        "update infrx.credit_wallets set reserved_total = 0",
+                        "update infrx.jobs set result_expires_at = infrx.now()",
+                        "update infrx.jobs set request_record = '{}'::jsonb",
+                        "insert into infrx.job_results (request_id) values (gen_random_uuid())"):
                 try:
                     await conn.execute(sql)
                 except Exception as refused:          # psycopg.errors.InsufficientPrivilege

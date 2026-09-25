@@ -152,6 +152,12 @@ def test_the_cutover_gate_needs_paused_admission_and_no_unmarked_preparing_job()
                      "settled_at = infrx.now() where state = 'preparing' and request_id "
                      "not in (select job_id from infrx.job_readiness)")
         assert gate()["ready"] is True, gate()
+        # the doors without a marker the runtime login still holds, until W5/G7 are wired
+        assert gate()["runtime_unmarked_doors"] == ["infrx.admit(jsonb)",
+                                                    "infrx.claim_preparation(jsonb)"], gate()
+        conn.execute("revoke execute on function infrx.admit(jsonb), "
+                     "infrx.claim_preparation(jsonb) from infrx_runtime")
+        assert gate()["runtime_unmarked_doors"] == [], gate()
         return "gate closed while admitting or while an unmarked job prepares"
     print(ca._in_rollback(conn, body))
 

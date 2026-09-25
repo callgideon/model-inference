@@ -44,31 +44,37 @@ if "result_expires_at" in TerminalOutcome.model_fields:
     _OUTCOME_FIELDS = (*_OUTCOME_FIELDS, "result_expires_at")
 
 
-#: The transaction pooler's port (Supavisor): a session there is not this client's (I8).
-TRANSACTION_PORT = 6543
+#: Supabase's transaction pooler (Supavisor): session state is lost between transactions
+#: and server-side prepared statements are unsupported (WR-I8-1, R110).
+TRANSACTION_POOLER_PORT = 6543
+
+
+def session_state_allowed(dsn: str) -> bool:
+    """False on the transaction pooler: a session `SET` there is lost for its client and
+    leaked to another one, so the role and timeout must come from the login role itself."""
+    from urllib.parse import urlsplit
+    return urlsplit(dsn).port != TRANSACTION_POOLER_PORT
 
 
 def connector(dsn: str, *, set_role: bool | None = None) -> Connect:
-    """The simplest `Connect`: a fresh connection per operation.
-
-    `set_role` (D10, S3 F6 / WR-I8-1): True runs `set role service_role` (0004: BYPASSRLS is
-    not inherited, so the role must be SET, as PostgREST does) - session state, which a
-    transaction pooler loses for this client and leaks to others; False sets nothing, which
-    is D10's dedicated login (0021 `infrx_runtime`), whose privileges and statement timeout
-    are the role's own; None (the default) sets the role only off the transaction port.
-    Server-side prepared statements are off (`prepare_threshold=None`): a pooler does not
-    keep them per client either.
+    """The simplest `Connect`: a fresh connection per operation, `set role service_role`
+    (0004: BYPASSRLS is not inherited, so the role must be SET, as PostgREST does) - only
+    off the transaction pooler, where the login role carries its own defaults. No
+    server-side prepared statements on any port (WR-I8-1).
+    `set_role` (D10) overrides the port rule: False sets nothing (D10's dedicated login,
+    0021 `infrx_runtime`, whose privileges and statement timeout are the role's own), True
+    always sets the role; None (the default) is I8's rule above.
     ponytail: one connection per call; a psycopg pool with the same `configure` hook
     when the gateway wires `DATABASE_POOL_*`."""
-    if set_role is None:
-        from psycopg.conninfo import conninfo_to_dict
-        set_role = str(conninfo_to_dict(dsn).get("port") or "") != str(TRANSACTION_PORT)
-
     async def connect():
         import psycopg
         conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True,
                                                      prepare_threshold=None)
-        if set_role:
+        if set_role is not None:
+            if set_role:
+                await conn.execute("set role service_role")
+            return conn
+        if session_state_allowed(dsn):
             await conn.execute("set role service_role")
         return conn
     return connect

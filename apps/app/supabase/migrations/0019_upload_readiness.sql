@@ -934,7 +934,15 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
     'ready', not flags.admitting and not exists (select 1 from waiting),
     'admission_paused', not flags.admitting,
     'unmarked_preparing', (select count(*) from waiting),
-    'last_deadline', (select max(preparation_deadline_at) from waiting))
+    'last_deadline', (select max(preparation_deadline_at) from waiting),
+    -- Not a gate: the doors that write no marker which the dedicated runtime login (0021)
+    -- still holds. The barrier is the new runtime CALLING `admit_ready` /
+    -- `claim_preparation_ready` (G7, W5); once both are wired these are revoked from it
+    -- (the previous runtime keeps them through service_role) and this answers [].
+    'runtime_unmarked_doors', coalesce((select jsonb_agg(d order by d) from unnest(array[
+        'infrx.admit(jsonb)', 'infrx.claim_preparation(jsonb)']) d
+       where case when exists (select 1 from pg_roles where rolname = 'infrx_runtime')
+                  then has_function_privilege('infrx_runtime', d, 'execute') end), '[]'))
   from flags;
 $$;
 

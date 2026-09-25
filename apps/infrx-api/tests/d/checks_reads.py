@@ -99,14 +99,19 @@ def check_result_expiry_persisted(conn) -> str:
             "limits": {"idempotency_ttl_s": 86_400.0}})
         assert late["replayed"] and late["outcome"]["state"] == "succeeded" and \
             late["outcome"]["result_ref"] == ref, "the terminal metadata was not readable"
-        # every new success carries its expiry (0021's NOT VALID check: new rows only)
-        running, _lease = cl.running(conn, world, "no-expiry")
-        why = cc.attempt(conn, "update infrx.jobs set state = 'succeeded', outcome_cause = "
-                               "'completed', settlement_state = 'settled', usage_certainty = "
-                               "'authoritative', result_ref = 'infrx-result:' || request_id, "
-                               "settled_at = infrx.now() where request_id = %s",
-                         (running.request_id,))
-        assert why is not None and "jobs_success_has_result_expiry" in why, why
+        # written once: no role moves a settled job's expiry (0021 jobs_result_expiry_guard),
+        # neither later nor earlier - an earlier one would make live content deletable
+        for session in (None, "service"):
+            for shift in ("+ interval '365 days'", "- interval '600 seconds'"):
+                why = cc.attempt(conn, f"update infrx.jobs set result_expires_at = "
+                                       f"result_expires_at {shift} where request_id = %s",
+                                 (request.request_id,), session=session)
+                assert why is not None and why.startswith("23514") and "immutable" in why, \
+                    f"a settled job's persisted expiry was rewritten ({session}): {why}"
+        # R116: no NOT VALID constraint on jobs (it would re-check every later UPDATE of a
+        # pre-0018 success and refuse its scrub)
+        assert conn.execute("select count(*) from pg_constraint where conrelid = "
+                            "'infrx.jobs'::regclass and not convalidated").fetchone()[0] == 0
         return "persisted expiry exact in reads and replay; metadata survives content"
     return ca._in_rollback(conn, body)
 
@@ -154,6 +159,21 @@ def check_consumer_reads(conn) -> str:
                        (settled.request_id,)) == (None, []), "a guessed id answered"
         assert as_user(conn, other, "select public.consumer_job_result(%s)",
                        (settled.request_id,))[0] == "not_found"
+        # a legacy USD job of the same individual is labelled USD, never CREDIT
+        own_org = cc.personal_org(conn, me)
+        conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
+                     "values (%s, 25, 'grant', 'fixture')", (own_org,))
+        usd = b.request(world, org_id=own_org, key_id=ca.C1_KEY)
+        ca.admit(conn, usd, b.idem(usd, "read-usd"))
+        code, rows = as_user(conn, me, "select unit, hold, hold_state from "
+                             "public.consumer_jobs(null, 10, %s)", (usd.request_id,))
+        assert code is None and len(rows) == 1 and rows[0][0] == "USD" and \
+            rows[0][1] == cl.row(conn, usd.request_id)["maximum_hold"].__format__(".8f"), \
+            f"a USD job was shown as {rows}"
+        # a page is at most 100 rows, whatever the caller asks
+        _copy_jobs(conn, settled.request_id, 101)
+        code, rows = as_user(conn, me, "select request_id from public.consumer_jobs(null, 1000)")
+        assert code is None and len(rows) == 100, f"a page of {len(rows or ())} rows"
         ck.at(conn, expires)
         code, rows = as_user(conn, me, "select result_available from "
                              "public.consumer_jobs(null, 10, %s)", (settled.request_id,))
@@ -167,6 +187,65 @@ def check_consumer_reads(conn) -> str:
             "invalid_cursor"
         return f"{len(seen)} own jobs paged by 2 over one timestamp; isolation and expiry hold"
     return ca._in_rollback(conn, body)
+
+
+def _copy_jobs(conn, request_id: str, n: int) -> None:
+    """`n` copies of one job row (new ids, no idempotency key) - a long history for paging,
+    written under the table's own constraints with its row triggers off (rolled back)."""
+    cols = [c for c, in conn.execute(
+        "select column_name from information_schema.columns where table_schema = 'infrx' "
+        "and table_name = 'jobs' and column_name not in ('request_id', 'job_handle', "
+        "'idempotency_key', 'idem_payload_hash') and is_generated = 'NEVER'")]
+    names = ", ".join(cols)
+    conn.execute("alter table infrx.jobs disable trigger user")
+    conn.execute(f"insert into infrx.jobs (request_id, job_handle, {names}) "
+                 f"select gen_random_uuid(), 'job_copy_' || n, {names} from infrx.jobs, "
+                 f"generate_series(1, %s) n where request_id = %s", (n, request_id))
+    conn.execute("alter table infrx.jobs enable trigger user")
+
+
+def _next_listing(conn, label: str, effective: str) -> None:
+    """A second serving version (`label`) on its own public active deployment and card,
+    listed for the alias as the next listing version at `effective` - catalog rows written
+    with their lifecycle triggers off (the registry's own rules are D's other checks)."""
+    tables = ("serving_versions", "deployment_revisions", "rate_card_versions",
+              "catalog_listings")
+    for t in tables:
+        conn.execute(f"alter table infrx.{t} disable trigger user")
+    serving, = conn.execute(
+        "insert into infrx.serving_versions (model_version_id, model_id, provider_org_id, "
+        "revision_label, prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+        "engine_options_digest, precision, capability, created_by) select model_version_id, "
+        "model_id, provider_org_id, %s, prompt_harness_ref, preprocessor_profile_version, "
+        "runtime_image_ref, engine_options_digest, precision, capability, 'o' from "
+        "infrx.serving_versions where serving_version_id = %s returning serving_version_id",
+        (label, cc.SERVING)).fetchone()
+    cols = ", ".join(c for c, in conn.execute(
+        "select column_name from information_schema.columns where table_schema = 'infrx' "
+        "and table_name = 'deployment_revisions' and column_name not in "
+        "('deployment_revision_id', 'serving_version_id') and is_generated = 'NEVER'"))
+    deployment, = conn.execute(
+        f"insert into infrx.deployment_revisions ({cols}, serving_version_id) select {cols}, "
+        f"%s from infrx.deployment_revisions where deployment_revision_id = %s "
+        f"returning deployment_revision_id", (serving, cc.PUBLIC_DEPLOYMENT)).fetchone()
+    card = f"rc_{label}"
+    conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                 "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                 "output_rate_per_million, effective_at, approved_by, provisional) values "
+                 "(%s, %s, %s, %s, 1, 1, infrx.now(), 'ops', true)",
+                 (card, cc.MODEL, deployment, serving))
+    conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                 "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+                 "approved_by) select 'nemostation/marlin-2b', max(version) + 1, %s, %s, %s, "
+                 f"%s, {effective}, 'ops' from infrx.catalog_listings where public_model_id = "
+                 "'nemostation/marlin-2b'", (cc.MODEL, deployment, serving, card))
+    for t in tables:
+        conn.execute(f"alter table infrx.{t} enable trigger user")
+
+
+def _shown(conn, model: str) -> str | None:
+    doc = conn.execute("select infrx.usd_price(%s)", (model,)).fetchone()[0]
+    return doc and doc["price_version"]
 
 
 def check_usd_resolution(conn) -> str:
@@ -219,7 +298,36 @@ def check_usd_resolution(conn) -> str:
             ("pv_pre_catalog", "acme/pre-catalog", "acme/pre-catalog"), job["price_version"]
         assert conn.execute("select * from infrx.price_versions order by 1").fetchall() == \
             prices_before, "a price row was rewritten"
-        return f"{len(PRICED)} spellings priced canonically, {len(REFUSED)} refused"
+        # discovery prices what admission charges at the edges of "resolve, then price":
+        # a retired price row, a future listing, the newest listing, an unserved deployment
+        alias = "nemostation/marlin-2b"
+        conn.execute("select infrx_test.advance(10)")
+        conn.execute("insert into infrx.price_versions (price_version, model_revision, "
+                     "input_rate_per_million, output_rate_per_million, token_rules_version, "
+                     "effective_from, effective_to, captured_at) values ('pv_retired', %s, 9, "
+                     "9, 'tr-1', infrx.now() - interval '5 s', infrx.now() - interval '1 s', "
+                     "infrx.now())", (CANONICAL,))
+        retired = b.request(world, model_revision=alias)
+        ca.admit(conn, retired, b.idem(retired, "edge-retired"))
+        charged = cl.row(conn, retired.request_id)["price_version"]
+        assert _shown(conn, alias) == charged == PRICED[alias], \
+            f"a retired price: discovery {_shown(conn, alias)}, admission {charged}"
+        _next_listing(conn, "2026-10-01", "infrx.now() + interval '1 day'")
+        conn.execute("insert into infrx.price_versions (price_version, model_revision, "
+                     "input_rate_per_million, output_rate_per_million, token_rules_version, "
+                     "effective_from, captured_at) values ('pv_next', %s, 1, 1, 'tr-1', "
+                     "infrx.now(), infrx.now())", ("nemostation/marlin-2b@2026-10-01",))
+        assert _shown(conn, alias) == PRICED[alias], "a future listing was priced"
+        conn.execute("select infrx_test.advance(%s)", (86_400,))
+        assert _shown(conn, alias) == "pv_next", "an older listing version was priced"
+        conn.execute("alter table infrx.deployment_revisions disable trigger user")
+        conn.execute("update infrx.deployment_revisions set state = 'draining' where "
+                     "serving_version_id = (select serving_version_id from "
+                     "infrx.serving_versions where revision_label = '2026-10-01')")
+        conn.execute("alter table infrx.deployment_revisions enable trigger user")
+        assert _shown(conn, alias) == HOSTED_USD_ROWS[0][0], \
+            "a listing whose deployment is not served publicly was priced"
+        return f"{len(PRICED)} spellings priced canonically, {len(REFUSED)} refused; 4 edges"
     return ca._in_rollback(conn, body)
 
 
@@ -358,10 +466,19 @@ def check_reads_privileges(conn) -> str:
     for table, verb in (("public.credit_ledger", "select"), ("public.profiles", "select"),
                         ("infrx.credit_ledger", "insert"), ("infrx.credit_wallets", "update"),
                         ("infrx.jobs", "insert"), ("infrx.jobs", "delete"),
-                        ("infrx.audit_entries", "select"), ("infrx.job_results", "select")):
+                        ("infrx.audit_entries", "select"), ("infrx.job_results", "select"),
+                        ("infrx.jobs", "update"), ("infrx.job_results", "insert"),
+                        ("infrx.job_results", "update"), ("infrx.job_results", "delete")):
         has, = conn.execute("select has_table_privilege('infrx_runtime', %s, %s)",
                             (table, verb)).fetchone()
         assert not has, f"infrx_runtime may {verb} {table}"
+    # the runtime's one job-row UPDATE is `updated_at` (a FOR UPDATE lock needs it): never
+    # the persisted expiry, the outcome, the request record or the money
+    updatable = {c for c, in conn.execute(
+        "select a.attname from pg_attribute a where a.attrelid = 'infrx.jobs'::regclass "
+        "and a.attnum > 0 and not a.attisdropped "
+        "and has_column_privilege('infrx_runtime', a.attrelid, a.attnum, 'update')")}
+    assert updatable == {"updated_at"}, f"infrx_runtime may update jobs.{sorted(updatable)}"
     # I8's privilege_probe identity checks, from the catalog: no attribute that undoes least
     # privilege, no membership, bounds as ROLE defaults (they survive a transaction pooler)
     for role, settings in (("infrx_runtime", {"statement_timeout=15s",

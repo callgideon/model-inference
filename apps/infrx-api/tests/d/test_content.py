@@ -44,6 +44,10 @@ def test_content_scrub() -> None:
     print(ck.check_content_scrub(_db()))
 
 
+def test_a_pre_0018_success_without_expiry_still_scrubs() -> None:
+    print(ck.check_legacy_success_scrub(_db()))
+
+
 def test_content_privileges() -> None:
     print(ck.check_content_privileges(_db()))
 

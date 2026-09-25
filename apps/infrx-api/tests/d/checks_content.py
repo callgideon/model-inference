@@ -270,6 +270,15 @@ def check_content_scrub(conn) -> str:
             f"a result was emptied before its persisted expiry: {early}"
         at(conn, job["result_expires_at"])
         assert read() == ("result_expired", None), "a result outlived its persisted expiry"
+        # the scrub is the ONLY permitted change: not with a digest or size rewritten
+        # beside it (0020's column-by-column guard, whatever CHECK runs first)
+        for label, extra in (("digest", "digest = 'sha256:' || repeat('0', 64)"),
+                             ("bytes", "bytes = bytes + 1")):
+            why = cc.attempt(conn, "update infrx.job_results set body = '', scrubbed_at = "
+                                   f"infrx.now(), {extra} where request_id = %s",
+                             (request.request_id,))
+            assert why is not None and why.startswith("23514") and "append-only" in why, \
+                f"the scrub rewrote the result's {label}: {why}"
         before = _accounting(conn, request.request_id)
         for content in (result_row, payload_row):
             granted = cr.call(conn, "content_claim", _claim_args(content, "scrubber"))
@@ -304,7 +313,47 @@ def check_content_scrub(conn) -> str:
                            ("unscrubbed", "update infrx.job_results set scrubbed_at = null ")):
             why = cc.attempt(conn, sql + "where request_id = %s", (request.request_id,))
             assert why is not None and why.startswith("23514"), f"a result was {label}"
+        why = cc.attempt(conn, "update infrx.job_results set scrubbed_at = infrx.now() + "
+                               "interval '1 second' where request_id = %s", (request.request_id,))
+        assert why is not None and why.startswith("23514") and "append-only" in why, \
+            f"a scrubbed result was stamped again: {why}"
         return "persisted expiry exact; scrub keeps metadata, digests and money; append-only"
+    return ca._in_rollback(conn, body)
+
+
+def check_legacy_success_scrub(conn) -> str:
+    """R116 (RI-1): a success settled before 0018 carries no persisted expiry (never
+    backfilled). Its database content still retires through the normal protocol -
+    register_existing -> claim -> tombstone -> acknowledge_delete scrubs it - so no
+    constraint may re-check such a row on UPDATE (a NOT VALID success-has-expiry CHECK
+    would refuse the scrub and the sweep would retry forever)."""
+    world = ca.World(conn)
+
+    def body():
+        request, _ref = _settled_with_result(conn, world, result_ttl_s=600.0)
+        conn.execute("alter table infrx.jobs disable trigger jobs_result_expiry_immutable")
+        why = cc.attempt(conn, "update infrx.jobs set result_expires_at = null "
+                               "where request_id = %s", (request.request_id,))
+        conn.execute("alter table infrx.jobs enable trigger jobs_result_expiry_immutable")
+        assert why is None, f"a success without a persisted expiry cannot be updated: {why}"
+        conn.execute("select infrx_test.advance(%s)", (2 * 86_400,))
+        for key in (f"job_results/{request.request_id}", f"jobs/{request.request_id}"):
+            content = row_of(conn, key)
+            try:
+                with conn.transaction():
+                    granted = cr.call(conn, "content_claim", _claim_args(content, "legacy"))
+                    tombstone = cr.call(conn, "content_tombstone", {"claim": granted})
+                    done = cr.call(conn, "content_acknowledge_delete", {"tombstone": tombstone})
+            except psycopg.Error as refused:
+                raise AssertionError(f"{key} of a pre-0018 success could not be retired: "
+                                     f"{refused.sqlstate} {refused}") from None
+            assert done["state"] == "deleted", done
+        scrubbed = conn.execute("select (select scrubbed_at is not null from infrx.job_results "
+                                "where request_id = %s), (select content_scrubbed_at is not null "
+                                "from infrx.jobs where request_id = %s)",
+                                (request.request_id, request.request_id)).fetchone()
+        assert scrubbed == (True, True), scrubbed
+        return "a pre-0018 success (no persisted expiry) scrubs through the protocol"
     return ca._in_rollback(conn, body)
 
 

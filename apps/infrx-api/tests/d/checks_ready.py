@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from datetime import timedelta
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -348,6 +349,28 @@ def check_upload_ticket(conn) -> str:
             "org_id": org, "upload_handle": big["upload_handle"], "bytes": 11,
             "digest": digest(b"x" * 11)})
         assert got == ("request_too_large", "too_large"), got
+        # `expire` never closes a ticket still inside its window - not at its last instant
+        edge = call(conn, "upload_create", {
+            "org_id": org, "upload_handle": "upl_" + "w" * 30,
+            "constraints": {"max_bytes": 1 << 26, "accepted_mime": MP4}, "window_s": WINDOW_S})
+        closes, = conn.execute("select expires_at from infrx.media_uploads where handle = %s",
+                               (edge["upload_handle"],)).fetchone()
+        assert call(conn, "upload_expire", {"limit": 1000}) == 0, "expire closed open tickets"
+        now = conn.execute("select infrx.now()").fetchone()[0]
+        conn.execute("select infrx_test.advance(%s)",
+                     ((closes - timedelta(microseconds=1) - now).total_seconds(),))
+        assert call(conn, "upload_expire", {"limit": 1000}) == 0, \
+            "expire closed a ticket at the last instant of its window"
+        call(conn, "upload_acknowledge_put", {"org_id": org,
+                                              "upload_handle": edge["upload_handle"],
+                                              "bytes": 9, "digest": digest(b"edge-clip")})
+        edge_ref = source_ref(org, b"edge-clip", handle=edge["upload_handle"],
+                              kind=MediaKind.upload)
+        done = call(conn, "upload_complete", {"org_id": org,
+                                              "upload_handle": edge["upload_handle"],
+                                              "source": edge_ref.model_dump(mode="json"),
+                                              "grace_s": GRACE_S})
+        assert done["state"] == "finalized", done
         # `expire` closes open tickets past their window, at most `limit` per call, once
         for n in range(2):
             call(conn, "upload_create", {

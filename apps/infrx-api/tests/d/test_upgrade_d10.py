@@ -18,11 +18,13 @@ from infrx.contracts.conformance import builders as b
 from infrx.state import migrations
 
 from . import checks_admission as ca
+from . import checks_content as ck
 from . import checks_credit as cc
 from . import checks_dispatch as cdp
 from . import checks_leases as cl
 from . import checks_operations as co
 from . import checks_reads as cd
+from . import checks_ready as cr
 from . import checks_settle as cs
 from . import pgharness
 
@@ -190,3 +192,41 @@ def test_d10_upgrade_preserves_history_money_identity_and_grants() -> None:
           f"previous runtime prepared the 2 preparing jobs of {len(made)} seeded states; P-22 {before_prices} -> r1; "
           f"{registered} pre-0020 content rows registered")
 
+
+
+def test_a_pre_0018_success_without_expiry_retires_after_the_upgrade() -> None:
+    """R116 (review 1-RI-1): a success settled before 0018 has no persisted expiry (0016's
+    terminalize never wrote one; D10 never backfills). After 0019-0021 its database content
+    registers and retires through claim -> tombstone -> acknowledge_delete (the scrub is an
+    UPDATE of that job row), and the journal sweep runs over it: no constraint added by the
+    upgrade re-checks such a row."""
+    base, ours = _split()
+    name = f"{DB}_legacy"
+    pgharness.ensure()
+    pgharness.recreate(name)
+    pgharness.apply(name, base)
+    conn = pgharness.connect(name)
+    made = seed_history(conn)
+    legacy = made["usd_settled"]
+    conn.execute("update infrx.jobs set result_expires_at = null where request_id = %s",
+                 (legacy,))
+    pgharness.apply(name, ours)
+    assert conn.execute("select count(*) from pg_constraint where conrelid = "
+                        "'infrx.jobs'::regclass and not convalidated").fetchone()[0] == 0
+    registered = conn.execute("select infrx.register_existing_database_content(%s)",
+                              ('{"limit": 1000, "grace_s": 0}',)).fetchone()[0]
+    assert registered >= 2, registered
+    conn.execute("select infrx_test.advance(%s)", (2 * 86_400,))
+    for key in (f"job_results/{legacy}", f"jobs/{legacy}"):
+        content = ck.row_of(conn, key)
+        granted = cr.call(conn, "content_claim", ck._claim_args(content, "legacy-sweeper"))
+        tombstone = cr.call(conn, "content_tombstone", {"claim": granted})
+        done = cr.call(conn, "content_acknowledge_delete", {"tombstone": tombstone})
+        assert done["state"] == "deleted", (key, done)
+    assert conn.execute("select (select scrubbed_at is not null from infrx.job_results where "
+                        "request_id = %s), (select content_scrubbed_at is not null from "
+                        "infrx.jobs where request_id = %s)", (legacy, legacy)).fetchone() == \
+        (True, True)
+    conn.execute("select infrx.expire_journal(%s)", ('{"limit": 1000}',))
+    print(f"pre-0018 success {legacy}: registered, claimed, tombstoned, scrubbed; journal "
+          f"sweep ran")

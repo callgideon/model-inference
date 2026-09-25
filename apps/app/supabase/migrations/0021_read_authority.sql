@@ -37,8 +37,8 @@
 -- ROLLBACK (0021 alone). Re-run 0018's `job_admission` and `reconcile` and 0011's
 -- `admit_legacy_usd`; restore 0006's `jobs_regime_fixes_provenance` only after no legacy job
 -- carries `requested_model` (or leave the wider one - it admits no row the old one refused
--- except that column); drop `resolve_usd_revision`, the consumer functions and (after the
--- runtime logs in as another role) `infrx_runtime`. Jobs admitted meanwhile keep their
+-- except that column); drop `resolve_usd_revision`, `jobs_result_expiry_immutable`, the
+-- consumer functions and (after the runtime logs in as another role) `infrx_runtime`. Jobs admitted meanwhile keep their
 -- canonical `model_revision` and snapshot - money history is never rewritten.
 --
 -- Additive and re-runnable.
@@ -60,7 +60,8 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
     'outbox', coalesce((select jsonb_agg(jsonb_build_object(
         'event_id', o.event_id, 'aggregate_id', o.aggregate_id, 'kind', o.kind,
         'version', o.version, 'payload', o.payload, 'available_at', o.available_at)
-        order by o.created_at, o.event_id)
+        order by o.created_at, array_position(array['prepare_dispatch',
+                 'inference_dispatch'], o.kind), o.event_id)
       from infrx.outbox o where o.aggregate_id = j.request_id
         and o.kind in ('prepare_dispatch', 'inference_dispatch')), '[]'),
     'admitted_at', j.admitted_at, 'deadline_at', j.deadline_at,
@@ -102,19 +103,29 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
   from infrx.jobs j where j.request_id = p_request_id;
 $$;
 
--- F2C.b rollout (optional -> required): a success carries its persisted expiry. NOT VALID -
--- every new row is checked, no existing row is rewritten or backfilled; the operator runs
--- `alter table infrx.jobs validate constraint jobs_success_has_result_expiry` once
+-- RESULT-EXPIRY (RV-11): the persisted expiry is written ONCE, by the settlement's own
+-- UPDATE (0018 sets `settled_at` and `result_expires_at` together); after that no role -
+-- the runtime, service_role, the owner - moves it, so a promised lifetime never changes and
+-- live result content never becomes deletable early. A pre-0018 success without one keeps
+-- NULL (fail-closed `unavailable`; never backfilled, R112).
+-- R116: NO success-has-expiry CHECK here. PostgreSQL re-checks a NOT VALID constraint on
+-- every later UPDATE of a row, so one pre-0018 success would refuse its own scrub (0020)
+-- and its journal expiry. The operator counts
 -- `select count(*) from infrx.jobs where state = 'succeeded' and result_expires_at is null`
--- is 0 (such a pre-0018 success reads `unavailable`, fail-closed, until then).
-do $$
+-- and a LATER migration adds the check, validated, only at zero.
+create or replace function infrx.jobs_result_expiry_guard() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 begin
-  if not exists (select 1 from pg_constraint where conrelid = 'infrx.jobs'::regclass
-                 and conname = 'jobs_success_has_result_expiry') then
-    alter table infrx.jobs add constraint jobs_success_has_result_expiry
-      check (state <> 'succeeded' or result_expires_at is not null) not valid;
+  if old.settled_at is not null
+     and new.result_expires_at is distinct from old.result_expires_at then
+    raise exception 'immutable: settled job % keeps its result expiry', old.request_id
+      using errcode = '23514';
   end if;
+  return new;
 end $$;
+create or replace trigger jobs_result_expiry_immutable
+  before update of result_expires_at on infrx.jobs
+  for each row execute function infrx.jobs_result_expiry_guard();
 
 -- ======================================================= the regime flags, locked ===
 -- G8 (wiring request 1): an admission reads its regime's flag FOR SHARE, so a freeze (an

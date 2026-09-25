@@ -54,7 +54,11 @@ def _representation(value):
     of an admission's reservations (a set; PostgreSQL returns them by kind); (3) a result
     reference, which R30 makes the store's (`infrx-result:<job>`); (4) a candidate page's
     order among equal `eligible_at` (content ids are the store's) and D10's DATABASE content
-    rows (request records, result bodies), which the fake does not model."""
+    rows (request records, result bodies), which the fake does not model; (5) an admission
+    document's `outbox` as its ADMISSION-time events: the real store's `job_admission` lists
+    every dispatch event of the job, so after `prepare` it also carries the inference
+    dispatch preparation emitted, which the fake's admission record never gains (review
+    2-ACI-2; compared as the admission's kinds, in order)."""
     if isinstance(value, list):
         return [_representation(item) for item in value]
     if not isinstance(value, dict):
@@ -67,6 +71,11 @@ def _representation(value):
             out[key] = "<result>"
         elif key == "reservations" and isinstance(item, list):
             out[key] = sorted((_representation(i) for i in item), key=lambda i: i["kind"])
+        elif key == "outbox" and isinstance(item, list):
+            kinds = {i.get("kind") for i in item if isinstance(i, dict)}
+            admitted = [_representation(i) for i in item if not (
+                "prepare_dispatch" in kinds and i.get("kind") == "inference_dispatch")]
+            out[key] = sorted(admitted, key=lambda i: i.get("kind", ""))
         elif key == "items" and isinstance(item, list):
             out[key] = sorted((_representation(i) for i in item
                                if i.get("identity", {}).get("location") != "database"),
@@ -80,7 +89,7 @@ def test_the_versioned_acceptance_transcripts_replay_exactly() -> None:
     """F2C.d: `fixtures/acceptance/lifecycle.json` (24 cases) recorded by the REAL adapter
     with the transcript's windows and compared step by step, relative instants included:
     every port answer and typed refusal, in order, per process. The comparison removes only
-    `_representation`'s four classes; `replay()`'s raw count is printed beside it."""
+    `_representation`'s five classes; `replay()`'s raw count is printed beside it."""
     from infrx.contracts.conformance import acceptance
     expected, got = acceptance.committed(), acceptance.record(factory)
     assert expected["version"] == acceptance.VERSION
@@ -89,4 +98,4 @@ def test_the_versioned_acceptance_transcripts_replay_exactly() -> None:
     raw = sum(steps != got["cases"].get(name) for name, steps in expected["cases"].items())
     assert problems == [], problems
     print(f"{len(expected['cases'])} transcripts replayed exactly after normalization "
-          f"({raw} differ only in the four representation classes)")
+          f"({raw} differ only in the five representation classes)")
