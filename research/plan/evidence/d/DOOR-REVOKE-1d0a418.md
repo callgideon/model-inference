@@ -114,3 +114,52 @@ Nothing else moved; no job, money or row state depends on the grant. 0023 is re-
 ## Estimate (remaining for the coordinator)
 optimistic 0.25 h, likely 0.5 h, pessimistic 1.5 h; confidence medium; basis: union merge with
 w5-merge + W4 then W-DR1, one composed `tests/d` + layer-3 RLS run.
+
+## Fix round (2026-09-25T22:26Z, on handback head `acc53094`)
+No code or SQL changed in owned paths: `0023`, `tests/d/**`, `pgtesting.py` and
+`tests/g/test_composition.py` are as handed back. This round adds
+`DOOR-REVOKE-wiring-v2.patch` (supersedes `DOOR-REVOKE-wiring.patch`), this section and
+`coordinator/updates/DOOR-REVOKE-20260925T2226Z.json`. The new head is the commit that carries them.
+Temporary merges were `git merge --no-commit --no-ff codex/wave4b-union` (`9d61d1e1`,
+which contains `codex/w5-merge` `f18c72f7` and `codex/d10-followup` `c584f54a`), undone with
+`git checkout -- <patched files>` and `git merge --abort`. Nothing was committed from them.
+
+| finding | status | what |
+|---|---|---|
+| 1-DR-1 (W-DR1 misses mutant e2m75) | **fixed (wiring request, v2)** | `DOOR-REVOKE-wiring-v2.patch` = v1's `pgstate.py`/`test_harness.py` hunks (byte-identical) **+ a `tests/integration/mutants.py` hunk**. e2m75 is re-anchored on the post-0023 line `    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",\n` and inverted: the mutant puts `"infrx.admit(jsonb)"` back, which must fail `L3-LOGIN-infrx_runtime-functions`. It is re-described as "0023 revoked admit; re-adding it to the expected set must fail its row". `git apply --check` is clean on union `9d61d1e1`'s three files. |
+| 0-DR-CM-1 (runtime still calls the revoked doors pre-W5) | **not a lane defect: merge gate, verified satisfied on the union** | The regression is `test_composition_pg::test_f_base__…_dedicated_login`. It fails on the branch alone and passes on union + door-revoke (both runs below). |
+| 1-DR-2 (0023 breaks the runtime login on a tree without W5; the textual merge is clean) | **not a lane defect: merge gate, verified satisfied on the union** | Same regression and runs. The ORDER note in 0023:21-23 is unchanged. A Docker-free static guard was skipped because the composition test already fails in the wrong order; add one if `tests/d` ever runs without Docker in a merge gate. |
+
+### Commands (fix round)
+| cmd | tree | exit | result |
+|---|---|---|---|
+| `git apply DOOR-REVOKE-wiring.patch` (v1), then `.venv/bin/python -m pytest -q tests/integration/test_run.py -k anchor_occurs` (repo root) | union `9d61d1e1` + `acc53094` | 1 | **fails before**: `stale anchors (id: occurrences found): {'e2m75': 0}`, 1 failed |
+| same with the v2 `mutants.py` hunk added | same | 0 | **passes after**: 1 passed |
+| `pytest -q tests/integration/test_run.py tests/integration/test_harness.py tests/integration/test_services.py` (v2 applied) | same | 0 | 81 passed, 24 skipped (layer 2 needs the e2 stack) |
+| lane-local e2m75 proof (scratch script). It applies 0001-0023 to a fresh DB on `INFRX_D_TASK=revoke` PG 55459 and runs pgstate's own `L3-LOGIN-infrx_runtime-functions` SQL as `postgres`, once with the v2-patched `pgstate` and once with e2m75's `before→after` applied in memory. Extension-owned functions are excluded, as `tests/d/checks_reads.py:507-512` does, because the plain image keeps pgcrypto in `public` | same | 0 | patched: **PASS** (exact set, nothing missing or extra). e2m75: **FAIL (killed)**, expected-but-absent `['infrx.admit(jsonb)']` |
+| `INFRX_D_TASK=revoke pytest -q tests/d/test_composition_pg.py tests/d/test_reads.py tests/d/test_ready.py tests/d/test_schema_postgres.py tests/g/test_composition.py` | union `9d61d1e1` + `acc53094` + v2 | 0 | **101 passed, 3 xfailed, 0 failed** (includes the dedicated-login composition test) |
+| same | branch head `acc53094` alone | 1 | 100 passed, **1 failed**, 3 xfailed. The one failure is `test_composition_pg::…dedicated_login`: `InsufficientPrivilege: permission denied for function admit`. This is the W5 merge gate by design |
+
+Not run by this lane: e2m75 as a real layer-2 mutant. It needs the `e2` compose stack
+(55500+, `infrx-e2-*`), which is outside this lane's task-local allocation (LANE-RULES 3).
+Coordinator/union command after applying v2:
+`apps/infrx-api/.venv/bin/python tests/integration/run.py --layer 2 --keep --no-mutants`, then
+`apps/infrx-api/.venv/bin/python tests/integration/mutants.py --layer 2 --only e2m75`
+(expect `killed`), then tear the stack down.
+
+### Wiring requests (supersede the v1 list)
+- **W-DR1 v2** (`DOOR-REVOKE-wiring-v2.patch`: `tests/integration/pgstate.py`,
+  `tests/integration/test_harness.py`, `tests/integration/mutants.py`). Apply AFTER D10F's W4,
+  which is already on union `9d61d1e1`. Do NOT also apply v1: v2 contains v1's two hunks
+  unchanged.
+- **W-DR2**: unchanged.
+- **ORDER (0-DR-CM-1, 1-DR-2)**: merge `codex/door-revoke` only into `codex/wave4b-union` at
+  or after `9d61d1e1`, never directly into `claude/consumer-v1` ahead of W5. Deploy 0023 only
+  after the W5 gateway and worker are the running release. Before rolling back to a pre-W5
+  runtime, apply 0023's rollback grant. After the union merge, re-run
+  `INFRX_D_TASK=<union> pytest -q tests/d/test_composition_pg.py`; the dedicated-login test
+  must pass.
+
+### Estimate (remaining, coordinator)
+optimistic 0.25 h, likely 0.5 h, pessimistic 1 h; confidence medium. Basis: merge into the union
+(clean, measured), apply v2, then run one e2 layer-2 stack for e2m75 and the L3 RLS row.
