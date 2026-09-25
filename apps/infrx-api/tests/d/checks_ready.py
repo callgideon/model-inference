@@ -391,6 +391,9 @@ def check_register_guards(conn) -> str:
                 ("another org's key", identity(org_id=other), ("not_found", "not_found")),
                 ("outside every prefix", identity(object_key=f"secrets/{org}/x"),
                  ("not_found", "not_found")),
+                # M6 finding: a dot segment inside the prefix names another tenant's key
+                ("a '..' segment inside the prefix",
+                 identity(object_key=f"media/{org}/../{other}/x"), ("not_found", "not_found")),
                 ("an unknown organization", identity(org_id="00000000-0000-4000-8000-"
                                                             "0000000000ff"),
                  ("not_found", "not_found")),
@@ -398,6 +401,13 @@ def check_register_guards(conn) -> str:
                  ("state_conflict", "bytes_changed"))):
             got = refusal(conn, "content_register", args)
             assert got == expected, f"{label}: {got}"
+        # ...and the table refuses it from any writer (the CHECK backs the function)
+        why = cc.attempt(conn, "insert into infrx.content_objects (org_id, kind, location, "
+                         "object_key, digest, bytes, origin, registered_at, eligible_at) "
+                         f"values ('{org}', 'source', 'object_store', "
+                         f"'uploads/{org}/./../{other}/x', '{clip.digest}', 1, 'written', "
+                         "infrx.now(), infrx.now())")
+        assert why is not None and "content_objects_key_in_tenant_prefix" in why, why
         conn.execute("select infrx_test.advance(1)")
         again = call(conn, "content_register", identity(origin="discovered"))
         assert again["eligible_at"] == first["eligible_at"], "a re-registration reset the grace"

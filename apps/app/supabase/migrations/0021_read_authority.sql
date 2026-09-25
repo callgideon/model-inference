@@ -418,6 +418,24 @@ grant execute on function public.consumer_job_result(uuid) to authenticated, ser
 revoke all on function infrx.resolve_usd_revision(text)
   from public, anon, authenticated, service_role;
 
+-- G7 WR-3a: the USD price discovery publishes - the row `admit_legacy_usd` would capture now
+-- for this model string (P-22: resolve, then price; same predicate). Null when unpriced.
+create or replace function infrx.usd_price(p_model text) returns jsonb
+language sql stable security definer set search_path = infrx, public, pg_temp as $$
+  select jsonb_build_object('price_version', pv.price_version, 'currency', pv.currency,
+           'model_revision', pv.model_revision,
+           'input_rate_per_million', pv.input_rate_per_million::text,
+           'output_rate_per_million', pv.output_rate_per_million::text,
+           'token_rules_version', pv.token_rules_version, 'captured_at', infrx.now())
+  from infrx.price_versions pv
+  where pv.model_revision = infrx.resolve_usd_revision(p_model)
+    and pv.effective_from <= infrx.now()
+    and (pv.effective_to is null or pv.effective_to > infrx.now())
+  order by pv.effective_from desc, pv.captured_at desc limit 1;
+$$;
+revoke all on function infrx.usd_price(text) from public, anon, authenticated;
+grant execute on function infrx.usd_price(text) to service_role;
+
 -- The browser's key scope, re-asserted (06a AuthContextV2; RV-06): a browser session
 -- names, renames and revokes its keys; it never writes a key's audience, individual,
 -- provider or endpoint - those are 0009's service defaults. New columns do not widen it.
@@ -462,6 +480,7 @@ begin
       -- admission, replay and readiness (gateway)
       'infrx.admit(jsonb)', 'infrx.admit_ready(jsonb)', 'infrx.idempotency_lookup(jsonb)',
       'infrx.job_admission(uuid)', 'infrx.readiness_doc(uuid)', 'infrx.now()',
+      'infrx.usd_price(text)',
       -- uploads and the content lifecycle (gateway, collector)
       'infrx.upload_create(jsonb)', 'infrx.upload_acknowledge_put(jsonb)',
       'infrx.upload_complete(jsonb)', 'infrx.upload_abort(jsonb)',

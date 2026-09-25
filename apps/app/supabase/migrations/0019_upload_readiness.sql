@@ -150,11 +150,12 @@ create table if not exists infrx.content_objects (
     (state = 'live') = (tombstoned_at is null)
     and (state = 'deleted') = (deleted_at is not null)),
   -- Never outside the tenant's own prefix (the adapter adds the environment's bucket
-  -- prefix): a row cannot name another organization's object, or anything else.
+  -- prefix): a row cannot name another organization's object, or anything else; a `.`/`..`
+  -- segment would reach outside the prefix on a store that normalizes keys (M6 finding).
   constraint content_objects_key_in_tenant_prefix check (case location
     when 'object_store' then object_key like any (array[
       'media/' || org_id::text || '/%', 'uploads/' || org_id::text || '/%',
-      'payloads/' || org_id::text || '/%'])
+      'payloads/' || org_id::text || '/%']) and object_key !~ '(^|/)\.\.?(/|$)'
     -- database content is `<table>/<row id>`: a result body or an admitted request record
     else job_id is not null and (kind, object_key) in (('result', 'job_results/' || job_id::text),
                                                        ('payload', 'jobs/' || job_id::text)) end),
@@ -251,7 +252,8 @@ begin
            p_identity->>'object_key' like any (array[
              'media/' || (p_identity->>'org_id') || '/%',
              'uploads/' || (p_identity->>'org_id') || '/%',
-             'payloads/' || (p_identity->>'org_id') || '/%']), false)) then
+             'payloads/' || (p_identity->>'org_id') || '/%']), false)
+           or p_identity->>'object_key' ~ '(^|/)\.\.?(/|$)') then
     perform infrx.lifecycle_refuse('not_found', 'the key is not under this organization''s '
                                    || 'prefix');
   end if;

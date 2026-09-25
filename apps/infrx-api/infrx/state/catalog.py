@@ -16,9 +16,13 @@ raised typed (the ingress maps them to 503), never swallowed into `None`: `None`
                          (0008's pin; a private deployment no listing names: its newest
                          effective card), at the DATABASE clock; unpriced is None (R69).
     data_access_policy   the policy version in force at the database clock.
+    usd_price            (G7 WR-3a) the USD price row a legacy admission would capture now for
+                         this model string (0021 `infrx.usd_price`: P-22 resolve, then price);
+                         unpriced is None.
 """
 from __future__ import annotations
 
+from ..contracts.records import PriceSnapshot
 from ..contracts.v2.records import (CredentialAudience, DataAccessPolicyRef,
                                     DeploymentRevision, RateCardSnapshot, ServingRevision)
 from .jobstore import Connect
@@ -93,6 +97,10 @@ class PgCatalogDirectory:
     async def active_rate_card(self, deployment_revision_id: str) -> RateCardSnapshot | None:
         row = await self._db.one(_ACTIVE_CARD, {"d": deployment_revision_id})
         return None if row is None else _record(RateCardSnapshot, _CARD_FIELDS, row)
+
+    async def usd_price(self, model_revision: str) -> PriceSnapshot | None:
+        row = await self._db.one("select infrx.usd_price(%s)", (model_revision,))
+        return None if row is None or row[0] is None else PriceSnapshot.model_validate(row[0])
 
     async def data_access_policy(self, deployment_revision_id: str) -> DataAccessPolicyRef | None:
         """0007's policy table records a version and its instant only, so the reference

@@ -186,6 +186,25 @@ def test_credit_rate__unpriced_answers_none() -> None:
     assert run(catalog.data_access_policy(str(uuid.uuid4()))) is None
 
 
+def test_usd_price__reads_the_row_admission_would_capture() -> None:
+    """G7 WR-3a: `usd_price` answers the effective USD row for the model string (typed,
+    exact decimals), None when unpriced or not yet effective at the DATABASE clock."""
+    catalog = RigCatalog(fresh())
+    assert run(catalog.usd_price("acme/unpriced")) is None
+    catalog.owner.execute(
+        "insert into infrx.price_versions (price_version, model_revision, "
+        "input_rate_per_million, output_rate_per_million, token_rules_version, "
+        "effective_from) values ('pv_wr3a', 'acme/pre-catalog', 0.10, 0.30, 'tr-1', "
+        "infrx.now()), ('pv_wr3a_next', 'acme/pre-catalog', 9, 9, 'tr-1', "
+        "infrx.now() + interval '1 hour')")
+    got = run(catalog.usd_price("acme/pre-catalog"))
+    assert (got.price_version, got.model_revision, str(got.input_rate_per_million),
+            str(got.output_rate_per_million)) == \
+        ("pv_wr3a", "acme/pre-catalog", "0.10000000", "0.30000000"), got
+    catalog.owner.execute("select infrx_test.advance(3600)")
+    assert run(catalog.usd_price("acme/pre-catalog")).price_version == "pv_wr3a_next"
+
+
 def test_credit_rate__alias_move_changes_resolve_not_an_admitted_job() -> None:
     """CREDIT-RATE / R78: a CREDIT job admitted at the listed deployment keeps its pins
     after the alias moves to a new public deployment with its own card - while `resolve`

@@ -189,6 +189,10 @@ def check_usd_resolution(conn) -> str:
                 (CANONICAL, price_version, spelling), (spelling, job["model_revision"],
                                                        job["price_version"])
             assert doc["price_snapshot"]["model_revision"] == CANONICAL
+            # G7 WR-3a: discovery reads the same row admission captured
+            shown = conn.execute("select infrx.usd_price(%s)", (spelling,)).fetchone()[0]
+            assert shown is not None and (shown["price_version"], shown["model_revision"]) \
+                == (price_version, CANONICAL), (spelling, shown)
             credit = cr.credit_request(conn, world)
             credit = credit.model_copy(update={"model_revision": spelling})
             ca.admit(conn, credit, b.idem(credit, f"credit-{spelling}"), regime="credit")
@@ -199,6 +203,8 @@ def check_usd_resolution(conn) -> str:
             request = b.request(world, model_revision=spelling)
             assert ca.refusal(conn, request, b.idem(request, f"refused-{spelling}")) \
                 is not None, f"{spelling} was admitted"
+            assert conn.execute("select infrx.usd_price(%s)", (spelling,)).fetchone()[0] \
+                is None, f"discovery shows a price for {spelling}"
         # a model no listing names keeps pricing by its own literal row (the pilot's
         # pre-catalog path, and the v1 conformance world's)
         conn.execute("insert into infrx.price_versions (price_version, model_revision, "
@@ -320,7 +326,8 @@ def check_reads_privileges(conn) -> str:
                          {"authenticated", "service_role"}),
                         ("public.consumer_job_result(uuid)", {"authenticated", "service_role"}),
                         ("public.consumer_org()", set()),
-                        ("infrx.resolve_usd_revision(text)", set())):
+                        ("infrx.resolve_usd_revision(text)", set()),
+                        ("infrx.usd_price(text)", {"service_role", "infrx_runtime"})):
         for role in ("anon", "authenticated", "service_role", "infrx_runtime"):
             allowed, = conn.execute("select has_function_privilege(%s, %s, 'execute')",
                                     (role, fn)).fetchone()
