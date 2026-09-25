@@ -1,0 +1,53 @@
+{
+  "task": "W5",
+  "slice": "fix round (review findings 0-W5-R1..R3, 1-W5-RULES-1/2, 2-W5-ACC-1..3)",
+  "activity": "review",
+  "head": "97381015",
+  "worktree": ".claude/worktrees/codex-w5-readiness",
+  "branch": "codex/w5-readiness",
+  "owned_paths": [
+    "apps/infrx-api/infrx/worker/",
+    "apps/infrx-api/tests/w/",
+    "research/plan/evidence/w/W5-27afab7.md"
+  ],
+  "commands": [
+    {
+      "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w/test_w5.py",
+      "exit": 0,
+      "summary": "35 passed, 1 skipped (D10 absent)"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs",
+      "exit": 0,
+      "summary": "39 passed, 1 skipped: 28/28 service-free + 6/6 PG mutants killed"
+    },
+    {
+      "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs",
+      "exit": 0,
+      "summary": "300 passed, 11 skipped (7 MinIO, 1 D10, 3 empty param sets)"
+    },
+    {
+      "cmd": "git merge-tree --write-tree --name-only claude/consumer-v1 codex/w5-readiness",
+      "exit": 1,
+      "summary": "11 conflicts, all in cherry-picked F2C paths; resolve taking claude/consumer-v1's side"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 3,
+    "likely_h": 6,
+    "pessimistic_h": 12,
+    "confidence": "medium",
+    "basis": "unchanged: wiring 1-2, fail_preparation port/adapter, merged-tree PG round trip with MinIO, box warm-up run",
+    "at": "2026-09-25T03:03:04Z"
+  },
+  "blockers": [
+    "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA",
+    "box warm-up/cold-cache run (coordinator) after run3"
+  ],
+  "wiring_requests": [
+    "unchanged from W5-27afab7.md; merge resolution: take claude/consumer-v1's side for the 11 conflicting F2C paths"
+  ],
+  "evidence": [
+    "research/plan/evidence/w/W5-27afab7.md"
+  ]
+}

@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 34,
-  "updated": "2026-09-25T03:21:08Z",
+  "revision": 35,
+  "updated": "2026-09-25T03:29:47Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -894,12 +894,12 @@
     {
       "id": "W5",
       "task": "W5",
-      "slice": "items 1-4 + S3 F4 + E3C s04/s05 cases (lane complete; integration pending wiring)",
+      "slice": "fix round (review findings 0-W5-R1..R3, 1-W5-RULES-1/2, 2-W5-ACC-1..3)",
       "agent": "opus",
       "branch": "codex/w5-readiness",
       "worktree": ".claude/worktrees/codex-w5-readiness",
       "base": "dff31efc",
-      "head": "27afab76",
+      "head": "97381015",
       "isolation": {
         "ports": "postgres 55445, valkey 55472 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-w5-",
@@ -907,16 +907,16 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T00:35:00Z",
-      "blocker": "merged-tree PostgreSQL round trip needs G7 admit_ready + D10 0019/PgLifecycle + wiring 1 together; fail_preparation port (F2C) and PostgreSQL adapter (D10) not yet committed: permanent refusals lapse (bounded) until then; box warmup/cold-cache run needs the pinned engine after certification run3",
+      "updated": "2026-09-25T03:03:00Z",
+      "blocker": "merge gate: W5 only together with wiring 1 + D10 0019/PgLifecycle + G7 admit_ready; run the 7 MinIO PG round trips on the merged SHA; box warm-up/cold-cache run (coordinator) after run3",
       "next_action": "rerun tests/w at 27afab76; apply W5-wiring-27afab7.patch with D10 PgLifecycle; fail_preparation port/adapter; G7 admit_ready; merged PG round trip; box warmup run after run3",
       "estimate": {
         "optimistic_h": 3,
         "likely_h": 6,
         "pessimistic_h": 12,
         "confidence": "medium",
-        "basis": "lane code and local/PG proof done; left: apply wiring 1-2, F2C/D10 fail_preparation port+adapter, merged-tree PG round trip with G7 admit_ready, one box run of W5-box-warmup.sh",
-        "at": "2026-09-25T00:35:33Z"
+        "basis": "unchanged: wiring 1-2, fail_preparation port/adapter, merged-tree PG round trip with MinIO, box warm-up run",
+        "at": "2026-09-25T03:03:04Z"
       },
       "evidence": [
         "research/plan/evidence/w/W5-27afab7.md",
@@ -925,50 +925,34 @@
       ],
       "commands": [
         {
-          "cmd": "make api-env",
+          "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w/test_w5.py",
           "exit": 0,
-          "summary": "pinned env"
+          "summary": "35 passed, 1 skipped (D10 absent)"
         },
         {
-          "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs (at 27afab76)",
-          "exit": null,
-          "summary": "not completed at handoff (session limit); last complete: d04526b9 291 passed, 10 skipped"
+          "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs",
+          "exit": 0,
+          "summary": "39 passed, 1 skipped: 28/28 service-free + 6/6 PG mutants killed"
         },
         {
-          "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs (at 27afab76)",
+          "cmd": "INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs",
           "exit": 0,
-          "summary": "31 passed, 1 skipped: 25/25 service-free + 1/1 PostgreSQL mutants killed; 1 PostgreSQL mutant needs D10's adapter (killed on 16ff5771 + D10.a)"
+          "summary": "300 passed, 11 skipped (7 MinIO, 1 D10, 3 empty param sets)"
         },
         {
-          "cmd": "INFRX_D_TASK=w5 INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_{mutants,loop_mutants,w3_mutants,w4_mutants,worker_main_mutants,prep_worker_mutants,w5_mutants}.py -rs (at 16ff5771)",
-          "exit": 0,
-          "summary": "551 passed, 13 skipped (12 need MinIO, 1 needs D10), 0 survived"
-        },
-        {
-          "cmd": "git apply --check W5-wiring-27afab7.patch; on 16ff5771+patch+D10.a: compose test + 2 wiring mutants",
-          "exit": 0,
-          "summary": "applies; 5 passed"
-        },
-        {
-          "cmd": "bash -n W5-box-warmup.sh; DRY_RUN=1 bash W5-box-warmup.sh",
-          "exit": 0,
-          "summary": "syntax ok; plan + self-check pass; box run pending (pinned engine, after run3)"
+          "cmd": "git merge-tree --write-tree --name-only claude/consumer-v1 codex/w5-readiness",
+          "exit": 1,
+          "summary": "11 conflicts, all in cherry-picked F2C paths; resolve taking claude/consumer-v1's side"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
       "owned_paths": [
         "apps/infrx-api/infrx/worker/",
         "apps/infrx-api/tests/w/",
-        "research/plan/evidence/w/W5-27afab7.md",
-        "research/plan/evidence/w/W5-wiring-27afab7.patch",
-        "research/plan/evidence/w/W5-box-warmup.sh"
+        "research/plan/evidence/w/W5-27afab7.md"
       ],
       "wiring_requests": [
-        "apps/infrx-api/infrx/worker/__main__.py compose(): PreparationRunner(readiness=PgLifecycle(connect, limits=limits)); WorkerService(reconciliation=PgReconciliation(connect)) - W5-wiring-27afab7.patch with its test and 2 mutants",
-        "Makefile api-mutants: add tests/w/test_w5_mutants.py (same patch)",
-        "F2C port + D10 PostgreSQL: JobStore.fail_preparation(lease, cause) (R104 third candidate), semantics in W5-27afab7.md",
-        "G7: gateway admission calls admit_ready (D1) for text and media",
-        "E/I8: read infrx_reconciliation_drift / infrx_unsettleable_jobs / infrx_holds_unknown from the worker's /metrics (8002) in certify's soak and the Prometheus scrape"
+        "unchanged from W5-27afab7.md; merge resolution: take claude/consumer-v1's side for the 11 conflicting F2C paths"
       ]
     },
     {
@@ -1338,12 +1322,6 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-25T00:35:00Z",
-      "lane": "W5",
-      "task": "W5",
-      "head": "27afab76"
-    },
-    {
       "since": "2026-09-25T00:05:00Z",
       "lane": "G7",
       "task": "G7",
@@ -1378,6 +1356,12 @@
       "lane": "E3C",
       "task": "E3C",
       "head": "fecf91a6"
+    },
+    {
+      "since": "2026-09-25T00:35:00Z",
+      "lane": "W5",
+      "task": "W5",
+      "head": "97381015"
     }
   ],
   "integration_queue": [],
@@ -2559,6 +2543,12 @@
       "by": "E3C",
       "what": "review → review; head fecf91a6",
       "source": "updates/E3C-20260925T0325Z.json"
+    },
+    {
+      "at": "2026-09-25T03:03:00Z",
+      "by": "W5",
+      "what": "review → review; head 97381015",
+      "source": "updates/W5-20260925T0303Z.json"
     }
   ],
   "history": {
@@ -2739,10 +2729,14 @@
     "E3C-20260925T0325Z.json": {
       "status": "applied",
       "at": "2026-09-25T03:25:00Z"
+    },
+    "W5-20260925T0303Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T03:03:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T03:21:08Z",
+    "computed_at": "2026-09-25T03:29:47Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2752,7 +2746,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 00:15Z – 2026-09-27 17:09Z (likely 2026-09-26 15:09Z)",
+        "text": "2026-09-26 00:23Z – 2026-09-27 17:17Z (likely 2026-09-26 15:17Z)",
         "constraint": "dependency path D10 → M5 → M6 → E3C",
         "effort_h": [
           27.1,
@@ -2765,9 +2759,9 @@
           61.8
         ],
         "finish": [
-          "2026-09-26T00:15:08Z",
-          "2026-09-26T15:09:08Z",
-          "2026-09-27T17:09:08Z"
+          "2026-09-26T00:23:47Z",
+          "2026-09-26T15:17:47Z",
+          "2026-09-27T17:17:47Z"
         ],
         "conditional": null,
         "confidence": "medium",
