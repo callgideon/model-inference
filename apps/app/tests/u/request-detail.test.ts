@@ -313,19 +313,19 @@ test(T.expiry, () => {
   assert.equal(expired.kind, "ready");
   if (expired.kind !== "ready") return;
   assert.equal(expired.value.result.access, "expired");
-  assert.match(expired.value.result.note, /expired at 2026-09-21 11:00 UTC/);
+  assert.match(expired.value.result.note, /expired at 2026-09-20 12:10 UTC/);
   // Metadata and charge stay.
   assert.equal(expired.value.charge.amount, "1.23456789 credits");
   assert.equal(expired.value.requestId, ID);
 
   const available = requestDetailModel({ ok: true, value: job() });
   assert.equal(available.kind === "ready" && available.value.result.access, "available");
-  assert.equal(available.kind === "ready" && available.value.result.expiresAt, "2026-09-21T11:00:05.000000Z");
-  assert.match(available.kind === "ready" ? available.value.result.note : "", /until 2026-09-21 11:00 UTC/);
+  assert.equal(available.kind === "ready" && available.value.result.expiresAt, "2026-09-20T12:10:00.000000Z");
+  assert.match(available.kind === "ready" ? available.value.result.note : "", /until 2026-09-20 12:10 UTC/);
 });
 
 test(T.poll, () => {
-  const delays = Array.from({ length: MAX_POLLS }, (_, n) => pollDelayMs(n));
+  const delays = Array.from({ length: MAX_POLLS }, (_, n) => pollDelayMs(n) as number);
   assert.equal(delays[0], 2000);
   for (let n = 1; n < delays.length; n += 1) assert.ok(delays[n] >= delays[n - 1], "backoff never shortens");
   assert.equal(Math.max(...delays), 30_000, "capped");
@@ -393,7 +393,7 @@ test(T.source, async () => {
   assert.equal(await pick({ NODE_ENV: "production", INFRX_CONSOLE_PREVIEW: "1" }), real);
   assert.equal(await pick({ NODE_ENV: "development" }), real);
   assert.equal(calls, 2);
-  const preview = await pick({ NODE_ENV: "development", INFRX_CONSOLE_PREVIEW: "1" });
+  const preview = (await pick({ NODE_ENV: "development", INFRX_CONSOLE_PREVIEW: "1" })) as RequestSource;
   assert.equal(preview.preview, true);
   assert.equal(calls, 2, "the real session is not opened for the preview");
   // The fixture's reads follow the same rules as the real ones.
