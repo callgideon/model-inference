@@ -5,7 +5,7 @@
   "integration_branch": "claude/consumer-v1",
   "base": "dff31efc",
   "main": "dff31efc",
-  "integration_head": "bba27b02",
+  "integration_head": "b413f253",
   "deployed": {
     "release": "bda15866e5700f3856d7142580da842fba9bbd23",
     "install": "third install",
@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 21,
-  "updated": "2026-09-25T00:12:28Z",
+  "revision": 23,
+  "updated": "2026-09-25T00:19:34Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -338,29 +338,29 @@
     {
       "id": "F2C-L",
       "task": "F2C",
-      "slice": "d",
+      "slice": "fix-round",
       "agent": "opus",
       "branch": "codex/f2c-lifecycle",
       "worktree": ".claude/worktrees/codex-f2c-lifecycle",
       "base": "dff31efc",
-      "head": "76d966cc",
+      "head": "c4873027",
       "isolation": {
         "ports": null,
         "prefix": null,
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T23:00:20Z",
+      "updated": "2026-09-25T00:19:33Z",
       "blocker": null,
-      "next_action": "slice b: persisted result_expires_at through terminal/status DTOs, scrub shape, 0014 guard; slice d: fixtures, consumer matrix, rollout contract, fixture hash, README table",
+      "next_action": "merged into claude/consumer-v1 at 78661bf0 (+ b413f253: R111-R116, SURFACE_VERSION contracts-v2.1, manifest F2C implemented)",
       "estimate": {
-        "optimistic_h": 0.5,
-        "likely_h": 1,
-        "pessimistic_h": 3,
-        "confidence": "medium",
-        "basis": "a, b, d delivered and green; only review fixes remain",
-        "at": "2026-09-24T23:00:20Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at c4873027)",
+        "at": "2026-09-25T00:19:33Z"
       },
       "evidence": [
         "research/plan/evidence/f/F2C-lifecycle-2d5e474.md",
@@ -370,12 +370,17 @@
         {
           "cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'",
           "exit": 0,
-          "summary": "1162 passed, 6 deselected (PG port held by other lanes)"
+          "summary": "1162 passed, 6 deselected"
         },
         {
-          "cmd": "uv run --frozen python -m tests.contracts.mutants <70 F2C mutants>",
+          "cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py",
           "exit": 0,
-          "summary": "70/70 killed"
+          "summary": "61 passed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.contracts.mutants <every lc_/lcb_/acc_>",
+          "exit": 0,
+          "summary": "79/79 killed (9 new; 8 of them survived before the fix)"
         },
         {
           "cmd": "uv run --frozen pytest -q tests --ignore=tests/d --ignore=tests/contracts -k 'not mutant and not pg'",
@@ -383,9 +388,14 @@
           "summary": "1666 passed, 15 skipped"
         },
         {
-          "cmd": "uv run --frozen pytest -q tests/d -k 'not mutant'",
+          "cmd": "DOCKER_HOST=unix:///nonexistent.sock uv run --frozen pytest -q tests/d -k 'not mutant'",
           "exit": 0,
-          "summary": "392 passed, 5 xfailed"
+          "summary": "65 passed, 332 skipped (isolated; the earlier 392-pass row is withdrawn)"
+        },
+        {
+          "cmd": "node --test 'tests/contracts/**/*.test.ts'",
+          "exit": 0,
+          "summary": "159 passed"
         },
         {
           "cmd": "make console-test",
@@ -403,9 +413,14 @@
           "summary": "clean"
         },
         {
+          "cmd": "node tests/contracts/run-mutants.mjs --self-test",
+          "exit": 0,
+          "summary": "14/14"
+        },
+        {
           "cmd": "node tests/contracts/run-mutants.mjs --entry v2",
           "exit": 0,
-          "summary": "41/41 killed"
+          "summary": "44/44 killed"
         }
       ],
       "owned_paths": [
@@ -525,18 +540,18 @@
         "prefix": "infrx-e1c-",
         "db": null
       },
-      "activity": "integration",
+      "activity": "complete",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T23:05:05Z",
+      "updated": "2026-09-25T00:19:34Z",
       "blocker": "UPLOAD-RESTART needs M5 durable uploads; hosted smoke is the coordinator's (amended command, --unprofiled smoke, in the evidence)",
-      "next_action": "merged into claude/consumer-v1 at cc687216 (manifest: implemented); lane complete once F2C's manifest status flips; UPLOAD-RESTART over M5's store + certify runner wiring are E3C/E4C integration items; hosted smoke (--unprofiled smoke) after run3",
+      "next_action": "merged cc687216; F2C now implemented so the lane closes; UPLOAD-RESTART over M5's store and the certify runner wiring are E3C/E4C integration items; hosted smoke after run3",
       "estimate": {
         "optimistic_h": 0,
-        "likely_h": 0.5,
-        "pessimistic_h": 2,
+        "likely_h": 0,
+        "pessimistic_h": 0,
         "confidence": "high",
-        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 6cb6c929); residual = integration checks on the merged tree",
-        "at": "2026-09-24T23:05:05Z"
+        "basis": "merged; start dependency F2C implemented",
+        "at": "2026-09-25T00:19:34Z"
       },
       "evidence": [
         "research/plan/evidence/e/E1C-2531dc4.md"
@@ -1169,12 +1184,6 @@
       "head": "103d20a8"
     },
     {
-      "since": "2026-09-24T23:00:20Z",
-      "lane": "F2C-L",
-      "task": "F2C",
-      "head": "76d966cc"
-    },
-    {
       "since": "2026-09-24T23:14:00Z",
       "lane": "G8",
       "task": "G8",
@@ -1211,14 +1220,7 @@
       "head": "f61d2f0b"
     }
   ],
-  "integration_queue": [
-    {
-      "since": "2026-09-24T23:05:05Z",
-      "lane": "E1C",
-      "task": "E1C",
-      "head": "6cb6c929"
-    }
-  ],
+  "integration_queue": [],
   "resource_locks": [
     {
       "id": "gpu-box",
@@ -2240,6 +2242,30 @@
       "by": "E2C",
       "what": "review → review; head f61d2f0b",
       "source": "updates/E2C-20260925T0010Z.json"
+    },
+    {
+      "at": "2026-09-25T00:19:34Z",
+      "by": "tracker",
+      "what": "rejected update: stale: at 2026-09-24T22:34:29Z is not newer than lane F2C-L state 2026-09-24T23:00:20Z",
+      "source": "updates/F2C-L-20260924T2234Z.json"
+    },
+    {
+      "at": "2026-09-24T23:54:00Z",
+      "by": "F2C-L",
+      "what": "review → review; head 16ce171a; estimate likely 1 → 0.5 h (every verification finding closed with a killed mutant or a column-level spec)",
+      "source": "updates/F2C-L-20260924T2354Z.json"
+    },
+    {
+      "at": "2026-09-25T00:19:33Z",
+      "by": "F2C-L",
+      "what": "review → complete; head c4873027; estimate likely 0.5 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at c4873027))",
+      "source": "updates/F2C-L-20260925T001933Z.json"
+    },
+    {
+      "at": "2026-09-25T00:19:34Z",
+      "by": "E1C",
+      "what": "integration → complete; head 6cb6c929; estimate likely 0.5 → 0 h (merged; start dependency F2C implemented)",
+      "source": "updates/E1C-20260925T001934Z.json"
     }
   ],
   "history": {
@@ -2350,10 +2376,27 @@
     "E2C-20260925T0010Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:10:00Z"
+    },
+    "F2C-L-20260924T2234Z.json": {
+      "status": "rejected",
+      "at": "2026-09-24T22:34:29Z",
+      "reason": "stale: at 2026-09-24T22:34:29Z is not newer than lane F2C-L state 2026-09-24T23:00:20Z"
+    },
+    "F2C-L-20260924T2354Z.json": {
+      "status": "applied",
+      "at": "2026-09-24T23:54:00Z"
+    },
+    "F2C-L-20260925T001933Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:19:33Z"
+    },
+    "E1C-20260925T001934Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:19:34Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:12:28Z",
+    "computed_at": "2026-09-25T00:19:34Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
