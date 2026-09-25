@@ -1,0 +1,56 @@
+{
+ "task": "I8",
+ "slice": "fix round (review of 103d20a8/d2f90ce6): slices 1, 2, 3, 5, 6",
+ "activity": "review",
+ "head": "b55b3c5e",
+ "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-i8-operate",
+ "branch": "codex/i8-operate",
+ "owned_paths": [
+  "infra/",
+  "apps/infrx-api/deploy/",
+  "apps/infrx-api/tests/i/",
+  "research/plan/evidence/i/I8-103d20a.md"
+ ],
+ "commands": [
+  {"cmd": "cd apps/infrx-api && INFRX_D_TASK=i8 python -m pytest -q -rxXs tests/i (at 7f439e2f)",
+   "exit": 0, "summary": "209 passed, 1 xfailed (strict, F4) in 291 s; +3 cases"},
+  {"cmd": "tests @7f439e2f against the 7 changed infra/ files from d2f90ce6 (scratch tree, i8 docker)",
+   "exit": 1, "summary": "5 failed at the expected lines: test_artifacts.py:210, test_privilege_probe.py:103, test_rollback_drill.py:86 and :318, test_ops_steps.py:151"},
+  {"cmd": "python tests/i/mutants.py <77 I8 mutants> (git archive 7f439e2f)",
+   "exit": 1, "summary": "76/77; known_good_ignores_migrations misdeclared (anchor removed) -> re-anchored b55b3c5e"},
+  {"cmd": "python tests/i/mutants.py <77 I8 mutants> (git archive b55b3c5e)",
+   "exit": 0, "summary": "77/77 killed (59 existing + 18 new), 835 s"},
+  {"cmd": "python -m pytest -q tests/integration/backend/recovery/test_runbooks.py",
+   "exit": 0, "summary": "8 passed"},
+  {"cmd": "python -m pytest -q tests/integration/backend/recovery/test_observe.py -k 'ob10 or ob1'",
+   "exit": 0, "summary": "7 passed"},
+  {"cmd": "known-good.py bda15866e5700f3856d7142580da842fba9bbd23 --applied 0025",
+   "exit": 1, "summary": "NOT-KNOWN-GOOD: applied beyond the tree with no schema_proof (was KNOWN-GOOD)"}
+ ],
+ "estimate": {
+  "optimistic_h": 5, "likely_h": 11, "pessimistic_h": 20, "confidence": "med",
+  "basis": "earlier 4/8/16 plus the replacement-instance restore path (image store decision, ECR copy, timed restore on a second instance, coordinator-run) and the P-24 canary decision",
+  "at": "2026-09-25T00:02Z"
+ },
+ "blockers": [
+  "P-24: canary spend bound + dedicated canary tenant (op 5 canary half BLOCKED; 72 enables the timer only with P24_APPROVED)",
+  "P-25: alert destination/owner/escalation (slice 4 delivery proof BLOCKED)",
+  "P-25: approved MIRROR_URL prefix for the model mirror (O9-O12)",
+  "image store for a replacement-instance restore (engine image pinned by registry digest; docker load does not restore it) - 2-ACC-3 open, blocks the slice-5 acceptance",
+  "Supabase personal access token for supabase_policy.py (O8)",
+  "D10: least-privilege runtime login + function list, read-only monitor login (O7, WR-I8-6)",
+  "every live op after certification run3 (coordinator)"
+ ],
+ "wiring_requests": [
+  "WR-I8-1 pilot.py/jobstore.py: prepare_threshold=None; session SETs only off 6543",
+  "WR-I8-2 metrics: infrx_db_pool_* families + record_pool at scrape (gateway, worker)",
+  "WR-I8-3 G: infrx_large_body_in_use / _limit gauges",
+  "WR-I8-4 observe/route.py: collect_host(..., gpu=False) in the gateway",
+  "WR-I8-5 W: serving-version.json processor/preprocessor digests",
+  "WR-I8-6 D10: runtime login (no service_role membership, role statement_timeout) + read-only monitor login or infrx.ops_snapshot()",
+  "coordinator: record replacement-instance restore as open in brief 03 §I8.5 status (not an I8 path)"
+ ],
+ "evidence": [
+  "research/plan/evidence/i/I8-103d20a.md"
+ ]
+}
