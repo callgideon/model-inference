@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 18,
-  "updated": "2026-09-25T00:05:33Z",
+  "revision": 19,
+  "updated": "2026-09-25T00:07:23Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -266,37 +266,129 @@
     {
       "id": "E2C",
       "task": "E2C",
-      "slice": "all",
+      "slice": "1-4 (environment+preflight, RV-12 repairs, baseline+dependency triage, gate wrappers)",
       "agent": "opus",
       "branch": "codex/e2c-verify",
       "worktree": ".claude/worktrees/codex-e2c-verify",
       "base": "dff31efc",
-      "head": null,
+      "head": "3a113dc9",
       "isolation": {
         "ports": "postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e2c-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-24T21:40:00Z",
-      "blocker": null,
+      "updated": "2026-09-25T00:04:00Z",
+      "blocker": "tests/d decoy collision from tasklocal patch efad43e0 (wiring 2); S3 endpoint / pinned MinIO image absent: m/w stages and integration-l2 BLOCKED; task-local ports inside the ephemeral range (host sysctl, wiring 4)",
       "next_action": "Linux environment manifest + preflight; RV-12 harness fixes; dependency triage; wrappers (Makefile lines as wiring requests).",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 1,
+        "likely_h": 3,
+        "pessimistic_h": 6,
+        "confidence": "medium",
+        "basis": "after coordinator wiring 1-4 (Makefile, tasklocal decoy fix, pytest bump, port-reservation sysctl), rerun make consumer-local with S3 + E2 layer 2 provided to reach PASS or name the next blocker",
+        "at": "2026-09-25T00:04Z"
       },
-      "evidence": [],
-      "commands": [],
+      "evidence": [
+        "research/plan/evidence/e/E2C-3a113dc.md",
+        "tests/integration/ENVIRONMENT.md",
+        "tests/integration/environment.json"
+      ],
+      "commands": [
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -rfEs --durations=40 --junitxml=... (make api-test) @ dff31efc",
+          "exit": 0,
+          "summary": "3686 passed, 0 failed, 27 skipped (24 S3 endpoint, 3 empty default mutant subsets), 5 strict xfail, 1810.9 s"
+        },
+        {
+          "cmd": "same @ 48e02236 (head apps tree)",
+          "exit": 1,
+          "summary": "3679 passed, 8 failed, 27 skipped, 5 xfailed, 2705 s; 7 HarnessBusy on shared d2-valkey lock (rerun on e2c namespace: tests/d/test_outbox_relay.py 20 passed) + 1 test_pgharness decoy collision from coordinator patch efad43e0"
+        },
+        {
+          "cmd": "same @ 66fb1d38 (attempt 1)",
+          "exit": 2,
+          "summary": "invalid: infrx-d1-postgres failed to bind 55432 (ephemeral source port); 54 D failures; interrupted, leftover container removed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -rA tests/w/test_w4_mutants.py",
+          "exit": 0,
+          "summary": "109 passed; all five audit W4 ids killed; no survivor on Linux"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all ... tests/i/test_mutants.py",
+          "exit": 0,
+          "summary": "226 passed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all ... tests/g/test_mutants.py",
+          "exit": 1,
+          "summary": "339 passed, 1 failed (new Linux case lacked a mutant) -> host_memory_not_read added a54ff914, killed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all ... tests/w/test_w3_mutants.py",
+          "exit": 0,
+          "summary": "87 passed"
+        },
+        {
+          "cmd": "make bench-test",
+          "exit": 0,
+          "summary": "68 passed"
+        },
+        {
+          "cmd": "make console-test console-lint console-typecheck (pnpm install --frozen-lockfile exit 0)",
+          "exit": 0,
+          "summary": "289 pass / 0 fail; lint 0 errors 2 warnings; typecheck pass"
+        },
+        {
+          "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py",
+          "exit": 0,
+          "summary": "21 passed"
+        },
+        {
+          "cmd": "tests/integration/run.py --layer 1 --only-suites --no-mutants @ 3a113dc9",
+          "exit": 0,
+          "summary": "engine PASS, suites 232 passed 103 skipped"
+        },
+        {
+          "cmd": "tests/integration/consumer-local.sh (run 3)",
+          "exit": 1,
+          "summary": "FAIL: contracts PASS, d FAIL (decoy), m/w BLOCKED (S3 skips), g PASS, bench PASS, integration-l1 PASS, integration-l2 BLOCKED (MinIO pin absent)"
+        },
+        {
+          "cmd": "tests/integration/consumer-local.sh --break-seam readiness|expiry",
+          "exit": 1,
+          "summary": "FAIL, mutant killed (both)"
+        },
+        {
+          "cmd": "tests/integration/backend-certify.sh -- --box --target ...",
+          "exit": 4,
+          "summary": "INVALID without profile; with valid profile exit 3 NOT RUN, nothing started"
+        },
+        {
+          "cmd": "tests/integration/app-e2e.sh",
+          "exit": 3,
+          "summary": "NOT RUN: console PASS, browser journey NOT RUN (E3A)"
+        },
+        {
+          "cmd": "gh api .../dependabot/alerts; uv audit --frozen; pnpm audit --json",
+          "exit": 0,
+          "summary": "1 open alert: pytest<9.0.3 GHSA-6w46-j5rx-g56g medium, dev-only, not in runtime image; pnpm 0 vulns; relock trial pytest 9.1.1 only package change"
+        }
+      ],
       "owned_paths": [
         "tests/integration/",
-        "apps/infrx-api/tests/ (portability fixes only)"
+        "apps/infrx-api/tests/ (portability fixes only)",
+        "research/plan/evidence/e/E2C-3a113dc.md"
       ],
-      "deviation": "Program 22 V0: E2C may begin environment inventory in parallel with S3."
+      "deviation": "Program 22 V0: E2C may begin environment inventory in parallel with S3.",
+      "wiring_requests": [
+        "Makefile: consumer-local / backend-certify / app-e2e targets calling tests/integration/*.sh $(GATE_ARGS)",
+        "tasklocal.py: g8 valkey 55473->55483, e2c valkey 55474->55484, e2c s3 55475->55485, i8 valkey 55476->55486 (D decoys are postgres+40)",
+        "pyproject dev pytest>=9.0.3,<10 + uv lock (pytest 9.1.1 only)",
+        "host: sysctl net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999"
+      ]
     },
     {
       "id": "F2C-L",
@@ -729,33 +821,78 @@
     {
       "id": "G7",
       "task": "G7",
-      "slice": "all",
+      "slice": "1-4 (+WR-I8-3, revocation bound)",
       "agent": "opus",
       "branch": "codex/g7-catalog",
       "worktree": ".claude/worktrees/codex-g7-catalog",
       "base": "dff31efc",
-      "head": null,
+      "head": "2bbfe0e3",
       "isolation": {
         "ports": "postgres 55446 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g7-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-24T21:58:00Z",
-      "blocker": null,
+      "updated": "2026-09-25T00:05:00Z",
+      "blocker": "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3, else every PG success reads unavailable (410); legacy-regime discovery publishes nothing until D10's PgCatalogDirectory.usd_price (WR-3a)",
       "next_action": "Public capability discovery, alias pricing, persisted result expiry; route-level proof for F5; provisional card ids mapped (F11).",
       "estimate": {
-        "optimistic_h": null,
-        "likely_h": null,
-        "pessimistic_h": null,
-        "confidence": "unknown",
-        "basis": "not estimated at baseline (lane has not inspected its slice yet)",
-        "at": null
+        "optimistic_h": 1,
+        "likely_h": 3,
+        "pessimistic_h": 8,
+        "confidence": "medium",
+        "basis": "all points implemented and green; left: review fixes, rerun on M5/D10 adapters at merge, WR-1 default decision fallout",
+        "at": "2026-09-25T00:05:00Z"
       },
-      "evidence": [],
-      "commands": [],
-      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order."
+      "evidence": [
+        "research/plan/evidence/g/G7-2bbfe0e.md"
+      ],
+      "commands": [
+        {
+          "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops",
+          "exit": 0,
+          "summary": "567 passed (baseline 527)"
+        },
+        {
+          "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py",
+          "exit": 0,
+          "summary": "505 passed at e3ba286f: every G/uploads/jobs mutant killed (33 new G, 5 new jobs); revocation_outlives_key_ttl 1/1 killed at 2bbfe0e3"
+        },
+        {
+          "cmd": "cd apps/infrx-api && INFRX_D_TASK=g7 uv run --frozen pytest -q",
+          "exit": 1,
+          "summary": "3912 passed, 1 failed, 27 skipped, 5 xfailed: tests/d/test_pgharness decoy ('d2', 55473) collides with 640cedd4's g8 valkey port - coordinator patch, not G7"
+        },
+        {
+          "cmd": "make console-typecheck && make console-test",
+          "exit": 0,
+          "summary": "tsc clean; 351/351 after the v2 export union"
+        },
+        {
+          "cmd": "tests/integration/backend/test_endpoint_doc.py",
+          "exit": 0,
+          "summary": "10 passed"
+        }
+      ],
+      "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
+      "owned_paths": [
+        "apps/infrx-api/infrx/gateway/routes/",
+        "apps/infrx-api/openrouter/provider-models.json (deleted)",
+        "apps/infrx-api/tests/g/ (not ops/, not the host-metrics test)",
+        "research/plan/evidence/g/G7-2bbfe0e.md",
+        "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json"
+      ],
+      "wiring_requests": [
+        "WR-1 app.py: pilot -> models.assert_release_profile(rt.settings); needs MAX_VIDEO_SECONDS default 82 (limits.py:62, config.py:50/:99, test_config_and_imports.py:26) or fixtures (trial: 43 failures otherwise)",
+        "WR-2 pilot.py:287 price_source -> Probe(models.price_check(catalog, settings)); with D10 usd_price",
+        "WR-3 D10: PgCatalogDirectory.usd_price(model_revision), active_rate_card = listing's card, owned reads carry result_expires_at (new migration), optional listing_version/card-approved flag",
+        "WR-4 observe/metrics.py FAMILIES: infrx_large_body_slots_in_use, infrx_large_body_slots_limit, infrx_large_body_refused_total, infrx_intake_drained_total{code} (exact Specs in evidence)",
+        "WR-5 retire MODELS_DOC (config.py, README, deploy/preflight.py)",
+        "WR-6 E endpoint_doc.py Limits table: approved 82 s, card from price()",
+        "WR-7 A3 docs/models pages read the projection",
+        "fix 640cedd4 tasklocal g8 valkey 55473 vs tests/d D2 decoy"
+      ]
     },
     {
       "id": "G8",
@@ -1052,6 +1189,18 @@
       "lane": "E3C",
       "task": "E3C",
       "head": "8406c798"
+    },
+    {
+      "since": "2026-09-25T00:04:00Z",
+      "lane": "E2C",
+      "task": "E2C",
+      "head": "3a113dc9"
+    },
+    {
+      "since": "2026-09-25T00:05:00Z",
+      "lane": "G7",
+      "task": "G7",
+      "head": "2bbfe0e3"
     }
   ],
   "integration_queue": [
@@ -2019,6 +2168,38 @@
       "at": "2026-09-25T00:05:33Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-25T00:04:00Z",
+      "by": "E2C",
+      "what": "running → review; head 3a113dc9; estimate likely unknown → 3 h (after coordinator wiring 1-4 (Makefile, tasklocal decoy fix, pytest bump, port-reservation sysctl), rerun make consumer-local with S3 + E2 layer 2 provided to reach PASS or name the next blocker)",
+      "source": "updates/E2C-20260925T0004Z.json"
+    },
+    {
+      "at": "2026-09-25T00:05:00Z",
+      "by": "G7",
+      "what": "running → review; head 2bbfe0e3; estimate likely unknown → 3 h (all points implemented and green; left: review fixes, rerun on M5/D10 adapters at merge, WR-1 default decision fallout)",
+      "source": "updates/G7-20260925T0005Z.json"
+    },
+    {
+      "at": "2026-09-25T00:07:23Z",
+      "by": "tracker",
+      "what": "forecast E3C: unknown: no remaining-effort estimate for D10, E2C, G7, M5, W5 → unknown: no remaining-effort estimate for D10, M5, W5 (because: no remaining-effort estimate for D10, M5, W5)"
+    },
+    {
+      "at": "2026-09-25T00:07:23Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, M5, W5)"
+    },
+    {
+      "at": "2026-09-25T00:07:23Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, M5, U1R, U2, U3, U4, W5)"
+    },
+    {
+      "at": "2026-09-25T00:07:23Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, M5, U1R, U2, U3, U4, W5)"
     }
   ],
   "history": {
@@ -2113,10 +2294,18 @@
     "E3C-20260925T0003Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:03:00Z"
+    },
+    "E2C-20260925T0004Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:04:00Z"
+    },
+    "G7-20260925T0005Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:05:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:05:33Z",
+    "computed_at": "2026-09-25T00:07:23Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2126,8 +2315,8 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "unknown",
-        "text": "unknown: no remaining-effort estimate for D10, E2C, G7, M5, W5",
-        "constraint": "no remaining-effort estimate for D10, E2C, G7, M5, W5",
+        "text": "unknown: no remaining-effort estimate for D10, M5, W5",
+        "constraint": "no remaining-effort estimate for D10, M5, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2140,7 +2329,7 @@
         "gate": "BACKEND-READY",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E2C, E4C, G7, M5, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for D10, E1B, E4C, M5, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2153,7 +2342,7 @@
         "gate": "APP-LOCAL",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4C, G7, M5, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4C, M5, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2166,7 +2355,7 @@
         "gate": "APP-PILOT",
         "status": "blocked",
         "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E2C, E3A, E4, E4C, G7, I2A, I3, M5, U1R, U2, U3, U4, W5",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, M5, U1R, U2, U3, U4, W5",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
