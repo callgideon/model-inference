@@ -1,0 +1,520 @@
+[ok  ] e4b.b.preconditions: App and Lab stopped, window open, engine idle, clips present
+[ok  ] e4b.b.config-pin: tree and deployed engine match
+[ok  ] e4b.b.served-build: the gateway and the worker serve the report's tree bda15866e5700f3856d7142580da842fba9bbd23 (git), the gateway from the release image
+[PEND] e4b.b.recovery-box: I3B's runbook drills on the box (infra/runbooks: restart, restore, rollback, index-loss, disk, reconcile) are the coordinator's, recorded in E4B-release-decision.md
+[skip] e4b.a.protocol: --no-stack
+[skip] e4b.b.recovery: --no-stack
+[ok  ] e4b.a.sop-parity: {"verdict": "pass", "why": "2 clips", "cap_s": 82.0, "expected refusal (over MAX_VIDEO_SECONDS)": {"c012-bbb1080p30-1024x768-4x3": {"http_status": 400, "code": "unsupported_media", "param": "messages"}, "c025-tos720p-256…
+[FAIL] e4b.a.dataset-resume: ["usage recorded outside CREDIT: ['b8fb617e-18f4-4dfd-9fd3-9f2630f226cb', 'f7d82885-5179-42cc-b105-f94e85faa81a', 'f5433284-e6e2-4e0d-8224-6104a4845331', 'a12892e9-21ae-4019-86f5-05e51a32ab0e', 'ef662c26-696b-4051-8b12-8…
+[FAIL] e4b.b.envelope: {"supported_rate_per_s": 0.5, "client_exits": {"envelope-r0.5": 0, "envelope-r1.0": 0, "envelope-r2.0": 0}, "rungs": {"0.5": [["duration_cap", "pass", {"over_cap_not_refused": [], "within_cap_refused": [], "over_cap_refu…
+[PEND] e4b.b.soak: {"rate_per_s": 0.25, "seconds": 14400, "client_exit": 0, "verdicts": [["failure_rate", "pass", "3/3374 (3 platform-caused)", "BOX"], ["answered", "pass", "3371 accepted", "BOX"], ["host_growth_mib", "pass", "+13.19999999…
+[ok  ] e4b.b.overload: honest refusals
+[ok  ] release-identity: one clean tree: bda15866e5700f3856d7142580da842fba9bbd23
+{
+  "runner": "e4b-certify",
+  "protocol": "models/marlin2b/results/E4B-protocol.md",
+  "target": {
+    "kind": "remote",
+    "base_url": "http://127.0.0.1:8001/v1",
+    "engine_url": "http://127.0.0.1:8000",
+    "metered": true,
+    "bench_target": "gateway",
+    "model": "nemostation/marlin-2b@2026-09-01",
+    "scale": "box",
+    "label": "meas.",
+    "namespace": null,
+    "workdir": "/out/work",
+    "box": true,
+    "release_sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+    "inventory": "/e4b/inventory.txt",
+    "parity_baseline": "/e4b/parity-e0.jsonl",
+    "max_video_seconds": 82.0
+  },
+  "hashes": {
+    "git": {
+      "sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+      "dirty": false
+    },
+    "serving_version_json": "6b1024b662ee8e880842c2c14b2180ca9000aa90c695434426ae8e8557ddd318",
+    "serve_sh": "9e1f473bd7d8d7ac593468e2e4c4049b0bbff1c78f93cdbf72577b894fb6dd11",
+    "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+    "engine_options_digest_recomputed": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+    "runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+    "model_digests": {
+      "weight_shards": [
+        "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+        "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+      ],
+      "tokenizer": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "chat_template": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+    },
+    "contract_limits": "525eb083ecaa75879a4f0d6fdc0da643ef827d8373d6a5b7bd829c04db205ce9",
+    "migrations": "eeb1645c13546c3d2cf47fb743d4a171445841f2f04e1ec336413ddacbc9b57f",
+    "deploy_tree": "95a1d1a8a916303dff7f9c65f8b0a9a2f1ad6c7f9b01187c14e0e430704653b1",
+    "rollout_tree": "57f929f014a8145629b0a4cf247f19a5412fcc722287f512858347b2324742af",
+    "alert_rules": "8eec8014fdc120bd54a7779b69a7226d470198a5569c4f7cb6d131a37d5c1243",
+    "uv_lock": "cc572b804a41a86caeeff8e612da3a54730ea4cf84737662a8325ac9c93ec24d",
+    "infrx_package": "f4a7816d48cf3bcbb6e9d5dd34d99ca8d133361aa511ecea5d6e37597be6d1e9",
+    "published_release": {
+      "requested_model": "nemostation/marlin-2b@2026-09-01",
+      "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+      "runtime_image_ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+      "rate_card_version": "rc_marlin2b_20260901T000000Z_provisional_p01"
+    },
+    "gateway_image": "sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb",
+    "release_image": "sha256:cc2a80c9396f6ebec8cd151770a0b8f221a306a56364f2562f90afd82a1cbebb"
+  },
+  "backend_ready": "not decided by this runner: BACKEND-READY needs the box half and the coordinator's recorded decision (E4B-release-decision.md)",
+  "git_head": {
+    "sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+    "dirty": false
+  },
+  "git_head_end": {
+    "sha": "bda15866e5700f3856d7142580da842fba9bbd23",
+    "dirty": false
+  },
+  "namespace": "e2",
+  "started": "2026-09-24T20:29:25+00:00",
+  "seconds": 15076.2,
+  "exit_code": 1,
+  "stages": [
+    {
+      "stage": "e4b.b.preconditions",
+      "status": "PASS",
+      "detail": "App and Lab stopped, window open, engine idle, clips present",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.3,
+      "owners": null,
+      "measured": {
+        "next_servers": []
+      },
+      "label": null
+    },
+    {
+      "stage": "e4b.b.config-pin",
+      "status": "PASS",
+      "detail": "tree and deployed engine match",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": {
+        "current": {
+          "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+          "runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+          "engine_max_num_seqs": "8",
+          "contract_engine_max_num_seqs": 8,
+          "encoder_budget_tokens": 16384,
+          "profile_version": "v1",
+          "preparation_concurrency": 2,
+          "max_preparing_jobs": 8,
+          "max_video_seconds": 120.0,
+          "published_engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+          "published_runtime_image": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"
+        },
+        "deployed_max_video_seconds": 82.0,
+        "inventory_sha256": "81212a57ef04a74b297b21b9864958408d656b90e384693fde05828fd15974b1"
+      },
+      "label": null
+    },
+    {
+      "stage": "e4b.b.served-build",
+      "status": "PASS",
+      "detail": "the gateway and the worker serve the report's tree bda15866e5700f3856d7142580da842fba9bbd23 (git), the gateway from the release image",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.b.recovery-box",
+      "status": "PENDING",
+      "detail": "I3B's runbook drills on the box (infra/runbooks: restart, restore, rollback, index-loss, disk, reconcile) are the coordinator's, recorded in E4B-release-decision.md",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "BOX"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.a.protocol",
+      "status": "SKIP",
+      "detail": "--no-stack",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "STACK"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.b.recovery",
+      "status": "SKIP",
+      "detail": "--no-stack",
+      "at": "2026-09-24T20:29:26+00:00",
+      "seconds": 0.0,
+      "owners": [
+        "STACK"
+      ],
+      "measured": null,
+      "label": null
+    },
+    {
+      "stage": "e4b.a.sop-parity",
+      "status": "PASS",
+      "detail": {
+        "verdict": "pass",
+        "why": "2 clips",
+        "cap_s": 82.0,
+        "expected refusal (over MAX_VIDEO_SECONDS)": {
+          "c012-bbb1080p30-1024x768-4x3": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "c025-tos720p-2560x1080-ultrawide-rot180": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "c038-sintel1080p-480x854-portrait": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "c051-tos720p-360p-16x9": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "sop09-120s-640x360": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "sop10-120s-854x480-step_spans_segment_boundary": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          },
+          "sop11-120s-1280x720": {
+            "http_status": 400,
+            "code": "unsupported_media",
+            "param": "messages"
+          }
+        },
+        "not refused as over the cap": [],
+        "capacity twice, unjudged": [],
+        "baseline": "/e4b/parity-e0.jsonl",
+        "candidate": "/out/work/parity-candidate.jsonl",
+        "candidate_sha256": "6672c8f47fee85c6caf6a7cbfbb4c9b3a2d1bfb8942bfd5a04711be252896ee0"
+      },
+      "at": "2026-09-24T20:29:42+00:00",
+      "seconds": 15.9,
+      "owners": null,
+      "measured": null,
+      "label": "meas."
+    },
+    {
+      "stage": "e4b.a.dataset-resume",
+      "status": "FAIL",
+      "detail": [
+        "usage recorded outside CREDIT: ['b8fb617e-18f4-4dfd-9fd3-9f2630f226cb', 'f7d82885-5179-42cc-b105-f94e85faa81a', 'f5433284-e6e2-4e0d-8224-6104a4845331', 'a12892e9-21ae-4019-86f5-05e51a32ab0e', 'ef662c26-696b-4051-8b12-8dfde01d6888', '18757c52-5265-45bc-840f-d7991397dfcf', '0fcf0cc6-5129-44d8-a89c-fb8ac1b061b6', 'fa237128-03f8-4bb8-ad5e-a42cbf5e9b54', '7a5fcba5-0b37-4280-9523-b80145fba4dc', '6e6a2574-9266-47af-bb00-647fd31e38e9', '4a27d4b4-a9c0-4241-9512-5b6eafcb75fc', 'bcc29503-051f-41d5-87c5-be1fc01d6912', '1a0cb0e0-f709-4368-b904-24110b4676c4', '1caabeb4-0fa6-4454-8d4c-db5b6ef2f021', '088419b2-de17-430c-91fe-32a692cb4b28', '41458883-0f03-4ce8-a160-9e9c74690cbf', '15953e43-79c2-4b01-bf48-b730c8a96752', '0a853531-6dc3-4713-be75-313ef185d976', 'a7ad159f-b8a7-463b-9d1f-ffaeb8ce3404']",
+        "jobs without exactly one hold: {'7a5fcba5-0b37-4280-9523-b80145fba4dc': 0, '41458883-0f03-4ce8-a160-9e9c74690cbf': 0, 'fa237128-03f8-4bb8-ad5e-a42cbf5e9b54': 0, '0a853531-6dc3-4713-be75-313ef185d976': 0, 'a7ad159f-b8a7-463b-9d1f-ffaeb8ce3404': 0, '1a0cb0e0-f709-4368-b904-24110b4676c4': 0, 'f7d82885-5179-42cc-b105-f94e85faa81a': 0, 'ef662c26-696b-4051-8b12-8dfde01d6888': 0, 'a12892e9-21ae-4019-86f5-05e51a32ab0e': 0, '0fcf0cc6-5129-44d8-a89c-fb8ac1b061b6': 0, '1caabeb4-0fa6-4454-8d4c-db5b6ef2f021': 0, '088419b2-de17-430c-91fe-32a692cb4b28': 0, '18757c52-5265-45bc-840f-d7991397dfcf': 0, '15953e43-79c2-4b01-bf48-b730c8a96752': 0, 'bcc29503-051f-41d5-87c5-be1fc01d6912': 0, '4a27d4b4-a9c0-4241-9512-5b6eafcb75fc': 0, 'f5433284-e6e2-4e0d-8224-6104a4845331': 0, '6e6a2574-9266-47af-bb00-647fd31e38e9': 0, 'b8fb617e-18f4-4dfd-9fd3-9f2630f226cb': 0}",
+        "Σ charged 0.00818890 != ledger fall 0E-8"
+      ],
+      "at": "2026-09-24T20:35:23+00:00",
+      "seconds": 341.1,
+      "owners": null,
+      "measured": {
+        "dataset_version": "e4b-bda1586-20260924T202942Z",
+        "items": 24,
+        "cap_s": 82.0,
+        "first_run": {
+          "exit": 130,
+          "signalled": true,
+          "attempts": 16,
+          "accepted": 8
+        },
+        "resume": {
+          "exit": 0,
+          "attempts": 16,
+          "replayed": 5
+        },
+        "client_problems": null,
+        "cancelled_by_interruption": [
+          "6380282385676978ccb82c8deef3aa02",
+          "7bb9df8a2cb1b10dc653fe07e2b0b0a4",
+          "8a77ba1a486ee70b295838128ad95a77",
+          "c97d6fdfd2c8990af58b032a9f4ae567",
+          "ca993863bb56ca6a753937de82a20cc3"
+        ],
+        "cancelled_by_the_platform": [],
+        "sop": "MARLIN-SOP: no second accepted item, nothing re-sent after it was terminal, and 5 item(s) cancelled by the interruption (the client's own tear), each terminal after exactly one replay of its key; 0 cancelled by the platform (R106)",
+        "ledger": {
+          "before": "10000.00000000",
+          "after": "10000.00000000",
+          "reserved_after": "0.00000000"
+        }
+      },
+      "label": "meas."
+    },
+    {
+      "stage": "e4b.b.envelope",
+      "status": "FAIL",
+      "detail": {
+        "supported_rate_per_s": 0.5,
+        "client_exits": {
+          "envelope-r0.5": 0,
+          "envelope-r1.0": 0,
+          "envelope-r2.0": 0
+        },
+        "rungs": {
+          "0.5": [
+            [
+              "duration_cap",
+              "pass",
+              {
+                "over_cap_not_refused": [],
+                "within_cap_refused": [],
+                "over_cap_refused_for_capacity": [],
+                "cap_s": 82.0
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/126 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "pass",
+              "126 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "pass",
+              "0 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "pass",
+              "p95 2.4461, p50 1.245 over 60 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "fail",
+              "p95 77.3142, p50 14.478 over 126 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "pass",
+              "exit 0",
+              "BOX"
+            ]
+          ],
+          "1.0": [
+            [
+              "duration_cap",
+              "pass",
+              {
+                "over_cap_not_refused": [],
+                "within_cap_refused": [],
+                "over_cap_refused_for_capacity": [],
+                "cap_s": 82.0
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/126 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "pass",
+              "125 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "fail",
+              "1 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "pass",
+              "p95 2.2481, p50 1.21 over 60 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "fail",
+              "p95 79.8937, p50 13.524 over 125 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "pass",
+              "exit 0",
+              "BOX"
+            ]
+          ],
+          "2.0": [
+            [
+              "duration_cap",
+              "pass",
+              {
+                "over_cap_not_refused": [],
+                "within_cap_refused": [],
+                "over_cap_refused_for_capacity": [],
+                "cap_s": 82.0
+              },
+              "BOX"
+            ],
+            [
+              "failure_rate",
+              "pass",
+              "0/126 (0 platform-caused)",
+              "BOX"
+            ],
+            [
+              "answered",
+              "pass",
+              "103 accepted",
+              "BOX"
+            ],
+            [
+              "rejections",
+              "fail",
+              "23 refused within the cap",
+              "BOX"
+            ],
+            [
+              "ttft_p95_short",
+              "unknown",
+              "p95 None, p50 1.349 over 54 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "e2e_p95_per_clip_minute",
+              "fail",
+              "p95 95.0859, p50 15.865 over 103 accepted samples (needs 60)",
+              "BOX"
+            ],
+            [
+              "client_exit",
+              "pass",
+              "exit 0",
+              "BOX"
+            ]
+          ]
+        }
+      },
+      "at": "2026-09-24T20:43:31+00:00",
+      "seconds": 488.6,
+      "owners": null,
+      "measured": null,
+      "label": "meas."
+    },
+    {
+      "stage": "e4b.b.soak",
+      "status": "PENDING",
+      "detail": {
+        "rate_per_s": 0.25,
+        "seconds": 14400,
+        "client_exit": 0,
+        "verdicts": [
+          [
+            "failure_rate",
+            "pass",
+            "3/3374 (3 platform-caused)",
+            "BOX"
+          ],
+          [
+            "answered",
+            "pass",
+            "3371 accepted",
+            "BOX"
+          ],
+          [
+            "host_growth_mib",
+            "pass",
+            "+13.199999999999989 MiB over 476 samples",
+            "BOX"
+          ],
+          [
+            "gpu_growth_mib",
+            "unknown",
+            "+None MiB over 476 samples",
+            "BOX"
+          ],
+          [
+            "reconciled_at_end",
+            "unknown",
+            "drift None, unsettleable None",
+            "BOX"
+          ],
+          [
+            "latency_drift",
+            "pass",
+            "p50 2.795295 -> 2.880056",
+            "BOX"
+          ],
+          [
+            "client_exit",
+            "pass",
+            "exit 0",
+            "BOX"
+          ]
+        ],
+        "samples": 476
+      },
+      "at": "2026-09-25T00:40:35+00:00",
+      "seconds": 14224.1,
+      "owners": [
+        "BOX"
+      ],
+      "measured": null,
+      "label": "meas."
+    },
+    {
+      "stage": "e4b.b.overload",
+      "status": "PASS",
+      "detail": "honest refusals",
+      "at": "2026-09-25T00:40:42+00:00",
+      "seconds": 6.2,
+      "owners": null,
+      "measured": {
+        "attempts": 32,
+        "accepted": 8,
+        "refused": 24
+      },
+      "label": "meas."
+    },
+    {
+      "stage": "release-identity",
+      "status": "PASS",
+      "detail": "one clean tree: bda15866e5700f3856d7142580da842fba9bbd23",
+      "at": "2026-09-25T00:40:42+00:00",
+      "seconds": 0.0,
+      "owners": null,
+      "measured": null,
+      "label": null
+    }
+  ]
+}
+
+exit 1
