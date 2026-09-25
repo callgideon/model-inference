@@ -1,0 +1,25 @@
+{
+  "task": "E3C",
+  "slice": "phase 1 fix round: run lock, required-case manifest, control_verdict, INVALID[harness], fake-only guard, D10 readiness port",
+  "activity": "review",
+  "head": "fecf91a6",
+  "worktree": ".claude/worktrees/codex-e3c-integration",
+  "branch": "codex/e3c-integration",
+  "owned_paths": ["tests/integration/backend/e3c/", "research/plan/evidence/e/E3C-8406c79.md",
+                  "research/plan/evidence/coordinator/updates/E3C-20260925T0325Z.json"],
+  "commands": [
+    {"cmd": "pytest -q tests/integration/backend/e3c (before fix, new regressions)", "exit": 1, "summary": "15 failed, 12 passed"},
+    {"cmd": "pytest -q tests/integration/backend/e3c (after)", "exit": 0, "summary": "27 passed"},
+    {"cmd": "pytest -q tests/integration/backend (layer 0)", "exit": 0, "summary": "145 passed, 79 skipped"},
+    {"cmd": "runner.py --s3-image pgsty/minio@sha256:b6bfe723... --out /tmp/e3cfix/run", "exit": 1,
+     "summary": "20 failed, 48 passed, 4 skipped; same matrix as run 3; no INVALID[harness], no absent required case; teardown clean"},
+    {"cmd": "second runner.py while the lock is held", "exit": 3, "summary": "gate BLOCKED, no stage run, stack untouched"},
+    {"cmd": "git merge-tree --write-tree claude/consumer-v1 codex/e3c-integration", "exit": 0, "summary": "no conflicts"}
+  ],
+  "estimate": {"optimistic_h": 3, "likely_h": 6, "pessimistic_h": 12, "confidence": "medium",
+               "basis": "unchanged: phase 2 reruns per merged SHA plus seam re-pointing and the two revert controls",
+               "at": "2026-09-25T03:25Z"},
+  "blockers": ["WR-2 pinned MinIO digest 401 (--s3-image deviation)", "phase 2 needs D10, M5, M6, W5, G7, G8, I8, E1C, F2C merged"],
+  "wiring_requests": ["WR-1..WR-4 unchanged (see evidence)"],
+  "evidence": ["research/plan/evidence/e/E3C-8406c79.md"]
+}
