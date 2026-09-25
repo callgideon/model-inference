@@ -224,6 +224,12 @@ MUTANTS = (
        "work doors as inference (CreditWork in the CREDIT regime)",
        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
        "runner=PreparationRunner(jobs=store, media=media,", COMPOSE),
+    _m("main_readiness_not_wired", "W5: preparation claims through D10's marker-gated "
+       "ReadinessStore", MAIN, "limits=limits, readiness=PgLifecycle(connect, limits=limits)),",
+       "limits=limits),", COMPOSE),
+    _m("main_reconciliation_not_wired", "S3 F4: the reaper publishes the reconciliation gauges",
+       MAIN, "                            reconciliation=PgReconciliation(connect),\n", "",
+       COMPOSE),
     _m("main_attach_not_durable", "preparation reads the attach D2's tables record",
        MAIN, "    media.attachments = PgAttachments(connect)", "    pass", COMPOSE),
     _m("main_preparation_on_the_inference_kind", "the pool claims prepare_dispatch",

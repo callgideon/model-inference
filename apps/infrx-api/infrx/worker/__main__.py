@@ -56,11 +56,12 @@ from ..media.prepare import MediaPreparation, ProcessingCache
 from ..observe.metrics import Registry
 from ..state.jobstore import PgJobStore, PreparedWork
 from ..state.journal import PgStreamStore
+from ..state.lifecycle import PgLifecycle
 from .attempt import AttemptRunner
 from .engine import VllmEngine
 from .loop import WorkerLoop
 from .preparation import PreparationRunner
-from .service import WorkerService
+from .service import PgReconciliation, WorkerService
 
 log = logging.getLogger("infrx.worker")
 
@@ -143,10 +144,12 @@ def compose(settings, *, objects=None, index=None):
     preparation = WorkerLoop(
         scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
-                                 limits=limits), limits=limits)
+                                 limits=limits, readiness=PgLifecycle(connect, limits=limits)),
+        limits=limits)
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
+                            reconciliation=PgReconciliation(connect),
                             metrics=rt.metrics, pool=pool, preparation=preparation,
                             preparation_concurrency=limits.preparation_concurrency)
     return service, pool

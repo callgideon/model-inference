@@ -44,9 +44,11 @@ from infrx.media.attachments import PgAttachments
 from infrx.media.prepare import MediaPreparation, ProcessingCache
 from infrx.media.store import InMemoryObjectStore
 from infrx.state.jobstore import PgJobStore
+from infrx.state.lifecycle import PgLifecycle
 from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request
 from infrx.worker import __main__ as worker_main
 from infrx.worker.fakes import m2_local_uri
+from infrx.worker.service import PgReconciliation
 from infrx.worker.preparation import (MEMO_ENTRIES, CountMemo, PreparationRunner,
                                       PreparationResult, VIDEO_TOKEN_ID, engine_prompt_tokens,
                                       memo_key)
@@ -817,6 +819,9 @@ def test_prep_worker__the_worker_composes_the_preparation_pool(tmp_path):
                                                           PgAttachments)
     assert runner.media.cache.root == str(tmp_path / "cache")
     assert worker.engine.local_uri == runner.media.local_uri
+    # W5: the marker-gated claim and manifest (D10), and S3 F4's reconciliation reader
+    assert isinstance(runner.readiness, PgLifecycle), runner.readiness
+    assert isinstance(worker.reconciliation, PgReconciliation), worker.reconciliation
 
 
 def test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup(tmp_path):
