@@ -8,8 +8,10 @@
 
 What it does, each line printed as `PASS|FAIL <what> <detail>`:
   schema   with SCHEMA_PROOF_DSN: that database's `supabase_migrations.schema_migrations`
-           (read-only) holds exactly the candidate's files - same versions, same sha256 of the
-           statements migrate.py recorded - so the proof below is about THAT catalog
+           (read-only) holds exactly the candidate's files - same versions, and each version's
+           statements are the file (migrate.py: byte for byte; the Supabase CLI's split: every
+           statement verbatim, in order, nothing else but whitespace, `;` and comments) - so the
+           proof below is about THAT catalog
   <suite>  `git archive <target> apps/infrx-api` into the scratch dir, the candidate's
            `apps/app/supabase/migrations` in place of the target's own, and the candidate's
            task-local port registry (test data only: the old one lacks newer lanes' ports);
@@ -17,7 +19,8 @@ What it does, each line printed as `PASS|FAIL <what> <detail>`:
            PROBE), one pytest process each, on its own harness - which builds its database
            from the migration directory it finds, i.e. the candidate's 0001..NNNN, so its
            admit/claim/settle/journal/read SQL runs on that catalog. The SHAPE cases are
-           deselected by name and printed as SKIP with their reason.
+           deselected by name and printed as SKIP with their reason. A suite PASSes only
+           when pytest exits 0 with at least one pass and no skip (pytest exits 0 on skips).
 Exit 0 every line PASS, 1 any FAIL, 2 usage. `through` = the candidate's newest migration.
 Only task-local services: --task's PostgreSQL and Valkey (the candidate's registry); the DSN is read.
 """
@@ -106,16 +109,35 @@ def candidate_files(rev: str) -> dict[str, str]:
             for name in names if re.fullmatch(r"\d{4}_[a-z0-9_]+\.sql", Path(name).name)}
 
 
+# What may sit around the Supabase CLI's statements in a file: whitespace, `;` and comments (a
+# line comment ends at its newline). Anything else is SQL the history does not hold.
+GAP = re.compile(r"(?:\s|;|--[^\n]*\n|/\*.*?\*/)*", re.S)
+END = re.compile(r"(?:\s|--[^\n]*\n|/\*.*?\*/)*(?:;|\Z)", re.S)     # a statement ends at its `;`
+
+
+def covers(parts: list[str], text: str) -> bool:
+    """The CLI's rows ARE the file: whole statements, verbatim and in order, with only GAP before,
+    between and after them - nothing omitted, added, reordered or cut. A statement may carry
+    the comment in front of it, so it may start anywhere GAP reaches."""
+    text, pos = text + "\n", 0
+    for part in (p.strip() for p in parts):
+        at = next((i for i in range(pos, GAP.match(text, pos).end() + 1)
+                   if part and text.startswith(part, i) and GAP.fullmatch(text, pos, i)), None)
+        if at is None or not (part.endswith(";") or END.match(text, at + len(part))):
+            return False
+        pos = at + len(part)
+    return GAP.fullmatch(text, pos) is not None
+
+
 def compare(history: list[tuple[str, list[str]]], files: dict[str, str]) -> str | None:
     """None when the history rows (version, statements) are exactly `files`, else why not.
-    migrate.py records a file as one statement (compared byte for byte); the Supabase CLI
-    splits it (each statement must be a verbatim part of the file)."""
+    migrate.py records a file as one statement (byte for byte); the Supabase CLI splits it
+    (`covers`: the statements, in order, are the whole file)."""
     seen = dict(history)
     if sorted(seen) != sorted(files):
         return f"history x{len(seen)} vs candidate x{len(files)}: only in history " \
                f"{sorted(set(seen) - set(files))}, only in candidate {sorted(set(files) - set(seen))}"
-    moved = sorted(v for v, parts in seen.items() if parts != [files[v]] and not (
-        len(parts) > 1 and all(p.strip() and p.strip() in files[v] for p in parts)))
+    moved = sorted(v for v, parts in seen.items() if parts != [files[v]] and not covers(parts, files[v]))
     return f"statements differ from the candidate's files: {moved}" if moved else None
 
 
@@ -171,7 +193,10 @@ def run_suite(api: Path, suite: str, env: dict[str, str]) -> tuple[bool, str]:
     log.parent.mkdir(exist_ok=True)
     log.write_text(done.stdout + done.stderr)
     tail = [line for line in done.stdout.splitlines() if line.strip()][-1:] or ["(no output)"]
-    return done.returncode == 0, tail[0]
+    # pytest exits 0 on skips, and the old suites skip themselves without Docker, psycopg or
+    # Valkey: a suite that skipped a case, or passed none, did not run the old SQL
+    ran = re.search(r"\b[1-9]\d* passed\b", tail[0]) and not re.search(r"\bskipped\b", tail[0])
+    return done.returncode == 0 and bool(ran), tail[0]
 
 
 def main(argv=None) -> int:

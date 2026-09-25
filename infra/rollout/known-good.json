@@ -16,6 +16,7 @@
       "schema_proof": {"through": "0023", "result": "4226315: its own tests/d (26 suites, 387 passed, 10 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0023; migrate.py history check PASS",
                        "candidate": "0001-0021 main, 0022 codex/d10-followup c584f54a, 0023 codex/door-revoke 1d0a418d (merged at c99286f0)",
                        "not_proven": "the infrx_runtime login (0023 revokes admit/claim_preparation from it: revert on the target's own env DSN); hosted pre-window rows; the Supabase image",
+                       "files": {"0019": "65d3d6937766ad6e4c8550e5cc6877a610d19a19398a71954a4030e39f0d169a", "0020": "06a5dfde0c342ef4666a715e411915fd5e192f2791424a29efbaa66b710e2ec4", "0021": "2aea0c8e1aa1048a9fdb8cec02f107c161651210879d35d3e159e509335f6425", "0022": "1f44b4ae89506dc75cb1d9cbf26208935906058833a18fa518518085aea5e706", "0023": "0ea64faa5c15aa4aff0735b843530491d3c46beedaf4c23e24bfaab262b17f46"},
                        "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"]},
       "evidence": ["models/marlin2b/results/E4B-box-4226315/run2-20260924T172244Z",
                    "models/marlin2b/results/E1B-box-4226315/run2-distinct-keys",
@@ -29,6 +30,7 @@
       "schema_proof": {"through": "0023", "result": "bda1586: its own tests/d (26 suites, 387 passed, 10 SHAPE cases skipped by name, 5 xfailed) + the result-read probe PASS on 0001-0023; migrate.py history check PASS",
                        "candidate": "0001-0021 main, 0022 codex/d10-followup c584f54a, 0023 codex/door-revoke 1d0a418d (merged at c99286f0)",
                        "not_proven": "the infrx_runtime login (0023 revokes admit/claim_preparation from it: revert on the target's own env DSN); hosted pre-window rows; the Supabase image",
+                       "files": {"0019": "65d3d6937766ad6e4c8550e5cc6877a610d19a19398a71954a4030e39f0d169a", "0020": "06a5dfde0c342ef4666a715e411915fd5e192f2791424a29efbaa66b710e2ec4", "0021": "2aea0c8e1aa1048a9fdb8cec02f107c161651210879d35d3e159e509335f6425", "0022": "1f44b4ae89506dc75cb1d9cbf26208935906058833a18fa518518085aea5e706", "0023": "0ea64faa5c15aa4aff0735b843530491d3c46beedaf4c23e24bfaab262b17f46"},
                        "evidence": ["research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md"]},
       "evidence": ["models/marlin2b/results/E1B-box-bda1586/bench.jsonl",
                    "research/plan/evidence/coordinator/2026-09-22-session-02.md"]
