@@ -305,10 +305,6 @@ def test_stack__os_processes_window_and_tenants(minio, tmp_path):
 
 
 @needs_stack
-@pytest.mark.xfail(strict=True, reason=(
-    "D10.a (dee59ed8): 0019's infrx.lifecycle_code lacks F2C's `media_refused` (3a21e0bf), "
-    "so upload_abort refuses it as invalid_request and the ticket stays open - D10 aligns "
-    "0019/0020 with F2C's UPLOAD_ABORT_REASONS; this case then passes and must be un-marked"))
 def test_stack__os_processes_a_probe_refusal_is_final_on_postgres(minio, tmp_path):
     """Bytes the probe refuses (not a container) abort the ticket durably with F2C's
     `media_refused`: the completion is `unsupported_media`, the row says `aborted`, and a

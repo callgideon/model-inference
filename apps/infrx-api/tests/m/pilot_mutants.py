@@ -155,8 +155,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_mpilot__a_replay_whose_attach_record_is_unreachable_is_retryable"),
     _m("attach_record_not_composed",
        "create_app from settings gives M's store the durable attach record on D's pool",
-       "gateway/pilot.py", "        job_org=relay.job_org, attachments=attachments)",
-       "        job_org=relay.job_org)",
+       "gateway/pilot.py",
+       "        job_org=relay.job_org, attachments=attachments, uploads=lifecycle, content=lifecycle)",
+       "        job_org=relay.job_org, uploads=lifecycle, content=lifecycle)",
        "test_mpilot__the_pilot_composition_records_the_attach_on_its_pool"),
 )
 

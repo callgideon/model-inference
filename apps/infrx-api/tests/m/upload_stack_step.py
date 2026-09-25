@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import functools
+import inspect
 import json
 import os
 import sys
@@ -74,17 +75,23 @@ def compose(authority: str, die_after: str | None):
     config.deployment = config.deployment.replace(accounting_regime="credit")
     config.pilot = config.pilot.replace(active_rate_card_version=catalog.rate_cards[
         gs.IDS.prod_deployment].rate_card_version)
+    injected = {}
     if authority == "durable":
         from infrx.state.jobstore import connector
         from infrx.state.lifecycle import PgLifecycle                   # D10
         lifecycle = PgLifecycle(connector(os.environ["M5_DSN"]), limits=config.pilot)
         tickets = DiesAfter(lifecycle, step) if step in ("acknowledge_put", "complete") \
             else lifecycle
-        # M5 wiring request 1, as the pilot will compose it.
-        pilot.MediaUploads = functools.partial(MediaUploads, uploads=tickets, content=lifecycle)
+        if "lifecycle" in inspect.signature(pilot.build_ingress_deps).parameters:
+            # M5 wiring request 1 applied: through `create_app`'s adapters, as the pilot
+            # hands it D10's adapter (content only `register`s, which DiesAfter passes on).
+            injected["lifecycle"] = tickets
+        else:
+            pilot.MediaUploads = functools.partial(MediaUploads, uploads=tickets,
+                                                   content=lifecycle)
     app = create_app(config, client=gs.upstream(), sb=keyed_identities(), catalog=catalog,
                      stream=Journal(jobs), objects=objects, jobs=jobs,
-                     index=MemoryScheduler(harness.clock.now))
+                     index=MemoryScheduler(harness.clock.now), **injected)
     return app, jobs
 
 

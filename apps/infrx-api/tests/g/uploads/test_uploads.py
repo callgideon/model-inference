@@ -663,7 +663,7 @@ def test_media_sec__completion_projects_the_ref():
     assert set(body) == set(fixture) and set(body["media"]) == set(fixture["media"])
     assert (body["upload_handle"], body["state"]) == (handle, "finalized")
     assert (body["media"]["digest"], body["media"]["bytes"]) == (DIGEST, len(CLIP))
-    ref = store.refs[(ORG_A, handle)]
+    ref = asyncio.run(store.resolve_owned(ORG_A, handle))
     assert ref.storage_ref not in done.text and ORG_A not in done.text
     assert retry.status_code == 200 and retry.content == done.content
 
