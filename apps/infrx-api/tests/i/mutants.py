@@ -806,8 +806,8 @@ MUTANTS += (
 SSM, STEP = "../../infra/rollout/ssm.sh", "../../infra/rollout/steps/"
 MUTANTS += (
     _m("ssm_drops_arguments", "a step runs with the arguments it was given",
-       SSM, """b64=$( { printf '%s' "$header"; cat "$step"; } | base64 -w0)""",
-       """b64=$( { cat "$step"; } | base64 -w0)""",
+       SSM, """b64=$( { printf '%s' "$header"; cat -- "$step"; } | base64 -w0)""",
+       """b64=$( { cat -- "$step"; } | base64 -w0)""",
        "test_backend_deploy__ssm_carries_a_step_byte_for_byte"),
     _m("ssm_ignores_status", "a failed invocation is a failed step",
        SSM, '[ "$status" = Success ]', "true",
