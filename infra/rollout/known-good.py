@@ -13,9 +13,11 @@ Checks, each printed with its evidence:
                 composition root runs a PreparationRunner (27af05a has neither)
   migrations    every migration the tree carries is applied on hosted (<= --applied, the
                 version `migrate.py plan` reports). Hosted AHEAD of the tree passes only with
-                the record's `schema_proof` {"through": NNNN, "evidence": [...]} reaching
-                --applied: brief §I8.6 wants additive compatibility PROVEN with both versions
-                (the old code's store tests on the newer schema), not assumed
+                the record's `schema_proof` {"through": NNNN, "files": {NNNN: sha256},
+                "evidence": [...]} reaching --applied: brief §I8.6 wants additive compatibility
+                PROVEN with both versions (the old code's store tests on the newer schema), not
+                assumed. With `files`, this checkout's migrations beyond the tree through
+                --applied must be those bytes: a revised 0022 is not the one proven
   config        every tunable name the current install passes (--set, INFRX_SET's names)
                 exists in the candidate's preflight schema - else its install refuses
   record        infra/rollout/known-good.json lists it known_good with evidence files that
@@ -27,6 +29,7 @@ Exit 0 KNOWN-GOOD, 1 NOT-KNOWN-GOOD, 2 usage.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -77,13 +80,18 @@ def judge(sha: str, applied: str, sets: list[str], bundles: str | None, registry
     versions = sorted(Path(f).name[:4] for f in files if re.match(r"\d{4}_", Path(f).name))
     newest = versions[-1] if versions else "0000"
     proof = (entry or {}).get("schema_proof") or {}
+    here = {p.name[:4]: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in (repo / MIGRATIONS).glob("[0-9][0-9][0-9][0-9]_*.sql")}
+    drift = [f"{n:04d}" for n in range(int(newest) + 1, int(applied) + 1) if "files" in proof
+             and (f"{n:04d}" not in here or proof["files"].get(f"{n:04d}") != here[f"{n:04d}"])]
     proven = (proof.get("through", "0000") >= applied and bool(proof.get("evidence"))
-              and all((repo / p).exists() for p in proof["evidence"]))
+              and all((repo / p).exists() for p in proof["evidence"]) and not drift)
     check("migrations", newest == applied or (newest < applied and proven),
           f"tree carries up to {newest}; hosted has {applied}"
           + ("" if newest >= applied else
              f"; applied beyond the tree: {int(newest) + 1:04d}-{applied} "
              + (f"(proven: {proof['evidence']})" if proven else
+                f"but this checkout's {drift} are not the bytes its schema_proof ran on" if drift else
                 "with no schema_proof reaching it: prove the old code on the newer schema")))
     names = schema_names(show(repo, sha, "apps/infrx-api/deploy/preflight.py") or "")
     missing = sorted(set(sets) - names)

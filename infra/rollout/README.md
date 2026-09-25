@@ -51,6 +51,27 @@ export INSTANCE=i-0e8449a4ffca29bab
 | Rollback target after migrations 0019+ | Once hosted carries migrations 0019 or later, **no recorded target qualifies** (`known-good.py` refuses one without a `schema_proof` reaching the applied migration) until a `schema_proof` entry exists for it - that proof is the KNOWN-GOOD-PROOF lane's, not this runbook's. Meanwhile the [known-good rollback](../runbooks/rollback.md#known-good-rollback-drill) has no target (bda1586 and 4226315 are recorded without one) and R3 (maintenance) is the fallback. Steps 71/72/74/80/81/86 also answer `BLOCKED ... I8+ checkout` (exit 3) on such a checkout |
 | R4 - the host itself | `aws ec2 create-replace-root-volume-task --instance-id $INSTANCE --snapshot-id $snap` then `aws ec2 describe-replace-root-volume-tasks --filters Name=instance-id,Values=$INSTANCE` until `succeeded` (the instance reboots; the instance-store NVMe - weights, media cache - survives a reboot), then step 3. RTO est. 10-20 min (§6), ⚠️ TO BE VERIFIED by I3B. Hosted migrations are additive and are **not** reverted (§8 rule 4) |
 
+**Rollback targets after the window applies 0019+ (KNOWN-GOOD-PROOF).** R2 and the O12 drill
+return to a release from `known-good.json`; with hosted ahead of that release's tree,
+`known-good.py` accepts it only through its record's `schema_proof`. `bda1586` and `4226315`
+carry `through: 0023` (0001-0021 as on main, 0022 from `codex/d10-followup` c584f54a, 0023 from
+`codex/door-revoke` 1d0a418d): each release's own `tests/d` (admission, preparation/claim and
+leases, settlement in both regimes, journal/stream, outbox relay, operations, signup, catalog,
+gateway composition over PostgreSQL) and a probe of its result read after a committed outcome
+passed on a database built from those files. `infra/runbooks/schema_proof.py <sha>` reruns it
+task-locally; with `SCHEMA_PROOF_DSN` it also checks, read-only, that a migrated database's
+history is exactly those files: run that against hosted after step 6, before relying on the
+proof. Each `schema_proof` also records the sha256 of 0019-0023 (`files`), and `known-good.py`
+refuses a checkout whose migrations beyond the target's tree are other bytes; the driver counts
+a suite that skipped a case or passed none as FAIL, and accepts a Supabase CLI history only when
+its statements, in order, are the whole file. Not proven: any migration after 0023, or a
+0022/0023 other than those bytes (rerun, then add the new `through` and `files`); the old release on the `infrx_runtime` login (0023 revokes
+`admit`/`claim_preparation` from it on purpose, so revert with the target's own env file, which
+R2 restores: the login the release ran on, which cannot be `infrx_runtime`, created by 0021); hosted rows written before the window (the proof uses
+fresh rows); the Supabase image (plain PostgreSQL plus the shim). Ten old cases that list the
+old catalog or read a result before its outcome are skipped by name, each with its reason
+(`SHAPE` in the driver). If no record reaches `--applied`, R3 maintenance is the only fallback.
+
 ## 3. What changes for clients (legacy-account transition)
 
 P-02 is resolved: the four hosted accounts hold USD 0.00 and are dev/e2e accounts that
@@ -102,3 +123,5 @@ that residual risk and its bound).
   `--help`/a non-file before any aws call; 45-s3-check pins uv.lock's pytest 9.1.1; the
   pre-I8 checkout guard (exit 3) on 71/72/74/80/81/86; rehearse.sh's worker `infrx_build_info`
   check reads the whole body. Not run on the box.
+- 2026-09-25 (KNOWN-GOOD-PROOF): `bda1586` and `4226315` proven on migrations 0001-0023 (the `schema_proof` entries in `known-good.json`; driver `infra/runbooks/schema_proof.py`; evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`). Only the task-local database was used; hosted and the box were not touched.
+- 2026-09-25 (KNOWN-GOOD-PROOF fix round): `schema_proof.files` binds the proven 0019-0023 bytes (`known-good.py` refuses others); the driver fails a skipped or pass-less suite and a CLI history that omits, reorders or cuts statements; proof rerun on both targets (evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`, section Fix round). Task-local only.
