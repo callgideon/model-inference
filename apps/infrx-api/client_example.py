@@ -7,6 +7,7 @@ an operator provisions the key (`python -m infrx.operations.cli issue-key ...
 else is the public API.
 
     export INFRX_API_KEY="$(cat sweep.key)"          # never on argv; refused there
+    python -m infrx.operations.cli statement --key-file sweep.key   # exact CREDIT state
     python client_example.py quickstart --base https://<host>/v1 \\
         --video https://example.com/clip.mp4                        # or --find "event"
     python client_example.py sweep --base https://<host>/v1 \\
@@ -21,7 +22,8 @@ mount their routes; against today's endpoint it answers 404 and is recorded as q
 
 A manifest line is one item (§3.1-3.2): `dataset_version, source_id, episode_id,
 segment_index, start_s, end_s, prompt, prompt_version, profile_version, video`, where
-`video` is a local file (data form) or an http(s) URL of at most 120 s. The
+`video` is a local file (data form) or an http(s) URL no longer than the deployment's
+finite-video cap (82 s on the pilot; the server refuses longer clips). The
 `Idempotency-Key` is `sop1.<item_key>`, a pure function of those fields, so a resumed
 item re-sends the same key and the same payload: the server replays the original
 outcome instead of accepting a second, billable item.

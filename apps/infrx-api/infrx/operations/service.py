@@ -36,6 +36,7 @@ from ..contracts.v2.money_units import Credit
 from ..contracts.v2.records import (AuthContextV2, BalanceV2, CredentialAudience,
                                     DeploymentRevision, DeploymentState, DigestSource,
                                     RateCardSnapshot, ServingRevision, Visibility, WalletRef)
+from .transition import unapproved
 from .ports import (AUDIT_ACTIONS, SUSPENSION_REASONS, AccountView, AuditEntry, AuditLog,
                     IdentityDirectory, KeyRow, Ledger, Registry, TenantStore, VerifiedIdentity)
 
@@ -48,14 +49,15 @@ _ALPHABET = string.ascii_letters + string.digits
 MAX_IDEMPOTENCY_KEY = 255
 MAX_REASON = 500                         # audit_entries.reason CHECK 1..500
 
-# D1's action vocabulary is closed and has no word for key, publication, cancellation
-# or reconciliation writes. Each operation is filed under the nearest action and names
-# itself in `after.operation`; the evidence asks D for dedicated actions.
+# Each operator write under its own 0009 audit action (G8: a reconciliation or an
+# adjustment filed as a grant misreads in an audit); it also names itself in
+# `after.operation`. `transition` flips the platform-wide admission flags (no org).
 ACTION = {
-    "key_issue": "admin_set_entitlements", "key_revoke": "admin_set_entitlements",
-    "publish": "admin_set_entitlements", "job_cancel": "admin_set_entitlements",
-    "suspension": "admin_set_suspension",
-    "signup_grant": "admin_grant", "adjustment": "admin_grant", "reconcile": "admin_grant",
+    "key_issue": "admin_key_issue", "key_revoke": "admin_key_revoke",
+    "publish": "admin_publish", "job_cancel": "admin_job_cancel",
+    "suspension": "admin_set_suspension", "signup_grant": "admin_grant",
+    "adjustment": "admin_adjust", "reconcile": "admin_reconcile",
+    "transition": "admin_set_entitlements",
 }
 assert set(ACTION.values()) <= set(AUDIT_ACTIONS)
 
@@ -101,6 +103,9 @@ class Operations:
     jobs: Any                            # v1 `contracts.ports.JobStore`
     accounts: AccountView
     clock: Callable[[], datetime]
+    # G8: the regime transition's flags and inventory (`transition.PgTransition`); only
+    # the PostgreSQL composition has one - a fake world has no regime to switch.
+    transitions: Any = None
 
     async def _context(self, secret: str) -> AuthContextV2:
         if not secret:
@@ -158,6 +163,16 @@ class TenantSession:
         wallet = await self.ops.wallets.consumer_wallet_for_user(self.auth.user_id)
         return BalanceV2.of(v2ports.resolve_wallet(self.auth, wallet))
 
+    async def statement(self) -> dict:
+        """G8: the individual's own exact CREDIT state - available, reserved and spent as
+        exact decimal strings - beside its holds and per-unit usage (R73). The wallet is
+        the credential's individual's (R66), never looked up by an id anyone supplied."""
+        balance, holds, usage = await self.balance(), await self.holds(), await self.usage()
+        return {"org_id": self.auth.org_id, "user_id": self.auth.user_id,
+                "credit": {**balance.model_dump(mode="json", exclude=_NOT_CREDIT),
+                           **_spent(usage)},
+                "holds": [_hold(h) for h in holds], "usage_totals": usage.totals()}
+
     async def quote(self, requested_model: str):
         """The pins and card a request for this model would be admitted at now.
         Private-to-others is NotFound (R70); unpriced is InvalidRequest (R69)."""
@@ -191,17 +206,24 @@ class OperatorSession:
             raise errors.InvalidRequest("an operator write states a reason of 1..500 characters")
         prior = await self.ops.audit.by_idempotency_key(idempotency_key)
         if prior is not None:
-            if prior.after.get("operation") != operation or prior.after.get("request") != request:
-                raise errors.IdempotencyConflict("this idempotency key recorded a different "
-                                                 "operator write")
-            return prior.after["result"], True
+            return _recorded(prior, operation, request), True
         operation_id = stable_id(operation, idempotency_key)
         before, result = await write(operation_id)
-        await self.ops.audit.append(AuditEntry(
-            id=operation_id, at=self.ops.clock(), actor_principal=self.principal,
-            action=ACTION[operation], target_org_id=target_org_id, reason=reason, before=before,
-            after={"operation": operation, "request": request, "result": result},
-            idempotency_key=idempotency_key))
+        try:
+            await self.ops.audit.append(AuditEntry(
+                id=operation_id, at=self.ops.clock(), actor_principal=self.principal,
+                action=ACTION[operation], target_org_id=target_org_id, reason=reason,
+                before=before,
+                after={"operation": operation, "request": request, "result": result},
+                idempotency_key=idempotency_key))
+        except errors.Conflict:
+            # G8: a concurrent call under the same key (a callback retry racing its original)
+            # recorded first; the ports deduped the write on the operation id, and the
+            # recorded row is the answer - never the raw unique violation. Nothing retried.
+            prior = await self.ops.audit.by_idempotency_key(idempotency_key)
+            if prior is None:
+                raise
+            return _recorded(prior, operation, request), True
         return result, False
 
     async def _identity(self, user_id: str) -> VerifiedIdentity:
@@ -211,6 +233,28 @@ class OperatorSession:
             # for an individual whose verification is not recorded.
             raise errors.NotFound("no verified individual with that id")
         return identity
+
+    # --- G8: the trusted account read -------------------------------------------
+    async def account(self, user_id: str) -> dict:
+        """A verified individual's personal consumer account, resolved from the v2
+        identity - the organization the individual created and owns, which the wallet
+        binding then freezes - never from whichever membership came first. A wallet bound
+        to another organization is Forbidden (R66). Exact CREDIT strings; a read, so no
+        audit row."""
+        identity = await self._identity(user_id)
+        org = identity.personal_org_id
+        wallet = None
+        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:
+            wallet = await self.ops.bound_wallet(identity)
+        usage = await self.ops.accounts.usage(org)
+        credit = ({"wallet_id": None, "unit": "CREDIT"} if wallet is None else
+                  BalanceV2.of(wallet).model_dump(mode="json", exclude=_NOT_CREDIT))
+        return {"user_id": user_id, "personal_org_id": org,
+                "verification_evidence_ref": identity.verification_evidence_ref,
+                "suspension": await self.ops.tenants.suspension(org),
+                "credit": {**credit, **_spent(usage)},
+                "holds": [_hold(h) for h in await self.ops.accounts.holds(org)],
+                "usage_totals": usage.totals()}
 
     # --- G6B.a: keys, suspension, grant, adjustment ---------------------------
     async def issue_key(self, user_id: str, name: str, *, idempotency_key: str,
@@ -375,6 +419,34 @@ class OperatorSession:
         result, _ = await self._once("publish", idempotency_key, reason, None, request, write)
         return result
 
+    async def publish_card(self, requested_model: str, *, rate_card_version: str,
+                           input_rate: str, output_rate: str, approved_by: str,
+                           effective_at: datetime, idempotency_key: str, reason: str) -> dict:
+        """G8 / P-01 / F2C-C: an operator-APPROVED card for the deployment the model's
+        effective listing serves now, published additively (a new immutable card; the
+        listing then names it). The public rate identity stays the listing's card - never
+        an id minted per release - and no historical card or job is rewritten. A
+        provisional approval is refused here: this path publishes launch prices only."""
+        why = unapproved(approved_by)
+        if why:
+            raise errors.InvalidRequest(f"publish-card publishes approved prices only: {why}")
+        deployment = await self.ops.catalog.resolve(
+            requested_model, audience=CredentialAudience.consumer, endpoint_id=None)
+        if deployment is None:
+            raise errors.NotFound("no public listing serves that model")
+        serving = await self.ops.catalog.serving_revision(deployment.serving_version_id)
+        try:
+            card = RateCardSnapshot(
+                rate_card_version=rate_card_version, model_id=serving.model_id,
+                deployment_revision_id=deployment.deployment_revision_id,
+                serving_version_id=serving.serving_version_id,
+                input_rate_per_million=input_rate, output_rate_per_million=output_rate,
+                effective_at=effective_at, approved_by=approved_by)
+        except ValueError as refused:
+            raise errors.InvalidRequest(f"not a publishable card: {refused}") from None
+        return await self.publish(serving, deployment, card, requested_model,
+                                  idempotency_key=idempotency_key, reason=reason)
+
     async def cancel_job(self, org_id: str, job_handle: str, *, idempotency_key: str,
                          reason: str) -> dict:
         async def write(_):
@@ -398,8 +470,38 @@ class OperatorSession:
         return result
 
 
+def _recorded(prior: AuditEntry, operation: str, request: dict[str, Any]) -> Any:
+    """The result an idempotency key recorded, if it recorded THIS write (R34)."""
+    if prior.after.get("operation") != operation or prior.after.get("request") != request:
+        raise errors.IdempotencyConflict("this idempotency key recorded a different "
+                                         "operator write")
+    return prior.after["result"]
+
+
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
+
+
+#: A `BalanceV2`'s fields that are not the CREDIT wallet's own (the statement is exact
+#: CREDIT; the legacy USD statement is never mixed into it, R73).
+_NOT_CREDIT = {"schema_version", "legacy_usd"}
+
+#: `AccountView.usage` is one page (the newest `usage_records` rows, at most 500).
+USAGE_PAGE = 500
+
+
+def _spent(usage) -> dict:
+    """Settled CREDIT spend: the CREDIT usage total, exact. A full page may have left
+    older rows out, so it answers None rather than a short sum.
+    ponytail: one page; D10's settled-debit read (D10.c) replaces it."""
+    if len(usage.entries) >= USAGE_PAGE:
+        return {"spent": None, "spent_complete": False}
+    return {"spent": usage.totals().get("CREDIT", str(Credit("0"))), "spent_complete": True}
+
+
+def _hold(hold) -> dict:
+    return {"request_id": hold.request_id, "state": hold.state.value, "amount": str(hold.amount),
+            "unit": "CREDIT"}
 
 
 def marlin_release(*, provider_org_id: str, created_at: datetime, effective_at: datetime,

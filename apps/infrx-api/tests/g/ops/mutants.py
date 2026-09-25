@@ -35,6 +35,7 @@ from tests.g.mutants import _layout  # noqa: E402
 
 S = "infrx/operations/service.py"
 C = "infrx/operations/cli.py"
+T = "infrx/operations/transition.py"
 X = "client_example.py"
 F = "tests/g/ops/fakes.py"           # the port contract D5 must match
 V2FIX = "infrx/contracts/v2/fixtures.py"     # the release's pins (E4B certification)
@@ -104,14 +105,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_api_ops__the_secret_is_revealed_once"),
     # --- idempotency and audit -------------------------------------------------
     _m("replay_ignores_the_request", "one idempotency key names one request",
-       S, "            if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
-       "            if prior.after.get(\"operation\") != operation:",
+       S, "    if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
+       "    if prior.after.get(\"operation\") != operation:",
        "test_api_ops__a_replayed_adjustment_is_deduplicated"),
-    _m("replay_is_not_looked_up", "a replay returns the recorded result",
-       S, "        if prior is not None:", "        if False:",
-       "test_api_ops__a_replayed_adjustment_is_deduplicated",
-       "test_api_ops__the_secret_is_revealed_once",
-       "test_credit_identity__a_replayed_grant_is_deduplicated"),
+    # G8: the recorded-row fallback of a same-key race also answers a replay whose lookup
+    # was skipped, so the dedupe cases no longer see this defect; what does is a write the
+    # ports do not dedupe on the operation id - a suspension re-applied after its lift.
+    _m("replay_is_not_looked_up", "a replay returns the recorded result, re-executing nothing",
+       S, "        if prior is not None:\n            return _recorded(", "        if False:\n            return _recorded(",
+       "test_api_ops__a_replayed_key_never_reapplies_a_write_that_was_since_undone"),
     _m("operation_id_not_deterministic", "the port dedupes a crash replay by operation id",
        S, "        operation_id = stable_id(operation, idempotency_key)",
        "        operation_id = stable_id(operation, idempotency_key, str(uuid.uuid4()))",
@@ -140,9 +142,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("wallet_binding_unchecked", "a wallet bound to another org is refused, not used",
        S, "        return v2ports.resolve_wallet(probe, wallet)", "        return wallet",
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("replayed_grant_reported_as_new", "a replayed grant says it is a replay (one entitlement)",
+       S, "\"ledger_operation_id\": grant.ledger_operation_id, \"replayed\": replayed}",
+       "\"ledger_operation_id\": grant.ledger_operation_id, \"replayed\": False}",
+       "test_credit_identity__a_replayed_grant_is_deduplicated"),
     _m("grant_skips_an_existing_binding", "a grant never lands in a wallet bound elsewhere",
-       S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:",
-       "        if False:",
+       S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:\n"
+          "            await self.ops.bound_wallet(identity)   # an existing",
+       "        if False:\n            await self.ops.bound_wallet(identity)   # an existing",
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
     _m("fake_ledger_overdraws",
        "an adjustment below zero is refused by the ledger port (mutates the fake: this pins "
@@ -220,8 +227,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return await self.ops.jobs.get_owned(self.auth.key_id, job_handle)",
        "test_api_ops__a_tenant_reads_only_its_own_usage_holds_and_jobs"),
     _m("cancel_audited_under_the_wrong_action", "a cancellation is audited in the D1 vocabulary",
-       S, "\"job_cancel\": \"admin_set_entitlements\",", "\"job_cancel\": \"calibration_label\",",
+       S, "\"publish\": \"admin_publish\", \"job_cancel\": \"admin_job_cancel\",",
+       "\"publish\": \"admin_publish\", \"job_cancel\": \"admin_set_entitlements\",",
        "test_api_ops__operator_cancellation_is_tenant_scoped_and_audited"),
+    _m("reconcile_audited_as_a_grant", "a reconciliation is audited as one, never as a grant",
+       S, "\"adjustment\": \"admin_adjust\", \"reconcile\": \"admin_reconcile\",",
+       "\"adjustment\": \"admin_adjust\", \"reconcile\": \"admin_grant\",",
+       "test_api_ops__reconciliation_waits_for_its_interval_and_is_audited"),
     _m("reconcile_at_a_future_clock", "reconciliation is decided at the present time",
        S, "operation_id,\n                                                    self.principal, self.ops.clock())",
        "operation_id,\n                                                    self.principal, self.ops.clock().replace(year=9999))",
@@ -295,6 +307,114 @@ MUTANTS: tuple[Mutant, ...] = (
        X, "    return bench.allow(err.get(\"code\") if isinstance(err, dict) else None, bench.CODE_OK, key)",
        "    return err.get(\"code\") if isinstance(err, dict) else None",
        "test_api_auth__the_client_key_never_reaches_argv_or_state"),
+    # --- G8 point 1: the trusted account and statement reads --------------------
+    _m("account_skips_the_binding", "an account read resolves the wallet through its binding",
+       S, "            wallet = await self.ops.bound_wallet(identity)\n        usage =",
+       "            wallet = await self.ops.wallets.consumer_wallet_for_user(user_id)\n        usage =",
+       "test_credit_identity__the_account_read_is_the_individuals_own_exact_credit"),
+    _m("spent_page_cap_ignored", "a page-capped spend is never reported as complete",
+       S, "    if len(usage.entries) >= USAGE_PAGE:", "    if False:",
+       "test_credit_spend__a_statement_never_reports_a_short_spend_as_complete"),
+    _m("statement_carries_the_usd_statement", "the CREDIT statement never carries USD (R73)",
+       S, '_NOT_CREDIT = {"schema_version", "legacy_usd"}', '_NOT_CREDIT = {"schema_version"}',
+       "test_credit_spend__a_statement_never_reports_a_short_spend_as_complete"),
+    # --- G8 points 2-3: the regime transition and the approved card -----------------
+    _m("provisional_flag_ignored", "a card the database marks provisional is not approved",
+       T, "    if provisional or not text or any(", "    if not text or any(",
+       "test_credit_cutover__only_an_approved_listed_card_at_the_restated_rates_activates"),
+    _m("approval_text_ignored", "an approval that says P-01/provisional/pending is not one",
+       T, "    if provisional or not text or any(m in text for m in UNAPPROVED_MARKERS):",
+       "    if provisional or not text:",
+       "test_credit_cutover__only_an_approved_listed_card_at_the_restated_rates_activates",
+       "test_credit_rate__publish_card_publishes_approved_prices_only"),
+    _m("restated_rates_not_compared", "the operator's restated rates must be the card's",
+       T, "    if (found[\"input_rate\"], found[\"output_rate\"]) != (input_rate, output_rate):",
+       "    if False:",
+       "test_credit_cutover__only_an_approved_listed_card_at_the_restated_rates_activates"),
+    _m("rates_compared_as_text", "restated rates compare as exact CREDIT, not as spelled",
+       T, "        blockers += _card_blockers(inv, card, _exact(input_rate), _exact(output_rate))",
+       "        blockers += _card_blockers(inv, card, input_rate, output_rate)",
+       "test_credit_cutover__only_an_approved_listed_card_at_the_restated_rates_activates"),
+    _m("listing_not_checked", "only the card the effective listing names can be public",
+       T, "    if not found[\"named_by_listing\"]:", "    if False:",
+       "test_credit_cutover__only_an_approved_listed_card_at_the_restated_rates_activates"),
+    _m("drift_ignored", "wallet drift blocks every switch",
+       T, "    if inv[\"drift\"]:", "    if False:",
+       "test_credit_cutover__drift_and_the_source_regimes_work_in_flight_block_the_switch"),
+    _m("target_jobs_counted", "only the source regime's jobs in flight block",
+       T, "    flying = inv[\"in_flight\"].get(source, {})",
+       "    flying = inv[\"in_flight\"].get(target, {})",
+       "test_credit_cutover__drift_and_the_source_regimes_work_in_flight_block_the_switch"),
+    _m("minted_id_hidden", "the report lists the per-release minted provisional ids",
+       T, "            \"minted_provisional\": sorted(i for i in ids if i.endswith(MINTED_SUFFIX)),",
+       "            \"minted_provisional\": [],",
+       "test_credit_cutover__the_report_names_the_public_card_and_every_provisional_id"),
+    _m("freeze_skipped", "the source admission is frozen before the drain is measured",
+       T, "        if await store.set_flag(ADMISSION_FLAG[source], False, op.principal, reason):",
+       "        if False:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last"),
+    _m("drain_skipped",
+       "the target is enabled only once the source has drained (declared: the final "
+       "recheck then refuses the run with TransitionBlocked where a drain was expected)",
+       T, "        while in_flight(inv := await store.inventory(), source):",
+       "        while False:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last",
+       dies_by=("TransitionBlocked",)),
+    _m("drain_unbounded_past_its_deadline",
+       "a drain past its bound stops with the report (declared: the scripted clock's "
+       "10,000 ticks run out - RuntimeError from the exhausted iterator - because the "
+       "drain never stops)",
+       T, "            if monotonic() >= deadline:", "            if monotonic() >= deadline * 1e9:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last",
+       dies_by=("RuntimeError",)),
+    _m("freeze_only_still_enables", "a freeze-only run leaves both regimes paused",
+       T, "        for flag in () if freeze_only else ENABLE[target]:",
+       "        for flag in ENABLE[target]:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last"),
+    _m("final_recheck_skipped", "a job that slipped in before the freeze stops the run",
+       T, "        if final[\"blockers\"]:", "        if False:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last"),
+    _m("straddler_wait_skipped",
+       "every transaction open when the freeze committed has ended before the drain is "
+       "measured (review G8-R1: require_feature takes no lock)",
+       T, "        while straddlers := straddlers & await store.open_transactions():",
+       "        while False:",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze"),
+    _m("straddlers_relisted",
+       "the wait is for the transactions open at the freeze, not whatever is open now "
+       "(declared: under steady traffic the relisting never empties and the run stops "
+       "with TransitionBlocked where it should have proceeded)",
+       T, "        while straddlers := straddlers & await store.open_transactions():",
+       "        while straddlers := await store.open_transactions():",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze",
+       dies_by=("TransitionBlocked",)),
+    _m("straddler_wait_unbounded",
+       "the wait for open transactions stops at the drain's bound (declared: the scripted "
+       "clock's 10,000 ticks run out - RuntimeError - because the wait never stops)",
+       T, "            if deadline <= monotonic():", "            if deadline * 1e9 <= monotonic():",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze",
+       dies_by=("RuntimeError",)),
+    _m("refused_card_still_freezes", "a refused card changes nothing",
+       T, "        if [b for b in first[\"blockers\"] if b[\"code\"] != \"in_flight\"]:",
+       "        if False:",
+       "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last"),
+    _m("blocked_dry_run_exits_zero", "a blocked dry run says so in its exit status",
+       C, "    return 1 if a.cmd == \"credit-transition\" and result.get(\"blockers\") else 0",
+       "    return 0",
+       "test_credit_cutover__the_cli_dry_run_needs_no_key_and_exits_nonzero_when_blocked"),
+    _m("publish_card_accepts_provisional", "publish-card publishes approved prices only",
+       S, "        if why:\n            raise errors.InvalidRequest(f\"publish-card",
+       "        if False:\n            raise errors.InvalidRequest(f\"publish-card",
+       "test_credit_rate__publish_card_publishes_approved_prices_only"),
+    # --- G8 point 4: races and retries ---------------------------------------------
+    _m("same_key_race_surfaces_the_raw_conflict", "a same-key race answers the recorded row",
+       S, "        except errors.Conflict:\n            # G8:",
+       "        except errors.IdempotencyConflict:\n            # G8:",
+       "test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing_twice"),
+    _m("same_key_race_ignores_the_request", "the recorded row answers only its own request",
+       S, "            return _recorded(prior, operation, request), True\n        return result, False",
+       "            return prior.after[\"result\"], True\n        return result, False",
+       "test_api_ops__a_same_key_race_answers_the_recorded_result_and_writes_nothing_twice"),
     # --- the CLI ---------------------------------------------------------------
     _m("cli_accepts_a_key_on_argv", "a key on argv is refused before any prompt",
        C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",
@@ -317,15 +437,16 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "            \"replayed\": issued.replayed,", "            \"replayed\": issued.secret,",
        "test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it"),
     _m("cli_error_echoes_the_credential", "a refusal names the error, never the credential",
-       C, "        print(json.dumps({\"error\": e.code, \"message\": str(e)}), file=sys.stderr)",
-       "        print(json.dumps({\"error\": e.code, \"message\": str(e) + secret}), file=sys.stderr)",
+       C, "    except errors.DomainError as e:\n        print(json.dumps({\"error\": e.code, \"message\": str(e)}), file=sys.stderr)",
+       "    except errors.DomainError as e:\n        print(json.dumps({\"error\": e.code, \"message\": str(e) + secret}), file=sys.stderr)",
        "test_api_auth__the_cli_reports_a_refusal_without_the_secret"),
 )
 
 
 #: The shared runner (R83), in the repository's shape, every named case required to notice.
 RUNNER = Runner(name="g-ops", package="", targets=(SUITE,), layout=_layout,
-                extra_args=(f"--ignore={SUITE}/test_mutants.py",), require_every_case=True)
+                extra_args=(f"--ignore={SUITE}/test_mutants.py",
+                            f"--ignore-glob={SUITE}/test_*_pg.py"), require_every_case=True)
 
 
 def run_mutant(mutant: Mutant) -> Result:
@@ -333,10 +454,14 @@ def run_mutant(mutant: Mutant) -> Result:
 
 
 def case_names() -> set[str]:
-    """Every `test_*` function in this suite except the list's own claims."""
+    """Every `test_*` function in this suite except the list's own claims and G8's
+    real-PostgreSQL suites (`test_*_pg.py`): those prove the D adapters under the logic
+    these mutants edit, which fake-level cases here claim; their failure oracles are the
+    recorded fail-first runs (G8 evidence). A PG case in a mutant subprocess would contend
+    for the harness port's lock with the in-process D suites of `make api-mutants`."""
     names = set()
     for path in sorted((API_DIR / SUITE).glob("test_*.py")):
-        if path.name == "test_mutants.py":
+        if path.name == "test_mutants.py" or path.name.endswith("_pg.py"):
             continue
         tree = ast.parse(path.read_text())
         names |= {n.name for n in tree.body

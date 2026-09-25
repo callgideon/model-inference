@@ -27,7 +27,8 @@ import sys
 from datetime import datetime, timezone
 
 from ..contracts import errors
-from . import service
+from ..contracts.v2 import fixtures as v2fix
+from . import service, transition
 
 OPERATOR_KEY_ENV = "INFRX_OPERATOR_KEY"
 
@@ -49,7 +50,8 @@ def build_operations(settings=None) -> service.Operations:
         ledger=pg.PgLedger(connect), audit=pg.PgAuditLog(connect),
         registry=pg.PgRegistry(connect), wallets=pg.PgWalletDirectory(connect),
         catalog=PgCatalogDirectory(connect), jobs=PgJobStore(connect),
-        accounts=pg.PgAccountView(connect), clock=lambda: datetime.now(timezone.utc))
+        accounts=pg.PgAccountView(connect), clock=lambda: datetime.now(timezone.utc),
+        transitions=transition.PgTransition(connect))
 
 
 def refuse_secret_argv(argv: list[str]) -> None:
@@ -81,6 +83,23 @@ def parser() -> argparse.ArgumentParser:
     cmd("publish-marlin", "--provider-org", "--created-at", "--effective-at")
     cmd("cancel", "--org", "--job")
     cmd("reconcile", "--org", "--request")
+    # G8 / P-01: an operator-approved card for the deployment the model's listing serves.
+    cmd("publish-card", "--model", "--card-version", "--input-rate", "--output-rate",
+        "--approved-by", "--effective-at")
+    # G8: the regime transition. `--dry-run` writes nothing and needs no operator key.
+    t = sub.add_parser("credit-transition")
+    t.add_argument("--to", choices=transition.TARGETS, default=transition.CREDIT)
+    t.add_argument("--model", default=v2fix.PUBLIC_MODEL_ID)
+    for flag in ("--card", "--input-rate", "--output-rate", "--idempotency-key", "--reason"):
+        t.add_argument(flag)
+    t.add_argument("--dry-run", action="store_true")
+    t.add_argument("--freeze-only", action="store_true")   # pause both regimes, drain, stop
+    t.add_argument("--drain-timeout-s", type=float, default=0.0)
+    t.add_argument("--poll-s", type=float, default=2.0)
+    # G8 reads: no idempotency key and no reason, since nothing is written.
+    sub.add_parser("account").add_argument("--user", required=True)
+    # A consumer's own statement, authenticated by the key file `issue-key` wrote.
+    sub.add_parser("statement").add_argument("--key-file", required=True)
     return p
 
 
@@ -98,8 +117,34 @@ def _issued(a, issued: service.IssuedKey) -> dict:
             "secret_file": a.secret_file if issued.secret is not None else None}
 
 
+def _read_secret(path: str) -> str:
+    with open(path) as f:
+        return f.read().strip()
+
+
+def _moment(value: str) -> datetime:
+    moment = datetime.fromisoformat(value)
+    if moment.utcoffset() is None:
+        raise SystemExit("times need an explicit UTC offset")
+    return moment
+
+
 async def dispatch(ops: service.Operations, secret: str, a) -> dict:
+    if a.cmd == "statement":
+        return await (await ops.tenant(secret)).statement()
+    rates = {}
+    if a.cmd == "credit-transition":
+        if ops.transitions is None:
+            raise SystemExit("the transition runs only on the PostgreSQL store")
+        rates = {"card": a.card, "input_rate": a.input_rate, "output_rate": a.output_rate}
+        if a.dry_run:           # read-only: the inventory and the plan, no credential
+            return transition.plan(await ops.transitions.inventory(a.model), target=a.to,
+                                   **rates)
+        if not a.idempotency_key or not a.reason:
+            raise SystemExit("--idempotency-key and --reason are required unless --dry-run")
     op = await ops.operator(secret)
+    if a.cmd == "account":
+        return await op.account(a.user)
     k = {"idempotency_key": a.idempotency_key, "reason": a.reason}
     if a.cmd == "grant":
         return await op.grant_initial(a.user, **k)
@@ -124,6 +169,15 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
         serving, deployment, card, model = service.marlin_release(
             provider_org_id=a.provider_org, created_at=created, effective_at=effective)
         return await op.publish(serving, deployment, card, model, **k)
+    if a.cmd == "publish-card":
+        return await op.publish_card(a.model, rate_card_version=a.card_version,
+                                     input_rate=a.input_rate, output_rate=a.output_rate,
+                                     approved_by=a.approved_by,
+                                     effective_at=_moment(a.effective_at), **k)
+    if a.cmd == "credit-transition":
+        return await transition.apply(op, ops.transitions, target=a.to, **rates, **k,
+                                      drain_timeout_s=a.drain_timeout_s, poll_s=a.poll_s,
+                                      freeze_only=a.freeze_only)
     if a.cmd == "cancel":
         return await op.cancel_job(a.org, a.job, **k)
     if a.cmd == "reconcile":
@@ -135,14 +189,24 @@ def main(argv=None, *, ops=None, environ=os.environ, prompt=getpass.getpass) -> 
     argv = sys.argv[1:] if argv is None else list(argv)
     refuse_secret_argv(argv)
     a = parser().parse_args(argv)
-    secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()
+    if a.cmd == "statement":
+        secret = _read_secret(a.key_file)
+    elif a.cmd == "credit-transition" and a.dry_run:
+        secret = ""
+    else:
+        secret = environ.get(OPERATOR_KEY_ENV, "").strip() or prompt("operator key: ").strip()
     try:
         result = asyncio.run(dispatch(ops or build_operations(), secret, a))
+    except transition.TransitionBlocked as e:
+        print(json.dumps(e.report, sort_keys=True))         # what blocked it, what changed
+        print(json.dumps({"error": e.code, "message": str(e)}), file=sys.stderr)
+        return 1
     except errors.DomainError as e:
         print(json.dumps({"error": e.code, "message": str(e)}), file=sys.stderr)
         return 1
     print(json.dumps(result, sort_keys=True))
-    return 0
+    # A dry run that finds blockers says so in its exit status too (0 = ready now).
+    return 1 if a.cmd == "credit-transition" and result.get("blockers") else 0
 
 
 if __name__ == "__main__":

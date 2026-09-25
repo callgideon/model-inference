@@ -22,7 +22,9 @@ CASES = mutation_list.case_names()
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per mechanism a secret, an identity or money could leak through.
 SUBSET = ("operator_audience_unchecked", "revoked_key_accepted", "secret_revealed_on_replay",
-          "operation_id_not_deterministic", "wallet_binding_unchecked", "cli_prints_the_secret")
+          "operation_id_not_deterministic", "wallet_binding_unchecked", "cli_prints_the_secret",
+          # G8: an unapproved price going public, a same-key race answered by a raw conflict
+          "approval_text_ignored", "same_key_race_surfaces_the_raw_conflict")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 Mutant, Outcome = mutation_list.Mutant, mutation_list.Outcome
 S = mutation_list.S

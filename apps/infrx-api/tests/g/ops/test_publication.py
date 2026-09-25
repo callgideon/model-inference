@@ -70,7 +70,7 @@ def test_api_ops__the_pinned_marlin_release_is_published_and_quoted():
         assert pins.serving_version_id == serving.serving_version_id
         assert quoted == card and pins.rate_card_version == card.rate_card_version
         entry = w.audit.entries[-1]
-        assert entry.after["operation"] == "publish" and entry.action == "admin_set_entitlements"
+        assert entry.after["operation"] == "publish" and entry.action == "admin_publish"
         count = len(w.audit.entries)
         again = await op.publish(serving, deployment, card, model, idempotency_key="p1", reason=R)
         assert again == result and len(w.audit.entries) == count
@@ -231,7 +231,7 @@ def test_api_ops__operator_cancellation_is_tenant_scoped_and_audited():
         result = await op.cancel_job(ORG_A, admitted.job_handle, idempotency_key="c1", reason=R)
         assert result["state"] == "cancelled" and result["cause"] == "client_cancelled"
         entry = w.audit.entries[-1]
-        assert entry.action == "admin_set_entitlements" and entry.target_org_id == ORG_A
+        assert entry.action == "admin_job_cancel" and entry.target_org_id == ORG_A
         assert entry.after["operation"] == "job_cancel"
         assert await op.cancel_job(ORG_A, admitted.job_handle, idempotency_key="c1",
                                    reason=R) == result
@@ -252,7 +252,7 @@ def test_api_ops__reconciliation_waits_for_its_interval_and_is_audited():
         fakes.later(w.clock, hours=24)
         result = await op.reconcile(ORG_A, request_id, idempotency_key="r2", reason=R)
         assert result["settlement"] == "released_platform_absorbed"
-        assert w.audit.entries[-1].action == "admin_grant"
+        assert w.audit.entries[-1].action == "admin_reconcile"
         assert w.audit.entries[-1].after["operation"] == "reconcile"
     run(go())
 
