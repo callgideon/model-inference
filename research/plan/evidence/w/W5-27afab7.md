@@ -254,3 +254,32 @@ box run of `W5-box-warmup.sh` (about 1 h of operator time after run3).
 
 - 2026-09-25: W5 lane evidence at code head `27afab76` (items 1-4, S3 F4, F2C.d replay, E3C s04/s05 cases).
 - 2026-09-25 (after the handoff commit): the final full run completed - `INFRX_D_TASK=w5 uv run --frozen pytest -q tests/w -rs` at `27afab76`: exit 0, 296 passed, 11 skipped (8 need a local MinIO, 1 needs D10's `PgLifecycle`, 2 empty mutant parameter sets), 761 s.
+
+## Fix round (2026-09-25, one round; test head `97381015`, code under `infrx/` unchanged from `27afab76`)
+
+Every finding reproduced first; the new cases pin behaviour the old suite let a mutant break
+(the mutants below are the "failed before" half: each survived the previous list).
+
+| Finding | Status | What changed |
+|---|---|---|
+| 0-W5-R1, 2-W5-ACC-2 (today's refusal path untested) | fixed | `test_w5_refuse__without_fail_preparation_a_permanent_refusal_lapses_within_its_bound` [over_the_cap, over_the_context] on the PLAIN fake store (asserts it has no `fail_preparation`): every attempt answers typed `(code, ended=None)`, the runner never dies (each attempt through `outcome()`, so a crash is an assertion), the lease lapses and is requeued, and after exactly 1 + MAX_PREPUBLICATION_RETRIES attempts the job is `preparation_failed`, hold released once. New mutants, all killed: `w5_fail_preparation_required` (getattr -> attribute: AttributeError), `w5_no_port_crashes_the_runner` (M4b), `w5_no_port_reports_an_end` (M3). |
+| 0-W5-R2 (merge-order hazard, no PostgreSQL proof) | fixed (test + gate) | `test_w5_ready_pg__without_a_readiness_store_a_text_job_fails_closed` [legacy, credit], no MinIO needed: a text job admitted through the pre-D10 PgJobStore / CreditWork and "attached" with no media through `PgAttachments` is claimed, refused `not_claimable`, never tokenized, `infrx.jobs` left `('preparing', NULL)`. PG mutant `w5_text_job_prepared_without_a_marker_on_postgresql` (barrier media-only) killed. `compose()` is not an owned path, so no start-up refusal was added; the gate below is the control. |
+| 0-W5-R3 (reconciliation SQL pinned only for USD drift) | fixed | `test_w5_reconcile_pg__...` now steps `(0,0) -> (1,0)` USD wallet drift `-> (2,0)` CREDIT wallet drift (`credit_wallets` provider_dev row off its ledger) `-> (2,1)` one `credit_holds` unknown hold `-> (2,2)` one `credit_wallet_holds` unknown hold (`reconcile_after` set; replica role past FKs/guards, CHECKs still enforced). PG mutants killed: `w5_reconciliation_ignores_the_credit_view` (PGM1), `..._ignores_usd_unknown_holds` (PGM2), `..._ignores_credit_unknown_holds` (PGM3), `..._counts_known_holds` (PGM4, `<> 'unknown'`). Read-only unchanged. |
+| 1-W5-RULES-1 (11 merge conflicts) | fixed (evidence corrected) | CORRECTION of the header's "so they merge clean": false against `claude/consumer-v1` (`1960b7c7`), which carries F2C's fix round (`16ce171a`/`c4873027`) on top of `9bf7a95f`. Reproduced: `git merge-tree --write-tree --name-only claude/consumer-v1 codex/w5-readiness` lists 11 conflicts, all in the cherry-picked non-W5 paths (`apps/app/lib/contracts/v2/types.ts`, `apps/app/tests/contracts/mutants.json`, `contracts/conformance/{acceptance,lifecycle}.py`, `contracts/fixtures/acceptance/lifecycle.json`, `contracts/fixtures/v2/result_read_cases.json`, `contracts/v2/{__init__,lifecycle}.py`, `tests/contracts/mutants.py`, `research/plan/01-contracts.md`, `02-durable-protocols.md`). Resolution for the coordinator's merge: take `claude/consumer-v1`'s side for all 11 (the other side reverts F2C's fix round); the cherry-picks themselves are content-identical to their sources. |
+| 1-W5-RULES-2, 2-W5-ACC-1 (W5 alone stops PostgreSQL text jobs; 8 round trips skipped) | not fixed in-lane (coordinator gate) | The hazard is now pinned by the PG case above, but the lifting pieces (D10 0019/PgLifecycle, G7 `admit_ready`, wiring 1) are outside this lane and task w5 has no S3 port. GATE: merge W5 only in the same integration step as `W5-wiring-27afab7.patch`, D10 (0019 + PgLifecycle) and G7's `admit_ready`; never onto the pilot box without 0019; on the merged SHA, run `test_prep_worker_pg__*` (3) and `test_worker_main_pg__*` (4) plus the PREP-WORKER PG mutants with a task-local MinIO before E3C. Record the gate in the tracker. |
+| 2-W5-ACC-3 (slice 4 warmup/cold cache only scripted) | not fixed (coordinator-only box run) | Unchanged: `W5-box-warmup.sh` is reviewed/dry-run only. W5 stays open on slice 4 until the coordinator runs it on the pilot box after run3 and commits the output; ADMISSION-READY/OPS-RECOVER warm-up acceptance is NOT met from lane evidence. |
+
+Commands (from `apps/infrx-api`, `INFRX_D_TASK=w5`, at `97381015`):
+
+| Command | Exit | Result |
+|---|---|---|
+| `uv run --frozen pytest -q tests/w/test_w5.py` | 0 | 35 passed, 1 skipped (D10's PgLifecycle absent) |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w5_mutants.py -rs` | 0 | 39 passed, 1 skipped: 28/28 service-free + 6/6 PostgreSQL mutants killed, 5 list checks; the D10-dependent PG mutant skips visibly. Log `/tmp/w5fix/mutants2.log` |
+| `uv run --frozen pytest -q tests/w -rs` | 0 | 300 passed, 11 skipped (7 MinIO round trips, 1 D10, 3 empty mutant parameter sets), 625 s. Log `/tmp/w5fix/testsw.log` |
+
+A first mutant run (before `outcome()` wrapped the new case) reported
+`w5_fail_preparation_required` and `w5_no_port_crashes_the_runner` as `broken_runner`
+(an exception death, not an assertion; R83); the case was fixed and both are now killed.
+No hosted DB, box or AWS was used; only `infrx-w5-postgres` (55445).
+
+- 2026-09-25: fix round at `97381015` (tests only); evidence corrected on merge cleanliness; the merge gate for W5 recorded above.
