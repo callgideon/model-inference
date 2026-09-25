@@ -171,6 +171,20 @@ def test_the_browser_role_matrix_through_postgrest() -> None:
             {r["request_id"] for r in by_key.json()}, by_key.text
         none = rpc("consumer_jobs", {"p_model": "nobody/none"}, _jwt(me))
         assert none.status_code == 200 and none.json() == [], none.text
+        # 0024 (C3A WR-C3A-4): a direct key INSERT needs a verified individual with a
+        # consumer wallet - `me` holds one but is not email-verified in this fixture
+        def mint(user, tag):
+            return httpx.post(f"{base}/api_keys", json={
+                "org_id": cc.personal_org(conn, user), "created_by": user, "name": "k",
+                "prefix": "sk-infrx-rest0000", "key_hash": f"hash-rest-{tag}"},
+                headers={"Authorization": f"Bearer {_jwt(user)}", "Prefer": "return=minimal",
+                         "Content-Type": "application/json"}, timeout=10)
+        unverified = mint(me, "unverified")
+        assert unverified.status_code in (401, 403) and "42501" in unverified.text, \
+            unverified.text
+        conn.execute("update auth.users set email_confirmed_at = now() where id = %s", (me,))
+        verified = mint(me, "verified")
+        assert verified.status_code == 201, verified.text
         # a browser session never writes a key's audience or provider scope
         patch = httpx.patch(f"{base}/api_keys?id=eq.{ca.C1_KEY}", json={"audience": "operator"},
                             headers={"Authorization": f"Bearer {_jwt(me)}",

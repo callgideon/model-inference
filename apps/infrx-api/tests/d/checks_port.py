@@ -34,6 +34,9 @@ from .checks_reads import _copy_jobs, as_user
 
 LEDGER = "public.consumer_credit_ledger(text,integer)"
 KEY_GATE = "public.consumer_may_create_key()"
+#: 0001's INSERT check, AND the 0024 predicate (the only 0001-0005 object 0024 changes).
+KEY_POLICY = ("(is_org_owner(org_id) AND (created_by = auth.uid()) AND "
+              "consumer_may_create_key())")
 JOBS = ("public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
         "timestamp with time zone)")
 #: The page cap every consumer read shares (0021's `consumer_jobs` clamps to it).
@@ -386,6 +389,11 @@ def check_key_insert_needs_verified_wallet(conn) -> str:
             assert code == "42501", f"{case}: an api_keys insert was accepted ({code})"
         code, rows = insert(cc.CONSUMER_1)
         assert code is None and len(rows) == 1, f"a verified, funded individual: {code}"
+        policy = conn.execute("select replace(pg_get_expr(polwithcheck, polrelid), "
+                              "'public.', ''), polcmd, "
+                              "polroles::regrole[]::text from pg_policy where polname = "
+                              "'api_keys_insert_owner'").fetchall()
+        assert policy == [(KEY_POLICY, "a", "{authenticated}")], policy
         return f"refused {sorted(refused)}; a verified individual with a wallet accepted"
     return ca._in_rollback(conn, body)
 

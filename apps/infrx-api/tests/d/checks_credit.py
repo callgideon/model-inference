@@ -124,6 +124,11 @@ ALLOWED_LEGACY_CHANGES = {
     # its four 0003 values kept.
     ("constraint", "infrx.audit_entries", "audit_entries_action_check"):
         "six headless operator actions appended",
+    # D10-APP-SQL (0024, C3A WR-C3A-4): the browser key INSERT also needs a verified
+    # individual with a consumer wallet; the exact expression is pinned by
+    # `checks_port.check_key_insert_needs_verified_wallet`.
+    ("policy", "public.api_keys", "api_keys_insert_owner"):
+        "0001's check AND public.consumer_may_create_key()",
 }
 
 #: D2 fills the bodies of the 0004 boundaries it owns. The BODY may change; SECURITY
@@ -2054,7 +2059,11 @@ def check_operator_seams(conn) -> str:
                f"'{NEMO}', '{DEV_ENDPOINT}')"),
     ), "operator seam controls")
     with conn.transaction():
-        # The deployed console's own insert: the individual is its creator.
+        # The deployed console's own insert: the individual is its creator (0024: a verified
+        # individual with a consumer wallet - this fixture's grant seam leaves the email
+        # unconfirmed, so it is confirmed here, rolled back with the rest).
+        conn.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
+                     (CONSUMER_1,))
         conn.execute(checks._jwt(CONSUMER_1))
         conn.execute("insert into public.api_keys (org_id, created_by, name, prefix, key_hash) "
                      "values (%s, %s, 'mine', 'sk-infrx-mine0001', 'hash-mine')",
