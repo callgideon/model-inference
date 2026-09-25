@@ -22,10 +22,11 @@ import {
   createConsumerReads,
   resolveConsumerContext,
   type ConsumerAccount,
+  type CreditLedgerEntry,
   type RpcClient,
 } from "../../lib/services/console.ts";
 import { creditBalanceOf, sidebarCredit } from "../../lib/services/credits.ts";
-import type { Result } from "../../lib/contracts/types.ts";
+import type { Page, Result } from "../../lib/contracts/types.ts";
 import { createMemoryPort, type Dataset } from "./harness.ts";
 
 /** Success, or a failure that prints the code that came back (the mutant runner reads it). */
@@ -271,7 +272,7 @@ test("the CREDIT ledger walks ties on created_at exactly once, newest first, own
   let cursor: string | null = null;
   let pages = 0;
   do {
-    const page = valueOf(await reads.ledger({ limit: 2, cursor }), "every page answers");
+    const page: Page<CreditLedgerEntry> = valueOf(await reads.ledger({ limit: 2, cursor }), "every page answers");
     seen.push(...page.items.map((item) => item.entry_id));
     cursor = page.next_cursor;
     pages += 1;
