@@ -68,7 +68,8 @@ nvidia-smi --query-gpu=name,driver_version,memory.total,memory.used,utilization.
 
 section "served bytes (sha256)"
 ( cd "$WEIGHTS" && sha256sum model-00001-of-00002.safetensors model-00002-of-00002.safetensors \
-    tokenizer.json chat_template.jinja generation_config.json config.json ) 2>&1
+    tokenizer.json chat_template.jinja generation_config.json config.json \
+    processor_config.json preprocessor_config.json ) 2>&1
 
 section "registry oids"
 if [ -n "${HF_TOKEN:-}" ]; then

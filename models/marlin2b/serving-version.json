@@ -13,6 +13,9 @@
     "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
     "config_digest": "sha256:1325d77937ce3a4a54eec9748269206901afdbd365abb1842bf32a42f5cabd20",
     "generation_config_digest": "sha256:0d54a28c36c5143413aa18a910f661d17483909e87321f34ad58859b66cf25b4",
+    "processor_config_digest": null,
+    "preprocessor_config_digest": null,
+    "processor_digests_todo": "TODO (WR-I8-5, P-06): served-bytes sha256 of processor_config.json and preprocessor_config.json not measured yet. The pinned revision (commit above) is not downloaded on the coordinator host and was not downloaded for this (gated repo). Fill both from the 'served bytes (sha256)' section of measure/inventory.sh on the serving host (it now hashes both files); then I8 adds both to infra/runbooks/artifacts.py PINNED. est. candidates only, NOT served bytes: the repository copies research/models/marlin2b/processor_config.json = sha256:d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1 and preprocessor_config.json = sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516 (S2M-50e32f7 quotes these copies; their equality with the served bytes is unverified)",
     "digest_source": "served_bytes",
     "served_bytes_measured": "meas. 2026-09-23, research/plan/evidence/w/box/inventory-20260923T0319Z.txt (SSM command 6a8569bd-e958-4a1d-9797-6496e0b12b42, 2026-09-23T03:19:48Z): the two shards, tokenizer.json and chat_template.jinja hash to exactly the four digests above (S2M's, 2026-09-22); config.json and generation_config.json (first recorded here) equal the repository copies research/models/marlin2b/config.json and generation_config.json byte for byte (sha256 of those files)",
     "registry_oid_equality": "⚠️ TO BE VERIFIED: needs HF_TOKEN on the serving host (research/workloads/marlin-sop.md §1.3); measure/inventory.sh prints both sides when HF_TOKEN is exported"
