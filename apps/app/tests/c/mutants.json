@@ -580,7 +580,7 @@
       "id": "CREDITS-07",
       "note": "the console layout formats a balance of its own instead of the wallet's result",
       "file": "app/(console)/layout.tsx",
-      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
+      "find": "  const balance = shell.reads === null ? null : sidebarCredit(await shell.reads.balance());",
       "replace": "  const balance = displayMoney(ZERO_MONEY);",
       "cases": [
         "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
@@ -620,8 +620,8 @@
       "id": "CREDITS-11",
       "note": "reviewer X4: the layout throws when the balance is unavailable",
       "file": "app/(console)/layout.tsx",
-      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
-      "replace": "  const read = await getBalance(session.orgId);\n  if (read.kind !== \"ok\") throw new Error(\"balance unavailable\");\n  const balance = sidebarBalance(read);",
+      "find": "  const balance = shell.reads === null ? null : sidebarCredit(await shell.reads.balance());",
+      "replace": "  if (shell.reads === null) throw new Error(\"balance unavailable\");\n  const balance = sidebarCredit(await shell.reads.balance());",
       "cases": [
         "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
       ]
@@ -630,8 +630,8 @@
       "id": "CREDITS-12",
       "note": "reviewer X5: the layout substitutes a default amount nobody read",
       "file": "app/(console)/layout.tsx",
-      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
-      "replace": "  const balance = sidebarBalance(await getBalance(session.orgId)) ?? \"$0.00\";",
+      "find": "  const balance = shell.reads === null ? null : sidebarCredit(await shell.reads.balance());",
+      "replace": "  const balance = (shell.reads === null ? null : sidebarCredit(await shell.reads.balance())) ?? \"$0.00\";",
       "cases": [
         "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
       ]
