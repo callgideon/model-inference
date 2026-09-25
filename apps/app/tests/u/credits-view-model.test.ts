@@ -199,6 +199,10 @@ test(T.page, () => {
   // No wallet: no ledger was read, and that is "empty", not an error and not rows of zeroes.
   const fresh = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(null), creditsIn: null, ledger: null, legacy: null });
   assert.equal(fresh.ledger.kind, "empty");
+  // A failed wallet read means the ledger was never read: that is the wallet's error, not "no entries".
+  const blind = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: down(), creditsIn: null, ledger: null, legacy: null });
+  assert.ok(blind.ledger.kind === "error" && blind.ledger.recovery === "retry");
+  assert.equal(blind.legacy.kind, "empty", "legacy history is not claimed either way when unreadable");
   // A failed ledger read is an error with its recovery, never an empty ledger.
   const broken = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(wallet("1.00000000", "0.00000000")), creditsIn: ok("1.00000000" as Credit), ledger: down(), legacy: null });
   assert.ok(broken.ledger.kind === "error" && broken.ledger.recovery === "retry");

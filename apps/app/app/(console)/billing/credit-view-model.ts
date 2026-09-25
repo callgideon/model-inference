@@ -271,7 +271,10 @@ export function creditsPageModel(input: {
     card: creditCardState(input.wallet, input.creditsIn),
     ledger:
       input.ledger === null
-        ? { kind: "empty" }
+        ? // Not read. With no wallet that is "no entries"; after a failed wallet read it is that error.
+          input.wallet.ok
+          ? { kind: "empty" }
+          : (viewStateOf(input.wallet, () => true) as ViewState<LedgerRows>)
         : mapState(viewStateOf(input.ledger, (page) => page.items.length === 0), (page) => ({
             rows: page.items.map(ledgerEntryView),
             page: pageNumberOf(state),
