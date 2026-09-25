@@ -1,0 +1,44 @@
+From 2efdeebdf940b692f4cf1e3ed2a996eed5c0fe63 Mon Sep 17 00:00:00 2001
+From: reyanshsolis <rishabh.17iitkgp@gmail.com>
+Date: Fri, 25 Sep 2026 00:07:23 +0000
+Subject: [PATCH] contracts/tasklocal: move the wave-4 Valkey/S3 ports out of
+ the D-harness decoy band (55472-55490): w5 55491, g8 55492, e2c 55493/55494,
+ i8 55495
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_015im5YK2aUi9LGinGDTfgng
+---
+ apps/infrx-api/infrx/contracts/tasklocal.py | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/apps/infrx-api/infrx/contracts/tasklocal.py b/apps/infrx-api/infrx/contracts/tasklocal.py
+index 13e77ed8..244b7b57 100644
+--- a/apps/infrx-api/infrx/contracts/tasklocal.py
++++ b/apps/infrx-api/infrx/contracts/tasklocal.py
+@@ -40,16 +40,18 @@ TASK_PORTS: dict[str, dict[str, int]] = {
+     "e4b": {"postgres": 56832},
+     # Wave 4 (consumer v1, program 22, 2026-09-24): one PostgreSQL (+ Valkey / S3 where the lane
+     # drives them) per lane so the twelve worktrees run their real-service suites concurrently.
+-    # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block.
++    # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block. The D
++    # harness decoy sits 40 above every PostgreSQL port (tests/d/test_pgharness.py: 55472-55490
++    # for the ports below), so the Valkey/S3 ports stay outside that band.
+     "d10": {"postgres": 55442, "valkey": 55469},
+     "m5": {"postgres": 55443, "s3": 55470},
+     "m6": {"postgres": 55444, "s3": 55471},
+-    "w5": {"postgres": 55445, "valkey": 55472},
++    "w5": {"postgres": 55445, "valkey": 55491},
+     "g7": {"postgres": 55446},
+-    "g8": {"postgres": 55447, "valkey": 55473},
+-    "e2c": {"postgres": 55448, "valkey": 55474, "s3": 55475},
++    "g8": {"postgres": 55447, "valkey": 55492},
++    "e2c": {"postgres": 55448, "valkey": 55493, "s3": 55494},
+     "e1c": {"postgres": 55449},
+-    "i8": {"postgres": 55450, "valkey": 55476},
++    "i8": {"postgres": 55450, "valkey": 55495},
+     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
+     "e3c": {"postgres": 56932},
+ }
+-- 
+2.43.0
+

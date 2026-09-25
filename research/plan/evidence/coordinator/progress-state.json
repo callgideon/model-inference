@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 23,
-  "updated": "2026-09-25T00:19:34Z",
+  "revision": 24,
+  "updated": "2026-09-25T00:44:22Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -914,43 +914,54 @@
     {
       "id": "G8",
       "task": "G8",
-      "slice": "points 1-4 (trusted account ops; idempotent bounded transition; approved-card gate + dry-run; races/retries) + acceptance",
+      "slice": "fix round: 0-G8-R1/2-ACC-1 (pre-freeze admission straddling the transition), 0-G8-R2/1-G8-RULES-1/2-ACC-2 (contracts run on 55432; evidence correction), 0-G8-R3 (revoked-key read bound routed to G7)",
       "agent": "opus",
       "branch": "codex/g8-credit-ops",
       "worktree": ".claude/worktrees/codex-g8-credit-ops",
       "base": "dff31efc",
-      "head": "6a075c56",
+      "head": "09f4ab2a",
       "isolation": {
         "ports": "postgres 55447, valkey 55473 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g8-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-24T23:14:00Z",
+      "updated": "2026-09-25T00:44:22Z",
       "blocker": "P-01 approved launch rates (live activation only); coordinator box dry-run window (read-only)",
-      "next_action": "Headless CREDIT operations; read-only key inventory in the dry-run (F8); P-02 inventory; one public card id (F11).",
+      "next_action": "merged e309b3fa (--no-ff; tasklocal kept on the integration side); R117-R118 numbered; manifest G8 implemented; merged-tree checks: tests/g minus ops 527 passed, tests/g/ops + test_operations_pg + test_signup 116 passed on g8; ops mutants rerun was in flight at the session handoff - confirm on resume; remaining = merged-SHA rerun with D10 (0019/0020), G7 revocation-bound ruling, coordinator box dry-run after run3, post-P-01 activation window",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 4,
-        "pessimistic_h": 8,
-        "confidence": "medium",
-        "basis": "code + local real-PG/composed-app proofs done; remaining = merged-SHA rerun with D10 0019/0020 (ready marker in pgworld.settle), wiring request 1, review fixes, box dry-run support, post-P-01 activation window",
-        "at": "2026-09-24T23:14Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a)",
+        "at": "2026-09-25T00:44:22Z"
       },
       "evidence": [
-        "research/plan/evidence/g/G8-6a075c5.md"
+        "research/plan/evidence/g/G8-6a075c5.md",
+        "research/plan/evidence/g/G8-44ea477.md"
       ],
       "commands": [
         {
           "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops tests/d/test_operations_pg.py tests/d/test_signup.py",
           "exit": 0,
-          "summary": "114 passed (tests/g/ops 80), 0 skipped"
+          "summary": "116 passed, 0 skipped"
         },
         {
-          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py",
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g/ops",
           "exit": 0,
-          "summary": "95 passed: 89/89 mutants killed + 4 self-tests + 2 list checks"
+          "summary": "82 passed"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen python tests/g/ops/mutants.py --list",
+          "exit": 0,
+          "summary": "92 mutants over 51 named cases"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "summary": "98 passed: 92/92 killed + 4 self-tests + 2 list checks"
         },
         {
           "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/ops",
@@ -958,26 +969,32 @@
           "summary": "527 passed"
         },
         {
-          "cmd": "uv run --frozen pytest -q tests/contracts",
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q -p no:cacheprovider tests/contracts",
           "exit": 0,
-          "summary": "1078 passed (idle; one run under concurrent mutant load showed 3 load failures)"
+          "summary": "1078 passed, 0 skipped (PG projection cases on 55447); supersedes the earlier non-g8 record"
         },
         {
-          "cmd": "make api-test / make check",
-          "exit": null,
-          "summary": "not run: 55432 is E2C's; PG suites ran on g8 (55447)"
+          "cmd": "INFRX_D_TASK=g8 uv run --frozen pytest -q tests/g/ops/test_transition.py tests/g/ops/test_transition_pg.py (at 6a075c56 code, new tests)",
+          "exit": 1,
+          "summary": "fail-first: 2 failed (fake: no wait; PG straddler: transition exit 0 with CREDIT enabled), 10 passed; 12 passed at 44ea4770"
+        },
+        {
+          "cmd": "INFRX_D_TASK=g8 PYTHONPATH=. uv run --frozen python scratchpad/g8acc/race.py",
+          "exit": 0,
+          "summary": "reviewer reproduction after fix: transition exit 1 (open_transactions), freeze only, audited 0; dry-run exit 1 in_flight"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
       "owned_paths": [
         "apps/infrx-api/infrx/operations/",
         "apps/infrx-api/tests/g/ops/",
-        "apps/infrx-api/client_example.py",
-        "research/plan/evidence/g/G8-6a075c5.md"
+        "research/plan/evidence/g/G8-44ea477.md",
+        "research/plan/evidence/g/G8-6a075c5.md (appended Fix round section)"
       ],
       "wiring_requests": [
-        "D10 SQL: infrx.require_feature reads the flag FOR SHARE (volatile) so a freeze waits for in-flight admissions; patch + two-connection proving test in the evidence",
-        "D10 integration: add infrx.readiness_cutover_check() to transition inventory once 0019 merges; pgworld.settle may need claim_preparation_ready"
+        "D10 SQL: infrx.require_feature reads the flag FOR SHARE (durable DB-side guard; the transition's own wait now closes the hole without it)",
+        "D10 integration: add infrx.readiness_cutover_check() to transition inventory once 0019 merges; pgworld.settle may need claim_preparation_ready",
+        "G7/auth: rule on revoked-key job reads (document the KEY_TTL 60 s bound, or recheck revoked_at on reads)"
       ]
     },
     {
@@ -1182,12 +1199,6 @@
       "lane": "I8",
       "task": "I8",
       "head": "103d20a8"
-    },
-    {
-      "since": "2026-09-24T23:14:00Z",
-      "lane": "G8",
-      "task": "G8",
-      "head": "6a075c56"
     },
     {
       "since": "2026-09-24T23:25:00Z",
@@ -2266,6 +2277,18 @@
       "by": "E1C",
       "what": "integration → complete; head 6cb6c929; estimate likely 0.5 → 0 h (merged; start dependency F2C implemented)",
       "source": "updates/E1C-20260925T001934Z.json"
+    },
+    {
+      "at": "2026-09-25T00:17:00Z",
+      "by": "G8",
+      "what": "review → review; head 44ea4770",
+      "source": "updates/G8-20260925T0017Z.json"
+    },
+    {
+      "at": "2026-09-25T00:44:22Z",
+      "by": "G8",
+      "what": "review → complete; head 09f4ab2a; estimate likely 4 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a))",
+      "source": "updates/G8-20260925T004422Z.json"
     }
   ],
   "history": {
@@ -2393,10 +2416,18 @@
     "E1C-20260925T001934Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:19:34Z"
+    },
+    "G8-20260925T0017Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:17:00Z"
+    },
+    "G8-20260925T004422Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:44:22Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:19:34Z",
+    "computed_at": "2026-09-25T00:44:22Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,

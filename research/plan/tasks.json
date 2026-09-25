@@ -4297,7 +4297,7 @@
       "track": "G",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4328,7 +4328,12 @@
       ],
       "acceptance": "Verified individual gets one entitlement and can spend/reconcile/revoke through shared trusted ports.",
       "failure_oracle": "Repeated callback/grant, historical replay or client-selected unit cannot multiply funds or change settlement.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/g/G8-6a075c5.md",
+        "research/plan/evidence/g/G8-44ea477.md"
+      ],
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 at e309b3fa after the verify-lane fix round (ACCEPT_WITH_FIXES at 09f4ab2a); implemented = reviewed code + real-PG proofs on the task-local harness; the merged-SHA rerun with D10 (0019/0020 readiness, require_feature FOR SHARE), the G7 revocation-bound ruling, the coordinator box dry-run and the post-P-01 activation window remain (E3C/E4C)."
     },
     {
       "id": "E1C",

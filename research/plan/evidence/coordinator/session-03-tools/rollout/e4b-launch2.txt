@@ -1,0 +1,11 @@
+command ed77a679-fd22-4b2d-904f-9eef4677f060 (e4b-certify2.sh on i-0e8449a4ffca29bab)
+out=/opt/dlami/nvme/e4b/20260924T172244Z
+[ok  ] e4b.b.preconditions: App and Lab stopped, window open, engine idle, clips present
+[ok  ] e4b.b.config-pin: tree and deployed engine match
+[FAIL] e4b.b.served-build: ["the gateway serves 422631591845fbd66b590c73d5ff4150318d9d7a, the report's tree is None", "the gateway runs sha256:491697bce56a9b0b0359b38adaaeed6cb534f73ad6a45f35f43f9be46
+[PEND] e4b.b.recovery-box: I3B's runbook drills on the box (infra/runbooks: restart, restore, rollback, index-loss, disk, reconcile) are the coordinator's, recorded in E4B-release-decision.md
+[skip] e4b.a.protocol: --no-stack
+[skip] e4b.b.recovery: --no-stack
+[FAIL] e4b.a.sop-parity: {"verdict": "fail", "why": "c012-bbb1080p30-1024x768-4x3: refused by the candidate; c025-tos720p-2560x1080-ultrawide-rot180: refused by the candidate; c038-sintel1080p-480x854
+	
+status Success

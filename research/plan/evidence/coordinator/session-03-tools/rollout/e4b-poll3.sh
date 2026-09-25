@@ -1,0 +1,1 @@
+grep -E '^\[(ok|FAIL|PEND|skip)' /opt/dlami/nvme/e4b/20260924T202924Z/certify.log | cut -c1-150; echo "--- exit line:"; grep -E '^exit [0-9]+' /opt/dlami/nvme/e4b/20260924T202924Z/certify.log | tail -1; ls /opt/dlami/nvme/e4b/20260924T202924Z/report.json 2>/dev/null; ls /opt/dlami/nvme/e4b/20260924T202924Z/work | tail -n 3
