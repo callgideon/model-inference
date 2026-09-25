@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 48,
-  "updated": "2026-09-25T18:22:51Z",
+  "revision": 49,
+  "updated": "2026-09-25T18:23:16Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -266,12 +266,12 @@
     {
       "id": "E2C",
       "task": "E2C",
-      "slice": "coordinator wiring: Makefile gates, pytest relock, rehearse MinIO pin, E2C-FR-2",
+      "slice": "L3-REBASE",
       "agent": "opus",
-      "branch": "codex/e2c-wiring",
-      "worktree": ".claude/worktrees/codex-e2c-wiring",
+      "branch": "codex/l3-rebase",
+      "worktree": "/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-l3-rebase",
       "base": "5bef53bc",
-      "head": "26ef3fc3",
+      "head": "8a94a855",
       "isolation": {
         "ports": "postgres 55448, valkey 55474, s3 55475 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-e2c-",
@@ -279,78 +279,61 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:40:00Z",
-      "updated": "2026-09-25T03:02:52Z",
-      "blocker": "consumer-local not PASS: rerun needed (S3 container removed mid-run); E2C-FR-1 signup Runner env not applied; integration-l3 needs the coordinator's e2 namespace run",
-      "next_action": "coordinator merges codex/e2c-wiring, runs make api-test/api-mutants on pytest 9.1.1, then reruns make consumer-local on e2c",
+      "updated": "2026-09-25T18:12:00Z",
+      "blocker": null,
+      "next_action": "coordinator review + merge; D10-FOLLOWUP's 0022 re-baselines the migration pin and RUNTIME_FUNCTIONS; G7/I8 add panels for the four intake metric families (ob10)",
       "estimate": {
-        "optimistic_h": 1,
-        "likely_h": 2,
-        "pessimistic_h": 4,
-        "confidence": "medium",
-        "basis": "one consumer-local rerun on this head (~65 min) + E2C-FR-1 + make api-test/api-mutants on pytest 9",
-        "at": "2026-09-25T03:02:52Z"
+        "optimistic_h": 0,
+        "likely_h": 0.25,
+        "pessimistic_h": 1,
+        "confidence": "high",
+        "basis": "layer-3 rls green at head; only 0022 will need a re-baseline",
+        "at": "2026-09-25T18:12Z"
       },
       "evidence": [
         "research/plan/evidence/e/E2C-3a113dc.md",
         "tests/integration/ENVIRONMENT.md",
         "tests/integration/environment.json",
         "research/plan/evidence/e/E2C-f61d2f0.md",
-        "research/plan/evidence/e/E2C-wiring-26ef3fc.md"
+        "research/plan/evidence/e/E2C-wiring-26ef3fc.md",
+        "research/plan/evidence/e/L3-REBASE-8a94a85.md"
       ],
       "commands": [
         {
-          "cmd": "pytest -q tests/integration/test_preflight.py -k make_target",
-          "exit": 0,
-          "summary": "4 passed"
-        },
-        {
-          "cmd": "uv lock",
-          "exit": 0,
-          "summary": "pytest 8.4.2 -> 9.1.1 only"
-        },
-        {
-          "cmd": "uv sync --frozen --all-extras",
-          "exit": 0,
-          "summary": "pytest 9.1.1 installed"
-        },
-        {
-          "cmd": "uv run --frozen pytest -q tests/contracts -k 'not pg'",
-          "exit": 0,
-          "summary": "1260 passed, 6 deselected"
-        },
-        {
-          "cmd": "uv run --frozen pytest -q tests/i/test_packaging.py",
-          "exit": 0,
-          "summary": "23 passed"
-        },
-        {
-          "cmd": "pytest -q tests/integration/test_run.py test_preflight.py test_harness.py",
-          "exit": 0,
-          "summary": "138 passed"
-        },
-        {
-          "cmd": "consumer-local gate (fix agent driver, 330e04f1 dirty)",
+          "cmd": "run.py --layer 3 --only-suites --no-mutants (head, e2 namespace)",
           "exit": 1,
-          "summary": "FAIL: api-d decoy (lane tasklocal; passes at head), api-m/api-w S3 container vanished mid-run; l1/l3 BLOCKED; backend-local NOT RUN"
+          "summary": "rls PASS 880; backend 231 pass / 1 fail (ob10, G7 metrics without panels, not owned); suites PASS"
+        },
+        {
+          "cmd": "pytest -q tests/integration --ignore=tests/integration/backend",
+          "exit": 0,
+          "summary": "180 passed"
+        },
+        {
+          "cmd": "pytest -q tests/integration/backend/recovery/test_restore.py -k bk01",
+          "exit": 0,
+          "summary": "25 passed"
+        },
+        {
+          "cmd": "mutants.py --layer all --only e2m74|e2m75|e2m76",
+          "exit": 0,
+          "summary": "3/3 killed; control e2c02 survived"
+        },
+        {
+          "cmd": "python3 research/plan/scripts/validate_plan.py",
+          "exit": 0,
+          "summary": "PASS"
         }
       ],
       "owned_paths": [
-        "Makefile",
-        "apps/infrx-api/pyproject.toml",
-        "apps/infrx-api/uv.lock",
-        "apps/infrx-api/deploy/rehearse.sh",
-        "apps/infrx-api/tests/i/test_packaging.py",
-        "tests/integration/run.py",
-        "tests/integration/test_run.py",
-        "tests/integration/test_preflight.py",
-        "research/plan/evidence/e/E2C-wiring-26ef3fc.md",
-        "research/plan/evidence/coordinator/updates/E2C-20260925T0302Z.json"
+        "tests/integration/test_harness.py",
+        "tests/integration/pgstate.py",
+        "tests/integration/mutants.py",
+        "tests/integration/backend/recovery/test_restore.py",
+        "research/plan/evidence/e/"
       ],
       "deviation": "Program 22 V0: E2C may begin environment inventory in parallel with S3.",
-      "wiring_requests": [
-        "E2C-FR-1 tests/d/signup_mutants.py Runner env",
-        "host sysctl ip_local_reserved_ports += 55500-55599"
-      ]
+      "wiring_requests": []
     },
     {
       "id": "F2C-L",
@@ -1268,12 +1251,6 @@
   ],
   "review_queue": [
     {
-      "since": "2026-09-25T00:04:00Z",
-      "lane": "E2C",
-      "task": "E2C",
-      "head": "26ef3fc3"
-    },
-    {
       "since": "2026-09-25T00:35:00Z",
       "lane": "W5",
       "task": "W5",
@@ -1290,6 +1267,12 @@
       "lane": "E3C",
       "task": "E3C",
       "head": "7d0d3d7b"
+    },
+    {
+      "since": "2026-09-25T00:04:00Z",
+      "lane": "E2C",
+      "task": "E2C",
+      "head": "8a94a855"
     }
   ],
   "integration_queue": [],
@@ -2640,6 +2623,12 @@
       "at": "2026-09-25T18:22:51Z",
       "by": "tracker",
       "what": "forecast E3C: 2026-09-26 01:22Z – 2026-09-26 20:52Z (likely 2026-09-26 07:52Z) → 2026-09-26 00:34Z – 2026-09-26 17:28Z (likely 2026-09-26 05:46Z) (because: dependency path W5 → E3C)"
+    },
+    {
+      "at": "2026-09-25T18:12:00Z",
+      "by": "E2C",
+      "what": "review → review; head 8a94a855; estimate likely 2 → 0.25 h (layer-3 rls green at head; only 0022 will need a re-baseline)",
+      "source": "updates/L3-REBASE-20260925T1812Z.json"
     }
   ],
   "history": {
@@ -2910,10 +2899,14 @@
     "E3C-20260925T1820Z.json": {
       "status": "applied",
       "at": "2026-09-25T18:20:00Z"
+    },
+    "L3-REBASE-20260925T1812Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T18:12:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T18:22:51Z",
+    "computed_at": "2026-09-25T18:23:16Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2923,7 +2916,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 00:34Z – 2026-09-26 17:28Z (likely 2026-09-26 05:46Z)",
+        "text": "2026-09-26 00:35Z – 2026-09-26 17:29Z (likely 2026-09-26 05:47Z)",
         "constraint": "dependency path W5 → E3C",
         "effort_h": [
           6.2,
@@ -2936,9 +2929,9 @@
           23.1
         ],
         "finish": [
-          "2026-09-26T00:34:51Z",
-          "2026-09-26T05:46:51Z",
-          "2026-09-26T17:28:51Z"
+          "2026-09-26T00:35:16Z",
+          "2026-09-26T05:47:16Z",
+          "2026-09-26T17:29:16Z"
         ],
         "conditional": null,
         "confidence": "medium",
