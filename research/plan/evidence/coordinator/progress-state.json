@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 31,
-  "updated": "2026-09-25T02:56:50Z",
+  "revision": 32,
+  "updated": "2026-09-25T03:04:40Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -689,59 +689,75 @@
     {
       "id": "D10",
       "task": "D10",
-      "slice": "d (a, b, c committed)",
+      "slice": "survivor round (a-d committed; WR-3a, M6 findings, E2C-FR-1 folded in)",
       "agent": "opus",
       "branch": "codex/d10-durable",
       "worktree": ".claude/worktrees/codex-d10-durable",
       "base": "dff31efc",
-      "head": "31c2112c",
+      "head": "1f12cb6a",
       "isolation": {
         "ports": "postgres 55442, valkey 55469 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-d10-",
         "db": null
       },
-      "activity": "running",
+      "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T00:53:00Z",
-      "blocker": "lane ports lie in the kernel ephemeral range (32768-60999): a foreign outgoing connection took 127.0.0.1:55442 twice; pgharness retries, coordinator may move ports below 32768",
+      "updated": "2026-09-25T03:02:00Z",
+      "blocker": "W5 fail_preparation needs the F2C port signature and R104's ruling before D10 writes its SQL",
       "next_action": "rerun INFRX_MUTANTS=all D lists and triage; INFRX_D1_IMAGE=supabase D10 suites + test_postgrest_d10; probe on the Supabase image",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 4,
-        "pessimistic_h": 8,
+        "optimistic_h": 1,
+        "likely_h": 3,
+        "pessimistic_h": 6,
         "confidence": "medium",
-        "basis": "code/SQL committed and green on plain PG; remaining: full mutant list, Supabase-image runs, probe on that image",
-        "at": "2026-09-25T00:53Z"
+        "basis": "all D lists, full mutant list and Supabase-image runs green; left: review fixes and W5 fail_preparation SQL once F2C/R104 rule the port",
+        "at": "2026-09-25T03:02Z"
       },
       "evidence": [
         "research/plan/evidence/d/D10-HANDOFF-31c2112.md",
-        "research/plan/evidence/d/D10-runtime-functions.txt"
+        "research/plan/evidence/d/D10-runtime-functions.txt",
+        "research/plan/evidence/d/D10-1f12cb6.md"
       ],
       "commands": [
         {
-          "cmd": "INFRX_D_TASK=d10 uv run --frozen pytest -q tests/d (full, default mutant subset)",
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py tests/d/test_signup.py",
           "exit": 0,
-          "summary": "f44499ea: 791 passed, 1 skipped, 8 xfailed, 0 failed"
+          "summary": "9e3e149d: 728 passed, 0 survivors (4 former survivors killed, 4 new mutants)"
         },
         {
-          "cmd": "pytest -q tests/d/test_ready.py test_lifecycle_conformance.py test_jobstore_conformance.py test_credit_jobstore_conformance.py test_admission.py test_settle.py test_reads.py",
-          "exit": 0,
-          "summary": "31c2112c: 195 passed, 7 xfailed; F2C.d transcripts 24/24 after normalization"
+          "cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_ready.py test_content.py test_reads.py test_lifecycle_conformance.py test_upgrade_d10.py test_postgrest_d10.py test_catalog_pg.py",
+          "exit": 1,
+          "summary": "9e3e149d: 123 passed, 4 xfailed, 1 failed (test_postgrest_d10: image auth.uid() legacy body)"
         },
         {
-          "cmd": "other tracks' PG tests on the D10 schema (contracts, g/ops, m, w, q)",
+          "cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_postgrest_d10.py",
           "exit": 0,
-          "summary": "31c2112c: 324 passed, 7 skipped"
+          "summary": "1f12cb6a: 1 passed after the fixture installs the hosted auth.uid()"
         },
         {
-          "cmd": "I8 privilege_probe.py --role infrx_runtime (plain image)",
+          "cmd": "I8 privilege_probe.py --role infrx_runtime (Supabase image) + infrx_monitor attempt probe",
           "exit": 0,
-          "summary": "PASS, 62 checks"
+          "summary": "PASS 63 checks, 0 failed; monitor read-only, 10s, 7 allowed, 7 denied"
         },
         {
-          "cmd": "INFRX_MUTANTS=all D mutant lists",
-          "exit": null,
-          "summary": "interrupted by the session limit; 3 F seen by 29%; rerun"
+          "cmd": "other tracks on the D10 schema (contracts/g/m/w/q list)",
+          "exit": 0,
+          "summary": "9e3e149d: 324 passed, 7 skipped"
+        },
+        {
+          "cmd": "pytest -q tests/contracts",
+          "exit": 0,
+          "summary": "9e3e149d: 1168 passed"
+        },
+        {
+          "cmd": "pytest -q tests/d (full, default mutant subset)",
+          "exit": 0,
+          "summary": "9e3e149d: 796 passed, 1 skipped, 8 xfailed"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_signup.py -k code_mutant (+docker events)",
+          "exit": 0,
+          "summary": "1f12cb6a: 15 passed; no infrx-d1-* container created"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
@@ -752,14 +768,9 @@
         "research/plan/evidence/d/"
       ],
       "wiring_requests": [
-        "G7 relay.admit -> PgLifecycle.admit_ready; jobs.py result expiry from outcome.result_expires_at + read_outcome",
-        "W5 preparation -> PgLifecycle.claim_preparation + readiness().sources",
-        "M5 uploads over PgLifecycle UploadRepository; register before every write",
-        "M6 retention over ContentLifecycle; DB content scrubbed in acknowledge_delete; factory pgtesting.make_lifecycle_factory",
-        "coordinator: PgLifecycle(connect, limits=settings.pilot, upload_window_s, grace_s, claim_ttl_s, retention_s) on the existing pool; configure_connection per WR-I8-1",
-        "I8: logins infrx_runtime/infrx_monitor, research/plan/evidence/d/D10-runtime-functions.txt, readiness_cutover_check, validate jobs_success_has_result_expiry",
-        "G8: transition readiness query; pgworld.settle -> claim_preparation_ready; spent -> consumer_jobs",
-        "C0/U4: public.consumer_jobs / consumer_job_result"
+        "unchanged from D10-HANDOFF-31c2112.md section 8 (G7, W5, M5, M6, coordinator composition, I8, G8, C0/U4, tasklocal)",
+        "G7: WR-3a now available as PgCatalogDirectory.usd_price (0021 infrx.usd_price); WR-2 can land with D10",
+        "E3C WR-4: set infrx_runtime login password on the clone and pass that DSN as DATABASE_URL"
       ]
     },
     {
@@ -1352,6 +1363,12 @@
       "lane": "M5",
       "task": "M5",
       "head": "dfe0533a"
+    },
+    {
+      "since": "2026-09-25T03:02:00Z",
+      "lane": "D10",
+      "task": "D10",
+      "head": "1f12cb6a"
     }
   ],
   "integration_queue": [],
@@ -2510,6 +2527,17 @@
       "at": "2026-09-25T02:56:50Z",
       "by": "tracker",
       "what": "forecast E3C: 2026-09-26 02:14Z – 2026-09-28 04:56Z (likely 2026-09-26 20:26Z) → 2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z) (because: dependency path E2C → D10 → M5 → M6 → E3C)"
+    },
+    {
+      "at": "2026-09-25T03:02:00Z",
+      "by": "D10",
+      "what": "running → review; head 1f12cb6a; estimate likely 4 → 3 h (all D lists, full mutant list and Supabase-image runs green; left: review fixes and W5 fail_preparation SQL once F2C/R104 rule the port)",
+      "source": "updates/D10-20260925T0302Z.json"
+    },
+    {
+      "at": "2026-09-25T03:04:40Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z) → 2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z) (because: dependency path D10 → M5 → M6 → E3C)"
     }
   ],
   "history": {
@@ -2678,10 +2706,14 @@
       "status": "rejected",
       "at": "2026-09-25T01:54:00Z",
       "reason": "malformed: estimate at: Invalid isoformat string: '2026-09-25T01:54+00:00:00+00:00'"
+    },
+    "D10-20260925T0302Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T03:02:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T02:56:50Z",
+    "computed_at": "2026-09-25T03:04:40Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2691,27 +2723,26 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 02:56Z – 2026-09-28 03:38Z (likely 2026-09-26 20:26Z)",
-        "constraint": "dependency path E2C → D10 → M5 → M6 → E3C",
+        "text": "2026-09-25 23:58Z – 2026-09-27 16:52Z (likely 2026-09-26 14:52Z)",
+        "constraint": "dependency path D10 → M5 → M6 → E3C",
         "effort_h": [
-          30.2,
-          54.2,
-          99.7
+          27.1,
+          48.5,
+          88.8
         ],
         "wall_h": [
-          24.0,
-          41.5,
-          72.7
+          20.9,
+          35.8,
+          61.8
         ],
         "finish": [
-          "2026-09-26T02:56:50Z",
-          "2026-09-26T20:26:50Z",
-          "2026-09-28T03:38:50Z"
+          "2026-09-25T23:58:40Z",
+          "2026-09-26T14:52:40Z",
+          "2026-09-27T16:52:40Z"
         ],
         "conditional": null,
         "confidence": "medium",
         "critical_path": [
-          "E2C",
           "D10",
           "M5",
           "M6",
