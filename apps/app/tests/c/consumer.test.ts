@@ -19,9 +19,12 @@ import type { PostgrestClient, QueryPlan, QueryPort, Row } from "../../lib/servi
 import { buildPlan, postgrestPort, QueryPortError } from "../../lib/services/query.ts";
 import {
   authUserOutcome,
+  consoleShell,
+  consumerSessionFrom,
   createConsumerReads,
   resolveConsumerContext,
   type ConsumerAccount,
+  type ConsumerClient,
   type CreditLedgerEntry,
   type RpcClient,
 } from "../../lib/services/console.ts";
@@ -570,4 +573,90 @@ test("the PostgREST executor refuses what it cannot send, and turns an error int
     postgrestPort(failing.client).run({ name: "consumer_wallet", predicates: [], keyset: null, limit: 1, tenant: { column: "w.owner_user_id", value: ME } }),
     (error: unknown) => error instanceof QueryPortError && !String((error as Error).message).includes("permission denied"),
   );
+});
+
+// ------------------------------------------------------------------ the request's session and shell
+//
+// `consumerSessionFrom` is `consumerSession()` minus React's `cache` and the Next cookie client
+// (server.ts is a one-line wrapper over it); `consoleShell` is what `app/(console)/layout.tsx` does
+// with the result (WR-1). Both are pure, so the layout's decisions are tested here.
+
+const SHIPPED = { verifyEmail: "/verify-email", onboarding: "/onboarding" } as const;
+const NOT_SHIPPED = { verifyEmail: null, onboarding: null } as const;
+
+/** A Supabase server client: GoTrue's answer plus what PostgREST returns per relation. */
+function supabaseAs(auth: { data: { user: typeof verified | null } | null; error: { name?: string; status?: number } | null }, tables: Record<string, Row[]> = {}): ConsumerClient {
+  return {
+    auth: { getUser: () => Promise.resolve(auth) },
+    from: (relation: string) => recordingClient({ data: tables[relation] ?? [], error: null }).client.from(relation),
+    rpc: () => Promise.resolve({ data: null, error: { code: "PGRST202", message: "not used" } }),
+  } as unknown as ConsumerClient;
+}
+
+const signedIn = { data: { user: verified }, error: null };
+const myWallet = { console_credit_wallets: [{ owner_user_id: ME, wallet_id: MY_WALLET, org_id: MY_ORG }], organizations: [{ org_id: MY_ORG, name: "Personal", suspended: false, suspension_reason: null }] };
+const secret = () => SECRET;
+const noSecret = () => {
+  throw new Error("CONSOLE_CURSOR_SECRET must be set");
+};
+
+test("consumerSession: an auth outage is unavailable, never signed out", async () => {
+  const outage = supabaseAs({ data: { user: null }, error: { name: "AuthRetryableFetchError", status: 0 } }, myWallet);
+  assert.deepEqual(await consumerSessionFrom(async () => outage, secret), { context: { state: "unavailable" }, reads: null });
+  const gotrue500 = supabaseAs({ data: { user: null }, error: { name: "AuthApiError", status: 500 } }, myWallet);
+  assert.deepEqual(await consumerSessionFrom(async () => gotrue500, secret), { context: { state: "unavailable" }, reads: null });
+});
+
+test("consumerSession: a configuration or client failure is unavailable, never onboarding or signed out", async () => {
+  const unavailable = { context: { state: "unavailable" }, reads: null };
+  // No wallet, so a failure that leaked through as the resolved state would read as onboarding.
+  const ungranted = supabaseAs(signedIn);
+  assert.deepEqual(await consumerSessionFrom(async () => ungranted, noSecret), unavailable, "missing cursor secret");
+  assert.deepEqual(await consumerSessionFrom(async () => supabaseAs(signedIn, myWallet), noSecret), unavailable, "missing secret, ready account");
+  const noEnv = async (): Promise<ConsumerClient> => {
+    throw new Error("Your project's URL and Key are required to create a Supabase client!");
+  };
+  assert.deepEqual(await consumerSessionFrom(noEnv, secret), unavailable, "createClient threw");
+  const throwingAuth = { ...ungranted, auth: { getUser: () => Promise.reject(new TypeError("fetch failed")) } } as unknown as ConsumerClient;
+  assert.deepEqual(await consumerSessionFrom(async () => throwingAuth, secret), unavailable, "getUser threw");
+});
+
+test("consumerSession: signed out, unverified and onboarding carry no reads; a ready account does", async () => {
+  const none = await consumerSessionFrom(async () => supabaseAs({ data: { user: null }, error: { name: "AuthSessionMissingError", status: 400 } }), secret);
+  assert.deepEqual(none, { context: { state: "signed_out" }, reads: null });
+  const unverified = await consumerSessionFrom(async () => supabaseAs({ data: { user: { ...verified, email_confirmed_at: null } }, error: null }, myWallet), secret);
+  assert.deepEqual(unverified, { context: { state: "unverified", userId: ME, email: "me@example.com" }, reads: null });
+  const onboarding = await consumerSessionFrom(async () => supabaseAs(signedIn), secret);
+  assert.deepEqual(onboarding, { context: { state: "onboarding", userId: ME, email: "me@example.com" }, reads: null });
+  const ready = await consumerSessionFrom(async () => supabaseAs(signedIn, myWallet), secret);
+  assert.deepEqual(ready.context, { state: "ready", account });
+  assert.notEqual(ready.reads, null, "a ready account carries its reads");
+  const balance = await ready.reads!.balance();
+  assert.equal(balance.ok ? "ok" : balance.error.code, "dependency_unavailable", "the reads run on the same client");
+});
+
+test("the console shell: an operator without a consumer wallet reaches /admin, not /onboarding", async () => {
+  // The operator's view shows every wallet, none of them theirs: the owner filter leaves nothing.
+  const operator = await consumerSessionFrom(async () => supabaseAs(signedIn), secret);
+  assert.equal(operator.context.state, "onboarding");
+  assert.deepEqual(consoleShell(operator, true, SHIPPED), { kind: "render", email: "me@example.com", reads: null }, "operator: the shell renders the page asked for");
+  assert.deepEqual(consoleShell(operator, true, NOT_SHIPPED), { kind: "render", email: "me@example.com", reads: null });
+  // An individual (a provider developer included) is sent to finish onboarding - once that route exists.
+  assert.deepEqual(consoleShell(operator, false, SHIPPED), { kind: "redirect", to: "/onboarding" });
+  assert.deepEqual(consoleShell(operator, false, NOT_SHIPPED), { kind: "panel", state: "onboarding" }, "never a redirect to a missing route");
+});
+
+test("the console shell: sign-in, verification, readiness and outages", async () => {
+  const signedOut = { context: { state: "signed_out" as const }, reads: null };
+  assert.deepEqual(consoleShell(signedOut, false, SHIPPED), { kind: "redirect", to: "/login" });
+  const unverified = { context: { state: "unverified" as const, userId: ME, email: "me@example.com" }, reads: null };
+  assert.deepEqual(consoleShell(unverified, false, SHIPPED), { kind: "redirect", to: "/verify-email" });
+  assert.deepEqual(consoleShell(unverified, true, SHIPPED), { kind: "redirect", to: "/verify-email" }, "an operator verifies too");
+  assert.deepEqual(consoleShell(unverified, false, NOT_SHIPPED), { kind: "panel", state: "unverified" });
+  const unavailable = { context: { state: "unavailable" as const }, reads: null };
+  assert.deepEqual(consoleShell(unavailable, false, SHIPPED), { kind: "panel", state: "unavailable" });
+  assert.deepEqual(consoleShell(unavailable, true, SHIPPED), { kind: "panel", state: "unavailable" }, "an outage is not onboarding for an operator either");
+  const ready = await consumerSessionFrom(async () => supabaseAs(signedIn, myWallet), secret);
+  assert.deepEqual(consoleShell(ready, false, SHIPPED), { kind: "render", email: "me@example.com", reads: ready.reads });
+  assert.deepEqual(consoleShell({ context: ready.context, reads: null }, false, SHIPPED), { kind: "panel", state: "unavailable" }, "ready without reads");
 });
