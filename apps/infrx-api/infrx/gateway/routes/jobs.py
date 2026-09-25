@@ -25,6 +25,12 @@ any store read, then asks the store with the key's organization (R59/R66). A mal
 unknown and another tenant's handle are one 404. Expiry is judged on the store clock
 (`db_now`, R29/R79), never the gateway's.
 
+Revocation bound (G8's finding, stated rather than removed): admission re-reads the key in
+its own transaction, so a revoked key's next submission is refused at once; these routes
+authenticate from the identity cache, so a revoked key keeps reading - and cancelling - its
+own organization's jobs for at most KEY_TTL (60 s) after the gateway last fetched it, while
+the identity source answers (`tests/g/jobs/test_revocation.py`).
+
 G7 (RESULT-EXPIRY): every read applies F2C.b's one classification,
 `lifecycle.read_outcome(outcome, db_now)`, over the `result_expires_at` the settling
 transaction persisted - never recomputed from the current `result_ttl_s`, so a retune
