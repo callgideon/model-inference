@@ -111,6 +111,7 @@ Decided by the coordinator under the operator's authorization ([15 P-17](../15-p
 BACKEND-READY is accepted only when all ten hold. The coordinator records the decision, its date and the SHA in the E4C evidence under `research/plan/evidence/e/` and in `gates.BACKEND-READY`; a false item is `rejected` or pending with the item named, and a later FAIL on the same candidate sets `rejected`.
 
 Runbook: the box shell that runs certify exports only `INFRX_API_KEY` (the profile's `tenant_key_env`); bench prefers `MARLIN_API_KEY` when both are set, and the cell is then refused.
+Window runbook: [models/marlin2b/results/E4C-runbook.md](../../../models/marlin2b/results/E4C-runbook.md) (freeze, FILL sources, key inventory, the certify and two-tenant journey invocations with `E4C-edge.overload.base.json` and `E4C-box.two-tenant.base.json`, drill record, evidence layout, P-17 tick-off).
 
 ## Evidence format and ownership
 
