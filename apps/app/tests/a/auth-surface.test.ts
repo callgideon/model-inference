@@ -8,6 +8,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { CLAIM_RPC, claimArgs } from "../../app/(auth)/flow.ts";
+
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUTH = join(appRoot, "app", "(auth)");
 const CALLBACK = join(appRoot, "app", "auth", "callback", "route.ts");
@@ -142,4 +144,74 @@ test("A2-A11Y-01 every auth input has a label, and every error region is announc
       assert.match(tag, /role="alert"|aria-live=/, `${name}: an error region is not announced`);
     }
   }
+});
+
+// ---------------------------------------------------------- fix round: the wiring layer ---
+// The decisions are tested in onboarding-flow.test.ts; these pin that each page actually calls them.
+// (Browser tooling is not in package.json; see the evidence's fix-round section.)
+
+const MIGRATIONS = join(appRoot, "supabase", "migrations");
+const migration = (prefix: string) => read(join(MIGRATIONS, readdirSync(MIGRATIONS).find((name) => name.startsWith(prefix))!));
+
+test("A2-GRANT-05 the grant call matches A1's function (0015) and grant.ts sends it and reads its error", () => {
+  const signature = new RegExp(`create or replace function public\\.${CLAIM_RPC}\\(([^)]*)\\)`).exec(migration("0015_"));
+  assert.ok(signature, `0015 defines no public.${CLAIM_RPC}`);
+  const params = signature[1].split(",").map((param) => param.trim());
+  const sent = Object.keys(claimArgs("u"));
+  for (const key of sent) assert.ok(params.some((param) => param.startsWith(`${key} `)), `0015 has no parameter ${key}`);
+  for (const param of params.filter((p) => !/\bdefault\b/.test(p))) {
+    assert.ok(sent.includes(param.split(" ")[0]), `required parameter ${param} is not sent`);
+  }
+  const grant = read(join(AUTH, "grant.ts"));
+  assert.match(grant, /createAdminClient\(\)\.rpc\(CLAIM_RPC, claimArgs\(userId\)\)/);
+  assert.match(grant, /claimOutcome\(data, error\)/, "a claim error must reach the mapper");
+});
+
+test("A2-WIRE-01 sign-in claims the grant through afterSignIn and goes where it says", () => {
+  assert.match(read(join(AUTH, "login", "login-form.tsx")), /router\.push\(await afterSignIn\(claimOnboarding, next\)\);/);
+});
+
+test("A2-WIRE-02 signup, resend and reset go through the tested requests with the live auth client, and nothing bypasses them", () => {
+  assert.match(
+    read(join(AUTH, "signup", "signup-form.tsx")),
+    /const settled = await requestSignup\(createClient\(\)\.auth, email, String\(form\.get\("password"\)\), window\.location\.origin\);\s*setPending\(false\);\s*if \(settled === "sent"\) setSentTo\(email\);\s*else setError\(FAILURE_COPY\[settled\]\);/,
+  );
+  assert.match(
+    read(join(AUTH, "verify-email", "resend-form.tsx")),
+    /const settled = await requestResend\(createClient\(\)\.auth, address, window\.location\.origin\);/,
+  );
+  assert.match(
+    read(join(AUTH, "forgot-password", "page.tsx")),
+    /const settled = await requestReset\(createClient\(\)\.auth, email, window\.location\.origin\);\s*setPending\(false\);[\s\S]*?if \(settled === "sent"\) setSent\(true\);\s*else setError\(FAILURE_COPY\[settled\]\);/,
+  );
+  for (const file of files(AUTH).filter((f) => !f.endsWith("flow.ts"))) {
+    assert.ok(!/\.(signUp|resend|resetPasswordForEmail)\(/.test(read(file)), `${relative(appRoot, file)} calls the auth service directly`);
+  }
+});
+
+test("A2-WIRE-03 resend cools down for 60 s, and an expired reset session offers a new link", () => {
+  const resend = read(join(AUTH, "verify-email", "resend-form.tsx"));
+  assert.match(resend, /const COOLDOWN_MS = 60_000;/);
+  assert.match(resend, /setCoolingDown\(true\);\s*setTimeout\(\(\) => setCoolingDown\(false\), COOLDOWN_MS\);/);
+  assert.match(resend, /disabled=\{pending \|\| coolingDown\}/);
+  const update = read(join(AUTH, "update-password", "page.tsx"));
+  assert.match(update, /setExpired\(failure === "link_expired"\);/);
+  assert.match(update, /\{expired \? \(\s*<Link href="\/forgot-password"/);
+});
+
+test("A2-WIRE-04 /welcome shows the balance only from welcomeWallet's `available` answer, through displayCredit, never a float", () => {
+  assert.match(migration("0008_"), /function public\.console_wallet_summary\(p_user uuid\)/);
+  const page = read(join(AUTH, "welcome", "page.tsx"));
+  assert.match(page, /const wallet = await welcomeWallet\(\(\) => supabase\.rpc\("console_wallet_summary", \{ p_user: user\.id \}\)\);/);
+  assert.equal(page.split("displayCredit(").length - 1, 1, "one place renders the amount");
+  assert.match(page, /\{wallet\.kind === "available" \? \(\s*<>\s*<p[^>]*>\s*\{displayCredit\(wallet\.available\)\}/);
+  for (const banned of [/\bNumber\(/, /parseFloat\(/, /parseInt\(/, /toFixed\(/, /toLocaleString\(/, /"0(?:\.0+)?"/]) {
+    assert.ok(!banned.test(page), `page.tsx: ${banned}`);
+  }
+});
+
+test("A2-A11Y-02 after signup, focus moves to the 'Check your email' heading", () => {
+  const signup = read(join(AUTH, "signup", "signup-form.tsx"));
+  assert.match(signup, /useEffect\(\(\) => \{\s*if \(sentTo\) heading\.current\?\.focus\(\);\s*\}, \[sentTo\]\);/);
+  assert.match(signup, /<h2 ref=\{heading\} tabIndex=\{-1\}/);
 });

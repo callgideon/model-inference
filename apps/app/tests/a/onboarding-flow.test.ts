@@ -11,15 +11,24 @@ import {
   AFTER_VERIFY,
   FAILURE_COPY,
   SIGNUP_CAMPAIGN,
+  afterSignIn,
   authFailure,
   claimOutcome,
   completeCallback,
+  emailSettled,
   loginNotice,
   onboardingFor,
+  requestReset,
+  requestResend,
+  requestSignup,
+  resetRedirect,
   safeNext,
   signupSettled,
+  verifyRedirect,
   walletBalance,
+  welcomeWallet,
   type CallbackPorts,
+  type EmailAuth,
   type OnboardingState,
 } from "../../app/(auth)/flow.ts";
 
@@ -265,4 +274,129 @@ test("A2-NOTICE-01 the login page shows only known notices; anything else in ?er
   assert.equal(loginNotice("Your account is locked, call us"), null);
   assert.equal(loginNotice(null), null);
   assert.equal(loginNotice("toString"), null, "a prototype key is not a notice");
+});
+
+// ------------------------------------------------------------------- fix round (review) ---
+
+test("A2-ENUM-04 resend and reset read an unknown address as sent, and report rate limits and outages truthfully", () => {
+  assert.equal(emailSettled(null), "sent");
+  assert.equal(emailSettled({ code: "user_not_found", status: 400, message: "User not found" }), "sent", "an unknown address must not be revealed");
+  assert.equal(emailSettled({ code: "invalid_credentials", status: 400, message: "x" }), "sent");
+  assert.equal(emailSettled({ code: "over_email_send_rate_limit", status: 429, message: "x" }), "rate_limited", "a rate limit is not 'sent'");
+  assert.equal(emailSettled({ status: 429, message: "x" }), "rate_limited");
+  assert.equal(emailSettled({ status: 0 }), "unavailable", "no answer is not 'sent'");
+});
+
+test("A2-BAL-04 the /welcome read: exact balance, not issued, or unavailable — a failed or thrown read is never a confirmed zero", async () => {
+  const ok = { wallet_id: GRANT_ROW.wallet_id, unit: "CREDIT", available: "10000.00000000", signup_granted_at: GRANT_ROW.granted_at };
+  let reads = 0;
+  const answer = (data: unknown, error: { code: string; message: string } | null) => async () => {
+    reads += 1;
+    return { data, error };
+  };
+  assert.deepEqual(await welcomeWallet(answer([ok], null)), { kind: "available", available: "10000.00000000", grantedAt: GRANT_ROW.granted_at });
+  assert.equal(reads, 1, "one read per render");
+  assert.deepEqual(await welcomeWallet(answer(null, { code: "42501", message: "denied" })), { kind: "unavailable" });
+  assert.deepEqual(await welcomeWallet(answer([ok], { code: "57014", message: "canceled" })), { kind: "unavailable" }, "an error beside a row");
+  assert.deepEqual(await welcomeWallet(answer([{ ...ok, wallet_id: null, available: "0.00000000" }], null)), { kind: "not_issued" });
+  assert.deepEqual(await welcomeWallet(answer([{ ...ok, available: 10000 }], null)), { kind: "unavailable" }, "a float is not exact");
+  const thrown = await welcomeWallet(async () => {
+    throw new Error("fetch failed");
+  });
+  assert.deepEqual(thrown, { kind: "unavailable" }, "a thrown read is a retry state, not a crash or a zero");
+});
+
+test("A2-SIGNIN-01 sign-in claims the grant once; only a replayed grant continues to next, every other outcome lands on /welcome", async () => {
+  const NEXT = "/usage";
+  const credited = (first: boolean): OnboardingState => ({ kind: "credited", first, amount: "10000.00000000", grantedAt: GRANT_ROW.granted_at });
+  const cases: [string, () => Promise<OnboardingState>, string][] = [
+    ["a first grant is announced on onboarding", async () => credited(true), AFTER_VERIFY],
+    ["a replayed grant continues to next", async () => credited(false), NEXT],
+    ["an unavailable claim lands on the retry", async () => ({ kind: "unavailable" }), AFTER_VERIFY],
+    ["a held grant lands on onboarding", async () => ({ kind: "held", reason: "rollout_hold" }), AFTER_VERIFY],
+    ["an unverified answer lands on onboarding", async () => ({ kind: "unverified" }), AFTER_VERIFY],
+    ["a lost session lands on onboarding", async () => ({ kind: "signed_out" }), AFTER_VERIFY],
+    [
+      "a thrown claim still signs in, onto the retry",
+      async () => {
+        throw new Error("network");
+      },
+      AFTER_VERIFY,
+    ],
+  ];
+  for (const [name, answer, expected] of cases) {
+    let claims = 0;
+    const target = await afterSignIn(() => {
+      claims += 1;
+      return answer();
+    }, NEXT);
+    assert.equal(claims, 1, `${name}: exactly one claim`);
+    assert.equal(target, expected, name);
+  }
+});
+
+const ORIGIN = "https://app.example";
+type Sent = { method: string; args: unknown[] };
+
+function fakeAuth(error: Record<string, unknown> | null | "throw" = null) {
+  const sent: Sent[] = [];
+  const reply = async (method: string, args: unknown[]) => {
+    sent.push({ method, args });
+    if (error === "throw") throw new Error("fetch failed");
+    return { data: null, error };
+  };
+  const auth: EmailAuth = {
+    signUp: (...args) => reply("signUp", args),
+    resend: (...args) => reply("resend", args),
+    resetPasswordForEmail: (...args) => reply("resetPasswordForEmail", args),
+  };
+  return { auth, sent };
+}
+
+test("A2-EMAIL-01 signup, resend and reset send one request each, with links through /auth/callback, and settle without enumeration", async () => {
+  const verifyLink = `${ORIGIN}/auth/callback?next=/welcome`;
+  const signup = fakeAuth();
+  assert.equal(await requestSignup(signup.auth, "a@example.test", "pw-123456", ORIGIN), "sent");
+  assert.deepEqual(signup.sent, [
+    { method: "signUp", args: [{ email: "a@example.test", password: "pw-123456", options: { emailRedirectTo: verifyLink } }] },
+  ]);
+  assert.equal(await requestSignup(fakeAuth({ code: "user_already_exists", status: 422 }).auth, "a@example.test", "pw", ORIGIN), "sent");
+  assert.equal(await requestSignup(fakeAuth({ code: "weak_password", status: 422 }).auth, "a@example.test", "pw", ORIGIN), "weak_password");
+  assert.equal(await requestSignup(fakeAuth("throw").auth, "a@example.test", "pw", ORIGIN), "unavailable");
+
+  const resend = fakeAuth();
+  assert.equal(await requestResend(resend.auth, "a@example.test", ORIGIN), "sent");
+  assert.deepEqual(resend.sent, [
+    { method: "resend", args: [{ type: "signup", email: "a@example.test", options: { emailRedirectTo: verifyLink } }] },
+  ]);
+  assert.equal(await requestResend(fakeAuth({ code: "user_not_found", status: 400 }).auth, "b@example.test", ORIGIN), "sent");
+  assert.equal(await requestResend(fakeAuth({ code: "over_email_send_rate_limit", status: 429 }).auth, "a@example.test", ORIGIN), "rate_limited");
+
+  const reset = fakeAuth();
+  assert.equal(await requestReset(reset.auth, "a@example.test", ORIGIN), "sent");
+  assert.deepEqual(reset.sent, [
+    { method: "resetPasswordForEmail", args: ["a@example.test", { redirectTo: `${ORIGIN}/auth/callback?next=/update-password` }] },
+  ]);
+  assert.equal(await requestReset(fakeAuth({ code: "user_not_found", status: 400 }).auth, "b@example.test", ORIGIN), "sent");
+  assert.equal(
+    await requestReset(fakeAuth({ code: "over_email_send_rate_limit", status: 429 }).auth, "a@example.test", ORIGIN),
+    "rate_limited",
+    "forgot-password must not say 'sent' when rate-limited",
+  );
+  assert.equal(await requestReset(fakeAuth("throw").auth, "a@example.test", ORIGIN), "unavailable");
+});
+
+test("A2-EMAIL-02 the links those emails carry, completed by the callback, claim the grant and land where the brief says", async () => {
+  const opened = async (link: string) => {
+    const url = new URL(link);
+    assert.equal(url.origin + url.pathname, `${ORIGIN}/auth/callback`, `${link} must pass through the callback`);
+    url.searchParams.set("code", "pkce-1");
+    const { ports: p, calls } = ports();
+    return { target: await completeCallback(url.searchParams, p), calls };
+  };
+  const verified = await opened(verifyRedirect(ORIGIN));
+  assert.equal(verified.target, AFTER_VERIFY, "a verification link lands on onboarding");
+  assert.deepEqual(verified.calls.claims, [USER], "and claims the grant at verification");
+  const recovered = await opened(resetRedirect(ORIGIN));
+  assert.equal(recovered.target, "/update-password", "a recovery link reaches set-a-new-password");
 });
