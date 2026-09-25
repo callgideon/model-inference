@@ -7,6 +7,10 @@
     non-debit entries through the barrier view.
   - U1R WR-3(a): `public.consumer_jobs` gains defaulted `p_model`, `p_key_id`, `p_from`,
     `p_to`; the old three-argument calls answer exactly as before.
+  - U4 WR-U4-2: `public.consumer_job_result` refuses (`result_pending`) the success the API
+    withholds - usage never reported (`held_unknown`) - after the ownership check.
+  - C3A WR-C3A-4: a browser `api_keys` INSERT needs a verified individual (the claim path's
+    predicate) who holds a consumer wallet, besides 0001's owner/creator check.
 
 Same contract as `checks_reads.py`: the "admission" scenario, each check in a transaction it
 rolls back, the consumer reads as the real browser principal (`checks._jwt`).
@@ -21,11 +25,15 @@ import psycopg
 from infrx.contracts.conformance import builders as b
 
 from . import checks, checks_admission as ca
+from . import checks_content as ck
 from . import checks_credit as cc
+from . import checks_leases as cl
 from . import checks_ready as cr
+from . import checks_settle as cs
 from .checks_reads import _copy_jobs, as_user
 
 LEDGER = "public.consumer_credit_ledger(text,integer)"
+KEY_GATE = "public.consumer_may_create_key()"
 JOBS = ("public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
         "timestamp with time zone)")
 #: The page cap every consumer read shares (0021's `consumer_jobs` clamps to it).
@@ -300,7 +308,7 @@ def check_port_privileges(conn) -> str:
     platform's), never anon's, the runtime login's or the monitor's; the old
     three-argument `consumer_jobs` signature is gone (one function, so no call is
     ambiguous); both are SECURITY DEFINER with a pinned search_path."""
-    for fn in (LEDGER, JOBS):
+    for fn in (LEDGER, JOBS, KEY_GATE):
         for role in ("anon", "authenticated", "service_role", "infrx_runtime",
                      "infrx_monitor", "public"):
             if role == "public":
@@ -322,5 +330,66 @@ def check_port_privileges(conn) -> str:
     return "0024 reads: authenticated + service_role only; definer, pinned search_path"
 
 
+def check_result_withheld(conn) -> str:
+    """U4 WR-U4-2: the direct RPC serves what the gateway serves. A success whose usage was
+    never reported (`held_unknown`, state succeeded, result stored, expiry persisted) is
+    refused `result_pending` to its owner - the API withholds it, and an unreconciled hold
+    can end released as platform-absorbed, never charged; the settled sibling is served;
+    another individual gets `not_found` for both (the ownership check comes first)."""
+    world = ca.World(conn)
+
+    def body():
+        held, lease = cl.credit_running(conn, world)
+        cl.publish(conn, lease)
+        code, doc = cs.settle(conn, lease, cs.propose(held.request_id,
+                                                      ref=cs.stored(conn, held.request_id)),
+                              "credit")
+        assert code is None and doc["outcome"]["settlement_state"] == "held_unknown", doc
+        job = cl.row(conn, held.request_id)
+        assert job["state"] == "succeeded" and job["result_ref"] and \
+            job["result_expires_at"] is not None, job
+        settled, _ref = ck._settled_with_result(conn, world, result_ttl_s=600.0)
+        me, other = cc.CONSUMER_1, cc.CONSUMER_2
+        read = "select public.consumer_job_result(%s)"
+        got = as_user(conn, me, read, (held.request_id,))
+        assert got[0] == "result_pending", f"consumer_job_result served an unknown-usage " \
+            f"result: {got}"
+        assert as_user(conn, me, read, (settled.request_id,)) == \
+            (None, [(f"result of {settled.request_id}",)]), "the settled result is not served"
+        for request in (held, settled):
+            assert as_user(conn, other, read, (request.request_id,))[0] == "not_found", \
+                "another individual's result is not not_found"
+        return "held_unknown success refused result_pending; settled served; foreign not_found"
+    return ca._in_rollback(conn, body)
+
+
+def check_key_insert_needs_verified_wallet(conn) -> str:
+    """C3A WR-C3A-4: an individual's own-org key INSERT through the browser grant (0001's
+    column list, as PostgREST sends it) is accepted only for a verified individual
+    (`infrx.verified_user` evidence and a live email, the claim path's predicate) who holds
+    a consumer wallet; unverified with or without a wallet, and verified without one, are
+    refused by row-level security (42501)."""
+    def body():
+        # The admission scenario grants through the A1 seam, which takes its evidence as an
+        # argument: CONSUMER_1 has a wallet but no `email_confirmed_at` yet.
+        def insert(user: str):
+            return as_user(conn, user, "insert into public.api_keys (org_id, created_by, "
+                           "name, prefix, key_hash) values (%s, %s, 'k', 'sk-infrx-c3a4key0', "
+                           "%s) returning id", (cc.personal_org(conn, user), user,
+                                                f"hash-c3a4-{user}"))
+        refused = {"unverified, funded": insert(cc.CONSUMER_1),
+                   "unverified, no wallet": insert(cc.RACER)}
+        conn.execute("update auth.users set email_confirmed_at = infrx.now() "
+                     "where id in (%s, %s)", (cc.CONSUMER_1, cc.UNGRANTED))
+        refused["verified, no wallet"] = insert(cc.UNGRANTED)
+        for case, (code, _rows) in refused.items():
+            assert code == "42501", f"{case}: an api_keys insert was accepted ({code})"
+        code, rows = insert(cc.CONSUMER_1)
+        assert code is None and len(rows) == 1, f"a verified, funded individual: {code}"
+        return f"refused {sorted(refused)}; a verified individual with a wallet accepted"
+    return ca._in_rollback(conn, body)
+
+
 __all__ = ["check_consumer_credit_ledger", "check_consumer_jobs_filters",
-           "check_credits_in_index", "check_ledger_page_plan", "check_port_privileges"]
+           "check_credits_in_index", "check_key_insert_needs_verified_wallet",
+           "check_ledger_page_plan", "check_port_privileges", "check_result_withheld"]

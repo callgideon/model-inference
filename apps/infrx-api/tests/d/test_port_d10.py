@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """D10-APP-SQL (0024) on real PostgreSQL (both images): C0's paginated consumer CREDIT ledger,
-U1R's credits-in partial index and consumer_jobs filters, their grants, the re-run, and the
-immutability of 0001-0023.
+U1R's credits-in partial index and consumer_jobs filters, U4's withheld result, C3A's
+verified-and-funded key insert, their grants, the re-run, and the immutability of 0001-0023.
 
     INFRX_D_TASK=revoke uv run --frozen pytest -q tests/d/test_port_d10.py
     INFRX_D_TASK=revoke INFRX_D1_IMAGE=supabase uv run --frozen pytest -q tests/d/test_port_d10.py
@@ -61,6 +61,14 @@ def test_port_privileges() -> None:
     print(cp.check_port_privileges(_db()))
 
 
+def test_the_owners_result_is_withheld_while_usage_is_unknown() -> None:
+    print(cp.check_result_withheld(_db()))
+
+
+def test_a_browser_key_insert_needs_a_verified_individual_with_a_wallet() -> None:
+    print(cp.check_key_insert_needs_verified_wallet(_db()))
+
+
 def test_0024_is_re_runnable() -> None:
     """Applied a second time on the migrated, seeded database: same definitions, grants and
     index, and every check above still holds."""
@@ -68,15 +76,18 @@ def test_0024_is_re_runnable() -> None:
     snap = ("select p.oid::regprocedure::text, md5(pg_get_functiondef(p.oid)), "
             "coalesce(p.proacl::text, '') from pg_proc p join pg_namespace n on "
             "n.oid = p.pronamespace where n.nspname = 'public' and p.proname in "
-            "('consumer_jobs', 'consumer_credit_ledger') union all select indexname, "
-            "md5(indexdef), '' from pg_indexes where indexname = "
-            "'credit_ledger_wallet_credits_in_idx' order by 1")
+            "('consumer_jobs', 'consumer_credit_ledger', 'consumer_job_result', "
+            "'consumer_may_create_key') union all select indexname, md5(indexdef), '' "
+            "from pg_indexes where indexname = 'credit_ledger_wallet_credits_in_idx' "
+            "union all select polname, md5(pg_get_expr(polwithcheck, polrelid)), '' from "
+            "pg_policy where polname = 'api_keys_insert_owner' order by 1")
     before = conn.execute(snap).fetchall()
-    assert len(before) == 3, before
+    assert len(before) == 6, before
     pgharness.apply(DB, tuple(f for f in migrations.sql_for(shim=pgharness.NEEDS_SHIM)
                               if f[0] == PORT))
     assert conn.execute(snap).fetchall() == before, "0024 re-applied changed an object"
-    print(cp.check_port_privileges(conn), cp.check_consumer_credit_ledger(conn))
+    print(cp.check_port_privileges(conn), cp.check_consumer_credit_ledger(conn),
+          cp.check_result_withheld(conn), cp.check_key_insert_needs_verified_wallet(conn))
 
 
 def test_0001_to_0023_are_byte_identical_to_the_base() -> None:

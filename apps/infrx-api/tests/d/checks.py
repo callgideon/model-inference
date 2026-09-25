@@ -953,21 +953,34 @@ def check_sessions_are_somebody(conn) -> str:
 def check_role_matrix(conn) -> str:
     """DUR-RLS: no browser role can write balances, holds, entitlements, suspension,
     job ownership, author provenance, `by_operator` or platform roles, nor read another
-    tenant's durable state, nor call a mutation boundary."""
-    allowed_when_it_should_not_be = []
-    for label, sql in ATTACKS:
-        for session in BROWSER_SESSIONS:
-            refusal = _attempt(conn, session, sql)
-            if refusal is None:
-                allowed_when_it_should_not_be.append(f"{session} may {label}")
+    tenant's durable state, nor call a mutation boundary.
+
+    0024 (C3A WR-C3A-4) lets only a verified individual holding a consumer wallet insert a
+    key, so the owner is made one for this check (rolled back): the key-insert attacks must
+    then be refused by THEIR defenses (the column grant, the tenant), not by a missing
+    wallet, and "owner creates a key" stays a real positive control."""
+    allowed_when_it_should_not_be, refused_but_needed = [], []
+    try:
+        with conn.transaction():
+            conn.execute("update auth.users set email_confirmed_at = '2026-01-01T00:00:00Z' "
+                         "where id = %s", (USER_OWNER,))
+            conn.execute("insert into infrx.credit_wallets (kind, owner_user_id, "
+                         "personal_org_id) values ('consumer', %s, %s)", (USER_OWNER, ORG_A))
+            for label, sql in ATTACKS:
+                for session in BROWSER_SESSIONS:
+                    refusal = _attempt(conn, session, sql)
+                    if refusal is None:
+                        allowed_when_it_should_not_be.append(f"{session} may {label}")
+            for label, session, sql in ALLOWED:
+                refusal = _attempt(conn, session, sql)
+                if refusal is not None:
+                    refused_but_needed.append(f"{label} ({session}): {refusal}")
+            raise _Allowed()
+    except _Allowed:
+        pass
     assert not allowed_when_it_should_not_be, \
         "browser roles reached protected state:\n  " + \
         "\n  ".join(allowed_when_it_should_not_be)
-    refused_but_needed = []
-    for label, session, sql in ALLOWED:
-        refusal = _attempt(conn, session, sql)
-        if refusal is not None:
-            refused_but_needed.append(f"{label} ({session}): {refusal}")
     assert not refused_but_needed, \
         "the matrix denied something it must allow:\n  " + "\n  ".join(refused_but_needed)
     return (f"{len(ATTACKS)} protected operations x {len(BROWSER_SESSIONS)} browser "
@@ -1706,8 +1719,10 @@ EXPECTED_FUNCTION_CALLERS = {
     "public.consumer_jobs(text,integer,uuid,text,uuid,timestamp with time zone,"
     "timestamp with time zone)": {"authenticated", "service_role"},   # 0024's filters
     "public.consumer_job_result(uuid)": {"authenticated", "service_role"},
-    # D10-APP-SQL (0024): C0 WR-5's own-ledger page.
+    # D10-APP-SQL (0024): C0 WR-5's own-ledger page; C3A WR-C3A-4's key-insert predicate
+    # (evaluated by the api_keys INSERT policy as the caller, so the caller executes it).
     "public.consumer_credit_ledger(text,integer)": {"authenticated", "service_role"},
+    "public.consumer_may_create_key()": {"authenticated", "service_role"},
 }
 
 
