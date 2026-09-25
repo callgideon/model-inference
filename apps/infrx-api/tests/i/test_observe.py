@@ -23,6 +23,7 @@ import runpy
 import stat
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -201,7 +202,7 @@ def test_ops_continuous__the_gateway_exports_no_gpu_gauge():
 
 def test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed():
     names = [rule["name"] for rule in RULES["rules"]]
-    assert len(names) == len(set(names)) and RULES["version"] == "a1+o1"
+    assert len(names) == len(set(names)) and RULES["version"] == "a1+o2"
     anchors = {}
     for rule in RULES["rules"]:
         assert rule["op"] in evaluator.OPS and rule["severity"] in ("page", "ticket")
@@ -515,3 +516,126 @@ def test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runboo
     assert code == 0 and sent[0]["text"].startswith("[TEST RESOLVED]") and nonce in sent[0]["text"]
     code, sent = _deliver(monkeypatch, tmp_path, [], "--test")
     assert code == 3 and sent == []
+
+
+# --- M6 wiring 4: retention and processing-cache families, rules, bucket rule -------------
+# Failure oracles:
+# * a retention/cache family M6's code can report has no panel, a label outside a closed
+#   vocabulary, or a vocabulary missing a reason M6 writes (a rename at M6's tip fails here);
+# * a pending family that landed in FAMILIES but is still only in `pending` (OB-10 then
+#   owns it: it must move into `rows`);
+# * a retention/cache rule that fires on a healthy scrape or not on its own fault;
+# * a bucket rule that expires completed objects, reaches outside the media prefix, or
+#   carries an account id instead of the pinned bucket variable.
+DASHBOARD = json.loads((ALERTS / "dashboard.json").read_text())
+PENDING = DASHBOARD.get("pending", {})
+M6_PREFIXES = ("infrx_retention_", "infrx_processing_cache_")
+LIFECYCLE_RULE = API / "deploy" / "s3-lifecycle.json"
+LIFECYCLE_RUNBOOK = support.REPO / "infra" / "runbooks" / "observe.md"
+
+
+def _retained_reasons() -> set[str]:
+    """Every `reason` M6's collector can put in `Report.retained` at this head."""
+    from infrx.contracts import errors
+    from infrx.contracts.v2.lifecycle import REFUSAL_ERRORS
+    caught = (errors.NotClaimable, errors.StaleLease, errors.NotFound)
+    source = (API / "infrx" / "media" / "retention.py").read_text()
+    return ({r.value for r, e in REFUSAL_ERRORS.items() if issubclass(e, caught)}
+            | {e.code for e in caught} | set(re.findall(r'retained\["([a-z_]+)"\]', source)))
+
+
+def test_ops_retention__every_m6_family_has_a_pending_panel_and_a_closed_vocabulary():
+    from infrx.contracts.v2.lifecycle import ContentLocation
+    from infrx.observe.metrics import FAMILIES
+    families = PENDING["families"]
+    assert set(families) and all(name.startswith(M6_PREFIXES) for name in families)
+    assert set(families).isdisjoint(FAMILIES), "declared now: move its panel into rows (OB-10)"
+    for name, spec in families.items():
+        assert spec["kind"] in ("counter", "gauge"), name
+        for label, values in spec.get("labels", {}).items():
+            assert values and all(re.fullmatch(r"[a-z][a-z0-9_]*", v) for v in values), (name, label)
+    shown = set()
+    for row in PENDING["rows"]:
+        for panel in row["panels"]:
+            for field in ("metric", "compare"):
+                if field in panel:
+                    assert panel[field] in families, panel["title"]
+                    shown.add(panel[field])
+            assert set(panel.get("by", ())) <= set(families[panel["metric"]].get("labels", {}))
+    assert shown == set(families), f"no panel: {set(families) - shown}"
+    labels = {name: spec.get("labels", {}) for name, spec in families.items()}
+    assert _retained_reasons() <= set(labels["infrx_retention_retained_total"]["reason"])
+    source = (API / "infrx" / "media" / "retention.py").read_text()
+    aborted = set(re.findall(r'aborted = "([a-z_]+)"', source))
+    assert aborted and aborted <= set(labels["infrx_retention_aborted_total"]["reason"])
+    assert {c.value for c in ContentLocation} == set(labels["infrx_retention_deleted_total"]["location"])
+    ops = json.loads((ALERTS / "operations.json").read_text())
+    produced = exporter_producers() | runtime_producers()
+    assert set(families) - produced <= set(ops["pending_producers"])
+
+
+def _m6_rules():
+    return [r for r in RULES["rules"] if r["metric"].startswith(M6_PREFIXES)
+            and r["name"] != "ProcessingCacheLarge"]
+
+
+def _healthy_m6(now: float) -> str:
+    return "\n".join((
+        'infrx_retention_passes_total{process="worker"} 40',
+        'infrx_retention_consecutive_aborted_passes{process="worker"} 0',
+        f'infrx_retention_last_success_timestamp_seconds{{process="worker"}} {now - 60}',
+        'infrx_retention_pending_delete_seconds{process="worker"} 0',
+        'infrx_retention_delete_failed_total{process="worker"} 1',
+        'infrx_retention_retained_total{process="worker",reason="lease_short"} 3',
+        'infrx_processing_cache_refused_total{process="worker"} 0',
+        'infrx_processing_cache_evicted_total{process="worker",reason="high_water"} 9',
+        'infrx_processing_cache_bytes{process="host"} 1000', ""))
+
+
+M6_FAULTS = {
+    "RetentionPendingDeleteOld": ("infrx_retention_pending_delete_seconds", "901"),
+    "RetentionAborting": ("infrx_retention_consecutive_aborted_passes", "3"),
+    "RetentionStale": ("infrx_retention_last_success_timestamp_seconds", None),
+    "RetentionDeleteFailures": ("infrx_retention_delete_failed_total", "2"),
+    "ProcessingCacheRefusing": ("infrx_processing_cache_refused_total", "1"),
+}
+
+
+def test_ops_retention__each_rule_fires_on_its_fault_and_nothing_fires_when_healthy():
+    families = PENDING["families"]
+    assert {r["name"] for r in _m6_rules()} == set(M6_FAULTS)
+    for rule in _m6_rules():
+        spec = families[rule["metric"]]
+        for label, value in rule.get("match", {}).items():
+            assert value in spec["labels"][label], rule["name"]
+        assert "⚠️ TO BE VERIFIED (P-25)" in rule["threshold_status"] or \
+            rule["threshold_status"].startswith("exact"), rule["name"]
+    now = time.time()
+    healthy = evaluator.parse(_healthy_m6(now))
+    assert evaluator.evaluate(RULES["rules"], healthy, healthy, now=now) == []
+    for name, (metric, value) in M6_FAULTS.items():
+        text = _healthy_m6(now if value else now - 3600)
+        if value:
+            text = re.sub(rf"^({metric}\{{[^}}]*\}}) \S+$", rf"\g<1> {value}", text, flags=re.M)
+        fired = {a["alert"] for a in evaluator.evaluate(RULES["rules"], evaluator.parse(text),
+                                                        healthy, now=now)}
+        assert fired == {name}, (name, fired)
+
+
+def test_ops_retention__the_bucket_rule_aborts_stale_multipart_uploads_only():
+    from infrx.config import DeploymentSettings
+    text = LIFECYCLE_RULE.read_text()
+    (rule,) = json.loads(text)["Rules"]
+    assert rule["Status"] == "Enabled" and rule["ID"]
+    assert rule["Filter"] == {"Prefix": DeploymentSettings.s3_media_prefix}
+    days = rule["AbortIncompleteMultipartUpload"]["DaysAfterInitiation"]
+    assert isinstance(days, int) and days >= 1
+    # defence in depth only: content deletion is the collector's (a tombstone first)
+    assert set(rule) == {"ID", "Status", "Filter", "AbortIncompleteMultipartUpload"}
+    section = LIFECYCLE_RUNBOOK.read_text().partition("## Bucket lifecycle rule")[2]
+    section = section.partition("\n## ")[0]
+    assert '--bucket "$S3_MEDIA_BUCKET"' in section and "deploy/s3-lifecycle.json" in section
+    assert section.index("get-bucket-lifecycle-configuration") < \
+        section.index("put-bucket-lifecycle-configuration")          # merge, never replace
+    for body in (text, section):
+        assert not re.search(r"\b\d{12}\b", body) and "arn:" not in body

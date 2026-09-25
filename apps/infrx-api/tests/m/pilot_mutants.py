@@ -102,7 +102,7 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if digest_of(data) != digest or", "        if digest_of(data)[:23] != digest[:23] or",
        "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
     _m("disk_symlink_followed", "PAR-4: a symlink at the cache path is not served",
-       R, "os.O_RDONLY | os.O_NOFOLLOW", "os.O_RDONLY",
+       R, 'os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")', 'os.open(path, os.O_RDONLY), "rb")',
        "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
     _m("future_mtime_believed", "PAR-4: a file dated in the future does not extend its life",
        R, " or stored_at > self.clock() + FUTURE_MTIME_SLACK_S:", ":",

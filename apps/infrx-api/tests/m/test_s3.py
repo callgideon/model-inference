@@ -22,6 +22,7 @@ and dead local endpoints: they never reach AWS.
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import os
 import re
@@ -38,7 +39,7 @@ from infrx.media import store
 from infrx.media.fetch import digest_of
 from infrx.media.s3 import NO_DIGEST, S3ObjectStore
 
-from . import test_gc
+from . import support
 from .test_uploads import CLIP, adapter_for, created
 
 ENDPOINT = os.environ.get("INFRX_M_S3_ENDPOINT", "")
@@ -320,20 +321,33 @@ def test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refused_unread
 
 
 def test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest(objects):
-    """M3's sweep through the store: a closed upload's destination goes at once, an
-    unreferenced object after the grace, and a live job's source never."""
-    adapter, jobs = adapter_for(objects=objects), test_gc.Jobs()
-    ref = uploaded(adapter)
-    test_gc.staged_job(adapter, jobs, ref)
-    orphan = f"media/{b.ORG_B}/v1/{'a' * 16}/source"
-    assert run(objects.put_if_absent(orphan, b"half a request", "video/mp4"))
-    sweeper = test_gc.collector(adapter, jobs)
-    assert run(sweeper.sweep()).deleted == [adapter.upload_key(b.ORG_A, ref.handle)]
-    adapter.clock.advance(test_gc.GRACE)
-    assert run(sweeper.sweep()).deleted == [orphan]
-    assert run(objects.keys("media/")) == [ref.storage_ref]
-    assert run(objects.keys("uploads/")) == []
+    """M6's durable collector through the store (F2C's reference lifecycle as its
+    authority): a closed upload's destination and an unreferenced object go after the
+    grace, a live job's source never, and nothing outside what the rows name is touched."""
+    from infrx.contracts.conformance import lifecycle as cases
+    from infrx.media.retention import RetentionCollector
+
+    from .worlds import GRACE_S, ORG, f2c_world
+    world = f2c_world()
+    adapter = adapter_for(objects=objects, clock=world.clock, uploads=world.port,
+                          content=world.port)
+    handle = run(adapter.create_upload(ORG, {"bytes": len(CLIP)}))["upload_handle"]
+    run(adapter.put_upload(ORG, handle, CLIP, "video/mp4"))
+    ref = run(adapter.finalize_upload(ORG, handle))
+    request = cases._request(world.harness, (ref,))
+    run(world.port.admit_ready(request, cases._idem(request, "s3"), cases.CARD))
+    orphan = run(adapter.materialize(ORG, "data:video/mp4;base64," + base64.b64encode(
+        support.mp4(seconds=4.0)).decode()))
+    stranger = f"media/{b.ORG_B}/v1/{'a' * 16}/source"      # no row names it
+    assert run(objects.put_if_absent(stranger, b"not ours to judge", "video/mp4"))
+    world.clock.advance(world.port.upload_ttl_s + GRACE_S)
+    report = run(RetentionCollector(world.port, objects, delete_timeout_s=1.0,
+                                    clock=lambda: 0.0).sweep())
+    assert sorted(k for _, k, _ in report.deleted) == sorted(
+        [adapter.upload_key(ORG, handle), orphan.storage_ref])
     assert run(objects.get(ref.storage_ref)) == CLIP
+    assert run(objects.get(stranger)) == b"not ours to judge"
+    assert run(objects.keys("uploads/")) == []
 
 
 # --- S3 only ---------------------------------------------------------------------------

@@ -1,0 +1,35 @@
+{
+  "task": "M6",
+  "lane": "M6",
+  "slice": "phase 2 (slices 3+4; phase-1 WR-9): writers register every object, collector on D10, stand-ins and gc.py deleted, bounded maps and restart-safe cache",
+  "activity": "review",
+  "at": "2026-09-25T07:59:00Z",
+  "head": "5a027914",
+  "base": "bd556c5f",
+  "worktree": ".claude/worktrees/codex-m6-phase2",
+  "branch": "codex/m6-phase2",
+  "owned_paths": ["apps/infrx-api/infrx/media/retention.py", "apps/infrx-api/infrx/media/store.py", "apps/infrx-api/infrx/media/prepare.py", "apps/infrx-api/infrx/media/uploads.py", "apps/infrx-api/infrx/media/gc.py (deleted)", "apps/infrx-api/tests/m/", "research/plan/evidence/m/M6-phase2-5a02791.md", "research/plan/evidence/coordinator/updates/M6-20260925T0759Z.json"],
+  "isolation": {"ports": "postgres 55444 (INFRX_D_TASK=m6); 55471 closed-port outage only", "prefix": "infrx-m6-", "db": "infrx_m6*"},
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q -rxXs tests/m/test_retention.py tests/m/test_cache_bounds.py", "exit": 0, "summary": "84 passed (73 retention on f2c+d10, 11 cache), 0 skipped"},
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m -p no:cacheprovider", "exit": 0, "summary": "536 passed, 27 skipped (26 no-MinIO S3/stack, 1 pilot subset)"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py", "exit": 0, "summary": "304 passed: 283/283 mutants killed (M6 38, M 221, MPILOT 24)"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py tests/g/uploads -p no:cacheprovider", "exit": 0, "summary": "98 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py tests/g/uploads tests/g/jobs/test_jobs.py tests/g/test_relay_matrix.py", "exit": 0, "summary": "166 passed"},
+    {"cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py", "exit": 1, "summary": "64 failed, 9 passed (none of the 9 builds a collector)"},
+    {"cmd": "new tests on a git-archive copy of bd556c5f (INFRX_D_TASK=m6)", "exit": 1, "summary": "10 failed (5 cases x 2 worlds: writers, retiring, RV-03 probe, delayed delete, every-step rows), 155 passed; cache file fails at import"},
+    {"cmd": ".venv/bin/python research/plan/evidence/v1-review-20260924/reproduce.py", "exit": 1, "summary": "ModuleNotFoundError infrx.media.gc (collector retired); RV-03 rerun as test_rv03_probe_* on f2c+d10: pass"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 1, "summary": "1 error: doc 21 links deleted gc.py (wiring request 6); base exit 0"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium", "basis": "phases 1+2 implemented and green on D10 PostgreSQL; remaining = review round 1/2/3 h, composition proof after WR-1..3 0/1/2 h, coordinator box smoke 0/0/1 h", "at": "2026-09-25T07:59:00Z"},
+  "blockers": ["P-25 retention/grace/claim TTL/interval/cache high water unresolved (parameterized)"],
+  "wiring_requests": [
+    "WR-1 worker/__main__.py: MediaPreparation(content=PgLifecycle(connect), cache=ProcessingCache(..., max_bytes=PROCESSING_CACHE_MAX_BYTES)); ONE RetentionCollector.run + cache.sweep keeper task in the worker only (patch in evidence)",
+    "WR-2 worker engine (W): hold media.cache.pin(path) from submit to terminal; NotFound -> re-prepare",
+    "WR-3 E3C tests/integration/backend/e3c/world.py collect_once: MediaCollector (retired) -> RetentionCollector over PgLifecycle (patch in evidence); must land with this merge",
+    "WR-4 I8: AbortIncompleteMultipartUpload; retention_* and processing_cache_* metrics; alerts",
+    "WR-5 informational: gateway MediaUploads(content=lifecycle) now registers fetched sources and staged envelopes (bind_source needs the source row)",
+    "WR-6 research/plan/21-...md:84 link to deleted gc.py -> text + link to retention.py (validate_plan exit 1 until then)"
+  ],
+  "evidence": ["research/plan/evidence/m/M6-phase2-5a02791.md"]
+}
