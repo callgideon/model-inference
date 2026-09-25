@@ -18,7 +18,8 @@ What moves is three database flags (0006 `infrx.feature_flags`) and nothing else
    published, not provisional, the card the public alias's effective listing names, at
    exactly the rates the operator restates. Any drift blocks either direction.
 3. **Apply** (operator credential, audited once under its idempotency key): freeze the
-   source regime's admission, wait (bounded) until none of its jobs is in flight, then
+   source regime's admission, wait (bounded) until every transaction open when the freeze
+   committed has ended and then until none of the source's jobs is in flight, then
    enable the target's flags. A drain that does not finish leaves the freeze in place
    and exits with the report; re-running continues from where it stopped.
 
@@ -126,6 +127,18 @@ _QUERIES = {
             "last_used_at from public.api_keys order by created_at, id",
     "now": "select infrx.now()",
 }
+#: The transactions open in this database now, by the virtual transaction id each holds
+#: from its start (`pg_locks` and the pid, database and user of `pg_stat_activity` are
+#: readable by any role; autovacuum has no user and admits nothing). Waiting until those
+#: open at the freeze have ended is CREATE INDEX CONCURRENTLY's wait: `require_feature`
+#: reads the flag without a lock, so an admission that read it before the freeze committed
+#: can still commit its job (review G8-R1). The caller's own listing drops out of the
+#: intersection: each listing is a new transaction.
+_OPEN_TRANSACTIONS = (
+    "select l.virtualxid from pg_catalog.pg_locks l "
+    "join pg_catalog.pg_stat_activity a on a.pid = l.pid "
+    "where l.locktype = 'virtualxid' and l.virtualxid = l.virtualtransaction "
+    "and a.datname = current_database() and a.usesysid is not null")
 
 
 def _iso(value) -> str | None:
@@ -150,6 +163,14 @@ class PgTransition:
         finally:
             await conn.close()
         return shape(raw, alias)
+
+    async def open_transactions(self) -> frozenset[str]:
+        conn = await self._connect()
+        try:
+            rows = await (await conn.execute(_OPEN_TRANSACTIONS)).fetchall()
+        finally:
+            await conn.close()
+        return frozenset(vxid for vxid, in rows)
 
     async def set_flag(self, name: str, enabled: bool, actor: str, reason: str) -> bool:
         """True when this call changed it (attributed on the row); False when it already was."""
@@ -317,6 +338,20 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
         if await store.set_flag(ADMISSION_FLAG[source], False, op.principal, reason):
             applied.append({"flag": ADMISSION_FLAG[source], "enabled": False})
         deadline = monotonic() + drain_timeout_s
+        # The freeze has committed; a transaction open now may have read the flag before it
+        # and still commit a job the drain cannot see. Wait until all of those have ended
+        # (one that begins later reads the flag frozen), within the same bound.
+        straddlers = await store.open_transactions()
+        while straddlers := straddlers & await store.open_transactions():
+            if deadline <= monotonic():
+                report = plan(await store.inventory(), target=target, **rates)
+                report["blockers"].append({
+                    "code": "open_transactions",
+                    "detail": f"{len(straddlers)} transaction(s) open since the freeze of "
+                              f"{ADMISSION_FLAG[source]} may still commit {source} work; "
+                              "rerun once they have ended"})
+                raise TransitionBlocked({**report, "applied": applied})
+            await sleep(poll_s)
         while in_flight(inv := await store.inventory(), source):
             if monotonic() >= deadline:
                 raise TransitionBlocked({**plan(inv, target=target, **rates),
@@ -327,8 +362,7 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
                 applied.append({"flag": flag, "enabled": True})
         final = plan(await store.inventory(), target=target, **rates)
         if final["blockers"]:
-            # A job whose admission read the flag before the freeze committed: the source
-            # worker still runs it; rerun (idempotent) until it has drained, then restart.
+            # Belt and braces after the wait above: rerun (idempotent) until it clears.
             raise TransitionBlocked({**final, "applied": applied})
         return ({"flags": {f: v["enabled"] for f, v in first["inventory"]["flags"].items()}},
                 {"target": target, "applied": applied, "restart_with": final["restart_with"],

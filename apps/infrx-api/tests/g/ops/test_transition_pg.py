@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 
 import pytest
 
@@ -258,3 +260,60 @@ def test_credit_cutover__a_rollback_drains_credit_before_reopening_usd(capsys):
     assert w.owner.execute(wallet, (pgworld.cc.CONSUMER_1,)).fetchone() == before
     assert drift(w) == []
     run(admit_legacy(w, "usd-reopened"))
+
+
+def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsys):
+    """Two connections (review G8-R1 / ACC-1): a legacy admission passes both flag checks
+    (`admit_legacy_usd` and the insert trigger) and inserts its job, then parks on
+    `infrx.credit_holds`, which connection C holds in SHARE mode, while the transition
+    runs. `require_feature` takes no lock, so the freeze does not wait for it and the
+    drain cannot see its uncommitted job. The transition must wait for every transaction
+    open when the freeze committed; past its bound it stops with the freeze in place, the
+    target off and nothing audited. Once the admission commits, the dry run counts it in
+    flight; after it settles in USD the rerun enables CREDIT.
+    Oracle: without the wait the run exits 0, audited, and the USD job commits after the
+    drain measured zero (the review's reproduction)."""
+    w, request, _ = pilot("g8_straddle")
+    run(settle(w, request, "legacy_usd"))
+    publish_fixture_card(w, capsys)
+    blocker = pgworld.pgharness.connect(w.database, autocommit=False)
+    blocker.execute("lock table infrx.credit_holds in share mode")
+    box: dict = {}
+
+    def admit():
+        try:
+            box["admitted"] = run(admit_legacy(w, "straddler"))
+        except Exception as exc:                              # reported by the assert below
+            box["error"] = exc
+    thread = threading.Thread(target=admit)
+    thread.start()
+    argv = [*ACTIVATE, "--idempotency-key", "straddle", "--reason", R,
+            "--drain-timeout-s", "0.5", "--poll-s", "0.1"]
+    try:
+        for _ in range(100):                                  # A waits on C's lock
+            if w.one("select count(*) from pg_locks where not granted and "
+                     "relation = 'infrx.credit_holds'::regclass"):
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail("the admission never reached the held lock")
+        code, report, _ = cli_run(w, argv, capsys)
+    finally:
+        blocker.rollback()
+        blocker.close()
+        thread.join(30)
+    assert code == 1 and codes(report) == {"open_transactions"}, report
+    assert report["applied"] == [{"flag": "legacy_usd_admission", "enabled": False}]
+    assert w.one("select enabled from infrx.feature_flags where name = 'credit_admission'") \
+        is False
+    assert w.one("select count(*) from infrx.audit_entries where idempotency_key = 'straddle'") \
+        == 0
+    assert "admitted" in box, box                             # it committed after the freeze
+    code, dry, _ = cli_run(w, ["credit-transition", "--dry-run", *ACTIVATE[1:]], capsys,
+                           operator=False)
+    assert code == 1 and codes(dry) == {"in_flight"}, dry["blockers"]
+    assert dry["inventory"]["in_flight"] == {"legacy_usd": {"preparing": 1}}
+    run(settle(w, box["admitted"][0], "legacy_usd"))          # it settles IN USD
+    code, result, _ = cli_run(w, argv, capsys)
+    assert code == 0 and result["flags"]["credit_admission"] is True, result
+    assert drift(w) == []

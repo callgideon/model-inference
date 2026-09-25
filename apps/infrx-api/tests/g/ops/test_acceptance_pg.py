@@ -8,6 +8,12 @@ steps with a scripted engine answer, the result over HTTP, the exact statement, 
 revocation and the denial. A second individual cannot read, cancel or spend the first's
 job or wallet, and neither multiplies an entitlement.
 
+Revocation bound (what this test pins; the ruling is G7/auth's, G8 open issue 2): a
+revoked key is refused IMMEDIATELY by a new `POST /v1/jobs` (the admission transaction
+reads the key row) and by the operator tool; reads of an existing job's status or result
+through the gateway are refused within KEY_TTL (60 s by default), because `auth/keys.py`
+caches a positive lookup. Immediate denial of reads would need that cache rechecked.
+
 Engine: scripted (no GPU); everything the accounting touches is the real store. The key
 lookup is PostgREST's `api_keys` query answered from the same database. Rates are FIXTURE
 values, labelled, never a launch price (P-01).

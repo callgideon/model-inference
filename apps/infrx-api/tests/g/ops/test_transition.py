@@ -124,6 +124,13 @@ class ScriptedStore:
     flags: dict[str, bool] = dataclasses.field(default_factory=lambda: {
         "legacy_usd_admission": True, "credit_admission": False, "signup_grant": False})
     calls: list = dataclasses.field(default_factory=list)
+    #: The transactions open in the database per `open_transactions` call (the last repeats).
+    open: list = dataclasses.field(default_factory=lambda: [frozenset()])
+
+    async def open_transactions(self) -> frozenset:
+        now = frozenset(self.open.pop(0) if len(self.open) > 1 else self.open[0])
+        self.calls.append(("open", now))
+        return now
 
     async def inventory(self, alias: str = v2fix.PUBLIC_MODEL_ID) -> dict:
         n = self.flying.pop(0) if len(self.flying) > 1 else self.flying[0]
@@ -196,6 +203,30 @@ def test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last():
     with pytest.raises(transition.TransitionBlocked):
         asyncio.run(_apply_with(refused, card="rc_nowhere"))
     assert [c for c in refused.calls if c[0] == "set"] == []
+
+
+def test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze():
+    """Review G8-R1 / ACC-1: `require_feature` takes no lock, so an admission that read the
+    flag before the freeze committed can commit its job after the drain measured zero.
+    After the freeze and before the drain is measured, apply waits until every transaction
+    open at that moment has ended (one that began later reads the flag frozen and does not
+    count), within the drain's bound; past it the run stops with the freeze in place, the
+    target untouched and nothing audited.
+    Oracle: skipping the wait, or re-listing instead of waiting on the set open at the
+    freeze, enables CREDIT while a USD admission can still commit."""
+    store = ScriptedStore(flying=[0], open=[{"a", "b"}, {"a", "c"}, {"c", "d"}])
+    apply(fakes.world(), store)
+    freeze = store.calls.index(("set", "legacy_usd_admission", False))
+    assert store.calls[freeze + 1:freeze + 5] == [
+        ("open", {"a", "b"}), ("open", {"a", "c"}), ("open", {"c", "d"}), ("inventory", 0)], \
+        store.calls
+    stuck, audited = ScriptedStore(flying=[0], open=[{"a"}]), fakes.world()
+    with pytest.raises(transition.TransitionBlocked) as blocked:
+        apply(audited, stuck, timeout=3.0)
+    assert [b["code"] for b in blocked.value.report["blockers"]] == ["open_transactions"]
+    assert blocked.value.report["applied"] == [
+        {"flag": "legacy_usd_admission", "enabled": False}]
+    assert not any(stuck.flags.values()) and audited.audit.entries == []
 
 
 async def _apply_with(store, **kw):

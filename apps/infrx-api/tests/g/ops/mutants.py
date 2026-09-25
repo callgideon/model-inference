@@ -374,6 +374,26 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("final_recheck_skipped", "a job that slipped in before the freeze stops the run",
        T, "        if final[\"blockers\"]:", "        if False:",
        "test_credit_cutover__apply_freezes_first_drains_bounded_and_enables_last"),
+    _m("straddler_wait_skipped",
+       "every transaction open when the freeze committed has ended before the drain is "
+       "measured (review G8-R1: require_feature takes no lock)",
+       T, "        while straddlers := straddlers & await store.open_transactions():",
+       "        while False:",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze"),
+    _m("straddlers_relisted",
+       "the wait is for the transactions open at the freeze, not whatever is open now "
+       "(declared: under steady traffic the relisting never empties and the run stops "
+       "with TransitionBlocked where it should have proceeded)",
+       T, "        while straddlers := straddlers & await store.open_transactions():",
+       "        while straddlers := await store.open_transactions():",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze",
+       dies_by=("TransitionBlocked",)),
+    _m("straddler_wait_unbounded",
+       "the wait for open transactions stops at the drain's bound (declared: the scripted "
+       "clock's 10,000 ticks run out - RuntimeError - because the wait never stops)",
+       T, "            if deadline <= monotonic():", "            if deadline * 1e9 <= monotonic():",
+       "test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze",
+       dies_by=("RuntimeError",)),
     _m("refused_card_still_freezes", "a refused card changes nothing",
        T, "        if [b for b in first[\"blockers\"] if b[\"code\"] != \"in_flight\"]:",
        "        if False:",
