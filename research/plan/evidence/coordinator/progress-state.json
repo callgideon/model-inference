@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 25,
-  "updated": "2026-09-25T00:46:49Z",
+  "revision": 26,
+  "updated": "2026-09-25T00:49:11Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -887,12 +887,12 @@
     {
       "id": "G7",
       "task": "G7",
-      "slice": "1-4 (+WR-I8-3, revocation bound)",
+      "slice": "1-4 (+WR-I8-3, revocation bound, E3C s08/s05)",
       "agent": "opus",
       "branch": "codex/g7-catalog",
       "worktree": ".claude/worktrees/codex-g7-catalog",
       "base": "dff31efc",
-      "head": "2bbfe0e3",
+      "head": "a0e0928a",
       "isolation": {
         "ports": "postgres 55446 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g7-",
@@ -900,45 +900,41 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T00:05:00Z",
-      "blocker": "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3, else every PG success reads unavailable (410); legacy-regime discovery publishes nothing until D10's PgCatalogDirectory.usd_price (WR-3a)",
-      "next_action": "Public capability discovery, alias pricing, persisted result expiry; route-level proof for F5; provisional card ids mapped (F11).",
+      "updated": "2026-09-25T00:48:00Z",
+      "blocker": "D10 WR-3c (persisted result_expires_at on PG owned reads) must merge with or before G7 point 3; legacy-regime discovery publishes nothing until D10 usd_price (WR-3a)",
+      "next_action": "rerun the full G mutant lists and INFRX_D_TASK=g7 api-test at a0e0928a and record them; then coordinator review/merge with D10/M5",
       "estimate": {
         "optimistic_h": 1,
         "likely_h": 3,
         "pessimistic_h": 8,
         "confidence": "medium",
-        "basis": "all points implemented and green; left: review fixes, rerun on M5/D10 adapters at merge, WR-1 default decision fallout",
-        "at": "2026-09-25T00:05:00Z"
+        "basis": "all points implemented and green in tests/g; left: the two reruns, review fixes, integration reruns on M5/D10",
+        "at": "2026-09-25T00:48:00Z"
       },
       "evidence": [
-        "research/plan/evidence/g/G7-2bbfe0e.md"
+        "research/plan/evidence/g/G7-2bbfe0e.md",
+        "research/plan/evidence/g/G7-a0e0928.md"
       ],
       "commands": [
         {
           "cmd": "cd apps/infrx-api && uv run --frozen pytest -q tests/g --ignore=tests/g/ops",
           "exit": 0,
-          "summary": "567 passed (baseline 527)"
+          "summary": "573 passed at a0e0928a"
         },
         {
-          "cmd": "cd apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py",
+          "cmd": "new/re-anchored mutants (12) via tests.g.mutants / tests.g.jobs.jobs_mutants",
           "exit": 0,
-          "summary": "505 passed at e3ba286f: every G/uploads/jobs mutant killed (33 new G, 5 new jobs); revocation_outlives_key_ttl 1/1 killed at 2bbfe0e3"
+          "summary": "12/12 killed"
         },
         {
-          "cmd": "cd apps/infrx-api && INFRX_D_TASK=g7 uv run --frozen pytest -q",
-          "exit": 1,
-          "summary": "3912 passed, 1 failed, 27 skipped, 5 xfailed: tests/d/test_pgharness decoy ('d2', 55473) collides with 640cedd4's g8 valkey port - coordinator patch, not G7"
+          "cmd": "INFRX_MUTANTS=all full G/uploads/jobs mutant lists at a0e0928a",
+          "exit": null,
+          "summary": "NOT COMPLETED (session limit): 69% run, 0 failures; last complete 505 passed at e3ba286f"
         },
         {
-          "cmd": "make console-typecheck && make console-test",
-          "exit": 0,
-          "summary": "tsc clean; 351/351 after the v2 export union"
-        },
-        {
-          "cmd": "tests/integration/backend/test_endpoint_doc.py",
-          "exit": 0,
-          "summary": "10 passed"
+          "cmd": "INFRX_D_TASK=g7 uv run --frozen pytest -q at a0e0928a",
+          "exit": null,
+          "summary": "NOT COMPLETED: 43% run, 0 failures; last complete at e3ba286f 3912 passed, 1 failed (pgharness decoy vs 640cedd4 port 55473)"
         }
       ],
       "deviation": "Coordinator dispatch 21:55Z before F2C is implemented in the manifest: program 22 V2 develops against F2C in parallel and integrates in dependency order.",
@@ -947,16 +943,15 @@
         "apps/infrx-api/openrouter/provider-models.json (deleted)",
         "apps/infrx-api/tests/g/ (not ops/, not the host-metrics test)",
         "research/plan/evidence/g/G7-2bbfe0e.md",
-        "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json"
+        "research/plan/evidence/g/G7-a0e0928.md",
+        "research/plan/evidence/coordinator/updates/G7-20260925T0005Z.json",
+        "research/plan/evidence/coordinator/updates/G7-20260925T0048Z.json"
       ],
       "wiring_requests": [
-        "WR-1 app.py: pilot -> models.assert_release_profile(rt.settings); needs MAX_VIDEO_SECONDS default 82 (limits.py:62, config.py:50/:99, test_config_and_imports.py:26) or fixtures (trial: 43 failures otherwise)",
-        "WR-2 pilot.py:287 price_source -> Probe(models.price_check(catalog, settings)); with D10 usd_price",
-        "WR-3 D10: PgCatalogDirectory.usd_price(model_revision), active_rate_card = listing's card, owned reads carry result_expires_at (new migration), optional listing_version/card-approved flag",
-        "WR-4 observe/metrics.py FAMILIES: infrx_large_body_slots_in_use, infrx_large_body_slots_limit, infrx_large_body_refused_total, infrx_intake_drained_total{code} (exact Specs in evidence)",
-        "WR-5 retire MODELS_DOC (config.py, README, deploy/preflight.py)",
-        "WR-6 E endpoint_doc.py Limits table: approved 82 s, card from price()",
-        "WR-7 A3 docs/models pages read the projection",
+        "WR-1..WR-7 as in G7-2bbfe0e.md",
+        "WR-8 (I8): adapter-side client timeouts that survive a stalled server (psycopg keepalive/tcp_user_timeout, botocore read_timeout+retries < 20 s)",
+        "proposed ruling: stalled dependency bound (text in G7-a0e0928.md)",
+        "proposed ruling: revocation bound <= KEY_TTL (text in G7-a0e0928.md)",
         "fix 640cedd4 tasklocal g8 valkey 55473 vs tests/d D2 decoy"
       ]
     },
@@ -1262,12 +1257,6 @@
       "head": "8406c798"
     },
     {
-      "since": "2026-09-25T00:05:00Z",
-      "lane": "G7",
-      "task": "G7",
-      "head": "2bbfe0e3"
-    },
-    {
       "since": "2026-09-24T23:44:54Z",
       "lane": "M5",
       "task": "M5",
@@ -1284,6 +1273,12 @@
       "lane": "W5",
       "task": "W5",
       "head": "27afab76"
+    },
+    {
+      "since": "2026-09-25T00:05:00Z",
+      "lane": "G7",
+      "task": "G7",
+      "head": "a0e0928a"
     }
   ],
   "integration_queue": [],
@@ -2370,6 +2365,12 @@
       "at": "2026-09-25T00:46:49Z",
       "by": "tracker",
       "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, D10, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)"
+    },
+    {
+      "at": "2026-09-25T00:48:00Z",
+      "by": "G7",
+      "what": "review → review; head a0e0928a",
+      "source": "updates/G7-20260925T0048Z.json"
     }
   ],
   "history": {
@@ -2509,10 +2510,14 @@
     "W5-20260925T0035Z.json": {
       "status": "applied",
       "at": "2026-09-25T00:35:00Z"
+    },
+    "G7-20260925T0048Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T00:48:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T00:46:49Z",
+    "computed_at": "2026-09-25T00:49:11Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
