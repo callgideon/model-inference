@@ -114,25 +114,25 @@ MUTANTS = (
        "    if tokens is not None and (not isinstance(tokens, list) or len(tokens) != count):",
        CHECKED),
     _m("prep_video_count_unchecked", "a video's count is checked against the pinned budget",
-       P, "        if not most // TOKENS_PER_PATCH <= video <= most:", "        if False:",
+       P, "        if not patches <= video <= most:", "        if False:",
        CHECKED, NO_COUNT),
     _m("prep_video_ceiling_dropped", "more video tokens than the pinned budget is refused",
-       P, "        if not most // TOKENS_PER_PATCH <= video <= most:",
-       "        if not most // TOKENS_PER_PATCH <= video:", CHECKED),
+       P, "        if not patches <= video <= most:",
+       "        if not patches <= video:", CHECKED),
     _m("prep_video_floor_one_placeholder", "fewer than one video token per two-frame patch "
        "(an unexpanded placeholder) is refused",
-       P, "        if not most // TOKENS_PER_PATCH <= video <= most:",
+       P, "        if not patches <= video <= most:",
        "        if not 1 <= video <= most:", CHECKED),
     _m("prep_video_bounds_exclusive", "both bounds of the pinned budget are inclusive",
-       P, "        if not most // TOKENS_PER_PATCH <= video <= most:",
-       "        if not most // TOKENS_PER_PATCH < video < most:", INSIDE),
+       P, "        if not patches <= video <= most:",
+       "        if not patches < video < most:", INSIDE),
     # --- item 1: media through the durable attach ---------------------------------------
     _m("prep_media_skipped", "a job with media is prepared through M's prepare",
        P, "        if work.media_refs:\n            refs = await self._media(lease.job_id)",
        "        if False:\n            refs = await self._media(lease.job_id)", VIDEO),
-    _m("prep_attach_not_awaited", "the runner waits for the gateway's late durable attach",
-       P, "        while await self.media.attached(job_id) is None:", "        while False:",
-       VIDEO),
+    _m("prep_attach_not_awaited", "the runner waits for the gateway's late durable attach "
+       "(W5: the readiness barrier, for every job)",
+       P, "        await self._ready(lease.job_id)\n", "", VIDEO),
     _m("prep_attach_wait_default_zero", "the product waits for a late attach (ATTACH_WAIT_S; "
        "review L6)", P, "ATTACH_WAIT_S, ATTACH_POLL_S = 10.0, 0.05",
        "ATTACH_WAIT_S, ATTACH_POLL_S = 0.0, 0.05", VIDEO),
@@ -154,9 +154,9 @@ MUTANTS = (
           "crash-only\n", "                pass\n", UNTYPED),
     _m("prep_lost_claim_kills_the_runner", "a lost claim is answered, never a dead runner "
        "(review L1)",
-       P, "        try:\n            lease = await self.jobs.claim_preparation(job_id, "
+       P, "        try:\n            lease = await self.claims.claim_preparation(job_id, "
           "self.worker_id)\n        except errors.DomainError as refused:\n",
-       "        lease = await self.jobs.claim_preparation(job_id, self.worker_id)\n"
+       "        lease = await self.claims.claim_preparation(job_id, self.worker_id)\n"
        "        if False:\n            refused = None\n", TWICE),
     _m("prep_preparation_unlogged", "each preparation is logged at INFO with its count "
        "(review J-F2)",

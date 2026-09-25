@@ -1,0 +1,80 @@
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@
+ # E4B's list lives beside its runner in tests/integration/backend (outside apps/infrx-api), so it
+ # runs from the root with the pinned interpreter, through the same shared R83 runner.
+ api-mutants:
+-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py
++	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/m/test_pilot_mutants.py tests/m/test_s3_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/q/test_reconcile_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py tests/w/test_w4_mutants.py tests/w/test_worker_main_mutants.py tests/w/test_prep_worker_mutants.py tests/w/test_w5_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/d/test_code_mutants.py tests/d/test_code_mutants_d3.py tests/d/test_code_mutants_d4.py tests/d/test_code_mutants_d5.py tests/d/test_signup.py tests/g/test_mutants.py tests/g/ops/test_mutants.py tests/g/uploads/test_uploads_mutants.py tests/g/jobs/test_jobs_mutants.py tests/i/test_mutants.py
+ 	INFRX_MUTANTS=all $(API)/.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/backend/test_e4b_mutants.py
+ 
+ console-test:
+--- a/apps/infrx-api/infrx/worker/__main__.py
++++ b/apps/infrx-api/infrx/worker/__main__.py
+@@ -56,11 +56,12 @@
+ from ..observe.metrics import Registry
+ from ..state.jobstore import PgJobStore, PreparedWork
+ from ..state.journal import PgStreamStore
++from ..state.lifecycle import PgLifecycle
+ from .attempt import AttemptRunner
+ from .engine import VllmEngine
+ from .loop import WorkerLoop
+ from .preparation import PreparationRunner
+-from .service import WorkerService
++from .service import PgReconciliation, WorkerService
+ 
+ log = logging.getLogger("infrx.worker")
+ 
+@@ -143,10 +144,12 @@
+     preparation = WorkerLoop(
+         scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
+         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
+-                                 limits=limits), limits=limits)
++                                 limits=limits, readiness=PgLifecycle(connect, limits=limits)),
++        limits=limits)
+     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
+                             concurrency=limits.worker_concurrency,
+                             health_port=deployment.worker_health_port,
++                            reconciliation=PgReconciliation(connect),
+                             metrics=rt.metrics, preparation=preparation,
+                             preparation_concurrency=limits.preparation_concurrency)
+     return service, pool
+--- a/apps/infrx-api/tests/w/prep_worker_mutants.py
++++ b/apps/infrx-api/tests/w/prep_worker_mutants.py
+@@ -224,6 +224,12 @@
+        "work doors as inference (CreditWork in the CREDIT regime)",
+        MAIN, "runner=PreparationRunner(jobs=jobs, media=media,",
+        "runner=PreparationRunner(jobs=store, media=media,", COMPOSE),
++    _m("main_readiness_not_wired", "W5: preparation claims through D10's marker-gated "
++       "ReadinessStore", MAIN, "limits=limits, readiness=PgLifecycle(connect, limits=limits)),",
++       "limits=limits),", COMPOSE),
++    _m("main_reconciliation_not_wired", "S3 F4: the reaper publishes the reconciliation gauges",
++       MAIN, "                            reconciliation=PgReconciliation(connect),\n", "",
++       COMPOSE),
+     _m("main_attach_not_durable", "preparation reads the attach D2's tables record",
+        MAIN, "    media.attachments = PgAttachments(connect)", "    pass", COMPOSE),
+     _m("main_preparation_on_the_inference_kind", "the pool claims prepare_dispatch",
+--- a/apps/infrx-api/tests/w/test_prep_worker.py
++++ b/apps/infrx-api/tests/w/test_prep_worker.py
+@@ -44,9 +44,11 @@
+ from infrx.media.prepare import MediaPreparation, ProcessingCache
+ from infrx.media.store import InMemoryObjectStore
+ from infrx.state.jobstore import PgJobStore
++from infrx.state.lifecycle import PgLifecycle
+ from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request
+ from infrx.worker import __main__ as worker_main
+ from infrx.worker.fakes import m2_local_uri
++from infrx.worker.service import PgReconciliation
+ from infrx.worker.preparation import (MEMO_ENTRIES, CountMemo, PreparationRunner,
+                                       PreparationResult, VIDEO_TOKEN_ID, engine_prompt_tokens,
+                                       memo_key)
+@@ -817,6 +819,9 @@
+                                                           PgAttachments)
+     assert runner.media.cache.root == str(tmp_path / "cache")
+     assert worker.engine.local_uri == runner.media.local_uri
++    # W5: the marker-gated claim and manifest (D10), and S3 F4's reconciliation reader
++    assert isinstance(runner.readiness, PgLifecycle), runner.readiness
++    assert isinstance(worker.reconciliation, PgReconciliation), worker.reconciliation
+ 
+ 
+ def test_prep_worker__a_media_root_the_worker_cannot_write_refuses_startup(tmp_path):
