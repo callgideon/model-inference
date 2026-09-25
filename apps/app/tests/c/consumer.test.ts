@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { QueryPlan, QueryPort, Row } from "../../lib/services/query.ts";
+import type { PostgrestClient, QueryPlan, QueryPort, Row } from "../../lib/services/query.ts";
 import { postgrestPort, QueryPortError } from "../../lib/services/query.ts";
 import {
   authUserOutcome,
@@ -25,7 +25,14 @@ import {
   type RpcClient,
 } from "../../lib/services/console.ts";
 import { creditBalanceOf, sidebarCredit } from "../../lib/services/credits.ts";
+import type { Result } from "../../lib/contracts/types.ts";
 import { createMemoryPort, type Dataset } from "./harness.ts";
+
+/** Success, or a failure that prints the code that came back (the mutant runner reads it). */
+function valueOf<T>(result: Result<T>, what: string): T {
+  if (!result.ok) assert.fail(`${what}: ${result.error.code} (${result.error.message})`);
+  return result.value;
+}
 
 const SECRET = "c0-test-cursor-secret-0123456789";
 const ME = "c1000000-0000-4000-8000-000000000001";
@@ -264,19 +271,15 @@ test("the CREDIT ledger walks ties on created_at exactly once, newest first, own
   let cursor: string | null = null;
   let pages = 0;
   do {
-    const page = await reads.ledger({ limit: 2, cursor });
-    assert.ok(page.ok, "every page answers");
-    if (!page.ok) return;
-    seen.push(...page.value.items.map((item) => item.entry_id));
-    cursor = page.value.next_cursor;
+    const page = valueOf(await reads.ledger({ limit: 2, cursor }), "every page answers");
+    seen.push(...page.items.map((item) => item.entry_id));
+    cursor = page.next_cursor;
     pages += 1;
   } while (cursor !== null && pages < 10);
   const expected = [4, 3, 2, 1, 0].map((n) => ledgerRow(n).entry_id as string);
   assert.deepEqual(seen, expected, "each entry once, in (created_at, entry_id) descending order");
-  const first = await reads.ledger({ limit: 1 });
-  assert.ok(first.ok);
-  if (!first.ok) return;
-  assert.deepEqual(first.value.items[0], {
+  const first = valueOf(await reads.ledger({ limit: 1 }), "the first page");
+  assert.deepEqual(first.items[0], {
     entry_id: expected[0],
     created_at: "2026-09-01T12:00:00.000000Z",
     kind: "inference_debit",
@@ -295,10 +298,9 @@ test("a ledger cursor minted for one account is refused for another", async () =
     { pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET },
     { ...account, userId: OTHER, walletId: OTHER_WALLET, orgId: OTHER_ORG },
   );
-  const page = await mine.ledger({ limit: 1 });
-  assert.ok(page.ok && page.value.next_cursor !== null);
-  if (!page.ok || page.value.next_cursor === null) return;
-  const replay = await theirs.ledger({ limit: 1, cursor: page.value.next_cursor });
+  const page = valueOf(await mine.ledger({ limit: 1 }), "my first page");
+  assert.ok(page.next_cursor !== null, "there is a second page");
+  const replay = await theirs.ledger({ limit: 1, cursor: page.next_cursor });
   assert.equal(!replay.ok && replay.error.code, "invalid_cursor");
 });
 
@@ -357,9 +359,7 @@ test("requests: exact charge in the row's own unit; unsettled is null, never a z
   ];
   const rpc = rpcOf({ consumer_jobs: () => ({ data: rows, error: null }) });
   const reads = createConsumerReads({ pg: failingPort, rpc: rpc.client, cursorSecret: SECRET }, account);
-  const page = await reads.requests({ limit: 5 });
-  assert.ok(page.ok);
-  if (!page.ok) return;
+  const page = { value: valueOf(await reads.requests({ limit: 5 }), "the request page") };
   assert.deepEqual(rpc.calls, [["consumer_jobs", { p_after: null, p_limit: 6 }]], "no tenant argument: the DB takes it from the JWT");
   const [credit, usd, running] = page.value.items;
   assert.deepEqual(
@@ -468,11 +468,9 @@ test("keys: this personal organization's key metadata only, never a hash", async
   });
   data.keys = [key("k0000000-0000-4000-8000-000000000001", MY_ORG), key("k0000000-0000-4000-8000-000000000002", SHARED_ORG)];
   const reads = createConsumerReads({ pg: createMemoryPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
-  const keys = await reads.keys();
-  assert.ok(keys.ok);
-  if (!keys.ok) return;
-  assert.deepEqual(keys.value.map((k) => k.id), ["k0000000-0000-4000-8000-000000000001"]);
-  assert.ok(!("key_hash" in keys.value[0]));
+  const keys = valueOf(await reads.keys(), "the key list");
+  assert.deepEqual(keys.map((k) => k.id), ["k0000000-0000-4000-8000-000000000001"]);
+  assert.ok(!("key_hash" in keys[0]), "no hash column reaches a key summary");
   const blind = createConsumerReads({ pg: predicateBlindPort(data), rpc: rpcOf({}).client, cursorSecret: SECRET }, account);
   assert.equal((await blind.keys()).ok, false, "a key of another organization fails the list");
 });
@@ -501,7 +499,7 @@ function recordingClient(answer: Answer) {
       throw new Error("not used");
     },
   };
-  return { client, calls };
+  return { client: client as unknown as PostgrestClient, calls };
 }
 
 test("the PostgREST executor sends the plan: relation, named columns, filters, keyset, tenant last", async () => {

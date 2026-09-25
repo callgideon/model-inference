@@ -247,6 +247,41 @@ const NAMED_QUERIES = {
     tenantField: "org_id",
   },
 
+  /**
+   * C0: the signed-in individual's consumer wallet, found by its OWNER (R66) - never through an
+   * organization membership, and never an operator's or provider's organization. The view returns
+   * every wallet to an operator session, so the owner is the tenant: bound last, and checked on
+   * every row by `scopedPort`.
+   */
+  consumer_wallet: {
+    engine: "pg",
+    source: "credit_wallets",
+    from: "public.console_credit_wallets w",
+    columns: "w.owner_user_id, w.wallet_id, w.org_id",
+    tenantColumn: "w.owner_user_id",
+    tenantField: "owner_user_id",
+    constants: [{ field: "kind", column: "w.kind", op: "eq", value: "consumer" }],
+  },
+
+  /**
+   * C0: one consumer wallet's CREDIT ledger, keyset-paged on 0006's
+   * `credit_ledger_wallet_created_idx (wallet_id, created_at desc, entry_id desc)`. The wallet is the
+   * tenant. `actor` arrives masked by the view (R59-1).
+   */
+  credit_ledger_page: {
+    engine: "pg",
+    source: "credit_ledger",
+    from: "public.console_credit_ledger l",
+    columns: "l.wallet_id, l.entry_id, l.created_at, l.kind, l.amount, l.unit, l.request_id, l.reason, l.actor",
+    tenantColumn: "l.wallet_id",
+    tenantField: "wallet_id",
+    sort: {
+      at: { field: "created_at", column: "l.created_at" },
+      id: { field: "entry_id", column: "l.entry_id" },
+      direction: "desc",
+    },
+  },
+
   ledger_page: {
     engine: "pg",
     source: "ledger",
@@ -737,4 +772,108 @@ export function tenantParamIsLast(rendered: { paramNames: string[] }, tenanted: 
   const last = rendered.paramNames[rendered.paramNames.length - 1];
   const occurrences = rendered.paramNames.filter((name) => name === TENANT_PARAM).length;
   return tenanted ? last === TENANT_PARAM && occurrences === 1 : occurrences === 0;
+}
+
+// ---------------------------------------------------------------------------
+// PostgREST execution (C0) - the real Supabase path, with the caller's own JWT
+// ---------------------------------------------------------------------------
+
+/** A port could not answer (transport, auth, RLS, a missing relation). The DB's text is not kept. */
+export class QueryPortError extends Error {}
+
+type PostgrestAnswer = { data: unknown; error: { code?: string | null; message?: string | null } | null };
+
+/** The filter-builder calls the executor makes; a supabase-js query builder has all of them. */
+export type PostgrestBuilder = PromiseLike<PostgrestAnswer> & {
+  eq(column: string, value: SqlValue): PostgrestBuilder;
+  neq(column: string, value: SqlValue): PostgrestBuilder;
+  gte(column: string, value: SqlValue): PostgrestBuilder;
+  lte(column: string, value: SqlValue): PostgrestBuilder;
+  gt(column: string, value: SqlValue): PostgrestBuilder;
+  not(column: string, operator: string, value: null): PostgrestBuilder;
+  or(filters: string): PostgrestBuilder;
+  order(column: string, options: { ascending: boolean }): PostgrestBuilder;
+  limit(count: number): PostgrestBuilder;
+};
+
+/** The two entry points of a supabase-js client this module uses (`from` here, `rpc` in C0's reads). */
+export type PostgrestClient = {
+  from(relation: string): { select(columns: string): PostgrestBuilder };
+  rpc(fn: string, args: Record<string, SqlValue>): PromiseLike<PostgrestAnswer>;
+};
+
+/** `alias.column` -> `column`; the registry's SQL spelling is the source of truth for both engines. */
+function restColumn(column: string): string {
+  const match = /^(?:[a-z_]+\.)?([a-z_]+)$/.exec(column);
+  if (match === null) throw new QueryPlanError(`${column} has no PostgREST form`);
+  return match[1];
+}
+
+/** `o.id as org_id, o.name` -> `org_id:id,name` (PostgREST's rename syntax). */
+function restColumns(columns: string): string {
+  return columns
+    .split(",")
+    .map((entry) => {
+      const match = /^(?:[a-z_]+\.)?([a-z_]+)(?:\s+as\s+([a-z_]+))?$/.exec(entry.trim());
+      if (match === null) throw new QueryPlanError(`${entry.trim()} has no PostgREST form`);
+      return match[2] === undefined ? match[1] : `${match[2]}:${match[1]}`;
+    })
+    .join(",");
+}
+
+/**
+ * A keyset value inside PostgREST's `or=(...)` grammar, double-quoted so `.`, `:` and `,` are data.
+ * A quote or backslash would need escaping; no sort key this service mints contains one, so such a
+ * value is refused rather than escaped (the cursor was forged or the column is not what it claims).
+ */
+function restValue(value: string): string {
+  if (/["\\]/.test(value)) throw new QueryPlanError("a keyset bound may not contain a quote or a backslash");
+  return `"${value}"`;
+}
+
+/**
+ * The QueryPort over PostgREST (supabase-js, the caller's own JWT: RLS and the views' own guards are
+ * in force; no service key reaches this path). It renders the same plan `renderSql` does - named
+ * columns of one relation, the registry's predicates, the keyset bound on the whole sort key, the
+ * tenant LAST, the order and the row cap - and `scopedPort` still checks every row it returns.
+ * Aggregates and the ClickHouse projection have no PostgREST form here and are refused.
+ */
+export function postgrestPort(client: PostgrestClient): QueryPort {
+  return {
+    async run(plan: QueryPlan): Promise<Row[]> {
+      const spec = namedQuery(plan.name);
+      if (spec.engine !== "pg" || spec.aggregates !== undefined || spec.columns === undefined) {
+        throw new QueryPlanError(`${plan.name} has no PostgREST form`);
+      }
+      const relation = /^public\.([a-z_]+) [a-z]+$/.exec(spec.from);
+      if (relation === null) throw new QueryPlanError(`${plan.name} has no PostgREST form`);
+      let query = client.from(relation[1]).select(restColumns(spec.columns));
+      for (const predicate of plan.predicates) {
+        const column = restColumn(predicate.column);
+        if (predicate.op === "not_null") query = query.not(column, "is", null);
+        else query = query[predicate.op === "ne" ? "neq" : predicate.op](column, predicate.value);
+      }
+      if (plan.keyset !== null && spec.sort !== undefined) {
+        const at = restColumn(spec.sort.at.column);
+        const id = restColumn(spec.sort.id.column);
+        const op = spec.sort.direction === "desc" ? "lt" : "gt";
+        const bound = restValue(plan.keyset.at);
+        query = query.or(`(${at}.${op}.${bound},and(${at}.eq.${bound},${id}.${op}.${restValue(plan.keyset.id)}))`);
+      }
+      // Last, as in `renderSql`: a caller filter narrows the request, never widens it.
+      if (plan.tenant !== null) query = query.eq(restColumn(plan.tenant.column), plan.tenant.value);
+      if (spec.sort !== undefined) {
+        const ascending = spec.sort.direction === "asc";
+        query = query
+          .order(restColumn(spec.sort.at.column), { ascending })
+          .order(restColumn(spec.sort.id.column), { ascending });
+      }
+      if (plan.limit !== null) query = query.limit(plan.limit);
+      const { data, error } = await query;
+      // The code only: a PostgREST message can carry a relation, a column or a value.
+      if (error !== null) throw new QueryPortError(`${plan.name} could not be read (${error.code || "transport"})`);
+      if (!Array.isArray(data)) throw new QueryPortError(`${plan.name} did not return rows`);
+      return data as Row[];
+    },
+  };
 }
