@@ -1,0 +1,15 @@
+{"task": "D10", "slice": "fix round (review of f9b6ce5c)", "activity": "review",
+ "head": "ff62913d", "worktree": ".claude/worktrees/codex-d10-durable", "branch": "codex/d10-durable",
+ "owned_paths": ["apps/app/supabase/migrations/0019-0021", "apps/infrx-api/infrx/state/", "apps/infrx-api/tests/d/", "research/plan/evidence/d/D10-*"],
+ "commands": [
+  {"cmd": "pytest -q tests/d (INFRX_D_TASK=d10)", "exit": 0, "summary": "811 passed, 1 skipped, 8 xfailed at 36dd64e2"},
+  {"cmd": "INFRX_D1_IMAGE=supabase pytest -q (7 D10 suites)", "exit": 0, "summary": "126 passed, 4 xfailed"},
+  {"cmd": "pytest -q tests/contracts", "exit": 0, "summary": "1168 passed"},
+  {"cmd": "INFRX_MUTANTS=all D mutant lists + test_signup", "exit": 0, "summary": "741 passed, 0 survivors"},
+  {"cmd": "cross-track list without tests/q", "exit": 0, "summary": "132 passed, 7 skipped; only infrx-d10-postgres created"},
+  {"cmd": "scratch merge claude/consumer-v1 + ff62913d: test_lifecycle_conformance x3", "exit": 0, "summary": "27 passed each"}],
+ "estimate": {"optimistic_h": 0.5, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium",
+  "basis": "all D lists green; left: coordinator merge, W5/G7-gated revoke migration, W5 fail_preparation", "at": "2026-09-25T05:50Z"},
+ "blockers": [],
+ "wiring_requests": ["W5+G7: then revoke infrx.admit/claim_preparation from infrx_runtime (D10 follow-up)", "M6: test_retention.py:192 expect NotFound in d10 world; test_pg_* own database", "M5: drop strict xfail on probe_refusal_is_final_on_postgres", "merge: jobstore.py -> D10 side, other 13 conflicts -> integration side"],
+ "evidence": ["research/plan/evidence/d/D10-ff62913.md"]}
