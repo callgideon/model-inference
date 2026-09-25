@@ -83,15 +83,17 @@ class MediaCollector:
         # Listed first: an upload created while the listing is in flight must be in the
         # open set, or its destination is deleted as record-less (review B1).
         listed = await store.objects.keys(UPLOAD_KEY_PREFIX)
+        # M5: this reads a process-local ticket authority's records. A durable one keeps
+        # none in process (`store.uploads` raises), so the pass stops here, before any
+        # delete: its destinations are M6's to sweep over the durable content rows.
+        uploads = store.uploads
+        swept.uploads_expired = await store.tickets.expire(max(1, len(uploads)))
         open_destinations = set()
-        for handle, upload in list(store.uploads.items()):
-            if upload.state is UploadState.created and now >= upload.expires_at:
-                upload.state = UploadState.expired
-                swept.uploads_expired += 1
+        for handle, upload in list(uploads.items()):
             if upload.state is UploadState.created:
                 open_destinations.add(store.upload_key(upload.org_id, handle))
             elif upload.state is not UploadState.finalized and now >= upload.expires_at + self.grace:
-                del store.uploads[handle]      # a refused record is not kept forever
+                del uploads[handle]            # a refused record is not kept forever
         for key in listed:
             if key not in open_destinations:
                 await store.objects.delete(key)
@@ -130,16 +132,13 @@ class MediaCollector:
         return swept
 
     def _forget(self, key: str) -> None:
-        """A deleted object is named by nothing: no ref resolves to it, no upload
-        record finalizes to it."""
+        """A deleted object is named by nothing: no ref resolves to it. (An upload's ticket
+        is the repository's; its use re-checks the object, so a collected one is not_found.)"""
         store = self.store
         store.idle_since.pop(key, None)
         for index, ref in list(store.refs.items()):
             if ref.storage_ref == key:
                 del store.refs[index]
-        for handle, upload in list(store.uploads.items()):
-            if upload.ref is not None and upload.ref.storage_ref == key:
-                del store.uploads[handle]
 
     def _stray_files(self, cache, now: datetime) -> int:
         indexed = {entry.local_path for entry in cache.entries.values()}

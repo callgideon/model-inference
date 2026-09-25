@@ -72,9 +72,9 @@ def test_a_live_jobs_input_is_never_collected(tmp_path):
             assert [k for k in swept.deleted if k.startswith("media/")] == []
     assert ref.storage_ref in adapter.objects.objects
     assert prepared[0].storage_ref in adapter.objects.objects
-    # Still indexed as the job's input. (MPILOT: past the upload's window the handle is no
+    # Still bound as the job's input. (MPILOT: past the upload's window the handle is no
     # longer usable for a NEW request - `upload_expired` - but what a live job runs on stays.)
-    assert adapter.refs[(b.ORG_A, ref.handle)] == ref
+    assert adapter.by_job[job_id] == (ref,)
 
 
 def test_input_is_collected_after_the_job_ends_and_the_grace_passes():
@@ -95,10 +95,12 @@ def test_input_is_collected_after_the_job_ends_and_the_grace_passes():
     assert ref.storage_ref in run(sweeper.sweep()).deleted
     assert media_keys(adapter) == []
     assert job_id not in adapter.by_job
-    # nothing names the collected object any more
-    with pytest.raises(errors.NotFound):
+    # nothing names the collected object any more: the ticket's window has passed too
+    # (M5: the ticket is the repository's; inside its window the object's absence is
+    # `not_found` - `test_an_upload_whose_object_changed_is_not_staged`)
+    with pytest.raises(errors.UploadExpired):
         run(adapter.resolve_owned(b.ORG_A, ref.handle))
-    with pytest.raises(errors.NotFound):
+    with pytest.raises(errors.UploadExpired):
         run(adapter.finalize_upload(b.ORG_A, ref.handle))
 
 
@@ -137,7 +139,8 @@ def test_a_failed_stage_blob_is_eventually_removed():
 
 def test_a_stage_during_the_delete_is_refused_not_admitted():
     """The index forgets an object before its delete is sent: a stage racing the delete
-    round trip is not_found, never a ref to an object that is about to vanish."""
+    round trip is not_found, never a ref to an object that is about to vanish. (M5: an
+    upload's ref is the repository's, not this index's; its race is M6's tombstone.)"""
     class SlowDelete(store.InMemoryObjectStore):
         def __init__(self):
             super().__init__()
@@ -151,7 +154,8 @@ def test_a_stage_during_the_delete_is_refused_not_admitted():
 
     objects = SlowDelete()
     adapter = adapter_for(objects=objects)
-    _, ref = finalized(adapter)
+    ref = run(adapter.materialize(b.ORG_A, "data:video/mp4;base64,"
+                                  + base64.b64encode(CLIP).decode()))
     sweeper = collector(adapter)
     run(sweeper.sweep())
     adapter.clock.advance(GRACE)
@@ -294,8 +298,9 @@ def test_a_lapsed_upload_window_is_closed_and_its_bytes_removed():
 
 
 def test_a_finalized_record_outlives_its_window_while_its_object_lives():
-    """A finalized upload's record is kept past `expires_at + grace` for as long as its
-    object is in use, and a retried completion is still idempotent."""
+    """A finalized upload's record is kept past `expires_at + grace` while its object is in
+    use, and stays finalized. M5: the window is the ticket's, so a completion retried past
+    it is `upload_expired` - while the live job's input is untouched."""
     adapter, jobs = adapter_for(), Jobs()
     handle, ref = finalized(adapter)
     staged_job(adapter, jobs, ref)
@@ -303,7 +308,10 @@ def test_a_finalized_record_outlives_its_window_while_its_object_lives():
     adapter.clock.advance(TTL + GRACE + 1)
     run(sweeper.sweep())
     assert handle in adapter.uploads
-    assert run(adapter.finalize_upload(b.ORG_A, handle)) == ref
+    assert adapter.uploads[handle].state is UploadState.finalized
+    with pytest.raises(errors.UploadExpired):
+        run(adapter.finalize_upload(b.ORG_A, handle))
+    assert ref.storage_ref in adapter.objects.objects
 
 
 def test_a_refused_upload_record_is_dropped_after_the_grace():

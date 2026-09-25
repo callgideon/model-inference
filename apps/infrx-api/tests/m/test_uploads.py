@@ -50,9 +50,10 @@ class CacheClock:
 
 
 def adapter_for(tmp_path=None, *, objects=None, probe_fn=probe.probe, limits=DEFAULTS,
-                jobs=None, cls=uploads.MediaUploads):
-    """The real adapter: an in-memory object store, the harness clock, no socket."""
-    clock = FakeClock()
+                jobs=None, cls=uploads.MediaUploads, clock=None, **options):
+    """The real adapter: an in-memory object store, the harness clock, no socket.
+    `options` go to the adapter as they are (M5: `uploads=`, the ticket authority)."""
+    clock = clock or FakeClock()
     jobs = {} if jobs is None else jobs
 
     def job_org(job_id):
@@ -64,7 +65,7 @@ def adapter_for(tmp_path=None, *, objects=None, probe_fn=probe.probe, limits=DEF
                                  monotonic=support.Ticker(), log=support.Records())
     cache = prepare.ProcessingCache(str(tmp_path) if tmp_path else "", clock=CacheClock())
     adapter = cls(objects or store.InMemoryObjectStore(), now=clock.now, cache=cache,
-                  probe=probe_fn, limits=limits, fetcher=fetcher, job_org=job_org)
+                  probe=probe_fn, limits=limits, fetcher=fetcher, job_org=job_org, **options)
     adapter.clock, adapter.jobs = clock, jobs
     adapter.harness = Harness(port=adapter, clock=clock, ids=SequentialIds())
     return adapter
@@ -93,6 +94,10 @@ def finalized(adapter, data=CLIP, org_id=b.ORG_A, **constraints):
 
 def source_key(ref):
     return f"media/{ref.org_id}/v1/{ref.digest.split(':')[1][:16]}/source"
+
+
+def media_keys(adapter):
+    return sorted(key for key in adapter.objects.objects if key.startswith("media/"))
 
 
 # --- create -------------------------------------------------------------------------
@@ -194,7 +199,7 @@ def test_finalize_measures_the_bytes_that_arrived():
     assert ref.bytes == len(CLIP) and ref.digest == fetch.digest_of(CLIP)
     assert ref.mime == "video/mp4" and ref.duration_s == pytest.approx(10.0)
     assert ref.storage_ref == source_key(ref)
-    assert adapter.objects.objects[ref.storage_ref][1] == CLIP
+    assert adapter.objects.objects.get(ref.storage_ref, (None, None))[1] == CLIP
     assert adapter.uploads[handle].state is UploadState.finalized
     assert run(adapter.resolve_owned(b.ORG_A, handle)) == ref
 
@@ -242,6 +247,35 @@ def test_concurrent_finalizes_verify_and_copy_once():
     assert first == second and objects.gets == 1
 
 
+def test_concurrent_completions_share_the_preparation_bound():
+    """M5: completions of different uploads download and verify under the preparation
+    pool's bound (`PREPARATION_CONCURRENCY`), so N concurrent completions never hold N
+    downloads in memory at once."""
+    class Measuring(store.InMemoryObjectStore):
+        def __init__(self):
+            super().__init__()
+            self.inside = self.most = 0
+
+        async def get(self, key):
+            self.inside += 1
+            self.most = max(self.most, self.inside)
+            await asyncio.sleep(0.01)
+            self.inside -= 1
+            return await super().get(key)
+
+    objects = Measuring()
+    adapter = adapter_for(objects=objects, limits=DEFAULTS.replace(preparation_concurrency=1))
+    handles = [created(adapter) for _ in range(3)]
+    for seconds, handle in zip((5.0, 6.0, 7.0), handles):
+        arrive(adapter, handle, support.mp4(seconds=seconds))
+
+    async def together():
+        return await asyncio.gather(*(adapter.finalize_upload(b.ORG_A, h) for h in handles))
+
+    assert len({ref.digest for ref in run(together())}) == 3
+    assert objects.most == 1
+
+
 def test_a_second_finalize_with_other_bytes_is_a_conflict():
     """The destination overwritten after completion: a conflict, and the completed ref
     and its object stay exactly what they were."""
@@ -250,15 +284,19 @@ def test_a_second_finalize_with_other_bytes_is_a_conflict():
     arrive(adapter, handle, support.mp4(seconds=20.0))
     with pytest.raises(errors.Conflict):
         run(adapter.finalize_upload(b.ORG_A, handle))
-    assert adapter.uploads[handle].ref == ref
+    assert adapter.uploads[handle].finalized.digest == ref.digest
     assert run(adapter.resolve_owned(b.ORG_A, handle)) == ref
     assert adapter.objects.objects[ref.storage_ref][1] == CLIP
 
 
 def test_an_oversize_object_is_refused_without_being_downloaded():
+    """Bytes over every upload's ceiling (`MAX_MEDIA_BYTES`) that reached a destination are
+    refused from the HEAD, never downloaded (M5: the ticket's own cap is the receipt's,
+    applied before a PUT stores a byte - `test_put_upload_is_bounded_and_write_once`)."""
     objects = Counting()
-    adapter = adapter_for(objects=objects)
-    handle = created(adapter, max_bytes=len(CLIP) - 1)
+    adapter = adapter_for(objects=objects,
+                          limits=DEFAULTS.replace(max_media_bytes=len(CLIP) - 1))
+    handle = created(adapter)
     arrive(adapter, handle, CLIP)
     with pytest.raises(errors.RequestTooLarge):
         run(adapter.finalize_upload(b.ORG_A, handle))
@@ -288,6 +326,7 @@ def test_a_declared_size_is_verified():
     with pytest.raises(errors.InvalidRequest):
         run(adapter.finalize_upload(b.ORG_A, handle))
     assert adapter.uploads[handle].state is UploadState.aborted
+    assert media_keys(adapter) == []                 # refused bytes are never copied
     _, ref = finalized(adapter, bytes=len(CLIP))
     assert ref.bytes == len(CLIP)
 
@@ -311,6 +350,7 @@ def test_a_declared_digest_is_verified(declared):
     with pytest.raises(errors.UnsupportedMedia):
         run(adapter.finalize_upload(b.ORG_A, handle))
     assert adapter.uploads[handle].state is UploadState.aborted
+    assert media_keys(adapter) == []                 # refused bytes are never copied
     _, ref = finalized(adapter, digest=fetch.digest_of(CLIP))
     assert ref.digest == fetch.digest_of(CLIP)
 
@@ -322,6 +362,7 @@ def test_an_unaccepted_type_is_refused():
     with pytest.raises(errors.UnsupportedMedia):
         run(adapter.finalize_upload(b.ORG_A, handle))
     assert adapter.uploads[handle].state is UploadState.aborted
+    assert media_keys(adapter) == []                 # refused bytes are never copied
 
 
 def test_a_refused_upload_stays_refused():
@@ -336,15 +377,22 @@ def test_a_refused_upload_stays_refused():
 
 
 def test_an_expired_window_is_upload_expired_and_stays_closed():
-    """R22: `upload_expired`, and an expired upload takes no more bytes and no retry."""
+    """R22: `upload_expired`, and an expired upload takes no more bytes and no retry. Once
+    the repository has marked it `expired` a completion is still `upload_expired` (use is
+    bounded by the window first) and a PUT is the closed ticket's `state_conflict` (the
+    port's order: state, then window)."""
     adapter = adapter_for()
     handle = created(adapter)
     arrive(adapter, handle, CLIP)
     adapter.clock.advance(TTL)
-    with pytest.raises(errors.UploadExpired):
-        run(adapter.finalize_upload(b.ORG_A, handle))
+    for _ in range(2):
+        with pytest.raises(errors.UploadExpired):
+            run(adapter.finalize_upload(b.ORG_A, handle))
+        with pytest.raises(errors.UploadExpired):
+            run(adapter.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
+    assert run(adapter.tickets.expire(10)) == 1
     assert adapter.uploads[handle].state is UploadState.expired
-    with pytest.raises(errors.Conflict):
+    with pytest.raises(errors.UploadExpired):
         run(adapter.finalize_upload(b.ORG_A, handle))
     with pytest.raises(errors.Conflict):
         run(adapter.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
@@ -392,18 +440,19 @@ def test_nothing_uploaded_yet_is_not_a_refusal():
 
 
 def test_finalizing_never_replaces_what_the_handle_already_names():
-    """A handle that already names other content keeps that content. R82: `stage` takes
-    only store-produced refs and this store's handles are content-addressed, so the squat
-    is seeded directly - only something outside the store can reach this state."""
+    """An upload handle names what its ticket finalized, and nothing in this process can
+    change that (M5). A ref indexed in process under the handle - a squat, seeded directly
+    (R82: only something outside the store reaches this state) - is neither replaced by the
+    completion nor ever answered for the handle."""
     adapter = adapter_for()
     handle = created(adapter)
     squat = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
     adapter.refs[(b.ORG_A, handle)] = squat
     arrive(adapter, handle, CLIP)
-    with pytest.raises(errors.Conflict):
-        run(adapter.finalize_upload(b.ORG_A, handle))
+    ref = run(adapter.finalize_upload(b.ORG_A, handle))
     assert adapter.refs[(b.ORG_A, handle)] == squat
-    assert adapter.uploads[handle].state is UploadState.aborted
+    assert ref.digest == fetch.digest_of(CLIP) != squat.digest
+    assert run(adapter.resolve_owned(b.ORG_A, handle)) == ref
 
 
 def test_a_probe_that_times_out_leaves_the_upload_open():
@@ -450,11 +499,11 @@ def test_stage_refuses_an_unfinalized_upload():
 
 def test_resolve_refuses_an_upload_that_is_not_finalized_even_if_its_handle_is_indexed():
     """A handle squatted by an indexed ref (seeded directly, R82) is not a finalized
-    upload."""
+    upload: the ticket answers, and an unfinalized one is `not_found` (R99(a))."""
     adapter = adapter_for()
     handle = created(adapter)
     adapter.refs[(b.ORG_A, handle)] = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
-    with pytest.raises(errors.InvalidRequest):
+    with pytest.raises(errors.NotFound):
         run(adapter.resolve_owned(b.ORG_A, handle))
 
 
@@ -482,6 +531,8 @@ def test_an_upload_whose_object_changed_is_not_staged(change):
         run(adapter.stage(b.ORG_A, upload_request(adapter, ref)))
     with pytest.raises(errors.NotFound):
         run(adapter.resolve_owned(b.ORG_A, handle))
+    with pytest.raises(errors.NotFound):                # nor does a completion retry answer it
+        run(adapter.finalize_upload(b.ORG_A, handle))
 
 
 @pytest.mark.parametrize("tamper", [flip_last, lambda digest: "sha256:" + digest[7:].upper()],
@@ -505,13 +556,20 @@ def test_the_use_time_recheck_compares_the_whole_digest(tamper):
 
 
 def test_another_orgs_open_upload_state_does_not_leak():
-    """An upload's state is answered only to its owner: a foreign org whose own ref
-    happens to carry the same handle resolves to its own ref, not "not finalized"."""
+    """An upload's state is answered only to its owner: another org naming the handle -
+    even with its own ref seeded under it (R82) - gets the unknown handle's `not_found`,
+    never "not finalized", "expired" or the owner's ref."""
     adapter = adapter_for()
     handle = created(adapter)                                   # org A's, still open
-    foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
-    adapter.refs[(b.ORG_B, handle)] = foreign                   # seeded directly (R82)
-    assert run(adapter.resolve_owned(b.ORG_B, handle)) == foreign
+    adapter.refs[(b.ORG_B, handle)] = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
+    unknown = "upl_" + "u" * 40
+    for name in (handle, unknown):
+        with pytest.raises(errors.NotFound) as refused:
+            run(adapter.resolve_owned(b.ORG_B, name))
+        assert "not finalized" not in str(refused.value)
+    adapter.clock.advance(TTL)
+    with pytest.raises(errors.NotFound):
+        run(adapter.resolve_owned(b.ORG_B, handle))
 
 
 def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
@@ -535,11 +593,14 @@ def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
 class DeclaredFacts(uploads.MediaUploads):
     """The conformance cases upload `b"0123456789"` and `b"tiny"` as `video/mp4` and
     `application/zip`: labels, not containers, so M2's probe would refuse every one of
-    them for a reason the case is not about. This adapter takes M1's `facts` (the declared
-    type, no duration) and is otherwise the shipped class; that finalize consults the
+    them for a reason the case is not about. This adapter takes the declared type and a
+    nominal duration and is otherwise the shipped class; that finalize consults the
     probe is proven above (`test_the_container_wins_over_the_declared_content_type`)."""
 
-    facts = store.MediaStaging.facts
+    async def facts(self, data, mime):
+        # M1's facts (the declared type) plus a nominal duration: a completion carries a
+        # measured one (F2C `UploadRepository.complete`), which only a decoder can give.
+        return mime, 1.0
 
 
 def conformance_factory(limits=None, **_kw):
@@ -549,9 +610,10 @@ def conformance_factory(limits=None, **_kw):
     adapter.attachments = support.Durable()
 
     def reopened():
-        """MPILOT: the same object store and attach record, nothing in memory."""
+        """MPILOT: the same object store, attach record and (M5) ticket authority, nothing
+        in memory."""
         other = adapter_for(limits=limits or DEFAULTS, objects=adapter.objects,
-                            cls=DeclaredFacts)
+                            cls=DeclaredFacts, uploads=adapter.tickets)
         other.attachments = adapter.attachments
         return other
 
