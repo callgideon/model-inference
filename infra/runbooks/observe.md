@@ -9,8 +9,8 @@ and the three textfiles in `/var/lib/infrx/metrics/`, then `deliver.py`.
 `infrx-canary.timer` every 10 minutes runs `canary.sh` (one tiny text and one in-cap video
 request through the public edge as the canary tenant). The rule set is
 `infra/alerts/alerts.json` (I3B, version 1) plus `infra/alerts/operations.json` (I8,
-version 1), merged by `infra/observe/rules.py`; a delivered message names the merged
-version (`a1+o1`). Conventions: [README.md](README.md) (log before you act; names, never
+version 2), merged by `infra/observe/rules.py`; a delivered message names the merged
+version (`a1+o2`). Conventions: [README.md](README.md) (log before you act; names, never
 values). Single GPU: every "engine down" alert below is an outage until the engine is
 back — there is no second replica (P-16).
 
@@ -115,8 +115,64 @@ is in place (coordinator, box, one step each):
 3. `infra/rollout/ssm.sh infra/rollout/steps/74-alert-test.sh RESOLVE=<nonce>` — the
    recovery message; the owner confirms it too.
 
+## Retention stalled
+
+`RetentionAborting` (3 passes in a row stopped early), `RetentionStale` (no completed pass
+for claim TTL + 3 intervals) and `RetentionPendingDeleteOld` (a delete left unfinished
+longer than claim TTL + 2 intervals) are M6's `RetentionCollector` in the worker (pending
+WR-I8-M6-1: the worker records its `Report`). Expired uploads and prepared media are not
+being deleted; nothing is lost, but content outlives its retention. Read the worker's
+`retention sweep:` log lines (`journalctl -u infrx-worker --since -1h | grep 'retention sweep'`):
+`aborted: dependency_unavailable` is PostgreSQL (see [Exporter down](#exporter-down) and
+[Database pool](#database-pool)); `aborted: object_store_unavailable` is the bucket (the
+instance role, `S3_MEDIA_BUCKET`, the endpoint). No log lines at all: the worker is not
+running the collector (`systemctl status infrx-worker`). Do not delete objects by hand: a
+delete is authorized only by the collector's committed tombstone. Thresholds assume a
+300 s interval, ⚠️ TO BE VERIFIED (P-25).
+
+## Retention delete failures
+
+`RetentionDeleteFailures`: an object-store delete failed; that pass stopped and the content
+stays tombstoned (registration of the same key answers `content_retiring`, retryable) until
+a later claim deletes it. One is noise from the store; repeated ones become
+`RetentionAborting` - treat as [Retention stalled](#retention-stalled).
+
+## Processing cache high water
+
+`ProcessingCacheRefusing`: a preparation found `PROCESSING_CACHE_DIR` above its high water
+(`PROCESSING_CACHE_MAX_BYTES`, ⚠️ TO BE VERIFIED (P-25)) with everything left pinned by
+in-flight attempts, and refused with a retryable 503. Check `infrx_processing_cache_bytes`
+(host probe) against the setting, and in-flight attempts against the worker's concurrency;
+a cache full of pins with nothing running is a pin leak (the worker engine's, M6 wiring 2).
+`ProcessingCacheLarge` is the same volume by bytes ([disk.md](disk.md#disk-filling)).
+
+## Bucket lifecycle rule
+
+Defence in depth for M6 (wiring 4): `apps/infrx-api/deploy/s3-lifecycle.json` aborts
+multipart uploads under the media prefix (`S3_MEDIA_PREFIX`, default `infrx/`) left
+incomplete for a day, so an upload the collector never saw leaves no parts. It never
+expires a completed object: deletion is the collector's. Coordinator op, once per bucket,
+names only (the bucket is the pinned `S3_MEDIA_BUCKET`). The bucket is shared, and a put
+**replaces** its whole lifecycle configuration, so read the existing rules first and add
+this one to them:
+
+```bash
+aws s3api get-bucket-lifecycle-configuration --bucket "$S3_MEDIA_BUCKET" > lifecycle-before.json \
+  || echo '{"Rules": []}' > lifecycle-before.json    # NoSuchLifecycleConfiguration: none yet
+jq -s '{Rules: ([.[0].Rules[] | select(.ID != "infrx-abort-incomplete-multipart")] + .[1].Rules)}' \
+  lifecycle-before.json apps/infrx-api/deploy/s3-lifecycle.json > lifecycle-after.json
+aws s3api put-bucket-lifecycle-configuration --bucket "$S3_MEDIA_BUCKET" \
+  --lifecycle-configuration file://lifecycle-after.json
+aws s3api get-bucket-lifecycle-configuration --bucket "$S3_MEDIA_BUCKET"   # the rule is listed
+```
+
+Keep `lifecycle-before.json` with the session record (it is the rollback). Not applied yet.
+
 ## Verification log
 
 - 2026-09-24 (I8): written with the units, scripts and rules it describes; tests in
   `apps/infrx-api/tests/i/test_observe.py`. Nothing here has run on the box; delivery is
   BLOCKED on P-25.
+- 2026-09-25 (I8, M6 wiring 4): retention and processing-cache sections, the bucket
+  lifecycle rule and its apply stanza; rule set version `a1+o2`. The families are pending
+  WR-I8-M6-1 (no producer at M6 phase 2 `8fe53ed9`); nothing applied to the bucket.

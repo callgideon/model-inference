@@ -28,8 +28,8 @@ SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
           "duration_cap_removed", "cache_path_without_the_tenant", "facts_hook_not_consulted",
           # M3: one per new file, plus the two acceptance pins - a live job's input is
           # never collected, and a refused upload stays refused.
-          "upload_owner_unchecked", "liveness_ignored", "consent_org_unchecked",
-          "lookup_failure_fails_open", "refusal_not_recorded",
+          "upload_owner_unchecked", "consent_org_unchecked",
+          "refusal_not_recorded",
           # M4: no new file; the two pins - a download's header reaches the profile, and a
           # prepared clip is the same file on every run.
           "early_look_not_wired", "cache_file_name_varies",
@@ -41,11 +41,11 @@ SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 def test_the_list_is_well_formed():
     """A typo in a test name would make a mutant unkillable by construction and pass."""
-    from . import (test_consent, test_fetch, test_gc, test_parity, test_prepare, test_probe,
+    from . import (test_consent, test_fetch, test_parity, test_prepare, test_probe,
                    test_store, test_upload_restart, test_uploads)
 
     names = {name for module in (test_fetch, test_prepare, test_probe, test_store,
-                                 test_uploads, test_gc, test_consent, test_parity,
+                                 test_uploads, test_consent, test_parity,
                                  test_upload_restart)
              for name in vars(module)
              if name.startswith("test_")}
@@ -73,14 +73,15 @@ def test_the_mutation_list_covers_the_owned_modules():
     files = {mutant.file for mutant in ALL}
     assert files == {"media/fetch.py", "media/store.py", "media/video.py",
                      "media/probe.py", "media/prepare.py",
-                     "media/uploads.py", "media/gc.py", "media/consent.py"}
+                     "media/uploads.py", "media/consent.py"}
     assert len(ALL) >= 77 + 30, f"only {len(ALL)} mutants declared"
     # M2's own floor, stated separately so widening M1's list cannot cover for a thin one
     m2 = [mutant for mutant in ALL if mutant.file in ("media/probe.py", "media/prepare.py")]
     assert len(m2) >= 30, f"only {len(m2)} mutants for M2's modules"
-    # and M3's, for the same reason
+    # and M3's, for the same reason (M6 retired `gc.py` and its 24 mutants with it: its
+    # object deletion is `retention.py`'s, listed in `test_retention_mutants.py`)
     m3 = [mutant for mutant in ALL
-          if mutant.file in ("media/uploads.py", "media/gc.py", "media/consent.py")]
+          if mutant.file in ("media/uploads.py", "media/consent.py")]
     assert len(m3) >= 50, f"only {len(m3)} mutants for M3's modules"
     # and M5's durable upload adapter, on its own
     m5 = [mutant for mutant in ALL if mutant.file == "media/uploads.py"]

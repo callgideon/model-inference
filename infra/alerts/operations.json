@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "I8 operations rules, evaluated together with alerts.json (infra/observe/rules.py merges them; the evaluator is python -m infrx.observe.alerts). The metrics come from I8's deployed exporters - infra/observe/durable.py (PostgreSQL truth), host-probe.sh (host truth), canary.sh (the public synthetic check) - or are pending the runtime wiring named in pending_producers. Same rule shape and threshold conventions as alerts.json.",
   "overrides": {
     "GpuUnavailable": {
@@ -11,7 +11,18 @@
   },
   "pending_producers": {
     "infrx_large_body_in_use": "WR-I8-3 (the gateway's LargeBodies occupancy on /metrics)",
-    "infrx_large_body_limit": "WR-I8-3"
+    "infrx_large_body_limit": "WR-I8-3",
+    "infrx_retention_pending_delete_seconds": "WR-I8-M6-1 (M6 phase 2 reports it in RetentionCollector's Report / ProcessingCache but records no metric; FAMILIES declares none)",
+    "infrx_retention_consecutive_aborted_passes": "WR-I8-M6-1",
+    "infrx_retention_last_success_timestamp_seconds": "WR-I8-M6-1",
+    "infrx_retention_delete_failed_total": "WR-I8-M6-1",
+    "infrx_retention_passes_total": "WR-I8-M6-1 (panel only)",
+    "infrx_retention_aborted_total": "WR-I8-M6-1 (panel only)",
+    "infrx_retention_deleted_total": "WR-I8-M6-1 (panel only)",
+    "infrx_retention_retained_total": "WR-I8-M6-1 (panel only)",
+    "infrx_retention_ack_lost_total": "WR-I8-M6-1 (panel only)",
+    "infrx_processing_cache_evicted_total": "WR-I8-M6-1 (panel only)",
+    "infrx_processing_cache_refused_total": "WR-I8-M6-1"
   },
   "rules": [
     {
@@ -284,6 +295,64 @@
       "threshold": 1.0,
       "threshold_status": "exact: at the configured LARGE_BODY_LIMIT",
       "runbook": "infra/runbooks/observe.md#edge"
+    },
+    {
+      "name": "RetentionPendingDeleteOld",
+      "severity": "ticket",
+      "summary": "A retention pass took over a delete left unfinished for longer than a claim plus two passes: tombstoned content is outliving its claims.",
+      "metric": "infrx_retention_pending_delete_seconds",
+      "agg": "max",
+      "op": ">",
+      "threshold": 900,
+      "threshold_status": "derived: M6's rule, claim TTL (lifecycle.CLAIM_TTL_S = 300 s) + 2 x the retention interval (300 s assumed; M6 wiring 1 leaves <RETENTION_INTERVAL_S> open); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "runbook": "infra/runbooks/observe.md#retention-stalled"
+    },
+    {
+      "name": "RetentionAborting",
+      "severity": "ticket",
+      "summary": "Three retention passes in a row stopped early (PostgreSQL or the object store unavailable): expired content is not being deleted.",
+      "metric": "infrx_retention_consecutive_aborted_passes",
+      "agg": "max",
+      "op": ">=",
+      "threshold": 3,
+      "threshold_status": "exact: M6 phase 2's rule (3 consecutive aborted passes)",
+      "runbook": "infra/runbooks/observe.md#retention-stalled"
+    },
+    {
+      "name": "RetentionStale",
+      "severity": "ticket",
+      "summary": "No retention pass has completed for longer than a claim plus three passes: the collector is not running or never finishes.",
+      "metric": "infrx_retention_last_success_timestamp_seconds",
+      "agg": "max",
+      "age": true,
+      "op": ">",
+      "threshold": 1200,
+      "threshold_status": "derived: claim TTL 300 s + 3 x the retention interval (300 s assumed); ⚠️ TO BE VERIFIED (P-25): the approved interval",
+      "runbook": "infra/runbooks/observe.md#retention-stalled"
+    },
+    {
+      "name": "RetentionDeleteFailures",
+      "severity": "ticket",
+      "summary": "An object-store delete failed since the last evaluation: that content stays tombstoned in the bucket until a later claim deletes it.",
+      "metric": "infrx_retention_delete_failed_total",
+      "agg": "sum",
+      "increase": true,
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "derived: a failed delete aborts its pass, so at most about one per evaluation; ⚠️ TO BE VERIFIED (P-25): whether one failure is worth a ticket",
+      "runbook": "infra/runbooks/observe.md#retention-delete-failures"
+    },
+    {
+      "name": "ProcessingCacheRefusing",
+      "severity": "ticket",
+      "summary": "The processing cache refused a put since the last evaluation: above its high water and full of media in use (a retryable 503 to the caller).",
+      "metric": "infrx_processing_cache_refused_total",
+      "agg": "sum",
+      "increase": true,
+      "op": ">",
+      "threshold": 0,
+      "threshold_status": "derived: every refusal is a caller's retry; ⚠️ TO BE VERIFIED (P-25): the high water (PROCESSING_CACHE_MAX_BYTES) itself",
+      "runbook": "infra/runbooks/observe.md#processing-cache-high-water"
     }
   ]
 }

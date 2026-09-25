@@ -265,10 +265,13 @@ def test_upload_restart__create_put_complete_and_use_each_in_another_process(tmp
     prepared = run(e.prepare(job_id, "v1"))
     assert prepared[0].handle == handle and prepared[0].duration_s == pytest.approx(10.0)
     assert world.ticket(handle).state is UploadState.finalized
-    # every object the sequence wrote had its content row first (F2C, for M6's collector)
-    assert world.content_keys() == [ref.storage_ref, destination(handle)]
+    # every object the sequence wrote - destination, source, staged envelope, prepared
+    # artifact (M6) - has its content row (F2C, for M6's collector), and nothing else does
+    assert world.content_keys() == world.keys("")
+    assert {ref.storage_ref, destination(handle), prepared[0].storage_ref} <= \
+        set(world.content_keys())
     for process in (a, b_, c):
-        assert (process.refs, process.idle_since, process._finalizing) == ({}, {}, {})
+        assert (process.refs, process._finalizing) == ({}, {})
     assert world.keys("media/") == [prepared[0].storage_ref, ref.storage_ref]
 
 
@@ -500,8 +503,8 @@ def test_upload_restart__many_finalized_tickets_cost_the_process_no_memory(world
     holds a record per ticket, over 1 KiB each."""
     # 100 on PostgreSQL: the claim is per ticket, and each costs three real transactions
     durable, process = growth(world, TICKETS if world.conn is None else 100)
-    assert (process.refs, process.idle_since, process._finalizing, process.payloads,
-            process.by_job) == ({}, {}, {}, {}, {})
+    assert (process.refs, process._finalizing, process.payloads,
+            process.by_job) == ({}, {}, {}, {})
     assert durable <= 0, f"the process holds {durable} more bytes"
     local, process = growth(World(durable=False))
     assert len(process.uploads) == TICKETS + 3
