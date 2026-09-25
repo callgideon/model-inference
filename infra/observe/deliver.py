@@ -11,9 +11,9 @@ one of:
                        compatible); a credential, never printed
   ALERT_SNS_TOPIC_ARN  an SNS topic (e-mail subscription), published with the instance
                        role (sns:Publish on that topic); boto3 is imported only here
-Neither or both set, or boto3 missing for SNS: nothing is sent, the message goes to
-UNDELIVERED (bounded) and the exit is 3, "BLOCKED", so the timer's unit fails visibly
-instead of silently.
+Neither or both set, a webhook that is not https, or boto3 missing for SNS: nothing is
+sent, the message goes to UNDELIVERED (bounded) and the exit is 3, "BLOCKED", so the timer's
+unit fails visibly instead of silently. A send that fails is kept too (exit 4).
 
 Only changes are sent: a newly firing alert, a resolved one, and every page still firing
 after --repeat-s. A failed send leaves the state untouched, so the next run retries. A
@@ -60,22 +60,18 @@ def plan(firing: list[dict], state: dict, now: float, repeat_s: float) -> tuple[
     return lines, sent
 
 
-def post(text: str, extra: dict | None = None) -> int:
-    """HTTP status of the POST, or 0 when there is no destination."""
-    url = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
-    if not url:
-        return 0
-    if not url.startswith("https://"):
-        raise SystemExit("ALERT_WEBHOOK_URL must be https (the value is not printed)")
+def post(url: str, text: str, extra: dict | None = None) -> int:
+    """HTTP status of the POST to an https URL, -1 when it did not complete. The URL is a
+    credential: no exception escapes (a traceback would print parts of it)."""
     body = json.dumps({"text": text, **(extra or {})}).encode()
-    request = urllib.request.Request(url, data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
     try:
+        request = urllib.request.Request(url, data=body, method="POST",
+                                         headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=15) as answer:   # noqa: S310
             return answer.status
     except urllib.error.HTTPError as refused:
         return refused.code
-    except (urllib.error.URLError, OSError):
+    except Exception:                  # URLError, OSError, InvalidURL (a ValueError), ...
         return -1
 
 
@@ -85,7 +81,6 @@ def publish(topic: str, text: str) -> tuple[int, str]:
         return 0, "BLOCKED: ALERT_SNS_TOPIC_ARN is not an SNS topic ARN (P-25)"
     try:
         import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
     except ImportError:
         return 0, "BLOCKED: ALERT_SNS_TOPIC_ARN is set but boto3 is not installed"
     name = topic.rsplit(":", 1)[1]
@@ -94,9 +89,9 @@ def publish(topic: str, text: str) -> tuple[int, str]:
     try:
         answer = boto3.client("sns", region_name=topic.split(":")[3]).publish(
             TopicArn=topic, Subject=subject, Message=text)
-    except (BotoCoreError, ClientError) as failed:
+        status = answer.get("ResponseMetadata", {}).get("HTTPStatusCode", -1)
+    except Exception as failed:        # the type only: the text may carry anything
         return -1, f"sns={type(failed).__name__} topic={name}"
-    status = answer.get("ResponseMetadata", {}).get("HTTPStatusCode", 200)
     return status, f"sns={status} topic={name}"
 
 
@@ -110,7 +105,9 @@ def send(text: str, extra: dict | None = None) -> tuple[int, str]:
                    "ALERT_SNS_TOPIC_ARN set - exactly one is the destination (P-25)")
     if topic:
         return publish(topic, text)
-    status = post(text, extra)
+    if not hook.startswith("https://"):
+        return 0, "BLOCKED: ALERT_WEBHOOK_URL must be https (the value is not printed)"
+    status = post(hook, text, extra)
     return status, f"http={status}"
 
 

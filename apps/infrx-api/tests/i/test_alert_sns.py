@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import runpy
+import subprocess
 import sys
 import types
 
@@ -32,7 +34,8 @@ class BotoCoreError(Exception):
     pass
 
 
-def _fake_boto3(monkeypatch, fail=None):
+def _fake_boto3(monkeypatch, fail=None,
+                answer=lambda: {"MessageId": "m", "ResponseMetadata": {"HTTPStatusCode": 200}}):
     published, regions = [], []
 
     class Client:
@@ -40,7 +43,7 @@ def _fake_boto3(monkeypatch, fail=None):
             if fail:
                 raise fail
             published.append(kw)
-            return {"MessageId": "m", "ResponseMetadata": {"HTTPStatusCode": 200}}
+            return answer()
 
     def client(service, region_name):
         assert service == "sns"
@@ -99,13 +102,43 @@ def test_ops_alert_sns__publishes_one_subject_and_message_with_the_instance_role
     assert not (tmp_path / "undelivered.jsonl").exists()
 
 
-def test_ops_alert_sns__a_failed_publish_is_kept_and_retried(monkeypatch, tmp_path):
-    for failure in (ClientError("AuthorizationError"), BotoCoreError("no credentials")):
-        _fake_boto3(monkeypatch, fail=failure)
+def test_ops_alert_sns__a_failed_publish_is_kept_and_retried(monkeypatch, tmp_path, capsys):
+    """F2/F3: any exception (not only botocore's) and an answer without an explicit 2xx
+    are failed sends: exit 4, kept, and the exception's text is never printed."""
+    secret = support.MARKER + "-in-exception"
+    failures = [dict(fail=ClientError("AuthorizationError")), dict(fail=BotoCoreError("creds")),
+                dict(fail=RuntimeError(secret)), dict(answer=lambda: {"MessageId": "m"}),
+                dict(answer=lambda: None)]
+    for failure in failures:
+        _fake_boto3(monkeypatch, **failure)
         code, _ = _run(monkeypatch, tmp_path)
-        assert code == 4 and not (tmp_path / "state.json").exists()     # retried next run
+        assert code == 4 and not (tmp_path / "state.json").exists(), failure  # retried next run
+    out = capsys.readouterr()
+    assert "sns=RuntimeError topic=infrx-pilot-alerts" in out.out
+    assert secret not in out.out + out.err
     kept = (tmp_path / "undelivered.jsonl").read_text().splitlines()
-    assert len(kept) == 2 and all("StuckHolds" in line for line in kept)
+    assert len(kept) == len(failures) and all("StuckHolds" in line for line in kept)
+
+
+def test_ops_alert_sns__a_malformed_webhook_url_is_kept_and_never_printed(tmp_path):
+    """F1: a URL urllib cannot use (control character, non-numeric port) is a failed send
+    (exit 4) and a non-https one is BLOCKED (exit 3) - the alert kept either way, and no part
+    of the URL in stdout/stderr (a traceback would carry it into journald)."""
+    token = support.MARKER + "TOK"
+    for url, expected in ((f"https://hooks.example.invalid/{token} x", 4),
+                          (f"https://hooks.example.invalid:{token}/x", 4),
+                          (f"http://hooks.example.invalid/{token}", 3)):
+        undelivered = tmp_path / "undelivered.jsonl"
+        undelivered.unlink(missing_ok=True)
+        done = subprocess.run(
+            [sys.executable, "-X", "dev", str(DELIVER), "--state", str(tmp_path / "state.json"),
+             "--undelivered", str(undelivered)],
+            input=json.dumps(FIRING[0]) + "\n", capture_output=True, text=True,
+            env={"PATH": os.environ["PATH"], "ALERT_WEBHOOK_URL": url})
+        assert done.returncode == expected, (url.replace(token, "<t>"), done.returncode)
+        assert token not in done.stdout + done.stderr
+        assert "hooks.example" not in done.stdout + done.stderr
+        assert "StuckHolds" in undelivered.read_text()
 
 
 def test_ops_alert_sns__exactly_one_destination_or_blocked(monkeypatch, tmp_path, capsys):

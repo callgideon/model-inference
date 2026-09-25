@@ -216,8 +216,9 @@ SNS_TOPIC = "arn:aws:sns:us-east-1:641134885443:infrx-pilot-alerts"
 
 def test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination(tmp_path):
     """72-observe-install.sh with ALERT_SNS_TOPIC_ARN (P-25's SNS form): the ARN is a plain
-    value written into the 0600 alert env file, never an SSM read. Oracle: both destinations
-    (or a malformed ARN) are refused before anything is written."""
+    value written into the 0600 alert env file, never an SSM read. Oracle: both destinations,
+    a malformed ARN, or a control character in the owner/escalation literals (a second line in
+    the env file) are refused before anything is written."""
     stub = stubs(tmp_path, "aws", "systemctl", "git", outputs={"aws": "unused\n"})
     (stub / "git.out").write_text("c" * 40 + "\n")
     (stub / "install").write_text("#!/usr/bin/env bash\n"
@@ -233,7 +234,9 @@ def test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination
     step = (STEPS / "72-observe-install.sh").read_text()
     alert = root / "etc" / "infrx-alert.env"
     for bad in ({"ALERT_WEBHOOK_PARAM": "/model-inference/alert_webhook"},
-                {"ALERT_SNS_TOPIC_ARN": SNS_TOPIC + "\nALERT_WEBHOOK_URL=x"}):
+                {"ALERT_SNS_TOPIC_ARN": SNS_TOPIC + "\nALERT_WEBHOOK_URL=x"},
+                {"ALERT_OWNER": "sofia\nALERT_WEBHOOK_URL=https://x"},       # F4: injected line
+                {"ALERT_ESCALATION": "pager\rALERT_SNS_TOPIC_ARN=x"}):
         done = run_step(step, stub, env={**env, **bad})
         assert done.returncode == 2 and not alert.exists(), done.stderr
         assert [c for c in calls(stub) if c["tool"] != "git"] == []

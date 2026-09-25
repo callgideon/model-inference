@@ -147,8 +147,10 @@ confirmed subscriber, so `sns=200` is not delivery either).
 
 Until a destination is configured delivery is **BLOCKED**: `deliver.py` keeps each message
 in `/var/lib/infrx/metrics/undelivered.jsonl` (bounded to 200) and exits 3, so
-`infrx-observe.service` shows failed; a failed send (HTTP non-2xx, an SNS error such as
-`AuthorizationError`) is kept the same way and exits 4, retried next cycle. The proof, once
+`infrx-observe.service` shows failed (a webhook that is not `https://` is BLOCKED the same
+way); a failed send (HTTP non-2xx, a URL urllib cannot use, any SNS error such as
+`AuthorizationError`, an SNS answer without a 2xx) is kept the same way and exits 4, retried
+next cycle - only the error's type is printed, never the URL or the error's text. The proof, once
 P-25 is in place (coordinator, box, one step each):
 
 1. `infra/rollout/ssm.sh infra/rollout/steps/74-alert-test.sh` — one clearly marked

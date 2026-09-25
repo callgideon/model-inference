@@ -24,6 +24,10 @@ R=${INFRX_ROOT:-}                     # empty on the box; a sandbox root in test
 [ "$(git -c safe.directory="$repo" -C "$repo" rev-parse HEAD)" = "$RELEASE" ] \
   || { echo "the checkout is not $RELEASE" >&2; exit 2; }
 [ -f "$CANARY_VIDEO" ] || { echo "no clip at CANARY_VIDEO" >&2; exit 2; }
+for literal in "${ALERT_OWNER:-}" "${ALERT_ESCALATION:-}"; do   # one line each in the env file
+  [[ ! $literal =~ [[:cntrl:]] ]] \
+    || { echo "ALERT_OWNER/ALERT_ESCALATION must not contain a control character" >&2; exit 2; }
+done
 if [ -n "${ALERT_SNS_TOPIC_ARN:-}" ]; then
   [ -z "${ALERT_WEBHOOK_PARAM:-}" ] \
     || { echo "ALERT_WEBHOOK_PARAM and ALERT_SNS_TOPIC_ARN are both set: exactly one destination" >&2; exit 2; }
