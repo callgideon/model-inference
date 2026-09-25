@@ -19,12 +19,17 @@ from types import SimpleNamespace
 
 import pytest
 from infrx.contracts import errors
+from infrx.contracts.fakes.support import DEFAULT_START
+from infrx.contracts.v2.fixtures import IDS
 from infrx.media import gc, retention, uploads
 
-from .test_lifecycle_standin import (CLAIM_TTL_S, GRACE_S, RETENTION_S, key,  # noqa: F401
-                                     make_draft_world, make_world, new_id, pg_world, run)
+from .test_lifecycle_standin import (BROKEN, CLAIM_TTL_S, GRACE_S, RETENTION_S,  # noqa: F401
+                                     key, make_draft_world, make_world, new_id, pg_world, run)
 
 ORACLE = os.environ.get("INFRX_M6_ORACLE", "")
+#: The object store's worst-case delete, scaled to the fixture claim TTL (production: 75 s
+#: against a claim TTL of at least 300 s).
+DELETE_TIMEOUT_S = CLAIM_TTL_S / 6
 
 
 class LocalOnly:
@@ -44,6 +49,10 @@ def collector(world, *, port=None, objects=None, **options):
     if ORACLE == "local_only":
         return LocalOnly(world)
     options.setdefault("holder", "collector-1")
+    options.setdefault("delete_timeout_s", DELETE_TIMEOUT_S)
+    # The collector measures its lease on a local monotonic clock; here time is the
+    # store's, moved by hand, so the collector reads that.
+    options.setdefault("clock", lambda: (world.clock.now() - DEFAULT_START).total_seconds())
     return retention.RetentionCollector(port or world.port, objects or world.objects, **options)
 
 
@@ -172,11 +181,18 @@ def test_candidates_come_from_the_store_in_bounded_pages(make_world):
 
 
 @pytest.mark.parametrize("stray", ["secrets/keys.json", "media/../payloads/x.json",
-                                   "../media/x/source"])
+                                   "../media/x/source",
+                                   f"media/{IDS.consumer_org}/../../payloads/x.json"])
 def test_a_row_naming_a_key_outside_the_media_prefixes_is_never_deleted(make_world, stray):
     """A corrupt or foreign row must not reach the bucket: only keys M writes (media/,
-    uploads/, payloads/) and no `..` segment; anything else is kept and reported."""
+    uploads/, payloads/) and no `..` segment; anything else is kept and reported. D10's
+    tenant-prefix CHECK (0019) refuses the first three rows outright; a `..` segment inside
+    the tenant's own prefix passes it, and the collector is what keeps that one."""
     world = make_world()
+    if world.kind == "d10" and not stray.startswith(f"media/{world.org}/"):
+        with pytest.raises(errors.NotFound):
+            run(world.write("source", stray))
+        return
     run(world.write("source", stray))
     run(world.write("source", key(1)))
     world.clock.advance(GRACE_S)
@@ -291,14 +307,17 @@ def test_a_failed_object_delete_stays_tombstoned_unreadable_and_is_retried(make_
     too): the tombstoned object is unreadable although its bytes are still there, the
     untouched one is still live, and a later pass finishes both."""
     world = make_world()
-    first, second = (run(world.write("source", key(n))) for n in (1, 2))
+    rows = [run(world.write("source", key(n))) for n in (1, 2)]
     world.clock.advance(GRACE_S)
     report = run(collector(world, objects=FailingDeletes(world.objects, 1),
                            concurrency=1).sweep())
     assert (report.delete_failed, report.aborted) == (1, "object_store_unavailable")
     assert deleted(report) == []
+    # which one the store offers first is its choice (equal `eligible_at`: content_id order)
+    first, second = sorted(rows, key=lambda row: run(world.port.row(row.content_id)).state
+                           != "tombstoned")
     assert run(world.port.row(first.content_id)).state == "tombstoned"
-    assert run(world.read(first)) is None and key(1) in world.objects.objects
+    assert run(world.read(first)) is None and first.identity.object_key in world.objects.objects
     assert run(world.read(second)) == b"content"
     world.clock.advance(CLAIM_TTL_S)
     assert sorted(deleted(run(collector(world).sweep()))) == [key(1), key(2)]
@@ -331,6 +350,31 @@ def test_a_delayed_delete_cannot_remove_the_next_generation_at_the_same_key(make
     assert world.objects.objects == {}
 
 
+@pytest.mark.parametrize("over_s", [0.001, 0.0], ids=["short", "equality"])
+def test_the_delete_is_sent_only_while_the_claim_has_a_request_timeout_left(make_world, over_s):
+    """D10's rule (0020): the external delete is sent only while the claim still has one
+    object-store request timeout left, so it has landed or been abandoned before the lease
+    can pass to another collector - while writers still use the bare key, this and not the
+    generation name keeps a delayed delete off the next generation. Short of that margin
+    the object stays tombstoned (unreadable) and a later pass deletes it on a fresh claim;
+    at equality the delete is sent."""
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+
+    async def slow(claim):
+        world.clock.advance(CLAIM_TTL_S - DELETE_TIMEOUT_S + over_s)
+    report = run(collector(world, port=Interpose(world.port, tombstone=slow)).sweep())
+    if over_s:
+        assert deleted(report) == [] and report.retained == {"lease_short": 1}
+        assert key(1) in world.objects.objects and run(world.read(row)) is None
+        assert run(world.port.row(row.content_id)).state == "tombstoned"
+        world.clock.advance(DELETE_TIMEOUT_S)                     # the claim has lapsed
+        report = run(collector(world).sweep())
+    assert deleted(report) == [key(1)] and world.objects.objects == {}
+    assert run(world.port.row(row.content_id)).state == "deleted"
+
+
 def test_the_grace_boundary_is_exact_on_the_store_clock(make_world):
     world = make_world()
     run(world.write("source", key(1)))
@@ -340,13 +384,21 @@ def test_the_grace_boundary_is_exact_on_the_store_clock(make_world):
     assert deleted(run(collector(world).sweep())) == [key(1)]
 
 
-@pytest.mark.parametrize("locking", [True, False], ids=["row_lock", "no_reference_lock"])
-def test_pg_an_attach_racing_the_delete_serializes_on_the_content_row(locking):
-    """Real PostgreSQL, two sessions: an attach holds its transaction open with the
-    reference written but not committed while a collector runs. With the row lock the
-    collector waits for it and then sees the reference; without it (the deliberately
-    broken stand-in) the live job's source is deleted - the race this lock exists for."""
-    world = pg_world(locking=locking)
+RACES = [(schedule, None) for schedule in ("before_claim", "before_tombstone")] \
+    + [("before_tombstone", "no_reference_lock")] + [(s, b) for b, s in BROKEN.items()]
+
+
+@pytest.mark.parametrize("schedule,broken", RACES,
+                         ids=[f"{s}-{b or 'row_lock'}" for s, b in RACES])
+def test_pg_an_attach_racing_the_delete_serializes_on_the_content_row(schedule, broken):
+    """Real PostgreSQL, two sessions: an attach holds its transaction open, the reference
+    written but not committed, while the collector runs into it - before its claim, or
+    after the claim committed and before the tombstone. With the row lock the collector
+    waits for the attach and its in-transaction recheck then sees the reference. Each
+    broken stand-in (`BROKEN`: no lock at all, the recheck outside the tombstone's
+    transaction, a tombstone that does not lock) deletes the live job's source in the
+    schedule that reaches it - the races this lock exists for."""
+    world = pg_world(broken=broken)
     row = run(world.write("source", key(1)))
     world.clock.advance(GRACE_S)
     job = new_id()
@@ -358,24 +410,32 @@ def test_pg_an_attach_racing_the_delete_serializes_on_the_content_row(locking):
             "and datname = current_database()").fetchone()[0] > 0
 
     async def race():
-        inserted, commit = asyncio.Event(), asyncio.Event()
+        inserted, commit, attaching = asyncio.Event(), asyncio.Event(), []
 
         async def hold():
             inserted.set()
             await commit.wait()
-        attaching = asyncio.ensure_future(world.port.attach(job, row.content_id, hold=hold))
-        await asyncio.wait_for(inserted.wait(), 10)
-        sweeping = asyncio.ensure_future(collector(world).sweep())
+
+        async def open_attach(*args):
+            attaching.append(asyncio.ensure_future(
+                world.port.attach(job, row.content_id, hold=hold)))
+            await asyncio.wait_for(inserted.wait(), 10)
+        port = world.port
+        if schedule == "before_claim":
+            await open_attach()
+        else:
+            port = Interpose(port, tombstone=open_attach)
+        sweeping = asyncio.ensure_future(collector(world, port=port).sweep())
         await until(lambda: sweeping.done() or waiting())
         commit.set()
-        await attaching
+        await attaching[0]
         return await sweeping
     report = run(race())
     violated = run(world.port.job_live(job)) and run(world.read(row)) is None
-    if locking:
+    if broken is None:
         assert not violated and report.retained == {"reference_live": 1}
     else:
-        assert violated
+        assert violated, report
 
 
 # --- point 2: every content kind, database content, the persisted result boundary ----------
@@ -643,6 +703,32 @@ def test_the_schedule_survives_a_failed_pass(make_world, caplog):
     assert key(1) not in world.objects.objects
 
 
+def test_one_collector_across_passes_keeps_nothing_between_them(make_world):
+    """The production path: `run()` drives ONE collector for every pass. What a pass left
+    unfinished (a lost acknowledgement) is the store's to remember, not the instance's: the
+    same collector's next pass, once the claim has lapsed, finishes the delete."""
+    world = make_world()
+    row = run(world.write("source", key(1)))
+    world.clock.advance(GRACE_S)
+    lost, passes = [1], []
+
+    async def ack_once_lost(tombstone):
+        if lost:
+            lost.pop()
+            raise errors.DependencyUnavailable("the acknowledgement was lost")
+
+    async def sleep(seconds):
+        passes.append(seconds)
+        world.clock.advance(CLAIM_TTL_S)
+        if len(passes) == 2:
+            raise asyncio.CancelledError
+    sweeper = collector(world, port=Interpose(world.port, acknowledge_delete=ack_once_lost))
+    with pytest.raises(asyncio.CancelledError):
+        run(sweeper.run(1.0, sleep=sleep))
+    assert run(world.port.row(row.content_id)).state == "deleted"
+    assert world.objects.deletes[key(1)] == 2
+
+
 def test_pg_an_unreachable_database_fails_the_pass_and_deletes_nothing(caplog):
     """A real driver against a port nothing listens on (the lane's own, idle S3 port):
     the pass fails, the schedule logs it and goes on, and nothing is deleted."""
@@ -730,6 +816,7 @@ def test_pg_load_and_cleanup_together_never_delete_live_content():
                       "passes": len(reports), "drain_passes": drain,
                       "deleted": sum(len(r.deleted) for r in reports),
                       "lost_acks": sum(r.ack_lost for r in reports),
+                      "lease_short": sum(r.retained["lease_short"] for r in reports),
                       "max_batch": max(r.max_batch for r in reports),
                       "max_in_flight": max(r.max_in_flight for r in reports),
                       "max_pending_delete_s": pending, "load_phase_wall_s": round(loaded_s, 2)})

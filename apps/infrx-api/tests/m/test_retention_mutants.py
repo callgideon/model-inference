@@ -34,6 +34,8 @@ RESTART = "test_a_restarted_collector_keeps_a_live_jobs_source"
 KINDS = "test_every_content_kind_goes_and_the_financial_metadata_stays"
 SCRUB_FAILED = "test_a_failed_scrub_keeps_the_expired_result_unreadable_and_is_retried"
 SCHEDULE = "test_the_schedule_survives_a_failed_pass"
+ACROSS_PASSES = "test_one_collector_across_passes_keeps_nothing_between_them"
+LEASE = "test_the_delete_is_sent_only_while_the_claim_has_a_request_timeout_left"
 
 
 def _m(name, invariant, old, new, *cases, dies_by=()) -> Mutant:
@@ -98,6 +100,21 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("m6_ack_skipped", "a finished delete is acknowledged",
        "            await self.lifecycle.acknowledge_delete(tombstone)", "            pass",
        RESTART, LOST_ACK),
+    _m("m6_delete_without_lease_margin",
+       "a delete is sent only with a request timeout of lease left",
+       "            if lease_s - (self.clock() - asked) < self.delete_timeout_s:",
+       "            if False:", LEASE),
+    _m("m6_lease_margin_at_equality_kept", "exactly one request timeout left is enough",
+       "            if lease_s - (self.clock() - asked) < self.delete_timeout_s:",
+       "            if lease_s - (self.clock() - asked) <= self.delete_timeout_s:", LEASE),
+    # --- no process state between passes --------------------------------------------------
+    _m("m6_instance_remembers_items", "a reused collector keeps nothing between passes",
+       "        identity = item.identity\n",
+       '        _done = self.__dict__.setdefault("_done", set())\n'
+       "        if (item.content_id, item.generation) in _done:\n"
+       "            return\n"
+       "        _done.add((item.content_id, item.generation))\n"
+       "        identity = item.identity\n", ACROSS_PASSES),
     _m("m6_failed_pass_stops_the_schedule", "a failed pass is logged and the next one runs",
        "            except Exception:\n                log.exception",
        "            except ZeroDivisionError:\n                log.exception", SCHEDULE,

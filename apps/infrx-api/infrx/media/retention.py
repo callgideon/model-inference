@@ -16,17 +16,23 @@ claims. One pass:
    the row lock admission/attach also take. Any refusal keeps the object. A collector whose
    claim expired gets `claim_lost` and never reaches step 3.
 3. only after the tombstone commits, the **external delete**, outside every lock and
-   idempotent. Objects are addressed by generation (`generation_key`), so a delete that is
-   delayed past its lease can only remove the generation it tombstoned - never the next
-   one written later under the same logical key. Database content has no external step.
+   idempotent - and only while the claim still has `delete_timeout_s` (the object store's
+   worst-case call) left, so the delete has landed or been abandoned before the lease can
+   pass to another collector (D10's rule in 0020). Short of that it is left tombstoned for
+   a fresh claim (`lease_short`). The margin is measured from before the claim was asked
+   for, on this process's monotonic clock, so it is never optimistic. Objects are also
+   addressed by generation (`generation_key`): once writers write there (M6 phase 2), a
+   delete delayed past its lease anyway can remove only the generation it tombstoned.
+   Database content has no external step.
 4. **acknowledge_delete** - for database content this is the scrub (F2C.b): the store
    empties the body in that transaction and keeps the row's metadata (D3). A lost
    acknowledgement leaves the row tombstoned: unreadable, and a candidate again once the
    claim lapses, when the delete is simply repeated.
 
 Retain and report: a database or object store that does not answer ends the pass with
-what was not yet deleted kept. The claim TTL must exceed the object-store request timeout
-(F2C.a); `run()` is the hook the composition root starts and I8 schedules.
+what was not yet deleted kept. The claim TTL must exceed `delete_timeout_s` (F2C.a; a TTL
+at or under it deletes nothing, reported as `lease_short`); `run()` is the hook the
+composition root starts and I8 schedules.
 """
 from __future__ import annotations
 
@@ -34,6 +40,7 @@ import asyncio
 import logging
 import os
 import socket
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -43,6 +50,9 @@ log = logging.getLogger("infrx.media.retention")
 #: Every object key M writes starts with one of these (store.py, uploads.py). A row naming
 #: anything else is not deleted: a corrupt or foreign row must not reach the bucket.
 DELETABLE_PREFIXES = ("media/", "uploads/", "payloads/")
+#: The longest one object-store delete can take: `s3.py`'s client makes 2 attempts of
+#: (5 s connect + 30 s read), plus backoff. D10's claim TTL (300 s) exceeds it.
+DELETE_TIMEOUT_S = 75.0
 
 
 def generation_key(object_key: str, generation: int) -> str:
@@ -77,14 +87,17 @@ class Report:
 
 class RetentionCollector:
     """Drives `lifecycle` (a `ContentLifecycle`) and deletes from `objects` (the M
-    `ObjectStore`). `page_size` bounds each read, `concurrency` the candidates in flight."""
+    `ObjectStore`). `page_size` bounds each read, `concurrency` the candidates in flight,
+    `delete_timeout_s` the lease a delete needs left; `clock` is monotonic seconds."""
 
     def __init__(self, lifecycle, objects, *, page_size: int = 100, concurrency: int = 8,
-                 holder: str | None = None) -> None:
+                 holder: str | None = None, delete_timeout_s: float = DELETE_TIMEOUT_S,
+                 clock=time.monotonic) -> None:
         if page_size < 1 or concurrency < 1:
             raise ValueError("page_size and concurrency are positive")
         self.lifecycle, self.objects = lifecycle, objects
         self.page_size, self.concurrency = page_size, concurrency
+        self.delete_timeout_s, self.clock = delete_timeout_s, clock
         self.holder = holder or f"retention:{socket.gethostname()}:{os.getpid()}"
         self._in_flight = 0
 
@@ -124,6 +137,7 @@ class RetentionCollector:
             report.retained["foreign_key"] += 1
             return
         try:
+            asked = self.clock()
             claim = await self.lifecycle.claim(item.content_id, item.generation, self.holder)
             if item.tombstoned_at is not None:          # an unfinished delete, taken over
                 waited = (claim.claimed_at - item.tombstoned_at).total_seconds()
@@ -138,6 +152,10 @@ class RetentionCollector:
         erased = (str(tombstone.location), tombstone.object_key, tombstone.generation)
         in_database = tombstone.location == "database"
         if not in_database:
+            lease_s = (claim.expires_at - claim.claimed_at).total_seconds()
+            if lease_s - (self.clock() - asked) < self.delete_timeout_s:
+                report.retained["lease_short"] += 1     # tombstoned: a fresh claim deletes it
+                return
             try:
                 await self.objects.delete(generation_key(tombstone.object_key,
                                                          tombstone.generation))

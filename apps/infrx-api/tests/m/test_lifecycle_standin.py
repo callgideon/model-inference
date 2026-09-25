@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """STAND-INS for the content-lifecycle port M6's collector drives (`retention.py`), until
-F2C-L commits `contracts.v2.lifecycle` (+ its `fakes.lifecycle.FakeLifecycle`) and D10.b its
-PostgreSQL adapter. Neither is committed at the M6 base (f764e396); F2C-L's draft was
-READ for its method names, attribute names and refusal vocabulary, never imported.
+D10.b's PostgreSQL adapter merges. Written before F2C-L's port was committed (its draft was
+READ for its method names, attribute names and refusal vocabulary); F2C-L's committed fake
+is the `f2c` world and D10's adapter the `d10` world (a visible skip until it merges).
 
     INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_lifecycle_standin.py
 
@@ -25,9 +25,9 @@ draft). `PgLifecycleStandIn` is the same contract in real SQL on the task-local 
 (`tests/d/pgharness`, `INFRX_D_TASK=m6` -> infrx-m6-postgres :55444, database infrx_m6_*),
 in a throwaway `m6` schema: real row locks and READ COMMITTED visibility, which is what the
 race tests need. It is TEST SUPPORT, not a migration - D10 owns the SQL that replaces it,
-and `locking=False` is the deliberately broken variant (no reference lock) the race tests
-must catch. The cases at the bottom are the port rules both must satisfy; D10's adapter
-joins the `WORLDS` parametrization when it lands.
+and `broken=` names the deliberately broken variants (`BROKEN`) the race tests must catch.
+The cases at the bottom are the port rules every world must satisfy. Once D10 merges and
+the point-2 cases run on `d10`, `DraftLifecycle` and `PgLifecycleStandIn` are deleted.
 """
 from __future__ import annotations
 
@@ -40,9 +40,9 @@ from datetime import datetime, timedelta
 
 import pytest
 from infrx.contracts import errors
-from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import DEFAULT_START, FakeClock
 from infrx.contracts.records import MediaKind, MediaRef
+from infrx.contracts.v2.fixtures import IDS
 from infrx.media import store
 from infrx.media.fetch import digest_of
 from infrx.media.retention import generation_key
@@ -387,22 +387,35 @@ class PgClock:
                                  "returning now", (float(seconds),)).fetchone()[0]
 
 
+#: The deliberately broken variants of `PgLifecycleStandIn` - each a real way to write the
+#: tombstone wrong - and the race schedule that must catch it (`test_retention`).
+BROKEN = {
+    # attach, claim and tombstone read the row without its lock: check and write are apart
+    "no_reference_lock": "before_claim",
+    # the reference recheck in its own transaction before the tombstone's ("a check before
+    # this transaction is a race", `ContentLifecycle.tombstone`)
+    "recheck_outside": "before_tombstone",
+    # the tombstone reads the row without FOR UPDATE; claim and attach still lock it
+    "tombstone_unlocked": "before_tombstone",
+}
+
+
 class PgLifecycleStandIn:
     """`DraftLifecycle`'s contract in SQL. One connection per operation (like
     `state.jobstore.connector`), so concurrent operations are concurrent sessions.
-    `locking=False` drops the row lock from attach, claim and tombstone: the check and
-    the write are then separate - the "missing reference lock" the race tests catch."""
+    `broken` selects one of `BROKEN` - a missing or misplaced reference lock."""
 
     def __init__(self, dsn: str, *, grace_s=GRACE_S, claim_ttl_s=CLAIM_TTL_S,
-                 retention_s=RETENTION_S, locking: bool = True) -> None:
-        self.dsn, self.locking = dsn, locking
+                 retention_s=RETENTION_S, broken: str | None = None) -> None:
+        assert broken is None or broken in BROKEN, broken
+        self.dsn, self.broken = dsn, broken
         self.grace_s, self.claim_ttl_s, self.retention_s = grace_s, claim_ttl_s, retention_s
-        self.lock = " for update" if locking else ""
+        self.lock = "" if broken == "no_reference_lock" else " for update"
         self.unavailable = False
 
     def reopen(self, **changes) -> PgLifecycleStandIn:
         options = dict(grace_s=self.grace_s, claim_ttl_s=self.claim_ttl_s,
-                       retention_s=self.retention_s, locking=self.locking) | changes
+                       retention_s=self.retention_s, broken=self.broken) | changes
         return PgLifecycleStandIn(self.dsn, **options)
 
     async def _connect(self):
@@ -418,9 +431,9 @@ class PgLifecycleStandIn:
         finally:
             await conn.close()
 
-    async def _locked(self, conn, content_id: str) -> Row:
+    async def _locked(self, conn, content_id: str, *, lock: bool = True) -> Row:
         found = await (await conn.execute(
-            f"select {_ROW} from m6.content where content_id = %s{self.lock}",
+            f"select {_ROW} from m6.content where content_id = %s{self.lock if lock else ''}",
             (content_id,))).fetchone()
         if found is None:
             raise refuse("not_found")
@@ -567,16 +580,26 @@ class PgLifecycleStandIn:
             await conn.close()
 
     async def tombstone(self, claim: Claim) -> Tomb:
+        if self.broken == "recheck_outside":
+            outside = await self._connect()
+            try:
+                row = await self.row(claim.content_id)
+                if row.state == "live":
+                    await self._recheck(outside, row)
+            finally:
+                await outside.close()
         conn = await self._connect()
         try:
             async with conn.transaction():
-                row = await self._locked(conn, claim.content_id)
+                row = await self._locked(conn, claim.content_id,
+                                         lock=self.broken != "tombstone_unlocked")
                 now = (await (await conn.execute("select m6.now()")).fetchone())[0]
                 if row.generation != claim.generation or row.claim is None \
                         or row.claim.fence != claim.fence or now >= row.claim.expires_at:
                     raise refuse("claim_lost")
                 if row.state == "live":
-                    await self._recheck(conn, row)
+                    if self.broken != "recheck_outside":
+                        await self._recheck(conn, row)
                     await conn.execute("update m6.content set state = 'tombstoned', "
                                        "tombstoned_at = m6.now() where content_id = %s",
                                        (claim.content_id,))
@@ -624,7 +647,7 @@ class World:
     objects: Objects
     clock: object
     kind: str
-    org: str = b.ORG_A
+    org: str = IDS.consumer_org   # the seeded organization: D10's rows reference a real one
 
     async def write(self, kind: str, key: str, data: bytes = b"content", *,
                     job: str | None = None, hold_s: float | None = None,
@@ -684,12 +707,14 @@ def pg_world(**options) -> World:
 
 
 class F2CRuntime:
-    """F2C-L's committed reference fake (`contracts.fakes.lifecycle.FakeLifecycle`, 2d5e4743)
+    """F2C-L's committed reference fake (`contracts.fakes.lifecycle.FakeLifecycle`, 1b9c7411)
     behind the world's runtime hooks: a source is registered `written` with its digest, a
     job references it by being admitted with it (`admit_ready`, one job per attach), and a
-    job ends by cancellation. The port calls go straight to the fake. What F2C.a has no
-    operation for yet (a row-level hold, database bodies and their scrub, a result expiry:
-    slice b) is not offered, so the cases needing it run on the two stand-ins only."""
+    job ends by cancellation. The port calls go straight to the fake. The fake models
+    slice b's per-kind `retain_until` but has no database bodies (so no scrub to observe)
+    and no row-level hold outside an upload ticket, and a cancelled job has no result to
+    expire; the point-2 cases needing those run on `fake`, `pg` and - once D10 merges -
+    `d10`, whose triggers register database content."""
 
     def __init__(self, store, harness, refs: dict, jobs: dict) -> None:
         self.store, self.harness, self.refs, self.jobs = store, harness, refs, jobs
@@ -750,10 +775,61 @@ def f2c_world() -> World:
     return World(F2CRuntime(fake, credit, {}, {}), Objects(), credit.clock, "f2c", cases.ORG)
 
 
-WORLDS = {"f2c": f2c_world, "fake": fake_world, "pg": pg_world}
+class D10Runtime(F2CRuntime):
+    """D10's `state.lifecycle.PgLifecycle` behind the same hooks, on the task-local
+    PostgreSQL through D10's own `pgtesting.make_lifecycle_factory`: the SQL that ships,
+    replacing `PgLifecycleStandIn` once every case runs here."""
+
+    def reopen(self, **configuration) -> D10Runtime:
+        assert not configuration, "D10's adapter reopens with its factory's windows"
+        return D10Runtime(self.harness.extra["reopen"](), self.harness, self.refs, self.jobs)
+
+    def _one(self, sql: str, args):
+        return self.harness.extra["credit_conn"].execute(sql, args).fetchone()[0]
+
+    async def finish(self, job_id: str, state: str, *, result_ttl_s: float | None = None) -> None:
+        from infrx.contracts.conformance import lifecycle as cases
+        assert result_ttl_s is None, "a cancelled job keeps no result"
+        await self.harness.extra["jobs"].cancel(cases.ORG, self.jobs[job_id][1])
+
+    async def row(self, content_id: str):
+        from infrx.contracts.v2.lifecycle import ContentObject
+        doc = self._one("select infrx.content_doc(c) from infrx.content_objects c "
+                        "where content_id = %s", (content_id,))
+        return ContentObject.model_validate({"claim": None, **doc})
+
+    async def job_live(self, job_id: str) -> bool:
+        return job_id in self.jobs and self._one(
+            "select settled_at is null from infrx.jobs where request_id = %s",
+            (self.jobs[job_id][0],))
+
+    async def readable(self, content_id: str) -> bool:
+        return (await self.row(content_id)).state == "live"
+
+
+def d10_world() -> World:
+    """A visible skip until D10's adapter is in this tree (it is on `codex/d10-durable`)."""
+    from infrx.contracts.conformance import lifecycle as cases
+    from infrx.state import migrations, pgtesting
+    if not hasattr(pgtesting, "make_lifecycle_factory"):
+        pytest.skip("D10's PgLifecycle is not in this tree yet (codex/d10-durable)")
+    from ..d import pgharness, pgstore
+    reason = pgharness.unavailable()
+    if reason:
+        pytest.skip(f"PostgreSQL harness unavailable: {reason}")
+    if "d10" not in _PG:
+        _PG["d10"] = pgtesting.make_lifecycle_factory(pgstore.fresh_database, pgharness.dsn,
+                                                      migrations.SEED_MARLIN.read_text())
+    harness = _PG["d10"](upload_ttl_s=GRACE_S * 6, grace_s=GRACE_S, claim_ttl_s=CLAIM_TTL_S,
+                         retention_s=RETENTION_S)
+    return World(D10Runtime(harness.port, harness, {}, {}), Objects(), harness.clock, "d10",
+                 cases.ORG)
+
+
+WORLDS = {"f2c": f2c_world, "fake": fake_world, "pg": pg_world, "d10": d10_world}
 #: `INFRX_M6_WORLDS=f2c,fake` narrows the worlds: the mutant runs, one pytest process per
 #: mutant, then start no container.
-SELECTED = tuple(name for name in os.environ.get("INFRX_M6_WORLDS", "f2c,fake,pg").split(",")
+SELECTED = tuple(name for name in os.environ.get("INFRX_M6_WORLDS", ",".join(WORLDS)).split(",")
                  if name in WORLDS)
 #: The worlds with every operation point 2 needs (holds, database content, result expiry).
 DRAFT_WORLDS = tuple(name for name in ("fake", "pg") if name in SELECTED)
@@ -773,7 +849,7 @@ def run(coroutine):
     return asyncio.run(coroutine)
 
 
-def key(n: int, part: str = "source", org: str = b.ORG_A) -> str:
+def key(n: int, part: str = "source", org: str = IDS.consumer_org) -> str:
     return f"media/{org}/v1/{n:016x}/{part}"
 
 
