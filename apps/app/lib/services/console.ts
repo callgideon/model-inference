@@ -1310,7 +1310,6 @@ export type CreditLedgerEntry = {
   amount: Credit;
   request_id: string | null;
   reason: string;
-  actor: string | null;
 };
 
 /**
@@ -1429,7 +1428,6 @@ function creditLedgerEntryOf(row: Row): CreditLedgerEntry {
     amount: parseCredit(amount),
     request_id: optionalText(row, "request_id"),
     reason: text(row, "reason"),
-    actor: optionalText(row, "actor"),
   };
 }
 

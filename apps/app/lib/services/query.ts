@@ -266,13 +266,15 @@ const NAMED_QUERIES = {
   /**
    * C0: one consumer wallet's CREDIT ledger, keyset-paged on 0006's
    * `credit_ledger_wallet_created_idx (wallet_id, created_at desc, entry_id desc)`. The wallet is the
-   * tenant. `actor` arrives masked by the view (R59-1).
+   * tenant. `actor` is NOT selected: the kind says who acted for a consumer, and the view computes
+   * `visible_principal()` for every row below its sort (measured: 1.4 s for a 10,000-entry wallet
+   * page with it, milliseconds without - PostgreSQL drops an unselected stable column).
    */
   credit_ledger_page: {
     engine: "pg",
     source: "credit_ledger",
     from: "public.console_credit_ledger l",
-    columns: "l.wallet_id, l.entry_id, l.created_at, l.kind, l.amount, l.unit, l.request_id, l.reason, l.actor",
+    columns: "l.wallet_id, l.entry_id, l.created_at, l.kind, l.amount, l.unit, l.request_id, l.reason",
     tenantColumn: "l.wallet_id",
     tenantField: "wallet_id",
     sort: {
@@ -858,7 +860,8 @@ export function postgrestPort(client: PostgrestClient): QueryPort {
         const id = restColumn(spec.sort.id.column);
         const op = spec.sort.direction === "desc" ? "lt" : "gt";
         const bound = restValue(plan.keyset.at);
-        query = query.or(`(${at}.${op}.${bound},and(${at}.eq.${bound},${id}.${op}.${restValue(plan.keyset.id)}))`);
+        // supabase-js wraps the list in `or=( … )` itself.
+        query = query.or(`${at}.${op}.${bound},and(${at}.eq.${bound},${id}.${op}.${restValue(plan.keyset.id)})`);
       }
       // Last, as in `renderSql`: a caller filter narrows the request, never widens it.
       if (plan.tenant !== null) query = query.eq(restColumn(plan.tenant.column), plan.tenant.value);

@@ -287,7 +287,6 @@ test("the CREDIT ledger walks ties on created_at exactly once, newest first, own
     amount: "-0.00000004",
     request_id: "5c000000-0000-4000-8000-000000000004",
     reason: "",
-    actor: "platform",
   });
 });
 
@@ -515,10 +514,11 @@ test("the PostgREST executor sends the plan: relation, named columns, filters, k
   });
   assert.deepEqual(calls, [
     ["from", "console_credit_ledger"],
-    ["select", "wallet_id,entry_id,created_at,kind,amount,unit,request_id,reason,actor"],
+    ["select", "wallet_id,entry_id,created_at,kind,amount,unit,request_id,reason"],
     [
       "or",
-      '(created_at.lt."2026-09-01T12:00:00.000000Z",and(created_at.eq."2026-09-01T12:00:00.000000Z",entry_id.lt."eeeeeeee-0000-4000-8000-000000000004"))',
+      // supabase-js adds the surrounding `or=( … )` (found by the real PostgREST run).
+      'created_at.lt."2026-09-01T12:00:00.000000Z",and(created_at.eq."2026-09-01T12:00:00.000000Z",entry_id.lt."eeeeeeee-0000-4000-8000-000000000004")',
     ],
     ["eq", "wallet_id", MY_WALLET],
     ["order", "created_at", { ascending: false }],
