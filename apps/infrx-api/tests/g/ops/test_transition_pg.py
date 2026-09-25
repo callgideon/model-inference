@@ -39,6 +39,10 @@ ACTIVATE = ["credit-transition", "--card", FIXTURE_CARD, "--input-rate", FIXTURE
             "--output-rate", FIXTURE_OUT]
 
 
+#: The straddle case's hard bound: its drain bound is 0.5 s, so a bounded run is far inside.
+HARD_S = 30.0
+
+
 def run(coro):
     return asyncio.run(coro)
 
@@ -266,13 +270,14 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
     """Two connections (review G8-R1 / ACC-1): a legacy admission passes both flag checks
     (`admit_legacy_usd` and the insert trigger) and inserts its job, then parks on
     `infrx.credit_holds`, which connection C holds in SHARE mode, while the transition
-    runs. `require_feature` takes no lock, so the freeze does not wait for it and the
-    drain cannot see its uncommitted job. The transition must wait for every transaction
-    open when the freeze committed; past its bound it stops with the freeze in place, the
-    target off and nothing audited. Once the admission commits, the dry run counts it in
-    flight; after it settles in USD the rerun enables CREDIT.
+    runs. Since D10 `require_feature` reads the flag FOR SHARE, so the admission holds the
+    flag row and the freeze's UPDATE waits on it: the transition must wait for it no longer
+    than its bound, then stop with `open_transactions`, nothing changed, the target off and
+    nothing audited. Once the admission commits, the dry run counts it in flight; after it
+    settles in USD the rerun enables CREDIT.
     Oracle: without the wait the run exits 0, audited, and the USD job commits after the
-    drain measured zero (the review's reproduction)."""
+    drain measured zero (the review's reproduction); without the lock bound the run never
+    returns (the D10 merged-tree hang) - the case fails at `HARD_S` instead of hanging."""
     w, request, _ = pilot("g8_straddle")
     run(settle(w, request, "legacy_usd"))
     publish_fixture_card(w, capsys)
@@ -297,13 +302,22 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
             time.sleep(0.05)
         else:
             pytest.fail("the admission never reached the held lock")
-        code, report, _ = cli_run(w, argv, capsys)
+        ran: dict = {}
+        cli_thread = threading.Thread(target=lambda: ran.update(out=cli_run(w, argv, capsys)),
+                                      daemon=True)
+        cli_thread.start()
+        cli_thread.join(HARD_S)
+        if cli_thread.is_alive():
+            pytest.fail(f"the transition did not return within {HARD_S}s (unbounded flag lock)")
+        code, report, _ = ran["out"]
     finally:
         blocker.rollback()
         blocker.close()
         thread.join(30)
     assert code == 1 and codes(report) == {"open_transactions"}, report
-    assert report["applied"] == [{"flag": "legacy_usd_admission", "enabled": False}]
+    assert report["applied"] == []                            # the freeze waited, then gave up
+    assert w.one("select enabled from infrx.feature_flags where name = 'legacy_usd_admission'") \
+        is True
     assert w.one("select enabled from infrx.feature_flags where name = 'credit_admission'") \
         is False
     assert w.one("select count(*) from infrx.audit_entries where idempotency_key = 'straddle'") \
