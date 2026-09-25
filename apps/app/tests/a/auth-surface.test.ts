@@ -106,7 +106,7 @@ test("A2-BUNDLE-02 the grant port refuses to run in a browser and the retry is a
 test("A2-CB-09 the callback route delegates to the tested flow and claims through the grant port", () => {
   const route = read(CALLBACK);
   assert.match(route, /completeCallback\(/, "the route must run the tested callback decision");
-  assert.match(route, /claimSignupGrant/, "a verified callback must claim the grant (RV-06: the callback never did)");
+  assert.match(route, /claim:\s*claimSignupGrant\b/, "a verified callback must claim the grant (RV-06: the callback never did)");
   assert.ok(!/error_description/.test(route), "the route must not read the provider's free text");
 });
 
@@ -125,7 +125,7 @@ test("A2-COPY-02 no auth page makes a retention, ZDR or 120-second claim, or pre
     assert.ok(!/\bZDR\b|zero[- ]data[- ]retention/i.test(source), `${name}: ZDR claim`);
     assert.ok(!/never stores?/i.test(source), `${name}: never-stores claim`);
     assert.ok(!/defaultChecked/.test(source), `${name}: a prechecked control`);
-    assert.ok(!/error\.message/.test(source), `${name}: raw auth error text shown to the user`);
+    assert.ok(!/error\??\.message/.test(source), `${name}: raw auth error text shown to the user`);
   }
 });
 

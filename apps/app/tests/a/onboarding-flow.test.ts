@@ -173,6 +173,7 @@ test("A2-GRANT-03 an error, no row, an unknown status or an inexact amount is un
   assert.deepEqual(claimOutcome(null, { code: "PGRST202", message: "no function" }), unavailable);
   assert.deepEqual(claimOutcome([], null), unavailable);
   assert.deepEqual(claimOutcome(null, null), unavailable);
+  assert.deepEqual(claimOutcome([GRANT_ROW], { code: "57014", message: "canceled" }), unavailable, "an error beside a row is still an error");
   assert.deepEqual(claimOutcome([{ status: "granted_twice" }], null), unavailable);
   assert.deepEqual(claimOutcome([GRANT_ROW, GRANT_ROW], null), unavailable, "two rows is not one grant");
   for (const amount of [10000, "10000", "1e4", null, "10000.000000001"]) {
@@ -222,7 +223,9 @@ test("A2-BAL-03 a failed, empty, wrong-unit or inexact read is unavailable, neve
   assert.deepEqual(walletBalance(null, null), { kind: "unavailable" });
   assert.deepEqual(walletBalance({ ...ok, unit: "USD" }, null), { kind: "unavailable" }, "a USD figure is never a CREDIT one");
   assert.deepEqual(walletBalance({ ...ok, available: 10000 }, null), { kind: "unavailable" }, "a JSON number is not exact");
-  assert.deepEqual(walletBalance({ ...ok, available: "ten" }, null), { kind: "unavailable" });
+  for (const available of ["ten", "10000", "1e4", "10000.000000001"]) {
+    assert.deepEqual(walletBalance({ ...ok, available }, null), { kind: "unavailable" }, `available ${available}`);
+  }
   assert.deepEqual(walletBalance([ok], null).kind, "available", "an rpc array of one row reads the same");
 });
 

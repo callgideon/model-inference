@@ -32,7 +32,7 @@ async function sql(statement: string): Promise<string> {
 /** The SQLSTATE a statement fails with, or null when it succeeds. */
 async function sqlstate(statement: string): Promise<string | null> {
   try {
-    await run("psql", ["-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose", "-d", DSN!, "-c", `\\set VERBOSITY verbose\n${statement}`], {
+    await run("psql", ["-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose", "-d", DSN!, "-c", statement], {
       encoding: "utf8",
     });
     return null;

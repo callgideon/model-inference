@@ -1,0 +1,237 @@
+{
+  "_comment": "R32 for A2: one single-edit mutant per invariant tests/a claims, each with the case names that must catch it on an assertion. Run with `node tests/a/run-mutants.mjs`. The real-PG cases (grant-pg.test.ts) need a database and are not in this list; the DB rules they exercise are A1's own mutants (tests/d/signup_mutants.py).",
+  "mutants": [
+    {
+      "id": "CB-ID",
+      "note": "the grant is claimed for an id taken from the URL instead of the verified session",
+      "file": "app/(auth)/flow.ts",
+      "find": "  await ports.claim(userId).catch(() => null);",
+      "replace": "  await ports.claim(params.get(\"user_id\") ?? userId).catch(() => null);",
+      "cases": [
+        "A2-CB-03 a verified callback claims the grant ONCE, for the server-verified user, never an id from the URL"
+      ]
+    },
+    {
+      "id": "CB-NOCLAIM",
+      "note": "a verified callback never claims the grant (RV-06)",
+      "file": "app/(auth)/flow.ts",
+      "find": "  await ports.claim(userId).catch(() => null);",
+      "replace": "",
+      "cases": [
+        "A2-CB-03 a verified callback claims the grant ONCE, for the server-verified user, never an id from the URL",
+        "A2-CB-04 the token-hash form verifies the OTP with its type, then claims"
+      ]
+    },
+    {
+      "id": "CB-BLOCK",
+      "note": "a failed claim blocks sign-in instead of landing on onboarding's retry",
+      "file": "app/(auth)/flow.ts",
+      "find": "  await ports.claim(userId).catch(() => null);",
+      "replace": "  if ((await ports.claim(userId).catch(() => null))?.kind !== \"credited\") return LINK_INVALID;",
+      "cases": [
+        "A2-CB-06 a claim that fails or throws does not block sign-in: the user lands on onboarding to retry"
+      ]
+    },
+    {
+      "id": "CB-REFLECT",
+      "note": "the provider's free-text error_description is reflected into the login page",
+      "file": "app/(auth)/flow.ts",
+      "find": "    return authFailure({ code: params.get(\"error_code\") }) === \"link_expired\" ? LINK_EXPIRED : LINK_INVALID;",
+      "replace": "    return `/login?error=${encodeURIComponent(params.get(\"error_description\") ?? \"\")}`;",
+      "cases": [
+        "A2-CB-01 a link error is a fixed code; the provider's description is never reflected into the page"
+      ]
+    },
+    {
+      "id": "CB-FAILED-EXCHANGE",
+      "note": "a failed or expired exchange still proceeds to claim and sign in",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (outcome.error) return authFailure(outcome.error) === \"link_expired\" ? LINK_EXPIRED : LINK_INVALID;\n",
+      "replace": "",
+      "cases": [
+        "A2-CB-05 an expired or reused code is the expired-link state and claims nothing"
+      ]
+    },
+    {
+      "id": "CB-NO-SESSION",
+      "note": "a callback whose session cannot be read still claims",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (!userId) return LINK_INVALID;\n",
+      "replace": "",
+      "cases": [
+        "A2-CB-07 a session that cannot be read after the exchange is an invalid link and claims nothing"
+      ]
+    },
+    {
+      "id": "NEXT-BACKSLASH",
+      "note": "a backslash (`/\\\\evil`, which a browser reads as `//evil`) is accepted in a same-site redirect",
+      "file": "app/(auth)/flow.ts",
+      "find": "/^\\/(?!\\/)[^\\\\\\s",
+      "replace": "/^\\/(?!\\/)[^\\s",
+      "cases": [
+        "A2-NEXT-01 safeNext refuses protocol-relative, backslash and absolute targets",
+        "A2-CB-08 recovery goes to set-a-new-password; a safe next is kept and an unsafe one is dropped"
+      ]
+    },
+    {
+      "id": "GRANT-REPLAY-FIRST",
+      "note": "a replayed grant is announced as a new one",
+      "file": "app/(auth)/flow.ts",
+      "find": "first: row.status === \"granted\"",
+      "replace": "first: true",
+      "cases": [
+        "A2-GRANT-01 granted and replayed are both credited, with the exact amount; only the first is `first`"
+      ]
+    },
+    {
+      "id": "GRANT-INEXACT",
+      "note": "a non-canonical amount (\"10000\") is shown as credited",
+      "file": "app/(auth)/flow.ts",
+      "find": "if (amount !== row.amount || typeof row.granted_at",
+      "replace": "if (typeof row.granted_at",
+      "cases": [
+        "A2-GRANT-03 an error, no row, an unknown status or an inexact amount is unavailable, never a guessed credit"
+      ]
+    },
+    {
+      "id": "GRANT-ERROR",
+      "note": "a claim error with a stale row is read as the row",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (error) return { kind: \"unavailable\" };\n  const row = one(data);\n  if (row === null) return { kind: \"unavailable\" };\n  switch",
+      "replace": "  const row = one(data);\n  if (row === null) return { kind: \"unavailable\" };\n  switch",
+      "cases": [
+        "A2-GRANT-03 an error, no row, an unknown status or an inexact amount is unavailable, never a guessed credit"
+      ]
+    },
+    {
+      "id": "GRANT-HELD",
+      "note": "a held grant (identity reuse, rollout hold, retired) is reported as a transient outage",
+      "file": "app/(auth)/flow.ts",
+      "find": "      return { kind: \"held\", reason: row.status };",
+      "replace": "      return { kind: \"unavailable\" };",
+      "cases": [
+        "A2-GRANT-02 every denial is its own state; none of them is credited"
+      ]
+    },
+    {
+      "id": "GRANT-NO-SESSION",
+      "note": "the onboarding action claims with no session user",
+      "file": "app/(auth)/flow.ts",
+      "find": "    if (!userId) return { kind: \"signed_out\" };\n",
+      "replace": "",
+      "cases": [
+        "A2-GRANT-04 the onboarding action claims for the session user only; no session claims nothing"
+      ]
+    },
+    {
+      "id": "BAL-ZERO",
+      "note": "no wallet is shown as a confirmed zero balance",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (row.wallet_id === null) return { kind: \"not_issued\" };",
+      "replace": "  if (row.wallet_id === null) return { kind: \"available\", available: parseCredit(\"0.00000000\"), grantedAt: null };",
+      "cases": [
+        "A2-BAL-02 no wallet yet is `not_issued`, stated explicitly, never shown as a confirmed zero balance"
+      ]
+    },
+    {
+      "id": "BAL-UNIT",
+      "note": "a USD figure is displayed as the CREDIT balance",
+      "file": "app/(auth)/flow.ts",
+      "find": "if (row === null || row.unit !== \"CREDIT\") return { kind: \"unavailable\" };",
+      "replace": "if (row === null) return { kind: \"unavailable\" };",
+      "cases": [
+        "A2-BAL-03 a failed, empty, wrong-unit or inexact read is unavailable, never a zero or a float"
+      ]
+    },
+    {
+      "id": "BAL-FLOAT",
+      "note": "a JSON number is accepted as an exact balance",
+      "file": "app/(auth)/flow.ts",
+      "find": "    if (available !== row.available) return { kind: \"unavailable\" };\n",
+      "replace": "",
+      "cases": [
+        "A2-BAL-03 a failed, empty, wrong-unit or inexact read is unavailable, never a zero or a float"
+      ]
+    },
+    {
+      "id": "ENUM-USER",
+      "note": "an unknown address reads differently from a wrong password",
+      "file": "app/(auth)/flow.ts",
+      "find": "  user_not_found: \"invalid_credentials\",\n",
+      "replace": "",
+      "cases": [
+        "A2-ENUM-01 wrong password and unknown address read identically"
+      ]
+    },
+    {
+      "id": "ENUM-SIGNUP",
+      "note": "signing up with a registered address says so",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (error.code === \"user_already_exists\" || error.code === \"email_exists\") return \"sent\";\n",
+      "replace": "",
+      "cases": [
+        "A2-ENUM-02 signing up with an address that already has an account looks exactly like a new signup"
+      ]
+    },
+    {
+      "id": "ENUM-429",
+      "note": "a bare 429 is reported as a generic outage instead of a rate limit",
+      "file": "app/(auth)/flow.ts",
+      "find": "  if (error.status === 429) return \"rate_limited\";\n",
+      "replace": "",
+      "cases": [
+        "A2-ENUM-03 rate limits, expired links and outages are actionable codes; the raw server message never is the copy"
+      ]
+    },
+    {
+      "id": "NOTICE-REFLECT",
+      "note": "the login page shows whatever text ?error= carries",
+      "file": "app/(auth)/flow.ts",
+      "find": "  return typeof code === \"string\" && Object.hasOwn(NOTICES, code) ? NOTICES[code] : null;",
+      "replace": "  return typeof code === \"string\" ? (NOTICES[code] ?? code) : null;",
+      "cases": [
+        "A2-NOTICE-01 the login page shows only known notices; anything else in ?error= is ignored"
+      ]
+    },
+    {
+      "id": "BUNDLE-ADMIN",
+      "note": "a client component imports the service-role grant port directly",
+      "file": "app/(auth)/welcome/retry.tsx",
+      "find": "import { claimOnboarding } from \"./actions\";",
+      "replace": "import { claimSignupGrant as claimOnboarding } from \"../grant\";",
+      "cases": [
+        "A2-BUNDLE-01 no client component reaches the service-role client, however indirectly"
+      ]
+    },
+    {
+      "id": "ROUTE-NOCLAIM",
+      "note": "the callback route wires a claim that never reaches the grant",
+      "file": "app/auth/callback/route.ts",
+      "find": "    claim: claimSignupGrant,",
+      "replace": "    claim: async () => ({ kind: \"unavailable\" }),",
+      "cases": [
+        "A2-CB-09 the callback route delegates to the tested flow and claims through the grant port"
+      ]
+    },
+    {
+      "id": "COPY-RAW",
+      "note": "an auth page shows the raw server error text",
+      "file": "app/(auth)/forgot-password/page.tsx",
+      "find": "    else setError(FAILURE_COPY[settled]);",
+      "replace": "    else setError(error?.message ?? FAILURE_COPY[settled]);",
+      "cases": [
+        "A2-COPY-02 no auth page makes a retention, ZDR or 120-second claim, or prechecks a data-use permission"
+      ]
+    },
+    {
+      "id": "A11Y-ALERT",
+      "note": "an error region is not announced to assistive technology",
+      "file": "app/(auth)/signup/signup-form.tsx",
+      "find": "        <p role=\"alert\" className=\"text-xs text-destructive\">",
+      "replace": "        <p className=\"text-xs text-destructive\">",
+      "cases": [
+        "A2-A11Y-01 every auth input has a label, and every error region is announced"
+      ]
+    }
+  ]
+}

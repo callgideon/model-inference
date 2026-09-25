@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 assert os.environ.get("INFRX_D_TASK") == "app-a2", "run with INFRX_D_TASK=app-a2"
-sys.path.insert(0, str(Path.cwd() / "tests" / "d"))
+sys.path[:0] = [str(Path.cwd()), str(Path.cwd() / "tests" / "d")]
 import pgharness  # noqa: E402
 from infrx.state import migrations  # noqa: E402
 
