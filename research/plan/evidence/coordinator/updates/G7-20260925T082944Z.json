@@ -1,0 +1,21 @@
+{
+  "lane": "G7",
+  "task": "G7",
+  "at": "2026-09-25T08:29:44Z",
+  "activity": "complete",
+  "head": "2f7ed3ac",
+  "next_action": "merged into claude/consumer-v1 via codex/g7-merge 739c0414 (WR-1/2/4/5/6 applied); R130-R131 numbered; manifest G7 implemented; WR-7 is A3; MODELS_DOC retired (box env must not set it)",
+  "blocker": null,
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 2f7ed3ac)",
+    "at": "2026-09-25T08:29:44Z"
+  },
+  "evidence": [
+    "research/plan/evidence/g/G7-2bbfe0e.md",
+    "research/plan/evidence/g/G7-a0e0928.md"
+  ]
+}

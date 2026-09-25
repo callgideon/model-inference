@@ -4265,7 +4265,7 @@
       "track": "G",
       "product": "shared",
       "milestone": "BACKEND-CLOSURE",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "consumer-v1-closure",
       "execution_class": "core",
       "start_dependencies": [
@@ -4296,7 +4296,8 @@
       ],
       "acceptance": "Discovery/docs examples match admission; result access honors original persisted lifetime and tenancy.",
       "failure_oracle": "Stale capability, alias mismatch, unauthorized/expired result or unbounded body handling fails route checks.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger work preserving parent acceptance.",
+      "closure_note": "2026-09-25: merged on claude/consumer-v1 via codex/g7-merge 739c0414 (--no-ff of 2f7ed3ac) after the verify-lane fix round (ACCEPT_WITH_FIXES); implemented = release-derived discovery (/v1/models from the F2C-C projection, fail-closed on the approved 82 s profile), alias pricing through D10's usd_price, persisted expiry on every read/replay path, bounded overload/body drain, the startup refusal (WR-1) and the 82 s default; rulings R130–R131; OPEN: WR-7 (App docs/models page still say 120 s — A3, after BACKEND-READY); the box's staged env must not set MODELS_DOC (retired; preflight would refuse it) — rollout checklist; E3C F-2 (stall bound) re-measured on this tree."
     },
     {
       "id": "G8",

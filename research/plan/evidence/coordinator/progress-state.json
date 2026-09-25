@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 41,
-  "updated": "2026-09-25T08:19:39Z",
+  "revision": 42,
+  "updated": "2026-09-25T08:29:44Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -955,24 +955,24 @@
       "branch": "codex/g7-catalog",
       "worktree": ".claude/worktrees/codex-g7-catalog",
       "base": "dff31efc",
-      "head": "8906eb26",
+      "head": "2f7ed3ac",
       "isolation": {
         "ports": "postgres 55446 (contracts/tasklocal.py, bfb3a8af)",
         "prefix": "infrx-g7-",
         "db": null
       },
-      "activity": "review",
+      "activity": "complete",
       "started": "2026-09-24T21:55:00Z",
-      "updated": "2026-09-25T04:40:00Z",
+      "updated": "2026-09-25T08:29:44Z",
       "blocker": "merge gate: codex/d10-durable WR-3c (PgJobStore result_expires_at) must merge before or with G7, else PG successes read 410 and G8's tests/g/ops/test_acceptance_pg.py regresses",
-      "next_action": "rerun the full G mutant lists and INFRX_D_TASK=g7 api-test at a0e0928a and record them; then coordinator review/merge with D10/M5",
+      "next_action": "merged into claude/consumer-v1 via codex/g7-merge 739c0414 (WR-1/2/4/5/6 applied); R130-R131 numbered; manifest G7 implemented; WR-7 is A3; MODELS_DOC retired (box env must not set it)",
       "estimate": {
-        "optimistic_h": 0.5,
-        "likely_h": 2,
-        "pessimistic_h": 6,
-        "confidence": "medium",
-        "basis": "code findings closed; merge gates (D10 WR-3c before G7; WR-1; WR-2 after WR-3a) and merged-tree full suite remain",
-        "at": "2026-09-25T04:40Z"
+        "optimistic_h": 0,
+        "likely_h": 0,
+        "pessimistic_h": 0,
+        "confidence": "high",
+        "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 2f7ed3ac)",
+        "at": "2026-09-25T08:29:44Z"
       },
       "evidence": [
         "research/plan/evidence/g/G7-2bbfe0e.md",
@@ -1324,12 +1324,6 @@
       "lane": "W5",
       "task": "W5",
       "head": "97381015"
-    },
-    {
-      "since": "2026-09-25T00:05:00Z",
-      "lane": "G7",
-      "task": "G7",
-      "head": "8906eb26"
     }
   ],
   "integration_queue": [],
@@ -2587,6 +2581,12 @@
       "by": "D10",
       "what": "review → complete; head 483d9eca; estimate likely 2 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 483d9eca); follow-ups are separate lanes)",
       "source": "updates/D10-20260925T081939Z.json"
+    },
+    {
+      "at": "2026-09-25T08:29:44Z",
+      "by": "G7",
+      "what": "review → complete; head 2f7ed3ac; estimate likely 2 → 0 h (merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 2f7ed3ac))",
+      "source": "updates/G7-20260925T082944Z.json"
     }
   ],
   "history": {
@@ -2797,10 +2797,14 @@
     "D10-20260925T081939Z.json": {
       "status": "applied",
       "at": "2026-09-25T08:19:39Z"
+    },
+    "G7-20260925T082944Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T08:29:44Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T08:19:39Z",
+    "computed_at": "2026-09-25T08:29:44Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2810,12 +2814,12 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 02:13Z – 2026-09-27 08:07Z (likely 2026-09-26 12:37Z)",
+        "text": "2026-09-26 02:23Z – 2026-09-27 08:17Z (likely 2026-09-26 12:47Z)",
         "constraint": "dependency path M6 → E3C",
         "effort_h": [
-          23.4,
-          39.7,
-          72.2
+          22.3,
+          36.6,
+          63.9
         ],
         "wall_h": [
           17.9,
@@ -2823,9 +2827,9 @@
           47.8
         ],
         "finish": [
-          "2026-09-26T02:13:39Z",
-          "2026-09-26T12:37:39Z",
-          "2026-09-27T08:07:39Z"
+          "2026-09-26T02:23:44Z",
+          "2026-09-26T12:47:44Z",
+          "2026-09-27T08:17:44Z"
         ],
         "conditional": null,
         "confidence": "medium",
