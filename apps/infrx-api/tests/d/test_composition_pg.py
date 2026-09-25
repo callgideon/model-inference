@@ -26,6 +26,7 @@ from infrx.state.jobstore import PgJobStore
 from infrx.state.journal import PgStreamStore
 
 from . import pgharness
+from .checks_reads import seed_hosted_usd
 from .test_catalog_pg import fresh
 
 _reason = pgharness.unavailable()
@@ -49,6 +50,14 @@ def _app(regime: str, card: str, database: str):
 @pytest.mark.parametrize("regime", ["legacy_usd", "credit"])
 def test_f_base__create_app_composes_the_pilot_from_settings_on_postgresql(regime):
     database = fresh()
+    if regime == "legacy_usd":
+        # G7 WR-2: the legacy probe prices the served revision (`usd_price`, P-22 resolved).
+        # The catalog template carries no USD row; the hosted project carries two (W7c/W7e).
+        # Without them the pilot refuses to start (`price_source`), as it must.
+        with pytest.raises(RuntimeMisconfigured, match="price_source"):
+            _app(regime, CARD, database)
+        with pgharness.connect(database) as conn:
+            seed_hosted_usd(conn)
     if regime == "credit":
         # the CREDIT pin is the database's active card, or the pilot does not start
         with pytest.raises(RuntimeMisconfigured, match="price_source"):
