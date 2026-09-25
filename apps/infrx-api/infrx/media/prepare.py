@@ -35,6 +35,8 @@ artifact contains.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import fcntl
 import inspect
 import os
 import time
@@ -43,9 +45,10 @@ from dataclasses import dataclass
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import MediaRef, NormalizedRequest
+from ..contracts.v2.lifecycle import ContentKind
 from . import probe as probing
 from .fetch import digest_of
-from .store import MediaStaging, valid_digest, valid_org, valid_profile
+from .store import MediaStaging, Recent, valid_digest, valid_org, valid_profile
 
 VIDEO_PART = "video_url"
 # The rewritten reference. A part stays exactly `{type, video_url}` (R58, and W1's
@@ -107,6 +110,11 @@ class MediaProfile:
 # MPILOT (review PAR-4): how far in the future a cache file's mtime may be and still be
 # believed. Writer and reader share one host clock; this only absorbs a step adjustment.
 FUTURE_MTIME_SLACK_S = 60.0
+#: M6: how long a `.part` a crashed `put` left may sit before the sweep removes it. A live
+#: `put` finishes its rename in well under this.
+PART_GRACE_S = 3_600.0
+#: M6: eviction above the high water (`max_bytes`) runs down to this share of it.
+LOW_WATER = 0.8
 
 # What a probed container is called on disk. The engine opens the file by path, and a
 # decoder that sniffs is one more thing to be wrong about.
@@ -146,14 +154,27 @@ class ProcessingCache:
     media type (`local_uri`) finds a miss on disk: the path its key builds, the file's
     bytes checked against the key's content hash, its life counted from the file's mtime -
     which `put` sets to the entry's `stored_at`, so the disk says what the index said.
+
+    M6: **the disk is the index.** `entries` is a bounded memo (`Recent`); `sweep()` walks the
+    root, so a replaced process expires what its predecessor wrote (file mtime + TTL, a
+    stray `.part` after `PART_GRACE_S`). The key is (tenant, digest, profile version) and
+    the path carries all three, so another profile's entry is simply another path: a miss.
+    `max_bytes` is the high water: a `put` that would cross it first evicts the oldest
+    files down to `LOW_WATER`, and if what is left is all in use it is refused as a
+    retryable `dependency_unavailable` before a byte is written. "In use" is a `pin()`: a
+    shared `flock` on the file, held by whoever hands it to the engine; eviction and the
+    sweep take the exclusive lock without waiting and skip the file when they cannot. Absent
+    or full, the cache changes nothing about correctness: the durable prepared artifact is
+    the record (`prepare`), this is a local copy of it.
     """
 
     def __init__(self, root: str, *, ttl_s: float = DEFAULTS.processing_cache_ttl_s,
-                 clock=time.time) -> None:
+                 clock=time.time, max_bytes: int | None = None) -> None:
         self.root = os.path.abspath(root) if root else ""
         self.ttl_s = ttl_s
         self.clock = clock
-        self.entries: dict[tuple[str, str, str], CacheEntry] = {}
+        self.max_bytes = max_bytes
+        self.entries: dict[tuple[str, str, str], CacheEntry] = Recent()
 
     @property
     def enabled(self) -> bool:
@@ -203,6 +224,7 @@ class ProcessingCache:
             probed: probing.Probed) -> CacheEntry:
         """Write the prepared bytes and index them. Same content twice is one file."""
         path = self.path_for(org_id, profile, digest, probed.mime)
+        self._make_room(len(data), keep=path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # Written beside the target and renamed: a worker never opens a half-written clip,
         # and a crash leaves a temporary file rather than a plausible-looking short one.
@@ -243,18 +265,95 @@ class ProcessingCache:
         self.entries[key] = entry
         return entry
 
-    def sweep(self) -> int:
-        """Delete every entry past its life. Returns how many were removed."""
-        now = self.clock()
-        expired = [(key, entry) for key, entry in self.entries.items()
-                   if now - entry.stored_at >= self.ttl_s]
-        for key, entry in expired:
-            self._remove(key, entry)
-        return len(expired)
+    def _files(self) -> list[tuple[float, int, str]]:
+        """(mtime, size, path) of every regular file under the root, from the disk."""
+        found = []
+        for directory, _, names in os.walk(self.root):
+            for name in names:
+                path = os.path.join(directory, name)
+                try:
+                    stat = os.lstat(path)
+                except OSError:
+                    continue
+                found.append((stat.st_mtime, stat.st_size, path))
+        return found
 
-    def evict(self, key: tuple[str, str, str]) -> None:
-        """Remove one entry and its file now (M3's capacity bound)."""
-        self._remove(key, self.entries[key])
+    def sweep(self) -> int:
+        """Remove every file past its life - an entry `ttl_s` after its mtime (or dated in
+        the future, which `_load` would never believe either), a `.part` after
+        `PART_GRACE_S` - unless it is pinned. Read from the disk, so it holds for whatever
+        a previous process wrote. Returns how many were removed."""
+        if not self.enabled:
+            return 0
+        now = self.clock()
+        removed = 0
+        for mtime, _, path in self._files():
+            life = PART_GRACE_S if path.endswith(".part") else self.ttl_s
+            if (now - mtime >= life or mtime > now + FUTURE_MTIME_SLACK_S) \
+                    and self._evict_file(path):
+                removed += 1
+        return removed
+
+    def _make_room(self, incoming: int, *, keep: str) -> None:
+        """The high water: above `max_bytes`, evict the oldest unpinned files down to
+        `LOW_WATER`; refuse (retryable) when what is pinned leaves no room. ponytail: one
+        walk of the root per put; a running total if puts ever outpace it."""
+        if self.max_bytes is None:
+            return
+        # A `.part` is a `put` in flight (the sweep removes a crashed one after its grace).
+        files = [f for f in self._files() if f[2] != keep and not f[2].endswith(".part")]
+        total = sum(size for _, size, _ in files)
+        if total + incoming <= self.max_bytes:
+            return
+        for _, size, path in sorted(files):
+            if total + incoming <= LOW_WATER * self.max_bytes:
+                break
+            if self._evict_file(path):
+                total -= size
+        if total + incoming > self.max_bytes:
+            raise errors.DependencyUnavailable(
+                "the processing cache is full of media in use", retry_after_s=30)
+
+    def _evict_file(self, path: str) -> bool:
+        """Remove one file unless someone holds it (`pin`). False when it is pinned."""
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            return False
+        except OSError:          # a symlink or worse under the root: never followed, removed
+            fd = None
+        try:
+            if fd is not None:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return False
+            for key in [k for k, e in self.entries.items() if e.local_path == path]:
+                del self.entries[key]
+            with contextlib.suppress(OSError):
+                os.remove(path)
+            with contextlib.suppress(OSError):     # the digest directory, when empty
+                os.rmdir(os.path.dirname(path))
+            return True
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    @contextlib.contextmanager
+    def pin(self, local_path: str):
+        """Hold a cache file open for the engine: neither eviction nor the sweep removes it
+        while this is held, in any process (a shared `flock`; the kernel drops it when the
+        holder dies). A file already gone is `not_found` - prepare it again."""
+        try:
+            fd = os.open(local_path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError:
+            raise errors.NotFound("the prepared media is not in the processing cache") \
+                from None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH)
+            yield local_path
+        finally:
+            os.close(fd)
 
     def _remove(self, key: tuple[str, str, str], entry: CacheEntry) -> None:
         self.entries.pop(key, None)
@@ -440,6 +539,12 @@ class MediaPreparation(MediaStaging):
                 probed = await self.probed(data)
                 self.profile.check(probed, len(data))
                 body = self._prepared_bytes(data, probed)
+                # M6: its content row first, for its job (profile v1's artifact is the
+                # source bytes, so its digest is the source's).
+                await self._register(ContentKind.prepared, ref.org_id, prepared_key,
+                                     ref.digest if body is data
+                                     else await asyncio.to_thread(digest_of, body),
+                                     len(body), job_id=job_id)
                 # Durable before local: the prepared artifact exists in the object store
                 # before anything downstream can be told the job is prepared.
                 await self._write_once(prepared_key, body, probed.mime)

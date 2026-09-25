@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -27,6 +28,7 @@ from ..contracts import codec, errors
 from ..contracts.ids import UUID_RE
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import MediaKind, MediaRef, NormalizedRequest
+from ..contracts.v2.lifecycle import ContentIdentity, ContentKind, ContentLocation, ContentOrigin
 from .fetch import DATA_PREFIX, HTTP_PREFIXES, MediaFetcher, decode_data_url, digest_of
 
 HANDLE_PREFIX = "med_"
@@ -40,6 +42,26 @@ PROFILE_VERSION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 # not, so a digest reaching `_key` is checked where the key is built and not where the
 # record happens to have come from.
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+#: M6: the most entries any of this process's maps keeps. Each is a copy of a durable record
+#: (the content rows, D2's attachments, the staged payload object) or a hand-off inside one
+#: request, so a restart - or an eviction - loses nothing a later request needs to be right.
+MAX_PROCESS_ENTRIES = 4096
+
+
+class Recent(OrderedDict):
+    """A map keeping only its `limit` most recently written entries (M6: no per-process map
+    grows with the tickets, jobs or requests a long-lived process has seen).
+    ponytail: evicts by write order, not reads; LRU-on-read if a hot entry ever matters."""
+
+    def __init__(self, limit: int = MAX_PROCESS_ENTRIES) -> None:
+        super().__init__()
+        self.limit = limit
+
+    def __setitem__(self, key, value) -> None:
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self.limit:
+            self.popitem(last=False)
 
 
 def valid_org(org_id: object) -> str:
@@ -161,8 +183,12 @@ class MediaStaging:
 
     def __init__(self, objects: ObjectStore, *, limits: PilotSettings = DEFAULTS,
                  fetcher: MediaFetcher | None = None, job_org=None,
-                 profile_version: str = "v1", attachments=None) -> None:
+                 profile_version: str = "v1", attachments=None, content=None) -> None:
         self.objects = objects
+        # F2C's `ContentLifecycle` (D10's PgLifecycle in the pilot): every object this store
+        # writes gets its content row FIRST (M6's collector deletes only what rows name).
+        # None registers nothing - nothing is ever collected, which is the safe direction.
+        self.content = content
         self.limits = limits
         self.fetcher = fetcher or MediaFetcher(limits)
         # r1 R55: where `attach` reads a job's organization. A real adapter joins the job
@@ -172,19 +198,19 @@ class MediaStaging:
         self.profile_version = profile_version
         # (org, handle) -> immutable ref. Keyed by tenant, so one org's handle can never
         # name, replace or shadow another org's object.
-        self.refs: dict[tuple[str, str], MediaRef] = {}
+        self.refs: dict[tuple[str, str], MediaRef] = Recent()
         # MPILOT gap 2: `by_job` is this process's copy of the attach; `attachments`
         # (`attachments.PgAttachments`, D2's staged tables) is the durable one another
         # process reads - the worker, a restarted gateway. None: in process only.
-        self.by_job: dict[str, tuple[MediaRef, ...]] = {}
+        self.by_job: dict[str, tuple[MediaRef, ...]] = Recent()
         self.attachments = attachments
         # M2: what `prepare` produced, kept beside the attached sources rather than
         # replacing them. R46 allows bounded preparation retries, and a store that
         # overwrote the sources with the prepared refs would have the second attempt
         # prepare the first attempt's output - under a key derived from the profile it was
         # already prepared for.
-        self.prepared_by_job: dict[str, tuple[MediaRef, ...]] = {}
-        self.payloads: dict[str, StagedPayload] = {}
+        self.prepared_by_job: dict[str, tuple[MediaRef, ...]] = Recent()
+        self.payloads: dict[str, StagedPayload] = Recent()
 
     @staticmethod
     def _no_jobs(job_id: str) -> str:
@@ -197,6 +223,19 @@ class MediaStaging:
         # source, prepared, or whatever M2 adds - goes through the same guard.
         return (f"media/{valid_org(org_id)}/{valid_profile(profile_version)}"
                 f"/{valid_digest(digest)}/{part}")
+
+    async def _register(self, kind: ContentKind, org_id: str, key: str, digest: str,
+                        size: int, *, handle: str | None = None,
+                        job_id: str | None = None) -> None:
+        """F2C: the content row before the object (origin `written`), so a crash between
+        the two leaves a row with a persisted grace for M6's collector, never an object no
+        row names. A key whose delete is pending is `content_retiring` (a 503 to retry):
+        nothing is written over an object the collector is about to delete."""
+        if self.content is not None:
+            await self.content.register(ContentIdentity(
+                org_id=org_id, kind=kind, location=ContentLocation.object_store,
+                object_key=key, digest=digest, bytes=size, upload_handle=handle,
+                job_id=job_id, origin=ContentOrigin.written))
 
     async def _write_once(self, key: str, data: bytes, content_type: str) -> None:
         """Immutable content: the same bytes twice is a no-op, different bytes under a
@@ -255,6 +294,7 @@ class MediaStaging:
             # ever does (a shorter handle, a different scheme) it must not silently
             # replace the tenant's ref with one pointing at other content.
             raise errors.Conflict(f"handle {ref.handle} already names different content")
+        await self._register(ContentKind.source, org_id, ref.storage_ref, digest, ref.bytes)
         await self._write_once(ref.storage_ref, fetched.data, ref.mime)
         self.refs[(org_id, ref.handle)] = ref
         return ref
@@ -302,8 +342,13 @@ class MediaStaging:
         # A server-built key from server-known identity; `request.payload_ref` is not read,
         # because a caller-named path is exactly what a media store must never accept.
         key = f"payloads/{valid_org(org_id)}/{request.request_id}.json"
+        digest = digest_of(payload)
+        # The envelope serves one job: once admitted, that job keeps it (F2C); a request
+        # refused after staging leaves a row the collector removes after its grace.
+        await self._register(ContentKind.payload, org_id, key, digest, len(payload),
+                             job_id=request.request_id)
         await self._write_once(key, payload, "application/json")
-        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest_of(payload),
+        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest,
                                                           bytes=len(payload))
         return tuple(resolved)
 
