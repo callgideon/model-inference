@@ -17,7 +17,8 @@ READY = _d.READY
 #: The D10 follow-up (W5 request 3, G8 V-G8TL-2).
 FOLLOWUP = "0022_preparation_refusal_and_flag_writer.sql"
 #: D10-APP-SQL: the console read port (C0 WR-5, U1R WR-3). It redefines 0021's
-#: `consumer_jobs`, so the mutants of that body live on 0024's copy (same name and check).
+#: `consumer_jobs` and `consumer_job_result`, so the mutants of those bodies live on 0024's
+#: copies (same name, edit and check).
 PORT = "0024_console_read_port.sql"
 
 
@@ -222,7 +223,7 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_consumer_reads_any_tenant", PORT,
        "   where v_org is not null and j.org_id = v_org\n", "   where true\n", "consumer_reads",
        "bypass the tenant join: an individual lists other individuals' jobs"),
-    _m("d10_consumer_result_past_expiry", READS,
+    _m("d10_consumer_result_past_expiry", PORT,
        "  return infrx.read_result(v_org, 'infrx-result:' || p_request_id);",
        "  return (select x.body from infrx.job_results x where x.request_id = p_request_id);",
        "consumer_reads", "an expired or scrubbed result is shown in the App"),
@@ -422,6 +423,21 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
     _m("d10_jobs_key_filter_ignored", PORT,
        "     and (p_key_id is null or j.key_id = p_key_id)\n", "", "port_jobs_filters",
        "the per-key usage filter answers every key's jobs (U1R WR-3(a))"),
+    _m("d10_result_served_while_unreconciled", PORT,
+       "              and (j.settlement_state is not distinct from 'held_unknown'\n"
+       "                   or j.usage_prompt_tokens is null)) then",
+       "              and false) then", "port_result_withheld",
+       "the direct RPC serves an unknown-usage result the API withholds (U4 WR-U4-2)"),
+    _m("d10_key_insert_unverified", PORT,
+       "  with check (public.is_org_owner(org_id) and created_by = auth.uid()\n"
+       "              and public.consumer_may_create_key());",
+       "  with check (public.is_org_owner(org_id) and created_by = auth.uid());",
+       "port_key_insert",
+       "an unverified individual's JWT inserts an api_keys row directly (C3A WR-C3A-4)"),
+    _m("d10_key_insert_verification_ignored", PORT,
+       "     where v.verification_evidence_ref is not null\n",
+       "     where true\n", "port_key_insert",
+       "a wallet holder whose email is not verified mints keys (the claim path's predicate)"),
     _m("d10_ledger_for_the_runtime", PORT,
        "grant execute on function public.consumer_credit_ledger(text, integer)\n"
        "  to authenticated, service_role;",
@@ -436,6 +452,8 @@ _d._CHECKS.update({
     "port_credits_in": checks_port.check_credits_in_index,
     "port_jobs_filters": checks_port.check_consumer_jobs_filters,
     "port_privileges": checks_port.check_port_privileges,
+    "port_result_withheld": checks_port.check_result_withheld,
+    "port_key_insert": checks_port.check_key_insert_needs_verified_wallet,
 })
 _d._CHECKS.update({
     "fail_preparation": checks_followup.check_fail_preparation,

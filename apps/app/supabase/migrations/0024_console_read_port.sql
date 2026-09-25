@@ -1,5 +1,6 @@
--- D10-APP-SQL: the console read port the App lanes asked for (C0 WR-5, U1R WR-3(a)/(b);
--- R59-4, R64, R66, R122-R127). Reads only: no table, row, money or runtime grant changes.
+-- D10-APP-SQL: the console read port the App lanes asked for (C0 WR-5, U1R WR-3(a)/(b),
+-- U4 WR-U4-2, C3A WR-C3A-4; R59-4, R64, R66, R122-R127). No table, row, money or runtime
+-- grant changes; one browser write (the api_keys INSERT policy) is narrowed.
 --
 --   credit_ledger_wallet_credits_in_idx   U1R WR-3(b): "Spent" = sum(grant + adjustments)
 --                                         - ledger_total reads a wallet's NON-debit entries;
@@ -28,6 +29,23 @@
 --                                         make a two-argument call ambiguous, so the 0021
 --                                         signature is dropped and recreated in one
 --                                         transaction with the same body, columns and grants.
+--   public.consumer_job_result            U4 WR-U4-2: after the ownership check, a result
+--                                         whose usage is unreconciled (`held_unknown`, or no
+--                                         usage) is refused `result_pending`, as the gateway
+--                                         withholds it (F2C.b `read_outcome`): such a hold
+--                                         can end released platform-absorbed, never charged.
+--   api_keys_insert_owner (0001's)        C3A WR-C3A-4: a browser key INSERT also needs
+--     + public.consumer_may_create_key()  the caller to be a verified individual (the claim
+--                                         path's predicate: `infrx.verified_user` evidence
+--                                         and a live, non-empty email) holding a consumer
+--                                         wallet. 0001's owner/creator check is kept; the
+--                                         policy is dropped and recreated here, 0001 stays
+--                                         as it is. The predicate is SECURITY DEFINER (the
+--                                         policy runs as the caller, who cannot read
+--                                         `infrx`) and answers one boolean about the caller.
+--                                         Consequence: an org owner with no consumer wallet
+--                                         (a legacy USD pilot owner) creates keys through
+--                                         the operator/service seams, not the browser.
 --
 -- ORDER. After 0021 (consumer_org, the consumer read surface) and 0006 (the ledger index).
 -- Apply before the App build that calls `consumer_credit_ledger` or passes the new
@@ -36,6 +54,11 @@
 -- on the DDL notification Supabase sends.
 --
 -- ROLLBACK (0024 alone):
+--   drop policy if exists api_keys_insert_owner on public.api_keys;
+--   create policy api_keys_insert_owner on public.api_keys for insert to authenticated
+--     with check (public.is_org_owner(org_id) and created_by = auth.uid());   -- 0001's
+--   drop function if exists public.consumer_may_create_key();
+--   -- re-run 0021's `create or replace function public.consumer_job_result(...)` (0021:401-417)
 --   drop function if exists public.consumer_credit_ledger(text, integer);
 --   drop function if exists public.consumer_jobs(text, integer, uuid, text, uuid,
 --                                                timestamptz, timestamptz);
@@ -159,6 +182,51 @@ begin
    limit greatest(1, least(coalesce(p_limit, 50), 100));
 end $$;
 
+-- ======================================== U4 WR-U4-2: the owner's result, as the API ===
+-- 0021's read, plus the refusal after the ownership check (U4's text).
+create or replace function public.consumer_job_result(p_request_id uuid) returns text
+language plpgsql stable security definer set search_path = public, infrx, pg_temp as $$
+declare
+  v_org uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+  v_org := public.consumer_org();
+  if v_org is null or not exists (select 1 from infrx.jobs j where j.request_id = p_request_id
+                                   and j.org_id = v_org and j.result_ref is not null) then
+    perform infrx.refuse('not_found', 'no result for request ' || coalesce(p_request_id::text,
+                                                                            ''));
+  end if;
+  -- F2C.b read_outcome: a success is served only on authoritative usage (not held_unknown).
+  if exists (select 1 from infrx.jobs j where j.request_id = p_request_id
+              and (j.settlement_state is not distinct from 'held_unknown'
+                   or j.usage_prompt_tokens is null)) then
+    perform infrx.refuse('result_pending',
+                         'the result is not served while its usage is unreconciled');
+  end if;
+  return infrx.read_result(v_org, 'infrx-result:' || p_request_id);
+end $$;
+
+-- ====================================== C3A WR-C3A-4: who may create a key in the browser ===
+-- The caller is a verified individual (claim_signup_grant's predicate, 0015) who holds a
+-- consumer wallet (which only a verified claim creates).
+create or replace function public.consumer_may_create_key() returns boolean
+language sql stable security definer set search_path = public, infrx, pg_temp as $$
+  select exists (
+    select 1 from infrx.verified_user(auth.uid()) v
+      join auth.users u on u.id = v.user_id
+      join infrx.credit_wallets w on w.owner_user_id = v.user_id and w.kind = 'consumer'
+     where v.verification_evidence_ref is not null
+       and to_jsonb(u)->>'deleted_at' is null
+       and length(btrim(coalesce(to_jsonb(u)->>'email', ''))) > 0);
+$$;
+
+drop policy if exists api_keys_insert_owner on public.api_keys;
+create policy api_keys_insert_owner on public.api_keys for insert to authenticated
+  with check (public.is_org_owner(org_id) and created_by = auth.uid()
+              and public.consumer_may_create_key());
+
 -- ================================================================ privileges ===
 -- R59-4: Supabase's default ACL hands anon/authenticated EXECUTE on a new public function;
 -- revoke that first, then grant exactly the signed-in read (and the platform's, as every
@@ -170,6 +238,10 @@ revoke all on function public.consumer_jobs(text, integer, uuid, text, uuid, tim
   from public, anon, authenticated, service_role;
 grant execute on function public.consumer_credit_ledger(text, integer)
   to authenticated, service_role;
+revoke all on function public.consumer_may_create_key()
+  from public, anon, authenticated, service_role;
+grant execute on function public.consumer_may_create_key() to authenticated, service_role;
+-- consumer_job_result: `create or replace` keeps 0021's ACL (authenticated, service_role).
 grant execute on function public.consumer_jobs(text, integer, uuid, text, uuid, timestamptz,
                                                timestamptz)
   to authenticated, service_role;
