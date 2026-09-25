@@ -183,7 +183,10 @@ REQUIRED = {
                 ("AssertionError: executed before durable eligibility", "FAIL"))),
             "test_s12_a_held_namespace_lock_blocks_the_run_and_touches_nothing",
             "test_s12_a_fake_only_box_is_invalid_before_any_process_starts",
-            "test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port"),
+            "test_s12_the_readiness_oracle_and_admission_point_follow_d10s_port",
+            "test_s12_a_barrier_holds_on_whichever_candidate_the_process_calls",
+            "test_s12_a_collector_that_cannot_run_is_blocked_not_passed",
+            "test_s12_the_dedicated_runtime_login_is_a_real_box_database"),
 }
 # 2-ACC-2: infrastructure that broke under a case (never a product gap): INVALID[harness].
 HARNESS = re.compile(r"^(?:[\w.]*\.)?(?:HarnessError|OperationalError|BypassTargetMissing)\b"

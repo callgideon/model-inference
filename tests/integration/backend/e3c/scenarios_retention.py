@@ -52,6 +52,7 @@ def test_s06_two_fresh_collectors_never_delete_a_live_jobs_media(workdir):
         assert refs, "the admitted job has no durable attach to protect"
         answers = world.collectors(trip, count=2, grace_s=0.0)
         kept(trip, refs, answers)
+        world.collector_blocked(answers)
         trip.box.start("worker")
         assert world.terminal(trip, request_id, timeout=60.0) == "succeeded"
         world.settled_once(trip, request_id)
@@ -71,6 +72,7 @@ def test_s06_a_collector_that_cannot_reach_the_database_deletes_nothing(workdir)
         after = world.objects(trip, "")
         assert before <= after, f"deleted while the database was unreachable: " \
                                 f"{sorted(before - after)} ({answers})"
+        world.collector_blocked(answers)
 
 
 def test_s06_past_expiry_content_is_scrubbed_and_metadata_kept(workdir):

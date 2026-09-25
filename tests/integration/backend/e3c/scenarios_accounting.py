@@ -145,16 +145,45 @@ def cli_commands() -> set[str]:
     return set(sub.choices)
 
 
+def books(trip) -> dict:
+    """What a transition must never move: the flags, every wallet, every ledger row."""
+    return {"flags": trip.db("select name, enabled from infrx.feature_flags order by name"),
+            "usd": trip.db("select org_id::text, ledger_total from infrx.wallets order by 1"),
+            "credit": trip.db("select wallet_id::text, sum(amount) from infrx.credit_ledger "
+                              "group by 1 order by 1"),
+            "usd_ledger": trip.one("select count(*) from public.credit_ledger")[0]}
+
+
 def test_s09_the_credit_transition_is_a_reported_dry_run_first(workdir):
-    """G8: the CREDIT activation procedure reports its USD inventory as a dry run and refuses
-    an unapproved card (P-01) - driven through the operator CLI when the tree has it."""
+    """G8 (`credit-transition`) with a historical USD job in flight: the dry run reports the
+    USD inventory and its blockers and writes nothing; applying it at the PROVISIONAL seed
+    card (P-01 pending) is refused `card_unapproved` and changes no flag, wallet or ledger
+    row - no implicit conversion, the USD job keeps its regime."""
     commands = {c for c in cli_commands() if any(w in c for w in ("transition", "activate",
                                                                   "cutover", "inventory"))}
-    if not commands:
+    if "credit-transition" not in commands:
         world.blocked("G8", why="no CREDIT transition / activation command in the operator CLI "
                                 f"(commands: {sorted(cli_commands())})")
-    pytest.fail(f"G8's transition command exists ({sorted(commands)}): wire its dry-run "
-                "and unapproved-card cases here (phase 2)")
+    with world.composed(workdir, start=("gateway",)) as trip:
+        request_id = usd_job(trip, "e3c-s09-transition")
+        before = books(trip)
+        status, probe = world.cli(trip, "credit-transition", "--dry-run")
+        cards = {c["rate_card_version"]: c for c in probe["inventory"]["cards"]}
+        seed = cards[stack.SEED_CARD]
+        rates = ("--card", stack.SEED_CARD, "--input-rate", seed["input_rate"],
+                 "--output-rate", seed["output_rate"])
+        status, dry = world.cli(trip, "credit-transition", "--dry-run", *rates)
+        codes = {b["code"] for b in dry["blockers"]}
+        assert status == 1 and "card_unapproved" in codes, (status, dry["blockers"])
+        flying = dry["inventory"]["in_flight"].get("legacy_usd", {})
+        assert sum(flying.values()) >= 1, f"the USD job is missing from the inventory: {flying}"
+        assert books(trip) == before, "a dry run wrote"
+        status, applied = world.cli(trip, "credit-transition", *rates, "--idempotency-key",
+                                    "t-e3c", "--reason", "e3c: unapproved card must refuse")
+        assert status == 1, f"an unapproved card was applied: {applied}"
+        assert books(trip) == before, "a refused transition moved flags or money"
+        assert trip.db("select accounting_regime from infrx.jobs where request_id = %s",
+                       request_id) == [("legacy_usd",)]
 
 
 # ------------------------------------------------------------------ s11
@@ -226,5 +255,6 @@ def test_s11_cancel_racing_completion_and_reconcile_ends_once(workdir):
 
 def test_s11_reconcile_never_recreates_scrubbed_content(workdir):
     """Reconcile racing the retention pass must not bring content back. There is no retention
-    scrub on this tree to race (s06 is red), so this waits for M6/D10's pass."""
-    world.blocked("M6", "D10", why="no durable retention scrub to race (RV-03; s06)")
+    scrub on this tree to race (s06 is red), so this waits for M6's pass (D10's content
+    lifecycle doors are merged, phase 2)."""
+    world.blocked("M6", why="no durable retention scrub to race (RV-03; s06)")

@@ -21,7 +21,9 @@ What moves is three database flags (0006 `infrx.feature_flags`) and nothing else
    source regime's admission, wait (bounded) until every transaction open when the freeze
    committed has ended and then until none of the source's jobs is in flight, then
    enable the target's flags. A drain that does not finish leaves the freeze in place
-   and exits with the report; re-running continues from where it stopped.
+   and exits with the report; re-running continues from where it stopped. Every flag
+   write waits on the flag's row lock (an admission in flight holds it FOR SHARE, D10)
+   no longer than the drain's remaining bound, then refuses with `open_transactions`.
 
 Never: a balance converted, a USD row relabelled, a historical card rewritten, or a job
 moved between regimes. Every accepted job settles in the regime and at the card or price
@@ -51,6 +53,14 @@ SEED_PROVISIONAL = v2fix.RATE_CARD_VERSION
 MINTED_SUFFIX = "_provisional_p01"
 #: An approval that says it is not one (P-01 pending). Case-insensitive.
 UNAPPROVED_MARKERS = ("p-01", "provisional", "pending")
+
+
+#: What a flag write may run past its lock bound (the UPDATE and its triggers).
+STATEMENT_MARGIN_MS = 1000
+
+
+class FlagLocked(Exception):
+    """A flag row stayed locked (an admission in flight holds it) past the bound."""
 
 
 class TransitionBlocked(errors.StateConflict):
@@ -130,10 +140,12 @@ _QUERIES = {
 #: The transactions open in this database now, by the virtual transaction id each holds
 #: from its start (`pg_locks` and the pid, database and user of `pg_stat_activity` are
 #: readable by any role; autovacuum has no user and admits nothing). Waiting until those
-#: open at the freeze have ended is CREATE INDEX CONCURRENTLY's wait: `require_feature`
-#: reads the flag without a lock, so an admission that read it before the freeze committed
-#: can still commit its job (review G8-R1). The caller's own listing drops out of the
-#: intersection: each listing is a new transaction.
+#: open at the freeze have ended is CREATE INDEX CONCURRENTLY's wait: before 0021,
+#: `require_feature` read the flag without a lock, so an admission that read it before the
+#: freeze committed could still commit its job (review G8-R1). From 0021 on it reads FOR
+#: SHARE and the freeze waits for such admissions itself (V-G8TL-6); this wait then finds
+#: nothing of theirs and matters only on a schema before 0021. The caller's own listing
+#: drops out of the intersection: each listing is a new transaction.
 _OPEN_TRANSACTIONS = (
     "select l.virtualxid from pg_catalog.pg_locks l "
     "join pg_catalog.pg_stat_activity a on a.pid = l.pid "
@@ -172,14 +184,31 @@ class PgTransition:
             await conn.close()
         return frozenset(vxid for vxid, in rows)
 
-    async def set_flag(self, name: str, enabled: bool, actor: str, reason: str) -> bool:
-        """True when this call changed it (attributed on the row); False when it already was."""
+    async def set_flag(self, name: str, enabled: bool, actor: str, reason: str, *,
+                       lock_timeout_s: float) -> bool:
+        """True when this call changed it (attributed on the row); False when it already was.
+        Raises `FlagLocked` when the row stays locked past `lock_timeout_s`: an admission
+        holds it FOR SHARE until it commits (D10's `require_feature`), so an unbounded
+        UPDATE would wait on a parked admission forever. `lock_timeout` bounds one wait;
+        overlapping admissions chain waits (one MultiXact after another), so
+        `statement_timeout` bounds the whole write (V-G8TL-1)."""
+        # PostgreSQL reads 0 as "no limit": the floor keeps a spent bound bounded. The
+        # statement's margin lets a 1 ms lock bound still run the UPDATE and its triggers.
+        ms = max(1, int(lock_timeout_s * 1000))
         conn = await self._connect()
         try:
-            row = await (await conn.execute(
-                "update infrx.feature_flags set enabled = %s, updated_by = %s, reason = %s, "
-                "updated_at = infrx.now() where name = %s and enabled <> %s returning name",
-                (enabled, actor[:200], reason[:500], name, enabled))).fetchone()
+            async with conn.transaction():
+                await conn.execute(f"set local lock_timeout = {ms}")
+                await conn.execute(f"set local statement_timeout = {ms + STATEMENT_MARGIN_MS}")
+                row = await (await conn.execute(
+                    "update infrx.feature_flags set enabled = %s, updated_by = %s, reason = %s, "
+                    "updated_at = infrx.now() where name = %s and enabled <> %s returning name",
+                    (enabled, actor[:200], reason[:500], name, enabled))).fetchone()
+        except Exception as exc:
+            # lock_not_available, query_canceled (the statement bound)
+            if getattr(exc, "sqlstate", None) in ("55P03", "57014"):
+                raise FlagLocked(name) from exc
+            raise
         finally:
             await conn.close()
         return row is not None
@@ -335,31 +364,44 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
         if [b for b in first["blockers"] if b["code"] != "in_flight"]:
             raise TransitionBlocked({**first, "applied": []})
         applied = []
-        if await store.set_flag(ADMISSION_FLAG[source], False, op.principal, reason):
-            applied.append({"flag": ADMISSION_FLAG[source], "enabled": False})
         deadline = monotonic() + drain_timeout_s
+
+        async def open_transactions(n: int) -> TransitionBlocked:
+            report = plan(await store.inventory(), target=target, **rates)
+            report["blockers"].append({
+                "code": "open_transactions",
+                "detail": f"{n} transaction(s) open across the change of "
+                          f"{ADMISSION_FLAG[source]} may still commit {source} work; "
+                          "rerun once they have ended"})
+            return TransitionBlocked({**report, "applied": applied})
+
+        async def flag(name: str, enabled: bool) -> None:
+            try:
+                changed = await store.set_flag(name, enabled, op.principal, reason,
+                                               lock_timeout_s=max(deadline - monotonic(), 0.0))
+            except FlagLocked:
+                # D10: an admission in flight holds the flag FOR SHARE; waited out to the bound.
+                raise await open_transactions(1) from None
+            if changed:
+                applied.append({"flag": name, "enabled": enabled})
+
+        await flag(ADMISSION_FLAG[source], False)
         # The freeze has committed; a transaction open now may have read the flag before it
-        # and still commit a job the drain cannot see. Wait until all of those have ended
-        # (one that begins later reads the flag frozen), within the same bound.
+        # and still commit a job the drain cannot see (a schema before D10's FOR SHARE read).
+        # Wait until all of those have ended (one that begins later reads the flag frozen),
+        # within the same bound.
         straddlers = await store.open_transactions()
         while straddlers := straddlers & await store.open_transactions():
             if deadline <= monotonic():
-                report = plan(await store.inventory(), target=target, **rates)
-                report["blockers"].append({
-                    "code": "open_transactions",
-                    "detail": f"{len(straddlers)} transaction(s) open since the freeze of "
-                              f"{ADMISSION_FLAG[source]} may still commit {source} work; "
-                              "rerun once they have ended"})
-                raise TransitionBlocked({**report, "applied": applied})
+                raise await open_transactions(len(straddlers))
             await sleep(poll_s)
         while in_flight(inv := await store.inventory(), source):
             if monotonic() >= deadline:
                 raise TransitionBlocked({**plan(inv, target=target, **rates),
                                          "applied": applied})
             await sleep(poll_s)
-        for flag in () if freeze_only else ENABLE[target]:
-            if await store.set_flag(flag, True, op.principal, reason):
-                applied.append({"flag": flag, "enabled": True})
+        for name in () if freeze_only else ENABLE[target]:
+            await flag(name, True)
         final = plan(await store.inventory(), target=target, **rates)
         if final["blockers"]:
             # Belt and braces after the wait above: rerun (idempotent) until it clears.
@@ -374,4 +416,4 @@ async def apply(op, store: PgTransition, *, target: str, card: str | None = None
     return result
 
 
-__all__ = ["PgTransition", "TransitionBlocked", "apply", "plan", "unapproved"]
+__all__ = ["FlagLocked", "PgTransition", "TransitionBlocked", "apply", "plan", "unapproved"]

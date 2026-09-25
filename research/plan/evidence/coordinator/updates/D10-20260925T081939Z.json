@@ -1,0 +1,20 @@
+{
+  "task": "D10",
+  "activity": "complete",
+  "at": "2026-09-25T08:19:39Z",
+  "head": "483d9eca",
+  "next_action": "merged into claude/consumer-v1 at 8d20e115 via codex/d10-merge dfc4fa75; R122-R127 numbered; manifest D10 implemented; OPEN: revoke migration after W5/G7, fail_preparation SQL, runtime-login composition (E3C F-1), P-25 values",
+  "estimate": {
+    "optimistic_h": 0,
+    "likely_h": 0,
+    "pessimistic_h": 0,
+    "confidence": "high",
+    "basis": "merged after the verify-lane fix round (ACCEPT_WITH_FIXES at 483d9eca); follow-ups are separate lanes",
+    "at": "2026-09-25T08:19:39Z"
+  },
+  "lane": "D10",
+  "blocker": "W5/G7 wiring before the infrx_runtime door revoke; R104/R133 for fail_preparation; P-25 values",
+  "evidence": [
+    "research/plan/evidence/d/D10-ff62913.md"
+  ]
+}

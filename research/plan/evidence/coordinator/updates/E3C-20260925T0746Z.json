@@ -1,0 +1,28 @@
+{
+  "task": "E3C",
+  "slice": "phase 2: seams on D10+M5 (admission barrier on every candidate, collector composed as pilot with BLOCKED[M6], WR-4 dedicated runtime login, R106 dataset oracle, G8 transition wired)",
+  "activity": "review",
+  "at": "2026-09-25T07:46:00+00:00",
+  "head": "60ab7575",
+  "base": "ccf37b55",
+  "worktree": ".claude/worktrees/codex-e3c-phase2",
+  "branch": "codex/e3c-phase2",
+  "owned_paths": ["tests/integration/backend/e3c/", "research/plan/evidence/e/E3C-phase2-60ab757.md",
+                  "research/plan/evidence/coordinator/updates/E3C-20260925T0746Z.json"],
+  "commands": [
+    {"cmd": "runner.py --keep --reuse --only s03,s06,s07,s10 (phase-1 harness at ccf37b55)", "exit": 1, "summary": "6 failed, 9 passed; s03 PASS (M5); s06 red from a process-local collector composition"},
+    {"cmd": "pytest -q tests/integration/backend/e3c (no stack)", "exit": 0, "summary": "30 passed (3 new s12 regressions, each killed by its mutant)"},
+    {"cmd": "make backend-local (run 1, 42c831ec)", "exit": 2, "summary": "runner exit 1; 14 failed, 57 passed, 4 skipped; 2 harness reds fixed next (R106 oracle, G8 wiring)"},
+    {"cmd": "make backend-local (run 2, evidence, 60ab7575)", "exit": 2, "summary": "runner exit 1, gate FAIL; 12 failed, 59 passed, 4 skipped in 752 s; PASS s01 s02 s03 s09 s12; FAIL s04 s05 s06 s07 s08 s10 s13; BLOCKED s11; non-passes: G7 6, W5 3, M6 4, defects 3 (F-1, F-2), harness 0; teardown clean"},
+    {"cmd": "consumer-local.sh --break-seam readiness", "exit": 1, "summary": "seam:readiness FAIL (mutant killed) as required"},
+    {"cmd": "consumer-local.sh --break-seam expiry", "exit": 1, "summary": "seam:expiry FAIL (mutant killed) as required"},
+    {"cmd": "pytest -q tests/integration/backend (layer 0)", "exit": 1, "summary": "1 failed, 147 passed, 79 skipped; the failure is test_observe ob10 (infrx_db_pool_* panels), fixed by i8-panels 463d313d which this base predates"}
+  ],
+  "estimate": {"optimistic_h": 2, "likely_h": 4, "pessimistic_h": 8, "confidence": "medium",
+               "basis": "three ~13-min reruns after G7, W5 and M6 merge, re-point collect_once to M6's entry, run nc-admission-ready / nc-retention-durable revert controls; F-1 fix then INFRX_E3C_RUNTIME_LOGIN=1 rerun; F-2 needs a ruling",
+               "at": "2026-09-25T07:46:00+00:00"},
+  "blockers": ["G7 (admit_ready composition, persisted-expiry reads, discovery)", "W5 (claim_preparation_ready, fail_preparation)", "M6 (durable retention pass)",
+               "F-1 pilot.py:129-139 pool sets role service_role; infrx_runtime cannot serve", "F-2 unbounded acceptance on stalled PostgreSQL / S3 (bound needs a ruling)"],
+  "wiring_requests": [],
+  "evidence": ["research/plan/evidence/e/E3C-phase2-60ab757.md"]
+}

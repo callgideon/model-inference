@@ -30,6 +30,18 @@
       ]
     },
     {
+      "title": "Is the database pool saturated? (per process, psycopg_pool pop_stats)",
+      "panels": [
+        {"title": "DB pool connections: size vs available vs max", "metric": "infrx_db_pool_connections", "by": ["process", "state"], "unit": "connections"},
+        {"title": "DB pool waiters", "metric": "infrx_db_pool_requests_waiting", "by": ["process"], "unit": "requests"},
+        {"title": "DB pool requests", "metric": "infrx_db_pool_requests_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool wait time", "metric": "infrx_db_pool_wait_seconds_total", "by": ["process"], "rate": true, "unit": "s/s"},
+        {"title": "DB pool timeouts", "metric": "infrx_db_pool_timeouts_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool connect errors", "metric": "infrx_db_pool_connection_errors_total", "by": ["process"], "rate": true, "unit": "1/s"},
+        {"title": "DB pool connections lost", "metric": "infrx_db_pool_connections_lost_total", "by": ["process"], "rate": true, "unit": "1/s"}
+      ]
+    },
+    {
       "title": "What happened to accepted jobs?",
       "panels": [
         {"title": "Accepted by mode", "metric": "infrx_jobs_accepted_total", "by": ["mode"], "rate": true, "unit": "1/s"},

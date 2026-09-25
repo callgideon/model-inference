@@ -1,0 +1,15 @@
+{"task": "RUNTIME-LOGIN", "slice": "E3C F-1 / R127 / WR-I8-6 runtime side", "activity": "review",
+ "head": "b58d4558", "worktree": ".claude/worktrees/codex-runtime-login", "branch": "codex/runtime-login",
+ "owned_paths": ["apps/infrx-api/infrx/gateway/pilot.py", "apps/infrx-api/tests/g/test_composition.py",
+   "apps/infrx-api/tests/g/mutants.py", "apps/infrx-api/tests/d/test_composition_pg.py"],
+ "commands": [
+  {"cmd": "pytest -q tests/g --ignore=tests/g/ops", "exit": 0, "summary": "584 passed"},
+  {"cmd": "python -m tests.g.mutants dedicated_login_sets_role pool_configure_dropped pool_statement_timeout_zero", "exit": 0, "summary": "3/3 killed"},
+  {"cmd": "INFRX_D_TASK=m5 pytest tests/d/test_composition_pg.py tests/m/test_upload_wiring.py", "exit": 1, "summary": "7 passed, 1 failed (legacy_usd price_source; pre-existing on base)"},
+  {"cmd": "INFRX_D_TASK=i8 pytest tests/i/test_pooler.py", "exit": 0, "summary": "10 passed"},
+  {"cmd": "INFRX_D_TASK=i8 tests/i/mutants.py connector_sets_role_on_6543 connector_prepares", "exit": 0, "summary": "2/2 killed"},
+  {"cmd": "INFRX_E3C_RUNTIME_LOGIN=1 make backend-local E3C_ARGS='--only s10'", "exit": 2, "summary": "s10 PASS 4 passed; gate NOT RUN (deselected); teardown clean"}],
+ "estimate": {"optimistic_h": 0, "likely_h": 0.5, "pessimistic_h": 2, "confidence": "high",
+   "basis": "fix proven docker-free, real PG and E3C s10", "at": "2026-09-25T16:43Z"},
+ "blockers": [], "wiring_requests": [],
+ "evidence": ["research/plan/evidence/i/RUNTIME-LOGIN-b58d455.md"]}

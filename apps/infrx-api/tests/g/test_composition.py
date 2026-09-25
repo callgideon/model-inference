@@ -177,6 +177,34 @@ def test_f_base__the_pool_sets_the_service_role_on_every_connection():
                         f"{deployment.database_pool_statement_timeout_ms}"]
 
 
+def test_f_base__a_dedicated_login_pool_sets_no_role():
+    """E3C F-1 / R127: 0021's `infrx_runtime` (and `infrx_monitor`) are members of no role,
+    so a pool on that login must never `set role service_role` - it would be refused and the
+    gateway and the worker (same pool) would never connect. Any other login keeps the
+    D2 request 7 rule unchanged (rollback: bda1586's `service_role` DSN). Oracle: a pool that
+    SETs the role on a dedicated login, or stops SETting it on the broad one."""
+    executed = []
+
+    class Connection:
+        async def execute(self, sql, *args):
+            executed.append(sql)
+
+    def statements(dsn):
+        executed.clear()
+        pool, _ = pilot.connection_pool(support.settings(database_url=dsn))
+        rs.run(pool._configure(Connection()))
+        return list(executed)
+    timeout = f"set statement_timeout = {support.settings().deployment.database_pool_statement_timeout_ms}"
+    for dsn in ("postgresql://infrx_runtime:pw@db.example:5432/postgres",
+                "postgresql://infrx_runtime.projref:pw@pooler.example:5432/postgres",
+                "host=db.example port=5432 user=infrx_monitor dbname=postgres"):
+        assert statements(dsn) == [timeout], dsn
+    for dsn in ("postgresql://postgres:pw@db.example:5432/postgres",
+                "postgresql://postgres.projref:pw@pooler.example:5432/postgres",
+                "postgresql:///infrx_g1"):
+        assert statements(dsn) == ["set role service_role", timeout], dsn
+
+
 def test_f_base__the_lifespan_runs_the_dispatch_relay_until_shutdown():
     """Q3 request 2: the reconciler feeds the index from the outbox for the process lifetime
     and stops on shutdown; a unique worker id per process."""
