@@ -288,7 +288,9 @@ MUTANTS: tuple[Mutant, ...] = (
        file=P),
     _m("m6_x19_prepared_row_no_job", "the prepared artifact's row names its job",
        "                                     len(body), job_id=job_id)",
-       "                                     len(body), job_id=None)", PREPARED_ROW, file=P),
+       "                                     len(body), job_id=None)", PREPARED_ROW, file=P,
+       # F2C's ContentIdentity refuses a prepared row without its job: the contract kills it
+       dies_by=("ValidationError",)),
 )
 
 RUNNER = Runner(name="m6", targets=("tests/m/test_retention.py", "tests/m/test_cache_bounds.py",
