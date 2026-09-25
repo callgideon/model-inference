@@ -31,3 +31,17 @@ test("A2-ROUTE-01 signup and verify-email are public; onboarding and password ch
 test("A2-ROUTE-02 a signed-in visitor is sent away from sign-in and signup", () => {
   assert.match(source, /if \(user && \(path === "\/login" \|\| path === "\/signup"\)\)/);
 });
+
+// app-union (C0 WR-1 follow-up): the console shell redirects unverified and onboarding individuals to
+// A2's routes. Each target must be a shipped page outside the console layout (no redirect loop, no 404).
+test("A2-ROUTE-03 the console shell's verify/onboarding redirects land on shipped pages outside the console", () => {
+  const appRoot = join(resolve(dirname(fileURLToPath(import.meta.url)), "../.."), "app");
+  const layout = readFileSync(join(appRoot, "(console)", "layout.tsx"), "utf8");
+  const routes = /const ROUTES = \{ verifyEmail: "([^"]+)", onboarding: "([^"]+)" \};/.exec(layout);
+  assert.ok(routes, "the console layout's ROUTES are not both set");
+  assert.deepEqual([routes[1], routes[2]], ["/verify-email", "/welcome"]);
+  for (const path of [routes[1], routes[2]]) {
+    assert.ok(readFileSync(join(appRoot, "(auth)", path, "page.tsx"), "utf8").length > 0, `${path} has no page`);
+  }
+  assert.ok(isPublic("/verify-email"), "an unverified visitor must reach /verify-email");
+});

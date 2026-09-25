@@ -10,9 +10,9 @@ import { sidebarCredits } from "./billing/credit-view-model";
 // Every console page reads Supabase with the user's cookie: never prerender.
 export const dynamic = "force-dynamic";
 
-// Set each to its path in the commit that ships the route (A2: /verify-email; C3A/A2: /onboarding).
-// Until then the state gets a fixed panel: a redirect to a missing route is a 404.
-const ROUTES = { verifyEmail: null, onboarding: null };
+// Each is set in the commit that ships the route (a `null` state gets a fixed panel: a redirect to a
+// missing route is a 404). A2 shipped both: /verify-email (resend) and /welcome (grant retry + balance).
+const ROUTES = { verifyEmail: "/verify-email", onboarding: "/welcome" };
 
 export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
   const session = await consumerSession();
