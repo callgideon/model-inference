@@ -11,7 +11,8 @@ losing one layer is not an exposure:
 
 The operator reads it on the host (`curl -s 127.0.0.1:8001/metrics` over SSM) or through
 the alert evaluator (`python -m infrx.observe.alerts`). Host gauges are read at scrape
-time, in a thread: `nvidia-smi` may take seconds and must not stall the event loop.
+time, in a thread (disk reads must not stall the event loop); GPU gauges are the host
+probe's, never the gateway's (WR-I8-4).
 """
 from __future__ import annotations
 
@@ -53,7 +54,9 @@ def register(app, rt):
         pool = getattr(getattr(rt, "lifetime", None), "pool", None)
         if pool is not None:                  # WR-I8-2: the stores' pool, read at scrape
             record_pool(rt.metrics, pool.pop_stats())
-        await asyncio.to_thread(collect_host, rt.metrics, disks)
+        # gpu=False (WR-I8-4): the gateway container has no nvidia-smi; the host probe's
+        # infrx_gpu_up is the GPU's reading
+        await asyncio.to_thread(collect_host, rt.metrics, disks, gpu=False)
         return PlainTextResponse(rt.metrics.render(), media_type=CONTENT_TYPE)
 
     return metrics

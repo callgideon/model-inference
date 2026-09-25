@@ -188,6 +188,17 @@ def test_ops_continuous__both_processes_export_their_db_pool_at_scrape():
     assert {s % "worker" for s in POOL_SERIES} <= set(asyncio.run(worker()).splitlines())
 
 
+def test_ops_continuous__the_gateway_exports_no_gpu_gauge():
+    """WR-I8-4: the gateway container has no nvidia-smi, so its scrape carries no GPU
+    family at all (the host probe's infrx_gpu_up is the GPU's). Oracle: a gateway that
+    still runs collect_gpu writes infrx_gpu_up (0 in the container) on every scrape."""
+    from types import SimpleNamespace
+    from infrx.observe.metrics import Registry
+    text = _gateway_scrape(SimpleNamespace(metrics=Registry("gateway")))
+    assert "infrx_host_cpus{" in text
+    assert not re.search(r"^infrx_gpu_\w+\{", text, re.M)
+
+
 def test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed():
     names = [rule["name"] for rule in RULES["rules"]]
     assert len(names) == len(set(names)) and RULES["version"] == "a1+o1"
