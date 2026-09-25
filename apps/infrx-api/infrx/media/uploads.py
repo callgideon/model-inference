@@ -33,8 +33,9 @@ The rules, each of which has a test and a mutant in `tests/m`:
   downloads of concurrent completions share the preparation pool's bound (`gate`).
 * **use.** A handle resolves through the repository - the caller's organization's, inside
   its window (R99(b)), finalized - and its object must still carry the finalized digest.
-  An admitted job's attach checks the object, not the window: the ticket authorized the
-  ref before admission, and a job outlives the window of the upload it runs on.
+  Attach binds the store's record, never the caller's copy (R82): the ticket's ref, equal
+  field for field. Ticket expiry bounds new use only: a job's binding, made inside the
+  window, is a no-op again after it, and a job outlives the window of the upload it runs on.
 """
 from __future__ import annotations
 
@@ -405,16 +406,15 @@ class MediaUploads(MediaPreparation):
             raise
 
     async def _staged_ref(self, org_id: str, ref: MediaRef) -> MediaRef | None:
-        """M5 item 3: an admitted job's upload ref binds by the object it names, not by the
-        ticket's window - `stage` resolved it through the ticket before admission, and the
-        job outlives that window. It must be this tenant's content-addressed source object,
-        still carrying that digest."""
+        """R82: an upload ref binds as the store's record - the tenant's finalized ticket,
+        resolved through the repository, its object re-checked - and only when the caller's
+        copy is that record field for field (handle, digest, size, type, key, profile and
+        measured duration). Past the window the resolution is `upload_expired`; `attach`
+        then answers a job's own binding (M5 item 3)."""
         if ref.kind is not MediaKind.upload:
             return await super()._staged_ref(org_id, ref)
-        if ref.storage_ref != self._key(org_id, ref.digest, ref.profile_version, "source") \
-                or await self.objects.head(ref.storage_ref) != ref.digest:
-            return None
-        return ref
+        record = await self.resolve_owned(org_id, ref.handle)
+        return record if record == ref else None
 
     async def stage(self, org_id, request):
         refs = await super().stage(org_id, request)
@@ -422,5 +422,16 @@ class MediaUploads(MediaPreparation):
         return refs
 
     async def attach(self, job_id, refs) -> None:
-        await super().attach(job_id, refs)
+        try:
+            await super().attach(job_id, refs)
+        except errors.UploadExpired:
+            # M5 item 3: ticket expiry bounds new use only. The binding a job already holds -
+            # the store's records, checked inside the window - is a no-op again past it, in
+            # any process. ponytail: a job whose FIRST attach comes after the window (the
+            # relay's `_resume` of an acceptance cut short) is refused and cancelled unbilled;
+            # a window-free ticket read on the port (open issue 3) would bind it.
+            bound = await self.attached(job_id)
+            if bound != tuple(refs):
+                raise
+            self.by_job[job_id] = bound
         self._touch(self.by_job[job_id])

@@ -403,7 +403,9 @@ def test_upload_restart__forged_digest_or_a_second_finalize_never_replaces_accep
     """Failure oracle: once accepted, a handle names its bytes. A destination rewritten
     behind the store makes a second completion a conflict; a request claiming other content
     under the handle is refused; an attach naming a source key the digest does not build, or
-    whose object is gone, binds nothing - and the accepted ticket and object never change."""
+    whose object is gone, binds nothing; nor does one whose other fields are the caller's -
+    a duration, size or type the store did not measure, or a handle it never issued (R82:
+    the bound ref is the store's record) - and the accepted ticket and object never change."""
     handle = create(world.process())
     put(world.process(), handle)
     ref = complete(world.process(), handle)
@@ -421,7 +423,11 @@ def test_upload_restart__forged_digest_or_a_second_finalize_never_replaces_accep
     their_ref = complete(world.process(), theirs, org_id=b.ORG_B)
     for claim in (ref.model_copy(update={"storage_ref": source_key(forged)}),
                   forged.model_copy(update={"storage_ref": source_key(forged)}),
-                  ref.model_copy(update={"storage_ref": their_ref.storage_ref})):
+                  ref.model_copy(update={"storage_ref": their_ref.storage_ref}),
+                  ref.model_copy(update={"duration_s": 0.5}),
+                  ref.model_copy(update={"bytes": 1}),
+                  ref.model_copy(update={"mime": "video/webm"}),
+                  ref.model_copy(update={"handle": "upl_" + "Z" * 22})):
         with pytest.raises(errors.NotFound):
             run(world.process().attach(job_id, (claim,)))
     assert run(world.attachments.get(job_id)) is None

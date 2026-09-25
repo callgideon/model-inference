@@ -47,12 +47,25 @@ DIED = 17
 needs_s3 = pytest.mark.skipif(not ENDPOINT, reason=(
     "M5 (owner: M): no S3-compatible endpoint - start the task-local MinIO (infrx-m5-s3) and "
     "export INFRX_M_S3_ENDPOINT, INFRX_M_S3_LOCAL_CREDS=1"))
-_pg = pgharness.unavailable()
+# PostgreSQL only on a task-local harness the run names (as `test_upload_restart.py`): with
+# no `INFRX_D_TASK` the harness would default to d1's port, which this lane never touches.
+_pg = "INFRX_D_TASK is not set" if not os.environ.get("INFRX_D_TASK") \
+    else pgharness.unavailable()
 _d10 = None if importlib.util.find_spec("infrx.state.lifecycle") else (
     "D10's PgLifecycle (infrx/state/lifecycle.py) has not landed on this branch")
 needs_stack = pytest.mark.skipif(bool(_pg or _d10 or not ENDPOINT), reason=(
     f"M5 stack drill needs MinIO, the task-local PostgreSQL and D10: "
     f"{_d10 or _pg or 'no INFRX_M_S3_ENDPOINT'}"))
+
+
+def test_stack__without_a_named_task_postgresql_is_skipped_never_d1s_port():
+    """Isolation (review 2-M5-R1): with no `INFRX_D_TASK` the drill's PostgreSQL half is a
+    visible skip, decided at import, before the harness could default to d1's port."""
+    env = {k: v for k, v in os.environ.items() if k != "INFRX_D_TASK"}
+    probe = subprocess.run(
+        [sys.executable, "-c", "import tests.m.test_upload_restart_stack as s; print(s._pg)"],
+        cwd=API_DIR, env=env, capture_output=True, text=True, check=True)
+    assert probe.stdout.strip() == "INFRX_D_TASK is not set"
 
 
 @pytest.fixture
