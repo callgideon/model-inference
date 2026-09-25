@@ -59,6 +59,11 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     # 55454-55457 gap, below every decoy.
     "union": {"postgres": 55458, "valkey": 55454, "s3": 55455},
     "revoke": {"postgres": 55459},
+    # App completion lanes (2026-09-25, user-authorized ahead of BACKEND-READY): one PostgreSQL
+    # each for the lanes that test real RLS/RPC grants; A3/U2 use fakes only. These ports have
+    # no D-harness decoy use (App lanes never run tests/d/test_pgharness.py).
+    "app-c0": {"postgres": 55451}, "app-c3a": {"postgres": 55452}, "app-u3": {"postgres": 55453},
+    "app-u4": {"postgres": 55456}, "app-u1r": {"postgres": 55457}, "app-a2": {"postgres": 55460},
     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
     "e3c": {"postgres": 56932},
 }
