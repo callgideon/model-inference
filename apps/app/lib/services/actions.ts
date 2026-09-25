@@ -2,23 +2,26 @@
  * C3A: the trusted consumer actions, behind narrow ports.
  *
  * Every action takes the server-resolved consumer context (C0's `consumerSession()`), never an
- * identity from the caller: the tenant is `account.orgId`, the creator is `account.userId`, the
- * grant's individual is the session user, the key's audience is the column default (`consumer`, a
- * browser role cannot write it). Inputs are allowlisted, so a smuggled org, role, audience, amount or
+ * identity from the caller: the tenant is `account.orgId`, the creator is `account.userId`, the key's
+ * audience is the column default (`consumer`, a browser role cannot write it). Inputs are allowlisted, so a smuggled org, role, audience, amount or
  * actor is `invalid_request`, not quietly dropped.
  *
  * Ports:
  * - keys: `public.api_keys` through the individual's OWN JWT (0001's owner insert/update policies and
  *   0004's column grants decide; no service key);
- * - grant: `public.claim_signup_grant` (0015), service role, server-side, with the session user's id
- *   and nothing else from the request. The DB derives verification and owns idempotency (R71); this
- *   module duplicates none of the grant SQL;
+ * - grant: none here. The one App adapter for `public.claim_signup_grant` is A2's
+ *   `app/(auth)/grant.ts` (callback, sign-in and the onboarding retry), so there is one campaign
+ *   constant and one call site;
  * - operator: `OperatorPort`, which no App-reachable function implements yet (the audited G6B
  *   operations live in the `infrx` schema, which PostgREST does not expose). Without one the action is
  *   an explicit unavailable state.
  *
  * Every failure is a `Result` with fixed text: the DB's message can name relations, constraints or
  * identifiers and never reaches a caller.
+ *
+ * `consoleActions` is the composition `app/actions.ts` exports: Origin check first, then the
+ * session, then the adapter, then a refresh only after an acknowledged change. `app/actions.ts`
+ * only hands it Next's request APIs and the clients, so every rule is testable here (R48).
  */
 
 if (typeof window !== "undefined") throw new Error("lib/services/actions.ts is server-only");
@@ -27,21 +30,19 @@ import {
   API_KEY_CREATE_FIELDS,
   MAX_KEY_NAME_CHARS,
   type ApiKeyCreated,
+  type ApiKeyCreateInput,
   type ApiKeySummary,
   type ErrorCode,
   type Result,
 } from "../contracts/types.ts";
 import { parseCredit, type Credit } from "../contracts/v2/money-units.ts";
 import { generateKey, hashKey, keyPrefix } from "../keys.ts";
-import { __testables, keyOf, type ConsumerAccount, type ConsumerContext, type RpcClient } from "./console.ts";
+import { __testables, keyOf, type ConsumerAccount, type ConsumerContext } from "./console.ts";
 import type { Row } from "./query.ts";
 
 const { badInput } = __testables;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Audit metadata on the entitlement (0006); changing it never makes anyone eligible again (R71). */
-export const SIGNUP_CAMPAIGN = "app_onboarding";
 
 const MAX_IDEMPOTENCY_KEY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
@@ -137,11 +138,6 @@ function isAccount<T>(value: ConsumerAccount | Result<T>): value is ConsumerAcco
 }
 
 // -------------------------------------------------------------------------------------- actions
-
-/** What the onboarding page learns. `held` names no reason: the reasons are operator data (0015). */
-export type GrantOutcome =
-  | { status: "granted" | "already_granted"; wallet_id: string; amount: Credit; granted_at: string }
-  | { status: "held" };
 
 const CREATE_UNKNOWN =
   "the key could not be created right now; try again. If a new key appears in your list, revoke it - its secret cannot be shown again";
@@ -248,59 +244,6 @@ export function createConsumerActions(options: { now?: () => Date } = {}) {
         return fail("internal_error", "the key could not be revoked; refresh to see its state");
       }
     },
-
-    /**
-     * The one-time individual grant, for the session's own user (A2's onboarding and callback call
-     * this). Verification, eligibility and idempotency are the DB's (0015); this adds nothing to them.
-     */
-    async claimGrant(context: ConsumerContext, grants: () => RpcClient): Promise<Result<GrantOutcome>> {
-      let userId: string;
-      if (context.state === "ready") userId = context.account.userId;
-      else if (context.state === "onboarding") userId = context.userId;
-      else if (context.state === "unverified") return fail("forbidden", "verify your email address first");
-      else if (context.state === "signed_out") return fail("forbidden", "sign in first");
-      else return fail("dependency_unavailable", "your account could not be checked right now; try again");
-
-      const unavailable = "your signup credit could not be checked right now; try again";
-      let client: RpcClient;
-      try {
-        client = grants();
-      } catch {
-        return fail("dependency_unavailable", unavailable);
-      }
-      try {
-        const { data, error } = await client.rpc("claim_signup_grant", {
-          p_user_id: userId,
-          p_campaign_version: SIGNUP_CAMPAIGN,
-          p_operation_id: null,
-        });
-        if (error !== null) return fail("dependency_unavailable", unavailable);
-        const rows = rowsOf(data);
-        if (rows.length !== 1 || rows[0].user_id !== userId) return fail("internal_error", unavailable);
-        const row = rows[0];
-        switch (row.status) {
-          case "granted":
-          case "replayed":
-            if (typeof row.wallet_id !== "string" || typeof row.granted_at !== "string") return fail("internal_error", unavailable);
-            return ok({
-              status: row.status === "granted" ? "granted" : "already_granted",
-              wallet_id: row.wallet_id,
-              amount: parseCredit(row.amount),
-              granted_at: row.granted_at,
-            });
-          case "unverified":
-            return fail("forbidden", "verify your email address first");
-          case "identity_reused":
-          case "rollout_hold":
-          case "retired":
-            return ok({ status: "held" });
-          default:
-            return fail("internal_error", unavailable);
-        }
-      } catch {
-        return fail("internal_error", unavailable);
-      }
-    },
   };
 }
 
@@ -402,4 +345,43 @@ export async function runOperatorCommand(command: OperatorCommand, port: Operato
   } catch {
     return fail("dependency_unavailable", "the operator change could not be confirmed; retry with the same idempotency key");
   }
+}
+
+// --------------------------------------------------------------------------------- the seam
+
+/** What `app/actions.ts` supplies: Next's request APIs and the clients, resolved per call. */
+export type ActionDeps = {
+  headers(): Promise<Headers>;
+  context(): Promise<ConsumerContext>;
+  keys(): Promise<KeyStore>;
+  session(): Promise<{ userId: string; isOperator: boolean }>;
+  endSession(): Promise<void>;
+  revalidate(path: string): void;
+  /** The audited operator port; none is App-reachable yet (WR-C3A-3a). */
+  operator?: OperatorPort;
+  actions?: ConsumerActions;
+};
+
+/** The console's server actions, composed: nothing runs for a cross-site request, nothing refreshes a failure. */
+export function consoleActions(deps: ActionDeps) {
+  const actions = deps.actions ?? createConsumerActions();
+  async function guarded<T>(run: () => Promise<Result<T>>, refresh?: string): Promise<Result<T>> {
+    if (!sameOrigin(await deps.headers())) return fail("forbidden", "this change must be made from the console itself");
+    const result = await run();
+    if (result.ok && refresh !== undefined) deps.revalidate(refresh);
+    return result;
+  }
+  return {
+    async signOut(): Promise<void> {
+      if (sameOrigin(await deps.headers())) await deps.endSession();
+    },
+    createKey: (input: ApiKeyCreateInput) =>
+      guarded(async () => actions.createKey(await deps.context(), await deps.keys(), input), "/api-keys"),
+    revokeKey: (keyId: string) => guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId), "/api-keys"),
+    operator: (input: unknown) =>
+      guarded(async () => {
+        const command = operatorCommand(await deps.session(), input);
+        return command.ok ? runOperatorCommand(command.value, deps.operator ?? null) : command;
+      }),
+  };
 }

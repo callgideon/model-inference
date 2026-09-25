@@ -2,8 +2,10 @@
 //
 // C3A DUR-RLS / CONSOLE-FLOWS through the REAL path: the pinned Supabase PostgreSQL with every
 // migration, PostgREST v13.0.4, supabase-js and signed JWTs, composed as `app/actions.ts` composes
-// them - `supabaseKeyStore` over the individual's own client, `claimGrant` over a service-role client,
-// the context from C0's `resolveConsumerContext` over the same individual's client.
+// them - `supabaseKeyStore` over the individual's own client, the context from C0's
+// `resolveConsumerContext` over the same individual's client. The grant cases call
+// `claim_signup_grant` over a service-role client exactly as A2's `app/(auth)/grant.ts` does (the
+// App's one grant adapter): they pin the DB boundary and the concurrent-callback race it relies on.
 //
 //     cd apps/infrx-api && INFRX_D_TASK=app-c3a INFRX_D1_IMAGE=supabase \
 //         uv run --frozen python ../app/tests/c/realdb/actions_stack.py
@@ -18,7 +20,7 @@ import test from "node:test";
 import { createClient } from "@supabase/supabase-js";
 import type { Result } from "../../lib/contracts/types.ts";
 import { postgrestPort, type PostgrestClient } from "../../lib/services/query.ts";
-import { resolveConsumerContext, type ConsumerContext, type RpcClient } from "../../lib/services/console.ts";
+import { resolveConsumerContext, type ConsumerContext } from "../../lib/services/console.ts";
 import { createConsumerActions, supabaseKeyStore, type KeyClient } from "../../lib/services/actions.ts";
 
 type Stack = {
@@ -67,7 +69,15 @@ async function contextOf(user: string, verified = true): Promise<ConsumerContext
 }
 
 const storeAs = (user: string) => supabaseKeyStore(clientAs(user) as unknown as KeyClient);
-const service = () => clientAs("service_role") as unknown as RpcClient;
+/** A2's call (`app/(auth)/flow.ts` `claimArgs`): the session's user id and the campaign, nothing else. */
+async function claim(user: string) {
+  const { data, error } = await clientAs("service_role").rpc("claim_signup_grant", { p_user_id: user, p_campaign_version: "consumer-v1" });
+  assert.equal(error, null);
+  const rows = data as { status: string; user_id: string; amount: string | null }[];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].user_id, user);
+  return rows[0];
+}
 
 function valueOf<T>(result: Result<T>, what: string): T {
   if (!result.ok) assert.fail(`${what}: expected success, got ${result.error.code} (${result.error.message})`);
@@ -94,30 +104,22 @@ test("DUR-RLS: only the service role can reach the grant; anon and an individual
   assert.ok(direct.error !== null, "infrx functions are not exposed");
 });
 
-test("grant: five concurrent onboarding claims for one verified individual make exactly one +10,000", { skip }, async () => {
-  const before = await contextOf(S.users.fresh);
-  assert.equal(before.state, "onboarding");
-  const act = createConsumerActions();
-  const answers = await Promise.all(Array.from({ length: 5 }, () => act.claimGrant(before, service)));
-  const outcomes = answers.map((answer, i) => valueOf(answer, `claim ${i}`));
-  assert.equal(outcomes.filter((outcome) => outcome.status === "granted").length, 1);
-  assert.equal(outcomes.filter((outcome) => outcome.status === "already_granted").length, 4);
-  for (const outcome of outcomes) {
-    assert.equal("amount" in outcome ? outcome.amount : outcome.status, "10000.00000000");
-  }
+test("grant: five concurrent callback/onboarding claims for one verified individual make exactly one +10,000", { skip }, async () => {
+  assert.equal((await contextOf(S.users.fresh)).state, "onboarding");
+  const rows = await Promise.all(Array.from({ length: 5 }, () => claim(S.users.fresh)));
+  assert.equal(rows.filter((row) => row.status === "granted").length, 1);
+  assert.equal(rows.filter((row) => row.status === "replayed").length, 4);
+  for (const row of rows) assert.equal(row.amount, "10000.00000000");
   // Committed state, re-read: the context is now ready and the balance is the exact string.
-  const after = await contextOf(S.users.fresh);
-  assert.equal(after.state, "ready");
+  assert.equal((await contextOf(S.users.fresh)).state, "ready");
   const { data, error } = await clientAs(S.users.fresh).rpc("console_wallet_summary", { p_user: S.users.fresh });
   assert.equal(error, null);
   assert.equal((data as { ledger_total: string }[])[0].ledger_total, "10000.00000000");
-  const again = valueOf(await act.claimGrant(after, service), "a later login");
-  assert.equal(again.status, "already_granted");
+  assert.equal((await claim(S.users.fresh)).status, "replayed", "a later login");
 });
 
-test("grant: a forged onboarding context for an unverified user is refused by the DB, no wallet", { skip }, async () => {
-  const forged: ConsumerContext = { state: "onboarding", userId: S.users.unverified, email: "x@example.com" };
-  assert.equal(codeOf(await createConsumerActions().claimGrant(forged, service)), "forbidden");
+test("grant: a claim for an unverified user is refused by the DB, no wallet", { skip }, async () => {
+  assert.equal((await claim(S.users.unverified)).status, "unverified");
   assert.equal((await contextOf(S.users.unverified)).state, "onboarding", "still no wallet");
   assert.equal((await contextOf(S.users.unverified, false)).state, "unverified");
 });

@@ -1627,66 +1627,6 @@
       ]
     },
     {
-      "id": "C3A-GRANT-01",
-      "note": "a row for another individual is read as this one's grant",
-      "file": "lib/services/actions.ts",
-      "find": "if (rows.length !== 1 || rows[0].user_id !== userId)",
-      "replace": "if (rows.length !== 1)",
-      "cases": [
-        "grant: denials are answers with no reason; an outage or a foreign row is never a grant"
-      ]
-    },
-    {
-      "id": "C3A-GRANT-02",
-      "note": "a held grant names its reason (enumeration)",
-      "file": "lib/services/actions.ts",
-      "find": "            return ok({ status: \"held\" });",
-      "replace": "            return ok({ status: \"held\", reason: row.status } as GrantOutcome);",
-      "cases": [
-        "grant: denials are answers with no reason; an outage or a foreign row is never a grant"
-      ]
-    },
-    {
-      "id": "C3A-GRANT-03",
-      "note": "an unverified context reaches the service-role grant",
-      "file": "lib/services/actions.ts",
-      "find": "      else if (context.state === \"unverified\") return fail(\"forbidden\", \"verify your email address first\");\n",
-      "replace": "",
-      "cases": [
-        "grant: an unverified, signed-out or unknown context never calls the grant"
-      ]
-    },
-    {
-      "id": "C3A-GRANT-04",
-      "note": "a non-string amount is accepted as CREDIT",
-      "file": "lib/services/actions.ts",
-      "find": "              amount: parseCredit(row.amount),",
-      "replace": "              amount: String(row.amount) as Credit,",
-      "cases": [
-        "grant: denials are answers with no reason; an outage or a foreign row is never a grant"
-      ]
-    },
-    {
-      "id": "C3A-GRANT-05",
-      "note": "the grant is asked for an id the context does not hold",
-      "file": "lib/services/actions.ts",
-      "find": "          p_user_id: userId,",
-      "replace": "          p_user_id: context.state,",
-      "cases": [
-        "grant: the DB's one entitlement for the SESSION's user, never an input, exact CREDIT string"
-      ]
-    },
-    {
-      "id": "C3A-GRANT-06",
-      "note": "an unverified DB answer is read as held",
-      "file": "lib/services/actions.ts",
-      "find": "          case \"unverified\":\n            return fail(\"forbidden\", \"verify your email address first\");\n",
-      "replace": "",
-      "cases": [
-        "grant: denials are answers with no reason; an outage or a foreign row is never a grant"
-      ]
-    },
-    {
       "id": "C3A-ORIGIN-01",
       "note": "a look-alike origin passes",
       "file": "lib/services/actions.ts",
@@ -1754,6 +1694,86 @@
       "replace": "    return ok({ replayed: false });",
       "cases": [
         "operator: no deployed port is an explicit unavailable state, never a silent success"
+      ]
+    },
+    {
+      "id": "C3A-REV-06",
+      "note": "review V-05: a revoke RLS filtered out (a non-owner member) is reported ok with the key still active",
+      "file": "lib/services/actions.ts",
+      "find": "if (existing.length === 1 && keyOf(existing[0]).revoked_at !== null) return ok(keyOf(existing[0]));",
+      "replace": "if (existing.length === 1) return ok(keyOf(existing[0]));",
+      "cases": [
+        "key revoke: a revoke that changed nothing is ok only when the key really is revoked"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-01",
+      "note": "review V-30 / 1-V-1(1): the actions lose their Origin check",
+      "file": "lib/services/actions.ts",
+      "find": "    if (!sameOrigin(await deps.headers())) return fail(\"forbidden\", \"this change must be made from the console itself\");\n",
+      "replace": "",
+      "cases": [
+        "action seam: a cross-site request is refused before any session, store or refresh"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-02",
+      "note": "the Origin check runs after the session and store are resolved",
+      "file": "lib/services/actions.ts",
+      "find": "    if (!sameOrigin(await deps.headers())) return fail(\"forbidden\", \"this change must be made from the console itself\");\n    const result = await run();\n",
+      "replace": "    const result = await run();\n    if (!sameOrigin(await deps.headers())) return fail(\"forbidden\", \"this change must be made from the console itself\");\n",
+      "cases": [
+        "action seam: a cross-site request is refused before any session, store or refresh"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-03",
+      "note": "review V-32: a cross-site sign-out ends the session",
+      "file": "lib/services/actions.ts",
+      "find": "      if (sameOrigin(await deps.headers())) await deps.endSession();",
+      "replace": "      await deps.headers();\n      await deps.endSession();",
+      "cases": [
+        "action seam: a cross-site request is refused before any session, store or refresh"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-04",
+      "note": "review V-31 / 1-V-1(2): the read model is refreshed after a failed change (optimistic success)",
+      "file": "lib/services/actions.ts",
+      "find": "    if (result.ok && refresh !== undefined) deps.revalidate(refresh);",
+      "replace": "    if (refresh !== undefined) deps.revalidate(refresh);",
+      "cases": [
+        "action seam: the read model is refreshed only after an acknowledged change"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-05",
+      "note": "a successful key change never refreshes the list",
+      "file": "lib/services/actions.ts",
+      "find": "guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId), \"/api-keys\")",
+      "replace": "guarded(async () => actions.revokeKey(await deps.context(), await deps.keys(), keyId))",
+      "cases": [
+        "action seam: the read model is refreshed only after an acknowledged change"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-06",
+      "note": "1-V-1(3): the operator action reports a silent success",
+      "file": "lib/services/actions.ts",
+      "find": "        return command.ok ? runOperatorCommand(command.value, deps.operator ?? null) : command;",
+      "replace": "        return command.ok ? ok({ replayed: false }) : command;",
+      "cases": [
+        "action seam: the operator action is the session's, and with no port it is unavailable"
+      ]
+    },
+    {
+      "id": "C3A-SEAM-07",
+      "note": "operator authority is not re-read from the session",
+      "file": "lib/services/actions.ts",
+      "find": "        const command = operatorCommand(await deps.session(), input);",
+      "replace": "        const command = operatorCommand({ userId: \"\", isOperator: true }, input);",
+      "cases": [
+        "action seam: the operator action is the session's, and with no port it is unavailable"
       ]
     },
     {
