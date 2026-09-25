@@ -49,9 +49,12 @@ it into `INFRX_SET` itself (default 32, the old box value), and a name given twi
 | `ACCOUNTING_REGIME` | default `legacy_usd`, not set: no `credit` deployment before the worker change (D5 IR 5) | D5 |
 | `LARGE_BODY_LIMIT` | `8` (code default 2; `LARGE_BODY_THRESHOLD_BYTES` stays 1 MiB). Memory model: a body over the threshold is held four times across the whole of `Ingress.validated` while the slot is held (3.00x through the parse alone; 4.00x at 3, 85 and 95 MiB measured through `validated` by the INTAKE-DRAIN verifier, local tracemalloc), so the worst case is 8 slots x 96 MiB x 4 = 3,072 MiB of the gateway container's 8 GiB (`--memory 8g`), and 8 x 0.59 s (meas. local, one 95 MiB parse) = ~3.6 s of worst-case loop stall; the pilot's clips (0.3-3 MB) cost 8 x 3 MB x 3 = 72 MiB. 8 matches `ENGINE_MAX_NUM_SEQS`/`WORKER_CONCURRENCY`, so a burst is refused by job capacity rather than by the intake gate. ⚠️ TO BE MEASURED: validated by the next certification's overload cell (every refusal a read 429 with Retry-After, no ReadError, gateway RSS under the bound) | INTAKE-DRAIN, 2026-09-24 box overload cell |
 
+| `DATABASE_POOL_MAX_SIZE` | `6` (code default 10), **proposed by I8, interim**: `infra/runbooks/pool_budget.py` computes the session pooler's peak from the deployed knobs - defaults 10 + 10 (+1 CLI) = 21 > 15 slots (the 2026-09-24 `EMAXCONNSESSION`); 6 + 6 + 1 = 13 + 2 headroom = 15 PASS. The worker then waits for a connection at full load (8 runners + 2 preparers + the reaper > 6): watch `DbPoolWaiting`/`DbPoolTimeouts` (pending WR-I8-2). The durable fix is the runtime on the transaction port (WR-I8-1 + D10's login), where 200 clients share the 15 server connections | I8, 2026-09-24 |
+
 ```bash
 INSTALL_ARGS=(RELEASE="$RELEASE" ENGINE_MAX_NUM_SEQS=8
   INFRX_SET="S3_MEDIA_BUCKET=llm-bootcamp-641134885443 MAX_VIDEO_SECONDS=82 WORKER_CONCURRENCY=8 LARGE_BODY_LIMIT=8")
+# I8 (proposed, interim until WR-I8-1): add DATABASE_POOL_MAX_SIZE=6 to INFRX_SET
 ```
 
 ## 2. The window
@@ -200,6 +203,29 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
 | Pilot requests were accepted and it must stop | R3: `95-maintenance.sh`; `rollback.sh` refuses the unmetered monolith |
 | The host itself | R4: root-volume swap to the W2 snapshot ([restore.md](restore.md#box-snapshot)) |
 
+## 4. Continuous operations (I8) — after the release that carries I8
+
+Each row is one coordinator op, logged first (README rule 1), serialized after any running
+certification. Box rows: `infra/rollout/ssm.sh infra/rollout/steps/<step> NAME=VALUE…`.
+Nothing here has run; every row's output goes into the I8 evidence record.
+
+| # | Where | Op | Pass | Blocked on |
+|---|---|---|---|---|
+| O1 | host | `apps/infrx-api/.venv/bin/python infra/runbooks/pool_budget.py --runtime-port 5432 --set DATABASE_POOL_MAX_SIZE=6` (and without `--set`: the FAIL that explains EMAXCONNSESSION) | `PASS session: peak 13` | - |
+| O2 | host | the release with I8 through W1-W13, `DATABASE_POOL_MAX_SIZE=6` in `INFRX_SET` (§1). New: the runtime units run `preflight.py envcheck` before every start (the journal names a refused setting) | W12 `failures: 0` | - |
+| O3 | box | `71-pool-budget.sh` | exit 0, `PASS session` | - |
+| O4 | box | `72-observe-install.sh RELEASE=$RELEASE CANARY_VIDEO=<in-cap clip on the box> CANARY_KEY_PARAM=<ssm name of the canary tenant key>` [+ `P24_APPROVED=<ref>`] [+ `ALERT_WEBHOOK_PARAM=<ssm name> ALERT_OWNER=<who> ALERT_ESCALATION=<how>`] [+ `MONITOR_DSN_PARAM=<D10's read-only DSN name>`] | timers listed; first cycle exit 0 or 3 (delivery BLOCKED); without `P24_APPROVED` the canary timer is not enabled (`BLOCKED (P-24)`) | P-24 (canary spend + its tenant, canary half only); P-25 (destination); D10 (monitor login) |
+| O5 | box | `73-observe-status.sh` two minutes later | `infrx_durable_up 1`, `infrx_canary_up` 1 for text and video (only once O4 ran with `P24_APPROVED`), no unexpected firing | P-24 (the canary half) |
+| O6 | box | `74-alert-test.sh`, the owner confirms the nonce, then `74-alert-test.sh RESOLVE=<nonce>` | `http=2xx` twice + the owner's confirmation | **P-25** |
+| O7 | host | `read -rs PROBE_DATABASE_URL` (the runtime login's DSN on :6543) then `privilege_probe.py --role <login> --pooler-semantics` | today: FAIL (the `postgres` login is privileged - the baseline); after D10: PASS with its `--allow-functions` list | D10 |
+| O8 | host | `read -rs SUPABASE_ACCESS_TOKEN` then `supabase_policy.py` | the backup/PITR facts, the pooler's `max_client_conn` (feeds `pool_budget.py --txn-client-limit`) | the token |
+| O9 | box | `80-mirror-artifacts.sh RELEASE=$RELEASE MIRROR_URL=<approved prefix>` ([restore.md](restore.md#model-artifacts)) | `N/N match`, manifest read back equal | the prefix approval (P-25) |
+| O10 | box | `81-restore-artifacts.sh RELEASE=$RELEASE MIRROR_URL=<prefix> MODE=fetch CLEANUP=1` | `EQUAL`, `fetch_s`, `verify_s` | O9 |
+| O11 | box | **window** `81-restore-artifacts.sh ... MODE=swap`, then host `verify-journey.sh` + `drift.py --request-id` | the seven timings; journey `failures: 0`; `SETTLED` | O10 + authorization |
+| O12 | both | **window** the rollback drill, [rollback.md](rollback.md#known-good-rollback-drill) steps 1-7 (target bda1586 or 4226315) | both journeys `failures: 0`, both `SETTLED` | authorization |
+| O13 | box | `79-evidence-export.sh` | one JSON document, saved to the evidence record | - |
+| O14 | box | `86-cleanup.sh` (dry run), then `86-cleanup.sh DRY_RUN=0` after logging | only allowlisted paths listed/removed | - |
+
 ## Verification log
 
 - 2026-09-23 (ROLLOUT-PREP): written; W1's script and the W6 block were run by the lane
@@ -216,3 +242,6 @@ At prep time (0018 at `8554b47`) hosted's plan listed **0003-0018, sixteen files
 - 2026-09-24 (coordinator, second window): W7c (USD price version) and W7d (signup grant flag, USD balance, operator key) added from the smoke's findings; the smoke then passed 15/15 and text + video jobs settled with engine-exact counts.
 - 2026-09-24 (coordinator, box certification): W7e added - the first box certification run refused every request because only the unlabelled alias had a price version (the certify client sends the labelled one); the rerun admits after the second row.
 - 2026-09-24 (coordinator, INTAKE-DRAIN merge): the LARGE_BODY_LIMIT row's memory figures corrected from the verifier's measurement (4x across `Ingress.validated`: 3,072 MiB and ~4.7 s worst case at 8 slots; still inside 8 GiB).
+- 2026-09-24 (I8): §1 gains the interim `DATABASE_POOL_MAX_SIZE=6` row (pool_budget.py);
+  §4 lists the continuous-operations ops O1-O14 with their pass criteria and blockers. Not
+  run.

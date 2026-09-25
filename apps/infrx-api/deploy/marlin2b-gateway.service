@@ -11,6 +11,12 @@ User=ubuntu
 # with are replaced by the same rename. USAGE_LOG is in it too (row M-SCRATCH: on the
 # root EBS volume, which survives a stop).
 EnvironmentFile=/etc/marlin2b-gateway.env
+# I8 slice 2: before every start, the installed env file is checked by the image that will
+# read it (preflight.py envcheck: this image's env schema, no unknown or doubled name, every
+# required key shaped, the runtime's own validation) - names only in the journal, the file
+# over stdin, no network. A refusal fails the start: fail closed, never a silently ignored
+# or stale setting. `$$` is systemd's literal `$`, expanded by sh from EnvironmentFile.
+ExecStartPre=/bin/sh -c 'exec docker run --rm -i --network none "$$INFRX_IMAGE" python /app/deploy/preflight.py envcheck --mode "$$INFRX_MODE" --env-file /dev/stdin < /etc/marlin2b-gateway.env'
 ExecStartPre=-/usr/bin/docker rm -f infrx-gateway
 # The media root R (PROCESSING_CACHE_DIR, one value for the gateway, the worker and the
 # engine) is on the instance-store NVMe, which a stop/start wipes: recreate it with its

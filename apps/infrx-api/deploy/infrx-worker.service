@@ -9,6 +9,12 @@ PartOf=marlin2b-vllm.service
 [Service]
 User=ubuntu
 EnvironmentFile=/etc/marlin2b-gateway.env
+# I8 slice 2: before every start, the installed env file is checked by the image that will
+# read it (preflight.py envcheck: this image's env schema, no unknown or doubled name, every
+# required key shaped, the runtime's own validation) - names only in the journal, the file
+# over stdin, no network. A refusal fails the start: fail closed, never a silently ignored
+# or stale setting. `$$` is systemd's literal `$`, expanded by sh from EnvironmentFile.
+ExecStartPre=/bin/sh -c 'exec docker run --rm -i --network none "$$INFRX_IMAGE" python /app/deploy/preflight.py envcheck --mode "$$INFRX_MODE" --env-file /dev/stdin < /etc/marlin2b-gateway.env'
 ExecStartPre=-/usr/bin/docker rm -f infrx-worker
 # Its own uid (10002). PREP-WORKER: it prepares every job, so it writes the media root
 # (PROCESSING_CACHE_DIR, mode 2770 for the shared group: the engine reads what it wrote).

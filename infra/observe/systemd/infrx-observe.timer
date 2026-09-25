@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the infrx monitoring cycle every minute (I8)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

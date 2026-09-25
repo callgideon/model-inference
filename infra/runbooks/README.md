@@ -14,6 +14,16 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
 | [disk.md](disk.md) — disk exhaustion, slow preparation | DiskAlmostFull, DiskFilling, PreparationSlow | `test_i3b_rc07` | pending coordinator |
 | [index-loss.md](index-loss.md) — queue index loss, stall, saturation | QueueStalled, QueueSaturated, ComponentDown (index) | `test_i3b_rc06`, `rc09`; E3B `dr13` | pending coordinator |
 | [reconcile.md](reconcile.md) — money drift, unknown usage, unsettleable jobs | ReconciliationDrift, ReconciliationStale, UnsettleableJobs, UnknownUsageBacklog, SettlementSlow, MetricsSanitizerRejections | `reconcile()` after every drill | pending D5/Q3 |
+| [observe.md](observe.md) — continuous monitoring, the canary, alert delivery (I8) | every `infra/alerts/operations.json` rule; ScrapeFailed | `tests/i/test_observe.py`, `test_ops_steps.py` | steps 72/73/74, coordinator; delivery BLOCKED on P-25 |
+
+I8's tools beside the runbooks (each read-only unless its runbook says otherwise):
+[`pool_budget.py`](pool_budget.py) (the pooler budget from the deployed knobs; step 71),
+[`privilege_probe.py`](privilege_probe.py) (least privilege through the pooler),
+[`artifacts.py`](artifacts.py) (the model mirror's digest manifest; steps 80/81),
+[`supabase_policy.py`](supabase_policy.py) (backup/PITR and pooler limits, operator side),
+[`drift.py`](drift.py) `--request-id` (one job's settlement), and in `infra/rollout/`:
+`known-good.py` + `known-good.json` (rollback targets), `verify-journey.sh` (a real job
+after a rollback/restore), steps 79 (evidence export) and 86 (bounded cleanup).
 
 ## Rules every runbook follows
 
@@ -30,8 +40,23 @@ procedure is backed by an executable drill in `tests/integration/backend/recover
    `meas. local` with the test id; they bound the software, not the box.
 4. **Single GPU.** Automatic process recovery on one host is not high availability (P-16):
    while the engine or the host is down, the endpoint is down, and the runbooks say so.
+   What that means in numbers (I8): an engine restart is a full outage of meas. 172 s
+   (2026-09-24, restart to ready; no inference is served meanwhile, accepted jobs wait
+   in PostgreSQL); a rollout or a
+   rollback that keeps the engine is a runtime restart of seconds behind the maintenance
+   edge; losing the instance or its NVMe is an outage of weight fetch + engine load + first
+   request - `81-restore-artifacts.sh MODE=swap` measures each part, ⚠️ TO BE VERIFIED (P-18)
+   until it has run. Accepted jobs survive every one of these (PostgreSQL is the
+   authority); nothing here buys a second GPU or promises availability.
 5. **Never repair money by hand.** Wallet totals move only through the ledger trigger;
    no runbook step updates a balance, a hold or a job row directly ([reconcile.md](reconcile.md)).
+6. **Target allowlist.** Box steps run only on `i-0e8449a4ffca29bab` (the `INSTANCE`
+   `ssm.sh` pins), write only the paths their header names (`/etc/infrx-*.env`,
+   `/etc/systemd/system/infrx-{observe,canary}.*`, `/opt/infrx/observe`,
+   `/var/lib/infrx/metrics`, `/opt/dlami/nvme/{marlin2b,restore-<id>,marlin2b.pre-restore-<id>}`,
+   `/var/backups/infrx/<UTC>-<sha>` for cleanup), touch S3 only under the release prefix and
+   the one approved `MIRROR_URL`, and read hosted only through `drift.py`,
+   `privilege_probe.py` and `supabase_policy.py`. Anything else is not a runbook step.
 
 ## Running a step on the box (SSM)
 
@@ -74,3 +99,5 @@ ships.
   Supabase. Recovery windows remain ⚠️ until the coordinator's drills.
 - 2026-09-23 (ROLLOUT-PREP): rollout.md indexed (the phase-2 order; its W6 block was run once
   against hosted, read-only, and restored into a local copy).
+- 2026-09-24 (I8): observe.md indexed; rules 4 (single-GPU outage in numbers) and 6 (target
+  allowlist) added; the I8 tools listed. Nothing run on the box or hosted by the lane.

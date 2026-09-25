@@ -1,0 +1,16 @@
+[Unit]
+Description=infrx synthetic inference: one text and one in-cap video request via the public edge (I8)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# INFRX_CANARY_KEY (the canary tenant's scoped key) and CANARY_VIDEO (an in-cap clip on
+# this host), root 0600. Required: without it the unit fails to start, visibly.
+EnvironmentFile=/etc/infrx-canary.env
+# The monitor runs from its own pinned copy (72-observe-install.sh), not the runtime's
+# checkout: a rollback to a release without it must not blind the monitoring.
+Environment=REPO=/opt/infrx/observe
+ExecStart=/bin/bash /opt/infrx/observe/infra/observe/canary.sh
+TimeoutStartSec=300

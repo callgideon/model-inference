@@ -235,6 +235,54 @@ $AWS ec2 wait instance-status-ok --instance-ids i-0e8449a4ffca29bab
 still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: `est.`
 10-20 min (infra/README.md §6) plus the weight download - ⚠️ TO BE VERIFIED (P-18).
 
+## Model artifacts
+
+I8 (RV-09): the weights live on instance-store NVMe (`/opt/dlami/nvme/marlin2b`), which a
+stop/start wipes; the root-volume snapshot does not hold them. The durable copy is a mirror
+with a digest manifest (`infra/runbooks/artifacts.py`): every served file (weights,
+processor, tokenizer, chat template, configs) by sha256, the pins of
+`models/marlin2b/serving-version.json` checked before anything is uploaded, the engine
+image by registry digest, the runtime image id and the release it is built from, the env
+file by names. **Input: the approved prefix** - `llm-bootcamp-641134885443` is another
+project's bucket ([infra/README.md §6](../README.md)); proposed
+`s3://llm-bootcamp-641134885443/infrx/artifacts/marlin2b/fd111fca/`, pending the owner's
+approval (P-25).
+
+| # | Step (coordinator, one op each) | Service impact | Records |
+|---|---|---|---|
+| M1 | `infra/rollout/ssm.sh infra/rollout/steps/80-mirror-artifacts.sh RELEASE=<deployed> MIRROR_URL=<approved prefix>` | none (reads the NVMe; ~5 GB PUT in-region) | manifest sha256, `N/N match the manifest`, bucket versioning/public-access/encryption as readable |
+| M2 | `infra/rollout/ssm.sh infra/rollout/steps/81-restore-artifacts.sh RELEASE=<deployed> MIRROR_URL=<prefix> MODE=fetch CLEANUP=1` | none | `fetch_s`, `verify_s`, `EQUAL` |
+| M3 | **Maintenance window**: `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/81-restore-artifacts.sh RELEASE=<deployed> MIRROR_URL=<prefix> MODE=swap` | full outage while the engine loads (single GPU) | `fetch_s`, `verify_s`, `engine_load_s` (the cold start), `warm_text_s`, `warm_video_s`, `runtime_ready_s`, `first_usable_s`, `RESTORE_ID` |
+| M4 | host: `infra/rollout/verify-journey.sh`, then `drift.py --request-id <id>` | one test job | the journey, `SETTLED` |
+| M5 | red anywhere after the swap: `81-restore-artifacts.sh ... MODE=undo RESTORE_ID=<id>`; green: `86-cleanup.sh RESTORE_ID=<id> DRY_RUN=0` after M4 | as M3 | - |
+
+Host loss end to end (RTO) = replacement instance + runtime install (release bundle, W1-W10)
++ M3's `fetch_s + verify_s + engine_load_s + first_usable_s`; ⚠️ TO BE VERIFIED (P-18) until
+M3 has run. The processor files have no pin in serving-version.json yet: the manifest
+records their digests (`unpinned_processor_files`), WR-I8-5 adds the pins.
+
+## Backup and PITR policy
+
+What the operator side can read, and nothing more (I8): the Management API's backup list
+(PITR, WAL-G, completed backups and their age) and pooler config (pool size, max clients),
+plus the coordinator's own logical dumps (A3). **Input: a Supabase personal access token**
+(`SUPABASE_ACCESS_TOKEN`, read with `read -rs`; the account with the project) - without it
+the read is BLOCKED and only the local dumps are reported.
+
+```bash
+# coordinator host, read-only
+read -rs SUPABASE_ACCESS_TOKEN; export SUPABASE_ACCESS_TOKEN
+apps/infrx-api/.venv/bin/python infra/runbooks/supabase_policy.py     # JSON: backups, pooler, rpo
+unset SUPABASE_ACCESS_TOKEN
+```
+
+The printed `rpo` line is derived only from what was read: PITR on - minutes (est.); daily
+backups - at most 24 h (est.); neither - the age of the newest manual dump, unbounded
+between dumps (the only dump on record is `hosted-20260924T050746Z`). Enabling PITR is a paid
+plan change, separately authorized (infra/README.md §6). The database recovery drill is
+Part A above (dump -> scratch restore -> `pgrestore.py check` equal), timed by the
+coordinator: that time is the database's RTO lower bound.
+
 ## Other layers
 
 | Layer | Backup | Recovery |
@@ -266,3 +314,6 @@ still answer 401 through Caddy, and [reconcile.md](reconcile.md#drift). Window: 
   0001's column grant on `public.profiles`); bk01f damages a schema grant and a column grant,
   bk01g a sequence grant, and each is named (RST-1/RST-3/RST-4). The D harness runs this
   drill on the Supabase image only; the plain image is refused by name (RST-2).
+- 2026-09-24 (I8): "Model artifacts" (mirror, fetch/verify, timed swap, undo; RTO parts named)
+  and "Backup and PITR policy" (supabase_policy.py; RPO derived only from what it reads)
+  added. Not run: the mirror prefix and the access token are inputs (P-25).

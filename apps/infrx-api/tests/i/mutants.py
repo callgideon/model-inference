@@ -931,6 +931,296 @@ MUTANTS += (
        STEP + "45-s3-check.sh", "tests/m/test_s3.py'", "tests/m/test_s3.py || true'", S3C),
 )
 
+# --- I8 (consumer v1): pooler budget, transaction-pooler semantics, env schema, least
+# privilege. The docker cases (tests/i/pooler.py) run their own PostgreSQL + PgBouncer.
+BUDGET_PY, POOLER_PY = "../../infra/runbooks/pool_budget.py", "tests/i/pooler.py"
+PROBE_PY = "../../infra/runbooks/privilege_probe.py"
+ADMITS = "test_ops_continuous__the_computed_budget_is_what_the_session_pooler_admits"
+COMPOSED = "test_ops_continuous__the_composed_runtime_pool_breaks_on_the_transaction_pooler_today"
+TXN_CASES = ("test_ops_continuous__session_state_is_lost_and_leaked_on_the_transaction_pooler",
+             "test_ops_continuous__transaction_scoped_patterns_survive_the_transaction_pooler",
+             COMPOSED)
+ENVCHECK_REFUSES = "test_deploy_failclosed__envcheck_refuses_a_file_the_runtime_would_start_on"
+UNIT_REFUSES = "test_deploy_failclosed__each_runtime_unit_refuses_to_start_on_a_refused_env_file"
+LEAST = "test_ops_continuous__the_least_privilege_login_passes_and_privileged_ones_fail"
+MUTANTS += (
+    _m("budget_forgets_the_worker_pool", "every pool of the pooler's clients is counted",
+       BUDGET_PY, '"worker pool (inference + preparation + reaper)", mode, 1, pool_min, pool_max,',
+       '"worker pool (inference + preparation + reaper)", mode, 1, pool_min, 0,', ADMITS),
+    _m("budget_session_limit_raised", "the session pooler admits 15 clients, measured",
+       BUDGET_PY, "SESSION_LIMIT = 15 ", "SESSION_LIMIT = 25 ", ADMITS),
+    _m("budget_one_gateway_process", "uvicorn --workers multiplies the gateway's pool",
+       BUDGET_PY, "return int(found.group(1)) if found else 1", "return 1",
+       "test_ops_continuous__the_budget_counts_every_gateway_process"),
+    _m("stand_in_pooler_in_session_mode", "the stand-in hands server connections between "
+       "clients at transaction boundaries, as 6543 does",
+       POOLER_PY, "dbname={DATABASE} pool_mode=transaction pool_size=2",
+       "dbname={DATABASE} pool_mode=session pool_size=2", *TXN_CASES,
+       # a session pooler keeps each client on its server: the case's second client then
+       # waits for a server that never frees (query_wait_timeout) - the defect's absence,
+       # observed as the pooler's refusal
+       dies_by=("ProtocolViolation", "OperationalError")),
+    _m("stand_in_pooler_replays_prepares", "the stand-in, like 6543, supports no prepared "
+       "statements", POOLER_PY, "max_prepared_statements = 0", "max_prepared_statements = 100",
+       "test_ops_continuous__auto_prepared_statements_break_on_the_transaction_pooler", COMPOSED),
+    _m("runtime_adds_a_session_statement", "no new session-only statement reaches the pool",
+       "infrx/gateway/pilot.py", '        await conn.execute("set role service_role")\n',
+       '        await conn.execute("set role service_role")\n'
+       '        await conn.execute("set search_path = infrx, public")\n',
+       "test_ops_continuous__the_runtime_sends_no_other_session_only_statement"),
+    _m("pool_budget_step_env_as_mount", "the env file reaches the budget over stdin only",
+       STEP + "71-pool-budget.sh", '"${sets[@]}" < "$env_file"', '"${sets[@]}"',
+       "test_ops_continuous__the_pool_budget_step_hands_the_env_file_over_stdin"),
+    # the env schema
+    _m("envcheck_accepts_unknown_names", "a name outside the schema refuses the start",
+       P, "for name in sorted(set(seen) - schema_names())]", "for name in ()]",
+       "test_ops_continuous__the_runtime_ignores_a_mistyped_name_which_envcheck_refuses",
+       ENVCHECK_REFUSES, UNIT_REFUSES),
+    _m("envcheck_accepts_doubled_names", "a name set twice refuses the start",
+       P, '            problems.append(f"{name}: set twice (systemd would take the last)")\n',
+       "            pass\n", ENVCHECK_REFUSES),
+    _m("envcheck_ignores_the_schema_version", "a file written for another schema refuses",
+       P, "    elif header[len(SCHEMA_HEADER):].strip() != schema_id():",
+       "    elif False:", ENVCHECK_REFUSES),
+    _m("envcheck_skips_the_runtime_probe", "the runtime's own validation runs at start",
+       P, '    problems += verdict["problems"]\n    return {"ok": not problems, "schema"',
+       '    return {"ok": not problems, "schema"', ENVCHECK_REFUSES),
+    _m("schema_id_ignores_the_names", "the schema id moves with the names it covers",
+       P, '"\\n".join(sorted(schema_names()))', '"\\n".join(sorted(MODES))',
+       "test_deploy_failclosed__the_schema_id_moves_with_the_names_it_covers"),
+    _m("envcheck_refusal_exits_zero", "a refused env file fails the unit's start",
+       P, '        return 0 if verdict["ok"] else REFUSED\n    if args.command == "manifest":',
+       '        return 0\n    if args.command == "manifest":', UNIT_REFUSES),
+    _m("gateway_starts_unchecked", "the gateway unit checks its env file before it starts",
+       "deploy/marlin2b-gateway.service", "ExecStartPre=/bin/sh -c 'exec docker run",
+       "#ExecStartPre=/bin/sh -c 'exec docker run", UNIT_REFUSES),
+    # least privilege
+    _m("probe_passes_an_allowed_operation", "an operation that succeeds fails its check",
+       PROBE_PY, '"pass": got.startswith("denied"),', '"pass": got != "error",', LEAST),
+    _m("probe_ignores_role_membership", "membership in a privileged role fails the probe",
+       PROBE_PY, '"select not exists (select 1 from pg_roles r where r.rolname = any(%(privileged)s) "',
+       '"select true or exists (select 1 from pg_roles r where r.rolname = any(%(privileged)s) "',
+       LEAST),
+    _m("probe_passes_without_function_list", "no D10 function list is PENDING, not a pass",
+       PROBE_PY, '"got": "PENDING: no --allow-functions list given", "pass": False,',
+       '"got": "PENDING: no --allow-functions list given", "pass": True,', LEAST),
+    _m("probe_runs_without_its_dsn", "the DSN comes from the environment or nothing runs",
+       PROBE_PY, "    if not dsn:\n", "    if False:\n",
+       "test_ops_continuous__the_probe_refuses_to_run_without_its_dsn_in_the_environment"),
+)
+
+# --- I8 slices 3-4: monitoring, delivery ------------------------------------------------
+OBS = "../../infra/observe/"
+OPS_RULES = "../../infra/alerts/operations.json"
+DELIVERY = "test_ops_continuous__delivery_sends_changes_only_and_blocks_without_a_destination"
+MUTANTS += (
+    _m("durable_forgets_unknown_holds", "the durable exporter feeds the reconcile rules",
+       OBS + "durable.py", '        out[("infrx_holds_unknown", ())] = holds.get("unknown", 0)\n', "",
+       "test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones"),
+    _m("producer_scan_blind", "the producer check reads what the code writes",
+       "tests/i/test_observe.py",
+       "return {name for name, metrics in rule_metrics(rules).items() if not metrics <= produced}",
+       "return set()",
+       "test_ops_continuous__the_alert_rules_without_a_producer_are_exactly_the_known_ones",
+       "test_ops_continuous__every_alert_rule_names_a_metric_something_produces"),
+    _m("merge_accepts_duplicate_rules", "a rule name defined twice is refused",
+       OBS + "rules.py", '        if rule["name"] in rules:\n', "        if False:\n",
+       "test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed"),
+    _m("rule_names_a_missing_runbook_section", "every rule links a runbook section that exists",
+       OPS_RULES, '"runbook": "infra/runbooks/observe.md#stuck-holds"',
+       '"runbook": "infra/runbooks/observe.md#stuck-hold"',
+       "test_ops_continuous__the_merged_rule_set_is_versioned_and_well_formed"),
+    _m("gpu_rule_reads_the_gateway", "the GPU rule reads the host's gauge, not the gateway's",
+       OPS_RULES, '"GpuUnavailable": {\n      "match": {\n        "process": "host"',
+       '"GpuUnavailable": {\n      "match": {\n        "process": "gateway"',
+       "test_ops_continuous__the_gateways_blind_gpu_gauge_does_not_page_but_the_hosts_does"),
+    _m("durable_backlog_counts_the_future", "the ready backlog is what is available now",
+       OBS + "durable.py", '"and claimed_at is null and available_at <= now() group by kind"',
+       '"and claimed_at is null and available_at > now() group by kind"',
+       "test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler"),
+    _m("durable_hides_drift", "drift from durable truth reaches the drift rule",
+       OBS + "durable.py", '        out[("infrx_reconciliation_drift", ())] = drift\n',
+       '        out[("infrx_reconciliation_drift", ())] = 0\n',
+       "test_ops_continuous__durable_truth_reads_holds_backlog_and_drift_through_the_pooler"),
+    _m("durable_on_the_session_port", "the monitor never takes a session slot",
+       OBS + "durable.py", 'TRANSACTION_PORT = "6543"', 'TRANSACTION_PORT = "5432"',
+       "test_ops_continuous__durable_truth_uses_the_transaction_port_by_default"),
+    _m("host_probe_engine_always_up", "the engine's health is probed, not assumed",
+       OBS + "host-probe.sh",
+       'm infrx_engine_up "$(ok curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8000/health)"',
+       "m infrx_engine_up 1",
+       "test_ops_continuous__the_host_probe_reports_gpu_engine_units_disks_and_the_edge"),
+    _m("canary_header_file_readable", "the canary's key file is 0600",
+       OBS + "canary.sh", "( umask 077; printf", "( printf",
+       "test_ops_continuous__the_canary_sends_one_text_and_one_video_request_with_a_hidden_key"),
+    _m("canary_failure_exits_zero", "a failed synthetic request fails the run",
+       OBS + "canary.sh", 'publish\nexit "$failed"', "publish\nexit 0",
+       "test_ops_continuous__the_canary_sends_one_text_and_one_video_request_with_a_hidden_key"),
+    _m("delivery_blocked_reads_as_success", "no destination is BLOCKED, never a success",
+       OBS + "deliver.py", "        return BLOCKED if status == 0 else SEND_FAILED\n    current",
+       "        return 0\n    current", DELIVERY),
+    _m("delivery_repeats_tickets", "only pages repeat while firing",
+       OBS + "deliver.py", 'repeat = alert["severity"] == "page" and last is not None',
+       "repeat = last is not None", DELIVERY),
+    _m("test_alert_unmarked", "the delivery test cannot be mistaken for a real alert",
+       OBS + "deliver.py", 'text = (f"[TEST {word}] infrx', 'text = (f"[{word}] infrx',
+       "test_ops_continuous__the_test_alert_is_marked_and_names_its_owner_and_runbook"),
+    _m("observe_timer_hourly", "the monitoring cycle runs every minute",
+       OBS + "systemd/infrx-observe.timer", "OnUnitActiveSec=60s", "OnUnitActiveSec=1h",
+       "test_ops_continuous__the_monitoring_units_are_valid_and_scheduled"),
+    _m("observe_hands_the_whole_env_file", "only the DSN crosses into the exporter",
+       OBS + "observe.sh", "  || grep -E '^DATABASE_URL=' \"$env_file\" > \"$dsn_env\"",
+       "  || cat \"$env_file\" > \"$dsn_env\"",
+       "test_ops_continuous__one_observe_cycle_probes_exports_evaluates_and_delivers"),
+    _m("observe_install_env_world_readable", "the monitor's env files are root 0600",
+       STEP + "72-observe-install.sh", 'chmod 0600 "$tmp"; mv', 'chmod 0644 "$tmp"; mv',
+       "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"),
+    _m("observe_runs_from_the_checkout", "the monitor survives a runtime rollback",
+       OBS + "systemd/infrx-observe.service", "Environment=REPO=/opt/infrx/observe\n", "",
+       "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"),
+    _m("alert_test_without_destination_runs", "no P-25 destination is BLOCKED (exit 3)",
+       STEP + "74-alert-test.sh",
+       '[ -f "$conf" ] || { echo "BLOCKED: no $conf (P-25: destination, owner, escalation)" >&2; exit 3; }\n',
+       "", "test_ops_continuous__the_delivery_proof_is_blocked_until_p25_and_never_prints_the_url"),
+)
+
+# --- I8 slice 5: the durable model mirror, its restore, the backup/PITR read -------------
+ART, POLICY = "../../infra/runbooks/artifacts.py", "../../infra/runbooks/supabase_policy.py"
+PINS = "test_ops_recover__the_manifest_pins_the_served_bytes_and_records_names_only"
+ROUND = "test_ops_recover__mirror_then_restore_round_trips_and_detects_a_changed_object"
+POLICY_CASE = "test_ops_recover__the_policy_read_reports_pitr_backups_and_the_pooler_without_secrets"
+MUTANTS += (
+    _m("manifest_accepts_other_shards", "a directory serving other bytes is never mirrored",
+       ART, '    if shards != sorted(model["weight_shard_digests"]):', "    if False:", PINS),
+    _m("manifest_records_env_values", "the manifest carries env NAMES only",
+       ART, "                env_names.append(name)", "                env_names.append(line)", PINS),
+    _m("manifest_checks_a_renamed_pin", "the pins checked are the fields W3 records",
+       ART, '"config_digest": "config.json"', '"config_sha256": "config.json"',
+       "test_ops_recover__the_real_serving_record_has_the_fields_the_manifest_checks",
+       dies_by=("KeyError",)),
+    _m("restore_verify_ignores_changes", "a restored byte that differs is DIFFERENT",
+       ART, "    changed = sorted(p for p in set(want) & set(have) if want[p] != have[p])",
+       "    changed = []", ROUND),
+    _m("mirror_uploads_the_download_cache", "only served files are mirrored",
+       STEP + "80-mirror-artifacts.sh", "--exclude '.cache/*' ", "", ROUND),
+    _m("restore_skips_verification", "a restore is verified against the manifest",
+       STEP + "81-restore-artifacts.sh",
+       '  python3 "$repo/infra/runbooks/artifacts.py" verify --weights', "  true --weights", ROUND),
+    _m("policy_prints_connection_strings", "the pooler read never prints a connection string",
+       POLICY, '("database_type", "pool_mode", "db_port", "default_pool_size",',
+       '("database_type", "pool_mode", "db_port", "default_pool_size", "connection_string",',
+       POLICY_CASE),
+    _m("policy_passes_without_token", "no token is BLOCKED, never a pass",
+       POLICY, "        code = BLOCKED\n", "        code = 0\n", POLICY_CASE),
+)
+
+# --- I8 slice 6: the rollback drill --------------------------------------------------------
+KG, JOURNEY = "../../infra/rollout/known-good.py", "../../infra/rollout/verify-journey.sh"
+JUDGED = "test_ops_recover__a_known_good_target_is_judged_by_its_tree_and_its_record"
+BOXCHECK = "test_ops_recover__the_box_check_shows_what_each_backup_really_holds"
+SERVES = "test_ops_recover__the_journey_proves_a_real_video_job_its_result_and_settleable_usage"
+MUTANTS += (
+    _m("known_good_without_preparation", "a tree without the preparation loop is no target",
+       KG, 'check("preparation", prep and "PreparationRunner(" in main,', 'check("preparation", True,',
+       JUDGED),
+    _m("known_good_ignores_migrations", "a tree whose migrations are not applied is no target",
+       KG, 'check("migrations", newest == applied or (newest < applied and proven),',
+       'check("migrations", True,', JUDGED),
+    _m("known_good_without_evidence", "the record must carry evidence that exists",
+       KG, 'entry.get("known_good") is True and not absent,', "entry is not None,", JUDGED),
+    _m("known_good_bundle_unchecked", "the release bundle must be in the release prefix",
+       KG, '{f"{sha}.bundle", f"{sha}.sha256"} <= have,', "True,", JUDGED),
+    _m("box_check_prints_backup_env", "only the release id is read from a backup",
+       STEP + "85-known-good-box.sh", "sed -n 's/^INFRX_RELEASE_SHA=//p' | tail -n1", "cat", BOXCHECK),
+    _m("box_check_trusts_a_tampered_bundle", "a bundle that fails its sha256 is not ready",
+       STEP + "85-known-good-box.sh", 'sha256sum -c --status "$TARGET.sha256"', "true", BOXCHECK),
+    _m("journey_accepts_a_closed_edge", "a public 503 after readiness fails the drill",
+       JOURNEY, 'if [ "$lag" -lt "$EDGE_LAG_MAX_S" ]; then', "if true; then", SERVES),
+    _m("journey_ignores_usage_certainty", "unsettleable usage fails the drill",
+       JOURNEY, '[ "$(field "$work/status" usage_certainty)" = authoritative ] && ok',
+       "true && ok", SERVES),
+    _m("journey_may_replay", "the drill's job is fresh work, never an idempotent replay",
+       JOURNEY, "printf 'Idempotency-Key: verify-journey-%s\\n'", "printf 'X-Note: %s\\n'", SERVES),
+    _m("journey_window_admits", "during the window a submission must be refused",
+       JOURNEY, "if [ \"$code\" = 503 ] && grep -qi '^retry-after:' \"$work/hd\"; then",
+       "if true; then", "test_ops_recover__during_the_window_nothing_new_is_admitted"),
+    _m("install_readiness_as_cold_start", "readiness is never reported as a cold start",
+       "deploy/install.sh", 'else kind="engine kept running: NOT a cold start"; fi',
+       'else kind="cold start: engine restarted, weights loaded"; fi',
+       "test_ops_recover__an_install_never_reports_readiness_as_a_cold_start"),
+)
+
+# --- I8 slice 7: evidence export, bounded cleanup -------------------------------------------
+MUTANTS += (
+    _m("evidence_exports_env_values", "the evidence export carries env NAMES only",
+       STEP + "79-evidence-export.sh", '"env_names": sorted(env),',
+       '"env_names": sorted(f"{k}={v}" for k, v in env.items()),',
+       "test_ops_continuous__the_evidence_export_is_one_names_only_document"),
+    _m("cleanup_removes_known_good_backups", "a backup holding a known-good release is kept",
+       STEP + "86-cleanup.sh",
+       """  case " $keep_releases " in *" ${held:-none} "*) echo "kept $dir (holds known-good $held)"; continue ;; esac\n""",
+       "", "test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good"),
+    _m("cleanup_deletes_by_default", "cleanup is a dry run unless DRY_RUN=0",
+       STEP + "86-cleanup.sh", "DRY_RUN=${DRY_RUN:-1}", "DRY_RUN=${DRY_RUN:-0}",
+       "test_ops_continuous__cleanup_removes_only_allowlisted_paths_and_keeps_known_good"),
+)
+
+# --- I8 fix round (review of 103d20a/d2f90ce): oracles the review found missing -------------
+DRIFT_PY = "../../infra/runbooks/drift.py"
+READ_ONLY = "test_ops_continuous__durable_truth_sends_only_reads_inside_a_read_only_transaction"
+HEADROOM = "test_ops_continuous__the_budget_reserves_headroom_and_counts_the_startup_peak"
+SETTLES = "test_ops_recover__the_settlement_check_passes_either_regime_and_fails_the_unsettled"
+INSTALL_OBSERVE = "test_ops_continuous__installing_the_monitor_writes_env_files_from_ssm_by_name"
+MUTANTS += (
+    _m("durable_not_read_only", "the monitor's one transaction is read-only",
+       OBS + "durable.py", '        conn.execute("set transaction read only")\n', "", READ_ONLY),
+    _m("durable_writes", "the monitor sends reads only",
+       OBS + "durable.py", '        conn.execute("set transaction read only")\n',
+       '        conn.execute("create table if not exists infrx.i8_monitor_wrote (x int)")\n',
+       READ_ONLY),
+    _m("budget_headroom_ignored", "the verdict keeps the reserved headroom free",
+       BUDGET_PY, '"ok": peak + headroom <= limit}', '"ok": peak <= limit}', HEADROOM),
+    _m("budget_startup_ignored", "a concurrent startup above the steady peak is the peak",
+       BUDGET_PY, "peak = max(startup, steady)", "peak = steady", HEADROOM),
+    _m("art_pins_ignored", "the tokenizer, template and config pins refuse other bytes",
+       ART, "        if by_name.get(name) != model[field]:", "        if False:", PINS),
+    _m("art_verify_missing_ignored", "a restore that lost a file is DIFFERENT",
+       ART, "    missing = sorted(set(want) - set(have))", "    missing = []", ROUND),
+    _m("art_verify_extra_ignored", "a restore that gained a file is DIFFERENT",
+       ART, "    extra = sorted(set(have) - set(want))", "    extra = []", ROUND),
+    _m("restore_trusts_a_replaced_mirror", "restored bytes are checked against the release's pins",
+       ART, "    if a.serving_version:", "    if False:", ROUND),
+    _m("mirror_readback_mismatch_passes", "a manifest that reads back different fails the mirror",
+       STEP + "80-mirror-artifacts.sh",
+       '|| { echo "manifest read back DIFFERENT from the one uploaded" >&2; exit 1; }', "|| true",
+       ROUND),
+    _m("probe_attrs_blind", "a BYPASSRLS (or superuser...) login fails the probe",
+       PROBE_PY, '"select not (rolsuper or rolbypassrls', '"select true or (rolsuper or rolbypassrls',
+       LEAST),
+    _m("probe_timeout_identity_blind", "a login with no statement_timeout fails the probe",
+       PROBE_PY, "\"select current_setting('statement_timeout') not in ('0', '0ms')\"",
+       '"select true"', LEAST),
+    _m("probe_identity_reads_its_own_timeout", "the timeout check reads the login's, not the probe's",
+       PROBE_PY, "attempt(conn, sql, params, bounded=False)", "attempt(conn, sql, params)", LEAST),
+    _m("drift_credit_charge_unchecked", "a CREDIT job settles only with its ledger debit",
+       DRIFT_PY, '"then debit = 0 and exists (select 1 from infrx.credit_ledger',
+       '"then true or exists (select 1 from infrx.credit_ledger', SETTLES),
+    _m("drift_usd_only", "a settled CREDIT job is SETTLED (its USD debit is 0 by design)",
+       DRIFT_PY, ',\n           [("succeeded", "settled", "credit", True, "authoritative")])', ",)",
+       SETTLES),
+    _m("drift_ignores_wallet_drift", "wallet drift fails the settlement check",
+       DRIFT_PY, '                           and seen["wallet drift rows"] == [(0,)]\n', "", SETTLES),
+    _m("known_good_assumes_additive", "a schema ahead of the tree needs a recorded proof",
+       KG, "newest == applied or (newest < applied and proven)", "newest <= applied", JUDGED),
+    _m("canary_timer_without_p24", "the recurring canary waits for P-24's approval",
+       STEP + "72-observe-install.sh", 'if [ -n "${P24_APPROVED:-}" ]; then', "if true; then",
+       INSTALL_OBSERVE),
+    _m("canary_key_defaulted", "the canary key has no default",
+       STEP + "72-observe-install.sh",
+       ': "${CANARY_KEY_PARAM:?the SSM name of the canary tenant key - no default, P-24 bounds its spend}"',
+       "CANARY_KEY_PARAM=${CANARY_KEY_PARAM:-/model-inference/e4b_api_key}", INSTALL_OBSERVE),
+)
+
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
@@ -953,6 +1243,11 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     shutil.copy2(REPO / "models" / "marlin2b" / "serving-version.json", engine / "serving-version.json")
     # I2B.c: the rollout scripts one suite file reads, at their repository path
     shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
+    # I8: its scripts, rules and units, and the migrations its PostgreSQL stand-in applies
+    for part in (("infra", "runbooks"), ("infra", "observe"), ("infra", "alerts"),
+                 ("apps", "app", "supabase", "migrations")):
+        if REPO.joinpath(*part).exists():
+            shutil.copytree(REPO.joinpath(*part), root.joinpath(*part), ignore=ignore)
     for name in ("pyproject.toml", "uv.lock"):
         shutil.copy2(API_DIR / name, api / name)
     return api
@@ -995,3 +1290,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

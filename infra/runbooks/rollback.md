@@ -48,6 +48,53 @@ not instead of it.
 
 Window: ⚠️ TO BE VERIFIED (P-18) - first measured by the coordinator's I2B rollout drill.
 
+## Known-good rollback drill
+
+I8 (RV-10). What passes: after the rollback **and** after the roll-forward, a fresh public
+in-cap video job is accepted, succeeds, its result is fetched and it settles with no wallet
+drift. What does not pass: a unit that is active, a `/readyz` that answers, a backup
+directory that exists. The previous drill's "5 s to ready" was a runtime restart behind a
+running engine (readiness only), onto a backup that held 27af05a - a release with no
+preparation loop (F7). Every step below is one coordinator op; log each before it runs
+(README rule 1). **Maintenance window, single GPU: no inference while the swap runs.**
+
+1. **Choose the target by its tree and its record**, never by a backup (coordinator host):
+   `apps/infrx-api/.venv/bin/python infra/rollout/known-good.py --list --applied 0018 --set S3_MEDIA_BUCKET --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY --set LARGE_BODY_LIMIT --set DATABASE_POOL_MAX_SIZE --bundles s3://llm-bootcamp-641134885443/releases/`
+   (`--applied` = the version hosted's `migrate.py plan` reports). Pick a `KNOWN-GOOD` one.
+   Hosted ahead of the target's tree (e.g. after D10's migrations) is `NOT-KNOWN-GOOD` until
+   the target's record carries a `schema_proof` reaching `--applied`: the target's own store
+   tests run on the newer schema, recorded as evidence (additive compatibility proven with
+   both versions, not assumed).
+2. **The box can reinstall it**: `infra/rollout/ssm.sh infra/rollout/steps/85-known-good-box.sh TARGET=<sha>`
+   (bundle on the NVMe matches its sha256, commit in the checkout, image cached or not; the
+   backups listed with what they hold). Exit 1: run the target's W1 fetch step first.
+3. **Close admission**: `infra/rollout/ssm.sh infra/rollout/steps/30-pause.sh RELEASE=<target>`
+   (the target's edge files, maintenance, drain), then from the host
+   `EXPECT=maintenance infra/rollout/verify-journey.sh` - a submission answers 503 +
+   Retry-After: nothing is admitted while the runtime is swapped.
+4. **Roll back**: `infra/rollout/ssm.sh infra/rollout/steps/40-checkout.sh RELEASE=<target>`,
+   then `TIMEOUT_S=3600 infra/rollout/ssm.sh infra/rollout/steps/50-install.sh RELEASE=<target> MIGRATION_DIGEST=nothing-pending ENGINE_MAX_NUM_SEQS=8 INFRX_SET="<the current install's INFRX_SET>"`
+   - the engine keeps running (no ENGINE=restart): the install's `timing runtime_ready_s` is
+   readiness only; the edge opens after it.
+5. **Prove it serves** (host, right after step 4 returns): `infra/rollout/verify-journey.sh`
+   with `INFRX_TEST_KEY` (read -rs) and `VIDEO_FILE` (an in-cap clip): the edge opens within
+   `EDGE_LAG_MAX_S` (the 503-after-readiness check), the job succeeds, the result has content,
+   the usage is authoritative. Then the printed
+   `apps/infrx-api/.venv/bin/python infra/runbooks/drift.py --request-id <id>`: `SETTLED`.
+6. **Roll forward**: steps 3-5 again with `RELEASE=<the release you rolled back from>`
+   (its `50-install.sh` prints `timing engine_s` labelled NOT a cold start and
+   `timing runtime_ready_s`).
+7. **Record**: the two journeys' output, both `drift.py` verdicts, the SSM command ids and
+   timestamps, `85-known-good-box.sh TARGET=<forward sha>` (the new backup and what it
+   holds), then append the forward release to `infra/rollout/known-good.json` with its
+   evidence (a new entry; never rewrite one).
+
+Any red in 5: stay in maintenance (`95-maintenance.sh RELEASE=<target>`), roll forward
+(step 6); if the forward release is the one that failed, the known-good target is the
+fallback and the endpoint stays in maintenance until one of them passes step 5. Cold start
+is measured separately - `81-restore-artifacts.sh MODE=swap` (engine restart onto restored
+weights) and [restart.md](restart.md#engine) - and never quoted from these steps.
+
 ## Maintenance
 
 Admission refused, everything else untouched: accepted jobs finish, settle and replay. On
@@ -99,3 +146,7 @@ ledger, journal or job tables to roll back code.
 - 2026-09-23 (I3B follow-up round 2): `rc10` marks every restored file with its release, so
   the edge files' "byte for byte" is checked (DR-1); `rc10b` drills exit 4 with the gateway's
   or the worker's `/readyz` never answering: no edge reload (DR-3). Nothing run on the box.
+- 2026-09-24 (I8): "Known-good rollback drill" added: the target from known-good.py (tree +
+  record + bundle), the box check (85), maintenance proven closed, a real job + result +
+  settlement after the rollback and after the roll-forward (verify-journey.sh, drift.py
+  --request-id), readiness and cold-start timings kept apart. Not run on the box.

@@ -169,6 +169,8 @@ def run(line, env, background=None):
     ignore, line = line.startswith("-"), line.lstrip("-")
     privileged, line = line.startswith("+"), line.lstrip("+")
     argv = argv_of(line, env)
+    if argv[:2] == ["/bin/sh", "-c"]:                   # systemd's `$$` is a literal `$`;
+        argv[2] = argv[2].replace("$$", "$").replace("< /etc/", f"< {ROOT}/etc/")
     if argv[0] == "/usr/bin/docker":
         argv[0] = "docker"                              # the namespacing wrapper
     if argv[0].endswith("/serve.sh"):

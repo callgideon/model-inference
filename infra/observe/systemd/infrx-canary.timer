@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the infrx synthetic inference check every 10 minutes (I8)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

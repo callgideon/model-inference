@@ -50,9 +50,12 @@ if [ "${ENGINE:-}" = restart ]; then
     || die "the restored engine did not come up; the edge stays as it was (maintenance in the runbook): fix the engine, then drain.sh resume" 4
 fi
 case "$restored" in pilot) units=$RUNTIME_UNITS_pilot ;; *) units=$RUNTIME_UNITS_dev ;; esac
+runtime_t0=$SECONDS
 systemctl restart $units
 wait_ready "${restored:-legacy}" \
   || die "the restored runtime is not ready; the edge stays as it was: fix it, then drain.sh resume" 4
+# I8: readiness is not service - the drill proves that with a real job (verify-journey.sh)
+echo "timing runtime_ready_s=$((SECONDS - runtime_t0)) (restored runtime to /readyz: readiness only)"
 # The edge serves whatever site the backup had (none on a pre-pilot host).
 if [ -f "$CADDY_DIR/Caddyfile" ] && docker inspect caddy >/dev/null 2>&1; then
   caddy_reload

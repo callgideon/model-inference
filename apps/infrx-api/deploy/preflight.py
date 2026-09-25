@@ -34,6 +34,7 @@ This module mutates one file and calls `systemctl`. It performs no AWS write, an
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import logging
@@ -433,22 +434,46 @@ def withdrawn(values: dict[str, str]) -> list[str]:
             for key in WITHDRAWN_KEYS if key in values]
 
 
+# --- the env schema version (I8 slice 2) ---------------------------------------------
+# Every file `apply` writes starts with the schema it was written for: a version and a
+# digest of the names this preflight may write (manifest + tunables). `envcheck`, run by
+# the runtime units before every start, refuses a file written for another schema - an
+# image upgraded or rolled back without its env file, or a hand edit - instead of letting
+# the runtime ignore a name it no longer reads. Bump the version when a name changes meaning.
+ENV_SCHEMA_VERSION = 1
+SCHEMA_HEADER = "# INFRX_ENV_SCHEMA "
+
+
+def schema_names() -> frozenset[str]:
+    return frozenset(key.env for key in MANIFEST) | frozenset(TUNABLE)
+
+
+def schema_id() -> str:
+    digest = hashlib.sha256("\n".join(sorted(schema_names())).encode()).hexdigest()[:16]
+    return f"{ENV_SCHEMA_VERSION}:{digest}"
+
+
 def render(values: dict[str, str]) -> str:
     """The env file body, in manifest order so a diff of two installs is readable."""
     order = [key.env for key in MANIFEST] + list(TUNABLE)
-    return "".join(f"{name}={values[name]}\n" for name in order if name in values)
+    return f"{SCHEMA_HEADER}{schema_id()}\n" + \
+        "".join(f"{name}={values[name]}\n" for name in order if name in values)
+
+
+def read_env_text(text: str) -> dict[str, str]:
+    env = {}
+    for line in text.splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            name, _, value = line.partition("=")
+            env[name] = value
+    return env
 
 
 def read_env(path: pathlib.Path) -> dict[str, str]:
     """Parse a file this module wrote. Not a general dotenv reader: no quoting, no
     `export`, no continuations, because nothing else writes this file - and because
     `FORBIDDEN_CHARS` refuses every character that would need one of them."""
-    env = {}
-    for line in path.read_text().splitlines():
-        if line and not line.startswith("#") and "=" in line:
-            name, _, value = line.partition("=")
-            env[name] = value
-    return env
+    return read_env_text(path.read_text())
 
 
 # --- engine prerequisites ----------------------------------------------------------
@@ -571,7 +596,7 @@ def transport_logger_problems() -> list[str]:
     return problems
 
 
-def probe(env_file: pathlib.Path, mode: str) -> dict:
+def probe(env_file: pathlib.Path | None, mode: str, env: dict[str, str] | None = None) -> dict:
     """Run, in the runtime interpreter, every check that needs the runtime package.
 
     Returns a JSON-serialisable verdict whose `problems` name settings, modules and
@@ -603,7 +628,7 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
         problems.append(f"the runtime package does not import: {type(failure).__name__}")
         return {"ok": False, "python": version, "mode": mode, "problems": problems,
                 "warnings": warnings}
-    staged_env = read_env(env_file)
+    staged_env = read_env(env_file) if env is None else env
     if staged_env.get("INFRX_MODE") != mode:
         # The one place the requested mode and the written mode are compared. They can
         # only differ through a bug here, and the cost of not noticing is a file that
@@ -637,6 +662,56 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
     problems += transport_logger_problems()
     return {"ok": not problems, "python": version, "mode": mode,
             "validated_mode": validated, "problems": problems, "warnings": warnings}
+
+
+def envcheck(text: str, mode: str) -> dict:
+    """The installed env file, checked before a runtime unit starts (I8 slice 2): written
+    for this image's schema, every name in the schema and set once, every required key
+    present and shaped, nothing forbidden or withdrawn - then `probe`, the runtime's own
+    validation. Problems name settings and line numbers, never values."""
+    problems: list[str] = []
+    lines = text.splitlines()
+    header = lines[0] if lines else ""
+    if not header.startswith(SCHEMA_HEADER):
+        problems.append("no INFRX_ENV_SCHEMA header: the file was not written by "
+                        "`preflight.py apply` (reinstall: install.sh)")
+    elif header[len(SCHEMA_HEADER):].strip() != schema_id():
+        problems.append(f"the file was written for env schema "
+                        f"{header[len(SCHEMA_HEADER):].strip()!r}; this image reads "
+                        f"{schema_id()!r} (reinstall: install.sh)")
+    seen: list[str] = []
+    for number, line in enumerate(lines, 1):
+        if not line or line.startswith("#"):
+            continue
+        name, equals, _value = line.partition("=")
+        if not equals or not re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
+            problems.append(f"line {number}: not NAME=VALUE")
+            continue
+        if name in seen:
+            problems.append(f"{name}: set twice (systemd would take the last)")
+        seen.append(name)
+    problems += [f"{name}: not in the env schema (mistyped, retired or never writable)"
+                 for name in sorted(set(seen) - schema_names())]
+    env = read_env_text(text)
+    for key in MANIFEST:
+        if key.banned(mode) and key.env in env:
+            problems.append(f"{key.env}: forbidden in {mode} mode")
+        elif key.env in env:
+            problem = shape_problem(key, env[key.env])
+            if problem:
+                problems.append(problem)
+        elif key.needed(mode):
+            problems.append(f"{key.env}: missing ({key.role})")
+    for name, shape in TUNABLE_SHAPES.items():
+        if name in env:
+            problem = shape_problem(Key(name, "tunable", shape), env[name])
+            if problem:
+                problems.append(problem)
+    problems += withdrawn(env)
+    verdict = probe(None, mode, env=env)
+    problems += verdict["problems"]
+    return {"ok": not problems, "schema": schema_id(), "mode": mode, "keys": len(seen),
+            "problems": problems, "warnings": verdict.get("warnings", [])}
 
 
 def _importable(module: str) -> bool:
@@ -843,12 +918,21 @@ def main(argv=None) -> int:
     probe_parser.add_argument("--mode", required=True)
     probe_parser.add_argument("--env-file", required=True)
 
+    envcheck_parser = sub.add_parser(
+        "envcheck", help="the installed env file, before a runtime unit starts (names only)")
+    envcheck_parser.add_argument("--mode", required=True)
+    envcheck_parser.add_argument("--env-file", required=True, help="a path or /dev/stdin")
+
     manifest_parser = sub.add_parser("manifest", help="the required keys, names only")
     manifest_parser.add_argument("--mode", default="pilot")
 
     args = parser.parse_args(argv)
     if args.command == "probe":
         verdict = probe(pathlib.Path(args.env_file), args.mode)
+        print(json.dumps(verdict))
+        return 0 if verdict["ok"] else REFUSED
+    if args.command == "envcheck":
+        verdict = envcheck(pathlib.Path(args.env_file).read_text(), args.mode)
         print(json.dumps(verdict))
         return 0 if verdict["ok"] else REFUSED
     if args.command == "manifest":
