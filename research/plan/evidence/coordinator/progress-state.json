@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 43,
-  "updated": "2026-09-25T08:30:17Z",
+  "revision": 44,
+  "updated": "2026-09-25T08:40:45Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -2602,6 +2602,18 @@
       "at": "2026-09-25T08:30:17Z",
       "by": "tracker",
       "what": "forecast E3C: 2026-09-26 02:23Z – 2026-09-27 08:17Z (likely 2026-09-26 12:47Z) → 2026-09-26 01:06Z – 2026-09-27 03:06Z (likely 2026-09-26 10:12Z) (because: dependency path M6 → E3C)"
+    },
+    {
+      "at": "2026-09-25T08:40:45Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/G8-20260925T0808Z.json"
+    },
+    {
+      "at": "2026-09-25T08:40:45Z",
+      "by": "tracker",
+      "what": "rejected update: future-dated: at 2026-09-25T09:00:00Z is after host UTC now 2026-09-25T08:40:45Z (+15 min skew allowed); check the clock",
+      "source": "updates/G8-20260925T0900Z.json"
     }
   ],
   "history": {
@@ -2820,10 +2832,20 @@
     "E3C-20260925T0746Z.json": {
       "status": "applied",
       "at": "2026-09-25T07:46:00Z"
+    },
+    "G8-20260925T0808Z.json": {
+      "status": "rejected",
+      "at": "2026-09-25T08:08:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "G8-20260925T0900Z.json": {
+      "status": "rejected",
+      "at": "2026-09-25T09:00:00Z",
+      "reason": "future-dated: at 2026-09-25T09:00:00Z is after host UTC now 2026-09-25T08:40:45Z (+15 min skew allowed); check the clock"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T08:30:17Z",
+    "computed_at": "2026-09-25T08:40:45Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2833,7 +2855,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 01:06Z – 2026-09-27 03:06Z (likely 2026-09-26 10:12Z)",
+        "text": "2026-09-26 01:16Z – 2026-09-27 03:16Z (likely 2026-09-26 10:22Z)",
         "constraint": "dependency path M6 → E3C",
         "effort_h": [
           21.0,
@@ -2846,9 +2868,9 @@
           42.6
         ],
         "finish": [
-          "2026-09-26T01:06:17Z",
-          "2026-09-26T10:12:17Z",
-          "2026-09-27T03:06:17Z"
+          "2026-09-26T01:16:45Z",
+          "2026-09-26T10:22:45Z",
+          "2026-09-27T03:16:45Z"
         ],
         "conditional": null,
         "confidence": "medium",
