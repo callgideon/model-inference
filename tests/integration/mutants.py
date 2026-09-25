@@ -339,6 +339,30 @@ MUTANTS: tuple[Mutant, ...] = (
            '        passed = (outcome == "error" and (observed == expected or check.role == "anon")',
            "tests/integration/test_services.py", "should_fail",
            layer=2, cases=("test_a_check_that_should_fail_does_fail",)),
+    # L3-REBASE: D10's 0019-0021 rows discriminate against the live catalog.
+    Mutant("e2m74", "L3-REBASE: service_role's direct upload-ticket write is gone (0019:959)",
+           "tests/integration/pgstate.py",
+           '                     "infrx.media_uploads", "infrx.content_objects", '
+           '"infrx.job_readiness",',
+           '                     "infrx.content_objects", "infrx.job_readiness",',
+           "tests/integration/test_services.py", "role_matrix_holds",
+           layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m75", "L3-REBASE: the runtime login's execute surface is read, not assumed "
+           "(dropping admit from 0021's list must fail its row)",
+           "tests/integration/pgstate.py",
+           '    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit(jsonb)", '
+           '"infrx.admit_ready(jsonb)",',
+           '    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit_ready(jsonb)",',
+           "tests/integration/test_services.py", "role_matrix_holds",
+           layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m76", "L3-REBASE: a 0019 relation without a matrix row fails completeness",
+           "tests/integration/pgstate.py",
+           '    "infrx.content_objects": SERVICE,             # 0019:952-955 revoke all, '
+           'grant select\n',
+           "",
+           "tests/integration/test_services.py", "row_for_every_relation",
+           layer=2, cases=("test_the_role_matrix_has_a_row_for_every_relation_and_security_"
+                           "definer_function",)),
     Mutant("e2m53", "r2 minor M12: provision_database only talks to our own container",
            "tests/integration/harness.py",
            '    container = assert_ours(container_of("postgres"))',
