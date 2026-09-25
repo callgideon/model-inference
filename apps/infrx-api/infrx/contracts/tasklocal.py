@@ -40,16 +40,18 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "e4b": {"postgres": 56832},
     # Wave 4 (consumer v1, program 22, 2026-09-24): one PostgreSQL (+ Valkey / S3 where the lane
     # drives them) per lane so the twelve worktrees run their real-service suites concurrently.
-    # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block.
+    # 55442-55460 and 55469-55499 were free; 555xx belongs to the E compose block. The D
+    # harness decoy sits 40 above every PostgreSQL port (tests/d/test_pgharness.py: 55472-55490
+    # for the ports below), so the Valkey/S3 ports stay outside that band.
     "d10": {"postgres": 55442, "valkey": 55469},
     "m5": {"postgres": 55443, "s3": 55470},
     "m6": {"postgres": 55444, "s3": 55471},
-    "w5": {"postgres": 55445, "valkey": 55472},
+    "w5": {"postgres": 55445, "valkey": 55491},
     "g7": {"postgres": 55446},
-    "g8": {"postgres": 55447, "valkey": 55473},
-    "e2c": {"postgres": 55448, "valkey": 55474, "s3": 55475},
+    "g8": {"postgres": 55447, "valkey": 55492},
+    "e2c": {"postgres": 55448, "valkey": 55493, "s3": 55494},
     "e1c": {"postgres": 55449},
-    "i8": {"postgres": 55450, "valkey": 55476},
+    "i8": {"postgres": 55450, "valkey": 55495},
     # E3C composes the E2 stack as namespace `e3c` in its own block (56900-56999)
     "e3c": {"postgres": 56932},
 }
