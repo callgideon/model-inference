@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 47,
-  "updated": "2026-09-25T17:52:42Z",
+  "revision": 48,
+  "updated": "2026-09-25T18:22:51Z",
   "agent_slots": {
     "total": 16,
     "active": 7,
@@ -1171,12 +1171,12 @@
     {
       "id": "E3C",
       "task": "E3C",
-      "slice": "phase 2: seams on D10+M5 (admission barrier on every candidate, collector composed as pilot with BLOCKED[M6], WR-4 dedicated runtime login, R106 dataset oracle, G8 transition wired)",
+      "slice": "phase 2 interim rerun: harness re-pointed to G7 (s13 PublishedModel, expiry bypass), R130 (s08 measured), G8 lock bound (s09), RUNTIME-LOGIN (whole matrix on infrx_runtime), M6 phase 2 (WR-3 collector + grace)",
       "agent": "opus",
-      "branch": "codex/e3c-phase2",
-      "worktree": ".claude/worktrees/codex-e3c-phase2",
-      "base": "ccf37b55",
-      "head": "60ab7575",
+      "branch": "codex/e3c-rerun",
+      "worktree": ".claude/worktrees/codex-e3c-rerun",
+      "base": "19670a8c",
+      "head": "7d0d3d7b",
       "isolation": {
         "ports": "compose block 56900-56999 (postgres 56932)",
         "prefix": "infrx-e3c-",
@@ -1184,63 +1184,54 @@
       },
       "activity": "review",
       "started": "2026-09-24T21:59:40Z",
-      "updated": "2026-09-25T07:46:00Z",
-      "blocker": "G7 (admit_ready composition, persisted-expiry reads, discovery); W5 (claim_preparation_ready, fail_preparation); M6 (durable retention pass); F-1 pilot.py:129-139 pool sets role service_role; infrx_runtime cannot serve; F-2 unbounded acceptance on stalled PostgreSQL / S3 (bound needs a ruling)",
+      "updated": "2026-09-25T18:20:00Z",
+      "blocker": "W5 (claim_preparation_ready, fail_preparation): s04 video/permanent, s05 admission; F-3 relay.py:167 admits via admit_credit; no caller of PgLifecycle.admit_ready (unowned: G7 deferred, W5 gate): s04 text/late, s05 readiness; F-4 PgStreamStore.expire (journal.py:121) has no caller; stream_chunks deltas kept past JOURNAL_CHUNK_TTL_S: s06 scrub, s11 scrub race",
       "next_action": "scenario matrix red/blocked on f764e396",
       "estimate": {
-        "optimistic_h": 2,
-        "likely_h": 4,
-        "pessimistic_h": 8,
+        "optimistic_h": 1,
+        "likely_h": 2,
+        "pessimistic_h": 5,
         "confidence": "medium",
-        "basis": "three ~13-min reruns after G7, W5 and M6 merge, re-point collect_once to M6's entry, run nc-admission-ready / nc-retention-durable revert controls; F-1 fix then INFRX_E3C_RUNTIME_LOGIN=1 rerun; F-2 needs a ruling",
-        "at": "2026-09-25T07:46:00+00:00"
+        "basis": "one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees",
+        "at": "2026-09-25T18:20:00+00:00"
       },
       "evidence": [
         "research/plan/evidence/e/E3C-8406c79.md",
-        "research/plan/evidence/e/E3C-phase2-60ab757.md"
+        "research/plan/evidence/e/E3C-phase2-60ab757.md",
+        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md"
       ],
       "commands": [
         {
-          "cmd": "runner.py --keep --reuse --only s03,s06,s07,s10 (phase-1 harness at ccf37b55)",
-          "exit": 1,
-          "summary": "6 failed, 9 passed; s03 PASS (M5); s06 red from a process-local collector composition"
-        },
-        {
           "cmd": "pytest -q tests/integration/backend/e3c (no stack)",
           "exit": 0,
-          "summary": "30 passed (3 new s12 regressions, each killed by its mutant)"
+          "summary": "34 passed; new bypass-install regression fails on the phase-2 world.py (expiry-recompute)"
         },
         {
-          "cmd": "make backend-local (run 1, 42c831ec)",
+          "cmd": "make backend-local (run 1, interim, G7 head 5b38ab08, owner login)",
           "exit": 2,
-          "summary": "runner exit 1; 14 failed, 57 passed, 4 skipped; 2 harness reds fixed next (R106 oracle, G8 wiring)"
+          "summary": "runner exit 1, gate FAIL; 9 failed, 68 passed, 3 skipped in 760 s; s07 s13 PASS (former G7); non-passes W5 3, M6 4, harness 1 (s08 s3 zero-margin oracle), F-3 3, F-1 1"
         },
         {
-          "cmd": "make backend-local (run 2, evidence, 60ab7575)",
+          "cmd": "consumer-local.sh --break-seam readiness / expiry",
+          "exit": 1,
+          "summary": "both seams FAIL (mutants killed) as required"
+        },
+        {
+          "cmd": "scratch mutant: content_referenced -> NULL, runner.py --only s06",
+          "exit": 1,
+          "summary": "s06-live FAIL (live media deleted): WR-3 s06-live oracle not vacuous; reverted"
+        },
+        {
+          "cmd": "INFRX_E3C_RUNTIME_LOGIN=1 make backend-local (run 2, merged tree 7d0d3d7b)",
           "exit": 2,
-          "summary": "runner exit 1, gate FAIL; 12 failed, 59 passed, 4 skipped in 752 s; PASS s01 s02 s03 s09 s12; FAIL s04 s05 s06 s07 s08 s10 s13; BLOCKED s11; non-passes: G7 6, W5 3, M6 4, defects 3 (F-1, F-2), harness 0; teardown clean"
-        },
-        {
-          "cmd": "consumer-local.sh --break-seam readiness",
-          "exit": 1,
-          "summary": "seam:readiness FAIL (mutant killed) as required"
-        },
-        {
-          "cmd": "consumer-local.sh --break-seam expiry",
-          "exit": 1,
-          "summary": "seam:expiry FAIL (mutant killed) as required"
-        },
-        {
-          "cmd": "pytest -q tests/integration/backend (layer 0)",
-          "exit": 1,
-          "summary": "1 failed, 147 passed, 79 skipped; the failure is test_observe ob10 (infrx_db_pool_* panels), fixed by i8-panels 463d313d which this base predates"
+          "summary": "runner exit 1, gate FAIL; 8 failed, 72 passed, 0 skipped in 727 s; s08 s10 PASS (F-1, F-2 closed); non-passes W5 3, F-3 3 (relay admits via admit_credit, no admit_ready), F-4 2 (stream journal never pruned); harness 0, M6 0; teardown clean"
         }
       ],
       "deviation": "phase 1 = red harness in a new subdirectory only; E2C's top-level runner files read-only; phase 2 runs on the merged SHA (dispatch 3)",
       "owned_paths": [
         "tests/integration/backend/e3c/",
-        "research/plan/evidence/e/E3C-phase2-60ab757.md",
-        "research/plan/evidence/coordinator/updates/E3C-20260925T0746Z.json"
+        "research/plan/evidence/e/E3C-rerun-7d0d3d7.md",
+        "research/plan/evidence/coordinator/updates/E3C-20260925T1820Z.json"
       ],
       "wiring_requests": []
     },
@@ -1289,16 +1280,16 @@
       "head": "97381015"
     },
     {
-      "since": "2026-09-25T00:03:00Z",
-      "lane": "E3C",
-      "task": "E3C",
-      "head": "60ab7575"
-    },
-    {
       "since": "2026-09-24T23:25:00Z",
       "lane": "M6",
       "task": "M6",
       "head": "dea32507"
+    },
+    {
+      "since": "2026-09-25T00:03:00Z",
+      "lane": "E3C",
+      "task": "E3C",
+      "head": "7d0d3d7b"
     }
   ],
   "integration_queue": [],
@@ -2638,6 +2629,17 @@
       "by": "tracker",
       "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
       "source": "updates/I8-20260925T1744Z.json"
+    },
+    {
+      "at": "2026-09-25T18:20:00Z",
+      "by": "E3C",
+      "what": "review → review; head 7d0d3d7b; estimate likely 4 → 2 h (one ~13-min final INFRX_E3C_RUNTIME_LOGIN=1 rerun after F-3 (relay -> admit_ready) + W5 and F-4 (journal pruning composed) land, plus nc-admission-ready and nc-retention-durable revert controls on scratch trees)",
+      "source": "updates/E3C-20260925T1820Z.json"
+    },
+    {
+      "at": "2026-09-25T18:22:51Z",
+      "by": "tracker",
+      "what": "forecast E3C: 2026-09-26 01:22Z – 2026-09-26 20:52Z (likely 2026-09-26 07:52Z) → 2026-09-26 00:34Z – 2026-09-26 17:28Z (likely 2026-09-26 05:46Z) (because: dependency path W5 → E3C)"
     }
   ],
   "history": {
@@ -2904,10 +2906,14 @@
       "status": "rejected",
       "at": "2026-09-25T17:44:00Z",
       "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
+    },
+    "E3C-20260925T1820Z.json": {
+      "status": "applied",
+      "at": "2026-09-25T18:20:00Z"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T17:52:42Z",
+    "computed_at": "2026-09-25T18:22:51Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2917,22 +2923,22 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 01:22Z – 2026-09-26 20:52Z (likely 2026-09-26 07:52Z)",
+        "text": "2026-09-26 00:34Z – 2026-09-26 17:28Z (likely 2026-09-26 05:46Z)",
         "constraint": "dependency path W5 → E3C",
         "effort_h": [
-          7.5,
-          14.0,
-          27.0
+          6.2,
+          11.4,
+          23.1
         ],
         "wall_h": [
-          7.5,
-          14.0,
-          27.0
+          6.2,
+          11.4,
+          23.1
         ],
         "finish": [
-          "2026-09-26T01:22:42Z",
-          "2026-09-26T07:52:42Z",
-          "2026-09-26T20:52:42Z"
+          "2026-09-26T00:34:51Z",
+          "2026-09-26T05:46:51Z",
+          "2026-09-26T17:28:51Z"
         ],
         "conditional": null,
         "confidence": "medium",
@@ -2941,7 +2947,6 @@
           "E3C"
         ],
         "stale": [
-          "E3C",
           "W5"
         ]
       },
@@ -2957,7 +2962,6 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
-          "E3C",
           "W5"
         ]
       },
@@ -2973,7 +2977,6 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
-          "E3C",
           "W5"
         ]
       },
@@ -2989,7 +2992,6 @@
         "confidence": null,
         "critical_path": null,
         "stale": [
-          "E3C",
           "W5"
         ]
       }
