@@ -11,8 +11,9 @@ The one source of the numbers is `certify.py`: §5's table quotes `certify.CRITE
 `certify.MATRIX`, and `tests/integration/backend/test_certify.py` holds the two equal. Most
 criteria are imported, not restated: W4's `measure/decide.py` constants, E1B's sample rule and
 `research/production-api/01-requirements-and-traffic-model.md` §2.3. **Nothing here is a
-target or an SLO**: every latency, rate and soak row is **provisional (P-18)** until a
-workload owner supplies one.
+target or an SLO**: every latency, rate and soak row was **provisional (P-18)** until a
+workload owner supplied one. Amendment 6 (2026-09-25): P-18 is decided; §5's rows are E4C's
+single-GPU pilot limits for the pinned engine, still not a public SLA.
 
 ## 1. Identity
 
@@ -55,9 +56,9 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 
 | Cell | Driver | Passes when |
 |---|---|---|
-| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s` and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes. **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one bound, and a clip over it gets the typed refusal* |
+| `e4b.b.envelope` | `bench.py` open loop, one run per rate of the ladder, `--retries 0`, `--max-tokens 128,512,1024`, `--forms video_b64` | per rung: platform-caused failure rate below `max_failure_rate`; no rejection other than the duration cap's; TTFT p95 of short clips ≤ `ttft_p95_short_s`, request latency p95 ≤ `latency_p95_s` (amendment 6) and end-to-end p95 per clip-minute ≤ `e2e_p95_s_per_clip_minute`, each with ≥ `p95_min_accepted` samples; the envelope is the highest rung that passes (box: the declared rung, `declared_rate_per_s`, amendment 6 fix round). **Duration cap (P-20):** every attempt on a clip longer than `engine_ceiling_s` is refused at admission (4xx), never accepted and failed by the engine; no attempt on a clip of at most `applied_cap_s` is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one bound, and a clip over it gets the typed refusal* |
 | `e4b.b.soak` | `bench.py` open loop at `soak.rate` for `soak.seconds`, the target's `/metrics` scraped every `soak.sample_s` | failure rate below `max_failure_rate`; growth (second half's maximum over the first half's, `decide.growth`) of `infrx_process_resident_bytes` ≤ `max_host_growth_mib` and of used GPU memory ≤ `max_gpu_growth_mib`; `infrx_reconciliation_drift` and `infrx_unsettleable_jobs` 0 at the end; latency p50 of the last third ≤ `soak_latency_drift` × the first third's |
-| `e4b.b.overload` | `bench.py --burst <burst>`: `burst` requests from one key at one instant | at least one accepted; at least one refused; **every** refusal is a 429 carrying a numeric `Retry-After` and one of `overload_codes`; no 5xx and no platform-caused failure |
+| `e4b.b.overload` | `bench.py --burst <burst>`: `burst` requests from one key at one instant, a P4 cell (box: through the public edge, §5) | at least one accepted; at least one refused; **every** refusal is a 429 carrying a numeric `Retry-After` and one of `overload_codes`; no 5xx and no platform-caused failure |
 | `e4b.b.recovery` | I3B's `rc*`/`bk*` drills: local = the backend suite's `recovery/` cases on the E2 stack; box = I3B's runbook drills, executed by the coordinator from the E4B box protocol | every drill passes, or pends on a typed owner |
 | `e4b.b.config-pin` | the tree against the settings W3/W4/M4 declared (`certify.DECLARED`); the published Marlin release record against the serving version; box: the deployed engine (`--inventory`) against the pin | every value equal. A difference is a FAIL naming the evidence it would invalidate: re-measure and re-declare, never ship silently ("reject any optimization that invalidates earlier evidence") |
 
@@ -65,15 +66,17 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 
 | Id | Value | Source |
 |---|---|---|
-| `max_failure_rate` | 0.01 | `decide.MAX_FAILURE_RATE`; E1B §4 error rate, provisional (P-18) |
+| `max_failure_rate` | 0.01 | `decide.MAX_FAILURE_RATE`; E1B §4 error rate per cell, decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 0/126 at 0.5 req/s on run3 |
 | `p95_min_accepted` | 60 | `decide.P95_MIN_ACCEPTED`; E1B sample sufficiency (method) |
-| `ttft_p95_short_s` | 6.0 | 01 §2.3 interactive TTFT p95 for clips ≤ 30 s at ≤ 720p; a proposal, provisional (P-18) |
+| `ttft_p95_short_s` | 6.0 | 01 §2.3 interactive TTFT p95 for clips ≤ 30 s at ≤ 720p; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 2.4461 s at 0.5 req/s on run3 |
 | `short_clip_max_s` | 30.0 | 01 §2.3 (the clip class the TTFT row names) |
 | `short_clip_max_edge_px` | 1280 | 01 §2.3 "≤ 720p" read as the long edge of 1280×720 |
-| `e2e_p95_s_per_clip_minute` | 45.0 | 01 §2.3 interactive end-to-end p95; provisional (P-18) |
-| `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion) |
-| `max_gpu_growth_mib` | 256 | `decide.MAX_GPU_GROWTH_MIB` |
-| `soak_latency_drift` | 1.5 | E4B engineering criterion, provisional (P-18) |
+| `e2e_p95_s_per_clip_minute` | 90.0 | latency p95 per clip-minute at 0.5 req/s; replaces 01 §2.3's provisional 45 (run3 failed it); decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 77.3142 s over 126 samples on run3 `bda1586` |
+| `latency_p95_s` | 9.0 | whole-request latency p95 at 0.5 req/s, judged beside the TTFT row; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); meas. 7.6688 s on run3 (`work/envelope-r0.5.jsonl`) |
+| `declared_rate_per_s` | 0.5 | box: the only rate the certificate supports; the envelope's P-18 rows are judged at this rung. Rungs 1.0 and 2.0 run and are reported as `measured_passing_rate_per_s`, never as supported; if this rung fails nothing is supported and the soak does not run; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`) |
+| `max_host_growth_mib` | 512 | `decide.MAX_HOST_GROWTH_MIB` (W4 memory criterion); decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`) |
+| `max_gpu_growth_mib` | 256 | `decide.MAX_GPU_GROWTH_MIB`; decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`); must be measured in E4C (unknown on run3) |
+| `soak_latency_drift` | 1.5 | E4B engineering criterion, decided (P-18, 2026-09-25; `research/plan/15-pending-inputs.md`) |
 | `applied_cap_s` | 72 | P-20 interim: the cutover's `MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |
 | `engine_ceiling_s` | 82 | `decide.ceiling_s(<encoder budget of the pinned flags>)`: 16,384 tokens today (W4 P-20 record) |
 | `overload_codes` | capacity_exhausted, journal_capacity_exhausted, rate_limited | `errors.RETRY_AFTER_CODES` minus `dependency_unavailable` (a dependency, not overload) |
@@ -81,10 +84,35 @@ The measurement checkout at the release SHA (W4 precondition 2) and the inventor
 | Scale | Envelope rates (req/s) × requests | Soak rate × seconds, sample every | Overload burst | Dataset items / interrupt after / rate |
 |---|---|---|---|---|
 | `tiny` (local) | 4.0 × 12 | 2.0 × 10, 1 s | 32 | 12 / 4 / 4.0 |
-| `box` | 0.5, 1.0, 2.0 × 120 each | half the highest passing envelope rate × 14400 (E1B's provisional 4 h floor), 30 s | 32 (4 × `max_active_jobs_per_key`) | 24 / 8 / 1.0 |
+| `box` | 0.5, 1.0, 2.0 × 120 each | 0.25 × 14400 (decided, P-18: fixed; runs only once the declared rung is supported), 30 s | 32 (4 × `max_active_jobs_per_key`) | 24 / 8 / 1.0 |
 
 The `tiny` scale proves the runner end to end and cannot support a p95 (12 samples): its
 latency rows are `unknown` by construction, so a local run never passes the envelope.
+
+**Decided limits the runner does not read from `CRITERIA`** (P-18, 2026-09-25, `research/plan/15-pending-inputs.md`;
+single-GPU pilot limits for the pinned engine, not an SLA; no availability claim and no SOP
+accuracy claim):
+
+| Limit | Value | Source |
+|---|---|---|
+| Refusals within the cap at the declared 0.5 req/s | 0 (the rung's `rejections` row) | run3 `report.json`:280-304 |
+| Engine restart | gateway `/readyz` 200 ≤ 300 s | meas. 172 s (`research/plan/evidence/coordinator/2026-09-22-session-02.md`:940) |
+| Worker SIGKILL | ≤ 30 s | meas. 8 s (session-02.md:941) |
+| Valkey index loss | ≤ 30 s; no gateway 5xx other than 503 `dependency_unavailable` | meas. ~6 s (session-02.md:942) |
+| DB or object-store stall | a retryable 503/504 within 45 s | `research/plan/evidence/e/E3C-8406c79.md`:249 |
+| Recovery correctness (every drill) | every accepted job reaches exactly one terminal state and settles once; inference and settlement succeed after recovery (P7) | `research/plan/evidence/coordinator/2026-09-24-S3-reconciliation.md`:170 |
+
+The recovery bounds are judged by the I3B drills and the coordinator's box drills (§4
+`e4b.b.recovery`), not by a number in `CRITERIA`; the E4C drill record prints each measured
+recovery time next to its bound above with PASS or FAIL (a record rule, no runner code).
+The runner's failure rate is stricter than P-18's "platform-caused ≤ 1 %": it is
+`< max_failure_rate` over every attempt that got no answer, platform-caused and transport
+alike (amendment 3(c)), with the platform-caused share in the row's detail.
+
+**The box overload burst enters through the public edge** (E1B-protocol rule 11; S3 F5;
+CW-V3): certify stamps the overload cell P4, which bench refuses on any profile but a
+`public-edge` one, runs it under `--overload-profile` at `https://<its first allowlist
+host>/v1`, and without that profile the box overload cell is BLOCKED (PENDING on `PROFILE`).
 
 ## 6. What invalidates a result
 
@@ -226,3 +254,23 @@ run closed, and the coordinator's decision recorded in
   - Each latency row prints its p50 and accepted count beside the p95. run2's e2e p95 of
     about 91 s per clip-minute against the provisional 45 s is a measurement, and the
     criterion stands.
+- 2026-09-25 (E4C-PREP), **amendment 6**, before any E4C run: P-18 is decided
+  (`research/plan/15-pending-inputs.md`, "Decisions 2026-09-25"), and this amendment is
+  committed before the first qualifying run's start (consumer-v1/05 §3; P-17 check 4).
+  `e2e_p95_s_per_clip_minute` 45.0 → 90.0 (run3 measured 77.3142; the provisional 45 came
+  from 01 §2.3 and was never an agreed target). New `latency_p95_s` 9.0, judged in each
+  envelope rung beside the TTFT row: `unknown` below `p95_min_accepted` samples, like the
+  other rows. Every other §5 number is unchanged and now decided. The recovery bounds, the
+  declared supported rate, the soak rate and the public-edge rule for the box burst are
+  recorded in §5 as protocol text. The runner's soak derivation is unchanged (see §5).
+- 2026-09-25 (E4C-PREP), **amendment 6, fix round** (recheck E4P-V1/V2/V5/V6), before any
+  E4C run. (a) New `declared_rate_per_s` 0.5: on the box the envelope's supported rate is
+  the declared rung when it and every rung below pass. Its P-18 rows are the ones judged;
+  1.0 and 2.0 are measured only (`measured_passing_rate_per_s`); a failed declared rung
+  supports nothing. (b) The box soak is P-18's fixed 0.25 req/s × 14,400 s (3,600 requests,
+  the P-24 bound), run only once the declared rung is supported; this replaces the
+  derivation from the highest passing rung that amendment 6 kept. The `tiny` scale is
+  unchanged. (c) certify stamps the overload cell P4 and runs the box burst only under
+  `--overload-profile` (a `public-edge` profile), else BLOCKED. (d) §5 states that the
+  runner's failure rate counts transport failures too, and that the drill record prints each
+  recovery time against its bound.

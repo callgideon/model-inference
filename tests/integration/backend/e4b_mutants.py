@@ -144,6 +144,9 @@ E1C_BLOCKED = "test_e1c_a_remote_run_without_its_profile_or_inventory_is_blocked
 E1C_VALIDITY = "test_e1c_a_rung_whose_bench_summary_is_not_valid_fails"
 E1C_CELLS = "test_e1c_the_soak_and_overload_cells_fail_when_bench_calls_them_invalid"
 CW_STALE = "test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs"
+P18 = "test_e4c_the_p18_limits_are_the_runners_and_request_latency_p95_is_judged"
+E4C_RATE = "test_e4c_the_box_supports_only_the_declared_rate_and_soaks_at_p18s_fixed_rate"
+E4C_BURST = "test_e4c_the_overload_burst_is_p4_and_enters_through_the_public_edge_or_is_blocked"
 
 
 def _m(name, invariant, old, new, *cases, file=C, occurrences=1) -> Mutant:
@@ -234,6 +237,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("superseded_row_unmarked", "the superseded §5 row says so in place",
        "`MAX_VIDEO_SECONDS=72`. *Superseded by 5(c): the deployed cap* |",
        "`MAX_VIDEO_SECONDS=72` |", PROTOCOL, file="models/marlin2b/results/E4B-protocol.md"),
+    # --- E4C-PREP: P-18 decided (protocol amendment 6) ---------------------------------
+    _m("e2e_limit_reverted_to_provisional", "the e2e p95 per clip-minute limit is P-18's 90 s",
+       '"e2e_p95_s_per_clip_minute": 90.0,', '"e2e_p95_s_per_clip_minute": 45.0,', P18, PROTOCOL),
+    _m("request_latency_row_dropped", "each envelope rung judges request latency p95 <= 9.0 s",
+       '                                ("latency_p95", latency, CRITERIA["latency_p95_s"]),\n',
+       "", P18, RUNG),
+    _m("e4c_base_bound_off_the_soak", "the P-24 base bounds exactly the soak P-18 decided",
+       '  "max_requests": 3600,', '  "max_requests": 7200,', P18,
+       file="models/marlin2b/profiles/E4C-box.base.json"),
     _m("superseded_envelope_row_unmarked", "the superseded §4 envelope rule says so in place",
        "is refused. *Superseded by 5(c): the deployed cap (`MAX_VIDEO_SECONDS`) is the one "
        "bound, and a clip over it gets the typed refusal* |",
@@ -334,9 +346,31 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("engine_target_overload_run", "overload against an engine target is not run: it pends on the box",
        "    if not gateway:\n        report.check(\"e4b.b.overload\"",
        "    if False:\n        report.check(\"e4b.b.overload\"", CELLS),
-    _m("soak_at_the_full_rate", "the box soak runs at the declared fraction of the envelope",
-       'rate = soak.get("rate") or (supported * soak["rate_fraction"] if supported else None)',
-       'rate = soak.get("rate") or supported', CELLS),
+    _m("soak_at_the_full_rate", "the soak runs at its scale's fixed rate (box: P-18's 0.25)",
+       'rate = None if declared is not None and supported is None else soak["rate"]',
+       'rate = None if declared is not None and supported is None else supported or 1',
+       CELLS, E4C_RATE),
+    # --- E4C-PREP fix round: E4P-V1 (the declared rate) and E4P-V2 (the P4 burst) ------
+    _m("soak_without_a_supported_rate", "the box soak runs only once the declared rung passes",
+       'rate = None if declared is not None and supported is None else soak["rate"]',
+       'rate = soak["rate"]', E4C_RATE),
+    _m("declared_rate_not_applied", "the box certificate's supported rate is the declared one",
+       'declared = CRITERIA["declared_rate_per_s"] if target["scale"] == "box" else None',
+       "declared = None", E4C_RATE),
+    _m("climb_past_the_declared_rate", "a rung above the declared rate is measured, not supported",
+       "        if declared is not None and rate > declared:\n            break\n",
+       "        if False:\n            break\n", E4C_RATE),
+    _m("declared_rung_failure_accepted", "a failed declared rung supports nothing",
+       "    if chosen is None or (declared is not None and supported != declared):",
+       "    if chosen is None:", E4C_RATE),
+    _m("p4_stamp_dropped", "the overload cell is stamped P4, so bench refuses it off the edge",
+       '        profile["measurement"]["profile_class"] = "P4"', "        pass", E4C_BURST),
+    _m("box_burst_unblocked", "a box burst without a public-edge profile is BLOCKED, never run",
+       '    if not local and (edge or target["scale"] == "box"):', "    if not local and edge:",
+       E4C_BURST),
+    _m("burst_off_the_edge", "the burst runs under --overload-profile through the edge",
+       '        target = {**target, "run_profile": edge, "base_url": f"https://{host}/v1"}',
+       "        target = {**target}", E4C_BURST),
     _m("crashed_client_accepted", "a client run that did not finish cleanly fails its cell",
        '"client_exit", decide.PASS if code == 0 else decide.FAIL', '"client_exit", decide.PASS',
        CLIMB, CELLS),

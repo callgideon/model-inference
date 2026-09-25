@@ -781,8 +781,8 @@ def test_e4b_the_protocol_file_states_the_numbers_the_runner_applies():
     box = certify.MATRIX["box"]
     assert shapes["box"][0].startswith(
         ", ".join(str(r) for r in box["envelope"]["rates"]) + f" × {box['envelope']['requests']}")
-    assert f"× {box['soak']['seconds']}" in shapes["box"][1] and \
-        f"{box['soak']['sample_s']} s" in shapes["box"][1]
+    assert shapes["box"][1].startswith(f"{box['soak']['rate']} × {box['soak']['seconds']}") \
+        and f"{box['soak']['sample_s']} s" in shapes["box"][1]
     assert shapes["box"][2] == str(box["overload"]["burst"])
     assert shapes["box"][3] == (f"{box['dataset']['items']} / "
                                 f"{box['dataset']['interrupt_after']} / {box['dataset']['rate']}")
@@ -1002,7 +1002,7 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
     capped = [*ok, _attempt("over", "rejected", **typed)]
     assert {row[0]: row[1] for row in rung(capped)} == {
         "duration_cap": "pass", "bench_validity": "pass", "failure_rate": "pass", "answered": "pass", "rejections": "pass",
-        "ttft_p95_short": "pass", "e2e_p95_per_clip_minute": "pass"}
+        "ttft_p95_short": "pass", "latency_p95": "pass", "e2e_p95_per_clip_minute": "pass"}
     # the box rerun: every rung carried the over-cap clips' refusals - by design, never a
     # refusal that lowers the supported rate
     assert certify.envelope_summary([(0.5, rung(capped))]) == (certify.PASS, (), 0.5)
@@ -1043,15 +1043,37 @@ def test_e4b_an_envelope_rung_judges_the_duration_cap_apart_from_its_failures():
         assert _verdict(rung(mixed), "ttft_p95_short") == "pass", other
     slow = [_attempt("short", ttft=7.0) for _ in range(60)]
     assert _verdict(rung(slow), "ttft_p95_short") == "fail"
-    dragging = [_attempt("short", latency=8.0) for _ in range(60)]
+    dragging = [_attempt("short", latency=16.0) for _ in range(60)]     # 96 s/clip-minute
     assert _verdict(rung(dragging), "e2e_p95_per_clip_minute") == "fail"
     # box run2's e2e p95 is a measurement the release decision quotes with its p50 and count
     assert [row for row in rung(dragging) if row[0] == "e2e_p95_per_clip_minute"] == [(
         "e2e_p95_per_clip_minute", "fail",
-        "p95 48.0, p50 48.0 over 60 accepted samples (needs 60)", "BOX")]
+        "p95 96.0, p50 96.0 over 60 accepted samples (needs 60)", "BOX")]
     few = rung(ok[:10])
     assert _verdict(few, "ttft_p95_short") == _verdict(few, "e2e_p95_per_clip_minute") == \
         "unknown"
+
+
+def test_e4c_the_p18_limits_are_the_runners_and_request_latency_p95_is_judged():
+    """Oracle (P-18, decided 2026-09-25): the provisional 45 s per clip-minute left in place
+    (run3's measured 77.3 would fail a limit that is now 90), a request-latency p95 above
+    9.0 s passing a rung because no row judges it, or that row judged below the sample
+    floor; and a P-24 base profile whose request bound is not the box soak P-18 decided
+    (0.25 req/s x 14,400 s)."""
+    assert certify.CRITERIA["e2e_p95_s_per_clip_minute"] == 90.0
+    assert certify.CRITERIA["latency_p95_s"] == 9.0
+    soak = certify.MATRIX["box"]["soak"]
+    base = json.loads((certify.MARLIN / "profiles" / "E4C-box.base.json").read_text())
+    assert base["bounds"]["max_requests"] == round(soak["rate"] * soak["seconds"]) == 3600
+    clips = _clips()
+    rung = (lambda rows: certify.rung_verdicts(rows, clips, gateway=True, cap_s=CAP,
+                                               summary=VALID_CELL, local=False))
+    latency = (lambda seconds, n=60: [row[1] for row in rung(
+        [_attempt("short", latency=seconds) for _ in range(n)]) if row[0] == "latency_p95"])
+    assert (latency(9.5), latency(8.9), latency(9.5, 59)) == (["fail"], ["pass"], ["unknown"])
+    # judged beside the TTFT row, so a failing latency fails the envelope's chosen rung
+    slow = rung([_attempt("short", latency=9.5) for _ in range(60)])
+    assert certify.envelope_summary([(0.5, slow)])[0] == certify.FAIL
 
 
 def test_e4b_a_box_rung_is_sized_to_hold_enough_short_clips_for_its_ttft_p95():
@@ -1252,7 +1274,8 @@ def test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_j
     assert [name for name, *_ in seen] == [
         *(f"envelope-r{rate}-raw.jsonl" for rate in box["envelope"]["rates"]), "soak-raw.jsonl",
         "overload-raw.jsonl"]
-    assert seen[-2][1] == box["envelope"]["rates"][-1] * box["soak"]["rate_fraction"]
+    assert seen[-2][1:] == (box["soak"]["rate"],
+                            round(box["soak"]["rate"] * box["soak"]["seconds"]))
     assert seen[-1][2] == box["overload"]["burst"]
     assert {requests for name, _, requests in seen if name.startswith("envelope")} == {
         certify.rung_requests(box["envelope"]["requests"], "full")}
@@ -1738,6 +1761,142 @@ def test_cw_a_reused_workdir_never_lends_a_refused_cell_its_old_outputs(tmp_path
     assert not (tmp_path / "overload-raw.jsonl").exists()
     overload = report.stages[-1]["detail"]
     assert "the bench client exited 2" in overload, overload
+
+
+# ------------------------------------------------------------------ E4C-PREP fix round
+
+def _e4c_box(tmp_path, monkeypatch, **extra):
+    """A box target (the gateway's loopback port) on the committed E4C base profile with its
+    FILL values frozen, and the key inventory its test key passes."""
+    import argparse
+    profile = json.loads((certify.MARLIN / "profiles" / "E4C-box.base.json").read_text())
+    profile["identity"].update(source_sha="c" * 40, deployed_sha="d" * 40,
+                               migration_version="0025", config_version="cfg-1",
+                               **{k: "sha256:" + "0" * 64 for k in (
+                                   "image_digest", "weights_sha256", "processor_sha256")})
+    profile["target"].update(allowed_fault_targets=["marlin2b-vllm"], maintenance_window="mw-1")
+    assert "FILL" not in json.dumps(profile)
+    base, inventory = tmp_path / "e4c-base.json", tmp_path / "keys.json"
+    base.write_text(json.dumps(profile))
+    inventory.write_text(json.dumps({"active_key_id_prefixes": ["142c7d81"]}))
+    monkeypatch.setattr(certify, "published_release",
+                        lambda: {"requested_model": "nemostation/marlin-2b"})
+    return certify.remote_target(argparse.Namespace(
+        target="http://127.0.0.1:8001/v1", engine_url="http://127.0.0.1:8000", scale="box",
+        run_profile=base, key_inventory=inventory, **extra))
+
+
+def _fake_cells(monkeypatch, calls, failing=()):
+    """A client that answers every cell: 20 short accepted rows (a burst: one accepted, one
+    honest 429) and a VALID summary, or exit 2 and nothing for a cell named in `failing`."""
+    def fake_client(argv, env=None):
+        raw = Path(argv[argv.index("--raw") + 1])
+        calls[raw.name] = argv
+        if raw.name.replace("-raw.jsonl", "") in failing:
+            return {"exit": 2, "tail": ""}
+        rows = [dict(_attempt("c039-bbb1080p30-1080-square"), send_s=i) for i in range(20)]
+        if raw.name.startswith("overload"):
+            rows = rows[:1] + [_attempt("c039-bbb1080p30-1080-square", "rejected", status=429,
+                                        code="rate_limited", retry=1.0)]
+        raw.write_text("".join(json.dumps({**r, "item_key": f"k{i}"}) + "\n"
+                               for i, r in enumerate(rows)))
+        Path(argv[argv.index("--out") + 1]).write_text(json.dumps(VALID_CELL) + "\n")
+        return {"exit": 0, "tail": ""}
+    monkeypatch.setattr(certify, "client", fake_client)
+
+
+def _validate_only(argv):
+    """bench's own --validate-only on a cell's exact argv (no request leaves)."""
+    import subprocess
+    env = {k: v for k, v in certify.os.environ.items() if k not in certify.bench.KEY_ENV}
+    done = subprocess.run([*argv, "--validate-only"], cwd=certify.harness.REPO_ROOT, env=env,
+                          capture_output=True, text=True, timeout=120)
+    return done.returncode, json.loads(done.stdout or "{}")
+
+
+def test_e4c_the_box_supports_only_the_declared_rate_and_soaks_at_p18s_fixed_rate(
+        tmp_path, monkeypatch):
+    """Oracle (E4P-V1, P-18: "supported 0.5 req/s; 1.0 and 2.0 measured but not supported;
+    soak 14,400 s at 0.25 req/s"): a box ladder whose higher rungs also pass reporting 1.0 or
+    2.0 as supported, judging the P-18 rows at a higher rung, deriving the soak from it
+    (7,200+ requests: over the P-24 bound), a 3,600-request soak the base profile refuses,
+    or a soak run when the declared rung fails."""
+    assert certify.CRITERIA["declared_rate_per_s"] == 0.5
+    assert certify.MATRIX["box"]["soak"]["rate"] == 0.25
+    good = [("failure_rate", "pass", "", "BOX"), ("rejections", "pass", "", "BOX"),
+            ("latency_p95", "pass", "", "BOX")]
+    slow, bad = [*good[:2], ("latency_p95", "fail", "", "BOX")], [
+        ("failure_rate", "fail", "", "BOX"), *good[1:]]
+    # the certificate judges the declared rung; a slower higher rung is measured, not judged
+    assert certify.envelope_summary([(0.5, good), (1.0, slow), (2.0, good)], 0.5) == (
+        certify.PASS, (), 0.5)
+    assert certify.envelope_summary([(0.5, good), (1.0, slow)])[0] == certify.FAIL  # undeclared
+    assert certify.envelope_summary([(0.5, good), (1.0, slow)], 0.5)[0] == certify.PASS
+    assert certify.envelope_summary([(0.5, slow), (1.0, good)], 0.5)[0] == certify.FAIL
+    assert certify.envelope_summary([(0.25, good), (0.5, bad)], 0.5) == (certify.FAIL, (), None)
+    # a replay of the box ladder where every rung passes: supported 0.5, soak 0.25 x 14,400
+    box, calls = _e4c_box(tmp_path, monkeypatch), {}
+    _fake_cells(monkeypatch, calls)
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    cells = {e["stage"]: e for e in report.stages}
+    envelope = cells["e4b.b.envelope"]["detail"]
+    assert (envelope["supported_rate_per_s"], envelope["measured_passing_rate_per_s"]) == (
+        0.5, 2.0), envelope
+    soak = calls["soak-raw.jsonl"]
+    assert (soak[soak.index("--rate") + 1], soak[soak.index("--requests") + 1]) == (
+        "0.25", "3600")
+    assert cells["e4b.b.soak"]["detail"]["rate_per_s"] == 0.25
+    code, verdict = _validate_only(soak)                  # the base profile admits that soak
+    assert code == 0 and verdict["runnable"], verdict
+    assert Decimal(verdict["derived"]["projected_spend"]) == Decimal("48660.48"), verdict
+    # the declared rung fails: nothing is supported and the soak never runs
+    calls.clear()
+    _fake_cells(monkeypatch, calls, failing=("envelope-r0.5",))
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    cells = {e["stage"]: e for e in report.stages}
+    assert cells["e4b.b.envelope"]["status"] == certify.FAIL
+    assert (cells["e4b.b.soak"]["status"], cells["e4b.b.soak"]["detail"]) == (
+        certify.FAIL, "no supported envelope rate to soak at")
+    assert "soak-raw.jsonl" not in calls
+
+
+def test_e4c_the_overload_burst_is_p4_and_enters_through_the_public_edge_or_is_blocked(
+        tmp_path, monkeypatch):
+    """Oracle (E4P-V2; S3 F5, E1B-protocol rule 11): the overload cell validating as a P1
+    cell through the direct gateway, a box run with no public-edge profile running (or
+    passing) the burst anyway, or an --overload-profile the burst does not run under."""
+    box, calls = _e4c_box(tmp_path, monkeypatch), {}
+    _fake_cells(monkeypatch, calls)
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    over = report.stages[-1]
+    assert (over["stage"], over["status"], over["owners"]) == (
+        "e4b.b.overload", certify.PENDING, ["PROFILE"]), over
+    assert over["detail"].startswith("BLOCKED") and "--overload-profile" in over["detail"]
+    assert "overload-raw.jsonl" not in calls
+    # stamped P4, the direct-gateway base is refused by bench itself: never a silent P1
+    direct = certify.bench_argv(box, tmp_path, "overload", rate=1000.0, requests=32,
+                                dataset_version="v", extra=("--burst", "32"))
+    code, verdict = _validate_only(direct)
+    assert code == 2 and any(e.startswith("P4 overload must enter through the public edge")
+                             for e in verdict["errors"]), verdict
+    # with a public-edge profile the burst runs through the edge, under that profile, as P4
+    edge = json.loads(Path(box["run_profile"]).read_text())
+    edge["target"].update(path="public-edge", allowlist=["marlin2b.callbill.ai"])
+    (tmp_path / "edge.json").write_text(json.dumps(edge))
+    box = _e4c_box(tmp_path, monkeypatch, overload_profile=tmp_path / "edge.json")
+    report = certify.Report(box)
+    certify.load_cells(report, box, tmp_path, None, CAP)
+    assert report.stages[-1]["status"] == certify.PASS, report.stages[-1]
+    burst = calls["overload-raw.jsonl"]
+    assert burst[burst.index("--base-url") + 1] == "https://marlin2b.callbill.ai/v1"
+    stamped = json.loads(Path(burst[burst.index("--profile") + 1]).read_text())
+    assert (stamped["measurement"]["profile_class"], stamped["target"]["path"]) == (
+        "P4", "public-edge")
+    code, verdict = _validate_only(burst)
+    assert code == 0 and verdict["runnable"], verdict
 
 
 if __name__ == "__main__":
