@@ -2019,6 +2019,15 @@
       "blocks": [
         "E4C"
       ]
+    },
+    {
+      "id": "P-26",
+      "status": "open",
+      "what": "Key revocation during an identity-source outage: a key cached before the outage is served past KEY_TTL (60 s) until PostgREST answers again; decide bounded staleness (state it in the U2/A3 copy) vs fail-closed 503s (G7 verification / G8 0-G8-R3)",
+      "owner": "user/product; G7 implements",
+      "blocks": [
+        "E4C"
+      ]
     }
   ],
   "activity_log": [
