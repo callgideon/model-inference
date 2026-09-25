@@ -146,6 +146,16 @@ export function grantLine(wallet: CreditWallet): string {
     : `One-time signup grant of 10,000 credits, received ${instantLabel(wallet.signupGrantedAt)}.`;
 }
 
+/**
+ * The console sidebar's figure (WR-2, applied by the coordinator in `app/(console)/layout.tsx`): the
+ * wallet's exact available credits, "No credits yet" before the grant, or `null` when the wallet
+ * could not be read — the sidebar's own "unavailable" copy, never a zero.
+ */
+export function sidebarCredits(wallet: Result<CreditWallet | null>): string | null {
+  if (!wallet.ok) return null;
+  return wallet.value === null ? "No credits yet" : credits(wallet.value.available);
+}
+
 export type CreditCardModel = {
   /** Empty when there is no wallet: a new account is not three zeroes. */
   figures: CreditFigure[];

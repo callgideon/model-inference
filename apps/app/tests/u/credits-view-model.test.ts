@@ -21,6 +21,7 @@ import {
   creditsPageModel,
   ledgerEntryView,
   legacyUsdState,
+  sidebarCredits,
 } from "../../app/(console)/billing/credit-view-model.ts";
 
 const WALLET = "a1000000-0000-4000-8000-00000000000a";
@@ -57,6 +58,7 @@ const T = {
   ledger: "U1R-B06 every ledger kind renders signed in credits, a debit links to its request, no principal is shown",
   legacy: "U1R-B07 legacy USD is a separate USD section when history exists, and an error is not an empty history",
   page: "U1R-B08 the page model walks the ledger on its own cursors and states every branch",
+  sidebar: "U1R-B09 the sidebar figure is the wallet's exact available credits, never dollars, and a failed read is null",
 };
 
 test(T.figures, () => {
@@ -208,4 +210,14 @@ test(T.page, () => {
   // A failed ledger read is an error with its recovery, never an empty ledger.
   const broken = creditsPageModel({ state: { cursor: null, trail: [] }, wallet: ok(wallet("1.00000000", "0.00000000")), creditsIn: ok("1.00000000" as Credit), ledger: down(), legacy: null });
   assert.ok(broken.ledger.kind === "error" && broken.ledger.recovery === "retry");
+});
+
+// WR-2: the console layout's sidebar figure. Failure oracle: the v1 sidebar showed the org's legacy
+// USD `$` balance next to a link to this CREDIT page; a failed read must stay `null` (the sidebar's
+// "unavailable" copy), never a zero or a dollar figure.
+test(T.sidebar, () => {
+  assert.equal(sidebarCredits(ok(wallet("9987.65432100", "12.00000000"))), "9,975.654321 credits");
+  assert.equal(sidebarCredits(ok(null)), "No credits yet");
+  assert.equal(sidebarCredits(down()), null);
+  assert.doesNotMatch(String(sidebarCredits(ok(wallet("0.00000000", "0.00000000")))), /\$|USD/);
 });

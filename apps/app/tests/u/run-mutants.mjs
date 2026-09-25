@@ -106,6 +106,7 @@ const T = {
   uWindow: "U1R-U05 the date window is cut on the ordered stream at its inclusive start, and ends the walk",
   uHrefs: "U1R-U06 every href is computed here: pages, window changes reset the cursor, rows link to their detail",
   uWalk: "U1R-U08 walking every page visits each job once, and the totals equal the wallet's spent and reserved",
+  bSidebar: "U1R-B09 the sidebar figure is the wallet's exact available credits, never dollars, and a failed read is null",
   gGate: "U1R-G01 the CREDIT fixture gate opens only on an explicit development opt-in",
   gSource: "U1R-G02 with the gate closed the pages get the real session reads, never the fixture",
   gBuild: "U1R-G03 a production build never serves the CREDIT fixture whatever environment it is handed",
@@ -739,6 +740,12 @@ const MUTANTS = [
     find: "  return consoleContext(env) !== null;", replace: "  return true;", cases: [T.gGate] },
   { id: "U1R-M31", what: "the fixture is chosen whatever the gate says (reviewer P2)", file: SOURCE,
     find: "  if (previewAllowed(env)) {", replace: "  if (true) {", cases: [T.gSource, T.gBuild] },
+  // Fix round (1-U1R-V02 / WR-2): the sidebar figure the layout will render.
+  { id: "U1R-M32", what: "a failed wallet read shows zero credits in the sidebar", file: CREDITS,
+    find: "  if (!wallet.ok) return null;", replace: "  if (!wallet.ok) return credits(\"0\");", cases: [T.bSidebar] },
+  { id: "U1R-M33", what: "the sidebar shows the balance, ignoring holds", file: CREDITS,
+    find: "? \"No credits yet\" : credits(wallet.value.available);", replace: "? \"No credits yet\" : credits(wallet.value.ledgerTotal);",
+    cases: [T.bSidebar] },
 ];
 
 /**
