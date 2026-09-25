@@ -1,0 +1,30 @@
+{
+  "task": "M6",
+  "lane": "M6",
+  "slice": "phase 2 fix round: R1 prepared row-before-bytes proven; R3/R4/A2 pins hold on get, pin and evict; R2/A1 refetch race pinned as strict xfail (WR-7); A3 ruling, A4/A5 wiring",
+  "activity": "review",
+  "at": "2026-09-25T17:12:10Z",
+  "head": "dea32507",
+  "base": "bd556c5f",
+  "worktree": ".claude/worktrees/codex-m6-phase2",
+  "branch": "codex/m6-phase2",
+  "owned_paths": ["apps/infrx-api/infrx/media/prepare.py", "apps/infrx-api/tests/m/", "research/plan/evidence/m/M6-phase2-5a02791.md", "research/plan/evidence/coordinator/updates/M6-20260925T1712Z.json"],
+  "isolation": {"ports": "postgres 55444 (INFRX_D_TASK=m6)", "prefix": "infrx-m6-", "db": "infrx_m6*"},
+  "findings": {"fixed": ["0-M6P2-R1", "0-M6P2-R3", "0-M6P2-R4", "2-M6P2-A2"], "not_fixed": {"0-M6P2-R2": "WR-7 (D10 SQL + F2C fake); strict xfail on f2c+d10", "2-M6P2-A1": "WR-7, same race", "2-M6P2-A3": "ruling amendment R114 + WR-8", "2-M6P2-A4": "WR-1+WR-2 together, P-25", "2-M6P2-A5": "WR-3 amended (s06 set_clock)"}},
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q -rxXs tests/m", "exit": 0, "summary": "539 passed, 27 skipped, 2 xfailed"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py", "exit": 0, "summary": "43 passed: 42/42 M6 mutants killed (4 new)"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py tests/g/uploads", "exit": 0, "summary": "98 passed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/v2/test_lifecycle.py tests/g/uploads tests/g/jobs/test_jobs.py tests/g/test_relay_matrix.py", "exit": 0, "summary": "166 passed"},
+    {"cmd": "INFRX_M6_ORACLE=local_only INFRX_D_TASK=m6 uv run --frozen pytest -q tests/m/test_retention.py", "exit": 1, "summary": "66 failed, 9 passed (+2 = strict-xfail XPASS)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 1, "summary": "1 error: doc 21 gc.py link (WR-6)"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 2, "pessimistic_h": 5, "confidence": "medium", "basis": "lane code complete; remaining is WR-1/2/3/7 composition outside the lane, the R114 ruling, and P-25", "at": "2026-09-25T17:12:10Z"},
+  "blockers": ["P-25 unresolved", "WR-3 (E3C world.py + s06 clock) gates the merge", "WR-7 (D10 register refresh) for the refetch race", "R114 amendment"],
+  "wiring_requests": [
+    "WR-7 D10 0019 register_content + F2C fake: a written re-registration of a live same-digest key sets eligible_at = greatest(eligible_at, now()+grace); proof: drop xfail on test_a_source_fetched_again_is_not_collected_before_its_admission",
+    "WR-8 D10: implement or delete the 0019 'not before the claim that deleted it has lapsed' comment",
+    "WR-3 amended: s06-live/dark call world.set_clock past grace before collectors"
+  ],
+  "evidence": ["research/plan/evidence/m/M6-phase2-5a02791.md"]
+}
