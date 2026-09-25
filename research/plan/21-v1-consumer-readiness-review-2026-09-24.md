@@ -81,7 +81,7 @@ The implemented runtime stages normalized request payloads and source/prepared m
 
 ### RV-03 — P1: retention is not operational; simply starting the collector is unsafe
 
-Neither gateway nor worker lifetime starts [`MediaCollector`](../../apps/infrx-api/infrx/media/gc.py). Its liveness scan enumerates only `store.by_job` and `prepared_by_job`, not durable job/media references. A fresh process therefore knows nothing about another process's live objects. The upload destination sweep also uses only local upload records.
+Neither gateway nor worker lifetime starts `MediaCollector` (`infrx/media/gc.py` at bd556c5f, retired by M6 phase 2; its successor is [`RetentionCollector`](../../apps/infrx-api/infrx/media/retention.py)). Its liveness scan enumerates only `store.by_job` and `prepared_by_job`, not durable job/media references. A fresh process therefore knows nothing about another process's live objects. The upload destination sweep also uses only local upload records.
 
 **Reproduced with shared in-memory object storage:** a reconstructed store and collector deleted the source after the grace interval without making any live-job or durable-attachment query. This demonstrates the missing durable scan; it is not a claim that production deleted an active customer's object. Production currently does not schedule this collector.
 
