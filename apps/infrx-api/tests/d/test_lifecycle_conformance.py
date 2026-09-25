@@ -85,6 +85,25 @@ def _representation(value):
     return out
 
 
+def _canonical(steps):
+    """`_representation`, then the transcript's `<kind:N>` placeholders renumbered by first
+    appearance: class (5) drops events whose ids the recorder had already numbered, which
+    would otherwise shift every later id of the case."""
+    import re
+    text = json.dumps(_representation(steps), sort_keys=True)
+    seen: dict[str, str] = {}
+    counters: dict[str, int] = {}
+
+    def renumber(match):
+        token = match.group(0)
+        if token not in seen:
+            kind = match.group(1)
+            counters[kind] = counters.get(kind, 0) + 1
+            seen[token] = f"<{kind}:{counters[kind]}>"
+        return seen[token]
+    return re.sub(r"<(\w+):(\d+)>", renumber, text)
+
+
 def test_the_versioned_acceptance_transcripts_replay_exactly() -> None:
     """F2C.d: `fixtures/acceptance/lifecycle.json` (24 cases) recorded by the REAL adapter
     with the transcript's windows and compared step by step, relative instants included:
@@ -94,7 +113,7 @@ def test_the_versioned_acceptance_transcripts_replay_exactly() -> None:
     expected, got = acceptance.committed(), acceptance.record(factory)
     assert expected["version"] == acceptance.VERSION
     problems = [name for name, steps in expected["cases"].items()
-                if _representation(steps) != _representation(got["cases"].get(name))]
+                if _canonical(steps) != _canonical(got["cases"].get(name))]
     raw = sum(steps != got["cases"].get(name) for name, steps in expected["cases"].items())
     assert problems == [], problems
     print(f"{len(expected['cases'])} transcripts replayed exactly after normalization "
