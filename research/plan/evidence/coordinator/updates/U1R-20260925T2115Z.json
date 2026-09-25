@@ -1,0 +1,13 @@
+{
+  "task": "U1R",
+  "lane": "U1R",
+  "slice": "CREDIT usage and balance views (lane start)",
+  "activity": "running",
+  "at": "2026-09-25T21:15:00Z",
+  "head": "46776646",
+  "base": "46776646",
+  "worktree": ".claude/worktrees/codex-app-u1r",
+  "branch": "codex/app-u1r",
+  "isolation": {"ports": "postgres 55457 (INFRX_D_TASK=app-u1r)", "prefix": "infrx-app-u1r-", "db": "infrx_app-u1r_credit"},
+  "blockers": []
+}
