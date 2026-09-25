@@ -169,11 +169,12 @@ class ProcessingCache:
     """
 
     def __init__(self, root: str, *, ttl_s: float = DEFAULTS.processing_cache_ttl_s,
-                 clock=time.time, max_bytes: int | None = None) -> None:
+                 clock=time.time, max_bytes: int | None = None, metrics=None) -> None:
         self.root = os.path.abspath(root) if root else ""
         self.ttl_s = ttl_s
         self.clock = clock
         self.max_bytes = max_bytes
+        self.metrics = metrics          # observe.metrics.Registry (WR-I8-M6-1), or None
         self.entries: dict[tuple[str, str, str], CacheEntry] = Recent()
 
     @property
@@ -293,6 +294,8 @@ class ProcessingCache:
             if (now - mtime >= life or mtime > now + FUTURE_MTIME_SLACK_S) \
                     and self._evict_file(path):
                 removed += 1
+                if self.metrics is not None:
+                    self.metrics.inc("infrx_processing_cache_evicted_total", reason="expired")
         return removed
 
     def _make_room(self, incoming: int, *, keep: str) -> None:
@@ -311,7 +314,11 @@ class ProcessingCache:
                 break
             if self._evict_file(path):
                 total -= size
+                if self.metrics is not None:
+                    self.metrics.inc("infrx_processing_cache_evicted_total", reason="high_water")
         if total + incoming > self.max_bytes:
+            if self.metrics is not None:
+                self.metrics.inc("infrx_processing_cache_refused_total")
             raise errors.DependencyUnavailable(
                 "the processing cache is full of media in use", retry_after_s=30)
 

@@ -200,10 +200,11 @@ class PgTransition:
             async with conn.transaction():
                 await conn.execute(f"set local lock_timeout = {ms}")
                 await conn.execute(f"set local statement_timeout = {ms + STATEMENT_MARGIN_MS}")
-                row = await (await conn.execute(
-                    "update infrx.feature_flags set enabled = %s, updated_by = %s, reason = %s, "
-                    "updated_at = infrx.now() where name = %s and enabled <> %s returning name",
-                    (enabled, actor[:200], reason[:500], name, enabled))).fetchone()
+                # V-G8TL-2 (D10 0022): EXCLUSIVE table lock, then the guarded UPDATE - fair
+                # against a stream of FOR SHARE admissions; bounded by the SET LOCALs above.
+                (changed,) = await (await conn.execute(
+                    "select infrx.set_feature_flag(%s, %s, %s, %s)",
+                    (name, enabled, actor, reason))).fetchone()
         except Exception as exc:
             # lock_not_available, query_canceled (the statement bound)
             if getattr(exc, "sqlstate", None) in ("55P03", "57014"):
@@ -211,7 +212,7 @@ class PgTransition:
             raise
         finally:
             await conn.close()
-        return row is not None
+        return changed
 
 
 def shape(raw: dict, alias: str) -> dict:

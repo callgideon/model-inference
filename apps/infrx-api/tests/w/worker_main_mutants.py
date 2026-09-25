@@ -41,6 +41,13 @@ UNREACHABLE = "test_worker_main_pg__an_unreachable_database_refuses_before_readi
 PILOT_BOX = "test_worker_main__the_pilot_box_runs_the_real_entry_point"
 PILOT_BOX_PG = "test_worker_main_pg__the_pilot_box_starts_the_real_worker_and_waits_for_it"
 PB = "../../../tests/integration/backend/pilotbox.py"      # E3B's pilot box, from `infrx/`
+ENGINE = "worker/engine.py"
+OWNER = "test_worker_main__the_worker_is_the_one_owner_of_housekeeping"
+KEEPER = "test_worker_main__the_keeper_never_removes_an_input_the_engine_is_reading"
+GONE = "test_worker_main__a_gone_input_is_prepared_again_once_then_refused"
+EXITS = "test_worker_main__every_exit_path_releases_every_pin"
+EVERY = "test_worker_main__a_housekeeping_loop_outlives_a_failed_step"
+RELEASE = "                stream.pins.close()\n                # Every exit path"
 
 MUTANTS = (
     _m("main_validate_runtime_skipped", "the worker refuses what the gateway refuses (R44)",
@@ -64,10 +71,10 @@ MUTANTS = (
              "else store\n", "    jobs = store\n", COMPOSITION),
     _m("main_local_uri_without_the_shared_cache",
        "local_uri resolves through the shared processing cache (M's pilot request)",
-       MAIN, "    media = MediaPreparation(objects, limits=limits,\n"
-             "                             cache=ProcessingCache(root, "
-             "ttl_s=limits.processing_cache_ttl_s))\n",
-       "    media = MediaPreparation(objects, limits=limits)\n", LOCAL_URI),
+       MAIN, "                             cache=ProcessingCache(root, "
+             "ttl_s=limits.processing_cache_ttl_s,\n",
+       "                             cache=ProcessingCache(__import__('tempfile').mkdtemp(), "
+       "ttl_s=limits.processing_cache_ttl_s,\n", LOCAL_URI),
     _m("main_build_info_from_git", "the build gauge is the installed setting, never git",
        PILOT, 'rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,',
        'rt.metrics.set("infrx_build_info", 1, revision=__import__("subprocess").run('
@@ -84,6 +91,80 @@ MUTANTS = (
              "        return REFUSED\n",
        '        print(f"infrx.worker: refusing to start: {refused}", file=sys.stderr)\n'
        "        return 0\n", PROCESS),
+    # --- M6-WIRING: the one owner of housekeeping (wiring 1 + E3C F-4) -------------------
+    _m("main_retention_not_scheduled", "the worker runs the retention collector",
+       MAIN, '        "retention": lambda: collector.run(deployment.retention_interval_s, '
+             'metrics=metrics),\n', "", OWNER),
+    _m("main_retention_unrecorded", "the collector records its passes on the worker registry",
+       MAIN, "collector.run(deployment.retention_interval_s, metrics=metrics)",
+       "collector.run(deployment.retention_interval_s)", OWNER),
+    _m("main_journal_never_pruned", "the worker prunes the stream journal (F-4)",
+       MAIN, '        "journal_expire": lambda: every(', '        "journal_expire_": lambda: every(',
+       OWNER),
+    _m("main_journal_prune_one_call", "one prune pass drains everything past its TTL",
+       MAIN, "    while found := await journal.expire():", "    if found := await journal.expire():",
+       OWNER),
+    _m("main_content_unregistered", "prepared artifacts register with the worker's lifecycle",
+       MAIN, "media = MediaPreparation(objects, limits=limits, content=lifecycle,",
+       "media = MediaPreparation(objects, limits=limits,", OWNER),
+    _m("main_cache_unbounded", "the cache's high water is PROCESSING_CACHE_MAX_BYTES",
+       MAIN, "max_bytes=deployment.processing_cache_max_bytes,", "max_bytes=None,", OWNER),
+    _m("main_housekeeping_started_twice", "exactly one task per housekeeping loop",
+       SERVICE, "for name, loop in self.housekeeping.items()]",
+       "for name, loop in [*self.housekeeping.items()] * 2]", OWNER),
+    _m("main_housekeeping_outlives_the_drain", "housekeeping is cancelled with the service",
+       SERVICE, "        for task in (self._reaper, *self._housekeeping):",
+       "        for task in (self._reaper,):", OWNER),
+    # --- M6-WIRING: the engine holds its inputs (wiring 2) ---------------------------------
+    _m("engine_media_not_pinned", "the engine pins every input from submit to terminal",
+       ENGINE, "        await self._hold_media(stream)                   # released by `_generate`\n",
+       "", KEEPER, GONE),
+    _m("engine_pin_never_released", "a terminal attempt releases its pins",
+       ENGINE, RELEASE, "                # Every exit path", KEEPER, EXITS),
+    # --- M6-WIRING fix round (0-M6W-C1..C6) ------------------------------------------------
+    _m("engine_pins_released_on_success_only", "every exit path releases the pins (C1)",
+       ENGINE, RELEASE, "                stream.pins.close() if stream.complete else None\n"
+                        "                # Every exit path", EXITS),
+    _m("engine_close_raising_leaks_the_pins", "a close that raises still releases (C3)",
+       ENGINE, "            try:\n                await inner.aclose()\n            finally:\n",
+       "            await inner.aclose()\n            if True:\n", EXITS),
+    _m("engine_pins_released_before_the_upstream_close",
+       "the pins outlive the upstream response (C3)",
+       ENGINE, "            try:\n                await inner.aclose()\n",
+       "            stream.pins.close()\n            try:\n                await inner.aclose()\n",
+       EXITS),
+    _m("engine_only_the_first_input_pinned", "every file:// input of a request is pinned (C5)",
+       ENGINE, "                for ref in videos:\n                    uri = str(self.local_uri(ref))",
+       "                for ref in videos[:1]:\n                    uri = str(self.local_uri(ref))",
+       EXITS),
+    _m("engine_reprepare_for_another_job", "a gone input is prepared for the attempt's job (C4)",
+       ENGINE, "await self.reprepare(stream.lease.job_id, videos[0].profile_version)",
+       "await self.reprepare(str(__import__('uuid').uuid4()), videos[0].profile_version)",
+       GONE),
+    _m("main_housekeeping_loop_dies_on_a_failed_step",
+       "a failed step does not end a housekeeping loop (C2)",
+       MAIN, "        try:\n            await step()\n        except Exception:\n"
+             '            log.exception("%s failed", what)\n', "        await step()\n", EVERY),
+    _m("main_housekeeping_loop_stops_after_a_failure",
+       "a housekeeping loop runs on after a failed step (C2)",
+       MAIN, '            log.exception("%s failed", what)\n',
+       '            log.exception("%s failed", what)\n            return\n', EVERY),
+    _m("main_housekeeping_cancelled_before_the_drain",
+       "housekeeping runs until the in-flight attempts have drained (C6)",
+       SERVICE, "        report = await self.loop.drain(bound)\n",
+       "        for task in self._housekeeping:\n            task.cancel()\n"
+       "        report = await self.loop.drain(bound)\n", OWNER),
+    _m("main_engine_unpinned", "the composed engine pins through the composed cache",
+       MAIN, "pin=media.cache.pin, reprepare=", "pin=None, reprepare=", KEEPER, OWNER),
+    _m("engine_gone_input_refused_at_once", "a gone input is prepared again once",
+       ENGINE, "                if again or self.reprepare is None:", "                if True:",
+       GONE),
+    _m("engine_gone_input_prepared_forever", "a gone input is prepared again only once",
+       ENGINE, "        for again in (False, True):", "        for again in (False, False, True):",
+       GONE),
+    _m("main_reprepare_keeps_the_job_map", "re-preparation leaves no per-job entry behind",
+       MAIN, "        media.prepared_by_job.pop(job_id, None)   # nothing in this process reads it (F3)\n",
+       "", GONE),
     # item 3: E3B's pilot box runs the real entry point
     _m("pilotbox_worker_emulated", "the pilot box's worker process is python -m infrx.worker",
        PB, '        if role == "worker":\n', "        if False:\n", PILOT_BOX),

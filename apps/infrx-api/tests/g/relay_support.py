@@ -18,11 +18,13 @@ import httpx
 
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.factories import credit_jobstore_factory
+from infrx.contracts.fakes.lifecycle import FakeLifecycle
 from infrx.contracts.fakes.state import FakeJobStore, FakeStreamStore
 from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, JobState,
                                      SettlementState, TerminalCause, TerminalOutcome, Usage)
+from infrx.contracts.v2.lifecycle import AdmissionExpectation
 from infrx.media.fetch import MediaFetcher
 from infrx.media.probe import Probed
 from infrx.media.store import InMemoryObjectStore
@@ -78,6 +80,10 @@ class World:
     grant: str = "100"
     # The app's `Settings` (G7: `/v1/models` projects them); None is `support.settings()`.
     config: Any = None
+    # W5 wiring 4: compose D10's `ReadinessStore` (the fake) as the pilot does - admissions
+    # through `admit_ready`, uploads/content through it, preparation claimed behind its
+    # marker. False keeps the pre-D10 `jobs.admit` door these cases were written against.
+    readiness: bool = False
 
     def __post_init__(self) -> None:
         if self.regime == CREDIT:
@@ -85,6 +91,7 @@ class World:
             self.clock, self.jobs = harness.clock, harness.port
             self.stream = harness.extra["stream"]
             self.jobs.failures = self.stream.failures = self.failures
+            self.ids = harness.ids
             self.catalog = support.catalog()
             self.jobs.catalog = self.catalog          # one catalog for ingress and store
             self.row, self.org = CONSUMER_ROW, IDS.consumer_org
@@ -101,6 +108,8 @@ class World:
             self.catalog = support.catalog()
             self.row, self.org, self.card = support.ROW, support.ORG, ""
             self.jobs.grant(self.org, self.grant)
+        self.lifecycle = FakeLifecycle(self.jobs, self.clock, self.ids) \
+            if self.readiness else None
         self.results: dict[str, str] = {}
         self.objects = Objects()
         self.naps = 0
@@ -113,16 +122,26 @@ class World:
         process after a restart."""
         self.relay = Relay(jobs=self.jobs, stream=self.stream, media=None, regime=self.regime,
                            catalog=self.catalog, active_rate_card_version=self.card,
-                           results=self, limits=self.limits, clock=self.now_s, sleep=self.nap)
+                           results=self, limits=self.limits, clock=self.now_s, sleep=self.nap,
+                           readiness=self.lifecycle, expectation=self.expectation())
         fetcher = MediaFetcher(self.limits, resolve=self._resolve, transport=clip_transport())
         self.media = MediaUploads(self.objects, limits=self.limits, fetcher=fetcher,
-                                  probe=probe, job_org=self.relay.job_org)
+                                  probe=probe, job_org=self.relay.job_org,
+                                  uploads=self.lifecycle, content=self.lifecycle)
         self.relay.media = self.media
         # `PgJobStore.db_now` (the store clock every expiry is judged on), over the fake's.
         self.jobs.db_now = self.db_now
         self.app, _ = support.cutover_app(
             self.config, clock=self.now_s, sb=support.supabase(rows=(self.row,)),
             ingress_deps=support.deps(accept=self.relay.accept, catalog=self.catalog))
+
+    def expectation(self) -> AdmissionExpectation | None:
+        """What `pilot.admission_readiness` derives: this regime, CREDIT's approved card."""
+        if self.lifecycle is None:
+            return None
+        return AdmissionExpectation(accounting_regime=self.regime,
+                                    rate_card_version=self.card if self.regime == CREDIT
+                                    else None)
 
     @staticmethod
     async def _resolve(host):
@@ -169,7 +188,9 @@ class World:
     async def prepare(self, job_id: str | None = None) -> str:
         """M's preparation worker: the fenced preparation lease, `prepare`, `prepared`."""
         job_id = job_id or self.only_job().id
-        lease = await self.jobs.claim_preparation(job_id, "prep-a")
+        # Behind the marker when a readiness store is composed (W5's barrier).
+        claims = self.lifecycle if self.lifecycle is not None else self.jobs
+        lease = await claims.claim_preparation(job_id, "prep-a")
         await self.jobs.prepared(lease, await self.media.prepare(job_id, "v1"))
         return job_id
 

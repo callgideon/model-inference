@@ -1,0 +1,35 @@
+{
+  "task": "M6",
+  "lane": "M6-WIRING",
+  "slice": "M6 wiring 1+2 (worker owns retention/cache keeper, engine pins inputs), WR-I8-M6-1 metrics + dashboard row move, E3C F-4 journal prune; add-on R6 X6/X7/X11/X17/X19 + R5 note",
+  "activity": "review",
+  "at": "2026-09-25T19:10:00Z",
+  "head": "2ae944f5",
+  "base": "4959e10c",
+  "worktree": ".claude/worktrees/codex-m6-wiring",
+  "branch": "codex/m6-wiring",
+  "owned_paths": ["apps/infrx-api/infrx/worker/", "apps/infrx-api/infrx/media/retention.py", "apps/infrx-api/infrx/media/prepare.py", "apps/infrx-api/infrx/observe/metrics.py", "apps/infrx-api/infrx/config.py", "infra/alerts/dashboard.json", "apps/infrx-api/tests/w/", "apps/infrx-api/tests/m/", "apps/infrx-api/tests/i/test_observe.py", "research/plan/evidence/m/", "research/plan/evidence/coordinator/updates/"],
+  "also_touched": {"apps/infrx-api/deploy/preflight.py": "TUNABLE (env schema)", "infra/alerts/operations.json": "pending_producers emptied (I8 item 5)", "apps/infrx-api/infrx/media/store.py": "R5 ponytail comment", "apps/infrx-api/tests/i/mutants.py": "M6 row-move mutants"},
+  "schema_id": {"before": "1:c947948d1106e4fc", "after": "1:55563b285260ad78"},
+  "commands": [
+    {"cmd": "INFRX_D_TASK=m6 INFRX_M6_WORLDS=f2c,d10 uv run --frozen pytest -q -p no:cacheprovider tests/w tests/m", "exit": 0, "summary": "814 passed, 36 skipped, 2 xfailed"},
+    {"cmd": "INFRX_D_TASK=m6 uv run --frozen pytest -q tests/i/test_observe.py", "exit": 0, "summary": "18 passed, 1 xfailed (2 failed before the row move)"},
+    {"cmd": ".venv/bin/python -m pytest -q tests/integration/backend/recovery/test_observe.py", "exit": 0, "summary": "16 passed"},
+    {"cmd": "INFRX_D_TASK=m6 INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_retention_mutants.py", "exit": 0, "summary": "62/62 killed (x19_no_job declared ValidationError at 2ae944f5)"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_worker_main_mutants.py", "exit": 0, "summary": "27/27 service-free killed, PG list skipped"},
+    {"cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_prep_worker_mutants.py", "exit": 0, "summary": "73 passed, 8 skipped"},
+    {"cmd": "uv run --frozen python tests/i/mutants.py m6_panel_missing m6_pending_section_left m6_family_undeclared m6_abort_rule_blunted", "exit": 0, "summary": "4/4 killed"},
+    {"cmd": "uv run --frozen pytest -q tests/contracts/test_config_and_imports.py", "exit": 1, "summary": "DEPLOYMENT_EXPECTED pin: WR-M6W-1 (271 passed with the patch)"},
+    {"cmd": "python3 research/plan/scripts/validate_plan.py", "exit": 0, "summary": "PASS"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1.5, "pessimistic_h": 3, "confidence": "medium", "basis": "code and proofs complete; union with W5 compose, WR-M6W-1, review, E3C rerun on the composed worker", "at": "2026-09-25T19:10:00Z"},
+  "next_action": "coordinator: apply WR-M6W-1, union with codex/w5-merge compose (WR-M6W-2), review, then E3C final run on python -m infrx.worker",
+  "blockers": ["P-25 values unresolved (placeholders)"],
+  "wiring_requests": [
+    "WR-M6W-1 tests/contracts/test_config_and_imports.py DEPLOYMENT_EXPECTED += PROCESSING_CACHE_MAX_BYTES 64424509440, RETENTION_INTERVAL_S/CACHE_SWEEP_INTERVAL_S/JOURNAL_EXPIRE_INTERVAL_S 300.0",
+    "WR-M6W-2 merge lane: union worker/__main__.py M6-WIRING blocks with W5's compose; keep W mutant anchors",
+    "WR-M6W-3 E3C: final run starts python -m infrx.worker for nc-retention-durable and F-4 scrub cases",
+    "WR-M6W-4 I8 optional: worker sets infrx_processing_cache_bytes"
+  ],
+  "evidence": ["research/plan/evidence/m/M6-wiring-2ae944f.md"]
+}

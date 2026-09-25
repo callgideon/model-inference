@@ -1,0 +1,11 @@
+{"task":"W5-MERGE","slice":"PART A+B","activity":"blocked","head":"09d83a97","worktree":".claude/worktrees/codex-w5-merge","branch":"codex/w5-merge",
+ "owned_paths":["apps/infrx-api/infrx/worker/__main__.py","Makefile","apps/infrx-api/tests/w/"],
+ "commands":[
+  {"cmd":"pytest -q tests/g tests/m tests/contracts --deselect <G8 straddle>","exit":0,"summary":"2422 passed, 1 skipped, 1 deselected"},
+  {"cmd":"python3 research/plan/scripts/validate_plan.py","exit":0,"summary":"PASS"},
+  {"cmd":"INFRX_D_TASK=w5 +MinIO pytest -q -rxXs tests/w","exit":1,"summary":"5 failed (PG round trips, not_claimable), 303 passed, 3 skipped"},
+  {"cmd":"INFRX_MUTANTS=all w5/prep_worker/worker_main mutants +MinIO","exit":1,"summary":"12 failed (all PG broken_runner from the same 5 pristine failures), 133 passed"}],
+ "estimate":{"optimistic_h":0.5,"likely_h":1.5,"pessimistic_h":4,"confidence":"medium","basis":"only the missing gateway admit_ready blocks the PG cases","at":"2026-09-25T17:17Z"},
+ "blockers":["gateway relay admits via jobs.admit/admit_credit, never PgLifecycle.admit_ready; W5 barrier leaves every PG job not_claimable (W5 wiring request 4, not in G7 739c0414)"],
+ "wiring_requests":["G7/gateway: admit through ReadinessStore.admit_ready (text and media, both regimes) in routes/relay.py"],
+ "evidence":["research/plan/evidence/w/W5-merge-09d83a9.md"]}

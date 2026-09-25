@@ -50,6 +50,7 @@ from ...contracts import errors, wire
 from ...contracts.limits import DEFAULTS, PilotSettings
 from ...contracts.records import (ChunkEventType, ExecutionMode, JobState, NormalizedRequest,
                                   TerminalCause)
+from ...contracts.v2.lifecycle import AdmissionExpectation
 from ...observe import metrics
 from . import intake
 from .catalog import check_capability
@@ -98,6 +99,14 @@ class Relay:
     clock: Callable[[], float] = time.time
     sleep: Callable = asyncio.sleep
     registry: Any = None
+    # W5 wiring 4 (D1, one phase): the `ReadinessStore` every admission goes through -
+    # `admit_ready(request, idem, expectation)` admits AND writes the execution-ready marker
+    # the worker's barrier claims on. `expectation` is the composition root's
+    # `AdmissionExpectation` (this regime; CREDIT: the approved card). None is the pre-D10
+    # door (`jobs.admit`/`admit_credit`, no marker): only fakes and dev compositions without
+    # a lifecycle use it; `pilot.build_ingress_deps` never composes a pilot without one.
+    readiness: Any = None
+    expectation: Any = None
     # G3: the explicit-async answer. `jobs.register` installs its 202 hook here; None (no jobs
     # router mounted) keeps explicit async refused before anything durable happens.
     on_async: Callable | None = None
@@ -117,6 +126,15 @@ class Relay:
             raise ValueError(f"accounting regime must be one of {REGIMES}")
         if self.results is None:
             self.results = self.jobs
+        if self.readiness is not None:
+            # Fail closed (R69): an expectation that is not this runtime's regime and
+            # approved card never admits.
+            expected = self.expectation
+            card = self.active_rate_card_version if self.regime == CREDIT else None
+            if not isinstance(expected, AdmissionExpectation) \
+                    or expected.accounting_regime.value != self.regime \
+                    or expected.rate_card_version != card:
+                raise ValueError("the admission expectation is not this runtime's")
 
     # --- acceptance (item 1) ---------------------------------------------------
     async def accept(self, auth, request, idem) -> Response:
@@ -164,9 +182,16 @@ class Relay:
         timings = {"prepare": max(0.0, self.clock() - began)}
         if found is None:
             # The requested name and the idempotency scope exactly as handed (R66, R78).
-            admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
-                else self.jobs.admit(prepared, idem)
-            admission = await _dependency(admit)
+            if self.readiness is not None:
+                # One transaction: admission, the rechecks against the pins, each media ref
+                # resolved to live content, the manifest and the marker. A refusal admits
+                # nothing (no job, no hold) and is answered as its typed error.
+                admission, _ready = await _dependency(
+                    self.readiness.admit_ready(prepared, idem, self.expectation))
+            else:
+                admit = self.jobs.admit_credit(prepared, idem) if self.regime == CREDIT \
+                    else self.jobs.admit(prepared, idem)
+                admission = await _dependency(admit)
             if admission.replayed:              # a replay the lookup could not see yet
                 found = (admission, (await _dependency(
                     self._owned(admission.org_id, admission.job_handle)))[1])

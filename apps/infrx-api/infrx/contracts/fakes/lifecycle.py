@@ -324,6 +324,12 @@ class FakeLifecycle:
         if None not in (row.identity.digest, identity.digest) \
                 and row.identity.digest != identity.digest:
             raise refuse(R.bytes_changed, "the key already names other bytes")
+        if identity.origin is ContentOrigin.written and row.state is LifecycleState.live \
+                and row.identity.digest is not None and row.identity.digest == identity.digest:
+            # M6 WR-7 (D10 0022): the runtime rewrites these bytes for a new request, so the
+            # grace restarts (never shortens); a `discovered` registration never refreshes.
+            return self._save(row, eligible_at=max(row.eligible_at,
+                                                   now + timedelta(seconds=self.grace_s)))
         return row
 
     async def register(self, identity: ContentIdentity) -> ContentObject:

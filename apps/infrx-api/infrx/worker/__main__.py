@@ -33,6 +33,15 @@ index, the build-info gauge), so the two processes cannot disagree about a store
   (the attach D2's tables record, the object store, the shared processing cache), counts
   its prompt with the engine's own `/tokenize` and queues it with `prepared(...,
   prompt_tokens=)`; the inference pool then runs it. Same index, same stores, same drain.
+
+* **Housekeeping** (M6 wiring 1 + 2, E3C F-4): this process is the ONE long-lived owner
+  of collection - gateways run none. Exactly one `RetentionCollector.run` over the
+  configured `PgLifecycle` and the media store (`RETENTION_INTERVAL_S`), one cache keeper
+  (`ProcessingCache.sweep`, `CACHE_SWEEP_INTERVAL_S`) and one journal prune
+  (`PgStreamStore.expire`, `JOURNAL_EXPIRE_INTERVAL_S`), all on the worker's `Registry`.
+  Preparation registers its artifacts with the same lifecycle (`content=`), the cache is
+  bounded by `PROCESSING_CACHE_MAX_BYTES`, and the engine pins every file it opens from
+  submit to terminal (a keeper without the pin could remove an input mid-attempt).
 """
 from __future__ import annotations
 
@@ -53,14 +62,16 @@ from ..gateway import pilot
 from ..media import fetch
 from ..media.attachments import PgAttachments
 from ..media.prepare import MediaPreparation, ProcessingCache
+from ..media.retention import RetentionCollector
 from ..observe.metrics import Registry
 from ..state.jobstore import PgJobStore, PreparedWork
 from ..state.journal import PgStreamStore
+from ..state.lifecycle import PgLifecycle
 from .attempt import AttemptRunner
 from .engine import VllmEngine
 from .loop import WorkerLoop
 from .preparation import PreparationRunner
-from .service import WorkerService
+from .service import PgReconciliation, WorkerService
 
 log = logging.getLogger("infrx.worker")
 
@@ -126,15 +137,23 @@ def compose(settings, *, objects=None, index=None):
     pool, connect = pilot.connection_pool(settings)
     store = PgJobStore(connect, limits=limits)
     jobs = CreditWork(store) if deployment.accounting_regime == CREDIT_REGIME else store
-    media = MediaPreparation(objects, limits=limits,
-                             cache=ProcessingCache(root, ttl_s=limits.processing_cache_ttl_s))
+    # --- M6-WIRING (wiring 1): the lifecycle, the bounded cache, the metrics -------------
+    lifecycle = PgLifecycle(connect, limits=limits)       # claim TTL 300 s > the 75 s delete
+    media = MediaPreparation(objects, limits=limits, content=lifecycle,
+                             cache=ProcessingCache(root, ttl_s=limits.processing_cache_ttl_s,
+                                                   max_bytes=deployment.processing_cache_max_bytes,
+                                                   metrics=rt.metrics))
+    journal = PgStreamStore(connect, limits=limits)
+    # --- end M6-WIRING (wiring 1) --------------------------------------------------------
     media.attachments = PgAttachments(connect)    # R99 (c): the attach `prepare` reads
     engine = VllmEngine(httpx.AsyncClient(base_url=settings.upstream,
                                           timeout=httpx.Timeout(600, connect=10)),
                         served_model=SERVED_MODEL, clock=Wall, limits=limits,
-                        media_settings=settings, local_uri=media.local_uri)
+                        media_settings=settings, local_uri=media.local_uri,
+                        # M6-WIRING (wiring 2): held from submit to terminal
+                        pin=media.cache.pin, reprepare=reprepare_with(media))
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
-    runner = AttemptRunner(jobs=jobs, stream=PgStreamStore(connect, limits=limits),
+    runner = AttemptRunner(jobs=jobs, stream=journal,
                            engine=engine, clock=Wall, worker_id=worker_id,
                            count_prompt_tokens=lambda work: work.prompt_tokens,
                            put_result=store.put_result, limits=limits)
@@ -143,13 +162,59 @@ def compose(settings, *, objects=None, index=None):
     preparation = WorkerLoop(
         scheduler=scheduler, worker_id=worker_id, kind=OutboxKind.prepare_dispatch,
         runner=PreparationRunner(jobs=jobs, media=media, engine=engine, worker_id=worker_id,
-                                 limits=limits), limits=limits)
+                                 limits=limits, readiness=PgLifecycle(connect, limits=limits)),
+        limits=limits)
     service = WorkerService(loop=loop, jobs=jobs, engine=engine,
                             concurrency=limits.worker_concurrency,
                             health_port=deployment.worker_health_port,
+                            reconciliation=PgReconciliation(connect),
                             metrics=rt.metrics, pool=pool, preparation=preparation,
-                            preparation_concurrency=limits.preparation_concurrency)
+                            preparation_concurrency=limits.preparation_concurrency,
+                            housekeeping=housekeeping(deployment, lifecycle, objects, media,
+                                                      journal, rt.metrics))
     return service, pool
+
+
+# --- M6-WIRING: the worker's housekeeping (wiring 1 + E3C F-4) ---------------------------
+def housekeeping(deployment, lifecycle, objects, media, journal, metrics) -> dict:
+    """The three loops the worker - and only the worker - runs, by task name."""
+    collector = RetentionCollector(lifecycle, objects, page_size=100, concurrency=8)
+    return {
+        "retention": lambda: collector.run(deployment.retention_interval_s, metrics=metrics),
+        "cache_keeper": lambda: every(deployment.cache_sweep_interval_s,
+                                      lambda: asyncio.to_thread(media.cache.sweep),
+                                      "cache sweep"),
+        "journal_expire": lambda: every(deployment.journal_expire_interval_s,
+                                        lambda: expire_journal(journal), "journal expire"),
+    }
+
+
+async def every(interval_s: float, step, what: str, *, sleep=asyncio.sleep) -> None:
+    """`await step()` every `interval_s`, forever; a failed step is logged and retried."""
+    while True:
+        try:
+            await step()
+        except Exception:
+            log.exception("%s failed", what)
+        await sleep(interval_s)
+
+
+async def expire_journal(journal) -> int:
+    """One prune pass: `expire` until nothing past `JOURNAL_CHUNK_TTL_S` is left (each call
+    takes at most `EXPIRE_JOBS_PER_PASS` jobs; a job locked by an append is the next pass's)."""
+    removed = 0
+    while found := await journal.expire():
+        removed += found
+    return removed
+
+
+def reprepare_with(media):
+    """M6 wiring 2: a pinned input found gone is prepared again, from the durable record."""
+    async def reprepare(job_id: str, profile: str) -> None:
+        await media.prepare(job_id, profile)
+        media.prepared_by_job.pop(job_id, None)   # nothing in this process reads it (F3)
+    return reprepare
+# --- end M6-WIRING ------------------------------------------------------------------------
 
 
 async def run(settings, service, pool) -> int:

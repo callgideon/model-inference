@@ -557,10 +557,10 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        self.cancelled.pop(key, None)\n        self._remember_finished(key)",
        "        self._remember_finished(key)", LIFECYCLE),
     _m("inner_generator_not_closed", "a consumer that stops reading closes the engine now",
-       E, "            await inner.aclose()\n"
-          "            # Every exit path, including `upstream_body` refusing before a request was ever",
-       "            # Every exit path, including `upstream_body` refusing before a request was ever",
-       CANCEL_SCOPE),
+       E, "                await inner.aclose()\n            finally:\n"
+          "                # Terminal, and the upstream response closed",
+       "                pass\n            finally:\n"
+       "                # Terminal, and the upstream response closed", CANCEL_SCOPE),
     _m("run_does_not_close_its_inner", "the generate boundary closes what it delegated to",
        E, "            # Deterministic cleanup: a consumer that stops iterating (or closes this\n"
           "            # generator) must close the upstream stream *now*, not whenever the event\n"
