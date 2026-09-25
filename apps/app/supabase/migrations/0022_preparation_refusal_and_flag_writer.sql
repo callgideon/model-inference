@@ -43,6 +43,8 @@
 -- (M6 `retention.generation_key`: `<key>.g<n>`). Waiting for the lapse would only refuse a
 -- legitimate re-registration for up to a claim TTL. The sentence is void from 0022 on.
 --
+--   jobs_result_expiry_guard (L3-REBASE F2) revoked from everyone, like its sibling guards.
+--
 -- The replay key. `jobs.proposal` (0018: the winner's proposal, immutable once settled) is
 -- written with the lease's generation and worker BEFORE the terminalization, so only the
 -- identical call of the lease that ended the job replays; it can never equal a
@@ -55,8 +57,10 @@
 -- ROLLBACK (0022 alone). `drop function infrx.fail_preparation(jsonb)` and
 -- `drop function infrx.set_feature_flag(text, boolean, text, text)`; the worker then lapses
 -- a permanently refused lease (W5's fallback) and G8 writes the row directly (V-G8TL-1).
--- Re-run 0019's `content_objects_guard` and `register_content` (the refetch race returns;
--- eligibilities already moved later stay later - retaining longer is the safe direction).
+-- `grant execute on function infrx.jobs_result_expiry_guard() to service_role` restores
+-- 0021's (unused) grant. Re-run 0019's `content_objects_guard` and `register_content` (the
+-- refetch race returns; eligibilities already moved later stay later - retaining longer is
+-- the safe direction).
 -- Jobs already ended keep their outcome: money history is never un-settled.
 --
 -- Additive and re-runnable.
@@ -258,3 +262,10 @@ begin
   end if;
   return c;
 end $$;
+
+-- ============================================================ privileges ===
+-- L3-REBASE F2: 0021's trigger guard kept 0004:53's default EXECUTE for service_role; its
+-- siblings (0019 `content_objects_guard`, `media_uploads_guard`, 0020 `job_results_guard`)
+-- are revoked from everyone. A trigger function needs no EXECUTE to fire.
+revoke all on function infrx.jobs_result_expiry_guard()
+  from public, anon, authenticated, service_role;

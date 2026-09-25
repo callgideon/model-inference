@@ -377,6 +377,10 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "grant execute on function infrx.set_feature_flag(text, boolean, text, text) "
        "to service_role, infrx_runtime;", "followup_privileges",
        "the runtime login can switch a regime off (or signup on)"),
+    _m("d10_result_expiry_guard_executable", FOLLOWUP,
+       "revoke all on function infrx.jobs_result_expiry_guard()\n"
+       "  from public, anon, authenticated, service_role;", "", "followup_privileges",
+       "L3-REBASE F2: the platform role keeps EXECUTE on a trigger guard its siblings deny"),
     _m("d10_flag_writer_for_browsers", FOLLOWUP,
        "revoke all on function infrx.set_feature_flag(text, boolean, text, text)\n"
        "  from public, anon, authenticated;",

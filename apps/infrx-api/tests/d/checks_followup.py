@@ -164,11 +164,14 @@ def check_fail_preparation(conn) -> str:
 
 def check_followup_privileges(conn) -> str:
     """0022's grants: `fail_preparation` is the worker's (service_role, infrx_runtime);
-    `set_feature_flag` is the operator's (service_role alone). No browser principal executes
-    either; both are SECURITY DEFINER with a fixed search_path. The writer answers whether
+    `set_feature_flag` is the operator's (service_role alone); 0021's trigger guard
+    `jobs_result_expiry_guard` nobody's. No browser principal executes any; all are SECURITY
+    DEFINER with a fixed search_path. The writer answers whether
     it changed the row, attributed."""
     for fn, callers in (("infrx.fail_preparation(jsonb)", {"service_role", "infrx_runtime"}),
-                        ("infrx.set_feature_flag(text,boolean,text,text)", {"service_role"})):
+                        ("infrx.set_feature_flag(text,boolean,text,text)", {"service_role"}),
+                        # L3-REBASE F2: a trigger guard, executable by nobody (0019/0020's)
+                        ("infrx.jobs_result_expiry_guard()", set())):
         for role in ("public", "anon", "authenticated", "service_role", "infrx_runtime"):
             if role == "public":
                 acl, secdef, config = conn.execute(
