@@ -5,11 +5,15 @@
     deliver.py --test                  # slice 4: one clearly marked TEST message, then
     deliver.py --test-resolve <nonce>  #          its recovery
 
-The destination is ALERT_WEBHOOK_URL (EnvironmentFile /etc/infrx-alert.env, root 0600): an
-HTTPS webhook that accepts a JSON body with a `text` field (Slack-compatible). It is P-25's
-input - the owner, the destination and its authorization - and is never printed (a webhook
-URL is a credential). Without it nothing is sent: the message goes to UNDELIVERED (bounded)
-and the exit is 3, "BLOCKED", so the timer's unit fails visibly instead of silently.
+The destination (EnvironmentFile /etc/infrx-alert.env, root 0600) is P-25's input, exactly
+one of:
+  ALERT_WEBHOOK_URL    an HTTPS webhook taking a JSON body with a `text` field (Slack-
+                       compatible); a credential, never printed
+  ALERT_SNS_TOPIC_ARN  an SNS topic (e-mail subscription), published with the instance
+                       role (sns:Publish on that topic); boto3 is imported only here
+Neither or both set, or boto3 missing for SNS: nothing is sent, the message goes to
+UNDELIVERED (bounded) and the exit is 3, "BLOCKED", so the timer's unit fails visibly
+instead of silently.
 
 Only changes are sent: a newly firing alert, a resolved one, and every page still firing
 after --repeat-s. A failed send leaves the state untouched, so the next run retries. A
@@ -21,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -74,6 +79,41 @@ def post(text: str, extra: dict | None = None) -> int:
         return -1
 
 
+def publish(topic: str, text: str) -> tuple[int, str]:
+    """SNS: (HTTP status, what to print), 0 = BLOCKED. The topic is not a secret."""
+    if not re.fullmatch(r"arn:aws[a-z-]*:sns:[a-z0-9-]+:\d{12}:[A-Za-z0-9_-]{1,256}", topic):
+        return 0, "BLOCKED: ALERT_SNS_TOPIC_ARN is not an SNS topic ARN (P-25)"
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        return 0, "BLOCKED: ALERT_SNS_TOPIC_ARN is set but boto3 is not installed"
+    name = topic.rsplit(":", 1)[1]
+    # SNS Subject: ASCII, one line, at most 100 characters
+    subject = text.splitlines()[0].encode("ascii", "replace").decode()[:100]
+    try:
+        answer = boto3.client("sns", region_name=topic.split(":")[3]).publish(
+            TopicArn=topic, Subject=subject, Message=text)
+    except (BotoCoreError, ClientError) as failed:
+        return -1, f"sns={type(failed).__name__} topic={name}"
+    status = answer.get("ResponseMetadata", {}).get("HTTPStatusCode", 200)
+    return status, f"sns={status} topic={name}"
+
+
+def send(text: str, extra: dict | None = None) -> tuple[int, str]:
+    """(status, what to print) at the one configured destination: 2xx delivered,
+    0 BLOCKED (neither or both configured), anything else a failed send."""
+    hook = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
+    topic = os.environ.get("ALERT_SNS_TOPIC_ARN", "").strip()
+    if bool(hook) == bool(topic):
+        return 0, (f"BLOCKED: {'both' if hook else 'neither'} of ALERT_WEBHOOK_URL, "
+                   "ALERT_SNS_TOPIC_ARN set - exactly one is the destination (P-25)")
+    if topic:
+        return publish(topic, text)
+    status = post(text, extra)
+    return status, f"http={status}"
+
+
 def keep_undelivered(path: str, text: str) -> None:
     lines = []
     if os.path.exists(path):
@@ -102,8 +142,8 @@ def main(argv=None) -> int:
         text = (f"[TEST {word}] infrx alert delivery test {nonce} from {host} - NO ACTION "
                 f"REQUIRED. Owner: {owner}. Escalation: {escalation}. Runbook: "
                 f"{RUNBOOK}#delivery-test")
-        status = post(text, {"test": True, "nonce": nonce})
-        print(f"test {word.lower()} nonce={nonce} http={status or 'BLOCKED: no ALERT_WEBHOOK_URL (P-25)'}")
+        status, said = send(text, {"test": True, "nonce": nonce})
+        print(f"test {word.lower()} nonce={nonce} {said}")
         return 0 if 200 <= status < 300 else BLOCKED if status == 0 else SEND_FAILED
     firing = [json.loads(line) for line in sys.stdin if line.strip()]
     state = {}
@@ -116,8 +156,8 @@ def main(argv=None) -> int:
         return 0
     text = (f"infrx alerts (rules v{a.rules_version}, {host}); owner {owner}, escalation "
             f"{escalation}\n" + "\n".join(lines))
-    status = post(text)
-    print(f"delivery: {len(lines)} line(s), http={status or 'BLOCKED: no ALERT_WEBHOOK_URL (P-25)'}")
+    status, said = send(text)
+    print(f"delivery: {len(lines)} line(s), {said}")
     if not 200 <= status < 300:
         keep_undelivered(a.undelivered, text)
         return BLOCKED if status == 0 else SEND_FAILED
