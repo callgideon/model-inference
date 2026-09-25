@@ -575,7 +575,7 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", beta_keys),
               "auth.uid() is read from request.jwt.claim.sub, so whoever sets that claim IS "
               "the tenant: it must only ever be set from a verified JWT, never from input"),
-    ] + access_rows() + write_rows() + journal_rows() + settlement_rows()
+    ] + access_rows() + write_rows() + journal_rows() + settlement_rows() + login_rows()
 
 
 # --------------------------------------------------------------------- access completeness
@@ -587,6 +587,9 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
 # fails the row, and an object with no entry fails `test_services`' completeness case. D4's
 # 0017 (D4 request 8) adds no relation: its functions are rows below, and its watermark
 # columns, their CHECK and the terminal-event trigger on `infrx.jobs` are `journal_rows()`.
+# L3-REBASE: D10's 0019-0021 rows below are read off the migration text (each privilege
+# block's revoke/grant lists, cited per row), not off the measured catalog; D10's two
+# dedicated logins are `login_rows()`.
 #
 # A relation row: `select 1 from <it> limit 0` as the role - the grant alone (schema usage,
 # table/view privilege), independent of the rows and of RLS. A function row:
@@ -603,6 +606,7 @@ RELATIONS = {
     "infrx.capacity_reservations": SERVICE,
     "infrx.catalog_listings": SERVICE,
     "infrx.consent_history": SERVICE,
+    "infrx.content_objects": SERVICE,             # 0019:952-955 revoke all, grant select
     "infrx.credit_holds": SERVICE,
     "infrx.credit_ledger": SERVICE,
     "infrx.credit_wallet_holds": SERVICE,
@@ -615,6 +619,7 @@ RELATIONS = {
     "infrx.feedback": SERVICE,
     "infrx.idempotency": SERVICE,
     "infrx.job_media": SERVICE,
+    "infrx.job_readiness": SERVICE,               # 0019:952-955 revoke all, grant select
     "infrx.job_results": NOBODY,
     "infrx.jobs": SERVICE,
     "infrx.judge_budgets": SERVICE,
@@ -687,14 +692,28 @@ FUNCTIONS = {
     "infrx.admit_credit(jsonb)": NOBODY,
     "infrx.admit_legacy_usd(jsonb)": NOBODY,
     "infrx.admit(jsonb)": SERVICE,
+    "infrx.admit_ready(jsonb)": SERVICE,                          # 0019:976-986 (D10)
     "infrx.api_keys_identity_guard()": SERVICE,
     "infrx.append(jsonb)": SERVICE,
     "infrx.audit_by_idempotency_key(text)": SERVICE,
+    "infrx.bind_source(infrx.jobs,jsonb,integer)": NOBODY,        # 0019:964-975 (D10)
     "infrx.bootstrap_operator_key(uuid,text,text,text,text,text)": SERVICE,
     "infrx.cancel(jsonb)": SERVICE,
+    "infrx.check_pinned_capability(infrx.jobs,jsonb)": NOBODY,    # 0019:964-975 (D10)
     "infrx.claim_preparation(jsonb)": SERVICE,
+    "infrx.claim_preparation_ready(jsonb)": SERVICE,              # 0019:976-986 (D10)
     "infrx.claim(jsonb)": SERVICE,
     "infrx.consent_guard()": NOBODY,
+    "infrx.content_acknowledge_delete(jsonb)": SERVICE,           # 0020:482-489 (D10)
+    "infrx.content_candidates(jsonb)": SERVICE,                   # 0020:482-489 (D10)
+    "infrx.content_claim(jsonb)": SERVICE,                        # 0020:482-489 (D10)
+    "infrx.content_objects_guard()": NOBODY,                      # 0019:964-975 (D10)
+    "infrx.content_recheck(infrx.content_objects,timestamp with time zone)": NOBODY,  # 0020
+    "infrx.content_referenced(infrx.content_objects,timestamp with time zone)": NOBODY,
+    "infrx.content_references(jsonb)": SERVICE,                   # 0019:976-986 (D10)
+    "infrx.content_register(jsonb)": SERVICE,                     # 0019:976-986 (D10)
+    "infrx.content_row(uuid)": NOBODY,                            # 0020:470-481 (D10)
+    "infrx.content_tombstone(jsonb)": SERVICE,                    # 0020:482-489 (D10)
     "infrx.credit_ledger_moves_wallet()": SERVICE,
     "infrx.credit_wallet_holds_moves_wallet()": SERVICE,
     "infrx.credit_wallets_guard()": SERVICE,
@@ -724,10 +743,13 @@ FUNCTIONS = {
     "infrx.jobs_guard()": NOBODY,
     "infrx.jobs_no_delete_when_terminal()": NOBODY,
     "infrx.jobs_pins_guard()": SERVICE,
+    # 0021 (D10) revokes nothing on it: 0004:53's default privilege, like its sibling guards
+    "infrx.jobs_result_expiry_guard()": SERVICE,
     "infrx.jobs_settlement_record_guard()": NOBODY,               # 0018 (D5)
     "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
     "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
     "infrx.journal_bytes_charged()": NOBODY,
+    "infrx.job_results_guard()": NOBODY,                          # 0020:470-481 (D10)
     "infrx.key_by_hash(text)": SERVICE,
     "infrx.ledger_moves_wallet()": NOBODY,
     "infrx.legacy_usd_rollout_hold(uuid)": NOBODY,
@@ -744,10 +766,15 @@ FUNCTIONS = {
     "infrx.quarantine_hold_legacy_usd(uuid,timestamp with time zone)": NOBODY,
     "infrx.read_journal(jsonb)": SERVICE,                         # 0017 (D4)
     "infrx.read_result(uuid,text)": SERVICE,
+    "infrx.readiness_cutover_check()": SERVICE,                   # 0019:976-986 (D10)
+    "infrx.readiness_doc(uuid)": SERVICE,                         # 0019:976-986 (D10)
     "infrx.record_signup_denial(uuid,text)": NOBODY,
     "infrx.record_submission(jsonb)": SERVICE,
     "infrx.recover_job(uuid,timestamp with time zone,integer,double precision)": NOBODY,
     "infrx.recover(jsonb)": SERVICE,
+    "infrx.register_content(jsonb,double precision)": NOBODY,     # 0019:964-975 (D10)
+    "infrx.register_database_content()": NOBODY,                  # 0020:470-481 (D10)
+    "infrx.register_existing_database_content(jsonb)": SERVICE,   # 0020:482-489 (D10)
     "infrx.reconcile(jsonb)": SERVICE,                            # 0018 (D5)
     "infrx.release_aged_unknown(uuid,timestamp with time zone)": NOBODY,
     "infrx.release_dispatch(jsonb)": SERVICE,
@@ -757,9 +784,11 @@ FUNCTIONS = {
     "infrx.require_feature(text)": SERVICE,
     "infrx.reserve_judge(jsonb)": SERVICE,
     "infrx.resolve_admission_pins(text)": SERVICE,
+    "infrx.resolve_usd_revision(text)": NOBODY,                   # 0021:429-430 (D10)
     "infrx.retire_individual(uuid,text,text,text)": SERVICE,
     "infrx.retired_wallet_guard()": SERVICE,
     "infrx.revoke_key(uuid,text,text,text)": SERVICE,
+    "infrx.scrub_content(infrx.content_objects,timestamp with time zone)": NOBODY,  # 0020
     "infrx.set_suspension(uuid,boolean,text,text,text,text)": SERVICE,
     "infrx.settle_credit(uuid,numeric)": NOBODY,                  # 0018 (D5)
     "infrx.settle_legacy_usd(uuid,numeric)": NOBODY,              # 0018 (D5)
@@ -768,10 +797,22 @@ FUNCTIONS = {
     "infrx.terminalize_unstarted(uuid,text)": NOBODY,
     "infrx.terminalize(jsonb)": SERVICE,
     "infrx.touch_media_object(text,uuid)": SERVICE,
+    "infrx.upload_abort(jsonb)": SERVICE,                         # 0019:976-986 (D10)
+    "infrx.upload_acknowledge_put(jsonb)": SERVICE,               # 0019:976-986 (D10)
+    "infrx.upload_complete(jsonb)": SERVICE,                      # 0019:976-986 (D10)
+    "infrx.upload_create(jsonb)": SERVICE,                        # 0019:976-986 (D10)
+    "infrx.upload_expire(jsonb)": SERVICE,                        # 0019:976-986 (D10)
+    "infrx.upload_resolve(jsonb)": SERVICE,                       # 0019:976-986 (D10)
+    "infrx.upload_row(uuid,text,text)": NOBODY,                   # 0019:964-975 (D10)
     "infrx.usage_pilot_row_matches_job()": NOBODY,
     "infrx.usage_records(uuid,timestamp with time zone,uuid,integer)": SERVICE,
+    "infrx.usd_price(text)": SERVICE,                             # 0021:447-448 (D10)
     "infrx.verified_user(uuid)": SERVICE,
     "public.claim_signup_grant(uuid,text,uuid)": SERVICE,
+    # 0021:420-428 (D10): the signed-in consumer reads; the org resolver is nobody's
+    "public.consumer_job_result(uuid)": BROWSER,
+    "public.consumer_jobs(text,integer,uuid)": BROWSER,
+    "public.consumer_org()": NOBODY,
     "public.handle_new_user()": SERVICE,
     "public.is_operator()": BROWSER,
     "public.is_org_member(uuid)": BROWSER,
@@ -784,7 +825,15 @@ FUNCTIONS = {
 INVOKER_FUNCTIONS = {"infrx.chunk_doc(infrx.stream_chunks)": NOBODY,
                      "infrx.cause_carries_state(text,text)": NOBODY,
                      "infrx.debit_legacy_usd(jsonb,integer,integer)": NOBODY,
-                     "infrx.usage_doc(integer,integer)": NOBODY}
+                     "infrx.usage_doc(integer,integer)": NOBODY,
+                     # D10's pure helpers, revoked from everyone (0019:964-975, 0020:470-481)
+                     "infrx.lifecycle_code(text)": NOBODY,
+                     "infrx.lifecycle_refuse(text,text)": NOBODY,
+                     "infrx.lifecycle_refusal(text,text)": NOBODY,
+                     "infrx.content_doc(infrx.content_objects)": NOBODY,
+                     "infrx.upload_doc(infrx.media_uploads)": NOBODY,
+                     "infrx.claim_doc(infrx.content_objects)": NOBODY,
+                     "infrx.scrubbed_request(jsonb)": NOBODY}
 
 # 0017's two watermark columns on `infrx.jobs`, as `pg_get_*def` renders them (measured at
 # the D4 merge): one cursor or none, each part >= 1; and the trigger that writes the terminal
@@ -862,7 +911,10 @@ def settlement_rows() -> list[Check]:
 # anon and authenticated hold none on any relation (authenticated's api_keys/organizations/
 # profiles writes are COLUMN grants, which `has_table_privilege` does not count); service_role
 # holds its schema's default except the immutable registry rows (insert only) and the money
-# and signup relations only SECURITY DEFINER functions write.
+# and signup relations only SECURITY DEFINER functions write. L3-REBASE: D10's 0019 adds the
+# upload tickets to the definer-only set (0019:959 `revoke insert, update, delete on
+# infrx.media_uploads from service_role`: the `upload_*` boundary is the writer, R128) and its
+# two new relations are read-only to service_role (0019:952-955).
 WRITE_VERBS = ("INSERT", "UPDATE", "DELETE", "TRUNCATE")
 SERVICE_WRITES = {
     "infrx": "INSERT,UPDATE,DELETE", "public": "INSERT,UPDATE,DELETE,TRUNCATE",
@@ -873,6 +925,7 @@ SERVICE_WRITES = {
     **dict.fromkeys(("infrx.credit_ledger", "infrx.credit_wallet_holds",
                      "infrx.credit_wallet_reconciliation", "infrx.credit_wallets",
                      "infrx.feature_flags", "infrx.job_results", "infrx.retired_individuals",
+                     "infrx.media_uploads", "infrx.content_objects", "infrx.job_readiness",
                      "infrx.signup_denials", "infrx.signup_entitlements",
                      "infrx.signup_identity_claims", "infrx.wallets"), ""),
 }
@@ -893,6 +946,126 @@ def write_rows() -> list[Check]:
                 f"where has_table_privilege('{role}', '{relation}', v)), ',')",
                 ("value", expected),
                 f"{role} holds exactly {expected or 'no'} table-level write on {relation}"))
+    return rows
+
+
+
+# D10's two dedicated logins (0021:458-560, R127), read off the migration text: NOLOGIN here
+# (the operator grants LOGIN out of band), NOINHERIT, no attribute that widens, a member of
+# nothing, and exactly the surface 0021 grants. The runtime still holds the two unmarked
+# doors `admit`/`claim_preparation` - R123's interim clause; D10's follow-up migration revokes
+# them, and that migration re-baselines RUNTIME_FUNCTIONS. Read as `postgres`, catalog-wide
+# over `infrx`/`public`, so a grant that appears anywhere fails the row.
+RUNTIME_FUNCTIONS = (                                             # 0021:490-515
+    "infrx.acknowledge_dispatch(jsonb)", "infrx.admit(jsonb)", "infrx.admit_ready(jsonb)",
+    "infrx.append(jsonb)", "infrx.cancel(jsonb)", "infrx.claim(jsonb)",
+    "infrx.claim_preparation(jsonb)", "infrx.claim_preparation_ready(jsonb)",
+    "infrx.content_acknowledge_delete(jsonb)", "infrx.content_candidates(jsonb)",
+    "infrx.content_claim(jsonb)", "infrx.content_references(jsonb)",
+    "infrx.content_register(jsonb)", "infrx.content_tombstone(jsonb)",
+    "infrx.dispatch_pending(jsonb)", "infrx.dispatch_snapshot()", "infrx.expire_journal(jsonb)",
+    "infrx.fail_dispatch(jsonb)", "infrx.gc_outbox(jsonb)", "infrx.heartbeat(jsonb)",
+    "infrx.idempotency_lookup(jsonb)", "infrx.job_admission(uuid)", "infrx.journal_usage()",
+    "infrx.load_work(jsonb)", "infrx.load_work_credit(jsonb)", "infrx.now()",
+    "infrx.prepare(jsonb)", "infrx.put_result(jsonb)", "infrx.read_journal(jsonb)",
+    "infrx.read_result(uuid,text)", "infrx.readiness_doc(uuid)", "infrx.recover(jsonb)",
+    "infrx.release_dispatch(jsonb)", "infrx.reopen_dispatch(jsonb)", "infrx.terminalize(jsonb)",
+    "infrx.upload_abort(jsonb)", "infrx.upload_acknowledge_put(jsonb)",
+    "infrx.upload_complete(jsonb)", "infrx.upload_create(jsonb)", "infrx.upload_expire(jsonb)",
+    "infrx.upload_resolve(jsonb)", "infrx.usd_price(text)")
+LOGINS = {
+    "infrx_runtime": {
+        "config": "idle_in_transaction_session_timeout=30s,statement_timeout=15s",  # 0021:480-481
+        "functions": RUNTIME_FUNCTIONS,
+        "tables": tuple(sorted(                                   # 0021:518-535
+            [f"{t}:SELECT" for t in (
+                "infrx.catalog_listings", "infrx.content_objects", "infrx.data_access_policies",
+                "infrx.deployment_revisions", "infrx.endpoints", "infrx.job_readiness",
+                "infrx.jobs", "infrx.model_versions", "infrx.provider_orgs",
+                "infrx.rate_card_versions", "infrx.serving_versions", "infrx.stream_chunks",
+                "public.models")]
+            + ["infrx.job_media:SELECT,INSERT", "infrx.staged_media:SELECT,INSERT"])),
+        "columns": ("infrx.jobs.updated_at:UPDATE",),             # 0021:537
+    },
+    "infrx_monitor": {
+        "config": "default_transaction_read_only=on,statement_timeout=10s",  # 0021:482-483
+        "functions": (),
+        "tables": ("infrx.credit_wallet_reconciliation:SELECT",   # 0021:550-551
+                   "infrx.wallet_reconciliation:SELECT"),
+        "columns": tuple(sorted(                                  # 0021:543-549
+            [f"infrx.jobs.{c}:SELECT" for c in (
+                "request_id", "state", "admitted_at", "queued_at", "updated_at", "deadline_at",
+                "settled_at", "outcome_cause", "result_expires_at")]
+            + [f"infrx.outbox.{c}:SELECT" for c in (
+                "kind", "acknowledged_at", "claimed_at", "available_at")]
+            + [f"infrx.credit_holds.{c}:SELECT" for c in (
+                "request_id", "state", "reconcile_after")]
+            + ["infrx.stream_chunks.expires_at:SELECT", "infrx.job_results.request_id:SELECT"])),
+    },
+}
+_LOGIN_ATTRIBUTES = ("rolsuper", "rolinherit", "rolcreaterole", "rolcreatedb", "rolcanlogin",
+                     "rolreplication", "rolbypassrls")
+
+
+def _joined(sql: str, sep: str = ",") -> str:
+    """One text value: the single column of `sql`, byte-ordered (Python's `sorted`)."""
+    return (f"select array_to_string(array(select v from ({sql}) q(v) "
+            f"order by v collate \"C\"), '{sep}')")
+
+
+def login_rows() -> list[Check]:
+    """Per dedicated login: attributes, memberships, role defaults, and the exact function,
+    table and column surface, each one sorted joined value."""
+    rows = []
+    for role, surface in LOGINS.items():
+        attributes = " || ".join(f"case when {a} then '{a},' else '' end"
+                                 for a in _LOGIN_ATTRIBUTES)
+        rows += [
+            Check(f"L3-LOGIN-{role}-attributes", "postgres", None,
+                  f"select {attributes} from pg_roles where rolname = '{role}'", ("value", ""),
+                  f"{role} is NOLOGIN, NOINHERIT, not superuser/createrole/createdb/"
+                  "replication/bypassrls (0021:473-478, R127)"),
+            Check(f"L3-LOGIN-{role}-member-of", "postgres", None,
+                  f"select count(*) from pg_auth_members where member = '{role}'::regrole",
+                  ("value", 0), f"{role} is a member of no role (R127)"),
+            # PostgreSQL 16+ gives a role's creator ADMIN on it (no INHERIT, no SET): that is
+            # the one member, and it confers nothing on the login itself.
+            Check(f"L3-LOGIN-{role}-members", "postgres", None,
+                  _joined("select m.member::regrole::text || ':' || m.admin_option::text || "
+                          "':' || m.inherit_option::text || ':' || m.set_option::text from "
+                          f"pg_auth_members m where m.roleid = '{role}'::regrole"),
+                  ("value", "postgres:true:false:false"),
+                  f"only the creator's implicit ADMIN (PG16+) is a member of {role}"),
+            Check(f"L3-LOGIN-{role}-config", "postgres", None,
+                  _joined(f"select unnest(rolconfig) from pg_roles where rolname = '{role}'"),
+                  ("value", surface["config"]),
+                  f"{role}'s bounds are role defaults (0021:480-483, R127)"),
+            Check(f"L3-LOGIN-{role}-functions", "postgres", None,
+                  _joined("select p.oid::regprocedure::text from pg_proc p join pg_namespace n "
+                          "on n.oid = p.pronamespace where n.nspname in ('infrx', 'public') "
+                          f"and has_function_privilege('{role}', p.oid, 'execute')"),
+                  ("value", ",".join(sorted(surface["functions"]))),
+                  f"{role} executes exactly 0021's list and nothing else"),
+            Check(f"L3-LOGIN-{role}-tables", "postgres", None,
+                  _joined("select n.nspname || '.' || c.relname || ':' || array_to_string("
+                          "array(select v from unnest(array['SELECT', 'INSERT', 'UPDATE', "
+                          f"'DELETE', 'TRUNCATE']) v where has_table_privilege('{role}', "
+                          "c.oid, v)), ',') from pg_class c join pg_namespace n on n.oid = "
+                          "c.relnamespace where n.nspname in ('infrx', 'public') and "
+                          "c.relkind in ('r', 'v', 'm', 'p', 'f') and has_table_privilege("
+                          f"'{role}', c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE')", ";"),
+                  ("value", ";".join(surface["tables"])),
+                  f"{role} holds exactly 0021's table-level grants"),
+            Check(f"L3-LOGIN-{role}-columns", "postgres", None,
+                  _joined("select n.nspname || '.' || c.relname || '.' || a.attname || ':' || "
+                          "x.privilege_type from pg_attribute a join pg_class c on c.oid = "
+                          "a.attrelid join pg_namespace n on n.oid = c.relnamespace, "
+                          "aclexplode(a.attacl) x where n.nspname in ('infrx', 'public') and "
+                          f"x.grantee = '{role}'::regrole"),
+                  ("value", ",".join(surface["columns"])),
+                  f"{role} holds exactly 0021's column grants (R127: the runtime UPDATEs only "
+                  "jobs.updated_at, no job_results DML)"),
+        ]
     return rows
 
 
