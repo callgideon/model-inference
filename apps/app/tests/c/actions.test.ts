@@ -28,7 +28,9 @@ import {
   operatorCommand,
   runOperatorCommand,
   sameOrigin,
+  supabaseKeyStore,
   type GrantOutcome,
+  type KeyClient,
   type KeyStore,
   type OperatorPort,
 } from "../../lib/services/actions.ts";
@@ -399,4 +401,40 @@ test("operator: no deployed port is an explicit unavailable state, never a silen
   const failed = await runOperatorCommand(command, throwing);
   assert.equal(codeOf(failed), "dependency_unavailable");
   assert.ok(!failed.ok && !failed.error.message.includes("10.0.0.9"));
+});
+
+// --------------------------------------------------------------------------------- the real store
+
+test("the supabase key store scopes revoke/find to the org, the consumer audience and (revoke) active keys", async () => {
+  const calls: string[] = [];
+  const chain = (): Record<string, unknown> => {
+    const node: Record<string, unknown> = {
+      then: (resolve: (answer: Answer) => void) => resolve({ data: [], error: null }),
+    };
+    for (const method of ["eq", "is", "select", "insert", "update"]) {
+      node[method] = (...args: unknown[]) => {
+        calls.push(`${method}(${args.map((arg) => JSON.stringify(arg)).join(",")})`);
+        return node;
+      };
+    }
+    return node;
+  };
+  const client = { from: (relation: string) => (calls.push(`from(${relation})`), chain()) } as unknown as KeyClient;
+  const store = supabaseKeyStore(client);
+  await store.revoke(MY_ORG, KEY, AT);
+  assert.deepEqual(calls, [
+    "from(api_keys)",
+    `update({"revoked_at":"${AT}"})`,
+    `eq("id","${KEY}")`,
+    `eq("org_id","${MY_ORG}")`,
+    'eq("audience","consumer")',
+    'is("revoked_at",null)',
+    'select("id,name,prefix,created_at,last_used_at,revoked_at,trace_mode")',
+  ]);
+  calls.length = 0;
+  await store.find(MY_ORG, KEY);
+  assert.deepEqual(calls.slice(2), [`eq("id","${KEY}")`, `eq("org_id","${MY_ORG}")`, 'eq("audience","consumer")']);
+  calls.length = 0;
+  await store.insert({ org_id: MY_ORG, created_by: ME, name: "k", prefix: "p", key_hash: "h" });
+  assert.deepEqual(calls[1], `insert(${JSON.stringify({ org_id: MY_ORG, created_by: ME, name: "k", prefix: "p", key_hash: "h" })})`, "no audience, trace mode or id is written");
 });

@@ -103,8 +103,7 @@ test("grant: five concurrent onboarding claims for one verified individual make 
   assert.equal(outcomes.filter((outcome) => outcome.status === "granted").length, 1);
   assert.equal(outcomes.filter((outcome) => outcome.status === "already_granted").length, 4);
   for (const outcome of outcomes) {
-    assert.ok(outcome.status !== "held");
-    if (outcome.status !== "held") assert.equal(outcome.amount, "10000.00000000");
+    assert.equal("amount" in outcome ? outcome.amount : outcome.status, "10000.00000000");
   }
   // Committed state, re-read: the context is now ready and the balance is the exact string.
   const after = await contextOf(S.users.fresh);
