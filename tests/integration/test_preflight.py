@@ -56,6 +56,11 @@ def test_the_environment_manifest_is_self_consistent():
         ([own["postgres"].host_port, own["valkey"].host_port, own["s3"].host_port],
          ["infrx-e2c-postgres", "infrx-e2c-valkey", "infrx-e2c-s3"])
     assert all("@sha256:" in image["ref"] for image in ENV["images"].values())
+    # layer 3 (integration-l3, backend-certify) also binds the E3B PostgREST pair
+    sys.path.insert(0, str(HERE / "backend"))
+    import stack
+    assert {stack.POSTGREST_PORT, stack.JOURNEY_POSTGREST_PORT} < \
+        set(pf.namespace(ENV["namespaces"]["e2"])[0])
 
 
 def test_missing_docker_is_blocked_with_exit_3(tmp_path):

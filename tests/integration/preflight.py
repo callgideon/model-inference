@@ -89,7 +89,15 @@ def namespace(spec: dict) -> tuple[list[int], list[str]]:
         return [s.host_port for s in chosen], [s.container for s in chosen]
     if "harness" in spec:
         import harness
-        return sorted(harness.ports_for(spec["harness"]).values()), [f"infrx-{spec['harness']}-"]
+        ports = set(harness.ports_for(spec["harness"]).values())
+        if spec.get("postgrest"):     # layer 3: backend/stack.py's PostgREST pair, same offset
+            if str(HERE / "backend") not in sys.path:
+                sys.path.insert(0, str(HERE / "backend"))
+            import stack
+            start = harness.range_for(spec["harness"]).start
+            ports |= {start + port - harness.PORT_RANGE.start
+                      for port in (stack.POSTGREST_PORT, stack.JOURNEY_POSTGREST_PORT)}
+        return sorted(ports), [f"infrx-{spec['harness']}-"]
     return spec["ports"], [spec["container_prefix"]]
 
 
