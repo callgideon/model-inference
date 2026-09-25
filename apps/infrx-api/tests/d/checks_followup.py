@@ -124,6 +124,8 @@ def check_fail_preparation(conn) -> str:
             assert code == "already_terminal", (regime, code)
             assert fail(conn, dict(lease, worker_id="prep-b"), cause)[0] == \
                 "already_terminal", f"{regime}: another worker replayed this lease's end"
+            assert fail(conn, dict(lease, generation=lease["generation"] + 1), cause)[0] == \
+                "already_terminal", f"{regime}: another generation replayed this lease's end"
             assert prepare(conn, lease)[0] == "already_terminal", regime
             assert _money(conn, rid) == after, regime
             report.append(f"{regime}:{cause}")

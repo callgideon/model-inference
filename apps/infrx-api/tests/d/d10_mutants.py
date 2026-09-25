@@ -338,6 +338,14 @@ MIGRATION_MUTANTS = MIGRATION_MUTANTS + (
        "  if found and j.settled_at is not null and j.proposal = v_mark then",
        "  if found and j.settled_at is not null and j.outcome_cause = v_cause then",
        "fail_preparation", "another worker (or R29's deadline) is answered as the winner"),
+    # Fix round 0-D10F-1: each half of the replay key, alone.
+    _m("d10_fail_prep_replay_ignores_generation", FOLLOWUP,
+       "                                 'generation', v_lease->'generation',\n", "",
+       "fail_preparation", "a zombie call of an earlier generation from the same worker, "
+       "after that worker re-claimed and ended the job, is told it won"),
+    _m("d10_fail_prep_replay_ignores_worker", FOLLOWUP,
+       ",\n                                 'worker_id', v_lease->'worker_id')", ")",
+       "fail_preparation", "another worker's call with the same generation is told it won"),
     _m("d10_fail_prep_unmarked", FOLLOWUP,
        "  update infrx.jobs set proposal = v_mark where request_id = j.request_id;\n", "",
        "fail_preparation", "the replay key is never written: an identical retry is refused"),
