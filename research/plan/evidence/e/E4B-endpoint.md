@@ -11,7 +11,8 @@ is a measured limit or an SLO: measured limits are the box's (E4B-release-decisi
 | Field | Value | Source |
 |---|---|---|
 | requested model (pinned) | `nemostation/marlin-2b@2026-09-01` | G6B `marlin_release` / contracts v2 fixtures |
-| rate card | `rc_marlin2b_20260901T000000Z_provisional_p01` | provisional until P-01 decides the rates |
+| rate card (CREDIT regime) | `rc_marlin2b_2026_09_provisional` | `published_model.price()`; provisional until P-01 decides the rates |
+| USD price (legacy regime) | `pv_marlin2b_usd_2026_09_r1` | `published_model.price()`; CREDIT and USD are never converted |
 | serving revision's engine-options digest | `sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147` | W3's measured pin (`models/marlin2b/serving-version.json`) |
 | runtime image | `vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42` | W3's measured pin (`models/marlin2b/serving-version.json`) |
 
@@ -60,7 +61,7 @@ Content parts: `text` and `video_url`; a video reference is one of `http://`, `h
 |---|---|---|
 | `max_request_bytes` | 100663296 | request body, bytes |
 | `max_media_bytes` | 67108864 | one video, decoded bytes (also an upload's ceiling) |
-| `max_video_seconds` | 120 | one video's duration, s (profile v1; the deployed cap is configuration: P-20 applies 72) |
+| `max_video_seconds` | 82 | one video's duration, s (the approved release ceiling, P-20; a pilot configured past it refuses to start) |
 | `intake_timeout_s` | 30 | reading a request or upload body, s |
 | `media_fetch_timeout_s` | 20 | fetching a video URL, s |
 | `media_fetch_max_redirects` | 3 | redirects followed for a video URL |
@@ -217,3 +218,7 @@ curl -sS -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1
   that builds each route's answer; the Model table's notes are read from the published release
   against W3's serving record (at this commit they still flag B1; the cutover lane's fixture
   fix turns them into the measured pin on the next regeneration).
+- 2026-09-25 (G7 merge, WR-6): regenerated. `max_video_seconds` is the approved release
+  ceiling (82 s, P-20; the code default since WR-1, and a pilot configured past it refuses to
+  start); the rate identities are `published_model.price()`'s per regime (the card the
+  effective listing names), replacing the locally computed `..._provisional_p01` card.

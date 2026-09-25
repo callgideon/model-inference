@@ -183,7 +183,8 @@ def test_e4b_the_model_table_says_whether_the_published_release_is_the_measured_
     so the fixture fix cannot leave a false note behind."""
     import certify
     record = certify.serving_record()
-    pinned = {"requested_model": "m", "rate_card_version": "rc",
+    pinned = {"requested_model": certify.published_release()["requested_model"],
+              "rate_card_version": "rc",
               "engine_options_digest": record["engine_options_digest"],
               "runtime_image_ref": record["runtime_image"]["ref"]}
     for published, flagged in ((pinned, 0),

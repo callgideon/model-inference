@@ -23,7 +23,7 @@ import certify                                          # noqa: E402
 TARGET = {"kind": "local", "scale": "tiny", "label": certify.FAKE}
 CLEAN = {"sha": "c" * 40, "dirty": False}
 CAP = 82.0                          # the pilot's MAX_VIDEO_SECONDS (P-20 decision B)
-TREE_CAP = 120.0                    # the tree's default: every parity clip is within it
+TREE_CAP = 120.0                    # profile v1's cap: every parity clip is within it
 
 
 @pytest.fixture
@@ -257,7 +257,7 @@ def test_e4b_the_deployed_cap_and_its_refusal_are_the_media_layers(monkeypatch):
     from infrx.contracts.limits import DEFAULTS
     from infrx.media import prepare, probe
     monkeypatch.delenv("MAX_VIDEO_SECONDS", raising=False)
-    assert certify.deployed_cap_s() == DEFAULTS.max_video_seconds == TREE_CAP
+    assert certify.deployed_cap_s() == DEFAULTS.max_video_seconds == CAP   # G7 WR-1
     monkeypatch.setenv("MAX_VIDEO_SECONDS", "82")
     assert certify.deployed_cap_s() == CAP
     profile = prepare.MediaProfile.pinned(config.pilot_from_env())

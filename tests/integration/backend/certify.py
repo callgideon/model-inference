@@ -781,8 +781,8 @@ def declared() -> dict:
         "profile_version": ("v1", "S2M profile v1; M4-8179144's MEDIA-PARITY oracle"),
         "preparation_concurrency": (2, "M4-8179144 'Measured, not taken': stays 2"),
         "max_preparing_jobs": (8, "contracts limits, untouched by M4"),
-        "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 deploys a lower "
-                                     "cap as config (MAX_VIDEO_SECONDS, recorded apart)"),
+        "max_video_seconds": (82.0, "contracts limits: the approved release ceiling (P-20 "
+                                    "decision B; the code default since G7 WR-1)"),
         "published_engine_options_digest": (digest, "R76/R78: the serving revision every "
                                                     "admission pins is the measured one"),
         "published_runtime_image": (image, "R76/R78, as above"),

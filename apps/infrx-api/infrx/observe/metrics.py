@@ -100,6 +100,17 @@ FAMILIES: dict[str, Spec] = {
         (("code", frozenset(errors.ALL_CODES)), (TENANT_LABEL, _TENANT))),
     "infrx_inflight_requests": Spec("gauge", "Requests in flight in this process."),
     "infrx_inflight_limit": Spec("gauge", "The configured in-flight limit (MAX_INFLIGHT)."),
+    # WR-I8-3 (G7 WR-4): the large-body gate and the refusal drain, `routes/intake.py`.
+    "infrx_large_body_slots_in_use": Spec(
+        "gauge", "Large request and upload bodies holding a slot now (LARGE_BODY_LIMIT)."),
+    "infrx_large_body_slots_limit": Spec(
+        "gauge", "The large-body slots configured (LARGE_BODY_LIMIT)."),
+    "infrx_large_body_refused_total": Spec(
+        "counter", "Large bodies refused 429 because every slot was held."),
+    "infrx_intake_drained_total": Spec(
+        "counter", "Refused bodies read to their declared end so the caller reads the refusal.",
+        (("code", frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",
+                             "deadline_exceeded"})),)),
     "infrx_queue_depth": Spec("gauge", "Index candidates (pending plus in flight), by kind.",
                               (("kind", DISPATCH_KINDS),)),
     "infrx_queue_items": Spec("gauge", "Index candidates in total."),

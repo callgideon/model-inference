@@ -36,7 +36,6 @@ from typing import Any
 from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
 from ..contracts.limits import env_name
-from ..contracts.v2.records import CredentialAudience
 from ..media import fetch
 from ..media.attachments import PgAttachments
 from ..media.prepare import ProcessingCache
@@ -46,9 +45,9 @@ from ..scheduling.reconcile import Reconciler
 from ..state.catalog import PgCatalogDirectory
 from ..state.jobstore import PgJobStore, session_state_allowed
 from ..state.journal import PgStreamStore
-from .routes import intake
+from .routes import intake, models
 from .routes.ingress import IngressDeps
-from .routes.relay import CREDIT, Relay
+from .routes.relay import Relay
 
 log = logging.getLogger("infrx.gateway")
 
@@ -111,18 +110,6 @@ def journal_check(stream):
     async def check() -> bool:
         await stream.usage()
         return True
-    return check
-
-
-def price_check(catalog, model_id: str, regime: str, active_card: str):
-    """The served model resolves for a consumer and has an approved card - in the CREDIT
-    regime, the very card this deployment was approved to serve."""
-    async def check() -> bool:
-        deployment = await catalog.resolve(model_id, audience=CredentialAudience.consumer,
-                                           endpoint_id=None)
-        card = deployment and await catalog.active_rate_card(deployment.deployment_revision_id)
-        return card is not None and (regime != CREDIT
-                                     or card.rate_card_version == active_card)
     return check
 
 
@@ -303,9 +290,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         job_org=relay.job_org, attachments=attachments, uploads=lifecycle, content=lifecycle)
     rt.large_bodies = intake.LargeBodies(limit=deployment.large_body_limit,
                                          threshold=deployment.large_body_threshold_bytes)
-    checks = {"price_source": Probe(price_check(catalog, settings.model_id,
-                                                deployment.accounting_regime,
-                                                pilot.active_rate_card_version)),
+    checks = {"price_source": Probe(models.price_check(catalog, settings)),
               "journal": Probe(journal_check(stream))}
     rt.relay = relay
     rt.lifetime = Lifetime(probes=tuple(checks.values()), reconciler=reconciler, pool=pool,

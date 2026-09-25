@@ -100,11 +100,12 @@ def test_the_fixture_profile_is_what_the_deployed_configuration_enforces():
     assert set(pf.REFUSED_PARAMETERS) == validate.UNSUPPORTED
 
 
-def test_the_code_default_120s_profile_is_not_the_deployed_one():
-    """Oracle: publishing from code defaults. Without MAX_VIDEO_SECONDS=82 the runtime
-    enforces 120 s, so a projection built from the defaults advertises what the pilot
-    refuses (P-20)."""
-    default = runtime_profile({})
+def test_the_profile_v1_120s_ceiling_is_not_the_deployed_one():
+    """Oracle: publishing from profile v1's ceiling. At MAX_VIDEO_SECONDS=120 the runtime
+    enforces 120 s, so a projection built from it advertises what the pilot refuses
+    (P-20); the code default is the release's 82 s (G7 WR-1)."""
+    assert runtime_profile({}).capability.video.max_seconds == 82
+    default = runtime_profile({"MAX_VIDEO_SECONDS": "120"})
     assert default.capability.video.max_seconds == 120
     published = pm.PublishedModel.model_validate(CREDIT_DOC)
     assert pm.violations(published, default) == []            # honest against 120 s

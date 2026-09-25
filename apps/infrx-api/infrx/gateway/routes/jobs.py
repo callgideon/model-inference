@@ -14,7 +14,7 @@ Five routes, each answering only for the authenticated organization's own jobs:
 * `GET /v1/jobs/{handle}`: `JobStatus` from the committed row and outcome.
 * `GET /v1/jobs/{handle}/result`: the committed result (`JobResult`); `result_pending` while
   the job runs; a failure is a result with no `response`, not an error; `result_expired`
-  past the result's TTL.
+  past the result's PERSISTED expiry, or for a success with none persisted (G7, RV-11).
 * `GET /v1/jobs/{handle}/events`: the committed journal as SSE from `Last-Event-ID`, through
   `Relay.pump`. An observer that leaves detaches; it never cancels.
 * `DELETE /v1/jobs/{handle}`: `Relay.cancel(cause=client_cancelled)`, shielded, answering
@@ -24,6 +24,36 @@ Every handle route authenticates, then checks the audience and the handle's gram
 any store read, then asks the store with the key's organization (R59/R66). A malformed, an
 unknown and another tenant's handle are one 404. Expiry is judged on the store clock
 (`db_now`, R29/R79), never the gateway's.
+
+Revocation bound (G8's finding, stated rather than removed): admission re-reads the key in
+its own transaction, so a revoked key's next submission is refused at once; these routes
+authenticate from the identity cache, so a revoked key keeps reading - and cancelling - its
+own organization's jobs for at most KEY_TTL (60 s) after the gateway last fetched it, while
+the identity source answers (`tests/g/jobs/test_revocation.py`).
+
+G7 (RESULT-EXPIRY): every read applies F2C.b's one classification,
+`lifecycle.read_outcome(outcome, db_now)`, over the `result_expires_at` the settling
+transaction persisted - never recomputed from the current `result_ttl_s`, so a retune
+after settlement neither extends nor cuts a promised lifetime, and a success with no
+persisted expiry (a row from before it was carried) is never served. Metadata outlives
+content: status keeps state, cause and usage after the result is gone.
+
+| read_outcome | /result | status result_available / result_expires_at |
+|---|---|---|
+| pending | 409 result_pending | false / absent |
+| available | 200 with the response | true / the persisted instant |
+| no_result, held_unknown | 200 without one | false / absent |
+| expired, unavailable | 410 result_expired | false / absent |
+
+A worker lost after its first committed chunk (E3C s05) is `failed` /
+`lost_after_publication`, `held_unknown`: never regenerated and never charged (debit 0; the
+hold waits for reconciliation). Its result is 200 without a response, status reports usage
+`unknown`, the events replay the published prefix then `stream_interrupted` and `[DONE]`;
+a sync caller gets 500 `internal_error` (state `failed`), an SSE caller the prefix then
+`stream_interrupted`.
+
+Every store read here is bounded (E3C s08, `intake.bounded`): a store that stops answering
+is a retryable 503 `dependency_unavailable` within `DEPENDENCY_BOUND_S`, never a hang.
 """
 from __future__ import annotations
 
@@ -38,6 +68,7 @@ from starlette.responses import Response
 from ...contracts import errors, ids, wire
 from ...contracts.records import (Budgets, Cursor, ExecutionMode, JobState, SettlementState,
                                   TerminalCause, UsageCertainty)
+from ...contracts.v2.lifecycle import ReadOutcome, read_outcome
 from ...contracts.v2.records import CredentialAudience
 from . import intake
 from .ingress import Ingress
@@ -59,6 +90,8 @@ OWNERS = frozenset({CredentialAudience.consumer, CredentialAudience.provider_dev
 # An observer has no deadline of its own: the store's ends the job (R29). The relay's bound,
 # past which it cancels a sync or stream caller's job, is never reached by an observer.
 NEVER = datetime.max.replace(tzinfo=timezone.utc)
+# A success whose content is gone: past its persisted expiry, or with none persisted.
+GONE = frozenset({ReadOutcome.expired, ReadOutcome.unavailable})
 
 
 class Jobs:
@@ -142,22 +175,8 @@ class Jobs:
             return admission.pins.requested_model
         return admission.price_snapshot.model_revision
 
-    def result_expiry(self, outcome) -> datetime | None:
-        """When a committed success's result stops being served: `result_ttl_s` after its
-        settlement, both instants on the store clock. None for a job that has no chat result:
-        not terminal, not a success, or a success without authoritative usage (the chat shape
-        requires usage, and none is invented).
-
-        ponytail: the TTL is the route's (`limits.result_ttl_s` over `settled_at`) until D5
-        stores `jobs.result_expires_at`; then read the store's."""
-        if (outcome is None or outcome.state is not JobState.succeeded
-                or outcome.usage is None or not outcome.result_ref):
-            return None
-        return outcome.settled_at + timedelta(seconds=self.relay.limits.result_ttl_s)
-
     def status_of(self, admission, outcome, now: datetime) -> wire.JobStatus:
-        expires = self.result_expiry(outcome)
-        available = expires is not None and now < expires
+        available = read_outcome(outcome, now) is ReadOutcome.available
         usage = outcome.usage if outcome is not None else None
         held = outcome is not None and outcome.settlement_state is SettlementState.held_unknown
         certainty = (UsageCertainty.authoritative if usage is not None
@@ -168,7 +187,8 @@ class Jobs:
             cause=outcome.cause if outcome is not None else None,
             created_at=admission.admitted_at,
             updated_at=outcome.settled_at if outcome is not None else admission.admitted_at,
-            result_available=available, result_expires_at=expires if available else None,
+            result_available=available,
+            result_expires_at=outcome.result_expires_at if available else None,
             usage=wire.ChatUsage.of(usage) if usage is not None else None,
             usage_certainty=certainty.value if certainty is not None else None)
 
@@ -288,10 +308,10 @@ def register(app, rt):
         admission, outcome = await jobs.owned(org, handle)
         if outcome is None:
             raise errors.ResultPending("the job is not terminal")
-        expires, response = jobs.result_expiry(outcome), None
-        if expires is not None:
-            if await jobs.now() >= expires:
-                raise errors.ResultExpired("the result passed its retention")
+        read, response = read_outcome(outcome, await jobs.now()), None
+        if read in GONE:
+            raise errors.ResultExpired("the result passed its retention")
+        if read is ReadOutcome.available:
             text = await _dependency(relay.results.read_result(org, outcome.result_ref))
             response = jobs.response_of(admission, outcome, text)
         return _answer(wire.JobResult(
@@ -322,9 +342,12 @@ def register(app, rt):
             raise errors.InvalidRequest("DELETE /v1/jobs/{handle} takes no body")
         admission, _ = await jobs.owned(org, handle)
         # Never a 200 without the committed cancel: an outage is a retryable 503 (the job is
-        # untouched), and the retried DELETE answers what is committed then.
+        # untouched), and the retried DELETE answers what is committed then. `relay.cancel`
+        # bounds itself (its unconfirmed branch is that 503); the outer bound is only a
+        # backstop, set past it so the relay's own answer is the one that fires.
         outcome = await _dependency(
-            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))
+            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),
+            2 * intake.DEPENDENCY_BOUND_S)
         return _answer(jobs.status_of(admission, outcome, await jobs.now()), admission)
 
     # The guard's wrapper is defined in `intake`; the route table names this module

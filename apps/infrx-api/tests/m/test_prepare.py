@@ -935,7 +935,7 @@ def test_a_header_first_clip_over_the_cap_is_refused_before_the_rest_arrives(tmp
     adapter = _served(tmp_path, stream)
     with pytest.raises(errors.UnsupportedMedia) as caught:
         run(adapter.materialize(b.ORG_A, URL))
-    assert "longer than 120s" in caught.value.detail
+    assert f"longer than {DEFAULTS.max_video_seconds:g}s" in caught.value.detail
     assert getattr(caught.value, "reason", None) == "header"
     assert stream.read < fetch.EARLY_LOOK_BYTES + CHUNK < len(body)
     assert adapter.objects.objects == {} and adapter.refs == {}
@@ -966,7 +966,8 @@ def test_a_media_first_clip_over_the_cap_is_refused_once_it_has_arrived(tmp_path
     adapter = _served(tmp_path, stream)
     with pytest.raises(errors.UnsupportedMedia) as caught:
         run(adapter.materialize(b.ORG_A, URL))
-    assert "longer than 120s" in caught.value.detail and stream.read == len(body)
+    assert f"longer than {DEFAULTS.max_video_seconds:g}s" in caught.value.detail \
+        and stream.read == len(body)
     assert adapter.objects.objects == {}
 
 

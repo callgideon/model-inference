@@ -59,7 +59,7 @@ class PilotSettings:
     max_request_bytes: int = 100_663_296         # 96 MiB
     intake_timeout_s: float = 30.0
     max_media_bytes: int = 67_108_864            # 64 MiB decoded
-    max_video_seconds: float = 120.0
+    max_video_seconds: float = 82.0              # P-20: the approved release profile's ceiling
     # r1 R2: the new media path's own names. F1's FETCH_TIMEOUT_S (30),
     # MAX_VIDEO_MB and MAX_REDIRECTS keep their names and defaults until M1
     # retires them, so the two paths never read the same variable.
