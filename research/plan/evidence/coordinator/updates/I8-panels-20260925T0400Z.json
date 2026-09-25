@@ -1,0 +1,7 @@
+{"task":"I8","slice":"panels (OB-10)","activity":"review","head":"see commit","worktree":".claude/worktrees/codex-i8-panels","branch":"codex/i8-panels",
+ "owned_paths":["infra/alerts/dashboard.json"],
+ "commands":[{"cmd":"pytest -q tests/integration/backend/recovery/test_observe.py (base)","exit":1,"summary":"1 failed ob10, 15 passed"},
+  {"cmd":"pytest -q tests/integration/backend/recovery/test_observe.py","exit":0,"summary":"16 passed"},
+  {"cmd":"cd apps/infrx-api && INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_observe.py","exit":0,"summary":"13 passed, 1 xfailed"}],
+ "estimate":{"optimistic_h":0,"likely_h":0,"pessimistic_h":0,"confidence":"high","basis":"gate case green","at":"2026-09-25T04:00Z"},
+ "blockers":[],"wiring_requests":[],"evidence":["research/plan/evidence/i/I8-panels-59a8512.md"]}
