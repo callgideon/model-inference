@@ -1,0 +1,119 @@
+{
+  "task": "E2C",
+  "slice": "1-4 (environment+preflight, RV-12 repairs, baseline+dependency triage, gate wrappers)",
+  "activity": "review",
+  "head": "3a113dc9",
+  "worktree": ".claude/worktrees/codex-e2c-verify",
+  "branch": "codex/e2c-verify",
+  "owned_paths": [
+    "tests/integration/",
+    "apps/infrx-api/tests/ (portability fixes only)",
+    "research/plan/evidence/e/E2C-3a113dc.md"
+  ],
+  "commands": [
+    {
+      "cmd": "cd apps/infrx-api && uv run --frozen pytest -q -rfEs --durations=40 --junitxml=... (make api-test) @ dff31efc",
+      "exit": 0,
+      "summary": "3686 passed, 0 failed, 27 skipped (24 S3 endpoint, 3 empty default mutant subsets), 5 strict xfail, 1810.9 s"
+    },
+    {
+      "cmd": "same @ 48e02236 (head apps tree)",
+      "exit": 1,
+      "summary": "3679 passed, 8 failed, 27 skipped, 5 xfailed, 2705 s; 7 HarnessBusy on shared d2-valkey lock (rerun on e2c namespace: tests/d/test_outbox_relay.py 20 passed) + 1 test_pgharness decoy collision from coordinator patch efad43e0"
+    },
+    {
+      "cmd": "same @ 66fb1d38 (attempt 1)",
+      "exit": 2,
+      "summary": "invalid: infrx-d1-postgres failed to bind 55432 (ephemeral source port); 54 D failures; interrupted, leftover container removed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -rA tests/w/test_w4_mutants.py",
+      "exit": 0,
+      "summary": "109 passed; all five audit W4 ids killed; no survivor on Linux"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all ... tests/i/test_mutants.py",
+      "exit": 0,
+      "summary": "226 passed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all ... tests/g/test_mutants.py",
+      "exit": 1,
+      "summary": "339 passed, 1 failed (new Linux case lacked a mutant) -> host_memory_not_read added a54ff914, killed"
+    },
+    {
+      "cmd": "INFRX_MUTANTS=all ... tests/w/test_w3_mutants.py",
+      "exit": 0,
+      "summary": "87 passed"
+    },
+    {
+      "cmd": "make bench-test",
+      "exit": 0,
+      "summary": "68 passed"
+    },
+    {
+      "cmd": "make console-test console-lint console-typecheck (pnpm install --frozen-lockfile exit 0)",
+      "exit": 0,
+      "summary": "289 pass / 0 fail; lint 0 errors 2 warnings; typecheck pass"
+    },
+    {
+      "cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py",
+      "exit": 0,
+      "summary": "21 passed"
+    },
+    {
+      "cmd": "tests/integration/run.py --layer 1 --only-suites --no-mutants @ 3a113dc9",
+      "exit": 0,
+      "summary": "engine PASS, suites 232 passed 103 skipped"
+    },
+    {
+      "cmd": "tests/integration/consumer-local.sh (run 3)",
+      "exit": 1,
+      "summary": "FAIL: contracts PASS, d FAIL (decoy), m/w BLOCKED (S3 skips), g PASS, bench PASS, integration-l1 PASS, integration-l2 BLOCKED (MinIO pin absent)"
+    },
+    {
+      "cmd": "tests/integration/consumer-local.sh --break-seam readiness|expiry",
+      "exit": 1,
+      "summary": "FAIL, mutant killed (both)"
+    },
+    {
+      "cmd": "tests/integration/backend-certify.sh -- --box --target ...",
+      "exit": 4,
+      "summary": "INVALID without profile; with valid profile exit 3 NOT RUN, nothing started"
+    },
+    {
+      "cmd": "tests/integration/app-e2e.sh",
+      "exit": 3,
+      "summary": "NOT RUN: console PASS, browser journey NOT RUN (E3A)"
+    },
+    {
+      "cmd": "gh api .../dependabot/alerts; uv audit --frozen; pnpm audit --json",
+      "exit": 0,
+      "summary": "1 open alert: pytest<9.0.3 GHSA-6w46-j5rx-g56g medium, dev-only, not in runtime image; pnpm 0 vulns; relock trial pytest 9.1.1 only package change"
+    }
+  ],
+  "estimate": {
+    "optimistic_h": 1,
+    "likely_h": 3,
+    "pessimistic_h": 6,
+    "confidence": "medium",
+    "basis": "after coordinator wiring 1-4 (Makefile, tasklocal decoy fix, pytest bump, port-reservation sysctl), rerun make consumer-local with S3 + E2 layer 2 provided to reach PASS or name the next blocker",
+    "at": "2026-09-25T00:04Z"
+  },
+  "blockers": [
+    "tests/d decoy collision from tasklocal patch efad43e0 (wiring 2)",
+    "S3 endpoint / pinned MinIO image absent: m/w stages and integration-l2 BLOCKED",
+    "task-local ports inside the ephemeral range (host sysctl, wiring 4)"
+  ],
+  "wiring_requests": [
+    "Makefile: consumer-local / backend-certify / app-e2e targets calling tests/integration/*.sh $(GATE_ARGS)",
+    "tasklocal.py: g8 valkey 55473->55483, e2c valkey 55474->55484, e2c s3 55475->55485, i8 valkey 55476->55486 (D decoys are postgres+40)",
+    "pyproject dev pytest>=9.0.3,<10 + uv lock (pytest 9.1.1 only)",
+    "host: sysctl net.ipv4.ip_local_reserved_ports=55400-55999,56700-56999"
+  ],
+  "evidence": [
+    "research/plan/evidence/e/E2C-3a113dc.md",
+    "tests/integration/ENVIRONMENT.md",
+    "tests/integration/environment.json"
+  ]
+}
