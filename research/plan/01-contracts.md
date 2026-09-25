@@ -112,3 +112,58 @@ F3 publishes the concrete Python/TypeScript encoding and shared fixtures for the
 Evaluation states must distinguish queued/running/succeeded/partial/failed/cancelled/restricted; per-case outcomes include explicit missing/unsupported states. External pipeline states must additionally distinguish submission intent, submitted, unknown submission and reconciling. F3/D7/D8 define exact legal transitions and cancellation/late-artifact semantics in executable fixtures. Monetary states use the existing exact budgets/settlement protocol; a new UI must not invent a parallel spend counter.
 
 Requests used for Lab benchmark execution use a funded provider_dev wallet and bounded concurrency; consumer signup grants are not training/evaluation credits. External teacher/training USD costs are never summed with CREDIT. Full object payloads live in authorized object storage; relational rows store bounded references and lineage. Current inference contracts remain backward compatible while the later workers/apps adopt F3.
+
+## F2C.a lifecycle ports (2026-09-24)
+
+Additive to the ports table above; semantics and decisions in [02 §F2C lifecycle amendment](02-durable-protocols.md). Python is the signature authority (`apps/infrx-api/infrx/contracts/v2/lifecycle.py`); the console half (`apps/app/lib/contracts/v2/lifecycle.ts`) carries only browser-safe types - vocabularies, the upload ticket and the readiness view - and exact decoders.
+
+| Port / owner | Operations | Contract |
+|---|---|---|
+| UploadRepository / D10, adapted by M5 | create(org, constraints); acknowledge_put(org, handle, bytes, digest); complete(org, handle, source); abort(org, handle, refusal); resolve(org, handle); expire(limit) | Durable ticket (constraints, owner, window, receipt, immutable finalized source) reloaded by any process; the caller names no tenant, handle or expiry; one handle names one set of bytes; a failed check is final; another tenant's handle is `not_found`. |
+| ReadinessStore / D10, consumed by W5/G7 | admit_ready(request, idem, expectation); readiness(job); claim_preparation(job, worker) | Manifest and marker in the admission transaction; empty manifest is ready-with-zero, missing marker is not_ready; preparation refuses not_ready. |
+| ContentLifecycle / D10, driven by M6 | register(identity); references(content); candidates(after, limit); claim(content, generation, holder); tombstone(claim); acknowledge_delete(tombstone) | Persisted eligibility and references decide deletion; fenced leased claims; recheck inside tombstone; tombstoned keys refuse new use until acknowledged; an older generation's acknowledgement is a no-op. |
+
+- 2026-09-24: F2C.a ports section appended. Fake-backed conformance only.
+
+## F2C.b terminal/read consistency (2026-09-24)
+
+`TerminalOutcome` gains the optional `result_expires_at` (persisted at settlement; a proposal's value is ignored; absent on non-successes and on pre-F2C.b records). Every read path classifies with `v2.lifecycle.read_outcome(outcome, db_now)` into `pending`, `available`, `no_result`, `held_unknown`, `expired`, `unavailable`; the table and the rollout are in [02 §F2C terminal/read consistency](02-durable-protocols.md). Public wire bodies are unchanged. The TypeScript twin is `decodeTerminalOutcome`/`readOutcome` in `lib/contracts/v2/lifecycle.ts`.
+
+- 2026-09-24: F2C.b section appended. Fake-backed conformance only.
+
+## F2C changed-field / consumer matrix (2026-09-24, slice d)
+
+Every existing implementation that consumes a contract F2C-L changed, with the owner of the change. Line numbers are at `dff31efc` (unchanged by this lane). "None" means the consumer is compatible as is.
+
+| Changed contract | Consumer (file:line) | Owner | Required change |
+|---|---|---|---|
+| `TerminalOutcome.result_expires_at` | `infrx/state/jobstore.py:39` `_OUTCOME_FIELDS`, `:105` `_outcome` | D10 | add the field; keep the whitelist (records are `extra="forbid"`) |
+| | `migrations/0018_terminal_settlement.sql:281` `job_admission` outcome document | D10 | new migration re-creates it with `result_expires_at` (0018:436 already persists it); the `jobs` expiry check only at zero violators, never `NOT VALID` over one (02 rollout step 2) |
+| | `migrations/0017_stream_journal.sql:186` terminal journal payload | D10 | none - must NOT gain the field (widest bytes pinned) |
+| | `infrx/gateway/routes/jobs.py:145` `result_expiry`, `:158` `status_of`, `:286` `job_result` | G7 | delete the recomputation; `read_outcome(outcome, db_now)` |
+| | `infrx/gateway/routes/relay.py:338` `_outcome`, `:385` `answer` | G7 | a sync/stream replay of `expired`/`unavailable` answers `result_expired` |
+| | `infrx/worker/attempt.py:494` proposal | W | none (a proposal carries no expiry; the store ignores one) |
+| | `infrx/observe/metrics.py:328` `record_outcome` | I | none |
+| | App (C0/U4) | C/U | none today; result availability uses `readOutcome`/`decodeTerminalOutcome` |
+| `UploadRepository`, `UploadTicket`, `UploadConstraints` | `infrx/media/uploads.py:64` `Upload`, `:88` `self.uploads`, `:110` `create_upload`, `:153` `put_upload`, `:164` `finalize_upload`, `:246` `resolve_owned` | M5 | tickets through the port; `complete` with the measured ref |
+| | `infrx/gateway/routes/uploads.py:105` create, `:122` PUT, `:150` complete | G7/M5 | `UploadConstraints.parse`; `acknowledge_put` after the object write; wire bodies unchanged |
+| | `infrx/media/gc.py:87` upload sweep | M6 | destinations via `ContentLifecycle` (ticket references) |
+| | `migrations/0010_media_uploads.sql:21` `media_uploads` | D10 | additive nullable receipt and finalized-content columns; `aborted_reason` holds the abort reason |
+| | `infrx/gateway/pilot.py:280` `MediaUploads(...)` | coordinator | compose the durable adapter |
+| | `models/marlin2b/bench.py:808` `upload` | E1C | none from F2C (wire unchanged; RV-07 is separate) |
+| `ReadinessStore` (`admit_ready`, `readiness`, gated `claim_preparation`) | `infrx/gateway/routes/relay.py:143` `admit`, `:219` `_resume`, `:242` `_admitted`, `:280` `job_org` | G7 | `admit_ready(prepared, idem, AdmissionExpectation)`; the post-commit rechecks and attach move into the transaction |
+| | `infrx/media/attachments.py:51` `put` (`:53` returns on an empty set), `:83` `get` | D10 | `admit_ready` dual-writes 0003 `job_media`; `PgAttachments` remains the previous runtime's reader |
+| | `infrx/media/store.py:310` `attach`, `:339` `attached` | M5 | attach becomes part of admission |
+| | `infrx/worker/preparation.py:214` claim, `:237` `if work.media_refs`, `:263` `_media` | W5 | claim through the gated port; sources from `readiness(job_id)` |
+| | `infrx/state/jobstore.py:192` `admit`, `:201` `admit_credit`, `:258` `claim_preparation` | D10 | the old admits write no marker; the claim refuses `not_ready` |
+| | `migrations/0016_fenced_leases.sql:512` reaper, `0003_pilot_durable_schema.sql:416/459` `staged_media`/`job_media` | D10 | none (the no-backfill cutover relies on the reaper as is) |
+| | `infrx/gateway/pilot.py:212` `PgAttachments(connect)` | coordinator | compose the readiness store |
+| `ContentLifecycle` | `infrx/media/gc.py:65` `sweep`, `:69` process-memory liveness, `:132` `_forget` | M6 | candidates/claim/tombstone/acknowledge; retain and report on any refusal |
+| | `infrx/media/uploads.py:91` `idle_since`, `:104` `_touch` | M5/M6 | replaced by `register` and durable references |
+| | `infrx/media/store.py:201` `_write_once`, `:221` `materialize`, `:269` `stage` | M5 | `register` before each object write |
+| | `migrations/0010_media_uploads.sql:95` `media_objects`, `:124` `delete_media_object_if_idle` | D10 | superseded additively (generation, tombstone, references) |
+| | `migrations/0014_job_results.sql:24` `job_results_bytes_exact`, `:30` `job_results_immutable`, `:68` `read_result`; `infrx/state/jobstore.py:352` `read_result` | D10 | the scrub guard of 02 §F2C ("Scrub guard", column by column; the one allowed drop-and-recreate); `read_result` refuses a scrubbed row as `result_expired` |
+| Acceptance transcripts (`conformance/acceptance.py`) | E3C/E1C integration runs | E | `replay(real_factory) == []` on the merged SHA |
+
+- 2026-09-24: F2C consumer matrix appended (slice d).
+- 2026-09-24: F2C fix round: the 0014 and 0018 rows point at the column-by-column scrub guard and the zero-violator expiry check in 02; acceptance transcripts are now `f2c-lifecycle-acceptance.2`.

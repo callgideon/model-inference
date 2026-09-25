@@ -1,0 +1,25 @@
+{
+  "job_id": "f0000001-0000-4000-8000-000000000001",
+  "org_id": "a0000002-0000-4000-8000-000000000002",
+  "ready_at": "2026-09-22T12:00:00Z",
+  "schema_version": 2,
+  "sources": [
+    {
+      "content_id": "70000001-0000-4000-8000-000000000001",
+      "generation": 1,
+      "ref": {
+        "bytes": 4194304,
+        "digest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "duration_s": 12.5,
+        "handle": "upl_fixture0lifecycle0upload0000000001",
+        "kind": "upload",
+        "mime": "video/mp4",
+        "org_id": "a0000002-0000-4000-8000-000000000002",
+        "profile_version": "v1",
+        "schema_version": 1,
+        "storage_ref": "media/a0000002-0000-4000-8000-000000000002/v1/a1a1a1a1a1a1a1a1/source"
+      },
+      "schema_version": 2
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+[
+  {
+    "code": "not_found",
+    "reason": "not_found"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "invalid_constraints"
+  },
+  {
+    "code": "upload_expired",
+    "reason": "upload_expired"
+  },
+  {
+    "code": "state_conflict",
+    "reason": "upload_not_open"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "upload_not_finalized"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "nothing_received"
+  },
+  {
+    "code": "state_conflict",
+    "reason": "bytes_changed"
+  },
+  {
+    "code": "request_too_large",
+    "reason": "too_large"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "size_mismatch"
+  },
+  {
+    "code": "unsupported_media",
+    "reason": "digest_mismatch"
+  },
+  {
+    "code": "unsupported_media",
+    "reason": "mime_not_accepted"
+  },
+  {
+    "code": "unsupported_media",
+    "reason": "media_refused"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "invalid_manifest"
+  },
+  {
+    "code": "invalid_request",
+    "reason": "expectation_mismatch"
+  },
+  {
+    "code": "not_claimable",
+    "reason": "not_ready"
+  },
+  {
+    "code": "dependency_unavailable",
+    "reason": "content_retiring"
+  },
+  {
+    "code": "not_claimable",
+    "reason": "not_eligible"
+  },
+  {
+    "code": "not_claimable",
+    "reason": "reference_live"
+  },
+  {
+    "code": "not_claimable",
+    "reason": "claim_held"
+  },
+  {
+    "code": "stale_lease",
+    "reason": "claim_lost"
+  }
+]

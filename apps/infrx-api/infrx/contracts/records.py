@@ -612,7 +612,15 @@ class Chunk(Record):
 
 class TerminalOutcome(Record):
     """One per job. `usage is None` is exactly "usage unknown": a present usage
-    must be authoritative, because output chunks never bill."""
+    must be authoritative, because output chunks never bill.
+
+    F2C.b: `result_expires_at` is the instant the settling transaction PERSISTED for a
+    success's result (database clock; the store's configured TTL at settlement), carried
+    unchanged on every committed read. The store decides it, like `settlement_state`: a
+    proposal's value is ignored. It is absent on every other outcome, on a proposal, and
+    on a record written before it was carried - and absent never means "recompute it":
+    `v2.lifecycle.read_outcome` answers such a success `unavailable`.
+    """
 
     job_id: UuidStr
     state: JobState
@@ -623,6 +631,7 @@ class TerminalOutcome(Record):
     debit: Money = Field(default=money.ZERO, ge=0)
     settled_at: Timestamp
     reconcile_after: Timestamp | None = None    # set when settlement_state is held_unknown
+    result_expires_at: Timestamp | None = None  # F2C.b: persisted at settlement, successes only
 
     @model_validator(mode="after")
     def _consistent(self) -> TerminalOutcome:
@@ -637,6 +646,11 @@ class TerminalOutcome(Record):
             raise ValueError("only a settled outcome carries a nonzero debit")
         if (self.settlement_state is SettlementState.held_unknown) != (self.reconcile_after is not None):
             raise ValueError("held_unknown requires reconcile_after, and nothing else may set it")
+        if self.result_expires_at is not None and (
+                self.state is not JobState.succeeded or not self.result_ref
+                or self.result_expires_at <= self.settled_at):
+            raise ValueError("only a success with a result carries result_expires_at, "
+                             "and it follows settled_at")
         return self
 
 

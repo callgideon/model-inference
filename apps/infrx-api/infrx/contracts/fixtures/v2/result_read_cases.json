@@ -1,0 +1,281 @@
+[
+  {
+    "expected": "pending",
+    "name": "not terminal",
+    "now": "2026-09-20T12:00:09Z"
+  },
+  {
+    "expected": "available",
+    "name": "success at settlement",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_expires_at": "2026-09-21T12:00:09Z",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "available",
+    "name": "success one microsecond before its expiry",
+    "now": "2026-09-21T12:00:08.999999Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_expires_at": "2026-09-21T12:00:09Z",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "expired",
+    "name": "success AT its expiry: equality has passed",
+    "now": "2026-09-21T12:00:09Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_expires_at": "2026-09-21T12:00:09Z",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "expired",
+    "name": "success after its expiry",
+    "now": "2026-09-21T12:00:09.000001Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_expires_at": "2026-09-21T12:00:09Z",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "unavailable",
+    "name": "pre-F2C.b success at settlement: no expiry is invented",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "unavailable",
+    "name": "pre-F2C.b success before the old TTL would end",
+    "now": "2026-09-21T12:00:08.999999Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "terminal_cancelled",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "client_cancelled",
+      "debit": "0.00026400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "cancelled",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 40,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1240
+      }
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "terminal_platform_error",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "platform_error",
+      "debit": "0.00000000",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "released_platform_absorbed",
+      "state": "failed"
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "terminal_expired",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "queue_wait_expired",
+      "debit": "0.00000000",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "released_free",
+      "state": "expired"
+    }
+  },
+  {
+    "expected": "held_unknown",
+    "name": "terminal_unknown_usage",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "client_disconnected",
+      "debit": "0.00000000",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "reconcile_after": "2026-09-21T12:00:09Z",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "held_unknown",
+      "state": "failed"
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "cancelled with a result_ref",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "client_cancelled",
+      "debit": "0.00026400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "cancelled",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 40,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1240
+      }
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "failed with a result_ref",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "platform_error",
+      "debit": "0.00000000",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "released_platform_absorbed",
+      "state": "failed"
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "success without a result_ref",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00044400",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "settled",
+      "state": "succeeded",
+      "usage": {
+        "certainty": "authoritative",
+        "completion_tokens": 340,
+        "prompt_tokens": 1200,
+        "schema_version": 1,
+        "total_tokens": 1540
+      }
+    }
+  },
+  {
+    "expected": "no_result",
+    "name": "success released free without usage, with an expiry",
+    "now": "2026-09-20T12:00:09Z",
+    "outcome": {
+      "cause": "completed",
+      "debit": "0.00000000",
+      "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "result_expires_at": "2026-09-21T12:00:09Z",
+      "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+      "schema_version": 1,
+      "settled_at": "2026-09-20T12:00:09Z",
+      "settlement_state": "released_free",
+      "state": "succeeded"
+    }
+  }
+]
