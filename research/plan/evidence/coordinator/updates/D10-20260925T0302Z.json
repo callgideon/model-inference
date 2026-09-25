@@ -1,0 +1,43 @@
+{
+  "task": "D10",
+  "slice": "survivor round (a-d committed; WR-3a, M6 findings, E2C-FR-1 folded in)",
+  "activity": "review",
+  "head": "1f12cb6a",
+  "worktree": ".claude/worktrees/codex-d10-durable",
+  "branch": "codex/d10-durable",
+  "owned_paths": [
+    "apps/app/supabase/migrations/ (0019, 0020, 0021 new)",
+    "apps/infrx-api/infrx/state/",
+    "apps/infrx-api/tests/d/",
+    "research/plan/evidence/d/"
+  ],
+  "commands": [
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py tests/d/test_signup.py", "exit": 0, "summary": "9e3e149d: 728 passed, 0 survivors (4 former survivors killed, 4 new mutants)"},
+    {"cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_ready.py test_content.py test_reads.py test_lifecycle_conformance.py test_upgrade_d10.py test_postgrest_d10.py test_catalog_pg.py", "exit": 1, "summary": "9e3e149d: 123 passed, 4 xfailed, 1 failed (test_postgrest_d10: image auth.uid() legacy body)"},
+    {"cmd": "INFRX_D1_IMAGE=supabase pytest -q tests/d/test_postgrest_d10.py", "exit": 0, "summary": "1f12cb6a: 1 passed after the fixture installs the hosted auth.uid()"},
+    {"cmd": "I8 privilege_probe.py --role infrx_runtime (Supabase image) + infrx_monitor attempt probe", "exit": 0, "summary": "PASS 63 checks, 0 failed; monitor read-only, 10s, 7 allowed, 7 denied"},
+    {"cmd": "other tracks on the D10 schema (contracts/g/m/w/q list)", "exit": 0, "summary": "9e3e149d: 324 passed, 7 skipped"},
+    {"cmd": "pytest -q tests/contracts", "exit": 0, "summary": "9e3e149d: 1168 passed"},
+    {"cmd": "pytest -q tests/d (full, default mutant subset)", "exit": 0, "summary": "9e3e149d: 796 passed, 1 skipped, 8 xfailed"},
+    {"cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_signup.py -k code_mutant (+docker events)", "exit": 0, "summary": "1f12cb6a: 15 passed; no infrx-d1-* container created"}
+  ],
+  "estimate": {"optimistic_h": 1, "likely_h": 3, "pessimistic_h": 6, "confidence": "medium",
+               "basis": "all D lists, full mutant list and Supabase-image runs green; left: review fixes and W5 fail_preparation SQL once F2C/R104 rule the port", "at": "2026-09-25T03:02Z"},
+  "blockers": [
+    "W5 fail_preparation needs the F2C port signature and R104's ruling before D10 writes its SQL"
+  ],
+  "wiring_requests": [
+    "unchanged from D10-HANDOFF-31c2112.md section 8 (G7, W5, M5, M6, coordinator composition, I8, G8, C0/U4, tasklocal)",
+    "G7: WR-3a now available as PgCatalogDirectory.usd_price (0021 infrx.usd_price); WR-2 can land with D10",
+    "E3C WR-4: set infrx_runtime login password on the clone and pass that DSN as DATABASE_URL"
+  ],
+  "evidence": [
+    "research/plan/evidence/d/D10-1f12cb6.md",
+    "research/plan/evidence/d/D10-HANDOFF-31c2112.md",
+    "research/plan/evidence/d/D10-runtime-functions.txt"
+  ],
+  "open_issues": [
+    "lane-rule breach found and fixed: before 1f12cb6a the signup code-mutant copies ran on d1's 55432 (harness default) in both INFRX_MUTANTS=all runs",
+    "Supabase image auth.uid() is the legacy per-claim body; other PostgREST tests on that image need the same fixture"
+  ]
+}
