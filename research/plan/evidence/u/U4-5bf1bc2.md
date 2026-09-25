@@ -189,3 +189,95 @@ No mutant-list wiring is needed: `tests/u/run-mutants.mjs` is in the U path and 
 - Lane: 0 h, pending review.
 - Coordinator/D10: WR-U4-1 about 0.1 h. WR-U4-2 about 0.5 h (one function plus the two P07 lines). WR-U4-3 about 0.5 h (optional).
 - Estimate: optimistic 0.5 h, likely 1.5 h (one review/fix round), pessimistic 4 h. Confidence medium. Basis: every seam has a unit case, a named mutant kill and real-PostgreSQL agreement with the API's read path; what remains is review plus SQL and Makefile wiring whose patches and proofs are written.
+
+## Fix round (2026-09-25 23:00–23:25Z; review of handback 313ee915)
+
+Commits on `codex/app-u4` (nothing pushed, rebased, amended or stashed):
+
+```
+99395a20 U4 fix round: browser lifecycle regressions first (fail: drivers absent)
+ee447470 U4 fix round: browser lifecycle as tested drivers (0-U4-V-01/02) ...
+```
+
+This evidence section and `updates/U4-20260925T2322Z.json` are committed on top of `ee447470`. The handback gives the final head.
+
+### Findings
+
+| Id | Status | What changed |
+|---|---|---|
+| 0-U4-V-01 (major) | **fixed** | The effect logic moved into `request-view-model.ts` as pure drivers with an injected timer, clock and event target. `watchExpiry(expiresAt, now, schedule, onExpire)` drops content at the expiry and never before it. It re-arms when a timer fires early (the 2^31−1 ceiling, or a slept laptop), drops at once content that arrives already expired, and unmount clears it. `watchResult(read, show, page)` reads on mount. On a *persisted* `pageshow` it first shows `loading`, so the old content is hidden, then reads again. Its cancel aborts the reads, and an answer that arrives after cancel is dropped. `readResult(id, signal, fetcher = fetch)` also moved here. It is tested with a fake fetcher for `cache: "no-store"`, `credentials: "same-origin"`, the signal, GET, and the id as one path segment; an abandoned read returns `null`. `result-panel.tsx` now only wires these, with no `fetch(` of its own, so the retry button also goes through `readResult`. New cases: V10, V11, V12, and S02 (source wiring with comments stripped). |
+| 0-U4-V-02 (major) | **fixed** | `pollLoop(schedule, refresh, onStop)` refreshes on the backoff, calls `onStop` after exactly `MAX_POLLS` refreshes, then arms nothing; unmount cancels the next poll (V09). `pollsFor(model)` is the page's single mount decision, and T.poll now tests it directly. `status-poller.tsx` is one line, `useEffect(() => pollLoop(browserTimer, () => router.refresh(), () => setStopped(true)), [router, round])`. `page.tsx` renders `{pollsFor(model) ? <StatusPoller /> : null}`, and S02 pins that it has exactly one `<StatusPoller`. |
+| 0-U4-V-03 (major) | **not fixed in lane: outside owned paths (D10 SQL)**. WR-U4-2 refined and proven | The regression now exists and is strict. P07 keeps the App/API agreement. The old `console.log` became **U4-P08**: the direct RPC for the unknown-usage success must be `P0001 result_pending:`, and the settled sibling is still served. P08 carries `todo: WR_U4_2` until D10 applies the patch. Real PostgreSQL on the current schema gives `not ok 8 ... # TODO` with `consumer_job_result served an unknown-usage result`. The same world with the WR-U4-2 SQL applied after the migrations gives `ok 8`. |
+
+### Reproduced before, killed after
+
+The review's surviving mutants were reproduced on the handback tree, one scratch copy each, running `node --test tests/u/request-detail.test.ts`. **A** (no drop at expiry), **B** (no re-read on persisted pageshow), **F** (no `controller.abort()`), **K** (retry via plain `fetch`), **E** (poller never stops) and **D** (page always polls) all gave `exit 0, # pass 16 # fail 0`, so each survived.
+
+The regressions-first commit `99395a20` fails as a whole file: `SyntaxError: ... does not provide an export named 'pollLoop'`. After `ee447470` the file passes 21/21.
+
+18 new U-runner mutants (U4-M26..M43) cover each review mutant in both its driver form and its wiring form, plus neighbours. All 18 are killed by their declared case:
+
+| Mutant | Review mutant | What it breaks | Killed by |
+|---|---|---|---|
+| M26 | A | the driver never calls `onExpire` | V10 |
+| M27 | A | the panel's `onExpire` is `() => {}` | S02 |
+| M28 | B | the persisted check is `if (false)` | V11 |
+| M29 | B | listens on a non-window target | S02 |
+| M30 | F | `controller.abort()` deleted | V11 |
+| M31 | F | the panel discards the driver's cleanup (`void watchResult`) | S02 |
+| M32 | K | retry via plain `fetch` | S02 |
+| M33 | E | `pollDelayMs(attempt) ?? FIRST_POLL_MS` | V09 |
+| M34 | E | `onStop` is `() => {}` | S02 |
+| M35 | D | the page renders `{true ? <StatusPoller />` | S02 |
+| M36 | D | `pollsFor` returns `true` for non-ready | V05 |
+| M37 | — | the poll loop ignores unmount | V09 |
+| M38 | — | an early timer drops content | V10 |
+| M39 | — | the expiry timer ignores unmount | V10 |
+| M40 | — | a late answer is shown after navigation | V11 |
+| M41 | — | a restore keeps the old content on screen | V11 |
+| M42 | — | `credentials: "include"` | V12 |
+| M43 | — | an abandoned read shows `unavailable` | V12 |
+
+M23 (no-store) now targets `readResult` in the view model and is killed by V12. The fetch moved there, so S01 no longer greps the panel for it.
+
+One problem with the runner itself: M33 was first classed a runner-error. The V09 `deepEqual` diff printed a bare `...` line, which the runner reads as the end of the diagnostic. The count assertions were moved ahead of the `deepEqual`, and M33 is now killed by assertion.
+
+P04 now runs `watchExpiry` on the **store clock**, with its timer fired by hand:
+
+- It is armed at 60,000 ms.
+- Fired at +59 s, it does not drop the content and re-arms for 1,000 ms.
+- Fired at +60 s, it drops the content.
+
+### Commands (worktree root unless noted)
+
+| Command | Exit | Result |
+|---|---|---|
+| `node --test tests/u/request-detail.test.ts` at `99395a20` | 1 | 0/1: missing export `pollLoop` (fails before) |
+| same at `ee447470` | 0 | 21/21 |
+| `cd apps/app && pnpm test` | 0 | `# tests 417 / pass 403 / fail 0 / skipped 14 / todo 0`. That is +5 node cases (V09–V12, S02) and +1 PG case (P08). The 14 skipped are credit-pg 6 + request-pg 8, which need their world scripts. |
+| `pnpm lint` | 0 | 0 errors, 2 pre-existing warnings (`lib/contracts/conformance.ts`, `fake-services.ts`) |
+| `pnpm exec next typegen && pnpm exec tsc --noEmit` | 0 | clean |
+| `node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants` | 0 / 0 | 14/14 self-tests; 212/212 killed |
+| `node tests/v/run-mutants.mjs` | 0 | 40/40 killed |
+| `node tests/u/run-mutants.mjs` | 0 | 2/2 self-checks; **140/140 killed** (122 + 18) |
+| `node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs` | 0 / 0 | 4/4; 104/104 |
+| `cd apps/app && pnpm build` | 0 | `ƒ /usage/[requestId]`, `ƒ /usage/[requestId]/result`. 0 files in `.next/static` match service_role / SERVICE_ROLE / CONSOLE_CURSOR_SECRET / `Demo result for request` / `consumer_job_result` / fixture ids. |
+| `cd apps/infrx-api && INFRX_D_TASK=app-u4 uv run --frozen python ../app/tests/u/request_world.py` | 0 | 7 pass + 1 todo. `not ok 8 # TODO`, with the error `consumer_job_result served an unknown-usage result` |
+| same world with the WR-U4-2 SQL applied after the migrations (scratchpad wrapper that wraps `pgharness.apply`; task-local DB only) | 0 | 7 pass + `ok 8 # TODO`. The patch makes P08 pass, and P01–P07 are unchanged. |
+| `docker ps -a \| grep u4` | — | 0 containers left |
+
+**Isolation incident (not caused by this lane):** from 23:04Z to about 23:22Z a container named `infrx-q3-valkey-55456`, which is not ours, was bound to **127.0.0.1:55456**. That port is app-u4's reserved Postgres port; `tasklocal.py` gives q3 55462. The lane did not touch it and waited until it was released before running the world. The coordinator may want to find which Q3 run used 55456.
+
+### WR-U4-2 (revised proof; the patch itself is unchanged from the section above)
+
+- Migration: the next free D10 number. That is `0024` if D10-APP-SQL (`codex/d10-app-sql`) can still take it; otherwise `0025`.
+- The SQL is exactly the `create or replace function public.consumer_job_result` shown under WR-U4-2 above. It was applied verbatim in the proof run.
+- The proving test is already in the tree: `tests/u/request-pg.test.ts` **U4-P08**. When the migration lands, it needs one edit: delete `todo: WR_U4_2` from P08's options, along with the `WR_U4_2` constant. The composed result is then `ok 8` with no TODO, and exit 0 (proven above).
+- The App-side mapping does not change: `result_pending:` maps to `pending`.
+
+### Remaining effort
+
+- Lane: 0 h, pending recheck.
+- D10 WR-U4-2: about 0.5 h, one function plus a one-line test edit.
+- WR-U4-1, WR-U4-3 and WR-U4-4 are unchanged.
+- Estimate: optimistic 0.25 h, likely 0.75 h, pessimistic 2 h. Confidence medium-high. Basis: both browser findings are closed, with named kills for every review mutant in driver and wiring form. The remaining finding is SQL outside the lane, and its patch is proven on real PostgreSQL.
