@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**133 records; 127 active; 6 retired; 73 planned; 49 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**133 records; 127 active; 6 retired; 69 planned; 53 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** close the post-wave backend findings through E3C/E4C, then complete consumer App, then Lab. Existing implemented statuses are preserved; they are not release acceptance. See [program 22](22-consumer-v1-implementation.md), [review 21](21-v1-consumer-readiness-review-2026-09-24.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt 24](24-consumer-v1-session-handoff.md).
 
@@ -71,13 +71,13 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | I3 | planned / I | [Recovery, alarms and rollback runbooks](consumer-v1/04-app.md) | I2A, F2P | E3A, I3B, I8 |
 | E2 | implemented / E | [Pinned integration services and fault harness](handoffs/E-verification.md) | E1, F2 | — |
 | E4 | planned / E | [Single-GPU release evidence and launch decision](consumer-v1/04-app.md) | E3A, F2P | I3, S2M, E4B, E4C, U4 |
-| A2 | planned / A | [Consumer signup verification and credited onboarding](consumer-v1/04-app.md) | F2P, F2C | A1, C3A, G8 |
-| A3 | planned / A | [Published catalog, credit rates and capability-matched examples](consumer-v1/04-app.md) | F2P, F2C | D1R, G1R, C0, S2M, G7 |
+| A2 | implemented / A | [Consumer signup verification and credited onboarding](consumer-v1/04-app.md) | F2P, F2C | A1, C3A, G8 |
+| A3 | implemented / A | [Published catalog, credit rates and capability-matched examples](consumer-v1/04-app.md) | F2P, F2C | D1R, G1R, C0, S2M, G7 |
 | C3A | planned / C | [Consumer key/privacy and platform operator actions](consumer-v1/04-app.md) | F2P, C0, F2C | D5, D10, G8 |
 | I2A | planned / I | [Reproducible App and single-GPU runtime deployment](consumer-v1/04-app.md) | I1, F2P | D5, G2, G3, G4U, W3, C3A, U2, U3, A2, A3, C0, I0, D1R, I2B, E4C, U4, I8 |
 | E3A | planned / E | [Consumer failure, security and signup-to-spend integration gate](consumer-v1/04-app.md) | E2, F2P, E3B, E3C, E2C, F2C | D5, A1, A2, A3, M3, Q3, W3, G2, G3, G4U, C3A, U2, U3, C0, E2R, I0, D1R, G8, U4, E4C |
-| C0 | planned / C | [Wire the consumer database query port and real account context](consumer-v1/04-app.md) | F2P, F2C | D1R, D10, G8 |
-| U1R | planned / U | [Adapt consumer usage and balance views to CREDIT and explicit legacy USD](consumer-v1/04-app.md) | F2P, U1, F2C | C0, D5, D10 |
+| C0 | implemented / C | [Wire the consumer database query port and real account context](consumer-v1/04-app.md) | F2P, F2C | D1R, D10, G8 |
+| U1R | implemented / U | [Adapt consumer usage and balance views to CREDIT and explicit legacy USD](consumer-v1/04-app.md) | F2P, U1, F2C | C0, D5, D10 |
 | U4 | planned / U | [Expose owned consumer request detail and result lifecycle](consumer-v1/04-app.md) | F2C, U1R | C0, C3A, G7 |
 
 ## Later core platform work and preserved module baselines

@@ -1625,7 +1625,7 @@
         "CREDIT-GRANT"
       ],
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
@@ -1640,7 +1640,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane cd4a688e, verified ACCEPT_WITH_FIXES; WR-A2-1 middleware public routes + WR-A2-2 runner applied; ROUTES follow-up db8448a6). OPEN: WR-A2-3 (unused safeNext), hosted onboarding needs P-05 (confirm-email ON, custom SMTP, rate limits, redirect allowlist, templates), the signup_grant flag and SUPABASE_SERVICE_ROLE_KEY in the App server env (operator); the staging fresh-email journey is E3A/E4's."
     },
     {
       "id": "A3",
@@ -1665,7 +1666,7 @@
         "APP-JOURNEY"
       ],
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core",
@@ -1680,7 +1681,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane 7b0ea93f, verified ACCEPT_WITH_FIXES; WR-1 tests/g/test_app_examples.py + WR-2 runner applied). OPEN: WR-3 (Vercel INFRX_API_BASE_URL, operator), WR-4 (G7 provisional flag from the card approval — G7-PROVISIONAL lane), findings F-1..F-3 and the support-email copy question in the lane evidence."
     },
     {
       "id": "D6F",
@@ -2320,7 +2322,7 @@
       "title": "Wire the consumer database query port and real account context",
       "track": "C",
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2P",
         "F2C"
@@ -2354,7 +2356,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane ab0b5179, verified ACCEPT_WITH_FIXES; wirings WR-1/WR-3/WR-4 applied). OPEN: WR-5 (D10 paginated consumer_credit_ledger, 0024 via D10-APP-SQL), WR-6 (lib/session.ts membership pick → A2/U3), WR-7 (rerun console-c0-real on the merged SHA once 0022 lands), the console layout calls getUser() twice (U1R WR-6 shared port)."
     },
     {
       "id": "I0",
@@ -2456,7 +2459,7 @@
       "title": "Adapt consumer usage and balance views to CREDIT and explicit legacy USD",
       "track": "U",
       "handoff": "consumer-v1/04-app.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2P",
         "U1",
@@ -2489,7 +2492,8 @@
         "by": "user",
         "at": "2026-09-25",
         "note": "App completion lanes may start before BACKEND-READY; gates unchanged"
-      }
+      },
+      "closure_note": "2026-09-25: implemented on claude/consumer-v1 via codex/app-union 7ebed92d (lane 7482c21a, verified ACCEPT_WITH_FIXES; WR-1/WR-2 sidebar credits composed). OPEN: WR-3(a)(b)(c) D10 SQL (0024 via D10-APP-SQL: credits-in partial index, consumer_jobs filters), WR-4 (U4 route), WR-5 (money display in A3/U3), WR-6 (one shared credit port)."
     },
     {
       "id": "F3",
