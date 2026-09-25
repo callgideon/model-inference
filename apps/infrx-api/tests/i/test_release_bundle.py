@@ -67,7 +67,13 @@ def run(repo, env, *args):
                           env=env, capture_output=True, text=True)
 
 
-def test_backend_deploy__a_release_bundle_reaches_the_box_checked_against_its_manifest(tmp_path):
+def test_backend_deploy__a_release_bundle_reaches_the_box_checked_against_its_manifest(
+        tmp_path, monkeypatch):
+    # E2C (RV-12): run under the default that broke this case on a developer host
+    # (init.defaultBranch=main) instead of whatever this host's git config says.
+    (tmp_path / "gitconfig").write_text("[init]\n\tdefaultBranch = main\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     repo, bin_, env = world(tmp_path)
     sha = git(repo, "rev-parse", "HEAD~1")               # not HEAD: the commit named is shipped
     done = run(repo, env, sha)
@@ -89,7 +95,9 @@ def test_backend_deploy__a_release_bundle_reaches_the_box_checked_against_its_ma
     # and only that one, not HEAD.
     box = tmp_path / "box"
     git(repo, "tag", "old", "HEAD~2")
-    git(tmp_path, "init", "-q", str(box))
+    # E2C (RV-12): name the unborn branch, so a host whose init.defaultBranch is `main`
+    # does not make the fetch below target the checked-out branch (git refuses that).
+    git(tmp_path, "init", "-q", "--initial-branch=unborn", str(box))
     git(box, "fetch", "-q", str(repo), "refs/tags/old:refs/heads/main")
     git(box, "checkout", "-q", "main")
     assert subprocess.run(["git", "-C", str(box), "cat-file", "-e", f"{sha}^{{commit}}"],

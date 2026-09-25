@@ -31,6 +31,7 @@ from contextlib import redirect_stdout
 from infrx.config import Settings
 from infrx.contracts.records import JobState, SettlementState, TerminalCause
 from infrx.media.video import Media
+from tests.i import support
 from tests.w import test_serving as serving
 from tests.w.test_loop import World, adapter, queued
 
@@ -865,6 +866,7 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
         assert diff in done.stdout, (name, done.stdout[-600:])
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__the_candidate_run_restores_the_engine_it_found(tmp_path):
     check_candidate_restores(REPO, tmp_path)
 
@@ -952,6 +954,7 @@ def check_candidate_records(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert sixteen.startswith("run=w3-L1-stub-c16"), sixteen[:300]
 
 
+@support.LINUX_USERLAND
 def test_ops_recover__the_candidate_run_records_start_to_ready_and_engine_errors(tmp_path):
     check_candidate_records(REPO, tmp_path)
 

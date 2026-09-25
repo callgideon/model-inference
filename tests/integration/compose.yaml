@@ -85,7 +85,12 @@ services:
     stop_grace_period: 5s
 
   s3:
-    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # RELEASE.2025-09-07T16-13-09Z
+    # E2C (E3C WR-2): quay.io/minio/minio@sha256:14cea493… answers 401 UNAUTHORIZED on pull
+    # (2026-09-24). pgsty's MinIO community fork, verified: the digest is the OCI index
+    # that tags latest and RELEASE.2026-08-04T00-00-00Z resolve to; `minio --version` = RELEASE.2026-08-04T00-00-00Z
+    # (commit d88f46cc); health, bucket, put/get/list and NoSuchKey measured with this
+    # command and credentials. An image that cannot be pulled leaves the stack PENDING.
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372  # RELEASE.2026-08-04T00-00-00Z
     container_name: ${INFRX_E2_PROJECT:?}-s3
     labels: *checkout
     command: ["server", "/data", "--address", ":9000"]

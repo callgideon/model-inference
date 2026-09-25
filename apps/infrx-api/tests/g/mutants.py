@@ -916,6 +916,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "gateway/app.py", "ROUTERS = (health, models, ingress, uploads, jobs, metrics)",
        "ROUTERS = (health, models, ingress, uploads, jobs)", BUILD_CASE,
        "test_f_base__the_composition_root_serves_chat_through_the_metered_ingress_only"),
+    # E2C (RV-12): the build case scrapes a fixture procfs; this case keeps the real reading
+    _m("host_memory_not_read", "the scrape reports this Linux host's memory from /proc/meminfo",
+       "observe/host.py", '        if name in ("MemTotal", "MemAvailable"):', "        if False:",
+       "test_ops_recover__metrics_read_the_linux_host_the_gateway_runs_on", dies_by=("KeyError",)),
     _m("build_info_not_set_at_startup", "create_app sets the build gauge at startup",
        "gateway/app.py", "    pilot.build_info(rt)\n", "", BUILD_CASE),
     _m("build_info_gauge_omitted", "the build gauge is set from the settings",

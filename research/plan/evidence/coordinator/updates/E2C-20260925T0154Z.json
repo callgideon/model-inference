@@ -1,0 +1,28 @@
+{
+  "task": "E2C",
+  "slice": "fix round (lenses 0/1/2): B1, M1-M6, E2C-RS-1..3, E2C-ACC-1..5",
+  "activity": "review",
+  "head": "19444fd1",
+  "worktree": ".claude/worktrees/codex-e2c-verify",
+  "branch": "codex/e2c-verify",
+  "owned_paths": ["tests/integration/", "research/plan/evidence/e/E2C-f61d2f0.md", "research/plan/evidence/coordinator/updates/E2C-20260925T0154Z.json"],
+  "isolation": {"ports": "55448, 55493, 55494 (e2c; measured with the coordinator's assignment), self-test 55510-55519", "prefix": "infrx-e2c-", "db": "infrx_e2c"},
+  "commands": [
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_preflight.py", "exit": 0, "summary": "54 passed (29 at 0598f16e)"},
+    {"cmd": "apps/infrx-api/.venv/bin/python -m pytest -q tests/integration/test_harness.py tests/integration/test_run.py", "exit": 0, "summary": "79 passed"},
+    {"cmd": "mutants.run_one over e2cg01-12, e2cp01-06 (scratch driver)", "exit": 0, "summary": "18 killed, 0 survived, pristine baselines"},
+    {"cmd": "docker rm -f -v infrx-e2c-s3 (leftover of the killed agent, label = this worktree)", "exit": 0, "summary": "removed before the run"},
+    {"cmd": "consumer-local via scratch driver (e2c ports 55448/55493/55494; integration-l3 BLOCKED by lane rule), PID 379488, log scratchpad/e2c/gate-run.log", "exit": -1, "summary": "in progress: preflight PASS, s3 PASS, api-contracts: 1078 passed, 0 failed, 0 errors, 0 skipped, 0 xfailed"}
+  ],
+  "estimate": {"optimistic_h": 0.5, "likely_h": 1, "pessimistic_h": 3, "confidence": "medium", "basis": "read the finished consumer-local verdict and record its counts in a follow-up update; pessimistic if a suite fails on e2c or the lane must rerun the api stages", "at": "2026-09-25T01:54Z:00+00:00"},
+  "blockers": [],
+  "next_action": "read scratchpad/e2c/gate-out/verdict.json when PID 379488 exits; append the per-suite counts to the evidence; coordinator applies E2C-FR-1 and runs layer 3",
+  "wiring_requests": [
+    "E2C-FR-1 apps/infrx-api/tests/d/signup_mutants.py:212: Runner(..., env=(\"INFRX_D_TASK\", \"INFRX_D2_VALKEY_PORT\", \"INFRX_D2_VALKEY_CONTAINER\")) - the gate then runs test_code_mutant_is_killed on e2c automatically",
+    "E2C-FR-2 tests/integration/run.py layer 3: keep PostgREST up until suites() has run (or leave the backend suite out of the layer-3 suites run), else integration-l3 is BLOCKED by construction",
+    "Makefile: consumer-local / backend-certify / app-e2e / backend-local targets (E2C-3a113dc request 1, E2C-f61d2f0 request 1)",
+    "tasklocal decoy ports (E2C-3a113dc request 2; integration side has 55493/55494)",
+    "pytest >= 9.0.3 (request 3); host sysctl 55500-55599 (request 4); deploy/rehearse.sh MinIO pin (request 5)"
+  ],
+  "evidence": ["research/plan/evidence/e/E2C-f61d2f0.md", "research/plan/evidence/e/E2C-3a113dc.md"]
+}

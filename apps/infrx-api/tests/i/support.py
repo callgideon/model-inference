@@ -26,8 +26,27 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 REPO = API_DIR.parents[1]
+
+#: E2C (RV-12): a case that runs the box's scripts as the box runs them - Bash >= 4.4,
+#: GNU coreutils (realpath -m, mktemp, stat -c), util-linux flock, systemd. Off Linux it is a
+#: declared BLOCKED skip, never a pass (tests/integration/gates.py counts any skip as
+#: BLOCKED); on Linux it always runs, and a missing tool fails it.
+LINUX_USERLAND = pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="BLOCKED platform prerequisite: Linux userland (Bash>=4.4, GNU coreutils, "
+           "util-linux flock, systemd) - tests/integration/ENVIRONMENT.md")
+
+
+def blocked_off_linux(result) -> None:
+    """A list mutant whose every named case was a LINUX_USERLAND skip proved nothing here:
+    report it as that BLOCKED skip rather than as a misdeclared list. Inert on Linux."""
+    if not sys.platform.startswith("linux") and not result.killed \
+            and "its cases were skipped" in result.detail:
+        pytest.skip(f"BLOCKED platform prerequisite: {result.detail}")
 
 
 def _load():

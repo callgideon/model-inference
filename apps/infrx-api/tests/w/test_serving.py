@@ -24,6 +24,7 @@ from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import MediaRef
 from infrx.contracts.v2.records import DigestSource
 from infrx.worker.engine import MODEL_EOS_TOKEN_IDS
+from tests.i import support
 from tests.i.support import preflight
 
 MODELS = pathlib.Path(__file__).resolve().parents[4] / "models"
@@ -299,10 +300,12 @@ def check_inventory_refuses_a_missing_container(models: pathlib.Path, tmp: pathl
 # --------------------------------------------------------------------------
 # the cases
 # --------------------------------------------------------------------------
+@support.LINUX_USERLAND
 def test_perf_pilot__the_engine_starts_pinned_on_loopback_with_the_recorded_flags(tmp_path):
     check_pinned_launch(MODELS, tmp_path)
 
 
+@support.LINUX_USERLAND
 def test_perf_pilot__a_pinned_setting_has_one_source(tmp_path):
     check_one_source_per_setting(MODELS, tmp_path)
 
@@ -320,6 +323,7 @@ def test_perf_pilot__the_concurrency_sweep_labels_a_failed_run_and_refuses_witho
     check_the_sweep_labels_a_failed_run(MODELS, tmp_path)
 
 
+@support.LINUX_USERLAND
 def test_perf_pilot__the_concurrency_sweep_counts_its_metrics_exactly(tmp_path):
     check_the_sweep_counts_its_metrics_exactly(MODELS, tmp_path)
 

@@ -1,0 +1,49 @@
+{
+  "schema": "infrx.e2c.environment/1",
+  "doc": "tests/integration/ENVIRONMENT.md",
+  "recorded": {
+    "at": "2026-09-24",
+    "by": "E2C",
+    "os": "Ubuntu 24.04.4 LTS",
+    "kernel": "Linux 7.0.0-1010-aws x86_64",
+    "libc": "glibc 2.39",
+    "cpus": 16,
+    "note": "the development host this manifest was measured on; not the pilot box"
+  },
+  "platform": "linux",
+  "tools": {
+    "python": {"argv": ["apps/infrx-api/.venv/bin/python", "--version"], "match": "^Python 3\\.12\\.", "observed": "Python 3.12.3", "why": "pyproject requires-python ==3.12.*; the venv make api-env builds from uv.lock"},
+    "uv": {"argv": ["uv", "--version"], "match": "^uv 0\\.11\\.8\\b", "observed": "uv 0.11.8", "why": "uv sync --frozen / uv run --frozen against the committed uv.lock"},
+    "node": {"argv": ["node", "--version"], "match": "^v22\\.(1[89]|[2-9][0-9])\\.", "observed": "v22.23.1", "why": "apps/app engines.node >=22.18"},
+    "pnpm": {"argv": ["pnpm", "--version"], "match": "^9\\.15\\.9$", "observed": "9.15.9", "why": "apps/app packageManager pnpm@9.15.9; install with --frozen-lockfile"},
+    "bash": {"argv": ["bash", "--version"], "match": "version (4\\.[4-9]|[5-9]\\.)", "observed": "GNU bash 5.2.21", "why": "deploy/serve/measure scripts expand empty arrays under set -u (Bash >= 4.4)"},
+    "coreutils": {"argv": ["realpath", "--version"], "match": "GNU coreutils", "observed": "GNU coreutils 9.4", "why": "realpath -m/-s, sha256sum, stat -c, mktemp -d in deploy/measure scripts"},
+    "flock": {"argv": ["flock", "--version"], "match": "util-linux", "observed": "util-linux 2.39.3", "why": "models/marlin2b/measure/candidate.sh holds its lock with flock -n"},
+    "systemd-analyze": {"argv": ["systemd-analyze", "--version"], "match": "^systemd [0-9]+", "observed": "systemd 255 (255.4-1ubuntu8.17)", "why": "tests/i verifies the shipped units with systemd-analyze verify"},
+    "git": {"argv": ["git", "--version"], "match": "^git version 2\\.(2[89]|[3-9][0-9])\\.", "observed": "git version 2.43.0", "why": "release-bundle test uses git init --initial-branch (git >= 2.28)"},
+    "docker": {"argv": ["docker", "version", "--format", "{{.Server.Version}}"], "match": "^[0-9]+\\.", "observed": "29.6.2 (server reachable)", "why": "D/Q task-local PostgreSQL/Valkey containers and the E2 compose stack"},
+    "docker-compose": {"argv": ["docker", "compose", "version"], "match": "Docker Compose version v[2-9]", "observed": "Docker Compose version v5.3.1", "why": "tests/integration/compose.yaml"}
+  },
+  "images": {
+    "postgres-plain": {"ref": "postgres@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20", "tag": "16 (16.14-bookworm)", "used_by": "apps/infrx-api/tests/d/pgharness.py (default)"},
+    "supabase-postgres": {"ref": "supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd", "tag": "17.6.1.173", "used_by": "tests/integration/compose.yaml; tests/d with INFRX_D1_IMAGE=supabase"},
+    "valkey": {"ref": "valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1", "tag": "8.1-alpine", "used_by": "tests/integration/compose.yaml; apps/infrx-api/tests/q/vkharness.py; apps/infrx-api/tests/d/vkstore.py"},
+    "clickhouse": {"ref": "clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146", "tag": "25.8.33.6-alpine", "used_by": "tests/integration/compose.yaml"},
+    "minio": {"ref": "pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372", "tag": "RELEASE.2026-08-04T00-00-00Z", "used_by": "tests/integration/compose.yaml", "note": "pgsty MinIO community fork; the former pin quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e answers 401 on pull (2026-09-24)"},
+    "postgrest": {"ref": "postgrest/postgrest@sha256:a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732", "tag": "v13.0.4", "used_by": "tests/integration/backend/compose.yaml (layer 3)"}
+  },
+  "namespaces": {
+    "e2c": {"tasklocal": "e2c", "services": ["postgres", "valkey", "s3"], "use": "consumer-local's API stages: INFRX_D_TASK=e2c (infrx-e2c-postgres, database infrx_e2c), INFRX_D2_VALKEY_PORT/_CONTAINER and INFRX_Q_VALKEY_PORT (the e2c Valkey port), INFRX_M_S3_ENDPOINT (infrx-e2c-s3, the MinIO pin the gate starts itself); ports from infrx/contracts/tasklocal.py"},
+    "e2": {"harness": "e2", "postgrest": true, "use": "make integration / run.py layers 2-3 (consumer-local's integration-l3 stage) and certify.py's local stack; ports from tests/integration/harness.py (asserted against tasklocal's E block)"},
+    "e2c-selftest": {"ports": [55510, 55511, 55512, 55513, 55514, 55515, 55516, 55517, 55518, 55519], "container_prefix": "infrx-e2c-selftest-", "use": "test_preflight.py binds 55510 to prove a busy port is BLOCKED; E2C lane block, no service"}
+  },
+  "profiles": {
+    "consumer-local": {"tools": ["python", "uv", "bash", "coreutils", "flock", "systemd-analyze", "git", "docker"], "images": ["postgres-plain", "valkey", "minio"], "namespaces": ["e2c"]},
+    "integration-l3": {"tools": ["python", "docker", "docker-compose"], "images": ["supabase-postgres", "valkey", "clickhouse", "minio", "postgrest"], "namespaces": ["e2"]},
+    "backend-certify": {"tools": ["python", "uv", "bash", "coreutils", "git", "docker", "docker-compose"], "images": ["supabase-postgres", "valkey", "clickhouse", "minio", "postgrest"], "namespaces": ["e2"]},
+    "app-e2e": {"tools": ["node", "pnpm"], "images": [], "namespaces": []},
+    "seam": {"tools": ["python"], "images": [], "namespaces": []},
+    "self-test": {"tools": ["python"], "images": [], "namespaces": ["e2c-selftest"]}
+  },
+  "certify_profile_required": ["identity", "target_ownership", "bounds", "workload", "measurement", "cleanup"]
+}
