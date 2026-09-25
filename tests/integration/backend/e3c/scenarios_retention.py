@@ -50,7 +50,10 @@ def test_s06_two_fresh_collectors_never_delete_a_live_jobs_media(workdir):
         request_id = accepted.json()["request_id"]
         refs = live_refs(trip, request_id)
         assert refs, "the admitted job has no durable attach to protect"
+        # past the persisted grace: the media IS a candidate, only its live reference keeps it
+        world.set_clock(trip.world.database, world.grace_passed())
         answers = world.collectors(trip, count=2, grace_s=0.0)
+        world.set_clock(trip.world.database, 0.0)      # back inside the job's own deadlines
         kept(trip, refs, answers)
         world.collector_blocked(answers)
         trip.box.start("worker")
@@ -66,6 +69,7 @@ def test_s06_a_collector_that_cannot_reach_the_database_deletes_nothing(workdir)
                              "e3c-s06-dark")
         assert accepted.status_code == 202, accepted.text
         before = world.objects(trip, "")
+        world.set_clock(trip.world.database, world.grace_passed())   # eligible, if asked
         with stack.harness.Faults() as faults:
             faults.pause("postgres")
             answers = world.collectors(trip, count=1, grace_s=0.0)
