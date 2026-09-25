@@ -847,7 +847,7 @@ TENANT_B = "5e5e5e5e"                     # stands in for the P-05 second tenant
 def journey_validate(tmp, profile, tenant_keys="INFRX_API_KEY,INFRX_API_KEY_B",
                      active=("142c7d81", TENANT_B)):
     """bench --validate-only as the runbook's journey command runs it: the external client
-    through the public edge, both tenants' key NAMES, 8 requests, closed loop."""
+    through the public edge, both tenants' key NAMES, 24 requests, closed loop."""
     import test_bench
     bench.load_corpus = test_bench.REAL_LOAD_CORPUS
     path, inv = os.path.join(tmp, "p.json"), os.path.join(tmp, "keys.json")
@@ -857,8 +857,9 @@ def journey_validate(tmp, profile, tenant_keys="INFRX_API_KEY,INFRX_API_KEY_B",
     argv = ["--corpus", os.path.join(os.path.dirname(HERE), "corpus", "manifest.json"),
             "--subset", "full", "--base-url", "https://marlin2b.callbill.ai/v1",
             "--target", "gateway", "--model", "nemostation/marlin-2b", "-c", "2",
-            "--requests", "8", "--seed", "20260922", "--dataset-version", "e4c-journey-1",
-            "--forms", "upload,upload,video_b64,video_b64", "--max-tokens", "128",
+            "--requests", "24", "--seed", "20260922", "--dataset-version", "e4c-journey-1",
+            "--forms", "upload,upload,video_b64,video_b64,video_url,text,text,video_url",
+            "--media-base-url", "https://media.invalid/e4c-corpus", "--max-tokens", "128",
             "--retries", "0", "--out", os.path.join(tmp, "j.jsonl"),
             "--raw", os.path.join(tmp, "j-raw.jsonl"), "--profile", path,
             "--key-inventory", inv, "--validate-only"]
@@ -879,7 +880,7 @@ def test_the_e4c_two_tenant_profile_refuses_until_frozen_then_bounds_the_journey
     """Oracle (P-17 check 5, P-05): the committed two-tenant journey profile validating
     while any FILL remains (the second tenant's key prefix included), refusing the frozen
     journey for anything else, running as ONE tenant, or projecting off the exact CREDIT
-    ceiling: 8 x (30,720 x 400 + 128 x 1,200) / 1e6 = 99.5328 CREDIT under its 100 cap."""
+    ceiling: 24 x (30,720 x 400 + 128 x 1,200) / 1e6 = 298.5984 CREDIT under its 299 cap."""
     base = json.load(open(E4C_TWO_TENANT, encoding="utf-8"))
     assert base["target"]["tenant_key_env"] == ["INFRX_API_KEY", "INFRX_API_KEY_B"]
     assert base["workload"]["tenants"] == 2 and base["target"]["path"] == "public-edge"
@@ -899,7 +900,7 @@ def test_the_e4c_two_tenant_profile_refuses_until_frozen_then_bounds_the_journey
         per_request = (b["max_input_tokens_per_request"] * Decimal(400)
                        + b["max_output_tokens_per_request"] * Decimal(1200)) / 10 ** 6
         assert v["derived"]["spend_currency"] == "CREDIT" and Decimal(
-            v["derived"]["projected_spend"]) == 8 * per_request == Decimal("99.5328") \
+            v["derived"]["projected_spend"]) == 24 * per_request == Decimal("298.5984") \
             <= Decimal(b["spend"]["max_spend"])
         # one tenant is not the two-tenant journey
         code, v = journey_validate(tmp, frozen, tenant_keys="")
@@ -950,8 +951,8 @@ def runbook_commands():
                                       for p in json.loads(prefixes.group(1))]
     commands = []
     for raw in re.findall(r"python (?:\$M|models/marlin2b)/bench\.py[^`\n]*", text):
-        line = raw.replace("$C", c).replace("$M", m).replace(
-            '"$MEDIA_BASE_URL"', "https://media.invalid/e4c-corpus")
+        line = raw.replace('"$MEDIA_BASE_URL"', "https://media.invalid/e4c-corpus").replace(
+            "$C", c).replace("$M", m)
         projected = re.search(r"projected ([\d.]+)", line)
         commands.append((shlex.split(line, comments=True)[2:],
                          projected.group(1) if projected else None))
@@ -981,8 +982,13 @@ def test_every_runbook_bench_command_validates_as_written_and_the_journey_covers
             if inv not in inventories:
                 problems.append(f"{profile}: the runbook writes no inventory {inv}")
                 continue
+            doc = frozen(FROZEN_BY_NAME[profile])
+            if sorted(inventories[inv]) != sorted(doc["target"]["test_key_ids"]):
+                # taken while exactly the run's test keys are active: a stale one hides a key
+                problems.append(f"{profile}: {inv} lists {inventories[inv]}, the run's keys are "
+                                f"{doc['target']['test_key_ids']}")
             paths = {name: os.path.join(tmp, f"{i}-{name}") for name in ("p.json", "k.json")}
-            for name, doc in (("p.json", frozen(FROZEN_BY_NAME[profile])),
+            for name, doc in (("p.json", doc),
                               ("k.json", {"active_key_id_prefixes": inventories[inv]})):
                 with open(paths[name], "w", encoding="utf-8") as f:
                     json.dump(doc, f)
@@ -1008,7 +1014,7 @@ def test_every_runbook_bench_command_validates_as_written_and_the_journey_covers
             assert not os.path.exists(swap["--out"]), "validation opened --out"
             if "--tenant-keys" in argv:
                 journeys.append(argv)
-        assert len(journeys) == 1, journeys
+        assert len(journeys) == 1, problems or journeys
         a = bench.parse_args(journeys[0])
         clips = test_bench.REAL_LOAD_CORPUS(a.corpus, a.subset)[0]
         schedule = bench.build_schedule(
