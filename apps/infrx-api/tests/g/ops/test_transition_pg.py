@@ -39,6 +39,10 @@ ACTIVATE = ["credit-transition", "--card", FIXTURE_CARD, "--input-rate", FIXTURE
             "--output-rate", FIXTURE_OUT]
 
 
+#: The straddle case's hard bound: its drain bound is 0.5 s, so a bounded run is far inside.
+HARD_S = 30.0
+
+
 def run(coro):
     return asyncio.run(coro)
 
@@ -266,13 +270,14 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
     """Two connections (review G8-R1 / ACC-1): a legacy admission passes both flag checks
     (`admit_legacy_usd` and the insert trigger) and inserts its job, then parks on
     `infrx.credit_holds`, which connection C holds in SHARE mode, while the transition
-    runs. `require_feature` takes no lock, so the freeze does not wait for it and the
-    drain cannot see its uncommitted job. The transition must wait for every transaction
-    open when the freeze committed; past its bound it stops with the freeze in place, the
-    target off and nothing audited. Once the admission commits, the dry run counts it in
-    flight; after it settles in USD the rerun enables CREDIT.
+    runs. Since D10 `require_feature` reads the flag FOR SHARE, so the admission holds the
+    flag row and the freeze's UPDATE waits on it: the transition must wait for it no longer
+    than its bound, then stop with `open_transactions`, nothing changed, the target off and
+    nothing audited. Once the admission commits, the dry run counts it in flight; after it
+    settles in USD the rerun enables CREDIT.
     Oracle: without the wait the run exits 0, audited, and the USD job commits after the
-    drain measured zero (the review's reproduction)."""
+    drain measured zero (the review's reproduction); without the lock bound the run never
+    returns (the D10 merged-tree hang) - the case fails at `HARD_S` instead of hanging."""
     w, request, _ = pilot("g8_straddle")
     run(settle(w, request, "legacy_usd"))
     publish_fixture_card(w, capsys)
@@ -297,18 +302,27 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
             time.sleep(0.05)
         else:
             pytest.fail("the admission never reached the held lock")
-        code, report, _ = cli_run(w, argv, capsys)
+        ran: dict = {}
+        cli_thread = threading.Thread(target=lambda: ran.update(out=cli_run(w, argv, capsys)),
+                                      daemon=True)
+        cli_thread.start()
+        cli_thread.join(HARD_S)
+        if cli_thread.is_alive():
+            pytest.fail(f"the transition did not return within {HARD_S}s (unbounded flag lock)")
+        code, report, _ = ran["out"]
     finally:
         blocker.rollback()
         blocker.close()
         thread.join(30)
     assert code == 1 and codes(report) == {"open_transactions"}, report
-    assert report["applied"] == [{"flag": "legacy_usd_admission", "enabled": False}]
+    assert report["applied"] == []                            # the freeze waited, then gave up
+    assert w.one("select enabled from infrx.feature_flags where name = 'legacy_usd_admission'") \
+        is True
     assert w.one("select enabled from infrx.feature_flags where name = 'credit_admission'") \
         is False
     assert w.one("select count(*) from infrx.audit_entries where idempotency_key = 'straddle'") \
         == 0
-    assert "admitted" in box, box                             # it committed after the freeze
+    assert "admitted" in box, box                             # it committed once released
     code, dry, _ = cli_run(w, ["credit-transition", "--dry-run", *ACTIVATE[1:]], capsys,
                            operator=False)
     assert code == 1 and codes(dry) == {"in_flight"}, dry["blockers"]
@@ -317,3 +331,52 @@ def test_credit_cutover__an_admission_open_across_the_freeze_is_waited_for(capsy
     code, result, _ = cli_run(w, argv, capsys)
     assert code == 0 and result["flags"]["credit_admission"] is True, result
     assert drift(w) == []
+
+
+def test_credit_cutover__overlapping_admissions_cannot_stretch_a_flag_write_past_its_bound():
+    """V-G8TL-1: admissions overlap, each holding the flag FOR SHARE (0021 `require_feature`),
+    so the flag's UPDATE waits on one MultiXact after another. `lock_timeout` bounds each
+    wait, not their sum; the write as a whole must end within its bound (plus the fixed
+    statement margin), refused (`FlagLocked`) or done.
+    Oracle: with only `lock_timeout` the write returned after 6.7-34 s against a 2 s bound
+    (four 50 ms lockers); eight 200 ms lockers keep the row share-locked, so it never does."""
+    w = pgworld.world("g8_overlap")
+    stop = threading.Event()
+
+    def locker():
+        conn = pgworld.pgharness.connect(w.database, autocommit=False)
+        try:
+            while not stop.is_set():
+                try:
+                    conn.execute("select infrx.require_feature('legacy_usd_admission')")
+                    conn.execute("select pg_sleep(0.2)")
+                    conn.commit()
+                except Exception:                             # the flag is off: refused
+                    conn.rollback()
+        finally:
+            conn.close()
+    lockers = [threading.Thread(target=locker, daemon=True) for _ in range(8)]
+    for t in lockers:
+        t.start()
+    box: dict = {}
+
+    def write():
+        started = time.monotonic()
+        try:
+            box["changed"] = run(w.ops.transitions.set_flag(
+                "legacy_usd_admission", False, "g8-probe", R, lock_timeout_s=2.0))
+        except transition.FlagLocked as exc:
+            box["refused"] = exc
+        box["elapsed"] = time.monotonic() - started
+    try:
+        time.sleep(0.3)                                       # the lockers overlap by now
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(HARD_S)
+        assert not writer.is_alive(), f"the flag write did not return within {HARD_S}s"
+    finally:
+        stop.set()
+        for t in lockers:
+            t.join(10)
+    assert "elapsed" in box, box
+    assert box["elapsed"] < 2.0 + 1.0 + 1.5, box              # bound + margin + slack

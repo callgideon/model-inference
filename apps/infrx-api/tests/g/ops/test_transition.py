@@ -139,7 +139,14 @@ class ScriptedStore:
         inv["flags"] = {f: {"enabled": on} for f, on in self.flags.items()}
         return copy.deepcopy(inv)
 
-    async def set_flag(self, name, enabled, actor, reason) -> bool:
+    #: Flags an admission in flight holds FOR SHARE (D10): a write past its bound fails.
+    locked: set = dataclasses.field(default_factory=set)
+    bounds: list = dataclasses.field(default_factory=list)
+
+    async def set_flag(self, name, enabled, actor, reason, *, lock_timeout_s) -> bool:
+        self.bounds.append(lock_timeout_s)
+        if name in self.locked:
+            raise transition.FlagLocked(name)
         self.calls.append(("set", name, enabled))
         changed, self.flags[name] = self.flags[name] != enabled, enabled
         return changed
@@ -227,6 +234,30 @@ def test_credit_cutover__apply_waits_out_every_transaction_open_at_the_freeze():
     assert blocked.value.report["applied"] == [
         {"flag": "legacy_usd_admission", "enabled": False}]
     assert not any(stuck.flags.values()) and audited.audit.entries == []
+
+
+def test_credit_cutover__a_flag_an_admission_holds_is_waited_for_within_the_bound():
+    """D10's `require_feature` reads the flag FOR SHARE, so an admission in flight blocks
+    the flag's UPDATE until it commits - forever if it is parked (the D10 merged-tree hang).
+    Every flag write carries the drain's remaining bound as its lock wait; a write that runs
+    out refuses with `open_transactions`, keeps what already changed and audits nothing.
+    Oracle: an unbounded write (no bound, or an infinite one) hangs the transition behind
+    a parked admission; an unmapped lock timeout escapes as a raw error with no report."""
+    store = ScriptedStore(flying=[0])
+    apply(fakes.world(), store, timeout=3.0)
+    assert len(store.bounds) == 3 and all(0 <= b <= 3.0 for b in store.bounds), store.bounds
+    frozen = ScriptedStore(flying=[0], locked={"legacy_usd_admission"})
+    audited = fakes.world()
+    with pytest.raises(transition.TransitionBlocked) as blocked:
+        apply(audited, frozen, timeout=3.0)
+    assert [b["code"] for b in blocked.value.report["blockers"]] == ["open_transactions"]
+    assert blocked.value.report["applied"] == [] and audited.audit.entries == []
+    assert frozen.flags["legacy_usd_admission"] is True and not frozen.flags["credit_admission"]
+    enabling = ScriptedStore(flying=[0], locked={"credit_admission"})
+    with pytest.raises(transition.TransitionBlocked) as late:
+        apply(audited, enabling, timeout=3.0)
+    assert late.value.report["applied"] == [{"flag": "legacy_usd_admission", "enabled": False}]
+    assert not any(enabling.flags.values()) and audited.audit.entries == []
 
 
 async def _apply_with(store, **kw):
