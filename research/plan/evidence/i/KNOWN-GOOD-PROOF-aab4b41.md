@@ -207,3 +207,128 @@ the proven bytes. The suite part still runs task-locally.
 Remaining for this lane: 0 h. Coordinator's hosted history check: 0.1/0.2/0.5 h
 (optimistic/likely/pessimistic), confidence medium, because it depends on whether the pooler is
 reachable from the coordinator host.
+
+## Fix round (findings 0-KGP-1, 0-KGP-2, 1-KGP-1)
+
+This round started from handback head `913cfa9e`. Implementation commits: `8b7a667b`, then
+`59dc5c06`. The README and this section come in the commit after them. Everything ran
+task-locally: block `d10` and the stand-in `infrx-d10-migrated` (no published port, removed
+afterwards). The hosted database, the box, AWS, SSM and every secret were left alone.
+
+Changed paths: `infra/runbooks/schema_proof.py`, `infra/rollout/known-good.py` (the
+schema_proof reader), `infra/rollout/known-good.json` (`schema_proof.files` only),
+`apps/infrx-api/tests/i/test_known_good_proof.py`, `apps/infrx-api/tests/i/mutants.py`,
+`infra/rollout/README.md` (rollback paragraph plus one verification-log line), and this file.
+
+### What changed
+
+| finding | fix |
+|---|---|
+| 0-KGP-1: a skipped suite counted as PASS | `run_suite` gives PASS only when pytest exits 0, the summary shows at least one pass, and it shows no `skipped`. pytest exits 0 on skips, and the old suites skip themselves when Docker, psycopg or Valkey is missing. The pytest command is now a keyword argument, so the test can run a fake suite with its own interpreter. The mutant copy's PATH has no `uv`. |
+| 0-KGP-2: a CLI-split history could omit statements or hold fragments | `compare`'s CLI branch is now `covers(parts, file)`. The parts must be whole statements, verbatim and in order. Only whitespace, `;` and comments may sit before, between and after them (`GAP`; a line comment must end at its newline). A statement may carry the comment in front of it. Each statement ends at its own `;` (`END`). Nothing may be omitted, added, reordered or cut. migrate.py's single row still matches byte for byte. The old `len(parts) > 1` guard is gone, so a one-statement file's CLI row is no longer refused. |
+| 1-KGP-1: schema_proof bound only a version string | Each `schema_proof` now carries `files`: the sha256 of 0019-0023 (`65d3d693…`, `06a5dfde…`, `2aea0c8e…`, `1f44b4ae…`, `0ea64faa…`). The record test compares them with the tree's files. When `files` is present, `known-good.py` also refuses a checkout where any migration after the target's tree, up to `--applied`, is missing or has other bytes. The detail says so: "this checkout's ['0023'] are not the bytes its schema_proof ran on". A proof without `files` is judged as before; `test_rollback_drill`'s fixture is written that way, and that file is not owned by this lane. The record test requires `files` on both real proofs. |
+
+### Failed before, passed after
+
+The tests were written first and run against `913cfa9e`'s code:
+`pytest -q tests/i/test_known_good_proof.py` gave **4 failed, 1 passed**.
+
+- `a_schema_proof_reaches_exactly_its_through`: an edited 0023 was still `KNOWN-GOOD`.
+- `the_record_proves_both_targets…`: `KeyError: 'files'`.
+- `the_proof_driver_counts_a_skipped_suite_as_a_fail`: the verdicts were
+  `{'skips': (True, '1 skipped'), 'partly': (True, '1 passed, 1 skipped'), 'xfails': (True, '1 xfailed'), 'runs': True}`.
+- `a_cli_split_history_must_be_the_whole_file_in_order`: the old `compare` accepted the
+  reviewer's cases. The history without the `revoke`, `['a','b']` and the reordered history
+  all returned `None`.
+
+After the fix the same command gives **5 passed**.
+
+### The reviewers' reproductions, rerun
+
+| reproduction | before (review) | now |
+|---|---|---|
+| PATH = git, tar, uv, env only (no docker); `schema_proof.py bda1586… --suite tests/d/test_journal.py --suite tests/d/test_settle.py` | `PASS … 20 skipped`, `PASS … 19 skipped, 1 deselected` | `FAIL tests/d/test_journal.py 20 skipped`, `FAIL tests/d/test_settle.py 19 skipped, 1 deselected`, `FAIL through 0023`, exit 1 |
+| `compare([('0001',[a, b])], f)` with the revoke missing, and `compare([('0001',['a','b'])], f)` | `None`, `None` | `statements differ from the candidate's files: ['0001']`, twice. The full, ordered history still gives `None` |
+| one byte added to 0023, then `known-good.py bda1586… --applied 0023 --set MAX_VIDEO_SECONDS` | KNOWN-GOOD | NOT-KNOWN-GOOD, exit 1 (`migrations`: "['0023'] are not the bytes its schema_proof ran on"). `--applied 0022` is still KNOWN-GOOD. `pytest tests/i/test_known_good_proof.py` gives 1 failed. The file was then restored (sha256 `0ea64faa…`) |
+
+Extra check, offline: every real migration 0001-0023 was split with a quote-,
+dollar-quote- and comment-aware splitter. `covers` accepted each split, both without and with
+trailing `;`. It refused the same split with the last statement dropped, and with the second
+statement dropped. The file-by-file result was `problems: []`, with 2 to 102 statements per
+file. The script is scratch only and not committed.
+
+### Proof rerun (the fixed driver, both targets)
+
+The stand-in was rebuilt the same way as in the first round: plain `postgres@sha256:33f923b0…`,
+then the shim, then the CLI history table. `migrate.py plan`/`apply` then ran for 0001-0018
+(digest `6995aef8…`, exit 0) and for 0019-0023 (digest `d393cdbe…`, exit 0). Both digests match
+the first round. Then:
+
+```
+SCHEMA_PROOF_DSN=<stand-in> apps/infrx-api/.venv/bin/python infra/runbooks/schema_proof.py <sha> --work <scratch>
+```
+
+| target | schema | suites | passed | skipped | deselected (SHAPE) | xfailed | failed | exit |
+|---|---|---|---|---|---|---|---|---|
+| bda15866e5700f3856d7142580da842fba9bbd23 (23:04Z) | PASS | 26 PASS / 0 FAIL | 387 | 0 | 10 | 5 | 0 | 0 |
+| 422631591845fbd66b590c73d5ff4150318d9d7a (23:10Z) | PASS | 26 PASS / 0 FAIL | 387 | 0 | 10 | 5 | 0 | 0 |
+
+The per-suite counts are identical to the table above, and so is the recorded `result`, so the
+record's `result` text is unchanged. The candidate is still `c99286f0`'s tree: `git log` shows
+no migration change since that commit. The current source branches carry the same bytes:
+`codex/d10-followup` c584f54a has 0022 `1f44b4ae`, and `codex/door-revoke` 273990a0 has 0022
+`1f44b4ae` and 0023 `0ea64faa`.
+
+`known-good.py <t> --applied NNNN --set MAX_VIDEO_SECONDS --set WORKER_CONCURRENCY` on the
+record with `files`:
+
+| target | 0018 | 0022 | 0023 | 0024 |
+|---|---|---|---|---|
+| bda1586 | KNOWN-GOOD 0 | KNOWN-GOOD 0 | KNOWN-GOOD 0 | NOT-KNOWN-GOOD 1 (`migrations`) |
+| 4226315 | KNOWN-GOOD 0 | KNOWN-GOOD 0 | KNOWN-GOOD 0 | NOT-KNOWN-GOOD 1 |
+
+rollback.md step 1 (`--list --applied 0023`, with the five `--set` names) gives
+27af05a NOT-KNOWN-GOOD (preparation, migrations, record), 4226315 KNOWN-GOOD and
+bda1586 KNOWN-GOOD, exit 0.
+
+### Tests and mutants
+
+| command | result |
+|---|---|
+| `uv run --frozen --no-sync pytest -q tests/i/test_known_good_proof.py` | 5 passed |
+| `INFRX_D_TASK=d10 pytest -q tests/i --deselect tests/i/test_mutants.py --deselect <the 6 i8-block cases>` | 174 passed, 56 deselected, 1 xfailed, **2 errors**. The errors are `test_pooler` `session_state_is_lost…` and `auto_prepared_statements_break…`, both `BlockingIOError` on `/tmp/infrx-i8-pooler-55450.lock`. Another lane's run holds the i8 block (`infrx-i8-pgbouncer`/`-postgres` up); the lock was still held at the end of this round. Neither case touches a path this lane changed |
+| `pytest -q tests/i/test_mutants.py -k "well_formed or every_case_is_covered"` | 2 passed |
+| `tests/i/mutants.py <the 12 KNOWN-GOOD mutants>` through the shared runner | not usable while the i8 lock is held. Its pristine baseline covers the whole I list, including the i8 pooler cases, so every mutant came back `broken_runner` (baseline failures: the i8 cases `test_observe` `durable_truth_reads…` and `test_pooler` `the_computed_budget…`, plus this round's fake-suite case before `59dc5c06`) |
+| the same 12 through the shared `run_mutant` with the baseline narrowed to their own cases (scratch driver: `_SHARED._siblings = lambda m: chosen`) | **12/12 killed**. The old 5 are `known_good_ignores_migrations`, `known_good_assumes_additive`, `known_good_proof_ignores_through`, `known_good_record_unproven` and `schema_proof_trusts_moved_statements` (anchor updated). The 7 new ones are listed below |
+| `python3 -m py_compile infra/runbooks/schema_proof.py infra/rollout/known-good.py` | ok |
+| `python3 research/plan/scripts/validate_plan.py` | exit 0 |
+
+New mutants, with the case that kills each:
+
+| mutant | edit | killed by |
+|---|---|---|
+| `schema_proof_passes_a_skipped_suite` | drop the `skipped` check | `…counts_a_skipped_suite_as_a_fail` |
+| `schema_proof_passes_a_suite_that_ran_nothing` | drop the "at least one passed" check | same |
+| `schema_proof_accepts_a_partial_history` | `covers` ignores what is left after the last statement | `…a_cli_split_history_must_be_the_whole_file_in_order` |
+| `schema_proof_reads_sql_inside_a_comment` | a statement may start inside a comment | same |
+| `schema_proof_accepts_a_cut_statement` | a row need not end at its `;` | same |
+| `known_good_proof_ignores_its_bytes` | `known-good.py` drops the `drift` check | `…a_schema_proof_reaches_exactly_its_through` |
+| `known_good_record_proves_other_bytes` | one byte added to `0023_runtime_unmarked_door_revoke.sql` | `…the_record_proves_both_targets_on_the_candidate_schema` |
+
+### Open issues (coordinator)
+
+1. **The i8 pooler cases, and the whole-list `tests/i/test_mutants.py` / `make api-mutants`
+   for track I.** Rerun these once the i8 block's lock is free. Nothing in this round depends
+   on the pooler.
+2. **Hosted history rows with NULL `statements`.** A row written by
+   `supabase migration repair`, or like rollout.md's hand-seeded `('0001','init')`, would be
+   refused as "statements differ". The check fails closed here, as it did before this round.
+   The hosted follow-up (see "Coordinator follow-up") would then name those versions. They
+   need a judgement, not a pass.
+
+### Estimate
+
+The lane is done, with 0 h remaining. Coordinator work: the i8-block rerun takes 0.2/0.3/0.5 h
+(optimistic/likely/pessimistic) once the lock is free, and the hosted history check after
+step 6 is unchanged at 0.1/0.2/0.5 h. Confidence is medium, because both depend on shared
+resources.

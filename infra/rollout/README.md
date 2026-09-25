@@ -60,8 +60,11 @@ gateway composition over PostgreSQL) and a probe of its result read after a comm
 passed on a database built from those files. `infra/runbooks/schema_proof.py <sha>` reruns it
 task-locally; with `SCHEMA_PROOF_DSN` it also checks, read-only, that a migrated database's
 history is exactly those files: run that against hosted after step 6, before relying on the
-proof. Not proven: any migration after 0023, or a 0022/0023 other than those commits (rerun,
-then add the new `through`); the old release on the `infrx_runtime` login (0023 revokes
+proof. Each `schema_proof` also records the sha256 of 0019-0023 (`files`), and `known-good.py`
+refuses a checkout whose migrations beyond the target's tree are other bytes; the driver counts
+a suite that skipped a case or passed none as FAIL, and accepts a Supabase CLI history only when
+its statements, in order, are the whole file. Not proven: any migration after 0023, or a
+0022/0023 other than those bytes (rerun, then add the new `through` and `files`); the old release on the `infrx_runtime` login (0023 revokes
 `admit`/`claim_preparation` from it on purpose, so revert with the target's own env file, which
 R2 restores: the login the release ran on, which cannot be `infrx_runtime`, created by 0021); hosted rows written before the window (the proof uses
 fresh rows); the Supabase image (plain PostgreSQL plus the shim). Ten old cases that list the
@@ -110,3 +113,4 @@ that residual risk and its bound).
   not run on the box.
 - 2026-09-25: OPS-CLI-DSN (RL-V5): §3 records the operator CLI's own DSN (`OPERATIONS_DATABASE_URL`) and its refusal of the dedicated runtime/monitor logins; steps unchanged.
 - 2026-09-25 (KNOWN-GOOD-PROOF): `bda1586` and `4226315` proven on migrations 0001-0023 (the `schema_proof` entries in `known-good.json`; driver `infra/runbooks/schema_proof.py`; evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`). Only the task-local database was used; hosted and the box were not touched.
+- 2026-09-25 (KNOWN-GOOD-PROOF fix round): `schema_proof.files` binds the proven 0019-0023 bytes (`known-good.py` refuses others); the driver fails a skipped or pass-less suite and a CLI history that omits, reorders or cuts statements; proof rerun on both targets (evidence `research/plan/evidence/i/KNOWN-GOOD-PROOF-aab4b41.md`, section Fix round). Task-local only.
