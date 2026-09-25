@@ -7,7 +7,7 @@
 | Base / code head | `19670a8c` (claude/consumer-v1) / `4b462094` |
 | Commits | `e911d989` 0022 + adapter + checks; `b4a335fe` mutants, unit case, upgrade path, runtime list; `ba45d386` composition_pg seed; `5412c8fb` WR-7/WR-8; `aabe07f7` wiring patch; `3c1746db` register mutants moved to 0022, adapter case leaves the role NOLOGIN; `9c0e215f` F2 revoke; `4b462094` layer-3 hunks; then this evidence commit |
 | Isolation | `INFRX_D_TASK=d10`: `infrx-d10-postgres` / `-supabase` on 55442, `infrx-d10-valkey` on 55469. No hosted DB, pilot box, AWS or SSM. The harness removed its containers at the end. Scratch clones of `codex/m6-phase2` and `codex/l3-rebase` live under the session scratchpad. |
-| Migrations | `git diff 19670a8c -- 0001..0021` is empty. `0022_preparation_refusal_and_flag_writer.sql` is new: 271 lines, sha256 `a54eca595e40eb4f176dd45564f705501a080c5867a9393e686b9b8de8c4f4ee`. The door revoke is not included (see §5). |
+| Migrations | `git diff 19670a8c -- 0001..0021` is empty. `0022_preparation_refusal_and_flag_writer.sql` is new: 271 lines, sha256 `a54eca595e40eb4f176dd45564f705501a080c5867a9393e686b9b8de8c4f4ee`. Superseded by the fix round (comment-only change): 278 lines, sha256 `1f44b4ae89506dc75cb1d9cbf26208935906058833a18fa518518085aea5e706`. The door revoke is not included (see §5). |
 
 ## 1. Items
 
@@ -17,7 +17,7 @@
 | (2) `set_feature_flag` (V-G8TL-2 option A) | done | Signature `(text, boolean, text, text) returns boolean`, SECURITY DEFINER, `lock table infrx.feature_flags in exclusive mode`, then the guarded, attributed UPDATE (`left(actor,200)`, `left(reason,500)`), returning `found`. Revoked from public, anon and authenticated; granted to service_role only. G8's call site is wiring request W1. |
 | composition_pg legacy_usd | done | Fixed in the test world, not in the probe. The `legacy_usd` case first asserts `RuntimeMisconfigured(price_source)` without a USD row, which is the probe refusing correctly. It then seeds the two hosted rows (`checks_reads.seed_hosted_usd`, `effective_from = infrx.now()` on the frozen clock) and composes. |
 | M6 WR-7 | done (SQL); fake is W2 | 0022 does `create or replace` of 0019's `register_content` and `content_objects_guard`, one change each. When a `written` registration finds a LIVE row with the same digest, it sets `eligible_at = greatest(eligible_at, now + grace)` under the row lock. A `discovered` registration never does this. The guard now lets a live row's eligibility move later, never earlier, and never on a retiring row. A claim granted before the refresh can no longer tombstone (`not_claimable`/`not_eligible`, 0020 recheck). Grants are kept (create or replace). |
-| M6 WR-8 | retired in 0022's header | 0019's claim "not before the claim that deleted it has lapsed" was never implemented and will not be. `deleted` comes only from `content_acknowledge_delete`, which runs after the store confirms the delete. The delete is issued only with at least one request timeout left on the claim. Generation n>1 lives at its own name (`retention.generation_key`), so a late delete reaches only its own generation. |
+| M6 WR-8 | retired in 0022's header (corrected in the fix round) | 0019's claim "not before the claim that deleted it has lapsed" was never implemented and will not be. The retirement rests on R129 and the amended R114: a tombstoned key refuses registration (`content_retiring`) until its delete is acknowledged; `content_acknowledge_delete` accepts only the tombstone's current claim fence and runs after the store's delete returned; the delete is issued only with at least one request timeout left on the claim; writers write bare keys, so every generation reuses the physical key. The residual is R129's: an abandoned delete that the store executes after a later acknowledged delete and a re-registration's write removes the new generation's bytes. The lapse wait would not close it. Generation-keyed names are R129's upgrade. (The earlier text cited `retention.generation_key`, which M6 phase 2 removed; see Fix round.) |
 | L3-REBASE F2 | done | `revoke all on function infrx.jobs_result_expiry_guard() from public, anon, authenticated, service_role`, as for its siblings. |
 | Door revoke (`admit` / `claim_preparation` from infrx_runtime) | not done, by the brief | This lane must not do it. It belongs in 0023, after W5 and G7 merge. |
 
@@ -60,7 +60,7 @@ New tests: `tests/d/test_followup_d10.py` has 6 real-PG cases: fail_preparation 
 ## 4. Wiring requests (exact hunks in `D10-followup-wiring.patch`; not applied)
 
 - **W1, G8**: `infrx/operations/transition.py` `PgTransition.set_flag`. Replace the UPDATE with `(changed,) = await (await conn.execute("select infrx.set_feature_flag(%s, %s, %s, %s)", (name, enabled, actor, reason))).fetchone()` and `return changed`. The SET LOCAL bounds and the 55P03/57014 mapping stay. Proof: `tests/g/ops/test_transition_pg.py` 6 passed on the scratch merge. G8 then tightens its overlapping case to `changed is True`, which D10's `check_flag_writer_lands_under_overlapping_lockers` already shows.
-- **W2, F2C (contracts; must merge WITH this branch)**:
+- **W2, F2C (contracts; must merge WITH this branch; on the current tip W2, W3 and W4 are one atomic set with 0022, and W1 is needed for V-G8TL-2 to take effect; see Fix round)**:
   - `infrx/contracts/fakes/lifecycle.py` `_register` gets the same WR-7 rule.
   - `fixtures/acceptance/lifecycle.json` is regenerated (`python -m infrx.contracts.conformance.acceptance --write`). Two `eligible_at` values move (t+150 to t+210, t+60 to t+120).
   - Without W2, `tests/d/test_lifecycle_conformance` fails on this branch. With it, 27/27 pass on both images, and contracts show 1260 passed on the scratch merge.
@@ -76,7 +76,7 @@ New tests: `tests/d/test_followup_d10.py` has 6 real-PG cases: fail_preparation 
 ## 5. Open issues
 
 - The door revoke (`infrx.admit`, `infrx.claim_preparation` from infrx_runtime) is not in 0022, per the brief. It goes in 0023 after W5 + G7 merge, with the RUNTIME_FUNCTIONS and runtime-list updates.
-- The transcript failure on the branch alone is the W2 merge-order dependency above.
+- The transcript failure on the branch alone is the W2 merge-order dependency above. That holds on the lane base only; on the tip `e481584b`, merging the branch alone also fails `test_harness` (needs W4) and the M6 refetch case `[d10]` as XPASS(strict) (needs W3). See Fix round.
 
 ## 6. Proposed ruling text
 
@@ -91,3 +91,34 @@ Optimistic 0.5 h, likely 1.5 h, pessimistic 4 h; confidence medium. Basis: every
 ## Verification log
 
 - 2026-09-25T19:10Z: written at code head `4b462094`. Chain log is in the session scratchpad (`chain.log`, `probe-*.log`).
+
+## Fix round (2026-09-25T20:50Z): code head `9d4bd28f`
+
+Commits: `a0db994c` (0-D10F-1), `9d4bd28f` (0-D10F-2 + 2-D10F-ACC-1), then this evidence commit. `git diff 19670a8c -- apps/app/supabase/migrations` touches only 0022. The `9d4bd28f` diff of 0022 changes comment lines only; no SQL statement changed. 0022 is now 278 lines, sha256 `1f44b4ae89506dc75cb1d9cbf26208935906058833a18fa518518085aea5e706`.
+
+| Finding | Fix | Fails before / passes after |
+|---|---|---|
+| 0-D10F-1 (blocking): the generation half of the replay key had no oracle | `checks_followup.check_fail_preparation` now asserts that a `generation + 1` call after the end is `already_terminal`. New mutants `d10_fail_prep_replay_ignores_generation` (drops `generation` from `v_mark`, 0022:89) and `d10_fail_prep_replay_ignores_worker` (drops `worker_id`) are in `d10_mutants`, so they run in the default subset. | Before the assertion, `pytest tests/d/test_migration_mutants.py -k d10_fail_prep_replay_ignores` gave exit 1 with the generation mutant **SURVIVED** and the worker mutant killed. After it, `-k "d10_fail_prep or well_formed"` gives 12 passed (all 11 fail_prep mutants killed), and `test_followup_d10.py` gives 6 passed. |
+| 0-D10F-2 / 2-D10F-ACC-1: the WR-8 retirement cited `generation_key`, which M6 phase 2 removed | 0022:36-52 now rests on R129 and the amended R114. A tombstoned key is `content_retiring` until its delete is acknowledged. The ack accepts only the tombstone's current claim fence and follows the store's returned delete. The delete is issued only with at least one request timeout left on the claim. Writers write bare keys (`key.g<n>` names no object). The paragraph names R129's residual: an abandoned delete executed after a later acknowledged delete and a re-registration's write removes the new generation's bytes. It says why a lapse wait does not close that window, and that generation-keyed names are R129's upgrade. R129 already accepts that residual, so no new ruling is needed. §1's WR-8 row is corrected the same way. | Comment-only. `git show claude/consumer-v1:apps/infrx-api/infrx/media/retention.py \| grep -n 'delete('` shows the bare-key delete. |
+| 2-D10F-ACC-2: the merge set | §4 and §5 now say this. **On the tip, W2, W3 and W4 form one atomic merge set with this branch, and W1 must be included for V-G8TL-2 to take effect.** | See the table below. |
+
+Scratch merge of `claude/consumer-v1` `e481584b` with this branch at `9d4bd28f`: a local `--shared` clone in the session scratchpad, a plain merge with no conflicts, and its own `uv sync --frozen --all-extras` venv. Real-PG runs used `INFRX_D_TASK=d10`. No push, no hosted DB, and port 55432 was never used.
+
+| Command (scratch merge) | Without W1-W4 | With the whole `D10-followup-wiring.patch` (`git apply --check` clean) |
+|---|---|---|
+| `pytest tests/integration/test_harness.py` | exit 1: **1 failed**, 26 passed (`test_the_migration_set_is_the_console_one_and_is_read_in_filename_order`, which needs W4) | exit 0: **27 passed** |
+| `pytest tests/m/test_retention.py tests/d/test_lifecycle_conformance.py tests/d/test_followup_d10.py tests/d/test_composition_pg.py` (+ `tests/g/ops/test_transition_pg.py` with the patch) | exit 1: **2 failed**, 108 passed, 1 xfailed. The failures are `test_retention::...fetched_again...[d10]` (XPASS strict, needs W3) and the transcript case (needs W2) | exit 0: **117 passed** |
+| `pytest tests/contracts -k 'not pg'` | — | exit 0: **1260 passed**, 6 deselected |
+
+Branch alone (worktree, `9d4bd28f`, `INFRX_D_TASK=d10`):
+
+| Command | Exit | Result |
+|---|---|---|
+| `pytest -q tests/d` (default subset) | 1 | **843 passed, 1 failed, 1 skipped, 8 xfailed** (841 + the 2 new mutants). The only failure is `test_the_versioned_acceptance_transcripts_replay_exactly`, which needs W2 |
+| `INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py tests/d/test_code_mutants*.py` | 0 | **734 passed, 0 survivors** (732 + 2) |
+| `INFRX_D1_IMAGE=supabase pytest -q tests/d/test_followup_d10.py tests/d/test_upgrade_d10.py` | 0 | 8 passed |
+| `python3 research/plan/scripts/validate_plan.py` | 0 | PASS |
+
+Not rerun: `privilege_probe --role infrx_runtime` and the layer-3 catalog script, because no grant, revoke or function body changed since `4b462094`. The harness removed its d10 containers afterwards.
+
+Remaining effort: optimistic 0.5 h, likely 1 h, pessimistic 3 h; confidence medium. Basis: the coordinator merges the branch with W1-W4 as one set, then does the 0023 door revoke after W5/G7.
