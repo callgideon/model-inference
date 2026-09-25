@@ -19,8 +19,8 @@
     "regime": "legacy_usd",
     "target": "pilot box (single L40S)"
   },
-  "revision": 36,
-  "updated": "2026-09-25T04:45:55Z",
+  "revision": 37,
+  "updated": "2026-09-25T06:17:50Z",
   "agent_slots": {
     "total": 16,
     "active": 14,
@@ -2552,6 +2552,27 @@
       "by": "G7",
       "what": "review → review; head 8906eb26; estimate likely 3 → 2 h (code findings closed; merge gates (D10 WR-3c before G7; WR-1; WR-2 after WR-3a) and merged-tree full suite remain)",
       "source": "updates/G7-20260925T0440Z.json"
+    },
+    {
+      "at": "2026-09-25T06:17:50Z",
+      "by": "tracker",
+      "what": "rejected update: impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)",
+      "source": "updates/I8-panels-20260925T0400Z.json"
+    },
+    {
+      "at": "2026-09-25T06:17:50Z",
+      "by": "tracker",
+      "what": "forecast E4C: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C)"
+    },
+    {
+      "at": "2026-09-25T06:17:50Z",
+      "by": "tracker",
+      "what": "forecast E3A: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4)"
+    },
+    {
+      "at": "2026-09-25T06:17:50Z",
+      "by": "tracker",
+      "what": "forecast E4: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25 → blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26 (because: blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4)"
     }
   ],
   "history": {
@@ -2740,10 +2761,15 @@
     "G7-20260925T0440Z.json": {
       "status": "applied",
       "at": "2026-09-25T04:40:00Z"
+    },
+    "I8-panels-20260925T0400Z.json": {
+      "status": "rejected",
+      "at": "2026-09-25T04:00:00Z",
+      "reason": "impossible transition complete → review: complete is terminal (the coordinator reopens by editing the overlay)"
     }
   },
   "eta": {
-    "computed_at": "2026-09-25T04:45:55Z",
+    "computed_at": "2026-09-25T06:17:50Z",
     "params": {
       "review_rework_fraction": 0.3,
       "integration_h_per_task": 0.5,
@@ -2753,7 +2779,7 @@
       "E3C": {
         "gate": "BACKEND-LOCAL",
         "status": "forecast",
-        "text": "2026-09-26 01:39Z – 2026-09-27 18:33Z (likely 2026-09-26 16:33Z)",
+        "text": "2026-09-26 03:11Z – 2026-09-27 20:05Z (likely 2026-09-26 18:05Z)",
         "constraint": "dependency path D10 → M5 → M6 → E3C",
         "effort_h": [
           26.4,
@@ -2766,9 +2792,9 @@
           61.8
         ],
         "finish": [
-          "2026-09-26T01:39:55Z",
-          "2026-09-26T16:33:55Z",
-          "2026-09-27T18:33:55Z"
+          "2026-09-26T03:11:50Z",
+          "2026-09-26T18:05:50Z",
+          "2026-09-27T20:05:50Z"
         ],
         "conditional": null,
         "confidence": "medium",
@@ -2783,8 +2809,8 @@
       "E4C": {
         "gate": "BACKEND-READY",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for E1B, E4C",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2796,8 +2822,8 @@
       "E3A": {
         "gate": "APP-LOCAL",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4C; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4C, U1R, U2, U3, U4",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
@@ -2809,8 +2835,8 @@
       "E4": {
         "gate": "APP-PILOT",
         "status": "blocked",
-        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25",
-        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4",
+        "text": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26",
+        "constraint": "blocked pending P-01, P-02, P-05, P-06, P-17, P-18, P-19, P-22, P-24, P-25, P-26; no GPU window allocated for E1B, E4, E4C, I2A; no remaining-effort estimate for A2, A3, C0, C3A, E1B, E3A, E4, E4C, I2A, I3, U1R, U2, U3, U4",
         "effort_h": null,
         "wall_h": null,
         "finish": null,
