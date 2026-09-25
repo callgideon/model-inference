@@ -298,18 +298,24 @@ def test_two_stores_never_see_each_others_objects(pair):
 
 
 def test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refused_unread(objects):
-    """The size bound (M3): `describe` reports the stored size exactly, so an upload of
-    exactly `max_bytes` finalizes and one byte more is `request_too_large` without a
-    download."""
+    """The size bound: an upload of exactly `max_bytes` finalizes; a PUT one byte over its
+    ticket's cap stores nothing (M5: the receipt is refused before the write); and bytes
+    over `MAX_MEDIA_BYTES` - every ticket's ceiling - found at a destination are
+    `request_too_large` from `describe`'s exact size, without a download."""
     counting = Counting(objects)
-    adapter = adapter_for(objects=counting)
+    adapter = adapter_for(objects=counting, limits=DEFAULTS.replace(max_media_bytes=len(CLIP)))
     assert uploaded(adapter, max_bytes=len(CLIP)).bytes == len(CLIP)
     over = created(adapter, max_bytes=len(CLIP) - 1)
-    # the client's bytes at the destination, past put_upload's own cap
-    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, over), CLIP, "video/mp4"))
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.put_upload(b.ORG_A, over, CLIP, "video/mp4"))
+    assert run(objects.describe(adapter.upload_key(b.ORG_A, over))) is None
+    beyond = created(adapter)
+    # bytes at the destination behind the store's back, one past the ceiling
+    assert run(objects.put_if_absent(adapter.upload_key(b.ORG_A, beyond), CLIP + b"\0",
+                                     "video/mp4"))
     gets = counting.gets
     with pytest.raises(errors.RequestTooLarge):
-        run(adapter.finalize_upload(b.ORG_A, over))
+        run(adapter.finalize_upload(b.ORG_A, beyond))
     assert counting.gets == gets, "an oversize object was downloaded to be refused"
 
 
@@ -372,7 +378,7 @@ def test_an_object_stored_without_our_checksum_is_present_and_matches_no_digest(
 
 
 # --- the composition: create_app from settings, and the installer (item 3) ---------------
-def cutover_app(config):
+def cutover_app(config, **adapters):
     """`create_app` as the unit runs it, the object store NOT injected (the Valkey index
     and the two HTTP clients are, so nothing else leaves the process)."""
     from infrx.gateway.app import create_app
@@ -380,7 +386,7 @@ def cutover_app(config):
 
     from ..g import support as g
     return create_app(config, client=g.upstream(), sb=g.supabase(),
-                      index=MemoryScheduler(lambda: None))
+                      index=MemoryScheduler(lambda: None), **adapters)
 
 
 def settings(mode: str, bucket: str, **deployment):
@@ -393,8 +399,12 @@ def settings(mode: str, bucket: str, **deployment):
 def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch):
     """With S3 configured, `create_app` composes `S3ObjectStore` on that bucket and prefix,
     and the bytes an upload puts land there - not in process memory. `dev`, because the
-    database here is unreachable and `pilot` refuses to start without it (G2)."""
+    database here is unreachable and `pilot` refuses to start without it (G2). The upload
+    tickets are M5's durable authority on that database, so F2C's reference one is injected
+    (`lifecycle`, wiring request 1) - the case is about where the bytes land."""
     import psycopg
+    from infrx.contracts.fakes.lifecycle import FakeLifecycle
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
 
     async def no_database(*args, **kw):
         raise psycopg.OperationalError("no database in this case")
@@ -403,7 +413,9 @@ def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch)
     s3_store(monkeypatch)                              # the bucket exists
     prefix = unique_prefix()
     media = cutover_app(settings("dev", BUCKET, s3_media_prefix=prefix,
-                                 s3_endpoint_url=ENDPOINT)).state.runtime.media_store
+                                 s3_endpoint_url=ENDPOINT),
+                        lifecycle=FakeLifecycle(None, FakeClock(), SequentialIds())
+                        ).state.runtime.media_store
     assert isinstance(media.objects, S3ObjectStore)
     _WRITTEN.append(S3ObjectStore(media.objects.client, BUCKET, prefix))   # the case's prefix
     assert (media.objects.bucket, media.objects.prefix) == (BUCKET, prefix)

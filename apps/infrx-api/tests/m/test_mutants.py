@@ -32,17 +32,21 @@ SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
           "lookup_failure_fails_open", "refusal_not_recorded",
           # M4: no new file; the two pins - a download's header reaches the profile, and a
           # prepared clip is the same file on every run.
-          "early_look_not_wired", "cache_file_name_varies")
+          "early_look_not_wired", "cache_file_name_varies",
+          # M5: the two pins of the durable upload - a refused PUT writes nothing (the
+          # receipt first), and an admitted job's upload ref binds only its tenant's object.
+          "bytes_before_the_receipt", "attach_accepts_a_forged_upload_ref")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
     """A typo in a test name would make a mutant unkillable by construction and pass."""
     from . import (test_consent, test_fetch, test_gc, test_parity, test_prepare, test_probe,
-                   test_store, test_uploads)
+                   test_store, test_upload_restart, test_uploads)
 
     names = {name for module in (test_fetch, test_prepare, test_probe, test_store,
-                                 test_uploads, test_gc, test_consent, test_parity)
+                                 test_uploads, test_gc, test_consent, test_parity,
+                                 test_upload_restart)
              for name in vars(module)
              if name.startswith("test_")}
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
@@ -78,6 +82,9 @@ def test_the_mutation_list_covers_the_owned_modules():
     m3 = [mutant for mutant in ALL
           if mutant.file in ("media/uploads.py", "media/gc.py", "media/consent.py")]
     assert len(m3) >= 50, f"only {len(m3)} mutants for M3's modules"
+    # and M5's durable upload adapter, on its own
+    m5 = [mutant for mutant in ALL if mutant.file == "media/uploads.py"]
+    assert len(m5) >= 40, f"only {len(m5)} mutants for M5's adapter"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])

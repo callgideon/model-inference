@@ -220,9 +220,17 @@ def adapters_from_env(settings, **injected):
                     "stream": PgStreamStore(connect, limits=settings.pilot),
                     # MPILOT gap 2: M's attach, durable where the worker reads it
                     "attachments": PgAttachments(connect),
+                    # M5 (RV-02): upload tickets and content rows, on the same pool
+                    "lifecycle": _pg_lifecycle(connect, settings.pilot),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     **adapters}
     return adapters
+
+
+def _pg_lifecycle(connect, limits):
+    """D10's `PgLifecycle`: the upload ticket authority and the content lifecycle (M5)."""
+    from ..state.lifecycle import PgLifecycle
+    return PgLifecycle(connect, limits=limits)
 
 
 def valkey_index(pilot):
@@ -263,7 +271,8 @@ def build_info(rt) -> None:
 
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
-                       pool=None, consent_for=None, attachments=None) -> IngressDeps:
+                       pool=None, consent_for=None, attachments=None,
+                       lifecycle=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -291,7 +300,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         objects, cache=ProcessingCache(pilot.processing_cache_dir,
                                        ttl_s=pilot.processing_cache_ttl_s),
         limits=pilot, fetcher=fetch.MediaFetcher(pilot, allowed_mime=settings.allowed_video_mime),
-        job_org=relay.job_org, attachments=attachments)
+        job_org=relay.job_org, attachments=attachments, uploads=lifecycle, content=lifecycle)
     rt.large_bodies = intake.LargeBodies(limit=deployment.large_body_limit,
                                          threshold=deployment.large_body_threshold_bytes)
     checks = {"price_source": Probe(price_check(catalog, settings.model_id,

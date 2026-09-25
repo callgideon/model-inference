@@ -320,8 +320,8 @@ class MediaStaging:
             # on media the store itself put somewhere, described as the store described it.
             # Attaching an own-org ref that was never staged used to bind a job to an
             # object that does not exist, with fields the caller chose (review).
-            indexed = self.refs.get((org_id, ref.handle))
-            if indexed is None or indexed.digest != ref.digest:
+            indexed = await self._staged_ref(org_id, ref)
+            if indexed is None:
                 raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
             owned.append(indexed)
         owned = tuple(owned)
@@ -335,6 +335,11 @@ class MediaStaging:
         if self.attachments is not None:            # durable first (MPILOT gap 2)
             await self.attachments.put(job_id, owned)
         self.by_job[job_id] = owned
+
+    async def _staged_ref(self, org_id: str, ref: MediaRef) -> MediaRef | None:
+        """This store's own record of `ref` for `org_id` (R82), or None."""
+        indexed = self.refs.get((org_id, ref.handle))
+        return indexed if indexed is not None and indexed.digest == ref.digest else None
 
     async def attached(self, job_id: str) -> tuple[MediaRef, ...] | None:
         """The refs bound to the job, from this process or the durable record; None if
