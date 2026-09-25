@@ -83,6 +83,12 @@ CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
 COMPOSE = "test_f_base__the_jobs_router_mounts_only_over_a_relay"
 TABLE = "test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers"
 PILOT = "test_f_base__the_pilot_composition_carries_the_relay_the_jobs_router_needs"
+RETUNE = "test_result_expiry__a_ttl_retune_never_moves_a_promised_expiry"
+NO_EXPIRY = "test_result_expiry__a_success_with_no_persisted_expiry_is_never_served"
+SYNC_REPLAY = "test_result_expiry__a_sync_replay_after_the_expiry_is_410_never_the_content"
+READ_TABLE = "test_result_expiry__the_route_answers_f2c_b_s_classification_table"
+REVOKED = "test_dur_rls__a_revoked_key_reads_its_jobs_for_at_most_key_ttl"
+LOST = "test_result_expiry__a_job_lost_after_publication_reads_as_documented"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -222,15 +228,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("updated_at_is_created", "updated_at is the settlement instant once terminal",
        J, "            updated_at=outcome.settled_at if outcome is not None else admission.admitted_at,",
        "            updated_at=admission.admitted_at,", STATUS),
-    _m("status_ignores_the_ttl", "result_available turns false once the TTL passed (store clock)",
-       J, "        available = expires is not None and now < expires",
-       "        available = expires is not None", OUTLIVES),
+    _m("status_ignores_the_ttl", "result_available turns false once the expiry passed (store clock)",
+       J, "        available = read_outcome(outcome, now) is ReadOutcome.available",
+       "        available = read_outcome(outcome, admission.admitted_at) is ReadOutcome.available",
+       OUTLIVES),
     _m("usage_invented", "usage is authoritative only when the store has it",
        J, "        certainty = (UsageCertainty.authoritative if usage is not None",
        "        certainty = (UsageCertainty.authoritative if outcome is not None", NO_USAGE),
     _m("unknown_usage_served_as_result", "no chat result is rendered without authoritative usage",
-       J, "                or outcome.usage is None or not outcome.result_ref):",
-       "                or not outcome.result_ref):", NO_USAGE),
+       J, "        if read is ReadOutcome.available:",
+       "        if read is ReadOutcome.available or outcome.state is JobState.succeeded:",
+       NO_USAGE),
     # === item 3: result (API-MODES) =====================================================
     _m("pending_code_wrong", "a job not yet terminal has no result: 409 result_pending",
        J, '            raise errors.ResultPending("the job is not terminal")',
@@ -245,12 +253,40 @@ MUTANTS: tuple[Mutant, ...] = (
        J, "        if outcome is None:\n            raise errors.ResultPending",
        "        if outcome is None or outcome.state is not JobState.succeeded:\n"
        "            raise errors.ResultPending", FAILURES),
-    _m("expired_result_served", "a result past its TTL is 410 result_expired",
-       J, "            if await jobs.now() >= expires:", "            if False:",
-       STORE_CLOCK),
-    _m("result_ttl_on_gateway_clock", "the result TTL is judged on the store clock (R29/R79)",
-       J, "            if await jobs.now() >= expires:",
-       "            if relay._now() >= expires:", STORE_CLOCK),
+    _m("expired_result_served", "a result past its persisted expiry is 410 result_expired",
+       J, "        if read in GONE:", "        if False:", STORE_CLOCK, RETUNE, NO_EXPIRY, READ_TABLE),
+    _m("result_ttl_on_gateway_clock", "the result expiry is judged on the store clock (R29/R79)",
+       J, "        read, response = read_outcome(outcome, await jobs.now()), None",
+       "        read, response = read_outcome(outcome, relay._now()), None", STORE_CLOCK),
+    # === G7 item 3: RESULT-EXPIRY - the persisted expiry is the one authority (RV-11) ====
+    _m("expiry_recomputed_from_settings", "status reports the persisted expiry, never a recompute",
+       J, "            result_expires_at=outcome.result_expires_at if available else None,",
+       "            result_expires_at=outcome.settled_at + timedelta(seconds=self.relay.limits"
+       ".result_ttl_s) if available else None,", RETUNE),
+    _m("unpersisted_expiry_served", "a success with no persisted expiry is never served",
+       J, "GONE = frozenset({ReadOutcome.expired, ReadOutcome.unavailable})",
+       "GONE = frozenset({ReadOutcome.expired})", NO_EXPIRY, READ_TABLE),
+    _m("sync_replay_ignores_expiry", "a sync replay past the persisted expiry is 410",
+       R, "        if expires is None or await _dependency(self.jobs.db_now()) >= expires:",
+       "        if expires is None:", SYNC_REPLAY),
+    _m("sync_answer_invents_expiry", "a sync replay of a success with no persisted expiry is 410",
+       R, "        if expires is None or await _dependency(self.jobs.db_now()) >= expires:",
+       "        if expires is not None and await _dependency(self.jobs.db_now()) >= expires:",
+       SYNC_REPLAY),
+    _m("lost_output_reported_as_internal", "a stream lost after publication ends stream_interrupted",
+       R, "    failed = errors.StreamInterrupted if stream else errors.InternalError",
+       "    failed = errors.InternalError", LOST),
+    _m("lost_output_usage_invented_known", "a held reservation reads usage unknown",
+       J, "                     else UsageCertainty.unknown if held else None)",
+       "                     else None)", LOST),
+    _m("revocation_outlives_key_ttl", "a revoked key reads its jobs for at most KEY_TTL (G8)",
+       "infrx/auth/keys.py",
+       "                hit = (now() + (s.key_ttl if rows else s.miss_ttl), rows[0] if rows else None)",
+       "                hit = (now() + (s.key_ttl * 2 if rows else s.miss_ttl), rows[0] if rows else None)",
+       REVOKED),
+    _m("sync_expiry_on_gateway_clock", "a sync replay's expiry is judged on the store clock",
+       R, "        if expires is None or await _dependency(self.jobs.db_now()) >= expires:",
+       "        if expires is None or self._now() >= expires:", SYNC_REPLAY),
     _m("status_ttl_on_gateway_clock", "status availability is judged on the store clock",
        J, "        return _answer(jobs.status_of(admission, outcome, await jobs.now()), "
           "admission)\n\n    @app.get(RESULT_PATH)",
@@ -316,18 +352,18 @@ MUTANTS: tuple[Mutant, ...] = (
        OBSERVER),
     # === item 5: DELETE (API-MODES, DUR-FENCE) ==========================================
     _m("delete_cause_disconnected", "an explicit DELETE is client_cancelled (R21)",
-       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
-       "            relay.cancel(org, handle, cause=TerminalCause.client_disconnected))",
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),",
+       "            relay.cancel(org, handle, cause=TerminalCause.client_disconnected),",
        DELETE, MIDWAY),
     _m("delete_cancels_nothing", "DELETE requests durable cancellation",
-       J, "        outcome = await _dependency(\n            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
-       "        outcome = (await relay._owned(org, handle))[1]", DELETE),
+       J, "        outcome = await _dependency(\n            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),",
+       "        outcome = (await relay._owned(org, handle))[1]; (", DELETE),
     _m("delete_unshielded", "the DELETE's cancel survives the handler's own cancellation",
-       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
-       "            relay.jobs.cancel(org, handle, cause=TerminalCause.client_cancelled))", MIDWAY),
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),",
+       "            relay.jobs.cancel(org, handle, cause=TerminalCause.client_cancelled),", MIDWAY),
     _m("delete_quiet", "a DELETE whose cancel failed is never a 200 with the pre-cancel row",
-       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled))",
-       "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled, quiet=True))",
+       J, "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled),",
+       "            relay.cancel(org, handle, cause=TerminalCause.client_cancelled, quiet=True),",
        DELETE_OUTAGE),
     _m("already_terminal_read_swallowed", "after already_terminal the outcome is read, or the "
        "DELETE is a 503 - never a 200 without it (review stream-C3)",

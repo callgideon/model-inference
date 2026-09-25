@@ -21,10 +21,16 @@ import socket
 import threading
 import time
 
-import httpx
-import uvicorn
+import asyncio
 
-from infrx.gateway.routes import intake
+import httpx
+import pytest
+import uvicorn
+from fastapi import FastAPI
+
+from infrx.contracts import errors
+from infrx.gateway.routes import ingress, intake
+from infrx.observe import metrics
 
 from . import support
 
@@ -175,6 +181,114 @@ def test_media_sec__an_unauthenticated_caller_is_drained_only_up_to_1_mib():
     assert status_of(got) == 401, got[:200]
     assert closed and took < CLIENT_TIMEOUT_S, f"answered after {took:.1f}s: drained"
 
+
+# --- WR-I8-3: the gate and the drain on the gateway's /metrics ---------------------------
+# The declarations the coordinator adds to `observe.metrics.FAMILIES` (the wiring request,
+# verbatim); until then the intake records nothing rather than raise on the request path.
+WIRED = {
+    intake.SLOTS_IN_USE: metrics.Spec(
+        "gauge", "Large request and upload bodies holding a slot now (LARGE_BODY_LIMIT)."),
+    intake.SLOTS_LIMIT: metrics.Spec(
+        "gauge", "The large-body slots configured (LARGE_BODY_LIMIT)."),
+    intake.SLOTS_REFUSED: metrics.Spec(
+        "counter", "Large bodies refused 429 because every slot was held."),
+    intake.DRAINED: metrics.Spec(
+        "counter", "Refused bodies read to their declared end so the caller reads the refusal.",
+        (("code", intake.CLOSE_CODES),)),
+}
+
+
+def sample(registry, name, **labels) -> float | None:
+    """One sample's value from the exposition, or None when the series is absent."""
+    wanted = ",".join([f'process="{registry.process}"',
+                       *(f'{key}="{value}"' for key, value in labels.items())])
+    for line in registry.render().splitlines():
+        if line.startswith(f"{name}{{{wanted}}} "):
+            return float(line.rsplit(" ", 1)[1])
+    return None
+
+
+def test_ops_alert__the_large_body_gauges_move_under_a_held_slot(monkeypatch):
+    """WR-I8-3: while a large body holds the one slot, `/metrics` says so (in use 1 of 1);
+    a second large body is refused 429 and counted, drained to its declared end and counted
+    by code; when the first body ends, the slot is free again. No request id, key or
+    tenant in any label."""
+    for name, spec in WIRED.items():
+        monkeypatch.setitem(metrics.FAMILIES, name, spec)
+    registry = metrics.Registry("gateway")
+    rt = support.runtime(support.settings())
+    rt.metrics = registry
+    calls, accept = support.recorder()
+    app = FastAPI()
+    app.state.runtime, rt.app = rt, app
+    slots = intake.LargeBodies(limit=1, threshold=64)
+    ingress.register(app, rt, support.deps(accept=accept, large_bodies=slots))
+    assert sample(registry, intake.SLOTS_LIMIT) == 1
+    body = json.dumps({"messages": [{"role": "user", "content": "x" * 200}]}).encode()
+    head = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+            "method": "POST", "path": support.CHAT_PATH, "raw_path": support.CHAT_PATH.encode(),
+            "query_string": b"", "root_path": "", "scheme": "http",
+            "client": ("198.51.100.7", 40000), "server": ("gw", 8001),
+            "headers": [(b"authorization", f"Bearer {support.TOKEN}".encode()),
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode())]}
+
+    async def scenario():
+        rest = asyncio.Event()
+        parts = [body[:100], body[100:]]
+
+        async def slow():                     # the first chunk, then held until `rest`
+            if len(parts) == 1:
+                await rest.wait()
+            return {"type": "http.request", "body": parts.pop(0), "more_body": bool(parts)}
+
+        sent = []
+
+        async def keep(message):
+            sent.append(message)
+
+        held = asyncio.ensure_future(app(head, slow, keep))
+        for _ in range(50):
+            await asyncio.sleep(0)
+            if sample(registry, intake.SLOTS_IN_USE) == 1:
+                break
+        in_use = sample(registry, intake.SLOTS_IN_USE)
+        whole = [{"type": "http.request", "body": body, "more_body": False}]
+
+        async def at_once():
+            return whole.pop(0) if whole else {"type": "http.disconnect"}
+
+        refused = []
+        await app(head, at_once, lambda m: asyncio.sleep(0, refused.append(m)))
+        rest.set()
+        await held
+        return in_use, refused, sent
+
+    in_use, refused, sent = asyncio.run(scenario())
+    assert in_use == 1, "the held slot is not visible on /metrics"
+    assert refused[0]["status"] == 429
+    assert sample(registry, intake.SLOTS_REFUSED) == 1
+    assert sample(registry, intake.DRAINED, code="capacity_exhausted") == 1
+    assert sent[0]["status"] == 202 and calls                    # the held body went on
+    assert sample(registry, intake.SLOTS_IN_USE) == 0
+    assert "Bearer" not in registry.render() and support.ORG not in registry.render()
+
+
+def test_ops_alert__without_the_declarations_the_intake_records_nothing(monkeypatch):
+    """Before the wiring lands the families are undeclared: the gate still gates, the
+    refusal is still typed, and nothing on the request path raises for want of a family."""
+    for name in WIRED:
+        monkeypatch.delitem(metrics.FAMILIES, name, raising=False)
+    registry = metrics.Registry("gateway")
+    slots = intake.LargeBodies(limit=1, threshold=64, registry=registry)
+    slots.publish()
+    first = slots.slot()
+    first.account(100)
+    with pytest.raises(errors.CapacityExhausted):
+        slots.slot().account(100)
+    first.release()
+    assert (slots.in_flight, slots.refused) == (0, 1)
+    assert "large_body" not in registry.render()
 
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):

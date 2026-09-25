@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import ClientDisconnect
 
 from ...contracts import errors, ids, wire
+from ...observe import metrics
 
 log = logging.getLogger("infrx.gateway")
 
@@ -54,6 +55,55 @@ LAST_RESORT = {"error": {"message": errors.MESSAGES["internal_error"], "type": "
 # `guard` first drains a declared body within bounds (`drain`), then closes.
 CLOSE_CODES = frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",
                          "deadline_exceeded"})
+# E3C s08: every store and object-store call a route makes answers within a bound, so a
+# dependency that stops answering (a paused PostgreSQL or S3: no server-side timeout fires,
+# botocore retries) is a typed, retryable 503 inside the declared 45 s, never a request
+# left hanging. Past the pool's connect timeout (5 s) plus the statement timeout (15 s), so
+# a slow statement still gets the server's own refusal first. Media preparation has its
+# own: it fetches and probes legitimately for up to their timeouts, then writes the source.
+# ponytail: module constants; `PilotSettings` names if an operator needs to tune them.
+DEPENDENCY_BOUND_S = 20.0
+PREPARATION_WRITE_S = 10.0
+
+
+def preparation_bound(limits) -> float:
+    """The fetch, the probe and the source write: 40 s with the defaults."""
+    return limits.media_fetch_timeout_s + limits.probe_timeout_s + PREPARATION_WRITE_S
+
+
+async def bounded(awaitable, bound_s: float):
+    """`awaitable`'s answer, or `DependencyUnavailable` once `bound_s` has passed. The call
+    is cancelled then and not waited for: a call that ignores cancellation (a stalled
+    socket, a thread) must not hold the answer. Its caller's own error paths run as for
+    any dependency failure: a job already admitted is left for the same-key retry."""
+    task = asyncio.ensure_future(awaitable)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=bound_s)
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    if not done:
+        task.cancel()
+        log.warning("a durable dependency did not answer within %ss", bound_s)
+        raise errors.DependencyUnavailable("a durable dependency did not answer in time")
+    return task.result()
+
+
+# WR-I8-3: the large-body gate and the drain on the gateway's `/metrics`, for the
+# "gateway buffering/drains" alert rules. Recorded only once `observe.metrics.FAMILIES`
+# declares them (the coordinator's wiring request); until then nothing is recorded, and an
+# undeclared family never raises on the request path. No label but the refusal's code.
+SLOTS_IN_USE = "infrx_large_body_slots_in_use"
+SLOTS_LIMIT = "infrx_large_body_slots_limit"
+SLOTS_REFUSED = "infrx_large_body_refused_total"
+DRAINED = "infrx_intake_drained_total"
+
+
+def record(registry, method: str, name: str, value: float = 1.0, **labels) -> None:
+    if registry is not None and name in metrics.FAMILIES:
+        getattr(registry, method)(name, value, **labels)
+
+
 # What an unauthenticated caller can make us read and discard before its 401: a small
 # JSON body, never a video. Larger, it is refused without a drain (and may not read it).
 UNAUTHENTICATED_DRAIN_BYTES = 1_048_576
@@ -247,15 +297,20 @@ class LargeBodies:
     the same stall with a longer fuse.
     """
 
-    def __init__(self, limit: int = 2, threshold: int = 1_048_576) -> None:
+    def __init__(self, limit: int = 2, threshold: int = 1_048_576, registry=None) -> None:
         self.limit = limit
         self.threshold = threshold
         self.in_flight = 0
         self.peak = 0
         self.refused = 0
+        self.registry = registry          # the gateway's `/metrics` (WR-I8-3), if any
 
     def slot(self) -> "LargeBody":
         return LargeBody(self)
+
+    def publish(self) -> None:
+        record(self.registry, "set", SLOTS_IN_USE, self.in_flight)
+        record(self.registry, "set", SLOTS_LIMIT, self.limit)
 
 
 class LargeBody:
@@ -271,16 +326,19 @@ class LargeBody:
             return
         if self.slots.in_flight >= self.slots.limit:
             self.slots.refused += 1
+            record(self.slots.registry, "inc", SLOTS_REFUSED)
             raise errors.CapacityExhausted(
                 f"{self.slots.limit} large bodies are already in flight", retry_after_s=2)
         self.slots.in_flight += 1
         self.slots.peak = max(self.slots.peak, self.slots.in_flight)
         self.held = True
+        self.slots.publish()
 
     def release(self) -> None:
         if self.held:
             self.slots.in_flight -= 1
             self.held = False
+            self.slots.publish()
 
 
 def watched(receive):
@@ -296,7 +354,7 @@ def watched(receive):
     return watching, lambda: done
 
 
-async def drain(receive, headers, code: str, max_bytes: int, deadline: float) -> None:
+async def drain(receive, headers, code: str, max_bytes: int, deadline: float) -> bool:
     """Read and discard what is left of a refused body, so the caller reads the refusal.
 
     Only a declared `Content-Length` within the bound is drained: a chunked body has no
@@ -310,7 +368,7 @@ async def drain(receive, headers, code: str, max_bytes: int, deadline: float) ->
     bound = min(UNAUTHENTICATED_DRAIN_BYTES, max_bytes) if code == "invalid_api_key" else max_bytes
     declared = declared_length(headers)
     if declared is None or declared > bound:
-        return
+        return False
     total = 0
     try:
         async with asyncio.timeout_at(deadline):
@@ -318,9 +376,10 @@ async def drain(receive, headers, code: str, max_bytes: int, deadline: float) ->
                 message = await receive()
                 total += len(message.get("body", b""))
                 if message["type"] != "http.request" or not message.get("more_body", False):
-                    return
+                    return True
     except Exception:
-        return
+        return True
+    return True
 
 
 def safe_param(param: object) -> str | None:
@@ -420,9 +479,13 @@ def guard(mint_request_id, limits=None):
                 return await handler(Request(request.scope, receive), request_id)
             except errors.DomainError as error:
                 log.info("%s: %s on request %s", request.url.path, error.code, request_id)
-                if limits is not None and error.code in CLOSE_CODES and not finished():
-                    await drain(receive, request.headers, error.code, limits.max_request_bytes,
-                                started + limits.intake_timeout_s)
+                if limits is not None and error.code in CLOSE_CODES and not finished() \
+                        and await drain(receive, request.headers, error.code,
+                                        limits.max_request_bytes,
+                                        started + limits.intake_timeout_s):
+                    runtime = getattr(getattr(request.scope.get("app"), "state", None),
+                                      "runtime", None)
+                    record(getattr(runtime, "metrics", None), "inc", DRAINED, code=error.code)
                 return response(error, request_id)
             except Exception:
                 log.exception("%s: unhandled error on request %s", request.url.path, request_id)
