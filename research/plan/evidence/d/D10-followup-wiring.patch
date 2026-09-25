@@ -1,0 +1,82 @@
+diff --git a/apps/infrx-api/infrx/contracts/fakes/lifecycle.py b/apps/infrx-api/infrx/contracts/fakes/lifecycle.py
+index e8acffa2..1c4342d8 100644
+--- a/apps/infrx-api/infrx/contracts/fakes/lifecycle.py
++++ b/apps/infrx-api/infrx/contracts/fakes/lifecycle.py
+@@ -324,6 +324,12 @@ class FakeLifecycle:
+         if None not in (row.identity.digest, identity.digest) \
+                 and row.identity.digest != identity.digest:
+             raise refuse(R.bytes_changed, "the key already names other bytes")
++        if identity.origin is ContentOrigin.written and row.state is LifecycleState.live \
++                and row.identity.digest is not None and row.identity.digest == identity.digest:
++            # M6 WR-7 (D10 0022): the runtime rewrites these bytes for a new request, so the
++            # grace restarts (never shortens); a `discovered` registration never refreshes.
++            return self._save(row, eligible_at=max(row.eligible_at,
++                                                   now + timedelta(seconds=self.grace_s)))
+         return row
+ 
+     async def register(self, identity: ContentIdentity) -> ContentObject:
+diff --git a/apps/infrx-api/infrx/contracts/fixtures/acceptance/lifecycle.json b/apps/infrx-api/infrx/contracts/fixtures/acceptance/lifecycle.json
+index cfc8a49d..fe2ddb98 100644
+--- a/apps/infrx-api/infrx/contracts/fixtures/acceptance/lifecycle.json
++++ b/apps/infrx-api/infrx/contracts/fixtures/acceptance/lifecycle.json
+@@ -5055,7 +5055,7 @@
+             "schema_version": 2
+           },
+           "content_id": "<id:1>",
+-          "eligible_at": "t+150",
++          "eligible_at": "t+210",
+           "generation": 2,
+           "identity": {
+             "bytes": 7,
+@@ -5292,7 +5292,7 @@
+             "schema_version": 2
+           },
+           "content_id": "<id:1>",
+-          "eligible_at": "t+60",
++          "eligible_at": "t+120",
+           "generation": 1,
+           "identity": {
+             "bytes": 5,
+diff --git a/apps/infrx-api/infrx/operations/transition.py b/apps/infrx-api/infrx/operations/transition.py
+index ad9712ab..97a042f2 100644
+--- a/apps/infrx-api/infrx/operations/transition.py
++++ b/apps/infrx-api/infrx/operations/transition.py
+@@ -200,10 +200,11 @@ class PgTransition:
+             async with conn.transaction():
+                 await conn.execute(f"set local lock_timeout = {ms}")
+                 await conn.execute(f"set local statement_timeout = {ms + STATEMENT_MARGIN_MS}")
+-                row = await (await conn.execute(
+-                    "update infrx.feature_flags set enabled = %s, updated_by = %s, reason = %s, "
+-                    "updated_at = infrx.now() where name = %s and enabled <> %s returning name",
+-                    (enabled, actor[:200], reason[:500], name, enabled))).fetchone()
++                # V-G8TL-2 (D10 0022): EXCLUSIVE table lock, then the guarded UPDATE - fair
++                # against a stream of FOR SHARE admissions; bounded by the SET LOCALs above.
++                (changed,) = await (await conn.execute(
++                    "select infrx.set_feature_flag(%s, %s, %s, %s)",
++                    (name, enabled, actor, reason))).fetchone()
+         except Exception as exc:
+             # lock_not_available, query_canceled (the statement bound)
+             if getattr(exc, "sqlstate", None) in ("55P03", "57014"):
+@@ -211,7 +212,7 @@ class PgTransition:
+             raise
+         finally:
+             await conn.close()
+-        return row is not None
++        return changed
+ 
+ 
+ def shape(raw: dict, alias: str) -> dict:
+diff --git a/apps/infrx-api/tests/m/test_retention.py b/apps/infrx-api/tests/m/test_retention.py
+index cfe6173f..8f0eec0e 100644
+--- a/apps/infrx-api/tests/m/test_retention.py
++++ b/apps/infrx-api/tests/m/test_retention.py
+@@ -747,9 +747,6 @@ def test_the_runtimes_writers_register_every_object_before_writing_it(make_world
+     assert {k: rows_by_key(world)[k] for k in written} == {k: "live" for k in written}
+ 
+ 
+-@pytest.mark.xfail(strict=True, reason=(
+-    "fix round R2/A1, wiring request 7 (D10 SQL + the F2C reference fake): a written "
+-    "re-registration of a live key must refresh eligible_at; until then this is the race"))
+ def test_a_source_fetched_again_is_not_collected_before_its_admission(make_world):
+     """Fix round R2/A1 (a known race, strict xfail until wiring request 7 lands): a clip
+     fetched again after its first row became eligible gets the old row back (the first
