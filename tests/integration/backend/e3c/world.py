@@ -39,6 +39,7 @@ import sys
 import time
 import types
 from pathlib import Path
+from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
@@ -133,8 +134,9 @@ POINTS = {
 }
 
 
-def point_target(point: str):
-    """(owner class, candidate) of the first candidate this tree has, else None."""
+def point_targets(point: str) -> list:
+    """(owner class, candidate) of every candidate this tree has, in POINTS order."""
+    found = []
     for candidate in POINTS[point]:
         module, cls, attr = candidate[:3]
         try:
@@ -142,8 +144,13 @@ def point_target(point: str):
         except (ImportError, AttributeError):
             continue
         if callable(getattr(owner, attr, None)):
-            return owner, candidate
-    return None
+            found.append((owner, candidate))
+    return found
+
+
+def point_target(point: str):
+    """(owner class, candidate) of the first candidate this tree has, else None."""
+    return next(iter(point_targets(point)), None)
 
 
 def has_point(point: str) -> bool:
@@ -162,12 +169,20 @@ def _summary(args) -> list:
 
 
 def install_barrier(point: str, marker: Path) -> None:
-    found = point_target(point)
-    if found is None:
+    """Hold at `point` on EVERY candidate the tree has; the first one the process calls
+    holds, once. Phase 2: D10's `PgLifecycle.admit_ready` exists before the gateway calls it
+    (G7 composes it); holding only the first candidate would wait on a step never taken."""
+    found = point_targets(point)
+    if not found:
         raise BypassTargetMissing(f"fault point {point}: none of {POINTS[point]}")
-    owner, (_, _, attr, when, needs_result) = found
-    original = getattr(owner, attr)
     fired: list[int] = []
+    for owner, candidate in found:
+        _hold_on(point, marker, owner, candidate, fired)
+
+
+def _hold_on(point: str, marker: Path, owner, candidate, fired: list[int]) -> None:
+    _, _, attr, when, needs_result = candidate
+    original = getattr(owner, attr)
 
     async def hold(args) -> None:
         """Held until the test SIGKILLs the process, or releases it by deleting the marker."""
@@ -318,7 +333,9 @@ def fake_only(env: dict) -> list[str]:
     want = {"INFRX_MODE": "pilot", "S3_ENDPOINT_URL": harness.s3_endpoint(),
             "VALKEY_URL": harness.valkey_url()}
     wrong = [name for name, value in want.items() if env.get(name) != value]
-    if not env.get("DATABASE_URL", "").startswith(harness.pg_dsn("").split("?")[0]):
+    # this namespace's PostgreSQL, any login (WR-4: the dedicated runtime login is real too)
+    real, got = urlsplit(harness.pg_dsn("")), urlsplit(env.get("DATABASE_URL", ""))
+    if (got.hostname, got.port) != (real.hostname, real.port) or not got.path.strip("/"):
         wrong.append("DATABASE_URL")
     if not env.get("S3_MEDIA_BUCKET"):
         wrong.append("S3_MEDIA_BUCKET")
@@ -398,14 +415,43 @@ def bind_retried(start, attempts: int = 10):
             time.sleep(2.0)
 
 
+RUNTIME_ROLE = "infrx_runtime"
+#: WR-4 for the whole matrix: set to 1 once the box can serve on the dedicated login (phase 2
+#: finding F-1: pilot.py's pool `set role service_role` refuses it). s10 always uses it.
+RUNTIME_LOGIN_ENV = "INFRX_E3C_RUNTIME_LOGIN"
+
+
+def runtime_dsn(database: str) -> str:
+    """WR-4: 0021's `infrx_runtime` given LOGIN and a fresh random password on this
+    namespace's cluster - the operator's out-of-band step, done here as the owner - and the
+    DSN the box then uses. The password lives in memory and the box's environment only."""
+    import secrets
+
+    import psycopg
+    from psycopg import sql
+    owner, secret = harness.pg_dsn(database), secrets.token_hex(16)
+    with psycopg.connect(owner, autocommit=True) as conn:
+        conn.execute(sql.SQL("alter role {} login password {}").format(
+            sql.Identifier(RUNTIME_ROLE), sql.Literal(secret)))
+    parts = urlsplit(owner)
+    return owner.replace(f"{parts.username}:{parts.password}@", f"{RUNTIME_ROLE}:{secret}@", 1)
+
+
 @contextlib.contextmanager
-def composed(workdir: Path, *, start=("worker", "gateway"), **env: str):
+def composed(workdir: Path, *, start=("worker", "gateway"), runtime_login: bool | None = None,
+             **env: str):
     """E3B's journey stack with this lane's Box: two tenants on a fresh clone, PostgREST over
-    it, E2's controlled engine, and the box processes `start` names (in order)."""
+    it, E2's controlled engine, and the box processes `start` names (in order).
+    `runtime_login` (WR-4): the box's DATABASE_URL is the dedicated runtime login, not the
+    owner; None follows INFRX_E3C_RUNTIME_LOGIN."""
     import fake_vllm
     import psycopg
     need_stack()
+    if runtime_login is None:
+        runtime_login = os.environ.get(RUNTIME_LOGIN_ENV) == "1"
     world = stack.provision_two_tenants()
+    if runtime_login:
+        env = {**env, "DATABASE_URL": runtime_dsn(world.database)}
     engine = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
     with stack.journey_postgrest(world.database) as rest:
         bind_retried(engine.start)
@@ -619,8 +665,15 @@ def objects(trip, under: str = "media/") -> set[str]:
 # ------------------------------------------------------------------ the collector process
 
 async def collect_once(grace_s: float) -> dict:
-    """One `MediaCollector` pass in THIS (fresh) process: the box's object store, the job
-    store's liveness, the processing cache of the box. What it deleted, by key."""
+    """One `MediaCollector` pass in THIS (fresh) process, composed as the pilot composes the
+    media store (M5: D10's `PgLifecycle` as ticket authority and content lifecycle): the box's
+    object store, the job store's liveness, the processing cache of the box. What it deleted,
+    by key.
+
+    Phase 2: over a durable ticket authority the base collector has no process-local tickets
+    (`MediaUploads.uploads` raises) and stops before any delete - the durable retention pass
+    over the content rows is M6's. That answers `{"blocked": "M6", ...}`: a pass that cannot
+    run is not a pass that kept everything (never a vacuous green)."""
     from infrx.config import from_env
     from infrx.gateway import pilot
     from infrx.media.gc import MediaCollector
@@ -629,12 +682,26 @@ async def collect_once(grace_s: float) -> dict:
     from infrx.state.jobstore import PgJobStore, connector
     settings = from_env()
     limits = settings.pilot
-    store = MediaUploads(pilot.object_store(settings), limits=limits,
+    lifecycle = pilot._pg_lifecycle(connector(limits.database_url), limits) \
+        if hasattr(pilot, "_pg_lifecycle") else None
+    store = MediaUploads(pilot.object_store(settings), limits=limits, uploads=lifecycle,
+                         content=lifecycle,
                          cache=ProcessingCache(limits.processing_cache_dir,
                                                ttl_s=limits.processing_cache_ttl_s))
+    if lifecycle is not None and not hasattr(store.tickets, "records"):
+        return {"blocked": "M6", "why": "the durable ticket authority has no process-local "
+                "records; the base MediaCollector stops before any delete (gc.py) and no "
+                "durable retention pass is in the tree"}
     jobs = PgJobStore(connector(limits.database_url), limits=limits)
     swept = await MediaCollector(store, is_live=jobs.is_live, grace_s=grace_s).sweep()
     return {"deleted": swept.deleted, "uploads_expired": swept.uploads_expired}
+
+
+def collector_blocked(answers: list[dict]) -> None:
+    """BLOCKED[<lane>] when a collector process answered that its pass cannot run here."""
+    lanes = sorted({answer["blocked"] for answer in answers if "blocked" in answer})
+    if lanes:
+        blocked(*lanes, why=next(a["why"] for a in answers if "blocked" in a))
 
 
 def main(argv: list[str]) -> int:
