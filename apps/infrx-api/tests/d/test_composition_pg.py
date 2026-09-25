@@ -73,3 +73,83 @@ def test_f_base__create_app_composes_the_pilot_from_settings_on_postgresql(regim
         assert ready.json() == {"status": "ok", "mode": "pilot",
                                 "components": {"price_source": "ok", "journal": "ok"}}
     assert pool.closed
+
+
+def _runtime_login(database: str) -> str:
+    """0021's `infrx_runtime` given LOGIN and a fresh random password, as the operator does
+    out of band; the DSN (password inside) lives only in this process's memory."""
+    import secrets
+    password = secrets.token_urlsafe(24)
+    with pgharness.connect(database) as owner:
+        owner.execute(f"alter role infrx_runtime login password '{password}'")
+    return pgharness.dsn(database).replace(f"postgres:{pgharness.PASSWORD}@",
+                                           f"infrx_runtime:{password}@", 1)
+
+
+def test_f_base__the_pilot_serves_and_the_worker_connects_on_the_dedicated_login(tmp_path):
+    """E3C F-1 / R127: on 0021's `infrx_runtime` login (member of no role, so `set role
+    service_role` is refused) the gateway composed from settings passes its startup probes,
+    serves `/v1/models` and admits one job, and the worker's composition opens its pool and
+    hands out a connection - both as that login. Oracle: a pool that SETs the role on the
+    dedicated login never connects (the gateway refuses startup, the worker's pool times out)."""
+    import asyncio
+
+    import httpx
+    from infrx.config import from_env
+    from infrx.worker import __main__ as worker_main
+
+    from ..g import relay_support as rs, support as gs
+
+    from infrx.state import pgtesting
+    database = fresh()
+    with pgharness.connect(database) as owner:     # the consumer, its wallet and key rows
+        pgtesting.seed_credit_world(owner, "select 1")     # (the Marlin seed is fresh()'s)
+    runtime = _runtime_login(database)
+    settings = Settings(supabase_url="https://fake.supabase.co", supabase_key="service-role",
+                        pilot=DEFAULTS.replace(infrx_mode="pilot", database_url=runtime,
+                                               active_rate_card_version=CARD))
+    settings.deployment = settings.deployment.replace(
+        accounting_regime="credit", infrx_release_sha="c0ffee" + "0" * 34,
+        infrx_image="sha256:" + "b" * 64)
+    rows = {__import__("hashlib").sha256(gs.TOKEN.encode()).hexdigest(): rs.CONSUMER_ROW}
+
+    def identities(request):
+        key_hash = request.url.params.get("key_hash", "").removeprefix("eq.")
+        return httpx.Response(200, json=[rows[key_hash]] if key_hash in rows else [])
+    sb = httpx.AsyncClient(base_url="https://fake.supabase.co/rest/v1",
+                           transport=httpx.MockTransport(identities))
+    app = create_app(settings, client=gs.upstream(), sb=sb, objects=InMemoryObjectStore(),
+                     index=MemoryScheduler(lambda: None))
+    auth = {"authorization": f"Bearer {gs.TOKEN}"}
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        assert client.get("/readyz").status_code == 200
+        listed = client.get("/v1/models", headers=auth)
+        assert listed.status_code == 200, listed.text
+        assert gs.PUBLIC_MODEL in {m["id"] for m in listed.json()["data"]}
+        admitted = client.post("/v1/jobs", headers={**auth, "idempotency-key": "rl-1"},
+                               json={"model": gs.PUBLIC_MODEL, "messages": [
+                                   {"role": "user", "content": "hello"}]})
+        assert admitted.status_code == 202, admitted.text
+    with pgharness.connect(database) as owner:
+        assert owner.execute("select count(*) from infrx.jobs").fetchone()[0] >= 1
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    worker_settings = from_env({
+        "INFRX_MODE": "pilot", "DATABASE_URL": runtime, "VALKEY_URL": "redis://127.0.0.1:9/0",
+        "PROCESSING_CACHE_DIR": str(cache), "S3_MEDIA_BUCKET": "unused",
+        "UPSTREAM": "http://127.0.0.1:9", "SUPABASE_URL": "https://fake.supabase.invalid",
+        "SUPABASE_SERVICE_ROLE_KEY": "service-role-key-for-tests",
+        "INFRX_RELEASE_SHA": "c0ffee" + "0" * 34, "INFRX_IMAGE": "sha256:" + "b" * 64,
+        "ACCOUNTING_REGIME": "credit", "ACTIVE_RATE_CARD_VERSION": CARD})
+    _service, pool = worker_main.compose(worker_settings, objects=InMemoryObjectStore(),
+                                         index=MemoryScheduler(lambda: None))
+
+    async def acquire():
+        await pool.open(wait=True, timeout=10)
+        try:
+            async with pool.connection() as conn:
+                return (await (await conn.execute("select current_user")).fetchone())[0]
+        finally:
+            await pool.close()
+    assert asyncio.run(acquire()) == "infrx_runtime"
