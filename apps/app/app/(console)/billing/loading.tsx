@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function BillingLoading() {
   return (
     <div aria-busy="true" aria-live="polite">
-      <span className="sr-only">Loading balance…</span>
+      <span className="sr-only">Loading credits…</span>
       <Skeleton className="h-8 w-40" />
       <Skeleton className="mt-6 h-44" />
       <Skeleton className="mt-4 h-72" />
