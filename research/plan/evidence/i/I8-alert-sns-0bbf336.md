@@ -49,3 +49,27 @@ alert_test_drops_the_topic — all killed.
 ## Estimate
 Remaining: optimistic 0 h, likely 0.25 h, pessimistic 1 h (review/merge); confidence high; basis:
 all named suites and mutants green; box/AWS steps are coordinator ops.
+
+## Fix round (verifier ACCEPT_WITH_FIXES on 3e5e725e; code head 49c92e8d)
+
+| id | fix | regression (red before, green after) |
+|---|---|---|
+| F1 (medium) | `post(url, …)` builds the Request and opens it inside one try; `except Exception` → -1 (exit 4, kept). `InvalidURL` (a ValueError) no longer escapes as a traceback carrying URL fragments. Non-https → BLOCKED through `send()` (exit 3, kept), no SystemExit. | `test_ops_alert_sns__a_malformed_webhook_url_is_kept_and_never_printed`: subprocess under `python -X dev` with `https://…/<token> x` (exit 4), `https://…:<token>/x` (exit 4), `http://…/<token>` (exit 3); token and host absent from stdout+stderr; UNDELIVERED written each time. The verifier's three probes replayed by hand: exit 4/4/3, token_leak 0, kept 1. |
+| F2 (low) | `publish()` catches `Exception` → `sns=<Type> topic=<name>`, -1 (exit 4, kept); the botocore import is gone (no longer needed). | `…a_failed_publish_is_kept_and_retried` adds `RuntimeError(<marker>)`: exit 4, kept, `sns=RuntimeError` printed, marker absent. |
+| F3 (low) | status default -1 (computed inside the try, so a non-dict answer is a failure too). | same case: `{"MessageId"}` and `None` answers → exit 4, kept. |
+| F4 (low) | 72 refuses `[[:cntrl:]]` in ALERT_OWNER / ALERT_ESCALATION (exit 2) before any write. | `test_ops_continuous__the_monitor_takes_an_sns_topic_as_the_other_destination` adds a newline-owner and a CR-escalation case: exit 2, no env file, no aws/systemctl call. |
+
+Mutants added and killed: `webhook_value_error_escapes` (F1), `sns_missing_metadata_is_success` (F3),
+`observe_install_owner_multiline` (F4); all 13 delivery/SNS mutants rerun: 13/13 killed.
+
+| cmd (apps/infrx-api) | exit | result |
+|---|---|---|
+| `INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_alert_sns.py tests/i/test_ops_steps.py -k sns` before the fix | 1 | 3 failed (F1, F2/F3, F4 cases) |
+| `INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_observe.py tests/i/test_ops_steps.py tests/i/test_alert_sns.py` | 0 | 32 passed, 1 xfailed |
+| `uv run --frozen pytest -q tests/i/test_rollout.py` | 0 | 8 passed |
+| `INFRX_D_TASK=i8 uv run --frozen pytest -q tests/i/test_mutants.py` | 0 | 50 passed (its first ~25 s overlapped the focused run above; passed regardless) |
+| `uv run --frozen python tests/i/mutants.py <13 delivery/SNS mutants>` | 0 | 13/13 killed |
+| `ruff check` (changed Python), `bash -n` 72/74 | 0 | clean |
+
+Runbook `observe.md` delivery section: non-https BLOCKED; failed-send list (malformed URL, any SNS
+error, no 2xx), only the error type printed. Remaining estimate unchanged (0 / 0.25 / 1 h, high).
