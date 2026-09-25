@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/models", label: "Models", icon: Boxes },
   { href: "/usage", label: "Usage", icon: BarChart3 },
-  { href: "/billing", label: "Balance", icon: CreditCard },
+  { href: "/billing", label: "Credits", icon: CreditCard },
   { href: "/api-keys", label: "API Keys", icon: KeyRound },
 ];
 
@@ -124,7 +124,7 @@ export function Sidebar({
               </span>
             ) : (
               <>
-                <span className="flex-1 text-muted-foreground">Balance</span>
+                <span className="flex-1 text-muted-foreground">Credits</span>
                 <span className="font-medium tabular-nums">{balance}</span>
               </>
             )}

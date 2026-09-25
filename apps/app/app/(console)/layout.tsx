@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { ConsoleDataUnavailable } from "@/components/console-data-state";
 import { Sidebar } from "@/components/sidebar";
 import { consoleShell } from "@/lib/services/console";
-import { sidebarCredit } from "@/lib/services/credits";
 import { consumerSession } from "@/lib/services/server";
 import { getSession } from "@/lib/session"; // the operator flag only (WR-6)
+import { consumerCreditReads } from "./billing/credit-context";
+import { sidebarCredits } from "./billing/credit-view-model";
 
 // Every console page reads Supabase with the user's cookie: never prerender.
 export const dynamic = "force-dynamic";
@@ -30,8 +31,10 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
       </main>
     );
   }
-  // `null` when the wallet could not be read, or an operator has none: fixed copy, never a zero.
-  const balance = shell.reads === null ? null : sidebarCredit(await shell.reads.balance());
+  // The individual's CREDIT wallet (U1R WR-2): exact available credits, "No credits yet", or `null`
+  // when the wallet could not be read or an operator has none - fixed copy, never a zero, never the
+  // org's legacy USD figure.
+  const balance = shell.reads === null ? null : sidebarCredits(await (await consumerCreditReads()).reads.wallet());
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
