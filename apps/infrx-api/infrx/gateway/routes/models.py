@@ -19,8 +19,8 @@ from:
 * availability from the ingress's readiness probes, never a flag in a file.
 
 An entry is published only if `project` accepts it against the enforced profile AND it
-passes `violations` against the approved release profile (`APPROVED`: the deployed Marlin profile, 82 s -
-P-20/P-23). Anything else - unpriced, retired, private, an unapproved card, a runtime past
+passes `violations` against the approved release profile (`APPROVED`: the deployed Marlin
+profile, 82 s - P-20/P-23). Anything else - unpriced, retired, private, an unapproved card, a runtime past
 the approved profile - publishes nothing. `provider_document` renders the same entry as the
 OpenRouter v2.4 provider document (OpenRouter is deferred: nothing serves it yet).
 

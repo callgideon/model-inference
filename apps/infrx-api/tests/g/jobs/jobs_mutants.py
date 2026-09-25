@@ -88,6 +88,7 @@ NO_EXPIRY = "test_result_expiry__a_success_with_no_persisted_expiry_is_never_ser
 SYNC_REPLAY = "test_result_expiry__a_sync_replay_after_the_expiry_is_410_never_the_content"
 READ_TABLE = "test_result_expiry__the_route_answers_f2c_b_s_classification_table"
 REVOKED = "test_dur_rls__a_revoked_key_reads_its_jobs_for_at_most_key_ttl"
+LOST = "test_result_expiry__a_job_lost_after_publication_reads_as_documented"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -272,6 +273,12 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if expires is None or await _dependency(self.jobs.db_now()) >= expires:",
        "        if expires is not None and await _dependency(self.jobs.db_now()) >= expires:",
        SYNC_REPLAY),
+    _m("lost_output_reported_as_internal", "a stream lost after publication ends stream_interrupted",
+       R, "    failed = errors.StreamInterrupted if stream else errors.InternalError",
+       "    failed = errors.InternalError", LOST),
+    _m("lost_output_usage_invented_known", "a held reservation reads usage unknown",
+       J, "                     else UsageCertainty.unknown if held else None)",
+       "                     else None)", LOST),
     _m("revocation_outlives_key_ttl", "a revoked key reads its jobs for at most KEY_TTL (G8)",
        "infrx/auth/keys.py",
        "                hit = (now() + (s.key_ttl if rows else s.miss_ttl), rows[0] if rows else None)",

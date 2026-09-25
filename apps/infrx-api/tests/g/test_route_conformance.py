@@ -17,14 +17,16 @@ mounted routes, checked against what is documented and discovered.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import pathlib
 import re
+import time
 
 import pytest
 
-from infrx.gateway.routes import models, uploads
+from infrx.gateway.routes import intake, models, uploads
 
 from ..m import support as clips
 from . import relay_support as rs, support
@@ -94,6 +96,125 @@ def test_api_stream__a_store_outage_at_admission_is_a_typed_503_in_every_mode(
     assert int(reply.headers["retry-after"]) == infrx["retry_after_s"] > 0
     assert b"secret" not in reply.body
     assert world.jobs.jobs == {}
+
+
+# --- a stalled dependency (E3C s08): a typed answer inside the bound, one job ------------
+# E3C measured a paused PostgreSQL and a paused object store leaving `POST /v1/jobs`
+# unanswered past 60 s (declared bound 45 s). Every store/object call the routes make is
+# now bounded; the cases shrink the bound so they run in well under a second.
+BOUND_S = 0.3
+ANSWER_WITHIN_S = 45.0
+
+
+class Pause:
+    """A dependency call that does not answer while `paused` (a SIGSTOPped container):
+    polled on the loop's clock, so it works across the test's event loops."""
+
+    def __init__(self, call) -> None:
+        self.call, self.paused, self.stalled = call, True, 0
+
+    async def __call__(self, *args, **kw):
+        self.stalled += 1
+        while self.paused:
+            await asyncio.sleep(0.01)
+        return await self.call(*args, **kw)
+
+
+GUARD_S = 10.0          # this case's own wall clock: a hang fails here, never waits
+
+
+def timed(coroutine):
+    """The reply and the seconds it took; no reply within GUARD_S is a failed assertion
+    (the task is cancelled, not waited for - it may be stuck on a paused dependency)."""
+    async def run():
+        task = asyncio.ensure_future(coroutine)
+        done, _ = await asyncio.wait({task}, timeout=GUARD_S)
+        if not done:
+            task.cancel()
+            raise AssertionError(f"no answer within {GUARD_S}s: an unbounded wait")
+        return task.result()
+
+    began = time.monotonic()
+    reply = rs.run(run())
+    return reply, time.monotonic() - began
+
+
+def test_api_stream__a_bounded_answer_to_a_dependency_that_stops_answering(monkeypatch):
+    """The production bounds answer inside the declared 45 s, whichever call stalls: a
+    store or object call at the dependency bound, the media preparation (a fetch, a probe,
+    the object write) at its own."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", intake.DEPENDENCY_BOUND_S)
+    limits = support.settings(**DEPLOYED).pilot
+    assert intake.DEPENDENCY_BOUND_S < ANSWER_WITHIN_S
+    assert intake.preparation_bound(limits) < ANSWER_WITHIN_S
+    assert intake.preparation_bound(limits) > limits.media_fetch_timeout_s + limits.probe_timeout_s
+
+
+def test_api_stream__a_stalled_admission_is_a_typed_503_and_the_retry_is_one_job(monkeypatch):
+    """The store stops answering at admission: 503 `dependency_unavailable` with retry
+    guidance within the bound, nothing admitted; once it answers again, the same key's
+    retry admits exactly one job."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    world.jobs.admit = pause = Pause(world.jobs.admit)
+    reply, took = timed(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="k-s08"))
+    status, code, infrx = envelope(reply)
+    assert (status, code) == (503, "dependency_unavailable"), reply.body
+    assert infrx["retry_after_s"] > 0 and took < ANSWER_WITHIN_S and pause.stalled == 1
+    assert world.jobs.jobs == {}
+    pause.paused = False
+    again = rs.run(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="k-s08"))
+    assert again.status == 202, again.body
+    assert len(world.jobs.jobs) == 1
+
+
+def test_api_stream__a_stall_after_the_commit_leaves_one_job_for_the_same_key(monkeypatch):
+    """The admission committed and the attach stalls: 503 within the bound, and the job
+    is left for the retry (money-B2), never cancelled for a stall - the same key's retry
+    after recovery completes the attach and answers that one job."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    world.media.attach = pause = Pause(world.media.attach)
+    reply, took = timed(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="k-late"))
+    assert envelope(reply)[:2] == (503, "dependency_unavailable"), reply.body
+    assert took < ANSWER_WITHIN_S
+    (job,) = world.jobs.jobs.values()
+    assert job.outcome is None and job.id not in world.media.by_job
+    pause.paused = False
+    again = rs.run(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(), key="k-late"))
+    assert again.status == 202 and again.headers["idempotency-replayed"] == "true", again.body
+    assert list(world.jobs.jobs) == [job.id] and job.id in world.media.by_job
+
+
+def test_api_stream__a_stalled_object_store_or_catalog_is_a_typed_503(monkeypatch):
+    """The object store stops answering while the source is written (preparation), or the
+    catalog while the model resolves: each a 503 within its bound, nothing admitted."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    monkeypatch.setattr(intake, "preparation_bound", lambda limits: BOUND_S)
+    world = world_for()
+    world.objects.put_if_absent = Pause(world.objects.put_if_absent)
+    reply, took = timed(jw.send(world.app, "POST", "/v1/jobs", body=rs.body(rs.VIDEO)))
+    assert envelope(reply)[:2] == (503, "dependency_unavailable"), reply.body
+    assert took < ANSWER_WITHIN_S and world.jobs.jobs == {}
+    world = world_for()
+    world.catalog.resolve = Pause(world.catalog.resolve)
+    reply, _ = timed(jw.send(world.app, "POST", "/v1/jobs", body=rs.body()))
+    assert envelope(reply)[:2] == (503, "dependency_unavailable"), reply.body
+    assert world.jobs.jobs == {}
+
+
+def test_api_stream__a_sync_wait_over_a_stalled_store_still_ends_at_its_deadline(monkeypatch):
+    """The store stops answering while a sync caller waits: polls that stall are retried,
+    not waited on for ever, and the wait ends at the job's deadline (504) even though the
+    durable cancel cannot be confirmed."""
+    monkeypatch.setattr(intake, "DEPENDENCY_BOUND_S", BOUND_S)
+    world = world_for()
+    world.jobs.get_owned = Pause(world.jobs.get_owned)
+    world.jobs.cancel = Pause(world.jobs.cancel)
+    world.during += [lambda: None, lambda: world.clock.advance(3_600)]
+    reply, took = timed(rs.call(world.app, rs.body()))
+    assert envelope(reply)[:2] == (504, "deadline_exceeded"), reply.body
+    assert took < ANSWER_WITHIN_S
 
 
 # --- same-host authenticated uploads (E1C's client sequence) ---------------------------

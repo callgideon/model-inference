@@ -158,7 +158,8 @@ class Relay:
             # Media is fetched and staged only for a request that maps no job (R91).
             # M2 request 5: preparation replaces the record G1 built, so the staged payload
             # and the admission carry our media refs, never the customer's URL or bytes.
-            prepared = await _dependency(self.media.prepare_request(auth.org_id, request))
+            prepared = await _dependency(self.media.prepare_request(auth.org_id, request),
+                                         intake.preparation_bound(self.limits))
             refs = await _dependency(self.media.stage(auth.org_id, prepared))
         timings = {"prepare": max(0.0, self.clock() - began)}
         if found is None:
@@ -298,9 +299,17 @@ class Relay:
         self._cancels.add(task)                 # a strong reference until it is done
         task.add_done_callback(self._cancels.discard)
         try:
-            return await asyncio.shield(task)
+            # E3C s08: bounded like any dependency call; the shielded cancel goes on (and
+            # `drain` waits for it at shutdown) - an unconfirmed cancel claims no state.
+            return await asyncio.wait_for(asyncio.shield(task), intake.DEPENDENCY_BOUND_S)
         except asyncio.CancelledError:
             raise
+        except TimeoutError:
+            if not quiet:
+                raise errors.DependencyUnavailable("the cancel is not confirmed yet") from None
+            log.warning("cancel of job %s is not confirmed yet; its stored deadline ends it",
+                        handle)
+            return None
         except Exception:
             if not quiet:
                 raise
@@ -339,7 +348,11 @@ class Relay:
         """The committed outcome, None while the job runs. A read that failed for want of
         the database is retried at the next poll, not reported as the job's end."""
         try:
-            return (await self._owned(job.org_id, job.handle))[1]
+            return (await intake.bounded(self._owned(job.org_id, job.handle),
+                                         intake.DEPENDENCY_BOUND_S))[1]
+        except errors.DependencyUnavailable:
+            log.warning("status read of job %s did not answer; retrying", job.handle)
+            return None
         except errors.DomainError:
             raise
         except Exception:
@@ -392,7 +405,7 @@ class Relay:
         expires = outcome.result_expires_at
         if expires is None or await _dependency(self.jobs.db_now()) >= expires:
             raise errors.ResultExpired("the result passed its retention")
-        text = await self.results.read_result(job.org_id, outcome.result_ref)
+        text = await _dependency(self.results.read_result(job.org_id, outcome.result_ref))
         fields = dict(id=f"chatcmpl-{job.request_id}", created=job.created, model=job.model,
                       choices=(wire.ChatChoice(index=0, message=wire.ChatMessage(
                           role="assistant", content=text),
@@ -422,8 +435,11 @@ class Relay:
                                   cause=TerminalCause.client_disconnected, quiet=True)
                 return
             try:
-                chunks, cursor = await self.stream.read_owned(job.org_id, job.handle, cursor,
-                                                              self.page)
+                chunks, cursor = await intake.bounded(
+                    self.stream.read_owned(job.org_id, job.handle, cursor, self.page),
+                    intake.DEPENDENCY_BOUND_S)
+            except errors.DependencyUnavailable:
+                chunks = None                   # a stalled read: retried at the next poll
             except errors.DomainError:
                 raise
             except Exception:
@@ -478,12 +494,14 @@ class Relay:
             self.registry.inc(name, **labels)
 
 
-async def _dependency(awaitable):
+async def _dependency(awaitable, bound_s: float | None = None):
     """A store or media call at acceptance. Typed refusals pass through (the route guard
     renders them); anything else is a dependency that failed - a typed, retryable 503,
-    with the driver's text kept in the log (it may carry a DSN or a host)."""
+    with the driver's text kept in the log (it may carry a DSN or a host). E3C s08: one
+    that stops answering is the same 503 once its bound passes (`intake.bounded`)."""
     try:
-        return await awaitable
+        return await intake.bounded(
+            awaitable, intake.DEPENDENCY_BOUND_S if bound_s is None else bound_s)
     except errors.DomainError:
         raise
     except Exception:

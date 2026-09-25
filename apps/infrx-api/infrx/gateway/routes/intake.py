@@ -55,6 +55,40 @@ LAST_RESORT = {"error": {"message": errors.MESSAGES["internal_error"], "type": "
 # `guard` first drains a declared body within bounds (`drain`), then closes.
 CLOSE_CODES = frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",
                          "deadline_exceeded"})
+# E3C s08: every store and object-store call a route makes answers within a bound, so a
+# dependency that stops answering (a paused PostgreSQL or S3: no server-side timeout fires,
+# botocore retries) is a typed, retryable 503 inside the declared 45 s, never a request
+# left hanging. Past the pool's connect timeout (5 s) plus the statement timeout (15 s), so
+# a slow statement still gets the server's own refusal first. Media preparation has its
+# own: it fetches and probes legitimately for up to their timeouts, then writes the source.
+# ponytail: module constants; `PilotSettings` names if an operator needs to tune them.
+DEPENDENCY_BOUND_S = 20.0
+PREPARATION_WRITE_S = 10.0
+
+
+def preparation_bound(limits) -> float:
+    """The fetch, the probe and the source write: 40 s with the defaults."""
+    return limits.media_fetch_timeout_s + limits.probe_timeout_s + PREPARATION_WRITE_S
+
+
+async def bounded(awaitable, bound_s: float):
+    """`awaitable`'s answer, or `DependencyUnavailable` once `bound_s` has passed. The call
+    is cancelled then and not waited for: a call that ignores cancellation (a stalled
+    socket, a thread) must not hold the answer. Its caller's own error paths run as for
+    any dependency failure: a job already admitted is left for the same-key retry."""
+    task = asyncio.ensure_future(awaitable)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=bound_s)
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    if not done:
+        task.cancel()
+        log.warning("a durable dependency did not answer within %ss", bound_s)
+        raise errors.DependencyUnavailable("a durable dependency did not answer in time")
+    return task.result()
+
+
 # WR-I8-3: the large-body gate and the drain on the gateway's `/metrics`, for the
 # "gateway buffering/drains" alert rules. Recorded only once `observe.metrics.FAMILIES`
 # declares them (the coordinator's wiring request); until then nothing is recorded, and an

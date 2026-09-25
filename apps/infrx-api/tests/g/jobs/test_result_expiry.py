@@ -25,7 +25,7 @@ from infrx.contracts.records import TerminalOutcome
 
 from .. import relay_support as rs
 from .test_jobs import post, refusal, result, status
-from .world import JobsWorld
+from .world import JobsWorld, job_path, send
 
 CASES = json.loads((FIXTURES.parent / "v2" / "result_read_cases.json").read_text())
 # F2C.b's classification -> what the result route answers.
@@ -130,3 +130,36 @@ def test_result_expiry__the_route_answers_f2c_b_s_classification_table():
         available = case["expected"] == "available"
         assert body["result_available"] is available, case["name"]
         assert ("result_expires_at" in body) is available, case["name"]
+
+
+def test_result_expiry__a_job_lost_after_publication_reads_as_documented():
+    """E3C s05, the documented state: a worker lost after its first committed chunk is
+    never regenerated and never charged - the job is `failed` / `lost_after_publication`,
+    usage unknown (the hold waits for reconciliation, debit 0). Status says so, the
+    result route answers the committed outcome without a response, and the events replay
+    the published prefix, then `stream_interrupted` and `[DONE]`."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    handle = world.handle()
+
+    async def lost_after_publishing():
+        await world.commit(await world.lease("worker-lost"), "Two people")
+        world.clock.advance(world.limits.lease_ttl_s + 1)
+        await world.jobs.recover()
+
+    rs.run(lost_after_publishing())
+    job = world.only_job()
+    assert (job.outcome.cause.value, job.outcome.debit) == ("lost_after_publication", 0)
+    body = status(world).json()
+    assert (body.get("state"), body.get("cause"), body.get("result_available"),
+            body.get("usage_certainty")) == ("failed", "lost_after_publication", False,
+                                             "unknown")
+    reply = result(world)
+    assert reply.status == 200 and "response" not in reply.json(), reply.body
+    assert reply.json()["cause"] == "lost_after_publication"
+    events = rs.run(send(world.app, "GET", job_path(handle, "/events")))
+    assert events.text() == "Two people"
+    errors = [item["error"]["code"] for item in events.data()
+              if isinstance(item, dict) and "error" in item]
+    assert errors == ["stream_interrupted"] and events.data()[-1] == "[DONE]"
+    assert len(world.jobs.jobs) == 1                      # nothing regenerated

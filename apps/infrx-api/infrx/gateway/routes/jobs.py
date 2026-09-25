@@ -44,6 +44,16 @@ content: status keeps state, cause and usage after the result is gone.
 | available | 200 with the response | true / the persisted instant |
 | no_result, held_unknown | 200 without one | false / absent |
 | expired, unavailable | 410 result_expired | false / absent |
+
+A worker lost after its first committed chunk (E3C s05) is `failed` /
+`lost_after_publication`, `held_unknown`: never regenerated and never charged (debit 0; the
+hold waits for reconciliation). Its result is 200 without a response, status reports usage
+`unknown`, the events replay the published prefix then `stream_interrupted` and `[DONE]`;
+a sync caller gets 500 `internal_error` (state `failed`), an SSE caller the prefix then
+`stream_interrupted`.
+
+Every store read here is bounded (E3C s08, `intake.bounded`): a store that stops answering
+is a retryable 503 `dependency_unavailable` within `DEPENDENCY_BOUND_S`, never a hang.
 """
 from __future__ import annotations
 
